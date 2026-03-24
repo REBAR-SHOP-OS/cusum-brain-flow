@@ -21,6 +21,7 @@ import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
+import { LiveNoteTaker } from "./LiveNoteTaker";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { AssigneeManager } from "@/components/pipeline/AssigneeManager";
 import type { Profile } from "@/hooks/useProfiles";
