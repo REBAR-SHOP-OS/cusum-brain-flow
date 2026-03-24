@@ -123,6 +123,7 @@ serve((req) =>
       try {
         // Build RFC 2822 email
         const rawEmail = [
+          `From: ai@rebar.shop`,
           `To: ${recipient.email}`,
           `Subject: ${subject}`,
           `Content-Type: text/plain; charset=UTF-8`,
