@@ -5,7 +5,7 @@ import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
   Sparkles, Loader2, BookOpen, ShieldCheck, CheckSquare, Trash2,
-  CalendarDays, PlusSquare,
+  CalendarDays, PlusSquare, Clock,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -43,7 +43,7 @@ const platformFilters = [
 
 const statusFilters = [
   { id: "all", label: "All statuses" },
-  { id: "pending_approval", label: "Pending Approval" },
+  
   { id: "draft", label: "Drafts" },
   { id: "scheduled", label: "Scheduled" },
   { id: "published", label: "Published" },
@@ -314,6 +314,15 @@ export default function SocialMediaManager() {
                 {pendingApprovals.length}
               </span>
             )}
+          </Button>
+          <Button
+            variant={statusFilter === "pending_approval" ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setStatusFilter(statusFilter === "pending_approval" ? "all" : "pending_approval")}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Pending Approval</span>
           </Button>
           <Button
             variant={showStrategy ? "default" : "outline"}
