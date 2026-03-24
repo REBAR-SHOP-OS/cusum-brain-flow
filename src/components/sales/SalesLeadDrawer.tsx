@@ -167,6 +167,17 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
               </div>
             )}
           </div>
+
+          {/* Assignees */}
+          <div className="col-span-2 mt-1 pt-2 border-t border-border/50">
+            <span className="text-[11px] text-muted-foreground font-medium mb-1 block">Assignees</span>
+            <AssigneeManager
+              assignees={assignees}
+              profiles={profiles}
+              onAdd={onAddAssignee || (() => {})}
+              onRemove={onRemoveAssignee || (() => {})}
+            />
+          </div>
         </div>
 
         {/* ── Tab Bar ── */}
