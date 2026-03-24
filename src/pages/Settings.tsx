@@ -48,8 +48,34 @@ export default function Settings() {
 
   const myProfile = profiles.find((p) => p.user_id === user?.id);
 
+  useEffect(() => {
+    if (myProfile) {
+      const parts = (myProfile.full_name || "").split(" ");
+      const firstName = parts[0] || "";
+      const surname = parts.slice(1).join(" ") || "";
+      setFormData((prev) => ({
+        ...prev,
+        name: firstName,
+        surname,
+        email: myProfile.email || userEmail,
+        jobTitle: myProfile.title || "",
+        helpersLanguage: myProfile.preferred_language || "en",
+      }));
+    }
+  }, [myProfile, userEmail]);
+
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = () => {
+    if (!myProfile) return;
+    updateProfile.mutate({
+      id: myProfile.id,
+      full_name: `${formData.name} ${formData.surname}`.trim(),
+      title: formData.jobTitle || null,
+      preferred_language: formData.helpersLanguage,
+    });
   };
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
