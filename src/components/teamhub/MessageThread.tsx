@@ -704,6 +704,15 @@ export function MessageThread({
                                       );
                                     }
 
+                                    if (isAud) {
+                                      return (
+                                        <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20 max-w-[300px]">
+                                          <Mic className="w-4 h-4 text-primary shrink-0" />
+                                          <audio controls preload="metadata" className="h-8 w-full min-w-0" src={att.url} />
+                                        </div>
+                                      );
+                                    }
+
                                     return (
                                       <button
                                         key={i}
