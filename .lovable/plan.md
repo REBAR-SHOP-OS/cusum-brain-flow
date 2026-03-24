@@ -1,28 +1,35 @@
 
 
-## Filter Forward Message Dialog to rebar.shop Channels Only
+## Fix Pending Approval Filter to Only Show Unapproved Posts
 
 ### Problem
-The Forward Message dialog currently shows all channels including DM conversations. Per the Team Hub governance rules, only official channels and groups (rebar.shop team channels) should be visible — DMs should be excluded, consistent with the sidebar which already hides DMs.
+When clicking the "Pending Approval" button, the calendar still shows Published and Scheduled posts alongside pending ones. The filter on line 126 only checks `!p.neel_approved` but doesn't exclude posts with terminal statuses (`published`, `declined`) or already-approved scheduled posts.
 
 ### Changes
 
-**File**: `src/components/teamhub/ForwardMessageDialog.tsx`
+**File**: `src/pages/SocialMediaManager.tsx` (lines 125-126)
 
-1. Filter out DM-type channels from the list — only show channels with `channel_type === "channel"` or `channel_type === "group"` (exclude `"dm"`)
-2. This aligns with the sidebar behavior where DMs are already hidden
+Update the `pending_approval` filter branch to strictly show only posts that are truly pending approval:
 
-Update line 30-32:
 ```typescript
-const filteredChannels = channels
-  .filter((c) => c.id !== currentChannelId)
-  .filter((c) => c.channel_type !== "dm")  // Only show channels/groups, not DMs
-  .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()));
+} else if (statusFilter === "pending_approval") {
+  items = items.filter(
+    (p) => !p.neel_approved 
+      && p.status !== "published" 
+      && p.status !== "declined"
+  );
+}
 ```
+
+This ensures:
+- Published posts are excluded
+- Declined posts are excluded
+- Only draft/scheduled posts that haven't been approved (`neel_approved: false`) are shown
+- Matches the user's expectation: clicking "Pending Approval" shows ONLY cards waiting for approval
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/teamhub/ForwardMessageDialog.tsx` | Add `channel_type !== "dm"` filter to exclude DM channels |
+| `src/pages/SocialMediaManager.tsx` | Tighten `pending_approval` filter to exclude published/declined posts |
 
