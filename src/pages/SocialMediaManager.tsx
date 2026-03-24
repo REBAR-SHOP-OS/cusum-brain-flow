@@ -123,7 +123,11 @@ export default function SocialMediaManager() {
     if (statusFilter === "approved_by_neel") {
       items = items.filter((p) => p.neel_approved);
     } else if (statusFilter === "pending_approval") {
-      items = items.filter((p) => !p.neel_approved);
+      items = items.filter(
+        (p) => !p.neel_approved
+          && p.status !== "published"
+          && p.status !== "declined"
+      );
     } else if (statusFilter !== "all") {
       // Always keep scheduled + published visible, plus the selected status
       items = items.filter(
