@@ -129,7 +129,7 @@ export function BackgroundThemePicker({
               )}
               style={{ background: t.preview }}
             >
-              {themeId === t.id && <Check className="w-3.5 h-3.5 text-primary-foreground drop-shadow" />}
+              {themeId === t.id && <Check className="w-3.5 h-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />}
             </button>
           ))}
         </div>
