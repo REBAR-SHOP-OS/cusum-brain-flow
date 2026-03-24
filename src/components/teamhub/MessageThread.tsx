@@ -749,17 +749,45 @@ export function MessageThread({
           </div>
         )}
 
+        {/* Reply banner */}
+        {replyTo && (
+          <div className="flex items-center gap-2 px-3 py-1.5 mb-1 rounded-lg bg-muted/40 border border-border/50">
+            <Reply className="w-3.5 h-3.5 text-primary shrink-0" />
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] font-semibold text-primary">{replyTo.sender?.full_name || "Unknown"}</span>
+              <p className="text-[11px] text-muted-foreground truncate">{replyTo.original_text.slice(0, 80)}</p>
+            </div>
+            <button onClick={() => setReplyTo(null)} className="text-muted-foreground hover:text-foreground shrink-0">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Input area */}
         <div className="relative rounded-xl border border-border bg-background focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
+          {/* Mention menu */}
+          <MentionMenu
+            isOpen={mentionOpen}
+            filter={mentionFilter}
+            selectedIndex={mentionIndex}
+            onSelect={handleMentionSelect}
+            onClose={() => setMentionOpen(false)}
+          />
+
           <Textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             placeholder={`Message #${channelName}...`}
             className="min-h-[40px] md:min-h-[44px] max-h-32 resize-none border-0 focus-visible:ring-0 bg-transparent px-3 py-2 md:py-2.5 text-sm"
             rows={1}
             dir="auto"
             onKeyDown={(e) => {
+              if (mentionOpen) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => i + 1); return; }
+                if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(0, i - 1)); return; }
+                if (e.key === "Escape") { e.preventDefault(); setMentionOpen(false); return; }
+              }
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 handleSubmit();
