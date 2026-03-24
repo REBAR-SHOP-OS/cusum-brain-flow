@@ -41,12 +41,16 @@ export function DockChatBar() {
   const { profiles } = useProfiles();
   const myProfile = useMyProfile();
   const { user } = useAuth();
+  const location = useLocation();
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
   const { unreadSenderIds } = useUnreadSenders();
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const [launcherOpen, setLauncherOpen] = useState(false);
+
+  // Hide on Team Hub page — user already has full chat UI
+  if (location.pathname === "/team-hub") return null;
 
   useEffect(() => {
     setPortalContainer(getFloatingPortalContainer());
