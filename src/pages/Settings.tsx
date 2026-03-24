@@ -204,6 +204,10 @@ export default function Settings() {
                     <Input value={formData.jobTitle} onChange={(e) => handleInputChange("jobTitle", e.target.value)} placeholder="Job title" className="bg-secondary/50 border-0 h-12" />
                   </div>
                 </div>
+                <Button onClick={handleSave} disabled={updateProfile.isPending} className="w-full h-12">
+                  {updateProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Save changes
+                </Button>
               </section>
 
               {/* Language */}
