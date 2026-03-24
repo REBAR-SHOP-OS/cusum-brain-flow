@@ -48,7 +48,7 @@ function getAvatarColor(name: string) {
 
 export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose }: ChannelSidebarProps) {
   const [channelsOpen, setChannelsOpen] = useState(true);
-  const [dmsOpen, setDmsOpen] = useState(true);
+  
   const [membersOpen, setMembersOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const { unreadSenderIds } = useUnreadSenders();
