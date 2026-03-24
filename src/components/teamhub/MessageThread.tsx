@@ -28,6 +28,7 @@ import {
   Reply,
   Forward,
   Mic,
+  AudioLines,
   Square,
 } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
