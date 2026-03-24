@@ -247,6 +247,21 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
           profile={myProfile}
         />
       )}
+
+      <Dialog open={!!previewProfile} onOpenChange={() => setPreviewProfile(null)}>
+        <DialogContent className="max-w-xs flex flex-col items-center gap-4 p-6">
+          <Avatar className="w-40 h-40 border-2 border-border">
+            <AvatarImage src={previewProfile?.avatar_url || ""} className="object-cover" />
+            <AvatarFallback className={cn("text-4xl font-bold text-white", getAvatarColor(previewProfile?.full_name || ""))}>
+              {getInitials(previewProfile?.full_name || "?")}
+            </AvatarFallback>
+          </Avatar>
+          <h3 className="text-lg font-semibold text-foreground">{previewProfile?.full_name}</h3>
+          {previewProfile?.title && (
+            <p className="text-sm text-muted-foreground">{previewProfile.title}</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
