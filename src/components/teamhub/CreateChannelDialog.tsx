@@ -100,9 +100,9 @@ export function CreateChannelDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Hash className="w-4 h-4 text-primary" />
+              <Icon className="w-4 h-4 text-primary" />
             </div>
-            Create Channel
+            Create {label}
           </DialogTitle>
         </DialogHeader>
 
