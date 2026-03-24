@@ -1,32 +1,24 @@
 
 
-## Add RingCentral Call & Email Actions to Sales Lead Drawer
+## Show Enlarged Profile Photo on Avatar Click
 
 ### Problem
-The phone number and email in the lead drawer are plain links (`tel:` and `mailto:`). Users want to:
-1. **Click-to-call** via RingCentral (using the Embeddable widget) directly from the lead drawer
-2. **Send email** by clicking the email — open compose window
+When clicking a team member's avatar in the sidebar, nothing visual happens for their profile photo. The user wants the avatar to enlarge (lightbox-style preview).
 
-### Changes
+### Change
 
-**File**: `src/components/sales/SalesLeadDrawer.tsx`
+**File**: `src/components/teamhub/ChannelSidebar.tsx`
 
-1. **Import `useRingCentralWidget`** hook to get `makeCall` function
-2. **Replace the phone `<a href="tel:...">` link** (line 156-158) with a row containing:
-   - The phone number text (still displayed)
-   - A small `Phone` icon button that calls `makeCall(lead.contact_phone)` to initiate a RingCentral call via the Embeddable widget
-3. **Replace the email `<a href="mailto:...">` link** (line 148-150) with a row containing:
-   - The email text (still displayed)
-   - A small `Mail` icon button that opens `mailto:` compose
+1. Add state: `previewProfile: Profile | null`
+2. On the avatar `<div className="relative">` (line 217), add an `onClick` handler with `e.stopPropagation()` that sets `previewProfile` to the clicked member — this prevents the DM click from firing
+3. Render a simple Dialog/overlay at the bottom of the component that shows:
+   - Large avatar (w-40 h-40) with the user's photo or initials
+   - User's name below the avatar
+   - Click outside or X to close
 
-This uses the existing `useRingCentralWidget` hook already used in `LiveChat.tsx`. The Embeddable widget handles the actual call UI (transfer, hold, etc.) — clicking the button triggers the call and the widget pops up with full call controls including transfer capability.
-
-### Result
-- Phone number shows a call button that initiates a RingCentral call via the browser widget
-- The RingCentral widget provides built-in transfer/hold/mute controls
-- Email shows a button that opens the user's email client to compose
+The existing row `onClick` (line 214) still opens the DM. Only clicking the small avatar circle opens the preview.
 
 | File | Change |
 |---|---|
-| `src/components/sales/SalesLeadDrawer.tsx` | Add `useRingCentralWidget`, add call & email action buttons |
+| `src/components/teamhub/ChannelSidebar.tsx` | Add avatar preview dialog with enlarged photo on avatar click |
 
