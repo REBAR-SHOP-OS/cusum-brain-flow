@@ -336,17 +336,19 @@ Deno.serve(async (req) => {
           } as any).eq("id", dupId);
 
           // Log activity event
-          await supabaseAdmin.from("activity_events").insert({
-            company_id: companyId,
-            entity_type: "customer_merge",
-            entity_id: dupId,
-            event_type: "customer_merged",
-            description: `Merged customer "${dup.name}" into "${primary.name}"`,
-            actor_id: userId,
-            actor_type: "vizzy",
-            source: "system",
-            metadata: { primary_id, duplicate_id: dupId, relinked_counts: relinked, merge_reason: reason },
-          }).catch(() => {});
+          try {
+            await supabaseAdmin.from("activity_events").insert({
+              company_id: companyId,
+              entity_type: "customer_merge",
+              entity_id: dupId,
+              event_type: "customer_merged",
+              description: `Merged customer "${dup.name}" into "${primary.name}"`,
+              actor_id: userId,
+              actor_type: "vizzy",
+              source: "system",
+              metadata: { primary_id, duplicate_id: dupId, relinked_counts: relinked, merge_reason: reason },
+            });
+          } catch { /* ignore */ }
 
           allResults.push({ duplicate_id: dupId, duplicate_name: dup.name, relinked_counts: relinked, archived: true });
         }
@@ -382,25 +384,29 @@ Deno.serve(async (req) => {
               actions.push({ id: fr.id, action_taken: "machine_reset" });
             } else if (area.includes("order") || area.includes("lead") || area.includes("delivery")) {
               // Log as human task for manual review
-              await supabaseAdmin.from("human_tasks").insert({
-                company_id: companyId,
-                title: `Fix request: ${fr.description?.slice(0, 100)}`,
-                description: `Auto-created from fix request. Area: ${fr.affected_area}. Original: ${fr.description}`,
-                status: "open",
-                priority: "high",
-                created_by: userId,
-              }).catch(() => {});
+              try {
+                await supabaseAdmin.from("human_tasks").insert({
+                  company_id: companyId,
+                  title: `Fix request: ${fr.description?.slice(0, 100)}`,
+                  description: `Auto-created from fix request. Area: ${fr.affected_area}. Original: ${fr.description}`,
+                  status: "open",
+                  priority: "high",
+                  created_by: userId,
+                });
+              } catch { /* ignore */ }
               actions.push({ id: fr.id, action_taken: "human_task_created" });
             } else {
               // Unknown area — create human task
-              await supabaseAdmin.from("human_tasks").insert({
-                company_id: companyId,
-                title: `Unresolved fix request: ${fr.description?.slice(0, 80)}`,
-                description: `Area: ${fr.affected_area || "unknown"}. Description: ${fr.description}`,
-                status: "open",
-                priority: "medium",
-                created_by: userId,
-              }).catch(() => {});
+              try {
+                await supabaseAdmin.from("human_tasks").insert({
+                  company_id: companyId,
+                  title: `Unresolved fix request: ${fr.description?.slice(0, 80)}`,
+                  description: `Area: ${fr.affected_area || "unknown"}. Description: ${fr.description}`,
+                  status: "open",
+                  priority: "medium",
+                  created_by: userId,
+                });
+              } catch { /* ignore */ }
               actions.push({ id: fr.id, action_taken: "human_task_created" });
             }
 
@@ -867,18 +873,20 @@ Deno.serve(async (req) => {
 
     // Log the action as an event
     const { data: profile } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
-    await supabaseAdmin.from("activity_events").insert({
-      company_id: profile?.company_id,
-      entity_type: "vizzy_action",
-      entity_id: params?.id || crypto.randomUUID(),
-      event_type: `vizzy_${action}`,
-      description: `Vizzy executed: ${action}`,
-      actor_id: userId,
-      actor_type: "vizzy",
-      metadata: { params },
-      source: "system",
-      dedupe_key: `vizzy_action:${action}:${params?.id || ""}:${new Date().toISOString().slice(0, 13)}`,
-    }).catch(() => {});
+    try {
+      await supabaseAdmin.from("activity_events").insert({
+        company_id: profile?.company_id,
+        entity_type: "vizzy_action",
+        entity_id: params?.id || crypto.randomUUID(),
+        event_type: `vizzy_${action}`,
+        description: `Vizzy executed: ${action}`,
+        actor_id: userId,
+        actor_type: "vizzy",
+        metadata: { params },
+        source: "system",
+        dedupe_key: `vizzy_action:${action}:${params?.id || ""}:${new Date().toISOString().slice(0, 13)}`,
+      });
+    } catch { /* ignore */ }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
