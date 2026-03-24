@@ -237,7 +237,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
     <div className="px-4 py-3 space-y-3">
       {/* Action buttons */}
       <div className="flex gap-1.5">
-        {(["note", "activity"] as const).map((tab) => (
+        {(isExternalEstimator ? ["note"] as const : ["note", "activity"] as const).map((tab) => (
           <Button
             key={tab}
             size="sm"
