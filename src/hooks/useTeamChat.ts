@@ -160,6 +160,7 @@ export function useSendMessage() {
           original_language: senderLang,
           translations,
           attachments,
+          reply_to_id: replyToId || null,
         });
 
       if (insertError) throw insertError;
