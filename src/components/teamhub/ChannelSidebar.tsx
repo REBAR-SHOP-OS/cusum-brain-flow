@@ -30,6 +30,7 @@ interface ChannelSidebarProps {
   onlineCount: number;
   profiles: Profile[];
   onCreateChannel: () => void;
+  onCreateGroup?: () => void;
   onClickMember: (profileId: string, name: string) => void;
   onClose?: () => void;
   myProfile?: Profile;
