@@ -930,12 +930,12 @@ export function MessageThread({
                     onClick={() => voiceRecorder.startRecording()}
                     disabled={isSending || isUploading}
                     className={cn(
-                      "p-2.5 md:p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
+                      "p-2.5 md:p-2 rounded-md transition-colors bg-primary/10 text-primary hover:bg-primary/20 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
                       (isSending || isUploading) && "opacity-50 cursor-not-allowed"
                     )}
                     title="Record voice message"
                   >
-                    <Mic className="w-5 h-5" />
+                    <AudioLines className="w-5 h-5" />
                   </button>
                   <input
                     ref={fileInputRef}
