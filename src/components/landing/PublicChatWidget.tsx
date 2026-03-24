@@ -221,10 +221,17 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
                 <div
                   key={msg.id}
                   className={cn(
-                    "max-w-[85%] min-w-0",
+                    "group/msg relative max-w-[85%] min-w-0",
                     msg.role === "user" ? "ml-auto" : "mr-auto"
                   )}
                 >
+                  <button
+                    onClick={() => deleteMessage(msg.id)}
+                    className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
+                    title="Delete"
+                  >
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
                   <div
                     className={cn(
                       "rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed break-words min-w-0 [overflow-wrap:anywhere]",
