@@ -90,6 +90,9 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
 
   useEffect(() => {
     if (lead) {
+      // Populate assignees from junction table
+      const existing = byLeadId[lead.id] ?? [];
+      setSelectedAssignees(existing.map(a => a.profile_id));
       form.reset({
         title: lead.title,
         description: lead.description || "",
