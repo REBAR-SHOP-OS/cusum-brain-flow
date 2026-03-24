@@ -233,14 +233,24 @@ export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
               />
             </div>
           )}
-          <Textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onPaste={handlePaste}
-            placeholder={activeTab === "note" ? "Write a note..." : "Activity description..."}
-            rows={3}
-            className="text-sm resize-none"
-          />
+          <div className="relative">
+            <Textarea
+              value={text}
+              onChange={(e) => handleTextChange(e.target.value)}
+              onPaste={handlePaste}
+              onKeyDown={handleKeyDown}
+              placeholder={activeTab === "note" ? "Write a note... (type @ to mention)" : "Activity description..."}
+              rows={3}
+              className="text-sm resize-none"
+            />
+            <MentionMenu
+              isOpen={mentionOpen}
+              filter={mentionFilter}
+              selectedIndex={mentionIndex}
+              onSelect={handleMentionSelect}
+              onClose={() => setMentionOpen(false)}
+            />
+          </div>
 
           {/* File previews */}
           {pendingFiles.length > 0 && (
