@@ -613,6 +613,15 @@ export function MessageThread({
                           <Volume2 className="w-3.5 h-3.5" />
                         </button>
                         <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
+                        {canDelete && (
+                          <button
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                            title="Delete for everyone"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                       </div>
                     </div>
