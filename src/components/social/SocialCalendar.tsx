@@ -241,9 +241,9 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                           : status === "pending_approval" ? "text-yellow-600"
                           : "text-muted-foreground"
                       )}>
-                        {status === "scheduled" && !firstPost.neel_approved
+                        {status === "scheduled" && !isApproved
                           ? "Pending Approval"
-                          : status === "scheduled" && firstPost.neel_approved
+                          : status === "scheduled" && isApproved
                           ? "Scheduled · Approved"
                           : statusLabel}
                       </span>
