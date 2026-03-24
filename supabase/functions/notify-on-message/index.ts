@@ -68,21 +68,33 @@ async function handleTeamMessage(
 
   const senderName = senderProfile?.full_name || "Someone";
 
-  // Get all channel members except sender
-  const { data: members } = await svc
-    .from("team_channel_members")
-    .select("profile_id")
-    .eq("channel_id", channel_id)
-    .neq("profile_id", sender_profile_id);
+  let profiles: any[] | null = null;
 
-  if (!members || members.length === 0) return;
+  if (channelName === "Official Channel" || channelName === "Official Group") {
+    // Notify ALL @rebar.shop users except sender
+    const { data } = await svc
+      .from("profiles")
+      .select("id, user_id, preferred_language, email")
+      .like("email", "%@rebar.shop")
+      .neq("id", sender_profile_id);
+    profiles = data;
+  } else {
+    // Existing logic: notify channel members only
+    const { data: members } = await svc
+      .from("team_channel_members")
+      .select("profile_id")
+      .eq("channel_id", channel_id)
+      .neq("profile_id", sender_profile_id);
 
-  // Map profile_ids to user_ids
-  const profileIds = members.map((m: any) => m.profile_id);
-  const { data: profiles } = await svc
-    .from("profiles")
-    .select("id, user_id, preferred_language")
-    .in("id", profileIds);
+    if (!members || members.length === 0) return;
+
+    const profileIds = members.map((m: any) => m.profile_id);
+    const { data } = await svc
+      .from("profiles")
+      .select("id, user_id, preferred_language")
+      .in("id", profileIds);
+    profiles = data;
+  }
 
   if (!profiles || profiles.length === 0) return;
 
