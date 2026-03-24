@@ -18,11 +18,13 @@ import SalesLeadDrawer from "@/components/sales/SalesLeadDrawer";
 
 export default function SalesPipeline() {
   const { leads, isLoading, createLead, updateLead, deleteLead } = useSalesLeads();
+  const { contacts: unifiedContacts } = useSalesContacts();
   const [createOpen, setCreateOpen] = useState(false);
   const [drawerLead, setDrawerLead] = useState<SalesLead | null>(null);
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [contactPopoverOpen, setContactPopoverOpen] = useState(false);
 
   // Form state
   const [form, setForm] = useState({ title: "", contact_name: "", contact_company: "", contact_email: "", contact_phone: "", expected_value: "", source: "", notes: "" });
