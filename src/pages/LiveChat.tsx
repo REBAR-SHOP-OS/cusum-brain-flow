@@ -3,7 +3,7 @@ import { AnimatePresence } from "framer-motion";
 import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router-dom";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
-import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, ShieldAlert, CheckCircle2, XCircle, Mic } from "lucide-react";
+import { ArrowLeft, Send, Loader2, Square, Trash2, Type, Hash, Brain, ShieldAlert, CheckCircle2, XCircle, Mic, SpellCheck } from "lucide-react";
 import { VizzyVoiceChat } from "@/components/vizzy/VizzyVoiceChat";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
