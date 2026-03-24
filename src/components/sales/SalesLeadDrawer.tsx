@@ -344,5 +344,13 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
         </div>
       </SheetContent>
     </Sheet>
+
+    <ComposeEmailDialog
+      open={composeOpen}
+      onOpenChange={setComposeOpen}
+      initialTo={lead.contact_email || ""}
+      initialSubject={`Regarding: ${lead.title}`}
+    />
+    </>
   );
 }
