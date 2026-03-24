@@ -75,6 +75,7 @@ interface MessageThreadProps {
   activeMeetings?: TeamMeeting[];
   onStartMeeting?: () => void;
   onJoinMeeting?: (meeting: TeamMeeting) => void;
+  readOnly?: boolean;
 }
 
 const avatarColors = [
@@ -127,6 +128,7 @@ export function MessageThread({
   activeMeetings = [],
   onStartMeeting,
   onJoinMeeting,
+  readOnly = false,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
   const grammar = useGrammarCheck();
@@ -609,6 +611,14 @@ export function MessageThread({
       </ScrollArea>
 
       {/* Composer */}
+      {readOnly ? (
+        <div className="border-t border-border p-3 md:p-4 bg-card/50 backdrop-blur-sm safe-area-bottom">
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground py-2">
+            <Hash className="w-3.5 h-3.5" />
+            <span>This channel is read-only</span>
+          </div>
+        </div>
+      ) : (
       <div className="border-t border-border p-2 md:p-4 bg-card/50 backdrop-blur-sm safe-area-bottom">
         {/* Pending file previews */}
         {pendingFiles.length > 0 && (
@@ -718,6 +728,7 @@ export function MessageThread({
           </p>
         </div>
       </div>
+      )}
     </div>
   );
 }

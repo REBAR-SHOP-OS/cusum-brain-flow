@@ -40,6 +40,11 @@ export default function TeamHub() {
 
   const myLang = myProfile?.preferred_language || "en";
 
+  // Channel write restrictions
+  const CHANNEL_WRITERS = ["sattar@rebar.shop", "radin@rebar.shop", "neel@rebar.shop"];
+  const isOfficialChannel = activeChannel?.name === "کانال رسمی شرکت";
+  const canWrite = !isOfficialChannel || CHANNEL_WRITERS.includes(myProfile?.email ?? "");
+
   const targetLangs = useMemo(() => {
     const langs = new Set<string>();
     for (const p of profiles) {
@@ -207,6 +212,7 @@ export default function TeamHub() {
                   activeMeetings={activeMeetings}
                   onStartMeeting={() => setShowMeetingDialog(true)}
                   onJoinMeeting={(m) => setActiveMeeting(m)}
+                  readOnly={!canWrite}
                 />
               ) : channelsLoading ? (
                 <div className="flex items-center justify-center h-full">
