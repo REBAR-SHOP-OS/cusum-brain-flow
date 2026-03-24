@@ -223,6 +223,7 @@ export function PipelineBoard({
               aiMode={aiMode}
               aiActionLeadIds={aiActionLeadIds}
               pendingActivitiesByLead={pendingActivitiesByLead}
+              assigneesByLeadId={assigneesByLeadId}
             />
           </div>
         ))}
