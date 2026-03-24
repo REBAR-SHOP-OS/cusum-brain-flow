@@ -51,11 +51,12 @@ export function ScheduledActivities({ entityType, entityId, assignees }: Schedul
         activity_type: activityType,
         summary,
         due_date: dueDate,
+        assigned_name: assignedName || undefined,
       },
       {
         onSuccess: () => {
           setSummary("");
-          setShowForm(false);
+          setAssignedName("");
           setShowForm(false);
         },
       }
