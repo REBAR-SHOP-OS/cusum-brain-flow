@@ -151,7 +151,7 @@ export function useImportBackup() {
   });
 }
 
-export function useBackupLogs() {
+export function useBackupLogs(enabled = true) {
   return useQuery<BackupLog[]>({
     queryKey: ["backup_logs"],
     queryFn: async () => {
@@ -159,6 +159,8 @@ export function useBackupLogs() {
       return result.logs ?? [];
     },
     staleTime: 30_000,
+    enabled,
+    retry: false,
   });
 }
 
