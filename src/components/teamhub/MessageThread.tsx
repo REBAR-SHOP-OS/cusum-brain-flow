@@ -146,6 +146,36 @@ export function MessageThread({
   const [mentionStart, setMentionStart] = useState(-1);
   const grammar = useGrammarCheck();
 
+  // Voice recorder
+  const voiceRecorder = useVoiceRecorder();
+
+  const formatVoiceDuration = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  const handleVoiceSend = async () => {
+    const blob = await voiceRecorder.stopRecording();
+    if (!blob) return;
+
+    setIsUploading(true);
+    const sessionOk = await ensureSession();
+    if (!sessionOk) { setIsUploading(false); return; }
+
+    const fileName = `voice-${Date.now()}.webm`;
+    const { error } = await supabase.storage.from("team-chat-files").upload(fileName, blob, { contentType: "audio/webm" });
+    if (error) {
+      toast.error("Failed to upload voice message");
+      setIsUploading(false);
+      return;
+    }
+    const publicUrl = getPublicFileUrl(fileName);
+    onSend("🎤", [{ name: fileName, url: publicUrl, type: "audio/webm", size: blob.size }], replyTo?.id || null);
+    setReplyTo(null);
+    setIsUploading(false);
+  };
+
   const DELETE_ADMINS = ["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"];
   const canDelete = DELETE_ADMINS.includes(myProfile?.email ?? "");
 
