@@ -52,8 +52,8 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [searchTerm, setSearchTerm] = useState("");
   const { unreadSenderIds } = useUnreadSenders();
 
-  const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "کانال رسمی شرکت");
-  const officialGroup = channels.filter((c) => c.channel_type === "group" && c.name === "گروه رسمی شرکت");
+  const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
+  const officialGroup = channels.filter((c) => c.channel_type === "group" && c.name === "Official Group");
   const activeProfiles = profiles.filter((p) => 
     p.email?.endsWith("@rebar.shop")
   );

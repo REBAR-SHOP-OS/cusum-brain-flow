@@ -42,7 +42,7 @@ export default function TeamHub() {
 
   // Channel write restrictions
   const CHANNEL_WRITERS = ["sattar@rebar.shop", "radin@rebar.shop", "neel@rebar.shop"];
-  const isOfficialChannel = activeChannel?.name === "کانال رسمی شرکت";
+  const isOfficialChannel = activeChannel?.name === "Official Channel";
   const canWrite = !isOfficialChannel || CHANNEL_WRITERS.includes(myProfile?.email ?? "");
 
   const targetLangs = useMemo(() => {
