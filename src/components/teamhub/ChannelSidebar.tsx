@@ -12,6 +12,7 @@ import {
   MessageSquare as _MessageSquare,
   Globe,
   ChevronDown,
+  StickyNote,
   ChevronRight,
   Circle,
   X,
