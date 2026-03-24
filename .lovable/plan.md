@@ -1,32 +1,31 @@
 
 
-## Add Vendors to Mentions & Filter Activities for 3rd Party Users
+## Fix: Zahra's Profile ID Mismatch
 
-### Problem
-1. The `@` mention menu only shows `@rebar.shop` users — 3rd party assignees (vendors) on the lead cannot be mentioned
-2. External estimators (3rd party) can see ALL notes/activities on a lead — they should only see activities where they are explicitly `@mentioned`
+### Root Cause
+The hardcoded `ZAHRA_PROFILE_ID` in `Tasks.tsx` is `2356f04b-0e8d-4b50-bd62-1aa0420f74ab`, but Zahra's **actual** profile ID in the database is `3a59f057-b232-4654-a2ea-d519fe22ccd5`.
 
-### Changes
+This means:
+- `isDelegateFor` never matches for Zahra, so `canDeleteOrFix` returns `false` — Generate Fix and Delete buttons are disabled
+- The mirroring code targets the wrong Map entry, so Zahra's column shows "No tasks"
 
-**File: `src/components/chat/MentionMenu.tsx`**
-- Accept optional `extraUsers` prop: `{ id: string; label: string; subtitle?: string }[]`
-- After loading `@rebar.shop` profiles, append `extraUsers` to the items list (filtered by `mentionFilter`)
-- This allows the chatter to pass lead assignees who are non-rebar users
+### Fix
 
-**File: `src/components/sales/SalesLeadChatter.tsx`**
-- Accept new props: `isExternalEstimator?: boolean`, `currentUserEmail?: string`, `assignees?: { profile_id: string; full_name: string }[]`
-- Pass non-`@rebar.shop` assignees as `extraUsers` to `MentionMenu`
-- When `isExternalEstimator` is true, filter `activities` client-side to only show items where `body` or `subject` contains `@CurrentUserName` (matched by email/name from assignees list)
-- Also always show activities created by the current user themselves
+**File**: `src/pages/Tasks.tsx`
 
-**File: `src/components/sales/SalesLeadDrawer.tsx`**
-- Pass `isExternalEstimator`, `assignees`, and current user email to `SalesLeadChatter`
+Update `ZAHRA_PROFILE_ID` from `"2356f04b-0e8d-4b50-bd62-1aa0420f74ab"` to `"3a59f057-b232-4654-a2ea-d519fe22ccd5"`.
 
-### Files Changed
+**File**: `src/components/feedback/AnnotationOverlay.tsx`
+
+Same fix — update `ZAHRA_PROFILE_ID` to the correct value.
 
 | File | Change |
 |---|---|
-| `src/components/chat/MentionMenu.tsx` | Add `extraUsers` prop, merge with rebar profiles |
-| `src/components/sales/SalesLeadChatter.tsx` | Pass vendor assignees to MentionMenu; filter activities for 3rd party to only @mentioned ones |
-| `src/components/sales/SalesLeadDrawer.tsx` | Forward `isExternalEstimator`, `assignees`, user email to chatter |
+| `src/pages/Tasks.tsx` | Fix ZAHRA_PROFILE_ID constant |
+| `src/components/feedback/AnnotationOverlay.tsx` | Fix ZAHRA_PROFILE_ID constant |
+
+### Result
+- Generate Fix and Delete will be enabled for Zahra on Radin's tasks
+- Radin's feedback tasks will appear in Zahra's column
+- All delegate permissions work correctly
 
