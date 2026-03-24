@@ -13,7 +13,7 @@ const COLORS = ["#ef4444", "#3b82f6", "#eab308"] as const;
 const LINE_WIDTH = 8;
 
 const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
-const ZAHRA_PROFILE_ID = "2356f04b-0e8d-4b50-bd62-1aa0420f74ab";
+const ZAHRA_PROFILE_ID = "3a59f057-b232-4654-a2ea-d519fe22ccd5";
 const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID];
 
 export interface SpeechControls {
