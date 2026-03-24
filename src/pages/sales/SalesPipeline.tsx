@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
+import { useProfiles } from "@/hooks/useProfiles";
 import SalesSearchBar from "@/components/sales/SalesSearchBar";
 import SalesLeadDrawer from "@/components/sales/SalesLeadDrawer";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
