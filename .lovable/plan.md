@@ -1,46 +1,44 @@
 
 
-## Add Live Note-Taker for All Conversations
+## Add Create Channel & Create Group Buttons to Sidebar
 
 ### Problem
-When a salesperson is on a call or having a conversation, they need a way to capture live notes automatically via speech-to-text transcription — directly from the Sales Lead Drawer.
-
-### Approach
-Add a "Live Notes" button next to the existing email/phone actions. When clicked, it opens an inline panel that uses the existing `useSpeechRecognition` hook to transcribe speech in real-time and automatically saves the transcript as a note activity in the lead's timeline (via `SalesLeadChatter`'s activity system).
+The sidebar currently only shows hardcoded "Official Channel" and "Official Group". The `CreateChannelDialog` component and `useCreateChannel` hook already exist, but users have no visible button to create new channels or groups. User-created channels are also filtered out in the sidebar.
 
 ### Changes
 
-**File**: `src/components/sales/LiveNoteTaker.tsx` (NEW)
-- A compact panel component with:
-  - Start/Stop recording button with pulsing indicator
-  - Live transcript display (scrolling, interim + final text)
-  - Auto-saves the full transcript as a "note" activity on the lead when stopped
-  - Uses existing `useSpeechRecognition` hook
-  - Uses existing `useSalesLeadActivities().create` to save notes
+**File**: `src/components/teamhub/ChannelSidebar.tsx`
 
-**File**: `src/components/sales/SalesLeadDrawer.tsx`
-- Add a `NotebookPen` icon button next to the email/phone buttons (visible to all users, not just when phone/email exists)
-- Toggle state `noteTakerOpen` to show/hide `LiveNoteTaker` panel inline below the info grid
-- Pass `salesLeadId` and `companyId` to the note-taker
+1. **Show all group channels** — Change the `groupChannels` filter (line 61) from only showing `"Official Channel"` to showing all channels of type `"group"` that are NOT "Official Group":
+   ```
+   const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name !== "Official Group");
+   ```
 
-### UI Layout
-```text
-┌─────────────────────────────────┐
-│  Contact: Ali      Company: EPC │
-│  Email: [✉]  Phone: [📞]  [📝] │  ← new note-taker button
-├─────────────────────────────────┤
-│  🔴 Live Note-Taker    [Stop]  │  ← appears when toggled
-│  ─────────────────────────────  │
-│  "okay so the client wants..."  │
-│  "delivery by next Friday..."   │
-│  listening...                   │
-└─────────────────────────────────┘
-```
+2. **Show all group-type entries under Groups** — Change the `officialGroup` filter (line 62) to include "Official Group" plus any user-created groups (or keep as-is if groups use a different `channel_type`).
 
-When the user stops recording, the full transcript is automatically posted as a note in the Timeline tab with a "Live Note" label.
+3. **Add "+" button next to CHANNELS header** (line 146-150) — A small `Plus` icon button that calls `onCreateChannel()` to open the existing `CreateChannelDialog`.
+
+4. **Add "+" button next to GROUPS header** (line 170-177) — Same pattern, triggers a new callback `onCreateGroup()` to create a group.
+
+**File**: `src/components/teamhub/ChannelSidebar.tsx` (props)
+- Add `onCreateGroup?: () => void` prop
+
+**File**: `src/pages/TeamHub.tsx`
+- Add state + handler for creating groups (reuse `CreateChannelDialog` with a "group" flag, or add a second dialog)
+- Pass `onCreateGroup` to `ChannelSidebar`
+
+**File**: `src/components/teamhub/CreateChannelDialog.tsx`
+- Add optional `mode: "channel" | "group"` prop to change dialog title and icon
+- When mode is `"group"`, title says "Create Group" and uses `Users` icon
+
+### Result
+- "+" button appears next to both CHANNELS and GROUPS headers
+- Clicking opens the existing create dialog (with appropriate title)
+- New channels/groups appear in sidebar immediately after creation
 
 | File | Change |
 |---|---|
-| `src/components/sales/LiveNoteTaker.tsx` | NEW — speech-to-text panel with auto-save |
-| `src/components/sales/SalesLeadDrawer.tsx` | Add note-taker toggle button and render panel |
+| `src/components/teamhub/ChannelSidebar.tsx` | Show all channels/groups, add "+" buttons |
+| `src/components/teamhub/CreateChannelDialog.tsx` | Add `mode` prop for channel vs group |
+| `src/pages/TeamHub.tsx` | Wire up create group handler, pass to sidebar |
 
