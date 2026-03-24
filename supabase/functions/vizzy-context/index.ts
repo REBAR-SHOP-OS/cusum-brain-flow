@@ -173,7 +173,8 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     production: {
       activeCutPlans: (cutPlans || []).length,
       queuedItems: (cutItems || []).length,
-      completedToday: (completedTodayItems || []).length,
+      completedToday: (machineRunsToday || []).filter((r: any) => r.status === "completed").length,
+      totalPiecesProduced: (machineRunsToday || []).filter((r: any) => r.status === "completed").reduce((s: number, r: any) => s + (r.output_qty || 0), 0),
       machinesRunning: (machines || []).length,
       machineRunsToday: (machineRunsToday || []).length,
     },
