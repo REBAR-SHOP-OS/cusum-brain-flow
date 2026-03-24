@@ -398,9 +398,9 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
 
         {/* Fullscreen photo preview */}
         <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
-          <DialogContent className="max-w-[90vw] max-h-[90vh] p-2">
+          <DialogContent className="max-w-[90vw] max-h-[90vh] p-2 flex items-center justify-center overflow-hidden">
             {previewUrl && (
-              <img src={previewUrl} alt="Evidence preview" className="w-full h-full object-contain rounded" />
+              <img src={previewUrl} alt="Evidence preview" className="max-w-full max-h-[80vh] object-contain rounded" loading="lazy" />
             )}
           </DialogContent>
         </Dialog>
