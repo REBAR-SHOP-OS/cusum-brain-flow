@@ -1,26 +1,20 @@
 
 
-## Show Current User's Avatar in Sidebar Header
-
-### Problem
-The circled area in the sidebar header shows a generic `MessageSquare` icon. The user wants the logged-in user's profile avatar displayed there instead.
+## Hide Sensitive Fields from 3rd Party Vendors
 
 ### Change
 
-**File**: `src/components/teamhub/ChannelSidebar.tsx`
+**File**: `src/components/sales/SalesLeadDrawer.tsx`
 
-1. Accept a new prop `myProfile?: Profile` (the current user's profile)
-2. Replace the `MessageSquare` icon block (lines 86-88) with an `Avatar` showing the user's photo or initials
-3. Keep the same size (`w-8 h-8 md:w-9 md:h-9`) and rounded style
-
-**File**: `src/pages/TeamHub.tsx`
-- Pass `myProfile` to `ChannelSidebar`
+1. **Stage ribbon (lines 108-126)**: Wrap in `{!isExternalEstimator && (...)}`
+2. **Email field (lines 144-150)**: Add `!isExternalEstimator &&` to the existing condition
+3. **Phone field (lines 152-158)**: Add `!isExternalEstimator &&` to the existing condition
+4. **Assignees section (lines 174-184)**: Wrap in `{!isExternalEstimator && (...)}`
 
 ### Result
-The sidebar header shows the current logged-in user's avatar (photo or initials) instead of the generic chat icon.
+External estimators see only: title, priority badge, contact name, company name, expected value, source, timeline/details tabs. Stage controls, email, phone, and assignee chips are hidden.
 
 | File | Change |
 |---|---|
-| `src/components/teamhub/ChannelSidebar.tsx` | Replace MessageSquare icon with user Avatar |
-| `src/pages/TeamHub.tsx` | Pass `myProfile` prop to ChannelSidebar |
+| `src/components/sales/SalesLeadDrawer.tsx` | Guard 4 sections with `!isExternalEstimator` |
 
