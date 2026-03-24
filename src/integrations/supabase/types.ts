@@ -14945,6 +14945,51 @@ export type Database = {
         }
         Relationships: []
       }
+      user_notes: {
+        Row: {
+          company_id: string
+          content: string
+          created_at: string | null
+          id: string
+          profile_id: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          profile_id: string
+          title?: string
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          profile_id?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_notes_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_notes_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_ringcentral_tokens: {
         Row: {
           access_token: string | null
