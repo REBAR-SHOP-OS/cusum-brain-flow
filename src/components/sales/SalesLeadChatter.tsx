@@ -194,11 +194,25 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
     }
   };
 
-  const filtered = activities.filter((a) => {
+  // Filter by tab
+  let filtered = activities.filter((a) => {
     if (filter === "notes") return a.activity_type === "note" || a.activity_type === "email";
     if (filter === "system") return a.activity_type === "stage_change" || a.activity_type === "system";
     return true;
   });
+
+  // External estimators only see activities where they are @mentioned or ones they authored
+  if (isExternalEstimator && currentUserName) {
+    filtered = filtered.filter((a) => {
+      // Always show own activities
+      if (currentUserId && a.user_id === currentUserId) return true;
+      // Check if @mentioned in body or subject
+      const mentionTag = `@${currentUserName}`;
+      if (a.body?.includes(mentionTag)) return true;
+      if (a.subject?.includes(mentionTag)) return true;
+      return false;
+    });
+  }
 
   return (
     <div className="px-4 py-3 space-y-3">
