@@ -302,6 +302,7 @@ export default function TeamHub() {
                   readOnly={false}
                   onForward={(msg) => setForwardMsg(msg)}
                   onLangChange={setActiveLang}
+                  headerExtra={<BackgroundThemePicker themeId={themeId} onSelect={setTheme} />}
                 />
               ) : isNotesView ? (
                 <div className="flex items-center justify-center h-full">
