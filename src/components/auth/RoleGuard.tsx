@@ -81,6 +81,15 @@ export function RoleGuard({ children }: RoleGuardProps) {
       return <>{children}</>;
     }
 
+    // External estimator (in externalEstimators map) → Sales Pipeline only
+    const isExternalEstimator = !!ACCESS_POLICIES.externalEstimators[email.toLowerCase()];
+    if (isExternalEstimator) {
+      if (!location.pathname.startsWith("/sales/pipeline")) {
+        return <Navigate to="/sales/pipeline" replace />;
+      }
+      return <>{children}</>;
+    }
+
     // External office role (e.g. Karthick) → Pipeline, Time Clock, Team Hub
     const EXTERNAL_OFFICE_ALLOWED = ["/pipeline", "/timeclock", "/team-hub", "/sales/pipeline"];
     const hasOfficeRole = roles.includes("office" as any);
