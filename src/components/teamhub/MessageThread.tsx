@@ -137,12 +137,11 @@ export function MessageThread({
   const canDelete = DELETE_ADMINS.includes(myProfile?.email ?? "");
 
   const handleDeleteMessage = async (msgId: string) => {
-    const { data, error } = await (supabase as any)
+    const { error } = await (supabase as any)
       .from("team_messages")
       .delete()
-      .eq("id", msgId)
-      .select();
-    if (error || !data?.length) {
+      .eq("id", msgId);
+    if (error) {
       toast.error("Failed to delete message");
     } else {
       toast.success("Message deleted");
