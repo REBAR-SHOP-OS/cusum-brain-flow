@@ -47,6 +47,7 @@ export function PipelineBoard({
   aiMode = false,
   aiActionLeadIds = new Set(),
   pendingActivitiesByLead = {},
+  assigneesByLeadId = {},
 }: PipelineBoardProps) {
   const [draggedLead, setDraggedLead] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<string | null>(null);
