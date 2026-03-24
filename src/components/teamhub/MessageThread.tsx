@@ -661,7 +661,7 @@ export function MessageThread({
                               {cleanText && (
                                 <p
                                   className={cn(
-                                    "text-sm font-medium text-foreground whitespace-pre-wrap leading-relaxed",
+                                    "text-sm font-medium text-foreground whitespace-pre-wrap break-words leading-relaxed",
                                     detectRtl(cleanText) && "text-right"
                                   )}
                                   dir={detectRtl(cleanText) ? "rtl" : "ltr"}
