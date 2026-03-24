@@ -208,6 +208,14 @@ export async function fetchContext(
         ...t,
         employee_name: profileIdMap.get(t.profile_id) || t.profile_id,
       }));
+      // Deliveries (cross-department visibility for Forge)
+      const { data: shopDeliveries } = await supabase
+        .from("deliveries")
+        .select("id, delivery_number, status, scheduled_date, driver_name, notes")
+        .in("status", ["planned", "scheduled", "loading", "in_transit"])
+        .order("scheduled_date", { ascending: true })
+        .limit(15);
+      context.activeDeliveries = shopDeliveries;
     }
 
     // --- Delivery (Atlas) ---
