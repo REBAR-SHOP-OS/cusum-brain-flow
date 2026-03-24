@@ -116,6 +116,11 @@ const SATTAR_PROFILE_ID = "ee659c5c-20e1-4bf5-a01d-dedd886a4ad7";
 const FEEDBACK_RECIPIENTS = [RADIN_PROFILE_ID];
 const EXCLUDED_EMAILS = ["ai@rebar.shop", "kourosh@rebar.shop"];
 
+// Delegate access: key = profile who gains access, value = profiles they can manage
+const TASK_DELEGATES: Record<string, string[]> = {
+  [ZAHRA_PROFILE_ID]: [RADIN_PROFILE_ID],
+};
+
 const COLUMN_COLORS = [
   "border-t-blue-500 bg-blue-500/10",
   "border-t-purple-500 bg-purple-500/10",
@@ -144,7 +149,6 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ─── Helpers ────────────────────────────────────────────
 function parseDateString(dateStr: string): Date {
-  // Handle full ISO timestamps and plain yyyy-MM-dd
   const d = new Date(dateStr);
   if (!isNaN(d.getTime())) return d;
   const [year, month, day] = dateStr.slice(0, 10).split("-").map(Number);
@@ -204,7 +208,6 @@ function ImageWithCopy({ src }: { src: string }) {
       setCopiedImg(true);
       setTimeout(() => setCopiedImg(false), 2000);
     } else {
-      // fallback: copy URL
       navigator.clipboard.writeText(src);
       setCopiedImg(true);
       setTimeout(() => setCopiedImg(false), 2000);
@@ -313,25 +316,37 @@ export default function Tasks() {
   const authResolved = currentUserEmail !== null;
   const isInternal = authResolved && currentUserEmail.endsWith("@rebar.shop");
 
-  // Assigned user, creator, or admin can mark a task complete
+  // Delegate helper
+  const isDelegateFor = (taskAssignedTo: string | null) => {
+    if (!currentProfileId || !taskAssignedTo) return false;
+    return TASK_DELEGATES[currentProfileId]?.includes(taskAssignedTo) ?? false;
+  };
+
+  // Assigned user, creator, delegate, or admin can mark a task complete
   const canMarkComplete = (task: TaskRow) =>
     isAdmin ||
     currentProfileId === task.assigned_to ||
-    currentProfileId === task.created_by_profile_id;
+    currentProfileId === task.created_by_profile_id ||
+    isDelegateFor(task.assigned_to);
 
-  // Assigned user, creator, or admin can reopen/uncomplete
+  // Assigned user, creator, delegate, or admin can reopen/uncomplete
   const canUncomplete = (task: TaskRow) =>
     isAdmin ||
     currentProfileId === task.assigned_to ||
-    currentProfileId === task.created_by_profile_id;
+    currentProfileId === task.created_by_profile_id ||
+    isDelegateFor(task.assigned_to);
 
-  // Only task creator or admin can approve/close or reopen with issue
+  // Task creator, delegate, or admin can approve/close or reopen with issue
   const canApproveTask = (task: TaskRow) =>
-    isAdmin || currentProfileId === task.created_by_profile_id;
+    isAdmin ||
+    currentProfileId === task.created_by_profile_id ||
+    isDelegateFor(task.assigned_to);
 
-  // Only task creator or admin can delete or generate fix
+  // Task creator, delegate, or admin can delete or generate fix
   const canDeleteOrFix = (task: TaskRow) =>
-    isAdmin || currentProfileId === task.created_by_profile_id;
+    isAdmin ||
+    currentProfileId === task.created_by_profile_id ||
+    isDelegateFor(task.assigned_to);
 
   const canToggleTask = (task: TaskRow) => {
     if (task.status === "completed") return canUncomplete(task);
