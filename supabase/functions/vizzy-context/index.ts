@@ -86,9 +86,9 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
   ] = await Promise.all([
     supabase.from("cut_plans").select("id, status").in("status", ["queued", "running"]),
     supabase.from("cut_plan_items").select("id, phase, completed_pieces, total_pieces").in("phase", ["queued", "cutting", "bending"]).limit(500),
-    // completed today (phase = complete, updated today)
-    supabase.from("cut_plan_items").select("id").eq("phase", "complete").gte("updated_at", today + "T00:00:00").limit(500),
-    // machine runs today
+    // placeholder — completedToday now derived from machine_runs below
+    Promise.resolve({ data: [] }),
+    // machine runs today (with operator profile id for name resolution)
     supabase.from("machine_runs").select("id, machine_id, process, status, started_at, output_qty, operator_profile_id").gte("started_at", today + "T00:00:00").order("started_at", { ascending: false }).limit(100),
     // machine names for joining
     supabase.from("machines").select("id, name").limit(100),
