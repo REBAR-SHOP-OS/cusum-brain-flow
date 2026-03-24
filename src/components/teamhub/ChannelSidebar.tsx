@@ -1,7 +1,18 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 import { ProfileEditDialog } from "./ProfileEditDialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -18,6 +29,7 @@ import {
   Circle,
   X,
   Users,
+  Trash2,
 } from "lucide-react";
 import type { TeamChannel } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
@@ -34,6 +46,7 @@ interface ChannelSidebarProps {
   onClickMember: (profileId: string, name: string) => void;
   onClose?: () => void;
   myProfile?: Profile;
+  onDeleteChannel?: (channelId: string) => void;
 }
 
 function getInitials(name: string) {
@@ -51,13 +64,19 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onCreateGroup, onClickMember, onClose, myProfile }: ChannelSidebarProps) {
+const PROTECTED_CHANNELS = ["Official Channel", "Official Group", "My Notes"];
+const ADMIN_EMAILS = ["radin@rebar.shop", "neel@rebar.shop", "sattar@rebar.shop"];
+
+export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onCreateGroup, onClickMember, onClose, myProfile, onDeleteChannel }: ChannelSidebarProps) {
+  const { user } = useAuth();
   const [membersOpen, setMembersOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [previewProfile, setPreviewProfile] = useState<Profile | null>(null);
+  const [channelToDelete, setChannelToDelete] = useState<TeamChannel | null>(null);
   const { unreadSenderIds } = useUnreadSenders();
+  const isAdmin = ADMIN_EMAILS.includes(user?.email ?? "");
 
   const officialChannel = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
   const userChannels = channels.filter((c) => c.channel_type === "group" && c.name !== "Official Channel" && c.name !== "Official Group" && c.name !== "My Notes");
@@ -171,6 +190,12 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
             >
               <Hash className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
               <span className="truncate flex-1 text-left">{ch.name}</span>
+              {isAdmin && !PROTECTED_CHANNELS.includes(ch.name) && (
+                <Trash2
+                  className="w-3.5 h-3.5 shrink-0 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => { e.stopPropagation(); setChannelToDelete(ch); }}
+                />
+              )}
             </button>
           ))}
         </div>
@@ -206,6 +231,12 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
               >
                 <Users className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
                 <span className="truncate flex-1 text-left">{ch.name}</span>
+                {isAdmin && !PROTECTED_CHANNELS.includes(ch.name) && (
+                  <Trash2
+                    className="w-3.5 h-3.5 shrink-0 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => { e.stopPropagation(); setChannelToDelete(ch); }}
+                  />
+                )}
               </button>
             ))}
           </div>
@@ -277,6 +308,31 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!channelToDelete} onOpenChange={() => setChannelToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{channelToDelete?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this channel and all its messages. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (channelToDelete && onDeleteChannel) {
+                  onDeleteChannel(channelToDelete.id);
+                }
+                setChannelToDelete(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
