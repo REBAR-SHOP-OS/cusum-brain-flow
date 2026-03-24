@@ -1,29 +1,40 @@
 
 
-## Fix: Approved Cards Still Showing "Pending Approval"
+## Approvals Button → Filter Calendar to Approved Posts Only
 
-### Root Cause
+### What
+When clicking the "Approvals" button in the toolbar, instead of (or in addition to) showing the ApprovalsPanel, the calendar should filter to show **only approved cards** (`neel_approved === true`). Clicking again resets the filter.
 
-The card's approval status is checked using only `firstPost.neel_approved` (line 191, 237, 243), where `firstPost = posts[0]` — the first post in a grouped set. When a group has multiple posts (e.g., same content across multiple pages), `posts[0]` may not be the one that was approved. So even though Neel approved the post, the card shows "Pending Approval" because it's checking the wrong post in the group.
+### Changes
 
-### Fix
+**File**: `src/pages/SocialMediaManager.tsx`
 
-**File**: `src/components/social/SocialCalendar.tsx`
+1. When `showApprovals` is toggled **on**, set `statusFilter` to `"approved_by_neel"` (which already exists in the filter logic at line 123-124):
+   ```typescript
+   onClick={() => {
+     setShowApprovals((v) => {
+       const next = !v;
+       if (next) setStatusFilter("approved_by_neel");
+       else setStatusFilter("all");
+       return next;
+     });
+     setShowStrategy(false);
+   }}
+   ```
 
-Replace all `firstPost.neel_approved` checks with a group-level check that returns `true` if **any** post in the group is approved:
+2. The existing `filteredPosts` logic already handles `statusFilter === "approved_by_neel"` at line 123-124:
+   ```typescript
+   if (statusFilter === "approved_by_neel") {
+     items = items.filter((p) => p.neel_approved);
+   }
+   ```
+   So no changes needed in the filter logic.
 
-```typescript
-const isApproved = posts.some(p => p.neel_approved);
-```
-
-Then use `isApproved` instead of `firstPost.neel_approved` in the three places:
-- Line 191 (card border color)
-- Line 237 (status text color)
-- Lines 243-246 (status label text)
+3. Keep the `ApprovalsPanel` visible when `showApprovals` is true (existing behavior preserved).
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/social/SocialCalendar.tsx` | Add `isApproved` variable, replace 3 occurrences of `firstPost.neel_approved` |
+| `src/pages/SocialMediaManager.tsx` | Update Approvals button onClick to also set `statusFilter` to `"approved_by_neel"` / `"all"` |
 
