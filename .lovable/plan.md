@@ -1,42 +1,26 @@
 
 
-## Grant Zahra Access to Manage Radin's Tasks
+## Use Same Pipeline Columns in Sales Pipeline
 
 ### What
-Allow `zahra@rebar.shop` to perform all actions on `radin@rebar.shop`'s tasks — mark complete, uncomplete, approve, delete, generate fix, and reassign. Currently only the assigned user, task creator, or admin can do these actions.
+Replace the 8 Sales Pipeline stages (New, Contacted, Qualified, Estimating, Quote Sent, Follow Up, Won, Lost) with the exact same 26 stages from the main Pipeline (`PIPELINE_STAGES`).
 
-### How
-Add a "delegate access" concept: Zahra is treated as having the same permissions as Radin on his tasks.
+### Changes
 
-**File**: `src/pages/Tasks.tsx`
+**File**: `src/hooks/useSalesLeads.ts`
+- Replace `SALES_STAGES` array with the same stages as `PIPELINE_STAGES` from `src/pages/Pipeline.tsx` (all 26 stages: Prospecting, New, Telephonic Enquiries, QC - Ben, Estimation - Ben, ... through Archived / Orphan)
+- Keep hex color format but map from the tailwind classes
 
-1. **Add a delegate map** after the constants (~line 117):
-   ```typescript
-   // Delegate access: key = profile who gains access, value = profiles they can manage
-   const TASK_DELEGATES: Record<string, string[]> = {
-     [ZAHRA_PROFILE_ID]: [RADIN_PROFILE_ID],
-   };
-   ```
+**File**: `src/pages/sales/SalesPipeline.tsx`
+- Update `SALES_STAGE_GROUPS` to match the main Pipeline's `STAGE_GROUPS` (Sales, Estimation, Quotation, Production, Closed)
 
-2. **Create a helper** to check if user is a delegate:
-   ```typescript
-   const isDelegateFor = (taskAssignedTo: string | null) => {
-     if (!currentProfileId || !taskAssignedTo) return false;
-     return TASK_DELEGATES[currentProfileId]?.includes(taskAssignedTo) ?? false;
-   };
-   ```
-
-3. **Update all permission checks** to include delegate access:
-   - `canMarkComplete` — add `|| isDelegateFor(task.assigned_to)`
-   - `canUncomplete` — add `|| isDelegateFor(task.assigned_to)`
-   - `canApproveTask` — add `|| isDelegateFor(task.assigned_to)`
-   - `canDeleteOrFix` — add `|| isDelegateFor(task.assigned_to)`
-
-This gives Zahra full control over Radin's task column without granting admin role.
+**File**: `src/components/sales/SalesLeadDrawer.tsx`
+- No changes needed — it already imports `SALES_STAGES` dynamically
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/pages/Tasks.tsx` | Add delegate map + update 4 permission functions to include delegate access |
+| `src/hooks/useSalesLeads.ts` | Replace `SALES_STAGES` with all 26 stages matching main Pipeline |
+| `src/pages/sales/SalesPipeline.tsx` | Update stage groups to match main Pipeline groups |
 
