@@ -66,7 +66,7 @@ serve((req) =>
 
     // 4. Build email content
     const recordLink = `https://cusum-brain-flow.lovable.app/sales/pipeline?lead=${sales_lead_id}`;
-    const subject = `[Rebar.shop] Lead Update: ${lead.title}`;
+    const subject = `ERP | Rebar.shop | ${lead.title}`;
 
     let actionDesc = "";
     if (event_type === "stage_change") {
