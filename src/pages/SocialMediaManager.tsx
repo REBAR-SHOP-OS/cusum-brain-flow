@@ -316,6 +316,15 @@ export default function SocialMediaManager() {
             )}
           </Button>
           <Button
+            variant={statusFilter === "pending_approval" ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setStatusFilter(statusFilter === "pending_approval" ? "all" : "pending_approval")}
+          >
+            <Clock className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Pending Approval</span>
+          </Button>
+          <Button
             variant={showStrategy ? "default" : "outline"}
             size="sm"
             className="gap-1.5"
