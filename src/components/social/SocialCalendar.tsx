@@ -169,6 +169,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                 const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
                 const { dominant: status, label: statusLabel } = statusSummary(posts);
                 const firstPost = posts[0];
+                const isApproved = posts.some(p => p.neel_approved);
 
                 return (
                   <button
@@ -188,7 +189,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       allGroupSelected && "ring-2 ring-primary",
                       status === "published"
                         ? "bg-green-500/10 border-green-500/40"
-                        : status === "scheduled" && firstPost.neel_approved
+                        : status === "scheduled" && isApproved
                         ? "bg-card border-green-500/30"
                         : status === "scheduled"
                         ? "bg-yellow-500/10 border-yellow-500/30"
@@ -234,15 +235,15 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       {firstPost.scheduled_date && <span className="text-muted-foreground">·</span>}
                       <span className={cn(
                         status === "published" ? "text-green-600 font-medium"
-                          : status === "scheduled" && firstPost.neel_approved ? "text-green-500 font-medium"
+                          : status === "scheduled" && isApproved ? "text-green-500 font-medium"
                           : status === "scheduled" ? "text-yellow-600"
                           : status === "declined" ? "text-destructive"
                           : status === "pending_approval" ? "text-yellow-600"
                           : "text-muted-foreground"
                       )}>
-                        {status === "scheduled" && !firstPost.neel_approved
+                        {status === "scheduled" && !isApproved
                           ? "Pending Approval"
-                          : status === "scheduled" && firstPost.neel_approved
+                          : status === "scheduled" && isApproved
                           ? "Scheduled · Approved"
                           : statusLabel}
                       </span>
