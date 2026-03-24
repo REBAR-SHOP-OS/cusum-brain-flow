@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -6,11 +6,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   MessageSquare, Phone, Mail, Calendar, Clock, Send,
-  CheckCircle2, Loader2, ArrowRight, Zap,
+  CheckCircle2, Loader2, ArrowRight, Zap, Paperclip, X, Image, Video,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useSalesLeadActivities, type SalesLeadActivity } from "@/hooks/useSalesLeadActivities";
+import { supabase } from "@/integrations/supabase/client";
+import { uploadToStorage } from "@/lib/storageUpload";
+import { toast } from "sonner";
 
 interface Props {
   salesLeadId: string;
@@ -34,6 +37,33 @@ function getInitials(name: string): string {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 }
 
+const IMAGE_REGEX = /\.(png|jpe?g|gif|webp)(\?[^\s]*)?$/i;
+const VIDEO_REGEX = /\.(mp4|webm|mov|avi)(\?[^\s]*)?$/i;
+
+function renderBodyWithMedia(text: string | null) {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      if (IMAGE_REGEX.test(part)) {
+        return (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="block my-1">
+            <img src={part} alt="Attachment" className="max-w-full max-h-48 rounded-md border border-border object-contain" loading="lazy" />
+          </a>
+        );
+      }
+      if (VIDEO_REGEX.test(part)) {
+        return (
+          <video key={i} src={part} controls className="max-w-full max-h-48 rounded-md border border-border my-1" />
+        );
+      }
+      return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">{part}</a>;
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
   const { activities, isLoading, create, markDone } = useSalesLeadActivities(salesLeadId);
   const [activeTab, setActiveTab] = useState<TabMode>(null);
@@ -41,24 +71,87 @@ export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
   const [activityType, setActivityType] = useState("follow_up");
   const [dueDate, setDueDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [filter, setFilter] = useState<ThreadFilter>("all");
+  const [pendingFiles, setPendingFiles] = useState<{ file: File; previewUrl: string }[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = () => {
-    if (!text.trim()) return;
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const newFiles = files.map(f => ({ file: f, previewUrl: URL.createObjectURL(f) }));
+    setPendingFiles(prev => [...prev, ...newFiles]);
+    e.target.value = "";
+  };
+
+  const removeFile = (idx: number) => {
+    setPendingFiles(prev => {
+      URL.revokeObjectURL(prev[idx].previewUrl);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = Array.from(e.clipboardData.items);
+    const mediaItems = items.filter(item => item.type.startsWith("image/") || item.type.startsWith("video/"));
+    if (mediaItems.length === 0) return;
+    e.preventDefault();
+    const newFiles: { file: File; previewUrl: string }[] = [];
+    mediaItems.forEach(item => {
+      const blob = item.getAsFile();
+      if (blob) {
+        const ext = blob.type.split("/")[1] || "png";
+        const file = new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type });
+        newFiles.push({ file, previewUrl: URL.createObjectURL(blob) });
+      }
+    });
+    if (newFiles.length > 0) {
+      setPendingFiles(prev => [...prev, ...newFiles]);
+      toast.success(`${newFiles.length} file(s) added from clipboard`);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!text.trim() && pendingFiles.length === 0) return;
+    setUploading(true);
+
+    let body = text.trim();
+
+    // Upload files and append URLs
+    if (pendingFiles.length > 0) {
+      for (const { file } of pendingFiles) {
+        const path = `sales-activities/${salesLeadId}/${crypto.randomUUID()}.${file.name.split(".").pop()}`;
+        const { error: uploadError } = await uploadToStorage("estimation-files", path, file);
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from("estimation-files").getPublicUrl(path);
+          body += (body ? "\n" : "") + publicUrl;
+        } else {
+          toast.error(`Failed to upload ${file.name}`);
+        }
+      }
+    }
+
     if (activeTab === "note") {
       create.mutate({
         sales_lead_id: salesLeadId,
         company_id: companyId,
         activity_type: "note",
-        body: text,
-      }, { onSuccess: () => { setText(""); setActiveTab(null); } });
+        body,
+      }, {
+        onSuccess: () => { setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false); },
+        onError: () => setUploading(false),
+      });
     } else if (activeTab === "activity") {
       create.mutate({
         sales_lead_id: salesLeadId,
         company_id: companyId,
         activity_type: activityType,
-        subject: text,
+        subject: body,
         scheduled_date: dueDate,
-      }, { onSuccess: () => { setText(""); setActiveTab(null); } });
+      }, {
+        onSuccess: () => { setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false); },
+        onError: () => setUploading(false),
+      });
+    } else {
+      setUploading(false);
     }
   };
 
@@ -113,23 +206,74 @@ export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onPaste={handlePaste}
             placeholder={activeTab === "note" ? "Write a note..." : "Activity description..."}
             rows={3}
             className="text-sm resize-none"
           />
-          <div className="flex items-center gap-2 justify-end">
-            <Button size="sm" variant="ghost" onClick={() => { setActiveTab(null); setText(""); }}>
-              Cancel
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleSubmit}
-              disabled={!text.trim() || create.isPending}
-              className="gap-1.5"
-            >
-              {create.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-              {activeTab === "note" ? "Log" : "Schedule"}
-            </Button>
+
+          {/* File previews */}
+          {pendingFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {pendingFiles.map((f, i) => (
+                <div key={i} className="relative group">
+                  {f.file.type.startsWith("image/") ? (
+                    <img src={f.previewUrl} alt="" className="h-16 w-16 object-cover rounded-md border border-border" />
+                  ) : f.file.type.startsWith("video/") ? (
+                    <div className="h-16 w-16 rounded-md border border-border bg-muted flex items-center justify-center">
+                      <Video className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <div className="h-16 w-16 rounded-md border border-border bg-muted flex items-center justify-center">
+                      <Paperclip className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  )}
+                  <button
+                    onClick={() => removeFile(i)}
+                    className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 justify-between">
+            <div className="flex items-center gap-1">
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                className="hidden"
+                onChange={handleFilePick}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 w-7 p-0"
+                onClick={() => fileRef.current?.click()}
+                title="Attach photo or video"
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={() => { setActiveTab(null); setText(""); setPendingFiles([]); }}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSubmit}
+                disabled={(!text.trim() && pendingFiles.length === 0) || create.isPending || uploading}
+                className="gap-1.5"
+              >
+                {(create.isPending || uploading) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                {activeTab === "note" ? "Log" : "Schedule"}
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -194,10 +338,10 @@ function ActivityItem({ activity, onMarkDone }: { activity: SalesLeadActivity; o
           <span>{formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}</span>
         </div>
         {activity.subject && (
-          <p className="text-[13px] font-medium mt-0.5">{activity.subject}</p>
+          <div className="text-[13px] font-medium mt-0.5">{renderBodyWithMedia(activity.subject)}</div>
         )}
         {activity.body && (
-          <p className="text-[13px] text-muted-foreground mt-0.5 whitespace-pre-wrap">{activity.body}</p>
+          <div className="text-[13px] text-muted-foreground mt-0.5 whitespace-pre-wrap">{renderBodyWithMedia(activity.body)}</div>
         )}
         {isScheduled && (
           <div className="flex items-center gap-2 mt-1">
