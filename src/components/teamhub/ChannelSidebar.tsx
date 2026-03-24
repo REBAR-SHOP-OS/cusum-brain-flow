@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Circle,
   X,
+  Users,
 } from "lucide-react";
 import type { TeamChannel } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
@@ -47,10 +48,12 @@ function getAvatarColor(name: string) {
 
 export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose }: ChannelSidebarProps) {
   const [membersOpen, setMembersOpen] = useState(true);
+  const [groupsOpen, setGroupsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const { unreadSenderIds } = useUnreadSenders();
 
   const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "کانال رسمی شرکت");
+  const officialGroup = channels.filter((c) => c.channel_type === "group" && c.name === "گروه رسمی شرکت");
   const activeProfiles = profiles.filter((p) => 
     p.email?.endsWith("@rebar.shop") || p.email?.endsWith("@gmail.com")
   );
@@ -138,6 +141,35 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
             </button>
           ))}
         </div>
+
+        {/* Groups Section */}
+        <button
+          onClick={() => setGroupsOpen(!groupsOpen)}
+          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors mt-2"
+        >
+          {groupsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+          Groups
+        </button>
+
+        {groupsOpen && (
+          <div className="space-y-0.5 mb-3">
+            {officialGroup.map((ch) => (
+              <button
+                key={ch.id}
+                onClick={() => handleSelect(ch.id)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all group",
+                  selectedId === ch.id
+                    ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                )}
+              >
+                <Users className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
+                <span className="truncate flex-1 text-left">{ch.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Team Members */}
         <button
