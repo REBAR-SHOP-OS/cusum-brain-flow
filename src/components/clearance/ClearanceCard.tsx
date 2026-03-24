@@ -398,9 +398,9 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
 
         {/* Fullscreen photo preview */}
         <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
-          <DialogContent className="max-w-[90vw] max-h-[90vh] p-2">
+          <DialogContent className="max-w-[90vw] max-h-[90vh] p-2 flex items-center justify-center overflow-hidden">
             {previewUrl && (
-              <img src={previewUrl} alt="Evidence preview" className="w-full h-full object-contain rounded" />
+              <img src={previewUrl} alt="Evidence preview" className="max-w-full max-h-[80vh] object-contain rounded" loading="lazy" />
             )}
           </DialogContent>
         </Dialog>
@@ -486,7 +486,7 @@ function PhotoSlot({ label, url, loading, disabled, inputRef, onFileSelect, onPr
         </button>
       )}
       {url ? (
-        <img src={url} alt={label} className="w-full h-full object-cover" />
+        <img src={url} alt={label} className="w-full h-full object-cover" loading="lazy" decoding="async" />
       ) : loading ? (
         <div className="flex flex-col items-center gap-1 text-muted-foreground">
           <Loader2 className="w-6 h-6 animate-spin" />
