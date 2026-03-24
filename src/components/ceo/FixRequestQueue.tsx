@@ -232,6 +232,26 @@ export function FixRequestQueue() {
     toast.success("Marked as resolved");
   };
 
+  const handleAutoFix = async (req: FixRequest) => {
+    setGeneratingId(req.id);
+    try {
+      const result = await invokeEdgeFunction<{ prompt: string }>("generate-fix-prompt", {
+        title: req.affected_area || "Fix Request",
+        description: req.description,
+        screenshots: req.photo_url ? [req.photo_url] : [],
+        priority: classifySeverity(req.description),
+        source: "vizzy_auto_fix",
+      });
+      await navigator.clipboard.writeText(result.prompt);
+      toast.success("Fix command copied to clipboard — paste in Lovable chat");
+      await resolveRequest(req.id);
+    } catch (err: any) {
+      toast.error("Auto-fix failed", { description: err.message });
+    } finally {
+      setGeneratingId(null);
+    }
+  };
+
   const generateLovableCommand = async (req: FixRequest) => {
     setGeneratingId(req.id);
     try {
