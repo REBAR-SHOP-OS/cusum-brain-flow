@@ -122,25 +122,23 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
           </span>
         </div>
 
-        {channelsOpen && (
-          <div className="space-y-0.5 mb-3">
-            {groupChannels.map((ch) => (
-              <button
-                key={ch.id}
-                onClick={() => handleSelect(ch.id)}
-                className={cn(
-                  "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all group",
-                  selectedId === ch.id
-                    ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                )}
-              >
-                <Hash className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
-                <span className="truncate flex-1 text-left">{ch.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="space-y-0.5 mb-3">
+          {groupChannels.map((ch) => (
+            <button
+              key={ch.id}
+              onClick={() => handleSelect(ch.id)}
+              className={cn(
+                "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all group",
+                selectedId === ch.id
+                  ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
+                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              )}
+            >
+              <Hash className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
+              <span className="truncate flex-1 text-left">{ch.name}</span>
+            </button>
+          ))}
+        </div>
 
         {/* Team Members */}
         <button
