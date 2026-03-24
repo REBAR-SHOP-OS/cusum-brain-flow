@@ -40,6 +40,7 @@ interface PipelineColumnProps {
   aiMode?: boolean;
   aiActionLeadIds?: Set<string>;
   pendingActivitiesByLead?: Record<string, { type: string; dueDate: string }[]>;
+  assigneesByLeadId?: Record<string, { profile_id: string; full_name: string }[]>;
 }
 
 const ACTIVITY_COLORS: Record<ActivityStatus, string> = {
