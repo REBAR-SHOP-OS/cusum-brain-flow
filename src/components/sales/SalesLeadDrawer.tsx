@@ -68,6 +68,7 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
   const age = formatDistanceToNow(new Date(lead.created_at), { addSuffix: false });
 
   return (
+    <>
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent className="w-full sm:max-w-[45vw] overflow-y-auto p-0 rounded-none">
         {/* ── Header ── */}
