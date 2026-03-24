@@ -1,28 +1,9 @@
 
 
-## Click Own Name → Navigate to My Notes
+## Retry Edge Function Deployment
 
-### Problem
-When a user clicks their own name in the Team Members list, it opens a DM with themselves instead of navigating to "My Notes" (the self-chat channel).
+The error is a temporary network failure (connection reset to esm.sh) during the bundling step. The `notify-lead-assignees` function code is correct and doesn't even import from esm.sh directly — the error comes from a transitive dependency in the shared `requestHandler.ts`.
 
-### Changes
-
-**File**: `src/components/teamhub/ChannelSidebar.tsx`
-- In `handleClickMember` (line 100), check if the clicked `profileId` matches `myProfile.id`
-- If it matches, call `onSelect("__my_notes__")` instead of `onClickMember(profileId, name)` — this navigates to My Notes
-
-```tsx
-const handleClickMember = (profileId: string, name: string) => {
-  if (myProfile && profileId === myProfile.id) {
-    onSelect("__my_notes__");
-  } else {
-    onClickMember(profileId, name);
-  }
-  onClose?.();
-};
-```
-
-| File | Change |
-|---|---|
-| `src/components/teamhub/ChannelSidebar.tsx` | Redirect self-click to My Notes |
+### Action
+Simply redeploy the `notify-lead-assignees` edge function. No code changes needed.
 
