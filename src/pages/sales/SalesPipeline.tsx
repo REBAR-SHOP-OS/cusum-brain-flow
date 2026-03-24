@@ -82,6 +82,11 @@ const PIPELINE_STAGES = SALES_STAGES.map((s) => ({
 }));
 
 export default function SalesPipeline() {
+  const { user } = useAuth();
+  const userEmail = user?.email?.toLowerCase() || "";
+  const externalEstimatorStages = ACCESS_POLICIES.externalEstimators[userEmail];
+  const isExternalEstimator = !!externalEstimatorStages;
+
   const { leads, isLoading, createLead, updateLead, deleteLead } = useSalesLeads();
   const { contacts: unifiedContacts } = useSalesContacts();
   const { profiles } = useProfiles();
