@@ -21,6 +21,7 @@ import { SlashCommandMenu, SlashCommand } from "@/components/chat/SlashCommandMe
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
+import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
