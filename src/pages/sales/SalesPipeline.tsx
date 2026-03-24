@@ -311,6 +311,7 @@ export default function SalesPipeline() {
           onEdit={noop as any}
           onDelete={noop as any}
           onLeadClick={handleLeadClick}
+          assigneesByLeadId={bySalesLeadId}
         />
       </div>
 
