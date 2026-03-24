@@ -1,23 +1,28 @@
 
 
-## Filter @Mention Menu to Only Show rebar.shop Team Members
+## Filter Forward Message Dialog to rebar.shop Channels Only
 
 ### Problem
-The `MentionMenu` currently queries both `profiles_safe` (team members) and `v_customers_clean` (customers), showing customers like "Intricate Build Ltd" and "MORRISON CONSTRUCTION" in the mention dropdown. Only `@rebar.shop` domain users should appear.
+The Forward Message dialog currently shows all channels including DM conversations. Per the Team Hub governance rules, only official channels and groups (rebar.shop team channels) should be visible — DMs should be excluded, consistent with the sidebar which already hides DMs.
 
 ### Changes
 
-**File**: `src/components/chat/MentionMenu.tsx`
+**File**: `src/components/teamhub/ForwardMessageDialog.tsx`
 
-1. Remove the `v_customers_clean` query entirely from `loadMentions`
-2. Filter `profiles_safe` results to only include profiles with `@rebar.shop` email domain (add `.ilike("email", "%@rebar.shop")` to the query)
-3. Remove `"customer"` from the `MentionItem` type — only `"team"` remains
-4. Remove the `Building2` icon import and the customer icon branch in the render
-5. Simplify the items mapping to only handle profiles
+1. Filter out DM-type channels from the list — only show channels with `channel_type === "channel"` or `channel_type === "group"` (exclude `"dm"`)
+2. This aligns with the sidebar behavior where DMs are already hidden
+
+Update line 30-32:
+```typescript
+const filteredChannels = channels
+  .filter((c) => c.id !== currentChannelId)
+  .filter((c) => c.channel_type !== "dm")  // Only show channels/groups, not DMs
+  .filter((c) => c.name.toLowerCase().includes(search.toLowerCase()));
+```
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/chat/MentionMenu.tsx` | Remove customer query, filter to @rebar.shop profiles only |
+| `src/components/teamhub/ForwardMessageDialog.tsx` | Add `channel_type !== "dm"` filter to exclude DM channels |
 
