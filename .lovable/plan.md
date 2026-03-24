@@ -1,72 +1,107 @@
 
+## Audit Summary
 
-## Train Forge: Add Date Awareness, Tool Instructions, and Delivery Visibility
+The date itself is already available to Forge. The real bug is in how Forge fetches and interprets work orders:
 
-### Problem
-Forge (shopfloor agent) has three gaps despite having tools deployed:
-1. **No date awareness** — The system prompt never tells Forge what today's date is, so it can't reason about "today"
-2. **No delivery data** — Forge says "I can't access deliveries" because delivery context is only loaded for `agent === "delivery"`
-3. **Prompt doesn't list its new tools** — The `operations.ts` prompt for Forge doesn't mention `get_production_report`, `get_work_orders`, `get_cut_plan_status`, or `get_timeclock_summary`, so the model doesn't know to call them
+- `get_work_orders` currently returns **active** work orders, not **today’s** work orders
+- The tool does **not select `created_at`**, even though `work_orders` has that column
+- The tool defaults to `queued/pending/in-progress`, so Forge is showing a live queue and calling it “today’s”
+- The context loader has the same issue: `activeWorkOrders` includes active rows only, without creation-date visibility
+- Chat history is already passed into `ai-agent`, so Forge can see the prior conversation; it just needs better tool data + prompt rules
 
-### Changes
+I also verified the database has `work_orders.created_at`, and the sampled rows Forge listed were mostly created in February, so they are clearly **not all dated today**.
 
-**File: `supabase/functions/ai-agent/index.ts`** (line 981-983)
+## Fix Plan
 
-Inject today's date (EST timezone) into the static system prompt:
+### 1. Fix the work-order tool so Forge can answer date questions correctly
+Update `supabase/functions/_shared/agentToolExecutor.ts`:
 
-```typescript
-const todayEST = new Date().toLocaleDateString("en-US", {
-  weekday: "long", year: "numeric", month: "long", day: "numeric",
-  timeZone: "America/Toronto"
-});
+- Expand `get_work_orders` to select:
+  - `created_at`
+  - `scheduled_start`
+  - `order_id`
+  - existing status/priority/notes
+  - joined order/customer info if available
+- Add support for an explicit date mode such as:
+  - `created_today`
+  - `scheduled_today`
+  - `active`
+- Return clear booleans/labels in the result, for example:
+  - `is_created_today`
+  - `is_scheduled_today`
+- Sort appropriately for the chosen date mode
 
-const staticSystemPrompt = ONTARIO_CONTEXT + basePrompt + 
-  GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + LANG_INSTRUCTION +
-  `\n\n## Current Date & Time\nToday is: ${todayEST}\nTimezone: Eastern (America/Toronto)` +
-  `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
-```
+Result: Forge can distinguish “created today” from “scheduled today” from “currently active”.
 
-**File: `supabase/functions/_shared/agents/operations.ts`** (shopfloor prompt)
+### 2. Fix Forge’s default interpretation of “today’s work orders”
+Update `supabase/functions/_shared/agentTools.ts`:
 
-Add a tools section to Forge's prompt listing its available tools and when to use them:
+- Improve the `get_work_orders` tool schema so the model can request the right mode instead of guessing
+- Make the description explicit:
+  - “today’s work orders” must not automatically mean active work orders
+  - the tool should be used to check creation date and/or scheduled date
 
-```
-## Available Tools — USE THESE
-You have these tools available. ALWAYS use them instead of saying you can't access data:
+Result: the model has a better API contract.
 
-- **get_production_report**: Today's machine runs, pieces produced, operator activity. USE for "what happened today", "daily report", "status"
-- **get_work_orders**: List work orders with status and priority. USE for "show work orders", "what's pending"
-- **get_cut_plan_status**: Cut plan progress by phase. USE for "cut plan progress", "what's being cut"
-- **get_timeclock_summary**: Who's clocked in, hours worked. USE for "who's working", "attendance"
-- **update_machine_status**: Change machine status (idle, running, blocked, down)
-- **create_notifications**: Create todos, alerts, ideas
+### 3. Fix shopfloor context so passive answers are not misleading
+Update `supabase/functions/_shared/agentContext.ts`:
 
-CRITICAL: When asked about production, work orders, or employee activity — ALWAYS call the relevant tool FIRST. Never say "I don't have access" or "I can only update machine statuses." You have full read access to production data.
-```
+- Include `created_at` in work-order context
+- Optionally split context into:
+  - `activeWorkOrders`
+  - `todayCreatedWorkOrders`
+  - `todayScheduledWorkOrders`
 
-**File: `supabase/functions/_shared/agentContext.ts`** (shopfloor block, after line 210)
+Result: even when Forge answers from context instead of a tool call, it won’t confuse “active” with “today”.
 
-Add basic delivery data to Forge's context so it has cross-department visibility:
+### 4. Train Forge to use conversation history properly
+Update `supabase/functions/_shared/agents/operations.ts`:
 
-```typescript
-// Deliveries (cross-department visibility for Forge)
-const { data: deliveries } = await supabase
-  .from("deliveries")
-  .select("id, delivery_number, status, scheduled_date, driver_name, notes")
-  .in("status", ["planned", "scheduled", "loading", "in_transit"])
-  .order("scheduled_date", { ascending: true })
-  .limit(15);
-context.activeDeliveries = deliveries;
-```
+Add explicit rules for follow-up questions like:
+- “is all dated today?”
+- “are these really today’s?”
+- “check again”
 
-**Deploy**: Redeploy `ai-agent` edge function
+Forge should:
+- use the previous list from conversation/history as the subject of the follow-up
+- verify with `created_at` and `scheduled_start`
+- answer carefully:
+  - “These are active work orders”
+  - “Not all were created today”
+  - “X were created today, Y were scheduled today, Z are simply active”
 
-### Files Changed
+Also add a rule:
+- If “today” is ambiguous, Forge must report both:
+  - created today
+  - scheduled today
 
-| File | Change |
-|---|---|
-| `ai-agent/index.ts` | Inject today's date into system prompt for all agents |
-| `_shared/agents/operations.ts` | Add tool instructions to Forge's prompt |
-| `_shared/agentContext.ts` | Add delivery data to shopfloor context |
-| Deploy | Redeploy `ai-agent` |
+### 5. Keep existing date-awareness work, no extra date patch needed
+`supabase/functions/ai-agent/index.ts` already injects today’s date in Eastern time, so no new change is needed there unless we want to refine formatting.
 
+## Files to Update
+
+- `supabase/functions/_shared/agentToolExecutor.ts`
+- `supabase/functions/_shared/agentTools.ts`
+- `supabase/functions/_shared/agentContext.ts`
+- `supabase/functions/_shared/agents/operations.ts`
+
+## Expected Behavior After Fix
+
+When the user says “Show today’s work orders”, Forge should no longer dump all active work orders unless they are actually filtered for today.
+
+When the user follows with “is all dated today?”, Forge should answer with something like:
+
+- “No. These are active work orders, not all created today.”
+- “Created today: X”
+- “Scheduled today: Y”
+- “Still active from earlier dates: Z”
+
+## Validation
+
+After implementation, test these exact flows in Forge:
+
+1. Ask: “Show today’s work orders”
+2. Confirm the response is filtered by the intended meaning of “today”
+3. Ask: “is all dated today?”
+4. Confirm Forge uses the prior result and answers with real date-based counts instead of saying it lacks date info
+5. Ask a mixed follow-up like “show active but tell me which ones were created today” and confirm it distinguishes both correctly
