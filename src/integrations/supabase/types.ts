@@ -11857,6 +11857,56 @@ export type Database = {
           },
         ]
       }
+      sales_lead_activities: {
+        Row: {
+          activity_type: string
+          body: string | null
+          company_id: string
+          completed_at: string | null
+          created_at: string | null
+          id: string
+          sales_lead_id: string
+          scheduled_date: string | null
+          subject: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          activity_type?: string
+          body?: string | null
+          company_id: string
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          sales_lead_id: string
+          scheduled_date?: string | null
+          subject?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          activity_type?: string
+          body?: string | null
+          company_id?: string
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          sales_lead_id?: string
+          scheduled_date?: string | null
+          subject?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sales_lead_activities_sales_lead_id_fkey"
+            columns: ["sales_lead_id"]
+            isOneToOne: false
+            referencedRelation: "sales_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sales_leads: {
         Row: {
           assigned_to: string | null
