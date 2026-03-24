@@ -19,7 +19,7 @@ interface MentionMenuProps {
   extraUsers?: { id: string; label: string; subtitle?: string }[];
 }
 
-export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose }: MentionMenuProps) {
+export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose, extraUsers = [] }: MentionMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [items, setItems] = useState<MentionItem[]>([]);
 
@@ -34,18 +34,29 @@ export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose }
 
       const profiles = (data as unknown as { id: string; full_name: string; title: string | null; email: string }[]) || [];
 
-      setItems(
-        profiles.map((p) => ({
-          id: p.id,
-          label: p.full_name,
-          subtitle: p.title || "Team member",
+      const rebarItems: MentionItem[] = profiles.map((p) => ({
+        id: p.id,
+        label: p.full_name,
+        subtitle: p.title || "Team member",
+        type: "team" as const,
+      }));
+
+      // Merge extra users (vendors/3rd party) filtered by current filter
+      const extraFiltered: MentionItem[] = extraUsers
+        .filter((u) => u.label.toLowerCase().includes(filter.toLowerCase()))
+        .filter((u) => !rebarItems.some((r) => r.id === u.id))
+        .map((u) => ({
+          id: u.id,
+          label: u.label,
+          subtitle: u.subtitle || "External",
           type: "team" as const,
-        }))
-      );
+        }));
+
+      setItems([...rebarItems, ...extraFiltered]);
     } catch (err) {
       console.error("Failed to load mentions:", err);
     }
-  }, [filter]);
+  }, [filter, extraUsers]);
 
   useEffect(() => {
     if (isOpen) loadMentions();

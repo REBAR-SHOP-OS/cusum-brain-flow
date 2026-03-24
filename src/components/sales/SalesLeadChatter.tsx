@@ -69,8 +69,13 @@ function renderBodyWithMedia(text: string | null) {
   });
 }
 
-export function SalesLeadChatter({ salesLeadId, companyId }: Props) {
+export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, currentUserName, currentUserId, assignees = [] }: Props) {
   const { activities, isLoading, create, markDone } = useSalesLeadActivities(salesLeadId);
+
+  // Build extraUsers for MentionMenu from non-rebar assignees
+  const extraMentionUsers = assignees
+    .filter((a) => !a.full_name.toLowerCase().includes("rebar"))
+    .map((a) => ({ id: a.profile_id, label: a.full_name, subtitle: "External estimator" }));
   const [activeTab, setActiveTab] = useState<TabMode>(null);
   const [text, setText] = useState("");
   const [activityType, setActivityType] = useState("follow_up");
