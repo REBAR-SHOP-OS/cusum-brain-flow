@@ -198,7 +198,7 @@ export function DetailedListView() {
                   <span className="text-xs font-bold">{formatLength(item.cut_length_mm, unitSystem)}</span>
                   {dimCols.map(c => (
                     <span key={c} className="text-xs text-muted-foreground">
-                      {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">MM</sub></span> : ""}
+                      {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">{unitSystem === "imperial" ? "IN" : "MM"}</sub></span> : ""}
                     </span>
                   ))}
                   <div className="flex items-center gap-1">
