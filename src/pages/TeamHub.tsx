@@ -12,6 +12,7 @@ import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
 import { MeetingReportDialog } from "@/components/teamhub/MeetingReportDialog";
 import { ForwardMessageDialog } from "@/components/teamhub/ForwardMessageDialog";
+import { BackgroundThemePicker, useTeamHubTheme } from "@/components/teamhub/BackgroundThemePicker";
 import { MessageSquare, Globe, Users, Sparkles, Menu, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -37,6 +38,7 @@ export default function TeamHub() {
   const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
   const [forwardMsg, setForwardMsg] = useState<TeamMessage | null>(null);
   const [selfChannelId, setSelfChannelId] = useState<string | null>(null);
+  const { themeId, theme, setTheme } = useTeamHubTheme();
 
   const isNotesView = selectedChannelId === "__my_notes__";
 
@@ -239,7 +241,7 @@ export default function TeamHub() {
   );
 
   return (
-    <div className="relative flex flex-col h-full bg-background overflow-hidden">
+    <div className="relative flex flex-col h-full bg-background overflow-hidden" style={theme.style}>
       {/* Ambient glow effects */}
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute -top-20 -right-20 w-[500px] h-[500px] rounded-full bg-primary/5 blur-[120px]" />
@@ -300,6 +302,7 @@ export default function TeamHub() {
                   readOnly={false}
                   onForward={(msg) => setForwardMsg(msg)}
                   onLangChange={setActiveLang}
+                  headerExtra={<BackgroundThemePicker themeId={themeId} onSelect={setTheme} />}
                 />
               ) : isNotesView ? (
                 <div className="flex items-center justify-center h-full">
@@ -322,6 +325,7 @@ export default function TeamHub() {
                   readOnly={!canWrite}
                   onForward={(msg) => setForwardMsg(msg)}
                   onLangChange={setActiveLang}
+                  headerExtra={<BackgroundThemePicker themeId={themeId} onSelect={setTheme} />}
                 />
               ) : channelsLoading ? (
                 <div className="flex items-center justify-center h-full">
