@@ -44,7 +44,7 @@ const priorityConfig: Record<string, { label: string; class: string }> = {
   low: { label: "Low", class: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" },
 };
 
-export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete }: Props) {
+export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete, assignees = [], profiles = [], onAddAssignee, onRemoveAssignee }: Props) {
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const [notes, setNotes] = useState("");
   const [lostReason, setLostReason] = useState("");

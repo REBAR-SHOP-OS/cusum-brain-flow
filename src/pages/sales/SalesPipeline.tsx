@@ -489,6 +489,10 @@ export default function SalesPipeline() {
         onClose={() => setDrawerLead(null)}
         onUpdate={(data) => { updateLead.mutate(data); setDrawerLead(prev => prev ? { ...prev, ...data } : null); }}
         onDelete={(id) => deleteLead.mutate(id)}
+        assignees={drawerLead ? (bySalesLeadId[drawerLead.id] ?? []) : []}
+        profiles={activeProfiles}
+        onAddAssignee={(profileId) => { if (drawerLead) addAssignee.mutate({ salesLeadId: drawerLead.id, profileId }); }}
+        onRemoveAssignee={(profileId) => { if (drawerLead) removeAssignee.mutate({ salesLeadId: drawerLead.id, profileId }); }}
       />
     </div>
   );
