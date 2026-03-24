@@ -1,12 +1,15 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useSalesLeads, SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
+import { useSalesContacts } from "@/hooks/useSalesContacts";
 import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
+import { Plus, ChevronsUpDown, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandItem, CommandEmpty } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import SalesSearchBar from "@/components/sales/SalesSearchBar";
 import SalesSummaryCards, { SummaryCardData } from "@/components/sales/SalesSummaryCards";
