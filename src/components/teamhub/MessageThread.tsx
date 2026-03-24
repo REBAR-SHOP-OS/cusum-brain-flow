@@ -114,6 +114,14 @@ function isImageFile(type: string) {
   return type.startsWith("image/");
 }
 
+function isAudioFile(type: string) {
+  return type.startsWith("audio/");
+}
+
+function isAudioUrl(url: string): boolean {
+  return /\.(mp3|wav|ogg|webm|m4a|aac)(\?|$)/i.test(url);
+}
+
 function isVideoFile(type: string) {
   return type.startsWith("video/");
 }
