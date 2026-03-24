@@ -1,28 +1,17 @@
 
 
-## Mirror Feedback Task Completion Between Zahra & Radin
+## Make Chat Message Text Bolder and More Readable
 
 ### Problem
-Feedback tasks (`screenshot_feedback` and `feedback_verification`) are visually mirrored between Zahra and Radin's columns, but completing one doesn't auto-complete the paired task. When either user checks off a feedback task, the linked task should also be marked complete.
+Message text in Team Hub chat uses `text-sm text-foreground/90` which appears thin and hard to read, especially on light background themes.
 
 ### Changes
 
-**File**: `src/pages/Tasks.tsx`
-
-Add a helper function `mirrorFeedbackCompletion(task)` called after successful completion in three places:
-
-1. **`toggleComplete`** (line ~611, after successful update): If the task source is `screenshot_feedback` or `feedback_verification`, and the acting user is Zahra or Radin, find and complete the paired task.
-
-2. **`confirmFeedbackFix`** (line ~678): Same — after confirming, auto-complete the linked original task.
-
-3. **`approveAndClose`** (line ~719): Same pattern.
-
-**Mirror logic**:
-- If a `feedback_verification` task is completed → find the original `screenshot_feedback` task via `metadata.original_task_id` → mark it completed
-- If a `screenshot_feedback` task is completed → find any `feedback_verification` task where `metadata->>'original_task_id'` equals this task's ID → mark it completed
-- Only triggers when the acting user's profile is Zahra or Radin
+**File**: `src/components/teamhub/MessageThread.tsx` (line 664)
+- Change message text class from `text-sm text-foreground/90` to `text-sm font-medium text-foreground` — removes the 90% opacity and adds medium font weight for better readability
+- Also update sender name class (line 600) from `font-semibold text-sm` to `font-bold text-sm` for stronger name visibility
 
 | File | Change |
 |---|---|
-| `src/pages/Tasks.tsx` | Add `mirrorFeedbackCompletion` helper, call it in `toggleComplete`, `confirmFeedbackFix`, and `approveAndClose` |
+| `src/components/teamhub/MessageThread.tsx` | Make message text `font-medium text-foreground` (no opacity), sender names `font-bold` |
 
