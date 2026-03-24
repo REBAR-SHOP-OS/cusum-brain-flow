@@ -67,6 +67,9 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
   const [
     { data: cutPlans },
     { data: cutItems },
+    { data: completedTodayItems },
+    { data: machineRunsToday },
+    { data: allMachines },
     { data: machines },
     { data: leads },
     { data: customers },
@@ -83,6 +86,12 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
   ] = await Promise.all([
     supabase.from("cut_plans").select("id, status").in("status", ["queued", "running"]),
     supabase.from("cut_plan_items").select("id, phase, completed_pieces, total_pieces").in("phase", ["queued", "cutting", "bending"]).limit(500),
+    // completed today (phase = complete, updated today)
+    supabase.from("cut_plan_items").select("id").eq("phase", "complete").gte("updated_at", today + "T00:00:00").limit(500),
+    // machine runs today
+    supabase.from("machine_runs").select("id, machine_id, process, status, started_at, output_qty, operator_profile_id").gte("started_at", today + "T00:00:00").order("started_at", { ascending: false }).limit(100),
+    // machine names for joining
+    supabase.from("machines").select("id, name").limit(100),
     supabase.from("machines").select("id, name, status, type").eq("status", "running"),
     supabase.from("leads").select("id, title, stage, expected_value, probability").in("stage", ["new", "contacted", "qualified", "proposal"]).order("probability", { ascending: false }).limit(20),
     supabase.from("customers").select("id").eq("status", "active").limit(100),
@@ -164,9 +173,21 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     production: {
       activeCutPlans: (cutPlans || []).length,
       queuedItems: (cutItems || []).length,
-      completedToday: (cutItems || []).filter((i: any) => (i.completed_pieces ?? 0) >= (i.total_pieces ?? 0) && (i.total_pieces ?? 0) > 0).length,
+      completedToday: (completedTodayItems || []).length,
       machinesRunning: (machines || []).length,
+      machineRunsToday: (machineRunsToday || []).length,
     },
+    machineRuns: (() => {
+      const machineNameMap = new Map((allMachines || []).map((m: any) => [m.id, m.name]));
+      const runs = (machineRunsToday || []).map((r: any) => ({
+        machine_name: machineNameMap.get(r.machine_id) || "Unknown",
+        process: r.process,
+        status: r.status,
+        started_at: r.started_at,
+        output_qty: r.output_qty,
+      }));
+      return { totalToday: runs.length, runs };
+    })(),
     crm: {
       openLeads: (leads || []).length,
       hotLeads: (leads || []).filter((l: any) => (l.probability || 0) >= 70).slice(0, 5),
