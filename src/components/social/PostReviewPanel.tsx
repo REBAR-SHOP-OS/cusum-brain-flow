@@ -725,7 +725,7 @@ export function PostReviewPanel({
                                    user_id: post.user_id,
                                    scheduled_date: newDate.toISOString(),
                                    status: "scheduled",
-                                   qa_status: "needs_review",
+                                   qa_status: "scheduled",
                                    neel_approved: false,
                                  });
                                  if (error) throw error;
