@@ -8,7 +8,7 @@ import {
   Hash,
   Plus,
   Search,
-  MessageSquare,
+  MessageSquare as _MessageSquare,
   Globe,
   ChevronDown,
   ChevronRight,
