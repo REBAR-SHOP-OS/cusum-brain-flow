@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useProfiles } from "@/hooks/useProfiles";
 import { PIPELINE_STAGES } from "@/pages/Pipeline";
 import type { Tables } from "@/integrations/supabase/types";
 
