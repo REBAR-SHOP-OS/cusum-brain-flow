@@ -188,8 +188,10 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       allGroupSelected && "ring-2 ring-primary",
                       status === "published"
                         ? "bg-green-500/10 border-green-500/40"
+                        : status === "scheduled" && firstPost.neel_approved
+                        ? "bg-card border-green-500/30"
                         : status === "scheduled"
-                        ? "bg-card border-primary/30"
+                        ? "bg-yellow-500/10 border-yellow-500/30"
                         : status === "draft"
                         ? "bg-muted/30 border-dashed border-muted-foreground/30"
                         : status === "declined"
@@ -232,15 +234,17 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       {firstPost.scheduled_date && <span className="text-muted-foreground">·</span>}
                       <span className={cn(
                         status === "published" ? "text-green-600 font-medium"
-                          : status === "scheduled" ? "text-primary"
+                          : status === "scheduled" && firstPost.neel_approved ? "text-green-500 font-medium"
+                          : status === "scheduled" ? "text-yellow-600"
                           : status === "declined" ? "text-destructive"
                           : status === "pending_approval" ? "text-yellow-600"
                           : "text-muted-foreground"
                       )}>
-                        {statusLabel}
-                        {status === "scheduled" && firstPost.neel_approved && (
-                          <span className="text-green-500 font-medium ml-1">· Approved</span>
-                        )}
+                        {status === "scheduled" && !firstPost.neel_approved
+                          ? "Pending Approval"
+                          : status === "scheduled" && firstPost.neel_approved
+                          ? "Scheduled · Approved"
+                          : statusLabel}
                       </span>
                     </div>
                   </button>
