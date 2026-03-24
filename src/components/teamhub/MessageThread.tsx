@@ -660,6 +660,7 @@ export function MessageThread({
                                   {uniqueAttachments.map((att, i) => {
                                     const isImg = isImageFile(att.type) || isImageUrl(att.url) || isImageUrl(att.name);
                                     const isVid = isVideoFile(att.type) || isVideoUrl(att.url) || isVideoUrl(att.name);
+                                    const isAud = isAudioFile(att.type) || isAudioUrl(att.url) || isAudioUrl(att.name);
 
                                     if (isImg) {
                                       return (
