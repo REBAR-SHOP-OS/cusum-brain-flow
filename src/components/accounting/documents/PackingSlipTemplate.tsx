@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Printer, X } from "lucide-react";
 import brandLogo from "@/assets/brand-logo.png";
+import { SignaturePad } from "@/components/shopfloor/SignaturePad";
 
 interface PackingSlipItem {
   dwNumber?: string;
@@ -28,6 +30,7 @@ interface Props {
 }
 
 export function PackingSlipTemplate({ data, onClose }: Props) {
+  const [receivedSignature, setReceivedSignature] = useState<string | null>(null);
   const handlePrint = () => window.print();
 
   const totalQty = data.items.reduce((sum, item) => sum + item.quantity, 0);
@@ -134,7 +137,24 @@ export function PackingSlipTemplate({ data, onClose }: Props) {
             <p className="text-xs text-gray-500">Delivered By (Signature)</p>
           </div>
           <div>
-            <div className="border-b border-gray-400 mb-1 h-10"></div>
+            {/* Interactive pad — hidden when printing */}
+            <div className="print:hidden">
+              <SignaturePad
+                onSignatureChange={setReceivedSignature}
+                width={300}
+                height={120}
+              />
+            </div>
+            {/* Static image for print */}
+            <div className="hidden print:block">
+              {receivedSignature ? (
+                <div className="mb-1 h-10 flex items-end">
+                  <img src={receivedSignature} alt="Customer signature" className="max-h-[40px] max-w-[200px] object-contain" />
+                </div>
+              ) : (
+                <div className="border-b border-gray-400 mb-1 h-10"></div>
+              )}
+            </div>
             <p className="text-xs text-gray-500">Received By (Signature)</p>
           </div>
         </div>
