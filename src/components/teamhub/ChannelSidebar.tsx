@@ -51,7 +51,7 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onClickMember, onClose, myProfile }: ChannelSidebarProps) {
+export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onCreateGroup, onClickMember, onClose, myProfile }: ChannelSidebarProps) {
   const [membersOpen, setMembersOpen] = useState(true);
   const [groupsOpen, setGroupsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
