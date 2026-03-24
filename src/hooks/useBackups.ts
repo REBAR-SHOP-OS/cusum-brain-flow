@@ -49,7 +49,7 @@ async function callBackupFunction(body: Record<string, unknown>) {
   return json;
 }
 
-export function useBackups() {
+export function useBackups(enabled = true) {
   return useQuery<SystemBackup[]>({
     queryKey: ["system_backups"],
     queryFn: async () => {
@@ -57,6 +57,8 @@ export function useBackups() {
       return result.backups ?? [];
     },
     staleTime: 30_000,
+    enabled,
+    retry: false,
   });
 }
 
