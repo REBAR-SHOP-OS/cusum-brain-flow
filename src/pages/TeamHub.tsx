@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTeamChannels, useTeamMessages, useSendMessage, useMyProfile, type ChatAttachment, type TeamMessage } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useCreateChannel, useOpenDM, useDeleteChannel } from "@/hooks/useChannelManagement";
@@ -6,8 +6,8 @@ import { useActiveMeetings, useStartMeeting, useEndMeeting } from "@/hooks/useTe
 import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { ChannelSidebar } from "@/components/teamhub/ChannelSidebar";
 import { MessageThread } from "@/components/teamhub/MessageThread";
-import { PersonalNotes } from "@/components/teamhub/PersonalNotes";
 import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
+import { supabase } from "@/integrations/supabase/client";
 import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
 import { MeetingReportDialog } from "@/components/teamhub/MeetingReportDialog";
