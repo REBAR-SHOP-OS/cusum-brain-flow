@@ -157,7 +157,7 @@ export function MessageThread({
   const [mentionFilter, setMentionFilter] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStart, setMentionStart] = useState(-1);
-  const grammar = useGrammarCheck();
+  
 
   // Voice recorder
   const voiceRecorder = useVoiceRecorder();
