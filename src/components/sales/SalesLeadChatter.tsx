@@ -210,7 +210,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
               note_text: noteTextForEmail,
               actor_name: currentUserName || "Someone",
             },
-          }).catch(() => {}); // silent — don't block UI
+          }).catch((err) => console.error("notify-lead-assignees error:", err));
         },
         onError: () => setUploading(false),
       });
