@@ -203,8 +203,9 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
         activity_type: activityType,
         subject: body,
         scheduled_date: dueDate,
+        user_name: assignedName || currentUserName || undefined,
       }, {
-        onSuccess: () => { setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false); },
+        onSuccess: () => { setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false); setAssignedName(""); },
         onError: () => setUploading(false),
       });
     } else {
