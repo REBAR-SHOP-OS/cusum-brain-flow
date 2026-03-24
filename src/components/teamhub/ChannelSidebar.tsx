@@ -59,8 +59,12 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [previewProfile, setPreviewProfile] = useState<Profile | null>(null);
   const { unreadSenderIds } = useUnreadSenders();
 
-  const groupChannels = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
+  const officialChannel = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
+  const userChannels = channels.filter((c) => c.channel_type === "group" && c.name !== "Official Channel" && c.name !== "Official Group" && c.name !== "My Notes");
+  const groupChannels = [...officialChannel, ...userChannels];
   const officialGroup = channels.filter((c) => c.channel_type === "group" && c.name === "Official Group");
+  const userGroups = channels.filter((c) => c.channel_type === "group" && c.name !== "Official Channel" && c.name !== "Official Group" && c.name !== "My Notes" && !userChannels.find((uc) => uc.id === c.id));
+  // Note: For now, user-created entries appear under Channels. Groups section shows Official Group only.
   const activeProfiles = profiles.filter((p) => 
     p.email?.endsWith("@rebar.shop")
   );
