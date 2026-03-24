@@ -97,6 +97,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   const [text, setText] = useState("");
   const [activityType, setActivityType] = useState("follow_up");
   const [dueDate, setDueDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [assignedName, setAssignedName] = useState("");
   const [filter, setFilter] = useState<ThreadFilter>("all");
   const [pendingFiles, setPendingFiles] = useState<{ file: File; previewUrl: string }[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -202,8 +203,9 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
         activity_type: activityType,
         subject: body,
         scheduled_date: dueDate,
+        user_name: assignedName || currentUserName || undefined,
       }, {
-        onSuccess: () => { setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false); },
+        onSuccess: () => { setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false); setAssignedName(""); },
         onError: () => setUploading(false),
       });
     } else {
@@ -271,6 +273,20 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
                 onChange={(e) => setDueDate(e.target.value)}
                 className="w-36 h-8 text-xs"
               />
+              {assignees.length > 0 && (
+                <Select value={assignedName} onValueChange={setAssignedName}>
+                  <SelectTrigger className="w-36 h-8 text-xs">
+                    <SelectValue placeholder="Assign to..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {assignees.map((a) => (
+                      <SelectItem key={a.profile_id} value={a.full_name}>
+                        {a.full_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           )}
           <div className="relative">
