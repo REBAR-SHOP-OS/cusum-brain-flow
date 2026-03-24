@@ -24,6 +24,7 @@ import {
   Download,
   SpellCheck,
   Trash2,
+  Reply,
 } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
