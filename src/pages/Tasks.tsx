@@ -723,6 +723,7 @@ export default function Tasks() {
     }).eq("id", task.id);
     if (error) { toast.error(error.message); return; }
     await writeAudit(task.id, "complete", "status", "open", "completed");
+    await mirrorFeedbackCompletion(task, currentProfileId);
     toast.success("فیدبک تأیید شد ✅");
     loadData();
   };
