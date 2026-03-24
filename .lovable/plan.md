@@ -1,25 +1,22 @@
 
 
-## Fix Message Text Being Cut Off in Team Hub
+## Fix: Redeploy notify-lead-assignees & Add Error Visibility
 
 ### Problem
-Long messages in Team Hub chat get cut off and are not fully readable. The text container lacks proper word-breaking CSS, causing text to overflow its container instead of wrapping.
+The `notify-lead-assignees` edge function has zero logs, meaning it was never successfully invoked. Most likely the function wasn't properly deployed after the transient network error. The frontend also silently swallows invocation errors with `.catch(() => {})`.
 
 ### Changes
 
-**File**: `src/components/teamhub/MessageThread.tsx`
+1. **Redeploy the edge function** — Ensure `notify-lead-assignees` is live and callable.
 
-1. **Line 664** — Add `break-words` class to the message `<p>` tag:
-   - Current: `"text-sm font-medium text-foreground whitespace-pre-wrap leading-relaxed"`
-   - New: `"text-sm font-medium text-foreground whitespace-pre-wrap break-words leading-relaxed"`
+2. **File: `src/components/sales/SalesLeadChatter.tsx`** (line 213)
+   - Replace `.catch(() => {})` with `.catch((err) => console.error("notify-lead-assignees error:", err))` so failures are visible in the console for debugging.
 
-2. **Line 596** — Add `overflow-hidden` to the message content wrapper `<div className="flex-1 min-w-0">`:
-   - Current: `"flex-1 min-w-0"`
-   - New: `"flex-1 min-w-0 overflow-hidden"`
-
-This ensures long words, URLs, and code blocks wrap properly within the message bubble instead of overflowing and being hidden.
+3. **File: `src/pages/sales/SalesPipeline.tsx`** — Same change for the stage-change notification call.
 
 | File | Change |
 |---|---|
-| `src/components/teamhub/MessageThread.tsx` | Add `break-words` to message text, `overflow-hidden` to content wrapper |
+| Edge function deploy | Redeploy `notify-lead-assignees` |
+| `SalesLeadChatter.tsx` | Log notification errors to console instead of swallowing |
+| `SalesPipeline.tsx` | Log notification errors to console instead of swallowing |
 
