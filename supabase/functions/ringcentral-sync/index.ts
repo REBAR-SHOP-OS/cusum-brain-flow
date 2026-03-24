@@ -587,8 +587,19 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
     } catch (e) { console.warn("CRON: account-level fax sync failed:", e); }
   }
 
-  // Mark integration as synced for all users who had data
-  for (const uid of usersSeen) {
+  // Mark integration as synced for ALL users with RC connections (not just those with new data)
+  const { data: allRcConnections } = await supabaseAdmin
+    .from("integration_connections")
+    .select("user_id")
+    .eq("integration_id", "ringcentral");
+
+  const allRcUserIds = new Set<string>(
+    (allRcConnections || []).map((r: any) => r.user_id)
+  );
+  // Ensure admin user is always included
+  allRcUserIds.add(adminUserId);
+
+  for (const uid of allRcUserIds) {
     await supabaseAdmin
       .from("integration_connections")
       .upsert({
@@ -600,18 +611,6 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
         updated_at: new Date().toISOString(),
       }, { onConflict: "user_id,integration_id" });
   }
-
-  // Also mark the admin user
-  await supabaseAdmin
-    .from("integration_connections")
-    .upsert({
-      user_id: adminUserId,
-      integration_id: "ringcentral",
-      status: "connected",
-      error_message: null,
-      last_sync_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id,integration_id" });
 
   const summary = { cronMode: true, accountLevel: true, users_synced: usersSeen.size, calls: callsUpserted, sms: smsUpserted, voicemails: voicemailsUpserted, faxes: faxesUpserted, dateFrom };
   console.log(`CRON: Account-level RC sync complete.`, JSON.stringify(summary));

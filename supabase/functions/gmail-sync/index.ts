@@ -716,6 +716,9 @@ serve(async (req) => {
       }
     }
 
+    // Mark integration as synced for the single-user path too
+    await markIntegrationSynced(supabaseAdmin, userId, "gmail");
+
     return new Response(
       JSON.stringify({
         messages: validMessages,
