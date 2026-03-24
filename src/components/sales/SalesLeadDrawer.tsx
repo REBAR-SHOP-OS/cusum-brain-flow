@@ -193,7 +193,28 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                 <p className="font-medium capitalize">{lead.source}</p>
               </div>
             )}
+            {/* Live Note-Taker toggle */}
+            {!isExternalEstimator && (
+              <div className="col-span-2">
+                <Button
+                  size="sm"
+                  variant={noteTakerOpen ? "secondary" : "outline"}
+                  className="h-7 text-xs gap-1.5"
+                  onClick={() => setNoteTakerOpen((v) => !v)}
+                >
+                  <NotebookPen className="w-3.5 h-3.5" />
+                  Live Notes
+                </Button>
+              </div>
+            )}
           </div>
+
+          {/* Live Note-Taker panel */}
+          {noteTakerOpen && lead.company_id && (
+            <div className="mt-2">
+              <LiveNoteTaker salesLeadId={lead.id} companyId={lead.company_id} />
+            </div>
+          )}
 
           {/* Assignees */}
           {!isExternalEstimator && (
