@@ -24,6 +24,7 @@ export default function TeamHub() {
   const sendMutation = useSendMessage();
   const createChannelMutation = useCreateChannel();
   const openDMMutation = useOpenDM();
+  const deleteChannelMutation = useDeleteChannel();
   const startMeetingMutation = useStartMeeting();
   const endMeetingMutation = useEndMeeting();
 
