@@ -18,7 +18,8 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
     return () => window.removeEventListener("toggle-live-chat", handler);
   }, []);
   const [input, setInput] = useState("");
-  const { messages, isStreaming, sendMessage, clearChat, cancelStream, pendingAction, confirmAction, cancelAction } = useAdminChat();
+  const { messages, isStreaming, sendMessage, clearChat, cancelStream, pendingAction, confirmAction, cancelAction, deleteMessage } = useAdminChat();
+  const grammar = useGrammarCheck();
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
