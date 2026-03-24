@@ -432,17 +432,37 @@ export default function SalesPipeline() {
             {/* Expected Close Date */}
             <div><Label>Expected Close Date</Label><Input type="date" value={form.expected_close_date} onChange={e => setForm(p => ({ ...p, expected_close_date: e.target.value }))} /></div>
 
-            {/* Assigned To + Territory */}
+            {/* Assignees (multi-select) + Territory */}
             <div className="grid grid-cols-2 gap-2">
-              <div><Label>Assigned To</Label>
-                <Select value={form.assigned_to} onValueChange={v => setForm(p => ({ ...p, assigned_to: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select team member" /></SelectTrigger>
-                  <SelectContent>
-                    {activeProfiles.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div>
+                <Label>Assign To</Label>
+                <Popover open={assigneePopoverOpen} onOpenChange={setAssigneePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between font-normal h-10">
+                      {selectedAssignees.length > 0
+                        ? `${selectedAssignees.length} selected`
+                        : <span className="text-muted-foreground">Select members...</span>}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[220px] p-2" align="start">
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                      {activeProfiles.map(p => (
+                        <label key={p.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-accent cursor-pointer text-sm">
+                          <Checkbox
+                            checked={selectedAssignees.includes(p.id)}
+                            onCheckedChange={(checked) => {
+                              setSelectedAssignees(prev =>
+                                checked ? [...prev, p.id] : prev.filter(id => id !== p.id)
+                              );
+                            }}
+                          />
+                          {p.full_name}
+                        </label>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div><Label>Territory</Label><Input value={form.territory} onChange={e => setForm(p => ({ ...p, territory: e.target.value }))} placeholder="Region" /></div>
             </div>
