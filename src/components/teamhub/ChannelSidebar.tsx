@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Circle,
   X,
+  Users,
 } from "lucide-react";
 import type { TeamChannel } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
