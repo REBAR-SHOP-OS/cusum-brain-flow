@@ -357,6 +357,10 @@ export function useAdminChat(currentPage?: string, onBrowserAction?: BrowserActi
     abortRef.current?.abort();
   }, []);
 
+  const deleteMessage = useCallback((msgId: string) => {
+    setMessages((prev) => prev.filter((m) => m.id !== msgId));
+  }, []);
+
   return {
     messages,
     isStreaming,
@@ -366,5 +370,6 @@ export function useAdminChat(currentPage?: string, onBrowserAction?: BrowserActi
     cancelAction,
     clearChat,
     cancelStream,
+    deleteMessage,
   };
 }
