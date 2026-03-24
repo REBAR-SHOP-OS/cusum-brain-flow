@@ -208,9 +208,17 @@ export function MessageThread({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Voice input
+  // Voice input with multi-language support
+  const LANG_TO_BCP47: Record<string, string> = {
+    en: "en-US", fa: "fa-IR", ar: "ar-SA", es: "es-ES",
+    fr: "fr-FR", hi: "hi-IN", zh: "zh-CN", de: "de-DE",
+    tr: "tr-TR", pt: "pt-BR", ru: "ru-RU", ko: "ko-KR",
+    ja: "ja-JP", ur: "ur-PK",
+  };
+  const [voiceLang, setVoiceLang] = useState(myLang || "en");
   const speech = useSpeechRecognition({
     onError: (err) => toast.error(err),
+    lang: LANG_TO_BCP47[voiceLang] || "en-US",
   });
 
   // Append voice transcripts to input
