@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Building2 } from "lucide-react";
+import { User } from "lucide-react";
 
 interface MentionItem {
   id: string;
   label: string;
   subtitle?: string;
-  type: "team" | "customer";
+  type: "team";
 }
 
 interface MentionMenuProps {
@@ -24,35 +24,23 @@ export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose }
 
   const loadMentions = useCallback(async () => {
     try {
-      const [profilesRes, customersRes] = await Promise.all([
-        supabase
-          .from("profiles_safe" as any)
-          .select("id, full_name, title")
-          .ilike("full_name", `%${filter}%`)
-          .limit(5),
-        supabase
-          .from("v_customers_clean" as any)
-          .select("customer_id, display_name, company_name")
-          .ilike("display_name", `%${filter}%`)
-          .limit(5),
-      ]);
+      const { data } = await supabase
+        .from("profiles_safe" as any)
+        .select("id, full_name, title, email")
+        .ilike("email", "%@rebar.shop")
+        .ilike("full_name", `%${filter}%`)
+        .limit(10);
 
-      const mentionItems: MentionItem[] = [
-        ...((profilesRes.data as unknown as {id:string;full_name:string;title:string|null}[]) || []).map((p) => ({
+      const profiles = (data as unknown as { id: string; full_name: string; title: string | null; email: string }[]) || [];
+
+      setItems(
+        profiles.map((p) => ({
           id: p.id,
           label: p.full_name,
           subtitle: p.title || "Team member",
           type: "team" as const,
-        })),
-        ...((customersRes.data as unknown as {customer_id:string;display_name:string;company_name:string|null}[]) || []).map((c) => ({
-          id: c.customer_id,
-          label: c.display_name,
-          subtitle: c.company_name || "Customer",
-          type: "customer" as const,
-        })),
-      ];
-
-      setItems(mentionItems);
+        }))
+      );
     } catch (err) {
       console.error("Failed to load mentions:", err);
     }
@@ -96,11 +84,7 @@ export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose }
             )}
           >
             <div className="flex-shrink-0 w-7 h-7 rounded-full bg-secondary flex items-center justify-center">
-              {item.type === "team" ? (
-                <User className="w-3.5 h-3.5 text-muted-foreground" />
-              ) : (
-                <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-              )}
+              <User className="w-3.5 h-3.5 text-muted-foreground" />
             </div>
             <div className="min-w-0">
               <div className="text-sm font-medium truncate">{item.label}</div>
