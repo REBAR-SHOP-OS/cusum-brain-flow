@@ -1,35 +1,29 @@
 
 
-## Fix: Pending Approval Filter Shows All Posts Instead of Only Pending
+## Add Unified Contact List Autocomplete to New Sales Lead Dialog
 
-### Problem
-The "Pending Approval" button filter (line 125-128) currently shows scheduled, published, AND pending_approval posts. It should show **only** posts that have `neel_approved === false` — the actual pending ones.
+### What
+Replace the plain "Contact Name" text input in the New Sales Lead dialog with an autocomplete/combobox that searches the unified contact list (from `useSalesContacts` hook). When a contact is selected, auto-fill Company, Email, and Phone fields.
 
-### Fix
+### Changes
 
-**File**: `src/pages/SocialMediaManager.tsx` (lines 125-128)
+**File**: `src/pages/sales/SalesPipeline.tsx`
 
-Replace the current filter logic:
+1. Import `useSalesContacts` hook, plus `Popover`, `PopoverTrigger`, `PopoverContent` from UI, and `Command`/`CommandInput`/`CommandList`/`CommandItem`/`CommandEmpty` from UI.
 
-```typescript
-// BEFORE
-} else if (statusFilter === "pending_approval") {
-  items = items.filter(
-    (p) => p.status === "scheduled" || p.status === "published" || (p.status === "pending_approval")
-  );
-}
+2. Add state for contact popover open/closed and search text.
 
-// AFTER
-} else if (statusFilter === "pending_approval") {
-  items = items.filter((p) => !p.neel_approved);
-}
-```
+3. Replace the Contact Name `<Input>` (line 173) with a Popover+Command combobox:
+   - Shows a searchable dropdown of contacts from `useSalesContacts()`
+   - Filters by name, company, or email as user types
+   - On select: auto-fills `contact_name`, `contact_company`, `contact_email`, `contact_phone` in the form
+   - Still allows free-text typing (user can type a name not in the list)
 
-This ensures only cards **not yet approved** are visible when the Pending Approval button is active. Published posts (already approved) and approved scheduled posts will be hidden.
+4. The contact list merges system contacts (from `contacts` table) and manual sales contacts — already handled by the hook.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `src/pages/SocialMediaManager.tsx` | Fix `pending_approval` filter to show only `neel_approved === false` posts |
+| `src/pages/sales/SalesPipeline.tsx` | Replace Contact Name input with searchable combobox using unified contact list |
 
