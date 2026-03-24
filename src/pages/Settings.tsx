@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, lazy, Suspense } from "react";
+import { useState, useRef, lazy, Suspense } from "react";
 import {
   Lock, Tag, CreditCard, Lightbulb, HelpCircle, LogOut,
   Camera, Settings as SettingsIcon, Users, Loader2, GraduationCap,
@@ -33,7 +33,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { resetTour, restartTour } = useTour();
   const userEmail = user?.email ?? "";
-  const { profiles, updateProfile } = useProfiles();
+  const { profiles } = useProfiles();
   const { uploading, uploadSingle } = useAvatarUpload();
   const avatarFileRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("settings");
@@ -48,34 +48,8 @@ export default function Settings() {
 
   const myProfile = profiles.find((p) => p.user_id === user?.id);
 
-  useEffect(() => {
-    if (myProfile) {
-      const parts = (myProfile.full_name || "").split(" ");
-      const firstName = parts[0] || "";
-      const surname = parts.slice(1).join(" ") || "";
-      setFormData((prev) => ({
-        ...prev,
-        name: firstName,
-        surname,
-        email: myProfile.email || userEmail,
-        jobTitle: myProfile.title || "",
-        helpersLanguage: myProfile.preferred_language || "en",
-      }));
-    }
-  }, [myProfile, userEmail]);
-
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleSave = () => {
-    if (!myProfile) return;
-    updateProfile.mutate({
-      id: myProfile.id,
-      full_name: `${formData.name} ${formData.surname}`.trim(),
-      title: formData.jobTitle || null,
-      preferred_language: formData.helpersLanguage,
-    });
   };
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,10 +178,6 @@ export default function Settings() {
                     <Input value={formData.jobTitle} onChange={(e) => handleInputChange("jobTitle", e.target.value)} placeholder="Job title" className="bg-secondary/50 border-0 h-12" />
                   </div>
                 </div>
-                <Button onClick={handleSave} disabled={updateProfile.isPending} className="w-full h-12">
-                  {updateProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  Save changes
-                </Button>
               </section>
 
               {/* Language */}
