@@ -50,6 +50,9 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
+  const { byLeadId, addAssignee, removeAssignee } = useLeadAssignees();
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+  const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
 
   const { data: customers = [] } = useQuery({
     queryKey: ["customers-select"],
