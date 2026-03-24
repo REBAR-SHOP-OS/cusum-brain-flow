@@ -13,6 +13,8 @@ export interface ThemeOption {
   style: React.CSSProperties;
 }
 
+const DARK_TEXT = "hsl(222 47% 11%)";
+
 const THEMES: ThemeOption[] = [
   {
     id: "default",
@@ -21,58 +23,58 @@ const THEMES: ThemeOption[] = [
     style: {},
   },
   {
-    id: "midnight",
-    name: "Midnight",
-    preview: "linear-gradient(135deg, hsl(222 50% 4%), hsl(230 40% 10%))",
-    style: { background: "linear-gradient(180deg, hsl(222 50% 4%), hsl(230 40% 10%))" },
+    id: "sky",
+    name: "Sky Blue",
+    preview: "linear-gradient(135deg, hsl(210 60% 85%), hsl(220 50% 75%))",
+    style: { background: "linear-gradient(180deg, hsl(210 60% 85%), hsl(220 50% 75%))", color: DARK_TEXT },
   },
   {
-    id: "ocean",
-    name: "Ocean",
-    preview: "linear-gradient(135deg, hsl(195 80% 8%), hsl(220 40% 8%))",
-    style: { background: "linear-gradient(180deg, hsl(195 80% 8%), hsl(220 40% 8%))" },
+    id: "mint",
+    name: "Mint Green",
+    preview: "linear-gradient(135deg, hsl(160 40% 85%), hsl(170 35% 75%))",
+    style: { background: "linear-gradient(180deg, hsl(160 40% 85%), hsl(170 35% 75%))", color: DARK_TEXT },
   },
   {
-    id: "purple",
-    name: "Purple Haze",
-    preview: "linear-gradient(135deg, hsl(270 60% 10%), hsl(240 30% 8%))",
-    style: { background: "linear-gradient(180deg, hsl(270 60% 10%), hsl(240 30% 8%))" },
+    id: "lavender",
+    name: "Lavender",
+    preview: "linear-gradient(135deg, hsl(270 40% 85%), hsl(260 35% 78%))",
+    style: { background: "linear-gradient(180deg, hsl(270 40% 85%), hsl(260 35% 78%))", color: DARK_TEXT },
   },
   {
-    id: "forest",
-    name: "Forest",
-    preview: "linear-gradient(135deg, hsl(160 60% 8%), hsl(200 30% 6%))",
-    style: { background: "linear-gradient(180deg, hsl(160 60% 8%), hsl(200 30% 6%))" },
+    id: "peach",
+    name: "Peach",
+    preview: "linear-gradient(135deg, hsl(20 60% 88%), hsl(15 50% 80%))",
+    style: { background: "linear-gradient(180deg, hsl(20 60% 88%), hsl(15 50% 80%))", color: DARK_TEXT },
   },
   {
-    id: "warm",
-    name: "Warm Sunset",
-    preview: "linear-gradient(135deg, hsl(20 60% 10%), hsl(350 30% 8%))",
-    style: { background: "linear-gradient(180deg, hsl(20 60% 10%), hsl(350 30% 8%))" },
+    id: "rose",
+    name: "Rose",
+    preview: "linear-gradient(135deg, hsl(340 40% 88%), hsl(350 35% 80%))",
+    style: { background: "linear-gradient(180deg, hsl(340 40% 88%), hsl(350 35% 80%))", color: DARK_TEXT },
   },
   {
-    id: "charcoal",
-    name: "Charcoal",
-    preview: "hsl(0 0% 8%)",
-    style: { background: "hsl(0 0% 8%)" },
+    id: "sand",
+    name: "Sand",
+    preview: "linear-gradient(135deg, hsl(40 40% 88%), hsl(35 35% 80%))",
+    style: { background: "linear-gradient(180deg, hsl(40 40% 88%), hsl(35 35% 80%))", color: DARK_TEXT },
   },
   {
-    id: "aurora",
-    name: "Aurora",
-    preview: "linear-gradient(135deg, hsl(172 50% 10%), hsl(260 40% 10%))",
-    style: { background: "linear-gradient(180deg, hsl(172 50% 10%), hsl(260 40% 10%), hsl(300 30% 8%))" },
+    id: "teal",
+    name: "Teal",
+    preview: "linear-gradient(135deg, hsl(180 40% 82%), hsl(190 35% 72%))",
+    style: { background: "linear-gradient(180deg, hsl(180 40% 82%), hsl(190 35% 72%))", color: DARK_TEXT },
   },
   {
-    id: "steel",
-    name: "Steel",
-    preview: "linear-gradient(135deg, hsl(210 15% 12%), hsl(210 10% 8%))",
-    style: { background: "linear-gradient(180deg, hsl(210 15% 12%), hsl(210 10% 8%))" },
+    id: "lilac",
+    name: "Lilac",
+    preview: "linear-gradient(135deg, hsl(280 35% 88%), hsl(290 30% 80%))",
+    style: { background: "linear-gradient(180deg, hsl(280 35% 88%), hsl(290 30% 80%))", color: DARK_TEXT },
   },
   {
-    id: "ember",
-    name: "Ember",
-    preview: "linear-gradient(135deg, hsl(0 50% 10%), hsl(30 40% 6%))",
-    style: { background: "linear-gradient(180deg, hsl(0 50% 10%), hsl(30 40% 6%))" },
+    id: "cloud",
+    name: "Cloud",
+    preview: "linear-gradient(135deg, hsl(220 15% 90%), hsl(220 10% 82%))",
+    style: { background: "linear-gradient(180deg, hsl(220 15% 90%), hsl(220 10% 82%))", color: DARK_TEXT },
   },
 ];
 
@@ -127,7 +129,7 @@ export function BackgroundThemePicker({
               )}
               style={{ background: t.preview }}
             >
-              {themeId === t.id && <Check className="w-3.5 h-3.5 text-primary-foreground drop-shadow" />}
+              {themeId === t.id && <Check className="w-3.5 h-3.5 text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />}
             </button>
           ))}
         </div>
