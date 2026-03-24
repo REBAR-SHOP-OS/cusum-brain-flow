@@ -1,36 +1,43 @@
 
 
-## Notify All @rebar.shop Users on Official Channel Messages
+## Fix: Delete Message Shows False Error
 
-### Problem
-Currently, the `notify-on-message` edge function only sends notifications to users listed in `team_channel_members` for that channel. If @rebar.shop users aren't explicitly added as members, they don't get notified.
+### Root Cause
 
-### Fix
-
-**File**: `supabase/functions/notify-on-message/index.ts`
-
-In `handleTeamMessage`, add a special case for the Official Channel: instead of querying `team_channel_members`, query ALL profiles with `@rebar.shop` email (excluding the sender):
-
+In `MessageThread.tsx` line 145, the code checks:
 ```typescript
-// After getting channel info (line ~59):
-if (channelName === "Official Channel") {
-  // Get ALL @rebar.shop profiles except sender
-  const { data: profiles } = await svc
-    .from("profiles")
-    .select("id, user_id, preferred_language, email")
-    .like("email", "%@rebar.shop")
-    .neq("id", sender_profile_id);
-  // Use these profiles for notification instead of channel members
-} else {
-  // existing channel member logic
+if (error || !data?.length) {
+  toast.error("Failed to delete message");
 }
 ```
 
-This ensures every @rebar.shop user gets a notification (and push via the existing DB trigger) when someone posts in the Official Channel.
+The `.select()` after `.delete()` can return an empty array even when the delete succeeds (RLS interaction). The `!data?.length` check then falsely triggers the error toast.
+
+### Fix
+
+**File**: `src/components/teamhub/MessageThread.tsx` (lines 139-150)
+
+Remove the `.select()` call and the `data?.length` check. Only check for `error`:
+
+```typescript
+const handleDeleteMessage = async (msgId: string) => {
+  const { error } = await (supabase as any)
+    .from("team_messages")
+    .delete()
+    .eq("id", msgId);
+  if (error) {
+    toast.error("Failed to delete message");
+  } else {
+    toast.success("Message deleted");
+  }
+};
+```
+
+The realtime subscription will automatically remove the message from the UI for all users.
 
 ### Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/notify-on-message/index.ts` | Add Official Channel special case to notify all @rebar.shop users |
+| `src/components/teamhub/MessageThread.tsx` | Remove `.select()` and `data?.length` check from delete handler |
 
