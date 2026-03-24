@@ -2,7 +2,15 @@ import { useCutPlans, useCutPlanItems } from "@/hooks/useCutPlans";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Pencil, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
 
@@ -146,7 +154,7 @@ export function DetailedListView() {
       <div className="flex-1 overflow-x-auto">
         <div className="min-w-[1200px]">
           {/* Table header */}
-          <div className="grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_40px] gap-0 px-4 py-2 bg-primary/10 border-b border-border text-[10px] font-bold tracking-widest text-primary uppercase sticky top-0">
+          <div className="grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_70px] gap-0 px-4 py-2 bg-primary/10 border-b border-border text-[10px] font-bold tracking-widest text-primary uppercase sticky top-0">
             <span>DWG #</span>
             <span>Item</span>
             <span>Grade</span>
@@ -156,7 +164,7 @@ export function DetailedListView() {
             <span>Type</span>
             <span>Length</span>
             {dimCols.map(c => <span key={c}>{c}</span>)}
-            <span>Actions</span>
+            <span>ACT</span>
           </div>
 
           {/* Rows */}
@@ -170,7 +178,7 @@ export function DetailedListView() {
               return (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_40px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
+                  className="grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_70px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
                 >
                   <span className="text-xs text-muted-foreground">{item.drawing_ref || "—"}</span>
                   <span className="text-xs text-muted-foreground">{idx + 1}</span>
@@ -193,9 +201,12 @@ export function DetailedListView() {
                       {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">MM</sub></span> : ""}
                     </span>
                   ))}
-                  <button className="text-muted-foreground hover:text-foreground transition-colors">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button className="text-muted-foreground hover:text-foreground transition-colors">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <DeleteItemButton itemId={item.id} markNumber={item.mark_number} />
+                  </div>
                 </div>
               );
             })
@@ -203,5 +214,51 @@ export function DetailedListView() {
         </div>
       </div>
     </div>
+  );
+}
+
+function DeleteItemButton({ itemId, markNumber }: { itemId: string; markNumber: string | null }) {
+  const qc = useQueryClient();
+
+  const handleDelete = async () => {
+    const { data, error } = await supabase
+      .from("cut_plan_items")
+      .delete()
+      .eq("id", itemId)
+      .select();
+    if (error) {
+      toast.error("Permission denied", { description: error.message });
+      return;
+    }
+    if (!data || data.length === 0) {
+      toast.error("Permission denied", { description: "Item was not deleted — check your role." });
+      return;
+    }
+    toast.success(`Item ${markNumber || itemId.slice(0, 5)} deleted`);
+    qc.invalidateQueries({ queryKey: ["cut-plan-items"] });
+  };
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button className="text-muted-foreground hover:text-destructive transition-colors">
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete Item</AlertDialogTitle>
+          <AlertDialogDescription>
+            Are you sure you want to delete item <strong>{markNumber || itemId.slice(0, 5)}</strong>? This action cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={handleDelete}>
+            Delete
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
