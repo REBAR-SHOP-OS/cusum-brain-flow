@@ -32,6 +32,7 @@ export default function TeamHub() {
   const [activeMeeting, setActiveMeeting] = useState<TeamMeeting | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [reportMeetingId, setReportMeetingId] = useState<string | null>(null);
+  const [forwardMsg, setForwardMsg] = useState<TeamMessage | null>(null);
 
   const activeChannelId = selectedChannelId || (channelsLoading ? null : channels[0]?.id || null);
   const activeChannel = channels.find((c) => c.id === activeChannelId);
