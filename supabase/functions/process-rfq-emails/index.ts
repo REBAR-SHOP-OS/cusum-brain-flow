@@ -616,13 +616,13 @@ Deno.serve((req) =>
     const { data: allCustomers } = await supabaseAdmin
       .from("customers")
       .select("id, name, company_name")
-      .eq("company_id", profile.company_id);
+      .eq("company_id", companyId);
     const customers = allCustomers || [];
 
     const { data: allContacts } = await supabaseAdmin
       .from("contacts")
       .select("id, email, customer_id")
-      .eq("company_id", profile.company_id)
+      .eq("company_id", companyId)
       .not("email", "is", null);
     const contacts = allContacts || [];
 
@@ -636,7 +636,7 @@ Deno.serve((req) =>
     const { data: activeLeadsData } = await supabaseAdmin
       .from("leads")
       .select("id, title, customer_id, notes, updated_at, stage, metadata, source_email_id")
-      .eq("company_id", profile.company_id)
+      .eq("company_id", companyId)
       .not("stage", "in", `(${excludedStages.join(",")})`)
       .order("updated_at", { ascending: false })
       .limit(500);
@@ -681,7 +681,7 @@ Deno.serve((req) =>
     const { data: assignmentHistory } = await supabaseAdmin
       .from("leads")
       .select("customer_id, notes")
-      .eq("company_id", profile.company_id)
+      .eq("company_id", companyId)
       .not("customer_id", "is", null)
       .order("updated_at", { ascending: false })
       .limit(500);
@@ -697,7 +697,7 @@ Deno.serve((req) =>
     const { data: allProfiles } = await supabaseAdmin
       .from("profiles")
       .select("id, user_id, full_name")
-      .eq("company_id", profile.company_id);
+      .eq("company_id", companyId);
     const profilesList = allProfiles || [];
 
     function resolveAssigneeUserId(assignedName: string | null): string | null {
@@ -754,7 +754,7 @@ Deno.serve((req) =>
     const { data: existingActivities } = await supabaseAdmin
       .from("lead_activities")
       .select("metadata")
-      .eq("company_id", profile.company_id)
+      .eq("company_id", companyId)
       .eq("activity_type", "email")
       .not("metadata", "is", null)
       .limit(1000);
@@ -851,7 +851,7 @@ Deno.serve((req) =>
 
             await supabaseAdmin.from("lead_activities").insert({
               lead_id: existingLead.id,
-              company_id: profile.company_id,
+              company_id: companyId,
               activity_type: "email",
               title: "Follow-up email received (thread match)",
               description: [
@@ -915,7 +915,7 @@ Deno.serve((req) =>
 
           await supabaseAdmin.from("lead_activities").insert({
             lead_id: bestMatch.leadId,
-            company_id: profile.company_id,
+            company_id: companyId,
             activity_type: "email",
             title: "Follow-up email received",
             description: [
@@ -960,7 +960,7 @@ Deno.serve((req) =>
 
           await escalateUncertainMatch(
             supabaseAdmin,
-            profile.company_id,
+            companyId,
             { id: email.id, from, subject, snippet: body.substring(0, 500), sourceEmailId },
             candidates,
           );
@@ -984,7 +984,7 @@ Deno.serve((req) =>
         try {
           await escalateUncertainMatch(
             supabaseAdmin,
-            profile.company_id,
+            companyId,
             { id: email.id, from, subject, snippet: body.substring(0, 500), sourceEmailId },
             candidates,
           );
@@ -1038,7 +1038,7 @@ Deno.serve((req) =>
 
               await supabaseAdmin.from("lead_activities").insert({
                 lead_id: rl.id,
-                company_id: profile.company_id,
+                company_id: companyId,
                 activity_type: "email",
                 title: "Follow-up email received (customer dedup)",
                 description: [
@@ -1073,7 +1073,7 @@ Deno.serve((req) =>
 
                 await supabaseAdmin.from("lead_activities").insert({
                   lead_id: lead.id,
-                  company_id: profile.company_id,
+                  company_id: companyId,
                   activity_type: "email",
                   title: "Follow-up email received (reference match)",
                   description: [
@@ -1114,7 +1114,7 @@ Deno.serve((req) =>
             .insert({
               name: analysis.sender_company,
               company_name: analysis.sender_company,
-              company_id: profile.company_id,
+              company_id: companyId,
               status: "active",
               notes: `Auto-created from RFQ email scan.\nContact: ${analysis.sender_name}\nEmail: ${analysis.sender_email}\nPhone: ${analysis.sender_phone || "N/A"}`,
             })
@@ -1143,7 +1143,7 @@ Deno.serve((req) =>
             const nameParts = analysis.sender_name.split(" ");
             await supabaseAdmin.from("contacts").insert({
               customer_id: customerId,
-              company_id: profile.company_id,
+              company_id: companyId,
               first_name: nameParts[0] || analysis.sender_name,
               last_name: nameParts.slice(1).join(" ") || null,
               email: analysis.sender_email,
