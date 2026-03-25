@@ -518,19 +518,10 @@ function concatVideoBytes(clips: Uint8Array[]): Uint8Array {
 
 // ─── Main handler ───────────────────────────────────────────
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const auth = await verifyAuth(req);
-    if (!auth) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient, req: rawReq } = ctx;
+    const auth = { userId };
 
     const videoSchema = z.object({
       action: z.enum(["generate", "poll", "download", "generate-multi", "poll-multi", "list-library", "delete-library"]),
