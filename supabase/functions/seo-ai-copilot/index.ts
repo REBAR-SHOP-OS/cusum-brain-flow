@@ -198,16 +198,15 @@ async function executeWpTool(wp: WPClient, name: string, args: Record<string, an
   }
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { userId, serviceClient } = await requireAuth(req);
-    const { domain_id, messages } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient, body }) => {
+    const { domain_id, messages } = body;
 
     if (!domain_id || !messages?.length) {
+      return new Response(JSON.stringify({ error: "domain_id and messages required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
       return json({ error: "domain_id and messages required" }, 400);
     }
 
