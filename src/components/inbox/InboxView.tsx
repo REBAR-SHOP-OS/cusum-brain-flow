@@ -522,18 +522,18 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         return;
       }
       case "summarize": {
-        const toRespond = allEmails.filter((e) => e.label === "To Respond" || e.label === "Urgent").length;
-        const fyi = allEmails.filter((e) => e.label === "FYI" || e.label === "Awaiting Reply").length;
-        const marketing = allEmails.filter((e) => e.label === "Marketing").length;
-        const spam = allEmails.filter((e) => e.label === "Spam").length;
+        const toRespond = emails.filter((e) => e.label === "To Respond" || e.label === "Urgent").length;
+        const fyi = emails.filter((e) => e.label === "FYI" || e.label === "Awaiting Reply").length;
+        const marketing = emails.filter((e) => e.label === "Marketing").length;
+        const spam = emails.filter((e) => e.label === "Spam").length;
         const highlights: string[] = [];
         if (toRespond > 0) highlights.push(`${toRespond} email(s) need your reply — prioritize these first.`);
-        const urgentEmails = allEmails.filter((e) => e.label === "Urgent");
+        const urgentEmails = emails.filter((e) => e.label === "Urgent");
         if (urgentEmails.length > 0) highlights.push(`Urgent: "${urgentEmails[0].subject}" from ${urgentEmails[0].sender}`);
         if (marketing > 3) highlights.push(`${marketing} marketing emails — consider archiving them.`);
         if (spam > 0) highlights.push(`${spam} suspected spam email(s) detected.`);
         if (fyi > 0) highlights.push(`${fyi} informational email(s) — read when you have time.`);
-        setSummary({ totalEmails: allEmails.length, toRespond, fyi, marketing, spam, highlights });
+        setSummary({ totalEmails: emails.length, toRespond, fyi, marketing, spam, highlights });
         break;
       }
       case "detect-spam": {
