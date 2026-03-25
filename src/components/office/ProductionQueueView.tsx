@@ -56,7 +56,7 @@ interface CustomerNode {
 // --- Main Component ---
 
 export function ProductionQueueView() {
-  const { plans, loading, deletePlan } = useCutPlans();
+  const { plans, loading, deletePlan, fetchPlans } = useCutPlans();
   const { user } = useAuth();
   const navigate = useNavigate();
   const { companyId } = useCompanyId();
@@ -79,6 +79,7 @@ export function ProductionQueueView() {
     toast({ title: "Barlist deleted" });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["production-queues"] });
+    await fetchPlans();
   };
 
   const handleDeleteProject = async (projectId: string): Promise<boolean> => {
@@ -113,6 +114,7 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
     queryClient.invalidateQueries({ queryKey: ["production-queues"] });
+    await fetchPlans();
     return true;
   };
 
@@ -127,6 +129,7 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
+    await fetchPlans();
   };
 
   // Fetch only the customers referenced by projects (avoids 1000-row limit)
