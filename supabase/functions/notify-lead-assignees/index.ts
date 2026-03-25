@@ -59,6 +59,15 @@ serve((req) =>
       }
     }
 
+    // Add customer (contact_email) as recipient if available
+    const customerEmail = lead.contact_email?.trim().toLowerCase() || "";
+    if (customerEmail) {
+      const alreadyIncluded = recipients.some(r => r.email.toLowerCase() === customerEmail);
+      if (!alreadyIncluded) {
+        recipients.push({ email: lead.contact_email, full_name: lead.contact_name || lead.contact_email });
+      }
+    }
+
     if (recipients.length === 0) {
       log.info("No qualifying recipients");
       return { sent: 0 };
