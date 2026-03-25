@@ -14,10 +14,8 @@ interface HealthIssue {
   impact: string;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async () => {
 
   try {
     const wp = new WPClient();
