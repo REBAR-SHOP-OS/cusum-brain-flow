@@ -47,6 +47,31 @@ export default function Settings() {
   });
 
   const myProfile = profiles.find((p) => p.user_id === user?.id);
+  const [saving, setSaving] = useState(false);
+
+  // Populate form from profile
+  useEffect(() => {
+    if (myProfile) {
+      const parts = (myProfile.full_name || "").split(" ");
+      setFormData((prev) => ({
+        ...prev,
+        name: parts[0] || "",
+        surname: parts.slice(1).join(" ") || "",
+        jobTitle: myProfile.title || "",
+        email: userEmail,
+      }));
+    }
+  }, [myProfile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSave = async () => {
+    if (!myProfile) return;
+    setSaving(true);
+    const fullName = [formData.name, formData.surname].filter(Boolean).join(" ");
+    updateProfile.mutate(
+      { id: myProfile.id, full_name: fullName, title: formData.jobTitle },
+      { onSettled: () => setSaving(false) }
+    );
+  };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
