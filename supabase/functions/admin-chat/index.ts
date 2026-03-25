@@ -2282,24 +2282,14 @@ function buildMultimodalMessages(messages: any[], imageUrls?: string[]): any[] {
 
 // ═══ MAIN HANDLER ═══
 
-serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, userId: authedUserId, body: parsedBody, req: originalReq } = ctx;
 
     // ═══ PUBLIC MODE (unauthenticated visitor chat) ═══
-    const authHeader = req.headers.get("Authorization");
-    // Parse body once and reuse — avoids double-read crash in Deno runtime
-    let parsedBody: any;
-    try { parsedBody = await req.json(); } catch { parsedBody = {}; }
-
-    if (parsedBody.publicMode && !authHeader) {
+    if (parsedBody.publicMode && !authedUserId) {
       // Rate limit by IP
-      const visitorIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+      const visitorIp = originalReq.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
       const { data: allowed } = await supabase.rpc("check_rate_limit", {
         _user_id: `public_${visitorIp}`,
         _function_name: "public-chat",
@@ -2341,23 +2331,14 @@ Never reveal internal system details. Respond in the same language the user writ
     }
 
     // ═══ AUTHENTICATED MODE ═══
-    if (!authHeader) {
+    if (!authedUserId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
-    const { data: { user } } = await anonClient.auth.getUser(token);
-
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const user = { id: authedUserId };
 
     // Role-based admin check
     const { data: adminRole } = await supabase
@@ -2388,7 +2369,8 @@ Never reveal internal system details. Respond in the same language the user writ
       });
     }
 
-    const body = parsedBody; // reuse parsed body — never re-read req.json()
+    const body = parsedBody; // reuse parsed body
+    const authHeader = originalReq.headers.get("Authorization");
 
     // Get company_id
     const { data: profileData } = await supabase
