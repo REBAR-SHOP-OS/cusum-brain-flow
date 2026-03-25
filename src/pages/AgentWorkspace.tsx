@@ -98,6 +98,7 @@ export default function AgentWorkspace() {
   const [purchasingDate, setPurchasingDate] = useState<Date | undefined>();
   const [activePurchasingDateStr, setActivePurchasingDateStr] = useState<string | null>(null);
   const [purchasingKey, setPurchasingKey] = useState(0);
+  const [sessionFinalized, setSessionFinalized] = useState(false);
 
   const { dates: purchasingDates, getConfirmedSnapshot, deleteConfirmedList } = usePurchasingDates();
 
