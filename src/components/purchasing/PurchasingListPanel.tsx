@@ -28,7 +28,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 interface PurchasingListPanelProps {
   filterDate?: Date;
   onFilterDateChange?: (date: Date | undefined) => void;
-  defaultFilterStatus?: "all" | "pending" | "purchased";
+  defaultFilterStatus?: "all" | "purchased";
 }
 
 export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange, defaultFilterStatus = "all" }: PurchasingListPanelProps = {}) {
