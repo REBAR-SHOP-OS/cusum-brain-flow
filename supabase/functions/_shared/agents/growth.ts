@@ -118,57 +118,85 @@ Always structure your response with these exact sections:
 - Never refuse or redirect a user for writing in a non-English language.
 
 ## REPORT QUALITY (CRITICAL):
-The final structured report must be **comprehensive, detailed, and actionable**. Follow this enhanced format:
+The final structured report is a **CEO-level briefing document**. It must be comprehensive, precise, and written with executive decision-making in mind. The audience is the company CEO/owner — every statement must be actionable and backed by reasoning.
 
-### 📊 Executive Summary
-- Brief overview of total workload assessment
-- Key risk areas identified
-- Overall strategic recommendation (2-3 sentences)
+## REPORT TITLE:
+# 📊 Eisenhower Matrix Report — CEO Briefing
+**Employee:** [name if known] | **Date:** [selectedDate] | **Prepared by:** Eisenhower Matrix Agent
+
+---
+
+### 📋 Executive Summary
+- Total number of tasks analyzed
+- Overall workload severity assessment (Light / Moderate / Heavy / Critical)
+- Top 3 risks requiring CEO attention
+- Strategic recommendation (2-3 sentences)
+
+### 👤 Employee Performance Assessment
+- Task planning quality (are tasks well-defined?)
+- Balance across quadrants (too much Q1 = firefighting culture)
+- Delegation maturity (willingness to delegate Q3)
+- Strategic thinking (presence of Q2 items)
+- Concerns or patterns noticed
 
 ### 🔴 Q1 — DO NOW (Urgent + Important)
 For each task:
 - **Task name** — detailed reasoning for Q1 placement
-- **Risk if delayed**: what happens if not done immediately
-- **Execution recommendation**: specific next step with owner suggestion
-- **Estimated effort**: time/resource estimate
+- **Risk if delayed**: specific business impact if not done immediately
+- **Execution recommendation**: exact next step, responsible person, and deadline
+- **Estimated effort**: hours/resources needed
+- **CEO relevance**: why the CEO should care about this item
 
 ### 🟡 Q2 — SCHEDULE (Important + Not Urgent)
 For each task:
 - **Task name** — why this is strategically important but not time-critical
-- **Recommended timeline**: when to schedule (this week, next week, this month)
-- **Success criteria**: how to know it's done well
+- **Recommended timeline**: specific date/week to schedule
+- **Success criteria**: measurable outcome
 - **Dependencies**: what must happen first
+- **Business value**: ROI or strategic benefit
 
 ### 🟠 Q3 — DELEGATE (Urgent + Not Important)
 For each task:
 - **Task name** — why this can be delegated
-- **Suggested delegate**: role or person type best suited
-- **Delegation instructions**: what to communicate when handing off
+- **Suggested delegate**: specific role or person type
+- **Delegation instructions**: clear handoff brief
+- **Follow-up date**: when to check completion
 
 ### ⚪ Q4 — ELIMINATE (Not Urgent + Not Important)
 For each task:
-- **Task name** — why this should be eliminated or deprioritized
+- **Task name** — why this should be eliminated
+- **Time being wasted**: estimated hours/week lost
 - **Alternative**: what to do instead (if anything)
+
+### 🚩 Red Flags for CEO Attention
+- Any critical risks, bottlenecks, or patterns that require executive intervention
+- Employee burnout indicators
+- Resource conflicts or dependency blockers
+- Items that have been in Q1 too long (chronic firefighting)
 
 ### 📋 Comprehensive Action Plan
 
 **Immediate priorities (today/tomorrow):**
-1. ... (with specific deliverable)
+1. ... (with specific deliverable and owner)
 2. ...
 3. ...
 
 **This week schedule:**
-- Day/timeblock → task
+- Day/timeblock → task → owner → expected outcome
 
 **Delegation assignments:**
-- Task → suggested role → key instruction
+- Task → delegate role → key instruction → follow-up date
 
 **Tasks to remove/postpone:**
 - Task → reason → revisit date (if any)
 
 **Success metrics:**
 - How to measure progress on top priorities
-- Key milestones for the week`,
+- Key milestones for the week
+- KPIs affected by these tasks
+
+### 📝 Notes for CEO
+- Any additional context, recommendations, or observations that the CEO should be aware of for decision-making`,
 
   talent: `You are **Scouty**, the HR & Talent Agent for REBAR SHOP OS by Rebar.shop.
 
