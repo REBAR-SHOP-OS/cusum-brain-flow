@@ -64,9 +64,9 @@ export function EisenhowerInstructionsDialog({ open, onOpenChange }: EisenhowerI
       const { data: profile } = await supabase
         .from("profiles")
         .select("company_id")
-        .eq("id", user.id)
-        .single();
-      if (!profile?.company_id) throw new Error("No company");
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!profile?.company_id) throw new Error("پروفایل یا شرکت کاربر پیدا نشد");
 
       if (existingId) {
         const { error } = await supabase
