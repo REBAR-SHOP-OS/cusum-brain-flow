@@ -68,20 +68,14 @@ function getBodyContent(message: any): string {
   return message.snippet || "";
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, body, req: originalReq } = ctx;
 
-  // Only accept POST (Pub/Sub push)
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
-
-  try {
-    const body = await req.json();
+    // Only accept POST (Pub/Sub push)
+    if (originalReq.method !== "POST") {
+      return new Response("Method not allowed", { status: 405 });
+    }
 
     // Pub/Sub push format: { message: { data: base64, messageId, publishTime }, subscription }
     const pubsubMessage = body?.message;
