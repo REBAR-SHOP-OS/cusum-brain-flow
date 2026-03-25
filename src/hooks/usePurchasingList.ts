@@ -268,4 +268,3 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
 
   return { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, confirmList, resetItems, refetch: fetchItems };
 }
-}
