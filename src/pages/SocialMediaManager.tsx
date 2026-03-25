@@ -30,6 +30,7 @@ import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
 import { useSocialApprovals } from "@/hooks/useSocialApprovals";
 import { ApprovalsPanel } from "@/components/social/ApprovalsPanel";
+import { DeclineReasonDialog } from "@/components/social/DeclineReasonDialog";
 
 const platformFilters = [
   { id: "all", label: "All" },
