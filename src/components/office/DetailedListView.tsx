@@ -23,6 +23,42 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
   const qc = useQueryClient();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, any>>({});
+  const startEdit = (item: any) => {
+    setEditingItemId(item.id);
+    setEditValues({
+      mark_number: item.mark_number || "",
+      total_pieces: item.total_pieces,
+      cut_length_mm: item.cut_length_mm,
+      bend_type: item.bend_type,
+      asa_shape_code: item.asa_shape_code || "",
+      drawing_ref: item.drawing_ref || "",
+      bend_dimensions: { ...(item.bend_dimensions || {}) },
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingItemId(null);
+    setEditValues({});
+  };
+
+  const saveEdit = async () => {
+    if (!editingItemId) return;
+    const { bend_dimensions, ...rest } = editValues;
+    const updatePayload: Record<string, any> = { ...rest, bend_dimensions };
+    const { error } = await supabase
+      .from("cut_plan_items")
+      .update(updatePayload)
+      .eq("id", editingItemId);
+    if (error) {
+      toast.error("Failed to save", { description: error.message });
+      return;
+    }
+    toast.success("Item updated");
+    setEditingItemId(null);
+    setEditValues({});
+    await fetchItems();
+  };
+
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
   // Separate plans into active (running/draft/ready/queued) and completed
