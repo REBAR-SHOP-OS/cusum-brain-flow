@@ -509,9 +509,5 @@ Deno.serve((req) =>
       files_linked: filesLinked || 0,
       files_unlinked_remaining: filesUnlinked || 0,
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("Chatter sync error:", err);
-    return json({ error: err.message || "Chatter sync failed" }, 500);
-  }
-});
+  }, { functionName: "odoo-chatter-sync", authMode: "optional", requireCompany: false, wrapResult: false })
+);

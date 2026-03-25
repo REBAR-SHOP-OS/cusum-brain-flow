@@ -523,13 +523,5 @@ Consider: stage progression velocity, win probability, client history, deal valu
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e: any) {
-    console.error("pipeline-ai error:", e);
-    const status = e?.status || 500;
-    const message = e?.message || (e instanceof Error ? e.message : "Unknown error");
-    return new Response(JSON.stringify({ error: message }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "pipeline-ai", requireCompany: false, wrapResult: false })
+);
