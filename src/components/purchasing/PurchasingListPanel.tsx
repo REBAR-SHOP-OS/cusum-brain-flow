@@ -14,10 +14,7 @@ import { cn } from "@/lib/utils";
 import { usePurchasingList } from "@/hooks/usePurchasingList";
 import { CompanyDefaultItems, COMPANY_DEFAULTS } from "./CompanyDefaultItems";
 
-const STATUS_TABS = [
-  { value: "all" as const, label: "All" },
-  { value: "purchased" as const, label: "Purchased" },
-];
+
 
 const PRIORITY_COLORS: Record<string, string> = {
   high: "text-red-500",
@@ -28,15 +25,14 @@ const PRIORITY_COLORS: Record<string, string> = {
 interface PurchasingListPanelProps {
   filterDate?: Date;
   onFilterDateChange?: (date: Date | undefined) => void;
-  defaultFilterStatus?: "all" | "purchased";
 }
 
-export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange, defaultFilterStatus = "all" }: PurchasingListPanelProps = {}) {
+export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange }: PurchasingListPanelProps = {}) {
   const [internalDate, setInternalDate] = useState<Date | undefined>();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const filterDate = externalDate !== undefined ? externalDate : internalDate;
   const setFilterDate = onFilterDateChange || setInternalDate;
-  const [filterStatus, setFilterStatus] = useState<"all" | "purchased">(defaultFilterStatus);
+  
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -44,7 +40,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const [newCategory, setNewCategory] = useState("");
   const [newPriority, setNewPriority] = useState("medium");
 
-  const { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, confirmList, refetch } = usePurchasingList(filterDate, filterStatus);
+  const { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, confirmList, refetch } = usePurchasingList(filterDate, "all");
 
   const customItems = items.filter(item =>
     !COMPANY_DEFAULTS.some(d => d.title === item.title && d.category === item.category)
@@ -121,19 +117,6 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         </div>
       </div>
 
-      {/* Status tabs */}
-      <div className="flex gap-1 p-2 border-b border-border">
-        {STATUS_TABS.map((tab) => (
-          <Button
-            key={tab.value}
-            variant={filterStatus === tab.value ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setFilterStatus(tab.value)}
-          >
-            {tab.label}
-          </Button>
-        ))}
-      </div>
 
       {/* Always-visible Add form */}
       <div className="p-3 border-b border-border bg-muted/30 space-y-2">
