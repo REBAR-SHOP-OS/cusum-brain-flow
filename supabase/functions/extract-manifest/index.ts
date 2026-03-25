@@ -68,7 +68,11 @@ function safeDim(val: any): number | null {
   return Math.round(parsed);
 }
 
+console.log("[extract-manifest] Function booted and handler registered");
+
 serve(async (req) => {
+  console.log("[extract-manifest] Request received:", req.method, new Date().toISOString());
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }

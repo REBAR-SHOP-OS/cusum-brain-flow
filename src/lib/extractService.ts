@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { getSignedFileUrl } from "@/lib/storageUtils";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 // ── Types ────────────────────────────────────────────────────
 
