@@ -42,7 +42,7 @@ export function useNilaVoiceAssistant() {
   const [messages, setMessages] = useState<NilaMessage[]>([]);
   const [interimText, setInterimText] = useState("");
   const [lang, setLangState] = useState<NilaLang>(loadNilaLang);
-  const [selectedVoice, setSelectedVoice] = useState(NILA_VOICES[0].id);
+  const [selectedVoice, setSelectedVoice] = useState<string>(NILA_VOICES[0].id);
   const [isRecognizing, setIsRecognizing] = useState(false);
 
   const recognitionRef = useRef<any>(null);

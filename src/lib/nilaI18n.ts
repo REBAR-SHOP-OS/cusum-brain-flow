@@ -39,10 +39,15 @@ const translations = {
   },
 } as const;
 
-export type NilaTranslations = typeof translations.en;
+export type NilaTranslations = {
+  title: string; subtitle: string; ready: string; listening: string;
+  processing: string; speaking: string; modeNormal: string; modeSilent: string;
+  modeTranslate: string; switchedTo: string; placeholder: string; send: string;
+  endCall: string; selectVoice: string; downloadPdf: string; noMessages: string;
+};
 
 export function getNilaT(lang: NilaLang): NilaTranslations {
-  return translations[lang];
+  return translations[lang] as NilaTranslations;
 }
 
 export function loadNilaLang(): NilaLang {

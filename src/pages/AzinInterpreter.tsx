@@ -177,7 +177,7 @@ export default function AzinInterpreter() {
       {/* Voice Chat Overlay */}
       <AnimatePresence>
         {showVoiceChat && (
-          <AzinInterpreterVoiceChat onClose={() => setShowVoiceChat(false)} />
+          <NilaVoiceAssistant onClose={() => setShowVoiceChat(false)} />
         )}
       </AnimatePresence>
     </div>
