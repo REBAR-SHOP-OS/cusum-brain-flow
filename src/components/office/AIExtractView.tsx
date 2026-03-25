@@ -1633,6 +1633,12 @@ export function AIExtractView() {
                       toast({ title: "Extraction restarted", description: "The AI is re-processing your file." });
                       await refreshSessions();
                     } catch (err: any) {
+                      // Revert session to error so user sees error card immediately instead of stuck "thinking" animation
+                      await supabase
+                        .from("extract_sessions")
+                        .update({ status: "error", error_message: err.message || "Retry failed" } as any)
+                        .eq("id", activeSession.id);
+                      await refreshSessions();
                       toast({ title: "Retry failed", description: err.message, variant: "destructive" });
                     } finally {
                       setProcessing(false);
