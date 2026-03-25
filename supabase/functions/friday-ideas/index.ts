@@ -1,27 +1,13 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const svc = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Pull business context
-    const [
-      fixRes, taskRes, machineRes, orderRes, deliveryRes
-    ] = await Promise.all([
-      svc.from("vizzy_fix_requests").select("id, title, severity, status").eq("status", "open").limit(20),
-      svc.from("human_tasks").select("id, title, severity, category, status").in("status", ["open", "snoozed"]).limit(20),
-      svc.from("machines").select("id, name, status, type").in("status", ["blocked", "down"]),
-      svc.from("orders").select("id, order_number, status, total_amount").in("status", ["pending", "confirmed"]).limit(20),
-      svc.from("deliveries").select("id, delivery_number, status").in("status", ["planned", "loading"]).limit(10),
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient }) => {
+    const [fixRes, taskRes, machineRes, orderRes, deliveryRes] = await Promise.all([
+      serviceClient.from("vizzy_fix_requests").select("id, title, severity, status").eq("status", "open").limit(20),
+      serviceClient.from("human_tasks").select("id, title, severity, category, status").in("status", ["open", "snoozed"]).limit(20),
+      serviceClient.from("machines").select("id, name, status, type").in("status", ["blocked", "down"]),
+      serviceClient.from("orders").select("id, order_number, status, total_amount").in("status", ["pending", "confirmed"]).limit(20),
+      serviceClient.from("deliveries").select("id, delivery_number, status").in("status", ["planned", "loading"]).limit(10),
     ]);
 
     const context = {
@@ -35,11 +21,7 @@ serve(async (req) => {
     };
 
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) {
-      return new Response(JSON.stringify({ error: "GEMINI_API_KEY not configured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
 
     const prompt = `You are ARIA, the Platform Supervisor for a rebar manufacturing business.
 
@@ -87,8 +69,7 @@ Keep it practical and prioritized by business impact.`;
     const aiData = await aiResp.json();
     const ideas = aiData.choices?.[0]?.message?.content || "No ideas generated.";
 
-    // Find admin users to notify (scoped via profiles)
-    const { data: adminProfiles } = await svc
+    const { data: adminProfiles } = await serviceClient
       .from("profiles")
       .select("user_id, user_roles!inner(role)")
       .eq("is_active", true);
@@ -96,48 +77,32 @@ Keep it practical and prioritized by business impact.`;
       .filter((p: any) => p.user_roles?.some((r: any) => r.role === "admin"));
 
     for (const admin of admins || []) {
-      await svc.from("notifications").insert({
-        user_id: admin.user_id,
-        type: "notification",
+      await serviceClient.from("notifications").insert({
+        user_id: admin.user_id, type: "notification",
         title: "💡 Weekly Improvement Ideas from ARIA",
         description: ideas.slice(0, 500),
-        priority: "normal",
-        link_to: "/empire",
-        agent_name: "ARIA",
-        status: "unread",
+        priority: "normal", link_to: "/empire", agent_name: "ARIA", status: "unread",
         metadata: { full_ideas: ideas, generated_at: new Date().toISOString() },
       });
     }
 
-    // Also create human tasks for top ideas
-    const { data: adminProfile } = await svc
+    const { data: adminProfile } = await serviceClient
       .from("profiles")
       .select("id")
       .eq("user_id", admins?.[0]?.user_id)
       .maybeSingle();
 
     if (adminProfile) {
-      await svc.from("human_tasks").insert({
+      await serviceClient.from("human_tasks").insert({
         company_id: "a0000000-0000-0000-0000-000000000001",
         title: "Review weekly improvement ideas from ARIA",
         description: ideas.slice(0, 1000),
-        category: "improvement_idea",
-        severity: "info",
-        status: "open",
-        source_agent: "aria",
-        assigned_to: adminProfile.id,
+        category: "improvement_idea", severity: "info", status: "open",
+        source_agent: "aria", assigned_to: adminProfile.id,
       });
     }
 
     console.log(`✅ Friday ideas generated and ${admins?.length || 0} admin(s) notified`);
-
-    return new Response(JSON.stringify({ ok: true, adminsNotified: admins?.length || 0 }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("friday-ideas error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { ok: true, adminsNotified: admins?.length || 0 };
+  }, { functionName: "friday-ideas", authMode: "none", requireCompany: false, wrapResult: false })
+);

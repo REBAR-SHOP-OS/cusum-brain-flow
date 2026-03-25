@@ -1,16 +1,8 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ body, serviceClient }) => {
     let token: string | null = null;
 
     // Support both GET (query param) and POST (body)
@@ -18,7 +10,6 @@ serve(async (req) => {
       const url = new URL(req.url);
       token = url.searchParams.get("token");
     } else {
-      const body = await req.json();
       token = body.token;
     }
 
@@ -28,7 +19,6 @@ serve(async (req) => {
       });
     }
 
-    // Decode token
     let payload: { email: string; campaign_id?: string };
     try {
       payload = JSON.parse(atob(token));
@@ -46,10 +36,9 @@ serve(async (req) => {
 
     const email = payload.email.toLowerCase();
 
-    // Get company_id from campaign or default
     let companyId = "a0000000-0000-0000-0000-000000000001";
     if (payload.campaign_id) {
-      const { data: camp } = await supabaseAdmin
+      const { data: camp } = await serviceClient
         .from("email_campaigns")
         .select("company_id")
         .eq("id", payload.campaign_id)
@@ -57,45 +46,34 @@ serve(async (req) => {
       if (camp) companyId = camp.company_id;
     }
 
-    // Add to suppressions
-    await supabaseAdmin.from("email_suppressions").upsert({
-      email,
-      reason: "unsubscribe",
+    await serviceClient.from("email_suppressions").upsert({
+      email, reason: "unsubscribe",
       source: payload.campaign_id || "direct",
       company_id: companyId,
     }, { onConflict: "email" });
 
-    // Log consent revocation
-    const { data: contact } = await supabaseAdmin
+    const { data: contact } = await serviceClient
       .from("contacts")
       .select("id")
       .ilike("email", email)
       .maybeSingle();
 
-    await supabaseAdmin.from("email_consent_events").insert({
-      contact_id: contact?.id || null,
-      email,
-      consent_type: "marketing_email",
-      status: "revoked",
+    await serviceClient.from("email_consent_events").insert({
+      contact_id: contact?.id || null, email,
+      consent_type: "marketing_email", status: "revoked",
       source: "unsubscribe_link",
-      evidence: {
-        campaign_id: payload.campaign_id,
-        timestamp: new Date().toISOString(),
-        method: "one_click",
-      },
+      evidence: { campaign_id: payload.campaign_id, timestamp: new Date().toISOString(), method: "one_click" },
       company_id: companyId,
     });
 
-    // Update campaign send status if applicable
     if (payload.campaign_id) {
-      await supabaseAdmin
+      await serviceClient
         .from("email_campaign_sends")
         .update({ status: "unsubscribed" })
         .eq("campaign_id", payload.campaign_id)
         .eq("email", email);
     }
 
-    // For GET requests, return a simple HTML page
     if (req.method === "GET") {
       return new Response(
         `<!DOCTYPE html><html><head><title>Unsubscribed</title></head>
@@ -108,14 +86,6 @@ serve(async (req) => {
       );
     }
 
-    return new Response(
-      JSON.stringify({ message: "Successfully unsubscribed", email }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("email-unsubscribe error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { message: "Successfully unsubscribed", email };
+  }, { functionName: "email-unsubscribe", authMode: "none", requireCompany: false, rawResponse: true })
+);

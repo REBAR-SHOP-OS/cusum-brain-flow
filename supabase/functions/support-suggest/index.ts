@@ -1,50 +1,19 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
-import { corsHeaders } from "../_shared/auth.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient, body }) => {
+    const { conversation_id } = body;
+    if (!conversation_id) throw new Error("Missing conversation_id");
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    // Auth + data fetching unchanged
-
-    const supabase = createClient(supabaseUrl, serviceKey);
-
-    // Verify auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
-    const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(authHeader.replace("Bearer ", ""));
-    if (claimsErr || !claimsData?.claims) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    const { conversation_id } = await req.json();
-    if (!conversation_id) {
-      return new Response(JSON.stringify({ error: "Missing conversation_id" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // Fetch conversation + company
-    const { data: convo } = await supabase
+    const { data: convo } = await serviceClient
       .from("support_conversations")
       .select("id, company_id, visitor_name, visitor_email")
       .eq("id", conversation_id)
       .single();
+    if (!convo) throw new Error("Conversation not found");
 
-    if (!convo) {
-      return new Response(JSON.stringify({ error: "Conversation not found" }), { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // Fetch messages
-    const { data: messages } = await supabase
+    const { data: messages } = await serviceClient
       .from("support_messages")
       .select("sender_type, content, is_internal_note")
       .eq("conversation_id", conversation_id)
@@ -53,8 +22,7 @@ Deno.serve(async (req) => {
       .order("created_at", { ascending: true })
       .limit(30);
 
-    // Fetch KB articles
-    const { data: articles } = await supabase
+    const { data: articles } = await serviceClient
       .from("kb_articles")
       .select("title, content, excerpt")
       .eq("company_id", convo.company_id)
@@ -87,7 +55,6 @@ ${kbContext || "No articles available."}`,
       },
     ];
 
-    // Gemini Flash: customer-facing draft suggestion (with GPT fallback)
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
@@ -96,17 +63,6 @@ ${kbContext || "No articles available."}`,
       fallback: { provider: "gpt", model: "gpt-4o-mini" },
     });
 
-    const suggestion = result.content;
-
-    return new Response(JSON.stringify({ suggestion }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("support-suggest error:", err);
-    const status = err instanceof AIError ? err.status : 500;
-    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { suggestion: result.content };
+  }, { functionName: "support-suggest", requireCompany: false, wrapResult: false })
+);
