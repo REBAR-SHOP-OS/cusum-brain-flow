@@ -162,14 +162,10 @@ async function getDsmBaseUrl(synologyUrl: string): Promise<string> {
   return resolved.baseUrl;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { userId, serviceClient } = await requireAuth(req);
-    const { action, path, folderPath } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient, body } = ctx;
+    const { action, path, folderPath } = body;
 
     const SYNOLOGY_URL_RAW = Deno.env.get("SYNOLOGY_URL") || "RSI1";
     const SYNOLOGY_USERNAME = Deno.env.get("SYNOLOGY_USERNAME");
