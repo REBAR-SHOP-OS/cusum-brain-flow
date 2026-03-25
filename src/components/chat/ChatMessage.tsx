@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { AgentBadge, AgentType } from "./AgentSelector";
-import { User, Bot, FileIcon, Download } from "lucide-react";
+import { User, Bot, FileIcon, Download, X } from "lucide-react";
 import { UploadedFile } from "./ChatInput";
 import { MessageActions } from "./MessageActions";
 import { RichMarkdown } from "./RichMarkdown";
@@ -31,6 +32,11 @@ interface ChatMessageProps {
 
 export function ChatMessage({ message, onRegenerate, onRegenerateImage, onViewPost, onApprovePost, onRegeneratePost, agentImage, agentName, isPixelAgent }: ChatMessageProps) {
   const isUser = message.role === "user";
+  const [translation, setTranslation] = useState<{ text: string; lang: string } | null>(null);
+
+  const handleTranslate = (translatedText: string, langLabel: string) => {
+    setTranslation({ text: translatedText, lang: langLabel });
+  };
 
   return (
     <div
@@ -105,12 +111,33 @@ export function ChatMessage({ message, onRegenerate, onRegenerateImage, onViewPo
           )}
         </div>
 
+        {/* Translation block */}
+        {translation && (
+          <div className="w-full rounded-lg border border-border bg-muted/50 p-3 mt-1">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                🌐 {translation.lang}
+              </span>
+              <button
+                onClick={() => setTranslation(null)}
+                className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap" dir="auto">
+              {translation.text}
+            </p>
+          </div>
+        )}
+
         {/* Action buttons for agent messages */}
         {!isUser && message.content && (
           <MessageActions
             content={message.content}
             messageId={message.id}
             onRegenerate={onRegenerate}
+            onTranslate={handleTranslate}
           />
         )}
 

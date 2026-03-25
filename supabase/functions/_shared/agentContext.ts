@@ -23,7 +23,7 @@ export async function fetchContext(
 
   try {
     // Skip heavy context for social/Pixel agent — it only needs Brain knowledge + employees
-    if (agent === "social") {
+    if (agent === "social" || agent === "eisenhower") {
       // Jump straight to employees + brain block (handled below)
     } else {
       // 1. Basic Communications (Last 15 emails) — realtime, no cache
