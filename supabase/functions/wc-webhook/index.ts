@@ -114,12 +114,8 @@ Deno.serve((req) =>
     const { serviceClient: svc, req: originalReq } = ctx;
     const rawBody = await originalReq.text();
 
-  try {
-    const rawBody = await req.text();
-
-    // ── Read headers and classify ping vs event ──
-    const wcSignature = req.headers.get("x-wc-webhook-signature");
-    const wcTopic = req.headers.get("x-wc-webhook-topic");
+    const wcSignature = originalReq.headers.get("x-wc-webhook-signature");
+    const wcTopic = originalReq.headers.get("x-wc-webhook-topic");
     const wcWebhookSecret = Deno.env.get("WC_WEBHOOK_SECRET");
 
     console.log(`[wc-webhook] Topic: ${wcTopic}, Signature present: ${!!wcSignature}, Secret present: ${!!wcWebhookSecret}, Body length: ${rawBody.length}`);

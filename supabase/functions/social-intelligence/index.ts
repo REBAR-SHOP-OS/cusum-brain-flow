@@ -290,11 +290,5 @@ Focus on what content topics would resonate most and what products/services to h
     return new Response(JSON.stringify(report), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    console.error("Social intelligence error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "social-intelligence", authMode: "optional", requireCompany: false, wrapResult: false })
+);

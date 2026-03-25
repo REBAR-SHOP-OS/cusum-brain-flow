@@ -286,12 +286,5 @@ RULES:
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("vizzy-agent-audit error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
-
+  }, { functionName: "vizzy-agent-audit", requireRole: "admin", wrapResult: false })
+);

@@ -81,7 +81,7 @@ function analyzeHTML(html: string): {
 Deno.serve((req) =>
   handleRequest(req, async () => {
 
-  try {
+    const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "https://rebar.shop";
     const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "https://rebar.shop";
     const issues: SpeedIssue[] = [];
     const recommendations: Recommendation[] = [];

@@ -17,7 +17,7 @@ interface HealthIssue {
 Deno.serve((req) =>
   handleRequest(req, async () => {
 
-  try {
+    const wp = new WPClient();
     const wp = new WPClient();
     const issues: HealthIssue[] = [];
     const now = new Date();

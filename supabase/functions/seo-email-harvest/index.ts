@@ -31,7 +31,7 @@ Deno.serve((req) =>
     const { serviceClient: supabase, body } = ctx;
     const { domain_id } = body;
 
-    const { domain_id } = await req.json();
+    const { domain_id: _unused, ...rest } = body;
     if (!domain_id) {
       return new Response(JSON.stringify({ error: "domain_id required" }), {
         status: 400,

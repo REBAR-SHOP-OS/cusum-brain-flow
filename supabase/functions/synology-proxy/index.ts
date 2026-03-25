@@ -309,10 +309,5 @@ Deno.serve((req) =>
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
-  } catch (e) {
-    if (e instanceof Response) return e;
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    console.error("synology-proxy error:", msg);
-    return json({ error: msg }, 500);
-  }
-});
+  }, { functionName: "synology-proxy", requireCompany: false, wrapResult: false })
+);
