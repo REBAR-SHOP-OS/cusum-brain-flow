@@ -29,6 +29,8 @@ export interface SocialPost {
   page_name: string | null;
   // Approval gate
   neel_approved: boolean;
+  // Decline
+  decline_reason: string | null;
 }
 
 export type SocialPostInsert = Omit<SocialPost, "id" | "created_at" | "updated_at">;
