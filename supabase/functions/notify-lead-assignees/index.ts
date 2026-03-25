@@ -17,7 +17,7 @@ serve((req) =>
     // 1. Fetch lead title
     const { data: lead, error: leadErr } = await serviceClient
       .from("sales_leads")
-      .select("title")
+      .select("title, contact_email, contact_name")
       .eq("id", sales_lead_id)
       .single();
     if (leadErr) throw new Error("Lead not found: " + leadErr.message);
