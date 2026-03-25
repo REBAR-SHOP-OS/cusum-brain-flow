@@ -213,9 +213,5 @@ Deno.serve((req) =>
       results,
       drift: driftLeads.slice(0, 50), // Cap drift report to 50 for response size
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("Reconciliation error:", err);
-    return json({ error: err.message || "Reconciliation failed" }, 500);
-  }
-});
+  }, { functionName: "odoo-reconciliation-report", requireCompany: false, wrapResult: false })
+);

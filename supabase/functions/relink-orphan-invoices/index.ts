@@ -167,11 +167,5 @@ Deno.serve((req) =>
       JSON.stringify({ linked, notFound, totalFetched: invoices.length, details }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
-  } catch (error) {
-    console.error("relink-orphan-invoices error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-});
+  }, { functionName: "relink-orphan-invoices", wrapResult: false })
+);

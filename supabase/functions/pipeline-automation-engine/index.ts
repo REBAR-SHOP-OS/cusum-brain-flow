@@ -73,14 +73,8 @@ Deno.serve((req) =>
       JSON.stringify({ matched: rules.length, executed }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("pipeline-automation-engine error:", e);
-    return new Response(JSON.stringify({ error: String(e) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "pipeline-automation-engine", authMode: "none", requireCompany: false, wrapResult: false })
+);
 
 function matchConditions(
   trigger: string,

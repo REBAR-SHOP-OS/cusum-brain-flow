@@ -145,12 +145,8 @@ Deno.serve((req) =>
     }
 
     return json({ synced, errors, total: needsSync.length });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("Sync error:", err);
-    return json({ error: (err as Error).message || "Sync failed" }, 500);
-  }
-});
+  }, { functionName: "odoo-sync-order-lines", requireCompany: false, wrapResult: false })
+);
 
 async function syncLinesForQuote(
   serviceClient: ReturnType<typeof import("https://esm.sh/@supabase/supabase-js@2").createClient>,

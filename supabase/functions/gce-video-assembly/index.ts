@@ -247,12 +247,5 @@ gcloud compute instances delete "$INSTANCE" --zone="$ZONE" --quiet
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (err: unknown) {
-    console.error("GCE assembly error:", err);
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ fallback: true, reason: msg }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "gce-video-assembly", authMode: "none", requireCompany: false, wrapResult: false })
+);
