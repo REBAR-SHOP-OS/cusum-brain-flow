@@ -262,8 +262,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
     if (!profile?.company_id) return;
     await supabase.from("purchasing_list_items").delete()
-      .eq("company_id", profile.company_id)
-      .is("due_date", null);
+      .eq("company_id", profile.company_id);
   }, [user]);
 
   return { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, confirmList, resetItems, refetch: fetchItems };
