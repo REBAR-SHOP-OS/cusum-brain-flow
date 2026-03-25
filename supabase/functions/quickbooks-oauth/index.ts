@@ -1,8 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchWithTimeout, isTransientError, backoffWithJitter, logQBCall } from "../_shared/qbHttp.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const QUICKBOOKS_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
 const QUICKBOOKS_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
@@ -57,21 +56,7 @@ async function getCompanyQBConfig(supabase: ReturnType<typeof createClient>, com
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims?.sub) return null;
-  return data.claims.sub as string;
-}
+// verifyAuth removed — handled by handleRequest
 
 async function getUserCompanyId(supabase: ReturnType<typeof createClient>, userId: string): Promise<string> {
   const { data: profile } = await supabase
@@ -325,24 +310,19 @@ async function updateLastSync(supabase: ReturnType<typeof createClient>, userId:
 
 // ─── Main Handler ──────────────────────────────────────────────────
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase, body, req: rawReq } = ctx;
 
     const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID");
     const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 
     if (!clientId || !clientSecret) {
       throw new Error("QuickBooks credentials not configured");
     }
 
-    const url = new URL(req.url);
+    const url = new URL(rawReq.url);
     const pathParts = url.pathname.split("/");
     const pathAction = pathParts[pathParts.length - 1];
 
@@ -352,12 +332,10 @@ serve(async (req) => {
     }
 
     // ─── All other actions require authentication ────────────────
-    const userId = await verifyAuth(req);
     if (!userId) {
       return jsonRes({ error: "Unauthorized" }, 401);
     }
 
-    const body = await req.json().catch(() => ({}));
     const { action } = body;
 
     // ─── Route to action handler ─────────────────────────────────
@@ -540,14 +518,8 @@ serve(async (req) => {
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
-  } catch (error) {
-    console.error("QuickBooks OAuth error:", error);
-    return jsonRes(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      500
-    );
-  }
-});
+  }, { functionName: "quickbooks-oauth", authMode: "optional", requireCompany: false, wrapResult: false })
+);
 
 // ─── OAuth Callback ────────────────────────────────────────────────
 

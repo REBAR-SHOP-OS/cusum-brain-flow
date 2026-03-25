@@ -2,18 +2,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, body } = ctx;
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceKey);
-
-    const { domain_id } = await req.json();
+    const { domain_id } = body;
     if (!domain_id) {
       return new Response(JSON.stringify({ error: "domain_id required" }), {
         status: 400,
@@ -487,10 +482,5 @@ Suggest specific tasks with expected impact.`,
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    console.error("seo-ai-analyze error:", err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "seo-ai-analyze", authMode: "none", requireCompany: false, wrapResult: false })
+);

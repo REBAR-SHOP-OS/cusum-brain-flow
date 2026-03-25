@@ -1,7 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cropToAspectRatio } from "../_shared/imageResize.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 // ─── Same visual styles pool as Pixel agent ───
 const VISUAL_STYLES_POOL = [
@@ -242,20 +242,14 @@ async function generatePixelImage(
 
 // ─── Main handler ───
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, body } = ctx;
 
-  try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-
-    const { post_id, caption_only, is_video, selectedProducts, imageStyles } = await req.json();
+    const { post_id, caption_only, is_video, selectedProducts, imageStyles } = body;
     if (!post_id) throw new Error("post_id is required");
 
     // 1. Fetch post
@@ -688,12 +682,5 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("regenerate-post error:", e);
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "regenerate-post", authMode: "none", requireCompany: false, wrapResult: false })
+);

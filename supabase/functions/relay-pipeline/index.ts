@@ -1,26 +1,11 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    // Auth guard
-    let userId: string;
-    try {
-      const auth = await requireAuth(req);
-      userId = auth.userId;
-    } catch (res) {
-      if (res instanceof Response) return res;
-      throw res;
-    }
-
-    const svc = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: svc, body } = ctx;
 
     // Rate limit
     const { data: allowed } = await svc.rpc("check_rate_limit", {
@@ -367,17 +352,5 @@ serve(async (req) => {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    if (error instanceof AIError) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: error.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    console.error("relay-pipeline error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "relay-pipeline", requireCompany: false, wrapResult: false })
+);

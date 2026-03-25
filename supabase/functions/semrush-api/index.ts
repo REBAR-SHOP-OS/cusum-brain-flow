@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const SEMRUSH_API_KEY = "958fa1b9cc655056d7057ddb9b22ae8f";
 const SEMRUSH_BASE = "https://api.semrush.com";

@@ -1,7 +1,6 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const RC_SERVER = "https://platform.ringcentral.com";
 const APP_CALLBACK = "https://erp.rebar.shop/integrations/callback";
@@ -20,41 +19,23 @@ async function computeCodeChallenge(verifier: string): Promise<string> {
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) return null;
-
-  return data.claims.sub as string;
-}
+// verifyAuth removed — handled by handleRequest
 
 function getEdgeFunctionCallbackUrl(): string {
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   return `${supabaseUrl}/functions/v1/ringcentral-oauth`;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabaseAdmin, body, req: rawReq } = ctx;
 
-  // ─── Handle GET: OAuth callback from RingCentral ──────────────
-  const url = new URL(req.url);
-  if (req.method === "GET" && (url.searchParams.has("code") || url.searchParams.has("error"))) {
-    return await handleOAuthCallback(url);
-  }
+    // ─── Handle GET: OAuth callback from RingCentral ──────────────
+    const url = new URL(rawReq.url);
+    if (rawReq.method === "GET" && (url.searchParams.has("code") || url.searchParams.has("error"))) {
+      return await handleOAuthCallback(url);
+    }
 
-  try {
-    const userId = await verifyAuth(req);
     if (!userId) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
@@ -62,20 +43,7 @@ serve(async (req) => {
       );
     }
 
-    let body: Record<string, unknown> = {};
-    try {
-      const text = await req.text();
-      if (text) body = JSON.parse(text);
-    } catch {
-      // empty body
-    }
-
     const action = body.action as string;
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
     const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET");
@@ -85,21 +53,16 @@ serve(async (req) => {
       if (!clientId) throw new Error("RingCentral Client ID not configured");
 
       const redirectUri = getEdgeFunctionCallbackUrl();
-
-      // Generate PKCE parameters
       const codeVerifier = generateCodeVerifier();
       const codeChallenge = await computeCodeChallenge(codeVerifier);
 
-      // Store code_verifier for this user
       await supabaseAdmin
         .from("user_ringcentral_tokens")
         .upsert({ user_id: userId, code_verifier: codeVerifier, rc_email: "", refresh_token: "pending" }, { onConflict: "user_id" });
 
-      // Get user's email for login hint
       const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
       const userEmail = userData?.user?.email || "";
 
-      // Embed userId in state so the callback can identify the user
       const state = `${userId}|ringcentral`;
 
       const authUrl = new URL(`${RC_SERVER}/restapi/oauth/authorize`);
@@ -126,7 +89,6 @@ serve(async (req) => {
         .maybeSingle();
 
       if (tokenData) {
-        // Check if there's an existing error state from sync — don't blindly overwrite it
         const { data: existingConn } = await supabaseAdmin
           .from("integration_connections")
           .select("status, error_message, last_sync_at")
@@ -134,7 +96,7 @@ serve(async (req) => {
           .eq("integration_id", "ringcentral")
           .maybeSingle();
 
-        const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
+        const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000;
         const lastSyncAge = existingConn?.last_sync_at
           ? Date.now() - new Date(existingConn.last_sync_at).getTime()
           : Infinity;
