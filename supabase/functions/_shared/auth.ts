@@ -81,6 +81,33 @@ export async function optionalAuth(req: Request): Promise<string | null> {
   }
 }
 
+/**
+ * Optional auth returning full context (userId + userClient).
+ * Does NOT throw. Returns null if no valid token.
+ */
+export async function optionalAuthFull(req: Request): Promise<{
+  userId: string;
+  userClient: ReturnType<typeof createClient>;
+} | null> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    const { data: { user }, error } = await userClient.auth.getUser();
+    if (error || !user) return null;
+    return { userId: user.id, userClient };
+  } catch {
+    return null;
+  }
+}
+
 /** JSON response helper */
 export function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
