@@ -1,19 +1,51 @@
 
 
-## مشکل
-وقتی از Production Queue روی Edit کلیک می‌کنید، `selectedPlanId` در `DetailedListView` ست می‌شود و وارد جزئیات آن manifest می‌شوید. بعد اگر از سایدبار روی "Detailed List" کلیک کنید، `activePlanId` در `OfficePortal` به `null` ریست می‌شود، اما `useEffect` داخل `DetailedListView` فقط وقتی `initialPlanId` truthy باشد `selectedPlanId` را آپدیت می‌کند — پس هرگز به `null` برنمی‌گرداند و همچنان جزئیات همان manifest نمایش داده می‌شود.
+## مشکل ریشه‌ای: extract-manifest بوت نمی‌شود
 
-## راه‌حل
-در `src/components/office/DetailedListView.tsx`، `useEffect` (خطوط 23-27) را اصلاح می‌کنیم تا همیشه `selectedPlanId` را با `initialPlanId` سینک کند — نه فقط وقتی truthy است:
+### علت
+لاگ‌های edge function خطای زیر را نشان می‌دهند:
 
-```typescript
-useEffect(() => {
-  setSelectedPlanId(initialPlanId ?? null);
-}, [initialPlanId]);
+```
+worker boot error: Uncaught SyntaxError: The requested module
+'https://deno.land/std@0.190.0/encoding/base64.ts' does not provide
+an export named 'encode'
 ```
 
-این تنها تغییر لازم است. با این اصلاح، کلیک روی "Detailed List" در سایدبار، لیست گروه‌بندی‌شده manifests (مطابق اسکرین‌شات) را نمایش می‌دهد.
+**خط ۳** فایل `supabase/functions/extract-manifest/index.ts`:
+```typescript
+import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
+```
+
+در نسخه `0.190.0` استاندارد Deno، ماژول `encoding/base64.ts` export به نام `encode` ندارد. این باعث می‌شود function اصلاً بوت نشود و هر درخواست با "Failed to send a request to the Edge Function" رد شود.
+
+### راه‌حل
+
+**فایل**: `supabase/functions/extract-manifest/index.ts`
+
+خط ۳ را تغییر می‌دهیم تا از API داخلی Deno (`btoa`/`Uint8Array`) استفاده کند — بدون وابستگی به std:
+
+```typescript
+// حذف خط 3 (import encode)
+// جایگزین با تابع ساده:
+function base64Encode(data: Uint8Array): string {
+  let binary = "";
+  for (const byte of data) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+```
+
+یا استفاده از نسخه صحیح std:
+```typescript
+import { encodeBase64 as base64Encode } from "https://deno.land/std@0.224.0/encoding/base64.ts";
+```
+
+هر دو روش مشکل را حل می‌کند. روش دوم (std@0.224.0) با بقیه پروژه سازگارتر است.
 
 ### فایل درگیر
-- `src/components/office/DetailedListView.tsx` — فقط اصلاح useEffect
+| فایل | تغییر |
+|---|---|
+| `supabase/functions/extract-manifest/index.ts` | اصلاح import base64 در خط ۳ |
+
+### نتیجه
+بعد از این تغییر، edge function بوت می‌شود و Extraction دوباره کار خواهد کرد.
 
