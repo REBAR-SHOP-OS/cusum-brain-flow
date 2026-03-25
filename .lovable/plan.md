@@ -1,22 +1,21 @@
 
 
-## Remove "Not Purchased" Tab & Keep "Purchased" Always Visible
+## Remove Status Filter Tabs (All / Purchased)
 
 ### What Changes
 
 **File: `src/components/purchasing/PurchasingListPanel.tsx`**
 
-1. Remove the "Not Purchased" (`pending`) entry from `STATUS_TABS` — only keep `All` and `Purchased`
-2. Change `defaultFilterStatus` default from `"all"` to `"all"` (stays same — user sees all items by default)
-3. The "New Chat" reset already clears DB items (implemented previously) — no change needed there
+1. Remove the `STATUS_TABS` constant entirely
+2. Remove the entire status tabs UI block (lines 124–136)
+3. Hardcode `filterStatus` to always be `"all"` — remove the state, remove the `defaultFilterStatus` prop
+4. Clean up the `PurchasingListPanelProps` interface (remove `defaultFilterStatus`)
+
+**File: `src/pages/AgentWorkspace.tsx`**
+- Remove any `defaultFilterStatus` prop passed to `PurchasingListPanel`
 
 ### Result
-- Two tabs only: **All** | **Purchased**
-- "Not Purchased" filter disappears completely
-- Default view shows all items with no selections
-- "New Chat" continues to reset everything as already implemented
-
-| File | Change |
-|---|---|
-| `src/components/purchasing/PurchasingListPanel.tsx` | Remove `pending` tab from `STATUS_TABS` |
+- No filter tabs shown at all — all items always visible
+- Simpler UI with just the item list
+- "New Chat" reset continues to work as before
 
