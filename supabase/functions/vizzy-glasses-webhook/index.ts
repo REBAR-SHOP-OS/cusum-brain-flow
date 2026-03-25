@@ -1,54 +1,27 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Auth: accept either webhook key OR JWT
-    let userId: string | null = null;
+Deno.serve((req) =>
+  handleRequest(req, async ({ body, userId, serviceClient }) => {
+    // Dual auth: accept webhook key OR JWT (userId from wrapper)
     const webhookKey = req.headers.get("x-webhook-key");
     const expectedKey = Deno.env.get("GLASSES_WEBHOOK_KEY");
-    const authHeader = req.headers.get("Authorization");
 
-    if (webhookKey && expectedKey && webhookKey === expectedKey) {
-      // Webhook key auth — external device (iOS Shortcut, etc.)
-    } else if (authHeader?.startsWith("Bearer ")) {
-      // JWT auth — in-app usage
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-      const userClient = createClient(supabaseUrl, anonKey, {
-        global: { headers: { Authorization: authHeader } },
-      });
-      const { data: { user }, error } = await userClient.auth.getUser();
-      if (error || !user) {
-        return new Response(JSON.stringify({ error: "Invalid token" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      userId = user.id;
-    } else {
+    const isWebhook = webhookKey && expectedKey && webhookKey === expectedKey;
+    if (!isWebhook && !userId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { imageBase64, imageUrl, prompt } = await req.json();
-
+    const { imageBase64, imageUrl, prompt } = body;
     if (!imageBase64 && !imageUrl) {
       return new Response(JSON.stringify({ error: "imageBase64 or imageUrl required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Build image data for Gemini
     let imageData: string;
     let mimeType = "image/jpeg";
 
@@ -97,44 +70,30 @@ If the user included a specific question, answer it directly.`;
 
     const analysis = result.content || "Could not analyze image.";
 
-    // Store in database
-    const supabase = createClient(supabaseUrl, serviceKey);
-
     let storedImageUrl = imageUrl || null;
     if (imageBase64 && !imageUrl) {
       const fileName = `glasses/${Date.now()}.jpg`;
       const bytes = Uint8Array.from(atob(imageBase64), c => c.charCodeAt(0));
-      const { error: uploadErr } = await supabase.storage
+      const { error: uploadErr } = await serviceClient.storage
         .from("clearance-photos")
         .upload(fileName, bytes, { contentType: mimeType });
 
       if (!uploadErr) {
-        const { data: urlData } = await supabase.storage
+        const { data: urlData } = await serviceClient.storage
           .from("clearance-photos")
           .getPublicUrl(fileName);
         storedImageUrl = urlData?.publicUrl || null;
       }
     }
 
-    const { error: dbErr } = await supabase.from("glasses_captures").insert({
-      image_url: storedImageUrl,
-      analysis,
+    const { error: dbErr } = await serviceClient.from("glasses_captures").insert({
+      image_url: storedImageUrl, analysis,
       source: userId ? "app" : "glasses",
       prompt: prompt || null,
       metadata: { mimeType, hasBase64: !!imageBase64, hasUrl: !!imageUrl, userId },
     });
-
     if (dbErr) console.error("Failed to store capture:", dbErr);
 
-    return new Response(JSON.stringify({ analysis, stored: !dbErr }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("vizzy-glasses-webhook error:", err);
-    const status = err instanceof AIError ? err.status : 500;
-    return new Response(JSON.stringify({ error: err.message }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { analysis, stored: !dbErr };
+  }, { functionName: "vizzy-glasses-webhook", authMode: "optional", requireCompany: false, wrapResult: false })
+);

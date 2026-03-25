@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAIStream, AIError } from "../_shared/aiRouter.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
 // Simple in-memory rate limiter: IP -> timestamps[]
@@ -88,30 +87,25 @@ Your job is to help website visitors learn about our services, products, and cap
 - Be warm and helpful — these are potential customers!
 - If they ask about delivery times, say it depends on the job size but we pride ourselves on fast turnaround, often within 24-48 hours for standard orders`;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
                req.headers.get("cf-connecting-ip") || "unknown";
     if (isRateLimited(ip)) {
       return new Response(JSON.stringify({ error: "Too many requests. Please wait a moment." }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const { messages } = await req.json();
+    const { messages } = body;
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "Messages required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const trimmed = messages.slice(-MAX_CONVERSATION_MESSAGES);
 
-    // Gemini 2.5 Flash: public chatbot, fast + stable
     const response = await callAIStream({
       provider: "gemini",
       model: "gemini-2.5-flash",
@@ -125,12 +119,5 @@ serve(async (req) => {
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
-  } catch (e) {
-    console.error("website-chat error:", e);
-    const status = e instanceof AIError ? e.status : 500;
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "website-chat", authMode: "none", requireCompany: false, rawResponse: true })
+);

@@ -1,21 +1,12 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { text, voiceId, speed } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { text, voiceId, speed } = body;
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
 
-    if (!ELEVENLABS_API_KEY) {
-      return new Response(JSON.stringify({ error: "ElevenLabs API key not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!ELEVENLABS_API_KEY) throw new Error("ElevenLabs API key not configured");
 
     if (!text || text.length > 5000) {
       return new Response(JSON.stringify({ error: "Text is required and must be under 5000 characters" }), {
@@ -24,7 +15,7 @@ serve(async (req) => {
       });
     }
 
-    const selectedVoice = voiceId || "JBFqnCBsd6RMkjVDRZzb"; // George
+    const selectedVoice = voiceId || "JBFqnCBsd6RMkjVDRZzb";
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${selectedVoice}?output_format=mp3_44100_128`,
@@ -58,18 +49,8 @@ serve(async (req) => {
     }
 
     const audioBuffer = await response.arrayBuffer();
-
     return new Response(audioBuffer, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "audio/mpeg",
-      },
+      headers: { ...corsHeaders, "Content-Type": "audio/mpeg" },
     });
-  } catch (error) {
-    console.error("TTS function error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "elevenlabs-tts", authMode: "none", requireCompany: false, rawResponse: true })
+);

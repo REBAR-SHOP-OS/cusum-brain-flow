@@ -1,16 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-/**
- * Mints an ephemeral OpenAI Realtime API token for the AZIN interpreter.
- * Uses GPT_API_KEY to create a session, returns the client_secret for WebRTC.
- */
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
+Deno.serve((req) =>
+  handleRequest(req, async () => {
     const GPT_API_KEY = Deno.env.get("GPT_API_KEY");
     if (!GPT_API_KEY) throw new Error("GPT_API_KEY not configured");
 
@@ -43,9 +34,7 @@ FORBIDDEN — violating ANY of these is a critical failure:
 - Do NOT generate ANY original speech. Every word you produce must be a translation of words you heard.
 
 You are a codec. Translate faithfully. Then be silent. Always.`,
-        input_audio_transcription: {
-          model: "whisper-1",
-        },
+        input_audio_transcription: { model: "whisper-1" },
         turn_detection: {
           type: "server_vad",
           threshold: 0.4,
@@ -58,7 +47,7 @@ You are a codec. Translate faithfully. Then be silent. Always.`,
     if (!response.ok) {
       const errText = await response.text();
       console.error("OpenAI Realtime session error:", response.status, errText);
-      return json({ error: "Failed to create realtime session" }, 500);
+      throw new Error("Failed to create realtime session");
     }
 
     const sessionData = await response.json();
@@ -66,16 +55,12 @@ You are a codec. Translate faithfully. Then be silent. Always.`,
 
     if (!clientSecret) {
       console.error("No client_secret in response:", JSON.stringify(sessionData));
-      return json({ error: "No client secret received" }, 500);
+      throw new Error("No client secret received");
     }
 
-    return json({
+    return {
       client_secret: clientSecret,
       expires_at: sessionData.client_secret?.expires_at,
-    });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("azin-token error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
-  }
-});
+    };
+  }, { functionName: "elevenlabs-azin-token", authMode: "none", requireCompany: false, wrapResult: false })
+);

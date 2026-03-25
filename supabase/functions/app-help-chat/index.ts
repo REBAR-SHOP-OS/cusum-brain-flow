@@ -1,7 +1,6 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { buildPageContext } from "../_shared/pageMap.ts";
 import { callAIStream, AIError } from "../_shared/aiRouter.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
 const SYSTEM_PROMPT = `You are the AI Training & Help Assistant for REBAR SHOP OS — a comprehensive ERP system for rebar fabrication shops.
@@ -43,15 +42,11 @@ Your role is to help users understand and use the application. You have deep kno
 - Suggest using the guided tour (Settings → Replay Training) for comprehensive walkthroughs
 - When users ask "how do I...", give numbered steps`;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { messages, currentPage } = await req.json();
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { messages, currentPage } = body;
     const pageContext = buildPageContext(currentPage || "/home");
 
-    // GPT-4o-mini: fast, cheap, good for help/instruction tasks
     const response = await callAIStream({
       provider: "gpt",
       model: "gpt-4o-mini",
@@ -65,12 +60,5 @@ serve(async (req) => {
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
-  } catch (e) {
-    console.error("app-help-chat error:", e);
-    const status = e instanceof AIError ? e.status : 500;
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "app-help-chat", authMode: "none", requireCompany: false, rawResponse: true })
+);
