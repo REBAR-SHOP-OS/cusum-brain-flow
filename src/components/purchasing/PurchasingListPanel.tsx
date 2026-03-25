@@ -16,7 +16,6 @@ import { CompanyDefaultItems, COMPANY_DEFAULTS } from "./CompanyDefaultItems";
 
 const STATUS_TABS = [
   { value: "all" as const, label: "All" },
-  { value: "pending" as const, label: "Not Purchased" },
   { value: "purchased" as const, label: "Purchased" },
 ];
 
