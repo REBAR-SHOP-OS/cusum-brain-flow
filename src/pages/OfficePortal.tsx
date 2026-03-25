@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { Menu, Shield } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -36,9 +36,23 @@ export default function OfficePortal() {
   const location = useLocation();
   const rawSection = (location.state as any)?.section || "ai-extract";
   const initialSection = rawSection === "ceo-dashboard" ? "ai-extract" : rawSection;
-  const initialPlanId = (location.state as any)?.planId || null;
   const [activeSection, setActiveSection] = useState<OfficeSection>(initialSection);
+  const [activePlanId, setActivePlanId] = useState<string | null>((location.state as any)?.planId || null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // React to navigation state changes (e.g. Edit button from Production Queue)
+  useEffect(() => {
+    const state = location.state as any;
+    if (state?.section) {
+      const section = state.section === "ceo-dashboard" ? "ai-extract" : state.section;
+      setActiveSection(section);
+    }
+    if (state?.planId) {
+      setActivePlanId(state.planId);
+    } else {
+      setActivePlanId(null);
+    }
+  }, [location.state]);
 
   if (roleLoading) {
     return (
@@ -65,6 +79,7 @@ export default function OfficePortal() {
 
   const handleNavigate = (section: OfficeSection) => {
     setActiveSection(section);
+    setActivePlanId(null);
     setSidebarOpen(false);
   };
 
@@ -100,7 +115,7 @@ export default function OfficePortal() {
         </div>
         <div className="flex-1 overflow-auto">
           {activeSection === "detailed-list" ? (
-            <DetailedListView initialPlanId={initialPlanId} />
+            <DetailedListView initialPlanId={activePlanId} />
           ) : (
             <ActiveComponent />
           )}
