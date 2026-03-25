@@ -109,15 +109,10 @@ function buildInvoicePayload(
 
 // ─── Main Handler ──────────────────────────────────────────────────
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const svc = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: svc, req: originalReq } = ctx;
+    const rawBody = await originalReq.text();
 
   try {
     const rawBody = await req.text();
