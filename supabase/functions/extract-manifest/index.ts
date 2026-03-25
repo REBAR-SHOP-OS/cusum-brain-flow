@@ -70,30 +70,12 @@ function safeDim(val: any): number | null {
 
 console.log("[extract-manifest] Function booted and handler registered");
 
-serve(async (req) => {
-  console.log("[extract-manifest] Request received:", req.method, new Date().toISOString());
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: svcClient, body } = ctx;
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    // Auth guard — enforce authentication
-    let rateLimitId: string;
-    try {
-      const auth = await requireAuth(req);
-      rateLimitId = auth.userId;
-    } catch (res) {
-      if (res instanceof Response) return res;
-      throw res;
-    }
-
-    const svcClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
-      _user_id: rateLimitId,
+      _user_id: userId,
       _function_name: "extract-manifest",
       _max_requests: 5,
       _window_seconds: 60,
@@ -105,7 +87,7 @@ serve(async (req) => {
       });
     }
 
-    const { fileUrl, fileName, manifestContext, sessionId } = await req.json();
+    const { fileUrl, fileName, manifestContext, sessionId } = body;
     if (!fileUrl) {
       return new Response(
         JSON.stringify({ error: "fileUrl is required" }),
