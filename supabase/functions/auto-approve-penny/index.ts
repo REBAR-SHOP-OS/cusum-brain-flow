@@ -1,35 +1,21 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
-  try {
-    // Check if automation is enabled
-    const { data: config } = await supabase
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient }) => {
+    const { data: config } = await serviceClient
       .from("automation_configs")
       .select("enabled, config")
       .eq("automation_key", "auto_approve_penny")
       .maybeSingle();
 
     if (!config?.enabled) {
-      return new Response(JSON.stringify({ skipped: true, reason: "automation disabled" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { skipped: true, reason: "automation disabled" };
     }
 
     const threshold = (config.config as any)?.amount_threshold || 5000;
     const minDaysOverdue = (config.config as any)?.min_days_overdue || 30;
 
-    // Find pending items that qualify
-    const { data: items, error } = await supabase
+    const { data: items, error } = await serviceClient
       .from("penny_collection_queue")
       .select("*")
       .eq("status", "pending_approval")
@@ -43,25 +29,23 @@ serve(async (req) => {
 
     for (const item of items || []) {
       try {
-        const { error: upErr } = await supabase
+        const { error: upErr } = await serviceClient
           .from("penny_collection_queue")
           .update({
             status: "approved",
             approved_at: new Date().toISOString(),
-            approved_by: null, // auto-approved
+            approved_by: null,
           })
           .eq("id", item.id);
 
         if (upErr) throw upErr;
 
-        // Trigger execution
         try {
-          await supabase.functions.invoke("penny-execute-action", { body: { action_id: item.id } });
-        } catch (_) { /* best effort */ }
+          await serviceClient.functions.invoke("penny-execute-action", { body: { action_id: item.id } });
+        } catch (_) {}
 
-        // Log activity
         try {
-          await supabase.from("activity_events").insert({
+          await serviceClient.from("activity_events").insert({
             company_id: item.company_id,
             entity_type: "penny_collection_queue",
             entity_id: item.id,
@@ -79,9 +63,8 @@ serve(async (req) => {
       }
     }
 
-    // Log run
     try {
-      await supabase.from("automation_runs").insert({
+      await serviceClient.from("automation_runs").insert({
         company_id: "a0000000-0000-0000-0000-000000000001",
         automation_key: "auto_approve_penny",
         automation_name: "Auto-Approve Collections <$5K",
@@ -95,9 +78,8 @@ serve(async (req) => {
       });
     } catch (_) {}
 
-    // Update config stats
     try {
-      await supabase.from("automation_configs")
+      await serviceClient.from("automation_configs")
         .update({
           last_run_at: new Date().toISOString(),
           total_runs: (config as any).total_runs + 1,
@@ -107,14 +89,6 @@ serve(async (req) => {
         .eq("automation_key", "auto_approve_penny");
     } catch (_) {}
 
-    return new Response(JSON.stringify({ approved, failed, total: (items || []).length }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("auto-approve-penny error:", err);
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { approved, failed, total: (items || []).length };
+  }, { functionName: "auto-approve-penny", requireCompany: false, wrapResult: false })
+);

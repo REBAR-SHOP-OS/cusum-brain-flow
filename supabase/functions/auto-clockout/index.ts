@@ -1,27 +1,9 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Parse mode from request body — REQUIRED, no default
-    let mode: string | null = null;
-    try {
-      const body = await req.json();
-      if (body?.mode) mode = body.mode;
-    } catch {
-      // no body — mode stays null
-    }
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient, body }) => {
+    let mode: string | null = body?.mode || null;
 
     if (!mode || !["morning", "evening"].includes(mode)) {
       console.log(`BLOCKED: auto-clockout called with invalid/missing mode: ${mode}`);
@@ -31,170 +13,126 @@ serve(async (req) => {
       );
     }
 
-    // Get current ET time info
+    // Check if automation is enabled
+    const { data: config } = await serviceClient
+      .from("automation_configs")
+      .select("enabled, config")
+      .eq("automation_key", "auto_clockout")
+      .maybeSingle();
+
+    if (!config?.enabled) {
+      return { ok: true, skipped: true, reason: "automation disabled" };
+    }
+
     const now = new Date();
-    const etFormatter = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/New_York",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    });
-    const todayET = etFormatter.format(now);
+    const todayStr = now.toISOString().split("T")[0];
 
-    const etHourFormatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/New_York",
-      hour: "numeric",
-      hour12: false,
-    });
-    const currentETHour = parseInt(etHourFormatter.format(now));
+    // Find open clock entries
+    const { data: openEntries, error: fetchErr } = await serviceClient
+      .from("clock_entries")
+      .select("id, profile_id, clock_in, type, profiles(full_name)")
+      .is("clock_out", null)
+      .not("clock_in", "is", null);
 
-    if (mode === "morning") {
-      // HARD GUARD: only execute between 5-7 AM ET
-      if (currentETHour < 5 || currentETHour > 7) {
-        console.log(`BLOCKED: morning reset rejected at ET hour ${currentETHour}`);
-        return new Response(
-          JSON.stringify({ 
-            ok: false, 
-            blocked: true, 
-            message: `Morning reset blocked — current ET hour is ${currentETHour}, only allowed 5-7 AM ET` 
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // Close ALL open shifts for everyone
-      const { data: openShifts, error: fetchErr } = await supabase
-        .from("time_clock_entries")
-        .select("id, profile_id")
-        .is("clock_out", null);
-
-      if (fetchErr) throw fetchErr;
-
-      if (!openShifts || openShifts.length === 0) {
-        return new Response(
-          JSON.stringify({ ok: true, closed: 0, message: "Morning reset: no open shifts" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const clockOutTime = new Date().toISOString();
-      const idsToClose = openShifts.map((e: any) => e.id);
-
-      const { error: updateErr } = await supabase
-        .from("time_clock_entries")
-        .update({
-          clock_out: clockOutTime,
-          notes: "[auto-closed: 6 AM morning reset]",
-        })
-        .in("id", idsToClose);
-
-      if (updateErr) throw updateErr;
-
-      // Set ALL affected profiles inactive
-      const profileIds = [...new Set(openShifts.map((e: any) => e.profile_id))];
-      await supabase
-        .from("profiles")
-        .update({ is_active: false })
-        .in("id", profileIds);
-
-      console.log(`Morning reset: closed ${idsToClose.length} shifts at ${clockOutTime}`);
-
+    if (fetchErr) {
+      console.error("Failed to fetch open entries:", fetchErr);
       return new Response(
-        JSON.stringify({ ok: true, mode: "morning", closed: idsToClose.length, clock_out_time: clockOutTime }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ ok: false, error: fetchErr.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
 
-    } else {
-      // HARD GUARD: only execute between 5-7 PM ET (17-19)
-      if (currentETHour < 17 || currentETHour > 19) {
-        console.log(`BLOCKED: evening auto clock-out rejected at ET hour ${currentETHour}`);
-        return new Response(
-          JSON.stringify({ 
-            ok: false, 
-            blocked: true, 
-            message: `Evening auto clock-out blocked — current ET hour is ${currentETHour}, only allowed 5-7 PM ET` 
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    if (!openEntries?.length) {
+      return { ok: true, closed: 0, message: "No open clock entries found" };
+    }
 
-      // Evening mode: close ONLY office worker shifts at 6 PM ET
-      // Shop workers (non-@rebar.shop emails OR Kourosh Zand) are exempt
-      const clockOutTime = new Date().toISOString();
+    let closed = 0;
+    const errors: string[] = [];
 
-      const { data: openShifts, error: fetchErr } = await supabase
-        .from("time_clock_entries")
-        .select("id, profile_id, profiles!inner(email, full_name)")
-        .is("clock_out", null);
+    for (const entry of openEntries) {
+      const clockIn = new Date(entry.clock_in);
+      const hoursOpen = (now.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
 
-      if (fetchErr) throw fetchErr;
+      // Morning mode: close entries from yesterday (>14h open)
+      // Evening mode: close entries open >12h
+      const shouldClose = mode === "morning"
+        ? hoursOpen > 14
+        : hoursOpen > 12;
 
-      if (!openShifts || openShifts.length === 0) {
-        return new Response(
-          JSON.stringify({ ok: true, mode: "evening", closed: 0, exempted: 0, message: "No open shifts" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+      if (!shouldClose) continue;
 
-      // Split into office vs shop workers
-      const officeShifts: any[] = [];
-      const shopExempted: any[] = [];
-
-      for (const shift of openShifts) {
-        const profile = (shift as any).profiles;
-        const email = (profile?.email || "").toLowerCase();
-        const fullName = (profile?.full_name || "");
-        const isOffice = email.endsWith("@rebar.shop") && fullName !== "Kourosh Zand";
-
-        if (isOffice) {
-          officeShifts.push(shift);
-        } else {
-          shopExempted.push(shift);
+      // Determine clock_out time
+      let clockOut: Date;
+      if (mode === "morning") {
+        // Set to yesterday 6PM
+        clockOut = new Date(clockIn);
+        clockOut.setHours(18, 0, 0, 0);
+        if (clockOut <= clockIn) {
+          clockOut = new Date(clockIn.getTime() + 8 * 60 * 60 * 1000);
+        }
+      } else {
+        // Evening: set to today 6PM
+        clockOut = new Date();
+        clockOut.setHours(18, 0, 0, 0);
+        if (clockOut <= clockIn) {
+          clockOut = new Date(clockIn.getTime() + 8 * 60 * 60 * 1000);
         }
       }
 
-      if (shopExempted.length > 0) {
-        console.log(`Evening: exempted ${shopExempted.length} shop worker shifts:`,
-          shopExempted.map((s: any) => (s as any).profiles?.full_name));
-      }
+      const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+      const breakMinutes = totalHours > 5 ? 30 : 0;
+      const netHours = Math.max(0, totalHours - breakMinutes / 60);
 
-      if (officeShifts.length === 0) {
-        return new Response(
-          JSON.stringify({ ok: true, mode: "evening", closed: 0, exempted: shopExempted.length, message: "Only shop workers have open shifts — exempted" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const idsToClose = officeShifts.map((e: any) => e.id);
-
-      const { error: updateErr } = await supabase
-        .from("time_clock_entries")
+      const { error: updateErr } = await serviceClient
+        .from("clock_entries")
         .update({
-          clock_out: clockOutTime,
-          notes: "[auto-closed: 6 PM auto clock-out]",
+          clock_out: clockOut.toISOString(),
+          total_hours: Number(netHours.toFixed(2)),
+          break_minutes: breakMinutes,
+          auto_clocked_out: true,
+          notes: `Auto clock-out (${mode} sweep). Original open since ${clockIn.toISOString()}.`,
         })
-        .in("id", idsToClose);
+        .eq("id", entry.id);
 
-      if (updateErr) throw updateErr;
+      if (updateErr) {
+        errors.push(`${entry.id}: ${updateErr.message}`);
+      } else {
+        closed++;
 
-      const profileIds = [...new Set(officeShifts.map((e: any) => e.profile_id))];
-      await supabase
-        .from("profiles")
-        .update({ is_active: false })
-        .in("id", profileIds);
-
-      console.log(`Evening 6 PM auto clock-out: closed ${idsToClose.length} office shifts, exempted ${shopExempted.length} shop workers`);
-
-      return new Response(
-        JSON.stringify({ ok: true, mode: "evening", closed: idsToClose.length, exempted: shopExempted.length, clock_out_time: clockOutTime }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        // Log activity
+        try {
+          await serviceClient.from("activity_events").insert({
+            company_id: "a0000000-0000-0000-0000-000000000001",
+            entity_type: "clock_entry",
+            entity_id: entry.id,
+            event_type: "auto_clockout",
+            description: `Auto clock-out for ${(entry as any).profiles?.full_name || entry.profile_id} (${mode} sweep, was open ${hoursOpen.toFixed(1)}h)`,
+            actor_type: "automation",
+            source: "auto_clockout",
+            automation_source: "auto_clockout",
+          });
+        } catch (_) {}
+      }
     }
-  } catch (error) {
-    console.error("auto-clockout error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+
+    // Log automation run
+    try {
+      await serviceClient.from("automation_runs").insert({
+        company_id: "a0000000-0000-0000-0000-000000000001",
+        automation_key: "auto_clockout",
+        automation_name: `Auto Clock-Out (${mode})`,
+        agent_name: "System",
+        trigger_type: "cron",
+        status: errors.length > 0 ? "partial" : "completed",
+        items_processed: openEntries.length,
+        items_succeeded: closed,
+        items_failed: errors.length,
+        error_log: errors.length > 0 ? errors : null,
+        completed_at: new Date().toISOString(),
+        metadata: { mode },
+      });
+    } catch (_) {}
+
+    return { ok: true, closed, total_open: openEntries.length, errors };
+  }, { functionName: "auto-clockout", requireCompany: false, wrapResult: false })
+);

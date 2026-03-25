@@ -1,11 +1,4 @@
-/**
- * LLM-Based Agent Router (Phase 2)
- * Classifies user intent when keyword matching is ambiguous.
- * Uses GPT-4o-mini for speed (~200ms, ~100 tokens).
- */
-
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 const AGENT_DESCRIPTIONS: Record<string, string> = {
@@ -31,28 +24,20 @@ const AGENT_DESCRIPTIONS: Record<string, string> = {
   commander: "Department oversight, team KPIs, escalations, department-level performance",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { message, currentMatch, currentConfidence } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { message, currentMatch, currentConfidence } = body;
 
     if (!message) {
-      return new Response(
-        JSON.stringify({ error: "message required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "message required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const gptKey = Deno.env.get("GPT_API_KEY");
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-    if (!gptKey && !geminiKey) {
-      return new Response(
-        JSON.stringify({ agents: [currentMatch || "assistant"], confidence: currentConfidence || 0, method: "keyword_fallback" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!LOVABLE_API_KEY) {
+      return { agents: [currentMatch || "assistant"], confidence: currentConfidence || 0, method: "keyword_fallback" };
     }
 
     const agentList = Object.entries(AGENT_DESCRIPTIONS)
@@ -74,62 +59,40 @@ User message: "${message}"
 
 Respond with ONLY a JSON object: {"agents":["agent_id"],"confidence":0.0-1.0,"reasoning":"one sentence"}`;
 
-    // Try GPT first, fall back to Gemini on 429 or failure
-    let response: Response | null = null;
-    let usedProvider = "gpt";
+    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash-lite",
+        messages: [{ role: "user", content: classificationPrompt }],
+        max_tokens: 150,
+        temperature: 0.1,
+      }),
+    });
 
-    if (gptKey) {
-      response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${gptKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          messages: [{ role: "user", content: classificationPrompt }],
-          max_tokens: 150, temperature: 0.1,
-          response_format: { type: "json_object" },
-        }),
-      });
-    }
-
-    if (!response?.ok && geminiKey) {
-      console.warn("GPT unavailable (status:", response?.status, "), falling back to Gemini");
-      usedProvider = "gemini";
-      response = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${geminiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gemini-2.5-flash",
-          messages: [{ role: "user", content: classificationPrompt }],
-          max_tokens: 300, temperature: 0.1,
-        }),
-      });
-    }
-
-    if (!response?.ok) {
-      console.error("All LLM providers failed:", response?.status);
-      return new Response(
-        JSON.stringify({ agents: [currentMatch || "assistant"], confidence: currentConfidence || 0, method: "keyword_fallback" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (!response.ok) {
+      console.error("AI classification failed:", response.status);
+      return { agents: [currentMatch || "assistant"], confidence: currentConfidence || 0, method: "keyword_fallback" };
     }
 
     const data = await response.json();
     let content = data.choices?.[0]?.message?.content || "{}";
-    console.log("LLM raw response (" + usedProvider + "):", content);
-    // Strip markdown code fences if present (Gemini wraps JSON in ```json...```)
+
+    // Strip markdown code fences if present
     const fenceMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
     if (fenceMatch) {
       content = fenceMatch[1].trim();
     } else {
-      // If no closing fence (truncated), try to extract JSON after ```json
       const partialFence = content.match(/```(?:json)?\s*([\s\S]*)/i);
       if (partialFence) content = partialFence[1].trim();
     }
-    // Try to find the first valid JSON object
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) content = jsonMatch[0];
     content = content.trim();
-    
+
     let parsed: { agents?: string[]; confidence?: number; reasoning?: string };
     try {
       parsed = JSON.parse(content);
@@ -138,26 +101,14 @@ Respond with ONLY a JSON object: {"agents":["agent_id"],"confidence":0.0-1.0,"re
       parsed = { agents: [currentMatch || "assistant"], confidence: 0 };
     }
 
-    // Validate agent IDs
     const validAgents = (parsed.agents || []).filter(a => a in AGENT_DESCRIPTIONS);
-    if (validAgents.length === 0) {
-      validAgents.push("assistant");
-    }
+    if (validAgents.length === 0) validAgents.push("assistant");
 
-    return new Response(
-      JSON.stringify({
-        agents: validAgents,
-        confidence: parsed.confidence || 0.5,
-        reasoning: parsed.reasoning || "",
-        method: "llm",
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("agent-router error:", e);
-    return new Response(
-      JSON.stringify({ agents: ["assistant"], confidence: 0, method: "error_fallback" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return {
+      agents: validAgents,
+      confidence: parsed.confidence || 0.5,
+      reasoning: parsed.reasoning || "",
+      method: "llm",
+    };
+  }, { functionName: "agent-router", requireCompany: false, wrapResult: false })
+);

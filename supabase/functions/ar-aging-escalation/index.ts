@@ -1,31 +1,18 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
-  try {
-    const { data: config } = await supabase
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient }) => {
+    const { data: config } = await serviceClient
       .from("automation_configs")
       .select("enabled, config")
       .eq("automation_key", "ar_aging_escalation")
       .maybeSingle();
 
     if (!config?.enabled) {
-      return new Response(JSON.stringify({ skipped: true, reason: "disabled" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { skipped: true, reason: "disabled" };
     }
 
-    // Get overdue invoices from accounting_mirror
-    const { data: invoices } = await supabase
+    const { data: invoices } = await serviceClient
       .from("accounting_mirror")
       .select("*")
       .eq("entity_type", "invoice")
@@ -45,7 +32,6 @@ serve(async (req) => {
 
       processed++;
 
-      // Determine escalation level
       let actionType: string;
       let priority: string;
       let description: string;
@@ -66,8 +52,7 @@ serve(async (req) => {
         continue;
       }
 
-      // Check if action already exists for this invoice
-      const { data: existing } = await supabase
+      const { data: existing } = await serviceClient
         .from("penny_collection_queue")
         .select("id")
         .eq("invoice_id", inv.id)
@@ -76,9 +61,8 @@ serve(async (req) => {
 
       if (existing) continue;
 
-      // Queue collection action
       try {
-        await supabase.from("penny_collection_queue").insert({
+        await serviceClient.from("penny_collection_queue").insert({
           company_id: inv.company_id,
           invoice_id: inv.id,
           customer_name: data?.CustomerRef?.name || "Unknown",
@@ -92,16 +76,15 @@ serve(async (req) => {
             escalation_level: daysOverdue >= 90 ? 3 : daysOverdue >= 60 ? 2 : 1,
           },
           status: "pending_approval",
-          priority: priority,
+          priority,
           ai_reasoning: description,
         });
         actions++;
       } catch (_) {}
     }
 
-    // Log run
     try {
-      await supabase.from("automation_runs").insert({
+      await serviceClient.from("automation_runs").insert({
         company_id: "a0000000-0000-0000-0000-000000000001",
         automation_key: "ar_aging_escalation",
         automation_name: "AR Aging Escalation",
@@ -114,14 +97,6 @@ serve(async (req) => {
       });
     } catch (_) {}
 
-    return new Response(JSON.stringify({ processed, actions_queued: actions }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("ar-aging-escalation error:", err);
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { processed, actions_queued: actions };
+  }, { functionName: "ar-aging-escalation", requireCompany: false, wrapResult: false })
+);
