@@ -370,27 +370,64 @@ export function PostReviewPanel({
     // Reset pages to only valid ones for new platform selection
     const validPages = new Set(sanitized.flatMap(p => (PLATFORM_PAGES[p] || []).map(o => o.value)));
     setLocalPages(prev => prev.filter(p => validPages.has(p)));
-    // Batch update all siblings (same title + old platform + day)
-    if (sanitized.length > 0) {
-      const dbPlatform = platformMap[sanitized[0]] || sanitized[0];
-      const day = post.scheduled_date?.substring(0, 10);
-      let query = supabase
-        .from("social_posts")
-        .update({ platform: dbPlatform as SocialPost["platform"] })
-        .eq("platform", post.platform)
-        .eq("title", post.title);
-      if (day) {
-        query = query.gte("scheduled_date", `${day}T00:00:00`).lte("scheduled_date", `${day}T23:59:59`);
-      } else {
-        query = query.eq("id", post.id);
-      }
-      const { error } = await query;
-      if (error) {
-        toast({ title: "Failed to update platform", description: error.message, variant: "destructive" });
-      } else {
-        queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+
+    // Map UI platform keys to DB platform values
+    const dbPlatforms = sanitized.map(p => platformMap[p] || p);
+
+    // Reconcile sibling rows: find all siblings for this title + day
+    const day = post.scheduled_date?.substring(0, 10);
+    const siblings = allPosts.filter(p =>
+      p.title === post.title &&
+      (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
+    );
+    const existingPlatforms = [...new Set(siblings.map(s => s.platform))];
+    const targetSet = new Set(dbPlatforms);
+
+    // Delete siblings whose platform is no longer selected
+    const toDelete = siblings.filter(s => !targetSet.has(s.platform));
+    // Platforms that need new rows
+    const existingSet = new Set(existingPlatforms);
+    const toAdd = dbPlatforms.filter(p => !existingSet.has(p));
+    // Update existing siblings to keep them (in case platform value changed)
+    const toUpdate = siblings.filter(s => targetSet.has(s.platform));
+
+    const promises: PromiseLike<any>[] = [];
+
+    for (const sib of toDelete) {
+      promises.push(supabase.from("social_posts").delete().eq("id", sib.id).select());
+    }
+
+    for (const newPlatform of toAdd) {
+      // Clone from first existing sibling for each page
+      const templateSiblings = toUpdate.length > 0 ? toUpdate : [post];
+      const seenPages = new Set<string>();
+      for (const tmpl of templateSiblings) {
+        const pageKey = tmpl.page_name || "";
+        if (seenPages.has(pageKey)) continue;
+        seenPages.add(pageKey);
+        promises.push(
+          supabase.from("social_posts").insert({
+            user_id: post.user_id,
+            platform: newPlatform as SocialPost["platform"],
+            status: post.status,
+            qa_status: post.qa_status,
+            title: post.title,
+            content: post.content,
+            image_url: post.image_url,
+            scheduled_date: post.scheduled_date,
+            hashtags: post.hashtags,
+            page_name: tmpl.page_name,
+            content_type: post.content_type,
+            neel_approved: post.neel_approved,
+          }).select()
+        );
       }
     }
+
+    if (promises.length > 0) {
+      await Promise.all(promises);
+    }
+    queryClient.invalidateQueries({ queryKey: ["social_posts"] });
     setSubPanel(null);
   };
 
