@@ -1,41 +1,23 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, body } = ctx;
 
-  try {
     // Safety guard: only run on Fridays (day 5 in UTC)
     const now = new Date();
     if (now.getUTCDay() !== 5) {
-      return new Response(
-        JSON.stringify({ ok: true, message: "Not a working day, skipping alerts" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { ok: true, message: "Not a working day, skipping alerts" };
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Determine check type from body or default based on current hour
     let checkType: "missed_clockin" | "missed_clockout" = "missed_clockin";
-    try {
-      const body = await req.json();
-      if (body?.check_type) checkType = body.check_type;
-    } catch { /* no body, use default */ }
+    if (body?.check_type) checkType = body.check_type;
 
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
+    const todayStr = now.toISOString().slice(0, 10);
     const startOfDay = `${todayStr}T00:00:00.000Z`;
     const endOfDay = `${todayStr}T23:59:59.999Z`;
 
-    // Get all active employees
     const { data: profiles, error: profilesErr } = await supabase
       .from("profiles")
       .select("id, user_id, full_name, email, company_id")
@@ -43,12 +25,9 @@ serve(async (req) => {
 
     if (profilesErr) throw profilesErr;
     if (!profiles || profiles.length === 0) {
-      return new Response(JSON.stringify({ ok: true, message: "No active profiles" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { ok: true, message: "No active profiles" };
     }
 
-    // Get today's time clock entries
     const { data: entries, error: entriesErr } = await supabase
       .from("time_clock_entries")
       .select("id, profile_id, clock_in, clock_out")
@@ -64,7 +43,6 @@ serve(async (req) => {
       entriesByProfile.set(e.profile_id, list);
     }
 
-    // Check existing notifications for dedup
     const { data: existingNotifs } = await supabase
       .from("notifications")
       .select("metadata")
@@ -81,7 +59,6 @@ serve(async (req) => {
     const alerts: Array<{ profileId: string; userId: string; name: string; email: string; alertType: string; companyId: string }> = [];
 
     if (checkType === "missed_clockin") {
-      // Employees with NO entry today
       for (const p of profiles) {
         if (!entriesByProfile.has(p.id)) {
           const key = `${todayStr}:${p.id}:missed_clockin`;
@@ -91,7 +68,6 @@ serve(async (req) => {
         }
       }
     } else {
-      // Employees with open clock_out
       for (const p of profiles) {
         const pEntries = entriesByProfile.get(p.id);
         if (pEntries) {
@@ -106,7 +82,6 @@ serve(async (req) => {
       }
     }
 
-    // Process alerts
     let notifCount = 0;
     let emailCount = 0;
 
@@ -119,7 +94,6 @@ serve(async (req) => {
         ? `${alert.name} has not signed in for ${todayStr}. Please follow up.`
         : `${alert.name} clocked in but hasn't clocked out yet for ${todayStr}.`;
 
-      // Insert notification for the employee (only if they have a linked auth user)
       if (alert.userId) {
         await supabase.from("notifications").insert({
           user_id: alert.userId,
@@ -137,14 +111,12 @@ serve(async (req) => {
         notifCount++;
       }
 
-      // Notify admins in the same company (single query instead of N+1)
       const { data: adminUsers } = await supabase
         .from("user_roles")
         .select("user_id")
         .eq("role", "admin");
 
       if (adminUsers) {
-        // Filter to admins in the same company
         const { data: companyAdmins } = await supabase
           .from("profiles")
           .select("user_id")
@@ -172,7 +144,6 @@ serve(async (req) => {
         }
       }
 
-      // Send email to the employee
       if (alert.email) {
         try {
           const emailBody = `
@@ -190,18 +161,9 @@ serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, check_type: checkType, alerts_created: notifCount, emails_sent: emailCount }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("timeclock-alerts error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { ok: true, check_type: checkType, alerts_created: notifCount, emails_sent: emailCount };
+  }, { functionName: "timeclock-alerts", authMode: "none", requireCompany: false, wrapResult: false })
+);
 
 async function sendAlertEmail(to: string, subject: string, body: string) {
   const clientId = Deno.env.get("GMAIL_CLIENT_ID");
@@ -213,7 +175,6 @@ async function sendAlertEmail(to: string, subject: string, body: string) {
     return;
   }
 
-  // Get access token
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -232,13 +193,11 @@ async function sendAlertEmail(to: string, subject: string, body: string) {
 
   const { access_token } = await tokenRes.json();
 
-  // Get sender email
   const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
     headers: { Authorization: `Bearer ${access_token}` },
   });
   const profile = await profileRes.json();
 
-  // Build raw email
   const emailLines = [
     `From: ${profile.emailAddress}`,
     `To: ${to}`,

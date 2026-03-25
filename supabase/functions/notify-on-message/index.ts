@@ -1,52 +1,27 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { groupByLanguage, translateNotification } from "../_shared/notifyTranslate.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: svc, body } = ctx;
+    const { type, table, record } = body;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const svc = createClient(supabaseUrl, serviceKey);
-
-  try {
-    const { type, table, record } = await req.json();
     if (type !== "INSERT" || !record) {
-      return new Response(JSON.stringify({ skipped: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return { skipped: true };
     }
-
-    const sendPushUrl = `${supabaseUrl}/functions/v1/send-push`;
-    const pushHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` };
 
     if (table === "team_messages") {
-      await handleTeamMessage(svc, record, sendPushUrl, pushHeaders, supabaseUrl, anonKey);
+      await handleTeamMessage(svc, record);
     } else if (table === "support_messages") {
-      await handleSupportMessage(svc, record, sendPushUrl, pushHeaders, supabaseUrl, anonKey);
+      await handleSupportMessage(svc, record);
     }
 
-    return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (error) {
-    console.error("notify-on-message error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { ok: true };
+  }, { functionName: "notify-on-message", authMode: "none", requireCompany: false, wrapResult: false })
+);
 
-async function handleTeamMessage(
-  svc: any,
-  record: any,
-  sendPushUrl: string,
-  pushHeaders: Record<string, string>,
-  supabaseUrl: string,
-  anonKey: string
-) {
+async function handleTeamMessage(svc: any, record: any) {
   const { channel_id, sender_profile_id, original_text } = record;
 
-  // Get channel name and type
   const { data: channel } = await svc
     .from("team_channels")
     .select("name, channel_type")
@@ -56,7 +31,6 @@ async function handleTeamMessage(
   const channelName = channel?.name || "a channel";
   const channelType = channel?.channel_type;
 
-  // Get sender name
   const { data: senderProfile } = await svc
     .from("profiles")
     .select("full_name, user_id")
@@ -68,7 +42,6 @@ async function handleTeamMessage(
   let profiles: any[] | null = null;
 
   if (channelName === "Official Channel" || channelName === "Official Group") {
-    // Notify ALL @rebar.shop users except sender
     const { data } = await svc
       .from("profiles")
       .select("id, user_id, preferred_language, email")
@@ -76,7 +49,6 @@ async function handleTeamMessage(
       .neq("id", sender_profile_id);
     profiles = data;
   } else {
-    // Existing logic: notify channel members only
     const { data: members } = await svc
       .from("team_channel_members")
       .select("profile_id")
@@ -96,7 +68,6 @@ async function handleTeamMessage(
   if (!profiles || profiles.length === 0) return;
 
   const preview = (original_text || "").slice(0, 120);
-  // For DMs, show just the sender name; for group channels, show "Sender in #Channel"
   const titleEn = channelType === "dm" ? senderName : `${senderName} in #${channelName}`;
 
   const notifRows: any[] = [];
@@ -121,25 +92,14 @@ async function handleTeamMessage(
       console.error("Failed to insert team notifications:", err);
     }
   }
-  // Push notifications are handled automatically by the push-on-notify DB trigger
 }
 
-async function handleSupportMessage(
-  svc: any,
-  record: any,
-  sendPushUrl: string,
-  pushHeaders: Record<string, string>,
-  supabaseUrl: string,
-  anonKey: string
-) {
-  // Only notify for visitor messages
+async function handleSupportMessage(svc: any, record: any) {
   if (record.sender_type !== "visitor") return;
-  // Skip internal notes and system messages
   if (record.is_internal_note || record.content_type === "system") return;
 
   const { conversation_id, content } = record;
 
-  // Get conversation details
   const { data: convo } = await svc
     .from("support_conversations")
     .select("visitor_name, company_id")
@@ -151,7 +111,6 @@ async function handleSupportMessage(
   const preview = (content || "").slice(0, 120);
   const titleEn = `Support: ${visitorName}`;
 
-  // Get all admin/office users for this company
   const { data: roleUsers } = await svc
     .from("user_roles")
     .select("user_id")
@@ -159,7 +118,6 @@ async function handleSupportMessage(
 
   if (!roleUsers || roleUsers.length === 0) return;
 
-  // Filter to users in the same company — include preferred_language
   const userIds = roleUsers.map((r: any) => r.user_id);
   const { data: companyProfiles } = await svc
     .from("profiles")
@@ -191,5 +149,4 @@ async function handleSupportMessage(
       console.error("Failed to insert support notifications:", err);
     }
   }
-  // Push notifications are handled automatically by the push-on-notify DB trigger
 }

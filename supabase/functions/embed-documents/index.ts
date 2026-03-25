@@ -1,10 +1,4 @@
-/**
- * Embed Documents — generates vector embeddings for business records.
- * Supports batch processing: indexes leads, invoices, orders, machine logs, etc.
- * Uses Gemini text-embedding-004 (768 dimensions).
- */
-
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 
@@ -13,22 +7,17 @@ const EMBEDDING_DIM = 768;
 const BATCH_SIZE = 20;
 
 interface EmbedRequest {
-  /** Which domain to index: sales, accounting, shopfloor, delivery, support, etc. */
   domain: string;
-  /** Optional: only index specific entity type */
   entityType?: string;
-  /** Optional: company_id override */
   companyId?: string;
-  /** Optional: only index records updated since this timestamp */
   since?: string;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, body } = ctx;
+    const { domain, entityType, companyId, since } = body as EmbedRequest;
 
-  try {
-    const { domain, entityType, companyId, since } = await req.json() as EmbedRequest;
-    
     if (!domain) {
       return new Response(JSON.stringify({ error: "domain required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -42,21 +31,14 @@ serve(async (req) => {
       });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
     const company = companyId || "a0000000-0000-0000-0000-000000000001";
 
-    // Fetch records to embed based on domain
     const records = await fetchRecordsForDomain(supabase, domain, entityType, company, since);
-    
+
     if (records.length === 0) {
-      return new Response(JSON.stringify({ embedded: 0, message: "No new records to embed" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { embedded: 0, message: "No new records to embed" };
     }
 
-    // Process in batches
     let embedded = 0;
     let errors = 0;
 
@@ -93,18 +75,10 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ embedded, errors, total: records.length }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("embed-documents error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { embedded, errors, total: records.length };
+  }, { functionName: "embed-documents", authMode: "none", requireCompany: false, wrapResult: false })
+);
 
-// ─── Embedding generation via Gemini ───
 async function generateEmbeddings(apiKey: string, texts: string[]): Promise<number[][]> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${EMBEDDING_MODEL}:batchEmbedContents?key=${apiKey}`;
 
@@ -130,7 +104,6 @@ async function generateEmbeddings(apiKey: string, texts: string[]): Promise<numb
   return data.embeddings.map((e: { values: number[] }) => e.values);
 }
 
-// ─── Domain-specific record fetching ───
 interface EmbedRecord {
   entityType: string;
   entityId: string;
@@ -159,8 +132,8 @@ async function fetchRecordsForDomain(
             records.push({
               entityType: "lead",
               entityId: r.id,
-              content: `Lead: ${r.company_name || ""} | Contact: ${r.contact_name || ""} | Stage: ${r.stage} | Source: ${r.source || ""} | Value: $${r.total_value || 0} | Notes: ${r.notes || ""}`,
-              metadata: { stage: r.stage, value: r.total_value, created_at: r.created_at },
+              content: `Lead: ${(r as any).company_name || ""} | Contact: ${(r as any).contact_name || ""} | Stage: ${r.stage} | Source: ${r.source || ""} | Value: $${(r as any).total_value || 0} | Notes: ${r.notes || ""}`,
+              metadata: { stage: r.stage, value: (r as any).total_value, created_at: r.created_at },
             });
           }
         }
@@ -179,7 +152,7 @@ async function fetchRecordsForDomain(
             records.push({
               entityType: "invoice",
               entityId: r.id,
-              content: `Invoice QB#${r.quickbooks_id} | Customer: ${d?.CustomerRef?.name || ""} | Balance: $${r.balance || 0} | Total: $${d?.TotalAmt || 0} | Due: ${d?.DueDate || ""}`,
+              content: `Invoice QB#${r.quickbooks_id} | Customer: ${(d as any)?.CustomerRef?.name || ""} | Balance: $${r.balance || 0} | Total: $${(d as any)?.TotalAmt || 0} | Due: ${(d as any)?.DueDate || ""}`,
               metadata: { balance: r.balance, quickbooks_id: r.quickbooks_id },
             });
           }

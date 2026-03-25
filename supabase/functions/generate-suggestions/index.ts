@@ -1,23 +1,16 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
-  try {
-    // Auth guard: only admins can trigger suggestion generation
-    const { userId, serviceClient: supabase } = await requireAuth(req);
-
-    const { data: isAdmin } = await supabase.rpc("has_role", {
-      _user_id: userId,
-      _role: "admin",
-    });
-    if (!isAdmin) {
-      return json({ error: "Admin role required" }, 403);
-    }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase } = ctx;
 
     // Load agent IDs
     const { data: agents } = await supabase.from("agents").select("id, code");
@@ -803,19 +796,9 @@ serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({
-        generated: suggestions.length,
-        human_tasks_created: tasksInserted,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("generate-suggestions error:", e);
-    return new Response(JSON.stringify({ error: String(e) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return {
+      generated: suggestions.length,
+      human_tasks_created: tasksInserted,
+    };
+  }, { functionName: "generate-suggestions", requireRole: "admin", requireCompany: false, wrapResult: false })
+);

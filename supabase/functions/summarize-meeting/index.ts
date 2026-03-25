@@ -1,33 +1,16 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { callAI } from "../_shared/aiRouter.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase, body } = ctx;
 
-  try {
-    const { meetingId } = await req.json();
+    const { meetingId } = body;
     if (!meetingId) throw new Error("meetingId is required");
 
-    // Auth guard
-    let rateLimitId: string;
-    try {
-      const auth = await requireAuth(req);
-      rateLimitId = auth.userId;
-    } catch (res) {
-      if (res instanceof Response) return res;
-      throw res;
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceKey);
-
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
-      _user_id: rateLimitId,
+      _user_id: userId,
       _function_name: "summarize-meeting",
       _max_requests: 5,
       _window_seconds: 60,
@@ -39,7 +22,6 @@ serve(async (req) => {
       });
     }
 
-    // Fetch meeting
     const { data: meeting, error: meetingErr } = await supabase
       .from("team_meetings")
       .select("*")
@@ -47,7 +29,6 @@ serve(async (req) => {
       .single();
     if (meetingErr || !meeting) throw new Error("Meeting not found");
 
-    // Fetch transcript entries (primary source)
     const { data: transcriptEntries } = await supabase
       .from("meeting_transcript_entries")
       .select("speaker_name, speaker_profile_id, text, timestamp_ms, language")
@@ -56,7 +37,6 @@ serve(async (req) => {
       .order("timestamp_ms", { ascending: true })
       .limit(500);
 
-    // Fetch chat messages as secondary source
     const startedAt = meeting.started_at;
     const endedAt = meeting.ended_at || new Date().toISOString();
     const { data: chatMessages } = await supabase
@@ -68,14 +48,12 @@ serve(async (req) => {
       .order("created_at", { ascending: true })
       .limit(200);
 
-    // Fetch profiles for name resolution
     const { data: profiles } = await supabase
       .from("profiles")
       .select("id, full_name")
       .limit(200);
     const profileMap = new Map((profiles || []).map((p: any) => [p.id, p.full_name]));
 
-    // Build transcript text
     const durationMs = new Date(endedAt).getTime() - new Date(startedAt).getTime();
     const durationMin = Math.round(durationMs / 60000);
 
@@ -98,7 +76,6 @@ serve(async (req) => {
 
     const fullContext = [transcriptText, chatLog].filter(Boolean).join("\n\n---\n\n");
 
-    // Collect unique participant names
     const participantNames = [
       ...new Set([
         ...(transcriptEntries || []).map((e: any) => e.speaker_name),
@@ -106,7 +83,6 @@ serve(async (req) => {
       ]),
     ];
 
-    // Calculate talk time per speaker
     const speakerWordCounts: Record<string, number> = {};
     for (const e of (transcriptEntries || [])) {
       const name = (e as any).speaker_name;
@@ -131,7 +107,6 @@ Has recording: ${meeting.recording_url ? "Yes" : "No"}
 ${fullContext || "No transcript or chat data available."}
 `;
 
-    // GPT-4o: complex structured JSON extraction from meeting context
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o",
@@ -183,7 +158,6 @@ Rules:
       };
     }
 
-    // Build markdown notes
     const notesText = [
       `## Meeting Summary\n${parsed.executiveSummary}`,
       parsed.keyBullets?.length
@@ -203,7 +177,6 @@ Rules:
         : "",
     ].filter(Boolean).join("\n");
 
-    // Store structured report
     await supabase
       .from("team_meetings")
       .update({
@@ -215,10 +188,8 @@ Rules:
       })
       .eq("id", meetingId);
 
-    // Auto-create action items as drafts
     if (parsed.actionItems?.length > 0) {
       const actionRows = parsed.actionItems.map((a: any) => {
-        // Try to match assignee to a profile
         const matchedProfile = (profiles || []).find(
           (p: any) => p.full_name?.toLowerCase() === a.assignee?.toLowerCase()
         );
@@ -241,7 +212,6 @@ Rules:
       if (actionErr) console.error("Failed to create action items:", actionErr);
     }
 
-    // Save to Brain
     await supabase.from("knowledge").insert({
       title: `Meeting Notes: ${meeting.title}`,
       category: "meetings",
@@ -262,23 +232,14 @@ Rules:
       },
     });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        report: parsed,
-        notes: notesText,
-        participants: participantNames,
-        participantContributions,
-        duration_minutes: durationMin,
-        actionItemsCreated: parsed.actionItems?.length || 0,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("Summarize meeting error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return {
+      success: true,
+      report: parsed,
+      notes: notesText,
+      participants: participantNames,
+      participantContributions,
+      duration_minutes: durationMin,
+      actionItemsCreated: parsed.actionItems?.length || 0,
+    };
+  }, { functionName: "summarize-meeting", requireCompany: false, wrapResult: false })
+);

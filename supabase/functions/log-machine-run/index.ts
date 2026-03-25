@@ -1,54 +1,18 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, userClient: supabaseUser, serviceClient: supabaseService, body: rawBody } = ctx;
 
-  try {
-    // ── Auth ──────────────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // User-scoped client (respects RLS)
-    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    // Service client (for role checks & event logging)
-    const supabaseService = createClient(supabaseUrl, serviceKey);
-
-    // Validate JWT
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    const userId = user.id;
-
-    // ── Role check: block 'office' role ──────────────────────────────
+    // Role check
     const { data: userRoles } = await supabaseService
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
 
     const roles = (userRoles || []).map((r: { role: string }) => r.role);
-
-    // If user ONLY has 'office' role (or no roles at all), deny
     const allowedRoles = ["admin", "sales", "accounting", "workshop", "field"];
     const hasAllowedRole = roles.some((r: string) => allowedRoles.includes(r));
     if (!hasAllowedRole) {
@@ -58,7 +22,6 @@ serve(async (req) => {
       );
     }
 
-    // ── Parse body ───────────────────────────────────────────────────
     const bodySchema = z.object({
       machineRunId: z.string().uuid().optional(),
       companyId: z.string().uuid(),
@@ -76,7 +39,7 @@ serve(async (req) => {
       notes: z.string().max(2000).optional().nullable(),
       createdBy: z.string().uuid().optional().nullable(),
     });
-    const parsed = bodySchema.safeParse(await req.json());
+    const parsed = bodySchema.safeParse(rawBody);
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
@@ -84,24 +47,11 @@ serve(async (req) => {
       );
     }
     const {
-      machineRunId,
-      companyId,
-      workOrderId,
-      machineId,
-      operatorProfileId,
-      supervisorProfileId,
-      process,
-      status,
-      startedAt,
-      endedAt,
-      inputQty,
-      outputQty,
-      scrapQty,
-      notes,
-      createdBy,
+      machineRunId, companyId, workOrderId, machineId,
+      operatorProfileId, supervisorProfileId, process, status,
+      startedAt, endedAt, inputQty, outputQty, scrapQty, notes, createdBy,
     } = parsed.data;
 
-    // ── Build row payload ────────────────────────────────────────────
     const row: Record<string, unknown> = {
       company_id: companyId,
       machine_id: machineId,
@@ -119,12 +69,10 @@ serve(async (req) => {
     if (notes !== undefined) row.notes = notes;
     if (createdBy !== undefined) row.created_by = createdBy;
 
-    // ── Insert or update ─────────────────────────────────────────────
     let machineRun;
 
     if (machineRunId) {
-      // Update existing run (via user client for RLS)
-      const { data, error } = await supabaseUser
+      const { data, error } = await supabaseUser!
         .from("machine_runs")
         .update(row)
         .eq("id", machineRunId)
@@ -140,8 +88,7 @@ serve(async (req) => {
       }
       machineRun = data;
     } else {
-      // Insert new run (via user client for RLS)
-      const { data, error } = await supabaseUser
+      const { data, error } = await supabaseUser!
         .from("machine_runs")
         .insert(row)
         .select()
@@ -151,7 +98,6 @@ serve(async (req) => {
       machineRun = data;
     }
 
-    // ── Log event ────────────────────────────────────────────────────
     const eventPayload = {
       machineRunId: machineRun.id,
       machineId: machineRun.machine_id,
@@ -181,12 +127,5 @@ serve(async (req) => {
       JSON.stringify({ machineRun, event: "logged" }),
       { status: machineRunId ? 200 : 201, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("logMachineRunEvent error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "log-machine-run", requireCompany: false, wrapResult: false })
+);
