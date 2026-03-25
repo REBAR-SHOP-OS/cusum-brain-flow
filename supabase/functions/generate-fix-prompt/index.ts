@@ -1,11 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { callAI } from "../_shared/aiRouter.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "../_shared/auth.ts";
 
 const SYSTEM_PROMPT = `You are a senior full-stack developer and debugging expert analyzing bug reports for a production application built with:
 - **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui

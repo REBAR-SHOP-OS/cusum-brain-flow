@@ -1,10 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { callAIStream, AIError } from "../_shared/aiRouter.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/auth.ts";
 
 // Simple in-memory rate limiter: IP -> timestamps[]
 const rateLimitMap = new Map<string, number[]>();

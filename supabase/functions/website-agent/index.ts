@@ -3,10 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { WPClient } from "../_shared/wpClient.ts";
 import { callAIStream } from "../_shared/aiRouter.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/auth.ts";
 
 // ─── Rate Limiter ───
 const rateLimitMap = new Map<string, number[]>();

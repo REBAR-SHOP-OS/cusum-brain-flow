@@ -10,10 +10,7 @@ import { specialistsPrompts } from "../_shared/agents/specialists.ts";
 import { empirePrompts } from "../_shared/agents/empire.ts";
 import { purchasingPrompts } from "../_shared/agents/purchasing.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "../_shared/auth.ts";
 
 // Merge all prompts (excluding social/pixel)
 const ALL_PROMPTS: Record<string, string> = {

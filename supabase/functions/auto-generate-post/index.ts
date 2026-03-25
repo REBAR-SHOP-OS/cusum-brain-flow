@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { corsHeaders } from "../_shared/auth.ts";
+
 // buildEventPromptBlock removed — events are opt-in via chat only
 
 /** Resolve company logo URL from storage (same as Pixel agent) */
@@ -75,12 +77,6 @@ async function fetchBrainContext(supabase: ReturnType<typeof createClient>): Pro
   console.log(`Brain: instructions=${customInstructions.length > 0 ? "yes" : "no"}, images=${filtered.length}`);
   return { customInstructions, resourceImageUrls: filtered };
 }
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
 
 /** Strip Persian translation block — never store/publish Persian text */
 function stripPersianBlock(text: string): string {
