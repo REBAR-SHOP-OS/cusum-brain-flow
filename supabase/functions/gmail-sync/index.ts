@@ -533,7 +533,7 @@ Deno.serve((req) =>
     }
 
     // Get the user's own Gmail access token with IP tracking
-    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const clientIp = rawReq.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const accessToken = await getAccessTokenForUser(userId, clientIp);
 
     // body already parsed above (before auth check)
