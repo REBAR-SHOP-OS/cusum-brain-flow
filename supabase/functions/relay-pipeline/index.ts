@@ -352,17 +352,5 @@ Deno.serve((req) =>
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    if (error instanceof AIError) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: error.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    console.error("relay-pipeline error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "relay-pipeline", requireCompany: false, wrapResult: false })
+);
