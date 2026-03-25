@@ -431,11 +431,11 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
           <div className="flex items-center gap-0.5 px-2 pb-2">
             {/* Left actions */}
             {voiceAndAttachOnly ? (
-              <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} />
+              <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} lang={voiceLang} onLangChange={(l) => { if (speech.isListening) speech.stop(); setVoiceLang(l); }} />
             ) : !minimalToolbar ? (
               <>
                 <EmojiPicker onSelect={handleEmojiSelect} disabled={disabled} />
-                <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} />
+                <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} lang={voiceLang} onLangChange={(l) => { if (speech.isListening) speech.stop(); setVoiceLang(l); }} />
                 <QuickTemplates onSelect={handleTemplateSelect} disabled={disabled} />
 
                 <Tooltip>
