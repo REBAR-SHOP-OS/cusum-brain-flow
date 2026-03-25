@@ -28,10 +28,9 @@ const PRIORITY_COLORS: Record<string, string> = {
 interface PurchasingListPanelProps {
   filterDate?: Date;
   onFilterDateChange?: (date: Date | undefined) => void;
-  defaultFilterStatus?: "all" | "purchased";
 }
 
-export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange, defaultFilterStatus = "all" }: PurchasingListPanelProps = {}) {
+export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange }: PurchasingListPanelProps = {}) {
   const [internalDate, setInternalDate] = useState<Date | undefined>();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const filterDate = externalDate !== undefined ? externalDate : internalDate;
