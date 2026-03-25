@@ -1,4 +1,5 @@
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { STAGE_MAP } from "../_shared/odoo-validation.ts";
 import { isOdooEnabled } from "../_shared/featureFlags.ts";
 
@@ -28,26 +29,20 @@ interface ComparisonRow {
   auto_fixable: boolean;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient, body } = ctx;
 
-  // ODOO_ENABLED feature flag guard
-  if (!isOdooEnabled()) {
-    console.warn("ODOO_ENABLED guard: flag resolved to false");
-    return new Response(JSON.stringify({ error: "Odoo integration is disabled", disabled: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  try {
-    const { serviceClient } = await requireAuth(req);
+    // ODOO_ENABLED feature flag guard
+    if (!isOdooEnabled()) {
+      console.warn("ODOO_ENABLED guard: flag resolved to false");
+      return new Response(JSON.stringify({ error: "Odoo integration is disabled", disabled: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     // Parse mode: "report" (default) or "fix" (auto-fix OUT_OF_SYNC items)
-    let autoFix = false;
-    try {
-      const body = await req.json();
-      if (body?.mode === "fix") autoFix = true;
-    } catch { /* no body */ }
+    const autoFix = body?.mode === "fix";
 
     const odooUrl = Deno.env.get("ODOO_URL")!.trim();
     const odooKey = Deno.env.get("ODOO_API_KEY")!;
@@ -218,9 +213,5 @@ Deno.serve(async (req) => {
       results,
       drift: driftLeads.slice(0, 50), // Cap drift report to 50 for response size
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("Reconciliation error:", err);
-    return json({ error: err.message || "Reconciliation failed" }, 500);
-  }
-});
+  }, { functionName: "odoo-reconciliation-report", requireCompany: false, wrapResult: false })
+);

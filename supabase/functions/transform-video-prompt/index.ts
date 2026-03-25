@@ -1,6 +1,6 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const CONSTRUCTION_KEYWORDS = [
   "rebar", "steel", "fabrication", "machine", "cage", "construction",
@@ -76,37 +76,10 @@ RESPOND WITH ONLY A JSON OBJECT in this exact format:
   "isConstructionRelated": true|false
 }`;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const { rawPrompt, aspectRatio, duration } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { body } = ctx;
+    const { rawPrompt, aspectRatio, duration } = body;
     if (!rawPrompt || typeof rawPrompt !== "string" || rawPrompt.trim().length === 0) {
       return new Response(
         JSON.stringify({ error: "rawPrompt is required" }),
@@ -205,11 +178,5 @@ serve(async (req) => {
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("transform-video-prompt error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "transform-video-prompt", requireCompany: false, wrapResult: false })
+);

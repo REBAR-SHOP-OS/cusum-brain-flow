@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 /**
  * GCE Video Assembly Orchestrator
@@ -23,15 +23,12 @@ interface AssemblyRequest {
   audioUrl?: string;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { body } = ctx;
+    const typedBody = body as AssemblyRequest;
 
-  try {
-    const body: AssemblyRequest = await req.json();
-
-    if (!body.clips || body.clips.length === 0) {
+    if (!typedBody.clips || typedBody.clips.length === 0) {
       return new Response(
         JSON.stringify({ error: "No clips provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -250,12 +247,5 @@ gcloud compute instances delete "$INSTANCE" --zone="$ZONE" --quiet
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (err: unknown) {
-    console.error("GCE assembly error:", err);
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ fallback: true, reason: msg }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "gce-video-assembly", authMode: "none", requireCompany: false, wrapResult: false })
+);

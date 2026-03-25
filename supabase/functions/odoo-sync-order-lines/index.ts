@@ -1,4 +1,5 @@
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { isOdooEnabled } from "../_shared/featureFlags.ts";
 
 /**
@@ -31,22 +32,17 @@ async function odooRpc(url: string, db: string, apiKey: string, model: string, m
   return data.result;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient, body } = ctx;
 
-  // ODOO_ENABLED feature flag guard
-  if (!isOdooEnabled()) {
-    console.warn("ODOO_ENABLED guard: flag resolved to false");
-    return new Response(JSON.stringify({ error: "Odoo integration is disabled", disabled: true, linesFound: 0 }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
-  try {
-    const { serviceClient } = await requireAuth(req);
-
-    let body: Record<string, unknown> = {};
-    try { body = await req.json(); } catch { /* empty */ }
+    // ODOO_ENABLED feature flag guard
+    if (!isOdooEnabled()) {
+      console.warn("ODOO_ENABLED guard: flag resolved to false");
+      return new Response(JSON.stringify({ error: "Odoo integration is disabled", disabled: true, linesFound: 0 }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const odooUrl = Deno.env.get("ODOO_URL")!.trim();
     const odooKey = Deno.env.get("ODOO_API_KEY")!;
@@ -149,12 +145,8 @@ Deno.serve(async (req) => {
     }
 
     return json({ synced, errors, total: needsSync.length });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("Sync error:", err);
-    return json({ error: (err as Error).message || "Sync failed" }, 500);
-  }
-});
+  }, { functionName: "odoo-sync-order-lines", requireCompany: false, wrapResult: false })
+);
 
 async function syncLinesForQuote(
   serviceClient: ReturnType<typeof import("https://esm.sh/@supabase/supabase-js@2").createClient>,

@@ -1,8 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 import { callAI } from "../_shared/aiRouter.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 /**
  * Vizzy Pre-Digest: Before a voice session starts, this function:
@@ -15,33 +15,13 @@ import { corsHeaders } from "../_shared/auth.ts";
  * This means Vizzy starts every conversation already knowing everything —
  * like a human who studied the business before walking into the room.
  */
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase } = ctx;
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
-    const { data: { user } } = await anonClient.auth.getUser(token);
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Rate limit: 5 per 10 minutes (heavier than daily-brief)
+    // Rate limit: 5 per 10 minutes
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
-      _user_id: user.id,
+      _user_id: userId,
       _function_name: "vizzy-pre-digest",
       _max_requests: 5,
       _window_seconds: 600,
@@ -54,7 +34,7 @@ Deno.serve(async (req) => {
     }
 
     // Step 1: Load raw ERP context
-    const rawContext = await buildFullVizzyContext(supabase, user.id, {
+    const rawContext = await buildFullVizzyContext(supabase, userId, {
       includeFinancials: true,
     });
 
@@ -62,7 +42,7 @@ Deno.serve(async (req) => {
     const { data: prevBenchmarks } = await supabase
       .from("vizzy_memory")
       .select("content, metadata, created_at")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("category", "daily_benchmark")
       .order("created_at", { ascending: false })
       .limit(7); // Last 7 sessions for trend analysis
@@ -242,11 +222,5 @@ ${agentAuditContext}`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("vizzy-pre-digest error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "vizzy-pre-digest", requireCompany: false, wrapResult: false })
+);
