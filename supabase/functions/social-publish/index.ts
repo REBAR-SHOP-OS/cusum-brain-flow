@@ -47,27 +47,17 @@ Deno.serve((req) =>
       cover_image_url: z.string().url().max(2000).optional(),
     });
     const parsed = publishSchema.safeParse(body);
-    let message = rawMessage;
-    {
-      const idx = message.indexOf("---PERSIAN---");
-      if (idx !== -1) message = message.slice(0, idx);
-      message = message.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
-      message = message.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
-      message = message.trim();
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
+    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish, content_type, cover_image_url } = parsed.data;
+    console.log(`[social-publish] Received: platform=${platform}, content_type=${content_type}, post_id=${post_id}`);
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Guard: prevent duplicate publishing + declined + approval gate
-    if (post_id) {
-      const { data: existing } = await supabaseAdmin
-        .from("social_posts")
-        .select("status, neel_approved, declined_by")
-        .eq("id", post_id)
-        .single();
+    // Strip Persian translation block — server-side safety net
+    let message = rawMessage;
 
       if (existing?.status === "published") {
         return new Response(
