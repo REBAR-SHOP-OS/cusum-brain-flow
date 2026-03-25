@@ -719,15 +719,28 @@ export default function AgentWorkspace() {
                   />
                 </PopoverContent>
               </Popover>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setBrainOpen(true)}
-                title="Pixel Brain – Knowledge & Instructions"
-              >
-                <Brain className="w-4 h-4" />
-              </Button>
+              {agentId === "social" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setBrainOpen(true)}
+                  title="Pixel Brain – Knowledge & Instructions"
+                >
+                  <Brain className="w-4 h-4" />
+                </Button>
+              )}
+              {agentId === "eisenhower" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setEisenhowerInstrOpen(true)}
+                  title="Agent Instructions"
+                >
+                  <Menu className="w-4 h-4" />
+                </Button>
+              )}
             </>
           )}
           {isLoading && (
