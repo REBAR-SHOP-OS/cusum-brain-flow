@@ -1,43 +1,57 @@
 
 
-## Add Calendar + Enhanced Prompt to Eisenhower Matrix Agent
+## Fix Nila: English-Only UI, Multilingual Responses, and "Not Responding" Bug
 
-### What
-Two changes to the Eisenhower agent:
-1. **Date picker**: Add a calendar (like the Social/Pixel agent already has) so the user selects a date before starting. The selected date is shown on the welcome screen and sent as context to the AI.
-2. **Enhanced system prompt**: Update the Eisenhower agent's prompt to follow the structured output format (DO NOW / SCHEDULE / DELEGATE / ELIMINATE + Action Plan).
+### Problems Identified
+
+1. **Not responding**: Default mode is `silent` (mode 2), which ignores all input. Also, `recognition.onend` captures a stale `isRecognizing` value from closure, so auto-restart may fail.
+2. **UI has Persian text**: The i18n system shows Persian labels when `lang === "fa"`. The UI should be English-only per project standards.
+3. **Only responds in Persian**: The system prompt is hardcoded to Persian. Should respond in whatever language the user speaks.
 
 ### Changes
 
-**File: `src/pages/AgentWorkspace.tsx`**
+**1. `src/hooks/useNilaVoiceAssistant.ts`**
+- Change default mode from `"silent"` to `"normal"` so Nila responds immediately
+- Fix the stale closure bug in `recognition.onend` by using a ref for `isRecognizing` state
+- Remove `lang` dependency from speech recognition language — instead, don't set `recognition.lang` so the browser auto-detects the spoken language
+- Remove the Globe toggle and `lang` concept entirely from the hook (UI is always English)
 
-1. Show a calendar popover in the header bar when `agentId === "eisenhower"` (same pattern as the existing `social` calendar at line 693-716)
-2. Show the selected date on the welcome/hero screen when `agentId === "eisenhower"` (same pattern as social's date display at line 743-748)
-3. Pass `extraContext.selectedDate` when `agentId === "eisenhower"` (add to the extraContext block at line 270-276)
-4. Update session title to use `selectedDate` instead of `new Date()` (line 255-256)
+**2. `supabase/functions/nila-chat/index.ts`**
+- Update the normal-mode system prompt to: "You are a helpful voice assistant named Nila. Reply in the same language the user speaks. Keep answers short and concise."
+- Remove the `lang` parameter dependency from prompt selection
+- Increase `max_tokens` to 300 for normal mode (150 is too restrictive for multilingual)
 
-**File: `supabase/functions/_shared/agents/growth.ts`**
+**3. `src/lib/nilaI18n.ts`**
+- Remove the FA translations entirely. Keep only English strings as constants (no lang switching needed).
+- Simplify `getNilaT()` to always return English.
 
-Replace the Eisenhower system prompt with the full structured prompt:
-- Categorize tasks into Q1 (Do Now), Q2 (Schedule), Q3 (Delegate), Q4 (Eliminate)
-- Explain why each task belongs in its quadrant
-- Generate an Action Plan with: Top 3 priorities, tasks to delegate, tasks to remove/postpone
-- Use the exact output format sections: `DO NOW`, `SCHEDULE`, `DELEGATE`, `ELIMINATE`, `Action Plan`
-- Instruct the agent to use the `selectedDate` context to understand which date the user is planning for
+**4. `src/components/nila/NilaHeader.tsx`**
+- Remove the Globe (language toggle) button
+- All labels are already English from the simplified i18n
 
-### Technical Details
+**5. `src/components/nila/NilaVoiceAssistant.tsx`**
+- Remove `lang` toggle logic and `dir="rtl"` — always LTR
+- Remove Globe button handler
 
-- The calendar component (`Calendar` from shadcn) and `Popover` are already imported in AgentWorkspace
-- `selectedDate` state already exists (line 88) and is shared across agents
-- `handleDateChange` callback already exists for the social agent — reuse it
-- The `format` utility from date-fns is already imported
-- Edge function `ai-agent` needs redeployment after prompt change
+**6. `src/components/nila/NilaTextInput.tsx`**
+- Remove `dir` and `fontFamily` RTL logic — always English UI
+- Keep placeholder always in English
 
-### Files Summary
+**7. `src/components/nila/NilaChatMessages.tsx`**
+- Keep RTL detection per-message for content (assistant may reply in Persian/Arabic), but remove the Vazirmatn font override — use system fonts
+
+**8. Deploy `nila-chat`** edge function with the updated prompt.
+
+### Summary
 
 | File | Change |
 |---|---|
-| `src/pages/AgentWorkspace.tsx` | Add calendar to header + date display on welcome + pass selectedDate in context for eisenhower |
-| `supabase/functions/_shared/agents/growth.ts` | Replace eisenhower prompt with structured matrix format + date awareness |
-| Deploy `ai-agent` | Redeploy to pick up new prompt |
+| `useNilaVoiceAssistant.ts` | Default mode → normal, fix stale closure, auto-detect speech language |
+| `nila-chat/index.ts` | Multilingual system prompt, increase max_tokens |
+| `nilaI18n.ts` | English-only, remove FA |
+| `NilaHeader.tsx` | Remove Globe button |
+| `NilaVoiceAssistant.tsx` | Remove RTL/lang toggle |
+| `NilaTextInput.tsx` | Remove RTL logic |
+| `NilaChatMessages.tsx` | Keep per-message RTL detection, remove font override |
+| Deploy `nila-chat` | Redeploy edge function |
 
