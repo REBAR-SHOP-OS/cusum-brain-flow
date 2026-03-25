@@ -253,7 +253,7 @@ export default function AgentWorkspace() {
     let sessionId = activeSessionId;
     if (!sessionId) {
       const sessionTitle = agentId === "eisenhower"
-        ? format(new Date(), "yyyy-MM-dd (EEE, MMM d)")
+        ? format(selectedDate, "yyyy-MM-dd (EEE, MMM d)")
         : agentId === "social"
           ? format(selectedDate, "yyyy-MM-dd")
           : content;
