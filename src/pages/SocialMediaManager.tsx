@@ -672,6 +672,16 @@ export default function SocialMediaManager() {
         onConfirm={handleBulkDelete}
         loading={bulkDeleting}
       />
+
+      {/* Decline Reason Dialog */}
+      <DeclineReasonDialog
+        open={!!declineTarget}
+        onOpenChange={(open) => { if (!open) setDeclineTarget(null); }}
+        onConfirm={(reason) => {
+          if (declineTarget) handleDecline(declineTarget, reason);
+          setDeclineTarget(null);
+        }}
+      />
     </div>
   );
 }
