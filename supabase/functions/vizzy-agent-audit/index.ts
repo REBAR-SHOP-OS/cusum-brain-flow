@@ -11,6 +11,7 @@ import { empirePrompts } from "../_shared/agents/empire.ts";
 import { purchasingPrompts } from "../_shared/agents/purchasing.ts";
 
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 // Merge all prompts (excluding social/pixel)
 const ALL_PROMPTS: Record<string, string> = {
