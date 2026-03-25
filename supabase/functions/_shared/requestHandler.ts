@@ -34,6 +34,12 @@ export interface HandlerOptions {
   requireAnyRole?: AppRole[];
   /** If true, the handler must return a Response object directly. Skips { ok, data } wrapping. */
   rawResponse?: boolean;
+  /**
+   * If false, the handler's return value is serialized as-is (no { ok, data } wrapping).
+   * Useful for migrating legacy functions that have an established API contract.
+   * Default: true (wraps in { ok: true, data: result }).
+   */
+  wrapResult?: boolean;
 }
 
 /**
