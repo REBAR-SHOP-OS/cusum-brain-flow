@@ -1,90 +1,23 @@
 
-## ریشه مشکل
 
-من کد و وضعیت دیتابیس را بررسی کردم. مشکل اصلی از اینجاست:
+## Fix: Eisenhower Agent Language Policy
 
-1. در `EisenhowerInstructionsDialog.tsx` برای پیدا کردن پروفایل کاربر از این شرط استفاده شده:
-   ```ts
-   .eq("id", user.id)
-   ```
-   در حالی که `profiles.id` شناسه داخلی پروفایل است، نه شناسه کاربر احراز هویت‌شده.
+### Problem
+The current prompt (line 116) says "Always respond in the same language the user writes in" — so when the user writes in Persian, the agent responds in English saying "Farsi is for internal use only." The user wants Persian input to be accepted, but the final structured report (quadrants + action plan) must always be in English.
 
-2. لینک درست بین کاربر و پروفایل این است:
-   ```ts
-   profiles.user_id = auth user id
-   ```
+### Change
 
-3. چون کوئری با ستون اشتباه اجرا می‌شود، پروفایل پیدا نمی‌شود و در `handleSave` این خط اجرا می‌شود:
-   ```ts
-   throw new Error("No company");
-   ```
-   و در UI فقط پیام کلی `Failed to save` نمایش داده می‌شود.
+**File: `supabase/functions/_shared/agents/growth.ts`** — line 116
 
-4. این مشکل فقط در ذخیره نیست؛ در `loadInstructions` هم همان باگ تکرار شده، پس هم لود و هم سیو از یک ریشه خراب هستند.
-
-## شواهدی که بررسی شد
-
-- ساختار واقعی جدول `profiles`:
-  - `id`
-  - `user_id`
-  - `company_id`
-- ساختار واقعی جدول `knowledge`:
-  - `id`
-  - `company_id`
-  - `metadata`
-  - `content`
-- در دیتابیس هم مشخص است که `profiles.user_id` مقدار auth user را نگه می‌دارد و `company_id` از همین مسیر باید resolve شود.
-- این با استاندارد پروژه هم هم‌راستا است: هر جا هویت کاربر بررسی می‌شود باید از `profiles.user_id = auth.uid()` استفاده شود، نه `profiles.id`.
-
-## برنامه اصلاح ریشه‌ای
-
-### 1) اصلاح کوئری پروفایل در هر دو مسیر
-در فایل:
-`src/components/agent/EisenhowerInstructionsDialog.tsx`
-
-دو نقطه باید اصلاح شوند:
-
-- در `loadInstructions`
-- در `handleSave`
-
-تغییر:
-```ts
-.eq("id", user.id)
+Replace the current LANGUAGE rule:
 ```
-به:
-```ts
-.eq("user_id", user.id)
+- **LANGUAGE**: Always respond in the same language the user writes in. If the user writes in Persian, respond entirely in Persian. If English, respond in English. Match the user's language exactly.
 ```
 
-### 2) حذف `.single()` و استفاده از `.maybeSingle()`
-برای جلوگیری از خطاهای غیرضروری وقتی رکوردی پیدا نشود، `single()` باید به `maybeSingle()` تبدیل شود تا:
-- خطای 406 یا خطای empty result تولید نشود
-- بتوانیم وضعیت “پروفایل پیدا نشد” را تمیز و کنترل‌شده هندل کنیم
+With:
+```
+- **LANGUAGE**: You MUST understand and accept input in ANY language, including Persian (Farsi). However, your final structured output (quadrant categorization and action plan) MUST ALWAYS be written in English. If the user writes in Persian, you may acknowledge their input briefly in Persian, but the Eisenhower Matrix report itself must be in English. Never refuse or redirect a user for writing in a non-English language.
+```
 
-### 3) مدیریت خطای واضح و قابل‌فهم
-به‌جای پیام کلی `Failed to save`، اگر پروفایل یا `company_id` پیدا نشد:
-- پیام دقیق‌تری به کاربر نمایش داده شود
-- مثلا: «پروفایل کاربری شما کامل نیست» یا «شرکت کاربر پیدا نشد»
+Single-line change in one file.
 
-این کار باعث می‌شود اگر در آینده داده کاربر ناقص بود، مشکل سریع‌تر تشخیص داده شود.
-
-### 4) ساده‌سازی لود دستورالعمل‌ها
-الان کد یک بار `knowledge` را بدون `metadata` می‌خواند و بعد دوباره با `metadata` re-fetch می‌کند. این بخش باید تمیز شود:
-- فقط یک بار `knowledge` را با `id, content, metadata` بخوانیم
-- همان‌جا آیتم `agent=eisenhower` و `type=instructions` را پیدا کنیم
-
-این اصلاح مستقیماً علت خطا را عوض نمی‌کند، ولی کد را پایدارتر و قابل‌فهم‌تر می‌کند.
-
-## نتیجه بعد از اجرا
-
-بعد از این اصلاح:
-- دکمه `Save Instructions` دیگر به خاطر mismatch بین `profiles.id` و `profiles.user_id` خطا نمی‌دهد
-- لود دستورالعمل قبلی هم درست کار می‌کند
-- اگر واقعاً برای کاربر پروفایل یا شرکت تعریف نشده باشد، پیام درست‌تری نمایش داده می‌شود
-- ریشه مشکل از منبع اصلی حل می‌شود، نه فقط پنهان‌سازی خطا
-
-## فایل درگیر
-- `src/components/agent/EisenhowerInstructionsDialog.tsx`
-
-## خلاصه نهایی
-مشکل ریشه‌ای این است که کد برای پیدا کردن پروفایل، از ستون اشتباه (`id`) استفاده می‌کند؛ در حالی که باید از `user_id` استفاده شود. اصلاح این mapping در هر دو تابع `loadInstructions` و `handleSave`، به‌همراه جایگزینی `single()` با `maybeSingle()`، راه‌حل درست و پایدار این خطاست.
