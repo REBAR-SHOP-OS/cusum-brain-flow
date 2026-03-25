@@ -85,9 +85,9 @@ export async function handleRequest(
       await requireAnyRole(serviceClient, userId, options.requireAnyRole);
     }
 
-    // Parse body
+    // Parse body (skip if parseBody is false — e.g. FormData functions)
     let body: Record<string, any> = {};
-    if (req.method !== "GET" && req.method !== "HEAD") {
+    if (options.parseBody !== false && req.method !== "GET" && req.method !== "HEAD") {
       try {
         body = await req.json();
       } catch {
