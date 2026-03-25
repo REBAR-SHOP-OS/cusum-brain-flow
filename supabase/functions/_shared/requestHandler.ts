@@ -71,22 +71,46 @@ export async function handleRequest(
   const log = createLogger(options.functionName);
 
   try {
-    // Auth
-    const { userId, userClient, serviceClient } = await requireAuth(req);
-    log.info("Authenticated", { userId });
+    // Auth — resolve based on authMode
+    const authMode = options.authMode ?? "required";
+    let userId = "";
+    let userClient: ReturnType<typeof createClient> | null = null;
 
-    // Company resolution
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const serviceClient = createClient(supabaseUrl, serviceKey);
+
+    if (authMode === "required") {
+      const auth = await requireAuth(req);
+      userId = auth.userId;
+      userClient = auth.userClient;
+      log.info("Authenticated", { userId });
+    } else if (authMode === "optional") {
+      const auth = await optionalAuthFull(req);
+      if (auth) {
+        userId = auth.userId;
+        userClient = auth.userClient;
+        log.info("Authenticated (optional)", { userId });
+      } else {
+        log.info("Unauthenticated request (optional auth)");
+      }
+    } else {
+      // authMode === "none"
+      log.info("No auth (public endpoint)");
+    }
+
+    // Company resolution — skip when no userId
     let companyId = "";
-    if (options.requireCompany !== false) {
+    if (userId && options.requireCompany !== false) {
       companyId = await resolveCompanyId(serviceClient, userId);
     }
 
-    // Role check (if required)
-    if (options.requireRole) {
+    // Role check (if required) — skip when no userId
+    if (userId && options.requireRole) {
       const { requireRole } = await import("./roleCheck.ts");
       await requireRole(serviceClient, userId, options.requireRole);
     }
-    if (options.requireAnyRole?.length) {
+    if (userId && options.requireAnyRole?.length) {
       const { requireAnyRole } = await import("./roleCheck.ts");
       await requireAnyRole(serviceClient, userId, options.requireAnyRole);
     }
