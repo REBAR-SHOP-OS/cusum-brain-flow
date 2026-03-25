@@ -26,6 +26,7 @@ import logoCoin from "@/assets/logo-coin.png";
 import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { VizzyDailyBriefing } from "@/components/vizzy/VizzyDailyBriefing";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 
@@ -95,15 +96,15 @@ export default function Home() {
   const navigate = useNavigate();
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const { user } = useAuth();
+  const { isSuperAdmin } = useSuperAdmin();
 
   useEffect(() => {
-    if (isTablet) {
+    if (isTablet && !isSuperAdmin && !ACCESS_POLICIES.blockedFromShopFloor.includes(user?.email?.toLowerCase() ?? "")) {
       navigate("/shop-floor", { replace: true });
     }
-  }, [isTablet, navigate]);
+  }, [isTablet, navigate, isSuperAdmin, user?.email]);
 
   const mapping = getUserAgentMapping(user?.email);
-  const { isSuperAdmin } = useSuperAdmin();
   const { roles, isAdmin, isWorkshop, hasRole } = useUserRole();
 
   // Resolve agent for suggestions
