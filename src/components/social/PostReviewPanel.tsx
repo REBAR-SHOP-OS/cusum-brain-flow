@@ -380,8 +380,8 @@ export function PostReviewPanel({
       p.title === post.title &&
       (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
     );
-    const existingPlatforms = [...new Set(siblings.map(s => s.platform))];
-    const targetSet = new Set(dbPlatforms);
+    const existingPlatforms = [...new Set(siblings.map(s => s.platform))] as string[];
+    const targetSet = new Set(dbPlatforms as string[]);
 
     // Delete siblings whose platform is no longer selected
     const toDelete = siblings.filter(s => !targetSet.has(s.platform));
