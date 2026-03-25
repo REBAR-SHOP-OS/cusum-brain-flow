@@ -169,30 +169,9 @@ async function fetchAnalyticsData(accessToken: string): Promise<BusinessInsightR
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Accept either user auth or service role
-    let userId: string | null = null;
-    if (authHeader?.startsWith("Bearer ")) {
-      const userClient = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } }
-      );
-      const token = authHeader.replace("Bearer ", "");
-      const { data } = await userClient.auth.getClaims(token);
-      userId = (data?.claims?.sub as string) || null;
-    }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, userId } = ctx;
 
     // Gather business data in parallel
     const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
