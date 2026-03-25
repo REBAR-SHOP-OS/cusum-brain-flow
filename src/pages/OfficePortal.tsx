@@ -99,7 +99,11 @@ export default function OfficePortal() {
           </span>
         </div>
         <div className="flex-1 overflow-auto">
-          <ActiveComponent />
+          {activeSection === "detailed-list" ? (
+            <DetailedListView initialPlanId={initialPlanId} />
+          ) : (
+            <ActiveComponent />
+          )}
         </div>
       </main>
       {isRebarUser && <ScreenshotFeedbackButton />}
