@@ -1,7 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { constantTimeEqual } from "../_shared/qbHttp.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 import {
   DEFAULT_COMPANY_ID,
@@ -109,22 +109,13 @@ function buildInvoicePayload(
 
 // ─── Main Handler ──────────────────────────────────────────────────
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: svc, req: originalReq } = ctx;
+    const rawBody = await originalReq.text();
 
-  const svc = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  try {
-    const rawBody = await req.text();
-
-    // ── Read headers and classify ping vs event ──
-    const wcSignature = req.headers.get("x-wc-webhook-signature");
-    const wcTopic = req.headers.get("x-wc-webhook-topic");
+    const wcSignature = originalReq.headers.get("x-wc-webhook-signature");
+    const wcTopic = originalReq.headers.get("x-wc-webhook-topic");
     const wcWebhookSecret = Deno.env.get("WC_WEBHOOK_SECRET");
 
     console.log(`[wc-webhook] Topic: ${wcTopic}, Signature present: ${!!wcSignature}, Secret present: ${!!wcWebhookSecret}, Body length: ${rawBody.length}`);
@@ -329,24 +320,5 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (error) {
-    console.error("[wc-webhook] Error:", error);
-
-    try {
-      await svc.from("notifications").insert({
-        company_id: DEFAULT_COMPANY_ID,
-        type: "wc_qb_sync_error",
-        title: "WooCommerce → QuickBooks Sync Failed",
-        message: error instanceof Error ? error.message : "Unknown error",
-        priority: "high",
-      });
-    } catch {}
-
-    return new Response(JSON.stringify({
-      error: error instanceof Error ? error.message : "Unknown error",
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "wc-webhook", authMode: "none", requireCompany: false, parseBody: false, wrapResult: false })
+);

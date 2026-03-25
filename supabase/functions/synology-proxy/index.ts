@@ -1,4 +1,5 @@
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 interface QuickConnectInfo {
   baseUrl: string;
@@ -161,14 +162,10 @@ async function getDsmBaseUrl(synologyUrl: string): Promise<string> {
   return resolved.baseUrl;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { userId, serviceClient } = await requireAuth(req);
-    const { action, path, folderPath } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient, body } = ctx;
+    const { action, path, folderPath } = body;
 
     const SYNOLOGY_URL_RAW = Deno.env.get("SYNOLOGY_URL") || "RSI1";
     const SYNOLOGY_USERNAME = Deno.env.get("SYNOLOGY_USERNAME");
@@ -312,10 +309,5 @@ Deno.serve(async (req) => {
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
-  } catch (e) {
-    if (e instanceof Response) return e;
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    console.error("synology-proxy error:", msg);
-    return json({ error: msg }, 500);
-  }
-});
+  }, { functionName: "synology-proxy", requireCompany: false, wrapResult: false })
+);

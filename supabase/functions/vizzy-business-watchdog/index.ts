@@ -1,18 +1,15 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 /**
  * Vizzy Business Watchdog — runs every 15 minutes via pg_cron.
  * Scans all business domains for anomalies and writes alerts to notifications.
  * Uses metadata.dedupe_key to prevent duplicate alerts within 24 hours.
  */
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase } = ctx;
 
   const now = new Date();
   const today = now.toISOString().split("T")[0];
@@ -85,14 +82,8 @@ Deno.serve(async (req) => {
       JSON.stringify({ timestamp: now.toISOString(), total_anomalies: alerts.length, new_alerts: newAlerts.length }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("[watchdog] Error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "vizzy-business-watchdog", authMode: "none", requireCompany: false, wrapResult: false })
+);
 
 // ─── CHECK FUNCTIONS ───
 

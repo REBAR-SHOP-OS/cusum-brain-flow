@@ -1,25 +1,11 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI } from "../_shared/aiRouter.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const RC_SERVER = "https://platform.ringcentral.com";
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
-  return user.id;
-}
+// verifyAuth removed — handled by handleRequest wrapper
 
 async function getRCAccessTokenForUser(userId: string): Promise<string> {
   const supabaseAdmin = createClient(
@@ -267,28 +253,11 @@ function formatToFrontendResponse(analysis: any) {
   };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: svcClient, body } = ctx;
 
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // Rate limit: 5 requests per 60 seconds per user (expensive audio analysis)
-    const svcClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    // Rate limit: 5 requests per 60 seconds per user
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
       _user_id: userId,
       _function_name: "ringcentral-ai",
@@ -302,8 +271,7 @@ serve(async (req) => {
       });
     }
 
-    const { recordingUri, analysisType, fromNumber, toNumber } =
-      await req.json();
+    const { recordingUri, analysisType, fromNumber, toNumber } = body;
 
     if (!recordingUri) {
       return new Response(
@@ -339,16 +307,5 @@ serve(async (req) => {
     return new Response(JSON.stringify(response), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error) {
-    console.error("Call analysis error:", error);
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  }
-});
+  }, { functionName: "ringcentral-ai", requireCompany: false, wrapResult: false })
+);

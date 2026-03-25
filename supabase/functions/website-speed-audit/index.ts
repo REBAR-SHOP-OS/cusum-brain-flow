@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 interface SpeedIssue {
   type: string;
@@ -79,12 +78,10 @@ function analyzeHTML(html: string): {
   return { totalSizeKB, inlineStyleKB, inlineScriptKB, imgCount, imgsWithoutLazy, imgsWithoutDimensions, renderBlockingResources, externalScripts, externalStyles };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async () => {
 
-  try {
+    const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "https://rebar.shop";
     const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "https://rebar.shop";
     const issues: SpeedIssue[] = [];
     const recommendations: Recommendation[] = [];
@@ -312,11 +309,5 @@ serve(async (req) => {
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("Speed audit error:", e);
-    return new Response(
-      JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "website-speed-audit", authMode: "none", requireCompany: false, wrapResult: false })
+);

@@ -1,7 +1,6 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { WPClient } from "../_shared/wpClient.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 interface HealthIssue {
   issue_type: string;
@@ -15,12 +14,10 @@ interface HealthIssue {
   impact: string;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async () => {
 
-  try {
+    const wp = new WPClient();
     const wp = new WPClient();
     const issues: HealthIssue[] = [];
     const now = new Date();
@@ -266,11 +263,5 @@ serve(async (req) => {
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("Website health check error:", e);
-    return new Response(
-      JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "website-health-check", authMode: "none", requireCompany: false, wrapResult: false })
+);
