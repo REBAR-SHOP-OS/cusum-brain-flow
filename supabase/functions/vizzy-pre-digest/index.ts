@@ -15,33 +15,13 @@ import { handleRequest } from "../_shared/requestHandler.ts";
  * This means Vizzy starts every conversation already knowing everything —
  * like a human who studied the business before walking into the room.
  */
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase } = ctx;
 
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
-    const { data: { user } } = await anonClient.auth.getUser(token);
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Rate limit: 5 per 10 minutes (heavier than daily-brief)
+    // Rate limit: 5 per 10 minutes
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
-      _user_id: user.id,
+      _user_id: userId,
       _function_name: "vizzy-pre-digest",
       _max_requests: 5,
       _window_seconds: 600,
