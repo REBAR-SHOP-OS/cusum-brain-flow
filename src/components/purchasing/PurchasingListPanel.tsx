@@ -119,7 +119,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
 
 
       {/* Always-visible Add form */}
-      <div className="p-3 border-b border-border bg-muted/30 space-y-2">
+      <div className={cn("p-3 border-b border-border bg-muted/30 space-y-2", !filterDate && "opacity-50 pointer-events-none")}>
         <div className="flex gap-2">
           <Input
             placeholder="Item name..."
