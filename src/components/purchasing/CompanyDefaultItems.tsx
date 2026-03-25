@@ -166,7 +166,7 @@ function DefaultRow({
   );
 }
 
-export function CompanyDefaultItems({ dbItems, customItems = [], onMarkPurchased, onUnmarkPurchased, onMarkRejected, onUnmarkRejected, onTogglePurchased, onToggleRejected, onDeleteItem }: CompanyDefaultItemsProps) {
+export function CompanyDefaultItems({ dbItems, customItems = [], disabled, onMarkPurchased, onUnmarkPurchased, onMarkRejected, onUnmarkRejected, onTogglePurchased, onToggleRejected, onDeleteItem }: CompanyDefaultItemsProps) {
   const officeItems = COMPANY_DEFAULTS.filter((d) => d.category === "Office");
   const workshopItems = COMPANY_DEFAULTS.filter((d) => d.category === "Workshop");
 
