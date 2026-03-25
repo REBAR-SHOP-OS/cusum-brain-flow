@@ -743,7 +743,7 @@ export default function AgentWorkspace() {
               <p className="text-base sm:text-2xl font-semibold text-foreground mt-1">
                 What can I help you with?
               </p>
-              {agentId === "social" && (
+              {(agentId === "social" || agentId === "eisenhower") && (
                 <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border inline-block">
                   <p className="text-sm text-muted-foreground">📅 Selected date:</p>
                   <p className="text-lg font-bold text-primary">{format(selectedDate, "yyyy-MM-dd (EEEE, MMMM d)")}</p>
