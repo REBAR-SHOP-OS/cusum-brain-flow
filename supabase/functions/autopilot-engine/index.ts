@@ -1,6 +1,7 @@
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isOdooEnabled } from "../_shared/featureFlags.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 // ── Risk level hierarchy for comparison ──
 const RISK_HIERARCHY: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 };
