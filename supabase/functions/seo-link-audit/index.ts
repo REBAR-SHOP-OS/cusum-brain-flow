@@ -1,7 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { WPClient } from "../_shared/wpClient.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
 const RSIC_RESOURCES = [
@@ -13,14 +11,9 @@ const RSIC_RESOURCES = [
   { keywords: ["detailing", "bar bending schedule", "bending schedule"], href: "https://rebar.org/manual-of-standard-practice/", anchor: "Standard Detailing Practice" },
 ];
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { phase, domain_id, company_id, audit_ids } = await req.json();
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const sb = createClient(supabaseUrl, serviceKey);
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: sb, body }) => {
+    const { phase, domain_id, company_id, audit_ids } = body;
 
     if (phase === "crawl") {
       return await handleCrawl(sb, domain_id, company_id);
@@ -36,14 +29,8 @@ serve(async (req) => {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    console.error("seo-link-audit error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "seo-link-audit", authMode: "none", requireCompany: false, wrapResult: false })
+);
 
 // ─── AI HELPER ───
 

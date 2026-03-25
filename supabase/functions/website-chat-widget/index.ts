@@ -1,4 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const CHAT_ENDPOINT = `${SUPABASE_URL}/functions/v1/website-agent`;
@@ -561,21 +562,14 @@ const widgetJS = `
 })();
 `;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
+Deno.serve((req) =>
+  handleRequest(req, async () => {
+    return new Response(widgetJS, {
       headers: {
+        "Content-Type": "application/javascript; charset=utf-8",
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*",
+        "Cache-Control": "public, max-age=300",
       },
     });
-  }
-
-  return new Response(widgetJS, {
-    headers: {
-      "Content-Type": "application/javascript; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Cache-Control": "public, max-age=300",
-    },
-  });
-});
+  }, { functionName: "website-chat-widget", authMode: "none", requireCompany: false, wrapResult: false })
+);

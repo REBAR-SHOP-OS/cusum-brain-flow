@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 
@@ -42,19 +42,8 @@ function stripPersianBlock(text: string): string {
   return t.trim();
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    // No auth gate needed — verify_jwt=false and this is a server-side cron function.
-    // Use service role key for full DB access (bypasses RLS).
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: supabase }) => {
 
     // Find all scheduled posts that are due
     const now = new Date().toISOString();
@@ -346,14 +335,8 @@ serve(async (req) => {
       JSON.stringify({ published, failed, results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Social cron publish error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "social-cron-publish", authMode: "none", requireCompany: false, wrapResult: false })
+);
 
 // ── Publishing Functions ──────────────────────────────────────────
 

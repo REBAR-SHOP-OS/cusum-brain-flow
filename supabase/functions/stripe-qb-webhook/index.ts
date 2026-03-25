@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { constantTimeEqual } from "../_shared/qbHttp.ts";
 import { writeEvent } from "../_shared/writeEvent.ts";
@@ -157,19 +157,10 @@ function buildPaymentPayload(
 
 // ─── Main Handler ──────────────────────────────────────────────────
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const svc = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  try {
-    const rawBody = await req.text();
-    const sigHeader = req.headers.get("stripe-signature") || "";
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: svc, req: rawReq }) => {
+    const rawBody = await rawReq.text();
+    const sigHeader = rawReq.headers.get("stripe-signature") || "";
     const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 
     if (!webhookSecret) {
@@ -444,18 +435,8 @@ serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (error) {
-    console.error("[stripe-qb] Error:", error);
-    await notifyError(svc, DEFAULT_COMPANY_ID, "Stripe → QuickBooks Sync Failed", error instanceof Error ? error.message : "Unknown error");
-
-    return new Response(JSON.stringify({
-      error: error instanceof Error ? error.message : "Unknown error",
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "stripe-qb-webhook", authMode: "none", requireCompany: false, parseBody: false, wrapResult: false })
+);
 
 // ─── Helper: Notify admin of errors ────────────────────────────────
 

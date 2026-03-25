@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const DIARIZATION_INSTRUCTION = `
@@ -132,16 +132,9 @@ Respond ONLY with valid JSON:
 {"refined":"<refined translation>","confidence":<number>,"notes":"<brief note>","speakers":["<speaker1>","<speaker2>"]}`;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const auth = await requireAuth(req);
-    // AI keys loaded via aiRouter
-
-    const contentType = req.headers.get("content-type") || "";
+Deno.serve((req) =>
+  handleRequest(req, async ({ req: rawReq }) => {
+    const contentType = rawReq.headers.get("content-type") || "";
 
     let mode: string;
     let text = "";
@@ -156,7 +149,7 @@ serve(async (req) => {
     let customPrompt = "";
 
     if (contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
+      const formData = await rawReq.formData();
       mode = "audio";
       sourceLang = (formData.get("sourceLang") as string) || "auto";
       targetLang = (formData.get("targetLang") as string) || "English";
@@ -176,7 +169,7 @@ serve(async (req) => {
       }
       audioBase64 = btoa(binary);
     } else {
-      const body = await req.json();
+      const body = await rawReq.json();
       mode = body.mode || "text";
       text = body.text || "";
       sourceLang = body.sourceLang || "auto";
@@ -368,9 +361,5 @@ serve(async (req) => {
     }
 
     return json(result);
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("transcribe-translate error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
-  }
-});
+  }, { functionName: "transcribe-translate", parseBody: false, requireCompany: false, wrapResult: false })
+);

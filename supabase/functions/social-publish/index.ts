@@ -1,4 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
@@ -33,35 +33,8 @@ async function refreshPageToken(
   return null;
 }
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) return null;
-  return data.claims.sub as string;
-}
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient: supabaseAdmin, body, req: rawReq }) => {
 
     const publishSchema = z.object({
       platform: z.enum(["facebook", "instagram", "linkedin", "twitter"]),
@@ -73,7 +46,7 @@ serve(async (req) => {
       content_type: z.enum(["post", "reel", "story"]).optional().default("post"),
       cover_image_url: z.string().url().max(2000).optional(),
     });
-    const parsed = publishSchema.safeParse(await req.json());
+    const parsed = publishSchema.safeParse(body);
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
@@ -85,26 +58,6 @@ serve(async (req) => {
 
     // Strip Persian translation block — server-side safety net
     let message = rawMessage;
-    {
-      const idx = message.indexOf("---PERSIAN---");
-      if (idx !== -1) message = message.slice(0, idx);
-      message = message.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
-      message = message.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
-      message = message.trim();
-    }
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    // Guard: prevent duplicate publishing + declined + approval gate
-    if (post_id) {
-      const { data: existing } = await supabaseAdmin
-        .from("social_posts")
-        .select("status, neel_approved, declined_by")
-        .eq("id", post_id)
-        .single();
 
       if (existing?.status === "published") {
         return new Response(
@@ -300,14 +253,8 @@ serve(async (req) => {
       JSON.stringify({ success: true, postId: result.id, platform }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Social publish error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "social-publish", requireCompany: false, wrapResult: false })
+);
 
 async function publishToFacebook(
   pageId: string,

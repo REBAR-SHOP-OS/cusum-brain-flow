@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
 const TIKTOK_AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/";
@@ -32,41 +31,30 @@ function jsonRes(data: unknown, status = 200) {
   });
 }
 
-// ─── Main Handler ──────────────────────────────────────────────────
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient: supabase, req: rawReq, body }) => {
     const clientKey = Deno.env.get("TIKTOK_CLIENT_KEY")?.trim();
     const clientSecret = Deno.env.get("TIKTOK_CLIENT_SECRET")?.trim();
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 
     if (!clientKey || !clientSecret) {
       throw new Error("TikTok credentials not configured");
     }
 
-    const url = new URL(req.url);
+    const url = new URL(rawReq.url);
     const pathParts = url.pathname.split("/");
     const pathAction = pathParts[pathParts.length - 1];
 
-    // ─── OAuth Callback (no auth header) ─────────────────────────
+    // OAuth Callback (no auth header needed)
     if (pathAction === "callback") {
       return handleCallback(url, supabase, supabaseUrl, clientKey, clientSecret);
     }
 
-    // ─── All other actions require authentication ────────────────
-    const userId = await verifyAuth(req);
+    // All other actions require authentication
     if (!userId) {
       return jsonRes({ error: "Unauthorized" }, 401);
     }
 
-    const body = await req.json().catch(() => ({}));
     const { action } = body;
 
     switch (action) {
@@ -85,14 +73,8 @@ serve(async (req) => {
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
-  } catch (error) {
-    console.error("TikTok OAuth error:", error);
-    return jsonRes(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      500
-    );
-  }
-});
+  }, { functionName: "tiktok-oauth", authMode: "optional", requireCompany: false, wrapResult: false })
+);
 
 // ─── OAuth Callback ────────────────────────────────────────────────
 

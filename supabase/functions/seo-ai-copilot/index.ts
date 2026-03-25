@@ -1,5 +1,7 @@
-import { requireAuth, json, corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { callAIStream, callAI, AIError } from "../_shared/aiRouter.ts";
+import { WPClient } from "../_shared/wpClient.ts";
 import { WPClient } from "../_shared/wpClient.ts";
 
 // ─── WordPress Tool Definitions ───
@@ -196,16 +198,15 @@ async function executeWpTool(wp: WPClient, name: string, args: Record<string, an
   }
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { userId, serviceClient } = await requireAuth(req);
-    const { domain_id, messages } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient, body }) => {
+    const { domain_id, messages } = body;
 
     if (!domain_id || !messages?.length) {
+      return new Response(JSON.stringify({ error: "domain_id and messages required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
       return json({ error: "domain_id and messages required" }, 400);
     }
 
@@ -385,12 +386,5 @@ ${contextData}`;
     return new Response(stream, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("seo-ai-copilot error:", e);
-    if (e instanceof AIError) {
-      return json({ error: "AI service error" }, e.status);
-    }
-    return json({ error: "Internal server error" }, 500);
-  }
-});
+  }, { functionName: "seo-ai-copilot", requireCompany: false, wrapResult: false })
+);
