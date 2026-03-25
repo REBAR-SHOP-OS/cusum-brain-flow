@@ -6,6 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const MODEL = "gemini-2.5-flash-native-audio-preview-12-2025";
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -13,9 +16,9 @@ serve(async (req) => {
 
   try {
     const { messages, mode } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) {
+      return new Response(JSON.stringify({ error: "GEMINI_API_KEY not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -24,19 +27,19 @@ serve(async (req) => {
     const systemPrompt =
       mode === "translate"
         ? "Strict translator. Persian→English, English→Persian. Output ONLY the translation. No explanations."
-        : "You are Nila, a helpful and concise voice assistant. Reply in the same language the user speaks. Keep answers short (2-3 sentences max). Be friendly and direct.";
+        : "You are Nila, a helpful and concise voice assistant. Always reply in the same language the user speaks. If the user speaks Persian, reply in Persian. If English, reply in English. Keep answers short (2-3 sentences max). Be friendly and direct.";
 
     const maxTokens = mode === "translate" ? 100 : 300;
     const temperature = mode === "translate" ? 0 : 0.2;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch(GEMINI_API_URL, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-lite",
+        model: MODEL,
         messages: [
           { role: "system", content: systemPrompt },
           ...(messages || []).slice(-4),
@@ -62,7 +65,7 @@ serve(async (req) => {
         });
       }
       const t = await response.text();
-      console.error("AI gateway error:", status, t);
+      console.error("Gemini API error:", status, t);
       return new Response(JSON.stringify({ error: "AI gateway error" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
