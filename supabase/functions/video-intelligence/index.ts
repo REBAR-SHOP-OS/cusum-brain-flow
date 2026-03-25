@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, optionalAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 
 const API_BASE = "https://videointelligence.googleapis.com/v1";
 
@@ -18,32 +18,29 @@ const DEFAULT_FEATURES = [
   "TEXT_DETECTION",
 ];
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+function parseTimeOffset(offset: any): number {
+  if (!offset) return 0;
+  const seconds = parseInt(offset.seconds || "0", 10);
+  const nanos = parseInt(offset.nanos || "0", 10);
+  return seconds + nanos / 1e9;
+}
 
-  try {
-    const userId = await optionalAuth(req);
-    const isInternal = req.headers.get("apikey") === Deno.env.get("SUPABASE_ANON_KEY");
-    if (!userId && !isInternal) {
-      return json({ error: "Unauthorized" }, 401);
-    }
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
     const apiKey = Deno.env.get("GEMINI_API_KEY");
     if (!apiKey) {
       return json({ error: "GEMINI_API_KEY not configured" }, 500);
     }
 
-    const body: AnnotateRequest = await req.json();
+    const reqBody = body as AnnotateRequest;
 
     // ─── POLL for operation result ───
-    if (body.action === "poll") {
-      if (!body.operationName) {
+    if (reqBody.action === "poll") {
+      if (!reqBody.operationName) {
         return json({ error: "operationName required for poll" }, 400);
       }
 
-      const pollUrl = `${API_BASE}/${body.operationName}?key=${apiKey}`;
+      const pollUrl = `${API_BASE}/${reqBody.operationName}?key=${apiKey}`;
       const pollRes = await fetch(pollUrl);
       const pollData = await pollRes.json();
 
@@ -52,13 +49,12 @@ serve(async (req) => {
       }
 
       if (!pollData.done) {
-        return json({ done: false, operationName: body.operationName });
+        return { done: false, operationName: reqBody.operationName };
       }
 
-      // Parse completed results
       const result = pollData.response?.annotationResults?.[0];
       if (!result) {
-        return json({ done: true, results: null, error: "No annotation results" });
+        return { done: true, results: null, error: "No annotation results" };
       }
 
       const parsed = {
@@ -96,13 +92,12 @@ serve(async (req) => {
         })),
       };
 
-      // Determine moderation status
       const flaggedLevels = ["LIKELY", "VERY_LIKELY"];
       const isFlagged = parsed.moderation.some((m: any) =>
         flaggedLevels.includes(m.pornographyLikelihood)
       );
 
-      return json({
+      return {
         done: true,
         results: parsed,
         moderationStatus: isFlagged ? "flagged" : "safe",
@@ -110,25 +105,18 @@ serve(async (req) => {
           .filter((l: any) => l.confidence > 0.7)
           .slice(0, 8)
           .map((l: any) => `#${l.name.replace(/\s+/g, "")}`),
-      });
+      };
     }
 
     // ─── ANNOTATE — submit new job ───
-    if (!body.videoUrl) {
+    if (!reqBody.videoUrl) {
       return json({ error: "videoUrl required" }, 400);
     }
 
-    const features = (body.features || DEFAULT_FEATURES).map((f) => ({
-      type: f,
-      ...(f === "SPEECH_TRANSCRIPTION"
-        ? { videoContext: { speechTranscriptionConfig: { languageCode: "en-US", enableAutomaticPunctuation: true } } }
-        : {}),
-    }));
-
     const annotateUrl = `${API_BASE}/videos:annotate?key=${apiKey}`;
-    const annotateBody = {
-      inputUri: body.videoUrl,
-      features: features.map((f) => f.type),
+    const annotateBody: Record<string, unknown> = {
+      inputUri: reqBody.videoUrl,
+      features: (reqBody.features || DEFAULT_FEATURES),
       videoContext: {
         speechTranscriptionConfig: {
           languageCode: "en-US",
@@ -138,17 +126,16 @@ serve(async (req) => {
     };
 
     // If the URL is not a GCS URI, use inputContent via base64
-    if (!body.videoUrl.startsWith("gs://")) {
-      // Fetch video and convert to base64
+    if (!reqBody.videoUrl.startsWith("gs://")) {
       console.log("Fetching video for base64 encoding...");
-      const videoRes = await fetch(body.videoUrl);
+      const videoRes = await fetch(reqBody.videoUrl);
       if (!videoRes.ok) {
         return json({ error: "Failed to fetch video URL" }, 400);
       }
       const videoBuffer = await videoRes.arrayBuffer();
       const base64 = btoa(String.fromCharCode(...new Uint8Array(videoBuffer)));
-      delete (annotateBody as any).inputUri;
-      (annotateBody as any).inputContent = base64;
+      delete annotateBody.inputUri;
+      annotateBody.inputContent = base64;
     }
 
     const annotateRes = await fetch(annotateUrl, {
@@ -164,20 +151,9 @@ serve(async (req) => {
       return json({ error: annotateData.error?.message || "Video Intelligence API error" }, annotateRes.status);
     }
 
-    return json({
+    return {
       operationName: annotateData.name,
       done: false,
-    });
-
-  } catch (error) {
-    console.error("video-intelligence error:", error);
-    return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
-  }
-});
-
-function parseTimeOffset(offset: any): number {
-  if (!offset) return 0;
-  const seconds = parseInt(offset.seconds || "0", 10);
-  const nanos = parseInt(offset.nanos || "0", 10);
-  return seconds + nanos / 1e9;
-}
+    };
+  }, { functionName: "video-intelligence", authMode: "optional", requireCompany: false, wrapResult: false })
+);

@@ -1,12 +1,10 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const RC_SERVER = "https://platform.ringcentral.com";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
-async function refreshToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string, refreshTokenValue: string): Promise<string | null> {
+const RC_SERVER = "https://platform.ringcentral.com";
+
+async function refreshToken(supabaseAdmin: any, userId: string, refreshTokenValue: string): Promise<string | null> {
   const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID")!;
   const clientSecret = Deno.env.get("RINGCENTRAL_CLIENT_SECRET")!;
 
@@ -38,7 +36,7 @@ async function refreshToken(supabaseAdmin: ReturnType<typeof createClient>, user
   return tokens.access_token;
 }
 
-async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string, forceRefresh = false): Promise<string | null> {
+async function getAccessToken(supabaseAdmin: any, userId: string, forceRefresh = false): Promise<string | null> {
   const { data: tokenRow } = await supabaseAdmin
     .from("user_ringcentral_tokens")
     .select("access_token, refresh_token, token_expires_at")
@@ -47,7 +45,6 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
 
   if (!tokenRow?.refresh_token) return null;
 
-  // Return cached token if not expired and not forcing refresh
   if (!forceRefresh && tokenRow.token_expires_at && new Date(tokenRow.token_expires_at) > new Date()) {
     return tokenRow.access_token;
   }
@@ -55,39 +52,8 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
   return await refreshToken(supabaseAdmin, userId, tokenRow.refresh_token);
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const userId = user.id;
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient: supabaseAdmin, body }) => {
     // Super admin check
     const { data: profile } = await supabaseAdmin
       .from("profiles")
@@ -104,13 +70,9 @@ serve(async (req) => {
 
     let accessToken = await getAccessToken(supabaseAdmin, userId);
     if (!accessToken) {
-      return new Response(JSON.stringify({ error: "RingCentral not connected", connected: false }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { error: "RingCentral not connected", connected: false };
     }
 
-    // Call SIP provisioning endpoint with automatic retry on token expiry
     console.log("Requesting SIP provision for user:", userId);
 
     const doSipProvision = async (token: string) => {
@@ -129,13 +91,10 @@ serve(async (req) => {
     // If 401, force-refresh the token and retry once
     if (sipResp.status === 401) {
       console.warn("SIP provision returned 401, forcing token refresh and retrying...");
-      await sipResp.text(); // consume body
+      await sipResp.text();
       accessToken = await getAccessToken(supabaseAdmin, userId, true);
       if (!accessToken) {
-        return new Response(JSON.stringify({ error: "RingCentral token expired. Please reconnect.", connected: false }), {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return { error: "RingCentral token expired. Please reconnect.", connected: false };
       }
       sipResp = await doSipProvision(accessToken);
     }
@@ -177,15 +136,6 @@ serve(async (req) => {
 
     console.log("SIP provision success, callerIds:", callerIds);
 
-    return new Response(JSON.stringify({ sipInfo, callerIds }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
-  } catch (err) {
-    console.error("ringcentral-sip-provision error:", err);
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { sipInfo, callerIds };
+  }, { functionName: "ringcentral-sip-provision", requireCompany: false, wrapResult: false })
+);

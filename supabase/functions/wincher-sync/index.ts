@@ -1,5 +1,5 @@
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { json } from "../_shared/auth.ts";
 
 const WINCHER_BASE = "https://api.wincher.com/v1";
 
@@ -45,27 +45,21 @@ async function paginateKeywords(websiteId: number, token: string): Promise<any[]
   return all;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId, serviceClient } = await requireAuth(req);
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient: sb, body }) => {
     const token = Deno.env.get("WINCHER_API_KEY");
     if (!token) throw new Error("WINCHER_API_KEY not configured");
 
-    const { action, domain_id, website_id } = await req.json();
+    const { action, domain_id, website_id } = body;
 
     // Resolve company_id from user profile
-    const { data: profile } = await serviceClient.from("profiles").select("company_id").eq("user_id", userId).single();
+    const { data: profile } = await sb.from("profiles").select("company_id").eq("user_id", userId).single();
     const companyId = profile?.company_id;
     if (!companyId) throw new Error("No company profile found for Wincher sync");
 
-    // Helper: get service client
-    const sb = serviceClient;
-
     if (action === "list_websites") {
       const data = await wincherFetch("/websites?include_ranking=true", token);
-      return json({ success: true, data });
+      return { success: true, data };
     }
 
     if (action === "full_export") {
@@ -74,7 +68,7 @@ Deno.serve(async (req) => {
       // 1. List websites
       const websites = await wincherFetch("/websites?include_ranking=true", token);
       const siteList = websites?.data || websites || [];
-      if (!siteList.length) return json({ success: true, message: "No websites found in Wincher" });
+      if (!siteList.length) return { success: true, message: "No websites found in Wincher" };
 
       const site = website_id ? siteList.find((s: any) => s.id === website_id) : siteList[0];
       if (!site) throw new Error("Website not found");
@@ -127,9 +121,6 @@ Deno.serve(async (req) => {
           source_count: 1,
         };
 
-        // Wincher keyword sync updates only columns that exist on seo_keyword_ai
-
-        // Set intent if available
         if (kw.intents?.length) {
           const topIntent = kw.intents.sort((a: any, b: any) => (b.probability || 0) - (a.probability || 0))[0];
           upsertData.intent = topIntent.intent?.toLowerCase() || null;
@@ -160,20 +151,15 @@ Deno.serve(async (req) => {
         } catch { /* skip */ }
       }
 
-      return json({
+      return {
         success: true,
         website: site.domain || site.url,
         keywords_synced: kwUpserted,
         keyword_histories_pulled: historyPulled,
         total_keywords_found: keywords.length,
-      });
+      };
     }
 
     throw new Error(`Unknown action: ${action}`);
-  } catch (err) {
-    if (err instanceof Response) return err;
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error("wincher-sync error:", msg);
-    return json({ error: msg }, 400);
-  }
-});
+  }, { functionName: "wincher-sync", requireCompany: false, wrapResult: false })
+);

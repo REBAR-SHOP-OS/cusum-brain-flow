@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 
 const STRIPE_API = "https://api.stripe.com/v1";
 
@@ -60,12 +59,9 @@ function classifyError(e: any): { status: string; errorType: string; error: stri
   return { status: "error", errorType: "unknown", error: msg };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId, serviceClient: supabase } = await requireAuth(req);
-    const { action, ...params } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient: supabase, body }) => {
+    const { action, ...params } = body;
 
     // Get company_id
     const { data: profile } = await supabase
@@ -80,13 +76,13 @@ serve(async (req) => {
     if (action === "check-status") {
       try {
         const account = await stripeRequest("/account", "GET");
-        return json({
+        return {
           status: "connected",
           accountName: account.business_profile?.name || account.email || "Stripe Account",
           accountId: account.id,
-        });
+        };
       } catch (e) {
-        return json(classifyError(e));
+        return classifyError(e);
       }
     }
 
@@ -95,7 +91,6 @@ serve(async (req) => {
       const { amount, currency, invoiceNumber, customerName, qbInvoiceId } = params;
       if (!amount || !qbInvoiceId) return json({ error: "amount and qbInvoiceId required" }, 400);
 
-      // Check for existing cached link
       const { data: existing } = await supabase
         .from("stripe_payment_links")
         .select("*")
@@ -105,10 +100,9 @@ serve(async (req) => {
         .maybeSingle();
 
       if (existing) {
-        return json({ paymentLink: existing });
+        return { paymentLink: existing };
       }
 
-      // Create one-time price
       const amountCents = Math.round(parseFloat(amount) * 100);
       const cur = (currency || "cad").toLowerCase();
 
@@ -118,7 +112,6 @@ serve(async (req) => {
         "product_data[name]": `Invoice #${invoiceNumber || qbInvoiceId}${customerName ? ` — ${customerName}` : ""}`,
       });
 
-      // Create payment link
       const link = await stripeRequest("/payment_links", "POST", {
         "line_items[0][price]": price.id,
         "line_items[0][quantity]": "1",
@@ -127,7 +120,6 @@ serve(async (req) => {
         "metadata[customer_name]": customerName || "",
       });
 
-      // Cache in DB
       const record = {
         company_id: companyId,
         qb_invoice_id: qbInvoiceId,
@@ -147,7 +139,7 @@ serve(async (req) => {
         .select()
         .single();
 
-      return json({ paymentLink: inserted || { ...record, stripe_url: link.url } });
+      return { paymentLink: inserted || { ...record, stripe_url: link.url } };
     }
 
     // ── get-payment-link ──
@@ -163,7 +155,7 @@ serve(async (req) => {
         .eq("status", "active")
         .maybeSingle();
 
-      return json({ paymentLink: link });
+      return { paymentLink: link };
     }
 
     // ── list-payments (for reconciliation) ──
@@ -174,7 +166,7 @@ serve(async (req) => {
         .eq("company_id", companyId)
         .eq("status", "active");
 
-    return json({ links: links || [] });
+      return { links: links || [] };
     }
 
     // ── list-charges (real Stripe payment history) ──
@@ -182,13 +174,9 @@ serve(async (req) => {
       const limit = Math.min(Number(params.limit) || 100, 100);
       const charges = await stripeRequest(`/charges?limit=${limit}`, "GET");
       const succeeded = (charges.data || []).filter((c: any) => c.status === "succeeded");
-      return json({ charges: succeeded });
+      return { charges: succeeded };
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("stripe-payment error:", e);
-    return json({ error: String(e) }, 500);
-  }
-});
+  }, { functionName: "stripe-payment", requireCompany: false, wrapResult: false })
+);

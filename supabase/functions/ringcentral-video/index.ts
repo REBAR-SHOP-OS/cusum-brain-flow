@@ -1,38 +1,11 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 const RC_SERVER = "https://platform.ringcentral.com";
 
-function supabaseAdmin() {
-  return createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-}
-
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims) return null;
-  return data.claims.sub as string;
-}
-
 /** Get a valid RC access token for the user, refreshing if expired */
-async function getAccessTokenForUser(userId: string): Promise<string> {
-  const admin = supabaseAdmin();
-
-  const { data: tokenRow, error } = await admin
+async function getAccessTokenForUser(serviceClient: any, userId: string): Promise<string> {
+  const { data: tokenRow, error } = await serviceClient
     .from("user_ringcentral_tokens")
     .select("access_token, refresh_token, token_expires_at")
     .eq("user_id", userId)
@@ -76,7 +49,7 @@ async function getAccessTokenForUser(userId: string): Promise<string> {
   }
 
   const tokens = await resp.json();
-  await admin
+  await serviceClient
     .from("user_ringcentral_tokens")
     .update({
       access_token: tokens.access_token,
@@ -88,32 +61,16 @@ async function getAccessTokenForUser(userId: string): Promise<string> {
   return tokens.access_token;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient, body }) => {
     const { action, meetingName, meetingType } = body;
 
     let accessToken: string;
     try {
-      accessToken = await getAccessTokenForUser(userId);
+      accessToken = await getAccessTokenForUser(serviceClient, userId);
     } catch (e) {
       // Graceful fallback — user hasn't connected RC
-      return new Response(
-        JSON.stringify({ success: false, error: (e as Error).message, fallback: true }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { success: false, error: (e as Error).message, fallback: true };
     }
 
     if (action === "create") {
@@ -156,50 +113,35 @@ serve(async (req) => {
         console.error("RCV bridge creation failed:", createResponse.status, errorText);
 
         if (createResponse.status === 403) {
-          return new Response(
-            JSON.stringify({
-              success: false,
-              error: "RingCentral Video permissions not enabled on your account.",
-              fallback: true,
-            }),
-            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
+          return {
+            success: false,
+            error: "RingCentral Video permissions not enabled on your account.",
+            fallback: true,
+          };
         }
 
-        return new Response(
-          JSON.stringify({ success: false, error: `RCV bridge failed [${createResponse.status}]`, fallback: true }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return { success: false, error: `RCV bridge failed [${createResponse.status}]`, fallback: true };
       }
 
       const bridge = await createResponse.json();
       const joinUrl = bridge.discovery?.web || bridge.web || `https://v.ringcentral.com/join/${bridge.id}`;
       const hostUrl = bridge.discovery?.webHost || joinUrl;
 
-      return new Response(
-        JSON.stringify({
-          success: true,
-          bridgeId: bridge.id,
-          shortId: bridge.shortId,
-          joinUrl,
-          hostUrl,
-          pin: bridge.pins?.web || null,
-          pstnPin: bridge.pins?.pstn || null,
-          dialInNumbers: bridge.discovery?.pstnNumbers || [],
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return {
+        success: true,
+        bridgeId: bridge.id,
+        shortId: bridge.shortId,
+        joinUrl,
+        hostUrl,
+        pin: bridge.pins?.web || null,
+        pstnPin: bridge.pins?.pstn || null,
+        dialInNumbers: bridge.discovery?.pstnNumbers || [],
+      };
     }
 
     return new Response(
       JSON.stringify({ error: "Unknown action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("RingCentral Video error:", error);
-    return new Response(
-      JSON.stringify({ success: false, error: (error as Error).message || "Unknown error", fallback: true }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "ringcentral-video", requireCompany: false, wrapResult: false })
+);

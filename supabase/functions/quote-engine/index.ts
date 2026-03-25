@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 import {
@@ -10,18 +10,8 @@ import {
   type RebarSizeRow,
 } from "../_shared/quoteCalcEngine.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: supabase, body }) => {
     const { action, estimate_request, company_id } = body as {
       action: "validate" | "quote" | "explain";
       estimate_request: EstimateRequest;
@@ -72,13 +62,10 @@ Deno.serve(async (req) => {
     // ─── VALIDATE ───
     if (action === "validate") {
       const questions = validateEstimateRequest(estimate_request, config);
-      return new Response(
-        JSON.stringify({
-          valid: questions.length === 0,
-          missing_inputs_questions: questions.length > 0 ? questions : null,
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return {
+        valid: questions.length === 0,
+        missing_inputs_questions: questions.length > 0 ? questions : null,
+      };
     }
 
     // ─── QUOTE ───
@@ -90,7 +77,6 @@ Deno.serve(async (req) => {
       );
 
       // ─── $0 QUOTE GUARD ───
-      // Never persist a "successful" quote with $0 total — that's a pricing failure
       if (result.summary.grand_total <= 0 && result.line_items.length > 0) {
         return new Response(
           JSON.stringify({
@@ -104,7 +90,7 @@ Deno.serve(async (req) => {
               missing_inputs: result.missing_inputs_questions,
               weights: result.weights_summary,
             },
-            result, // Include for debugging
+            result,
           }),
           { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -134,39 +120,26 @@ Deno.serve(async (req) => {
           result.quote_id = quoteRow.id;
         }
       } catch (e) {
-        // Non-fatal — quote still returned
         console.error("Failed to persist quote:", e);
       }
 
-      return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return result;
     }
 
     // ─── EXPLAIN ───
     if (action === "explain") {
-      // First generate the quote to explain
       const result = generateQuote(
         estimate_request,
         config,
         rebarSizes as RebarSizeRow[]
       );
       const explanation = generateExplanation(estimate_request, result, config);
-      return new Response(
-        JSON.stringify({ explanation, result }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { explanation, result };
     }
 
     return new Response(
       JSON.stringify({ error: `Unknown action: ${action}` }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (err) {
-    console.error("Quote engine error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal error", details: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "quote-engine", requireCompany: false, wrapResult: false })
+);

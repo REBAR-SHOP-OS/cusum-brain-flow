@@ -1,7 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { constantTimeEqual } from "../_shared/qbHttp.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
 /** Verify HMAC-SHA256 signature from QuickBooks using constant-time comparison */
@@ -15,21 +13,12 @@ async function verifySignature(rawBody: string, signature: string, secret: strin
   return constantTimeEqual(computed, signature);
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: svc, req: rawReq }) => {
+    const verifierToken = Deno.env.get("QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN");
 
-  const svc = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  const verifierToken = Deno.env.get("QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN");
-
-  try {
     // QB webhook sends GET for validation
-    if (req.method === "GET") {
+    if (rawReq.method === "GET") {
       if (!verifierToken) {
         return new Response("Webhook verifier not configured", { status: 500 });
       }
@@ -40,8 +29,8 @@ serve(async (req) => {
     }
 
     // --- HMAC signature verification on POST ---
-    const rawBody = await req.text();
-    const intuitSignature = req.headers.get("intuit-signature");
+    const rawBody = await rawReq.text();
+    const intuitSignature = rawReq.headers.get("intuit-signature");
 
     if (!verifierToken) {
       console.error("[qb-webhook] QUICKBOOKS_WEBHOOK_VERIFIER_TOKEN not set");
@@ -91,7 +80,6 @@ serve(async (req) => {
         const entityId = entity.id;
         const operation = entity.operation;
 
-        // --- Dedupe via INSERT ON CONFLICT (uses partial unique index) ---
         try {
           const { data: inserted } = await svc
             .from("qb_webhook_events")
@@ -111,7 +99,6 @@ serve(async (req) => {
             continue;
           }
         } catch (e) {
-          // Unique constraint violation = duplicate
           const msg = String(e);
           if (msg.includes("duplicate key") || msg.includes("unique constraint") || msg.includes("idx_qb_webhook_events_dedupe")) {
             console.log(`[qb-webhook] Duplicate event (constraint): ${entityType}/${entityId}/${operation}`);
@@ -163,15 +150,6 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("[qb-webhook] Error:", error);
-    return new Response(JSON.stringify({ error: String(error) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { ok: true };
+  }, { functionName: "qb-webhook", authMode: "none", requireCompany: false, parseBody: false, wrapResult: false })
+);
