@@ -796,19 +796,9 @@ Deno.serve((req) =>
       }
     }
 
-    return new Response(
-      JSON.stringify({
-        generated: suggestions.length,
-        human_tasks_created: tasksInserted,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("generate-suggestions error:", e);
-    return new Response(JSON.stringify({ error: String(e) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return {
+      generated: suggestions.length,
+      human_tasks_created: tasksInserted,
+    };
+  }, { functionName: "generate-suggestions", requireRole: "admin", requireCompany: false, wrapResult: false })
+);
