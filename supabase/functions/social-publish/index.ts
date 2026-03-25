@@ -46,17 +46,7 @@ Deno.serve((req) =>
       content_type: z.enum(["post", "reel", "story"]).optional().default("post"),
       cover_image_url: z.string().url().max(2000).optional(),
     });
-    const parsed = publishSchema.safeParse(await req.json());
-    if (!parsed.success) {
-      return new Response(
-        JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish, content_type, cover_image_url } = parsed.data;
-    console.log(`[social-publish] Received: platform=${platform}, content_type=${content_type}, post_id=${post_id}`);
-
-    // Strip Persian translation block — server-side safety net
+    const parsed = publishSchema.safeParse(body);
     let message = rawMessage;
     {
       const idx = message.indexOf("---PERSIAN---");
