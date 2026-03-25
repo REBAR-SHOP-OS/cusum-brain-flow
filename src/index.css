@@ -339,3 +339,36 @@
   from { transform: rotate(0deg) translateX(72px) rotate(0deg); }
   to { transform: rotate(360deg) translateX(72px) rotate(-360deg); }
 }
+
+/* ========== Nila Voice Assistant ========== */
+.nila-bg {
+  background: hsl(230, 15%, 8%);
+}
+.nila-glass {
+  background: hsla(230, 15%, 20%, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid hsla(0, 0%, 100%, 0.08);
+}
+.nila-glass-strong {
+  background: hsla(230, 15%, 18%, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid hsla(0, 0%, 100%, 0.12);
+}
+.nila-gradient-text {
+  background: linear-gradient(135deg, hsl(210, 100%, 60%), hsl(280, 80%, 65%));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.nila-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+.nila-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.nila-scrollbar::-webkit-scrollbar-thumb { background: hsla(0, 0%, 100%, 0.15); border-radius: 2px; }
+
+@keyframes nila-pulse-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes nila-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

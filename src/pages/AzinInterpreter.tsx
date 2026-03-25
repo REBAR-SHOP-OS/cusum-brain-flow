@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AzinInterpreterVoiceChat } from "@/components/azin/AzinInterpreterVoiceChat";
+import { NilaVoiceAssistant } from "@/components/nila/NilaVoiceAssistant";
 import { LanguageMicButton } from "@/components/azin/LanguageMicButton";
 import { AnimatePresence } from "framer-motion";
 import azinAvatar from "@/assets/helpers/azin-helper.png";
@@ -177,7 +177,7 @@ export default function AzinInterpreter() {
       {/* Voice Chat Overlay */}
       <AnimatePresence>
         {showVoiceChat && (
-          <AzinInterpreterVoiceChat onClose={() => setShowVoiceChat(false)} />
+          <NilaVoiceAssistant onClose={() => setShowVoiceChat(false)} />
         )}
       </AnimatePresence>
     </div>
