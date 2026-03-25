@@ -1,37 +1,27 @@
 
 
-## Fix Inbox Summary Total Count
+## Fix "New Chat" Reset for Purchasing Agent
 
 ### Problem
-The AI Summary panel shows the total count of *all* emails (including hidden/snoozed) instead of the count of currently visible emails.
+When "New Chat" is clicked, the purchasing list still shows all items (including purchased ones with green checkmarks) because the data reflects actual DB state. The user expects a clean, fresh view.
 
-### Root Cause
-Line 536 in `src/components/inbox/InboxView.tsx` uses `allEmails.length` for `totalEmails`, but the user only sees the filtered `emails` list (which excludes hidden and snoozed items).
+### Solution
+Two changes:
 
-### Fix
+**1. `src/pages/AgentWorkspace.tsx` — `handleNewChat`**
+- Set `purchasingDate` to `undefined` and `activePurchasingDateStr` to `null` instead of today's date
+- This shows a fresh "no date" view — items without a due date (i.e., newly added, unconfirmed items)
+- Keep the `purchasingKey` increment for full remount
 
-**File: `src/components/inbox/InboxView.tsx` (line 536)**
+**2. `src/components/purchasing/PurchasingListPanel.tsx`**
+- Add an optional `defaultFilterStatus` prop (default: `"all"`)
+- Initialize `filterStatus` state from this prop
+- In `AgentWorkspace.tsx`, pass `defaultFilterStatus="pending"` so that after "New Chat", the panel defaults to showing only un-purchased items
 
-Change:
-```typescript
-setSummary({ totalEmails: allEmails.length, toRespond, fyi, marketing, spam, highlights });
-```
-To:
-```typescript
-setSummary({ totalEmails: emails.length, toRespond, fyi, marketing, spam, highlights });
-```
-
-Also update the category counts (lines 525-528) to use `emails` instead of `allEmails` so all numbers are consistent with what the user sees:
-```typescript
-const toRespond = emails.filter(...)
-const fyi = emails.filter(...)
-const marketing = emails.filter(...)
-const spam = emails.filter(...)
-```
-
-This ensures the summary card reflects only the emails currently visible to the user.
+### Files
 
 | File | Change |
 |---|---|
-| `src/components/inbox/InboxView.tsx` | Replace `allEmails` with `emails` in the summarize action (lines 525-536) |
+| `src/pages/AgentWorkspace.tsx` | Reset date to `undefined`/`null` on new chat; pass `defaultFilterStatus="pending"` |
+| `src/components/purchasing/PurchasingListPanel.tsx` | Accept `defaultFilterStatus` prop, use it as initial state |
 
