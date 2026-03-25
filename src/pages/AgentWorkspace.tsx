@@ -951,23 +951,47 @@ export default function AgentWorkspace() {
               agentName={config.name}
               isPixelAgent={agentId === "social"}
             />
-            <ChatInput
-              onSend={handleSend}
-              placeholder={config.placeholder}
-              disabled={isLoading}
-              showFileUpload={true}
-              showSmartMode={agentId !== "social"}
-              minimalToolbar={agentId === "social"}
-              voiceAndAttachOnly={agentId === "eisenhower"}
-              selectedModel={aiModel}
-              onModelChange={setAiModel}
-                imageStyles={imageStyles}
-                onImageStylesChange={setImageStyles}
-                selectedProducts={selectedProducts}
-                onSelectedProductsChange={setSelectedProducts}
-                imageAspectRatio={imageAspectRatio}
-                onImageAspectRatioChange={setImageAspectRatio}
-            />
+            {sessionFinalized ? (
+              <div className="w-full text-center py-4 px-6">
+                <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-4 py-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  This day has been finalized. Start a new chat for a new session.
+                </div>
+              </div>
+            ) : (
+              <>
+                {agentId === "eisenhower" && messages.length >= 2 && !isLoading && (
+                  <div className="w-full flex justify-center mb-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+                      onClick={handleFinalizeDay}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Finalize Day
+                    </Button>
+                  </div>
+                )}
+                <ChatInput
+                  onSend={handleSend}
+                  placeholder={config.placeholder}
+                  disabled={isLoading}
+                  showFileUpload={true}
+                  showSmartMode={agentId !== "social"}
+                  minimalToolbar={agentId === "social"}
+                  voiceAndAttachOnly={agentId === "eisenhower"}
+                  selectedModel={aiModel}
+                  onModelChange={setAiModel}
+                  imageStyles={imageStyles}
+                  onImageStylesChange={setImageStyles}
+                  selectedProducts={selectedProducts}
+                  onSelectedProductsChange={setSelectedProducts}
+                  imageAspectRatio={imageAspectRatio}
+                  onImageAspectRatioChange={setImageAspectRatio}
+                />
+              </>
+            )}
           </>
         )}
       </div>
