@@ -1,10 +1,8 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 import * as XLSX from "npm:xlsx@0.18.5";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BUCKET = "estimation-files";
 
 function parseJobLog(rows: any[][]): {
@@ -77,18 +75,9 @@ function parseJobLog(rows: any[][]): {
   return { project_name: projectName, customer_name: customerName, estimation_weight_kg: estimationWeight, detailing_weight_kg: detailingWeight, elements, releases, revisions };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId } = await requireAuth(req);
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-
-    const { data: profile } = await admin.from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
-    if (!profile?.company_id) return json({ error: "No company found" }, 400);
-    const companyId = profile.company_id;
-
-    const body = await req.json().catch(() => ({}));
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: admin, companyId, body } = ctx;
     const batchSize = body.batch_size ?? 20;
     const reset = body.reset ?? false;
 
@@ -232,9 +221,5 @@ serve(async (req) => {
       last_lead_id: lastLeadId,
       has_more: jobLogFiles.length === batchSize,
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("ingest-job-logs error:", err);
-    return json({ error: err instanceof Error ? err.message : "Ingestion failed" }, 500);
-  }
-});
+  }, { functionName: "ingest-job-logs", wrapResult: false })
+);

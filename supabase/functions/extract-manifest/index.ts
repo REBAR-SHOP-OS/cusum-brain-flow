@@ -1,9 +1,9 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encodeBase64 as base64Encode } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import * as XLSX from "npm:xlsx@0.18.5";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 function getMimeType(filename: string): string {
   const ext = filename.split(".").pop()?.toLowerCase() || "";
@@ -70,30 +70,12 @@ function safeDim(val: any): number | null {
 
 console.log("[extract-manifest] Function booted and handler registered");
 
-serve(async (req) => {
-  console.log("[extract-manifest] Request received:", req.method, new Date().toISOString());
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: svcClient, body } = ctx;
 
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    // Auth guard — enforce authentication
-    let rateLimitId: string;
-    try {
-      const auth = await requireAuth(req);
-      rateLimitId = auth.userId;
-    } catch (res) {
-      if (res instanceof Response) return res;
-      throw res;
-    }
-
-    const svcClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
-      _user_id: rateLimitId,
+      _user_id: userId,
       _function_name: "extract-manifest",
       _max_requests: 5,
       _window_seconds: 60,
@@ -105,7 +87,7 @@ serve(async (req) => {
       });
     }
 
-    const { fileUrl, fileName, manifestContext, sessionId } = await req.json();
+    const { fileUrl, fileName, manifestContext, sessionId } = body;
     if (!fileUrl) {
       return new Response(
         JSON.stringify({ error: "fileUrl is required" }),
@@ -497,22 +479,5 @@ Rules:
   } catch (error) {
     console.error("Extract manifest error:", error);
     // Attempt to mark the session as errored so the UI doesn't show a blank screen
-    try {
-      const body = await req.clone().json().catch(() => ({}));
-      if (body?.sessionId) {
-        await svcClient
-          .from("extract_sessions")
-          .update({
-            status: "error",
-            error_message: error instanceof Error ? error.message : "Unknown extraction error",
-            progress: 0,
-          })
-          .eq("id", body.sessionId);
-      }
-    } catch (_) { /* best-effort */ }
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "extract-manifest", requireCompany: false, wrapResult: false })
+);

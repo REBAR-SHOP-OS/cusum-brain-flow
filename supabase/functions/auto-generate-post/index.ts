@@ -1,7 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 // buildEventPromptBlock removed — events are opt-in via chat only
 
@@ -129,21 +129,7 @@ function buildScheduledDate(baseDate: string, hour: number, minute: number): str
   return eastern.toISOString();
 }
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) {
-    console.error("auto-generate-post auth failed:", error?.message);
-    return null;
-  }
-  return user.id;
-}
+// verifyAuth removed — handled by handleRequest wrapper
 
 async function fetchBusinessIntelligence(authHeader: string): Promise<string> {
   try {
@@ -201,27 +187,11 @@ async function fetchBrandKit(supabase: ReturnType<typeof createClient>, userId: 
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const authHeader = req.headers.get("Authorization")!;
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabaseAdmin, body, req: originalReq } = ctx;
+    const authHeader = originalReq.headers.get("Authorization")!;
     const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate } = body;
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     const postDate = scheduledDate || new Date().toISOString();
     const dateStr = new Date(postDate).toLocaleDateString("en-US", {
@@ -635,11 +605,5 @@ Return an array of 5 objects:
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Auto-generate error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "auto-generate-post", requireCompany: false, wrapResult: false })
+);

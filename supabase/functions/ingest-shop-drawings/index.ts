@@ -1,10 +1,8 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 import { callAI } from "../_shared/aiRouter.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BUCKET = "estimation-files";
 
 const REBAR_EXTRACTION_PROMPT = `You are a Canadian rebar detailing expert analyzing a structural shop drawing.
@@ -85,18 +83,9 @@ async function extractRebarFromText(ocrText: string): Promise<any> {
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId } = await requireAuth(req);
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-
-    const { data: profile } = await admin.from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
-    if (!profile?.company_id) return json({ error: "No company found" }, 400);
-    const companyId = profile.company_id;
-
-    const body = await req.json().catch(() => ({}));
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: admin, companyId, body } = ctx;
     const batchSize = 1; // Deep OCR is slow — process 1 PDF per invocation
     const reset = body.reset ?? false;
 
@@ -357,9 +346,5 @@ serve(async (req) => {
       has_more: pdfFiles.length === batchSize,
       files_processed: processedCount,
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("ingest-shop-drawings error:", err);
-    return json({ error: err instanceof Error ? err.message : "Ingestion failed" }, 500);
-  }
-});
+  }, { functionName: "ingest-shop-drawings", wrapResult: false })
+);

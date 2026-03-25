@@ -1,6 +1,7 @@
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { isOdooEnabled } from "../_shared/featureFlags.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 // ── Risk level hierarchy for comparison ──
 const RISK_HIERARCHY: Record<string, number> = { low: 0, medium: 1, high: 2, critical: 3 };
@@ -294,25 +295,10 @@ async function attemptRollback(
 }
 
 // ── Main handler ──
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const auth = await requireAuth(req);
-    const { userId, serviceClient: svcClient } = auth;
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, companyId, serviceClient: svcClient, body } = ctx;
     const { action } = body;
-
-    // Get user's company_id
-    const { data: profile } = await svcClient
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", userId)
-      .single();
-    const companyId = profile?.company_id;
-    if (!companyId) return json({ error: "No company" }, 403);
 
     // Check admin role
     const { data: roleRow } = await svcClient
@@ -641,9 +627,5 @@ Deno.serve(async (req) => {
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("autopilot-engine error:", e);
-    return json({ error: e instanceof Error ? e.message : "Internal error" }, 500);
-  }
-});
+  }, { functionName: "autopilot-engine", requireRole: "admin", wrapResult: false })
+);

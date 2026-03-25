@@ -1,8 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 /** Refresh a Gmail access token */
 async function refreshGmailToken(refreshToken: string): Promise<string | null> {
@@ -69,20 +68,14 @@ function getBodyContent(message: any): string {
   return message.snippet || "";
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, body, req: originalReq } = ctx;
 
-  // Only accept POST (Pub/Sub push)
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
-
-  try {
-    const body = await req.json();
+    // Only accept POST (Pub/Sub push)
+    if (originalReq.method !== "POST") {
+      return new Response("Method not allowed", { status: 405 });
+    }
 
     // Pub/Sub push format: { message: { data: base64, messageId, publishTime }, subscription }
     const pubsubMessage = body?.message;
@@ -403,17 +396,5 @@ serve(async (req) => {
     }, { onConflict: "dedupe_key", ignoreDuplicates: true });
 
     return new Response("OK", { status: 200 });
-  } catch (error) {
-    console.error("gmail-webhook error:", error);
-    // R16-3: Differentiate transient vs permanent errors
-    // Transient errors (DB, network, decryption) → 500 so Pub/Sub retries
-    // Permanent errors (bad data, missing user) → 200 to stop retries
-    const errMsg = String(error);
-    const isTransient = /connect|timeout|network|ECONNREFUSED|database|pool|decrypt/i.test(errMsg);
-    if (isTransient) {
-      console.warn("gmail-webhook: transient error, returning 500 for retry");
-      return new Response("Transient error", { status: 500 });
-    }
-    return new Response("OK", { status: 200 });
-  }
-});
+  }, { functionName: "gmail-webhook", authMode: "none", requireCompany: false, wrapResult: false })
+);
