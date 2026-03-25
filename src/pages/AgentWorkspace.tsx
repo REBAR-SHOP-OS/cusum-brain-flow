@@ -566,7 +566,29 @@ export default function AgentWorkspace() {
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
   const [eisenhowerInstrOpen, setEisenhowerInstrOpen] = useState(false);
-  
+
+  // Finalize day — lock session for eisenhower
+  const handleFinalizeDay = useCallback(async () => {
+    if (!activeSessionId) return;
+    const thankYouMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "agent",
+      content: "✅ **Day Finalized**\n\nThank you for completing your Eisenhower Matrix for today! Your report has been saved and is now available in the Team Reports for CEO review.\n\nHave a productive day! 💪",
+      agent: config.agentType as any,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, thankYouMsg]);
+    addMessage(activeSessionId, "agent", thankYouMsg.content, config.agentType);
+    setSessionFinalized(true);
+
+    // Mark session as finalized in DB
+    await supabase
+      .from("chat_sessions")
+      .update({ is_finalized: true } as any)
+      .eq("id", activeSessionId);
+
+    toast.success("Day finalized successfully");
+  }, [activeSessionId, addMessage, config.agentType]);
 
   const handleDateChange = useCallback((date: Date | undefined) => {
     if (date) {
