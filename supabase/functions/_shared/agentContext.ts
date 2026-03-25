@@ -378,6 +378,25 @@ ENFORCEMENT RULES:
         }
       }
 
+      // Eisenhower-specific: fetch custom instructions
+      if (agent === "eisenhower") {
+        try {
+          const { data: eisenItems } = await svc
+            .from("knowledge")
+            .select("content, metadata")
+            .eq("company_id", companyId)
+            .order("created_at", { ascending: false })
+            .limit(50);
+
+          const instrItem = eisenItems?.find((d: any) => d.metadata?.agent === "eisenhower" && d.metadata?.type === "instructions");
+          if (instrItem?.content) {
+            brainBlock += `\n\n## 📋 USER CUSTOM INSTRUCTIONS (ALWAYS FOLLOW THESE):\n${instrItem.content}`;
+          }
+        } catch (_eisenErr) {
+          console.warn("[agentContext] Failed to fetch Eisenhower instructions:", _eisenErr);
+        }
+      }
+
       context.brainKnowledgeBlock = brainBlock;
     } catch (_) {}
 
