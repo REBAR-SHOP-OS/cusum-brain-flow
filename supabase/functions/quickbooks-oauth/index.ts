@@ -310,24 +310,19 @@ async function updateLastSync(supabase: ReturnType<typeof createClient>, userId:
 
 // ─── Main Handler ──────────────────────────────────────────────────
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase, body, req: rawReq } = ctx;
 
     const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID");
     const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 
     if (!clientId || !clientSecret) {
       throw new Error("QuickBooks credentials not configured");
     }
 
-    const url = new URL(req.url);
+    const url = new URL(rawReq.url);
     const pathParts = url.pathname.split("/");
     const pathAction = pathParts[pathParts.length - 1];
 
@@ -337,12 +332,10 @@ serve(async (req) => {
     }
 
     // ─── All other actions require authentication ────────────────
-    const userId = await verifyAuth(req);
     if (!userId) {
       return jsonRes({ error: "Unauthorized" }, 401);
     }
 
-    const body = await req.json().catch(() => ({}));
     const { action } = body;
 
     // ─── Route to action handler ─────────────────────────────────
