@@ -75,18 +75,9 @@ function parseJobLog(rows: any[][]): {
   return { project_name: projectName, customer_name: customerName, estimation_weight_kg: estimationWeight, detailing_weight_kg: detailingWeight, elements, releases, revisions };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId } = await requireAuth(req);
-    const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-
-    const { data: profile } = await admin.from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
-    if (!profile?.company_id) return json({ error: "No company found" }, 400);
-    const companyId = profile.company_id;
-
-    const body = await req.json().catch(() => ({}));
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: admin, companyId, body } = ctx;
     const batchSize = body.batch_size ?? 20;
     const reset = body.reset ?? false;
 
