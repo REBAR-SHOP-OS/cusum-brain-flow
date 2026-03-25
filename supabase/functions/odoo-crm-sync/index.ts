@@ -753,9 +753,5 @@ Deno.serve((req) =>
       mode,
       validation: validationSummary,
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("Sync error:", err);
-    return json({ error: err.message || "Sync failed" }, 500);
-  }
-});
+  }, { functionName: "odoo-crm-sync", authMode: "optional", requireCompany: false, wrapResult: false })
+);
