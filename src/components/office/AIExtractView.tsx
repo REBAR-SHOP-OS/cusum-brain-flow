@@ -1463,7 +1463,74 @@ export function AIExtractView() {
           </div>
         )}
 
-        {activeSession && activeSession.status === "extracting" && !processing && (
+        {activeSession && activeSession.status === "extracting" && !processing && (() => {
+          const updatedAt = new Date(activeSession.updated_at).getTime();
+          const isStale = Date.now() - updatedAt > 5 * 60 * 1000; // 5 minutes
+          return isStale ? (
+            <Card className="border-destructive/40 bg-destructive/5">
+              <CardContent className="flex flex-col items-center gap-4 py-10">
+                <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
+                  <XCircle className="w-8 h-8 text-destructive" />
+                </div>
+                <div className="text-center space-y-1">
+                  <h3 className="text-sm font-bold text-foreground">Extraction Appears Stuck</h3>
+                  <p className="text-xs text-muted-foreground max-w-md">
+                    This session has been extracting for over 5 minutes without progress. The background job may have failed silently.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => { refreshSessions(); refreshRows(); }}>
+                    <Clock className="w-3.5 h-3.5" /> Refresh Status
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs"
+                    disabled={processing}
+                    onClick={async () => {
+                      try {
+                        setProcessing(true);
+                        setProcessingStep("Retrying extraction...");
+                        const { data: rawFile } = await supabase
+                          .from("extract_raw_files")
+                          .select("file_url, file_name")
+                          .eq("session_id", activeSession.id)
+                          .order("created_at", { ascending: false })
+                          .limit(1)
+                          .single();
+                        if (!rawFile) throw new Error("No file found for this session");
+                        await supabase
+                          .from("extract_sessions")
+                          .update({ status: "extracting", error_message: null } as any)
+                          .eq("id", activeSession.id);
+                        await refreshSessions();
+                        await runExtract({
+                          sessionId: activeSession.id,
+                          fileUrl: (rawFile as any).file_url,
+                          fileName: (rawFile as any).file_name,
+                          manifestContext: {
+                            name: activeSession.name,
+                            customer: activeSession.customer || "",
+                            address: activeSession.site_address || "",
+                            type: activeSession.manifest_type,
+                          },
+                        });
+                        toast({ title: "Extraction restarted", description: "The AI is re-processing your file." });
+                        await refreshSessions();
+                      } catch (err: any) {
+                        toast({ title: "Retry failed", description: err.message, variant: "destructive" });
+                      } finally {
+                        setProcessing(false);
+                        setProcessingStep("");
+                      }
+                    }}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" /> Retry Extraction
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
           <div className="relative flex flex-col items-center justify-center py-24 gap-6 overflow-hidden rounded-xl">
             {/* Pulsing glow rings */}
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -1507,10 +1574,11 @@ export function AIExtractView() {
               <Clock className="w-3.5 h-3.5" /> Refresh Status
             </Button>
           </div>
-        )}
+          );
+        })()}
 
         {/* Error state — extraction failed */}
-        {activeSession && activeSession.status === "error" && (
+        {activeSession && (activeSession.status === "error" || activeSession.status === "failed") && (
           <Card className="border-destructive/40 bg-destructive/5">
             <CardContent className="flex flex-col items-center gap-4 py-10">
               <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
