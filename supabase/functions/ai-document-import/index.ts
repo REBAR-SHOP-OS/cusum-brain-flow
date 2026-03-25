@@ -1,45 +1,38 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 interface ExtractedField {
   field: string;
   value: string | number | null;
-  confidence: number; // 0-100
+  confidence: number;
 }
 
 interface ExtractionResult {
-  documentType: string; // invoice, bill, estimate, credit_memo, sales_receipt, expense, payment, unknown
+  documentType: string;
   overallConfidence: number;
   fields: ExtractedField[];
   warnings: string[];
   rawText?: string;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
+Deno.serve((req) =>
+  handleRequest(req, async ({ req: originalReq }) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const formData = await req.formData();
+    const formData = await originalReq.formData();
     const file = formData.get("file") as File | null;
-    const targetType = formData.get("targetType") as string | null; // optional hint
+    const targetType = formData.get("targetType") as string | null;
 
     if (!file) {
       return new Response(JSON.stringify({ error: "No file provided" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
     const base64 = btoa(String.fromCharCode(...bytes));
 
-    // Determine mime type
     let mimeType = file.type || "application/octet-stream";
     const name = file.name.toLowerCase();
     if (name.endsWith(".pdf")) mimeType = "application/pdf";
@@ -54,7 +47,6 @@ serve(async (req) => {
     const isPdf = mimeType === "application/pdf";
     const isSpreadsheet = mimeType.includes("spreadsheet") || mimeType === "text/csv" || name.endsWith(".csv") || name.endsWith(".xlsx") || name.endsWith(".xls");
 
-    // For spreadsheets, we'll handle differently - just extract as text
     let textContent: string | null = null;
     if (mimeType === "text/csv") {
       textContent = new TextDecoder().decode(bytes);
@@ -97,7 +89,6 @@ You MUST respond with valid JSON matching this schema:
   "lineItems": [{"description": "", "quantity": 1, "unitPrice": 0, "amount": 0}]
 }`;
 
-    // Build message content
     const userContent: any[] = [];
 
     if (textContent) {
@@ -115,7 +106,6 @@ You MUST respond with valid JSON matching this schema:
         image_url: { url: `data:${mimeType};base64,${base64}` },
       });
     } else if (isSpreadsheet) {
-      // For Excel files, send as base64 and ask Gemini to parse
       userContent.push({
         type: "text",
         text: "This is a spreadsheet file (Excel). Analyze it and extract accounting records.",
@@ -153,26 +143,22 @@ You MUST respond with valid JSON matching this schema:
       console.error("AI gateway error:", response.status, errText);
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded, try again shortly." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       if (response.status === 402) {
         return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
       return new Response(JSON.stringify({ error: "AI analysis failed" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const aiResult = await response.json();
     const content = aiResult.choices?.[0]?.message?.content || "";
 
-    // Parse JSON from response (handle markdown code blocks)
     let extracted: ExtractionResult;
     try {
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
@@ -192,11 +178,5 @@ You MUST respond with valid JSON matching this schema:
     return new Response(JSON.stringify(extracted), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    console.error("ai-document-import error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "ai-document-import", requireCompany: false, parseBody: false, rawResponse: true })
+);

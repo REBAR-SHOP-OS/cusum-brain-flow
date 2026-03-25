@@ -1,20 +1,18 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    await requireAuth(req);
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ req: originalReq }) => {
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
     if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY not configured");
 
-    const formData = await req.formData();
+    const formData = await originalReq.formData();
     const audioFile = formData.get("audio") as File;
-    if (!audioFile) return json({ error: "No audio file provided" }, 400);
+    if (!audioFile) {
+      return new Response(JSON.stringify({ error: "No audio file provided" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const languageCode = (formData.get("language_code") as string) || "";
     const diarize = formData.get("diarize") !== "false";
@@ -35,17 +33,21 @@ serve(async (req) => {
     });
 
     if (!response.ok) {
-      if (response.status === 429) return json({ error: "Rate limit exceeded. Please try again later." }, 429);
+      if (response.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit exceeded. Please try again later." }), {
+          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
       const errText = await response.text();
       console.error("ElevenLabs transcribe error:", response.status, errText);
-      return json({ error: "Transcription failed" }, 500);
+      return new Response(JSON.stringify({ error: "Transcription failed" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const transcription = await response.json();
-    return json(transcription);
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("elevenlabs-transcribe error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
-  }
-});
+    return new Response(JSON.stringify(transcription), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }, { functionName: "elevenlabs-transcribe", requireCompany: false, parseBody: false, rawResponse: true })
+);
