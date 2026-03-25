@@ -547,7 +547,7 @@ Deno.serve((req) =>
       lastFrameBase64: z.string().optional(),
       lastFrameMimeType: z.string().max(50).optional(),
     });
-    const parsed = videoSchema.safeParse(await req.json());
+    const parsed = videoSchema.safeParse(await rawReq.json());
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
