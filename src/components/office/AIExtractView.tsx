@@ -1578,7 +1578,7 @@ export function AIExtractView() {
         })()}
 
         {/* Error state — extraction failed */}
-        {activeSession && activeSession.status === "error" && (
+        {activeSession && (activeSession.status === "error" || activeSession.status === "failed") && (
           <Card className="border-destructive/40 bg-destructive/5">
             <CardContent className="flex flex-col items-center gap-4 py-10">
               <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
