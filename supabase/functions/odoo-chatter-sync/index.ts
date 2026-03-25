@@ -1,6 +1,7 @@
 import { corsHeaders, json } from "../_shared/auth.ts";
 import { isOdooEnabled } from "../_shared/featureFlags.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const MESSAGE_TYPE_MAP: Record<string, string> = {
   comment: "note",

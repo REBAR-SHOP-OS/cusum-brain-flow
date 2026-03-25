@@ -1,24 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/tokenEncryption.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
-
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
-
-  return user.id;
-}
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 async function getAccessTokenForUser(userId: string, clientIp: string): Promise<string> {
   const supabaseAdmin = createClient(

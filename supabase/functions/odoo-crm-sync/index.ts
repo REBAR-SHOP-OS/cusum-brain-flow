@@ -1,6 +1,7 @@
 import { corsHeaders, json } from "../_shared/auth.ts";
 import { isOdooEnabled } from "../_shared/featureFlags.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import {
   STAGE_MAP, TERMINAL_STAGES, ACTIVE_STAGES,
   validateOdooLead, persistValidationWarnings, summarizeWarnings,

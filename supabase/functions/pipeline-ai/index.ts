@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI as routerCallAI, AIError } from "../_shared/aiRouter.ts";
 
 const systemPrompt = `You are Blitz, an AI sales assistant for rebar.shop — a Canadian rebar fabrication company.
