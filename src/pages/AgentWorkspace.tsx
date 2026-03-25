@@ -895,6 +895,7 @@ export default function AgentWorkspace() {
                 showFileUpload={true}
                 showSmartMode={agentId !== "social"}
                 minimalToolbar={agentId === "social"}
+                voiceAndAttachOnly={agentId === "eisenhower"}
                 selectedModel={aiModel}
                 onModelChange={setAiModel}
                 imageStyles={imageStyles}
