@@ -60,7 +60,7 @@ Deno.serve((req) =>
 
     const conn = connections?.find((c: any) => {
       const cfg = c.config as any;
-      return cfg?.company_id === profile.company_id || cfg?.realm_id;
+      return cfg?.company_id === companyId || cfg?.realm_id;
     });
     if (!conn) throw new Error("No QuickBooks connection found");
 
