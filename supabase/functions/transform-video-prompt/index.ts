@@ -76,37 +76,10 @@ RESPOND WITH ONLY A JSON OBJECT in this exact format:
   "isConstructionRelated": true|false
 }`;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const { rawPrompt, aspectRatio, duration } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { body } = ctx;
+    const { rawPrompt, aspectRatio, duration } = body;
     if (!rawPrompt || typeof rawPrompt !== "string" || rawPrompt.trim().length === 0) {
       return new Response(
         JSON.stringify({ error: "rawPrompt is required" }),
