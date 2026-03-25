@@ -518,14 +518,8 @@ Deno.serve((req) =>
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
-  } catch (error) {
-    console.error("QuickBooks OAuth error:", error);
-    return jsonRes(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      500
-    );
-  }
-});
+  }, { functionName: "quickbooks-oauth", authMode: "optional", requireCompany: false, wrapResult: false })
+);
 
 // ─── OAuth Callback ────────────────────────────────────────────────
 
