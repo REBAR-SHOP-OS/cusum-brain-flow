@@ -132,16 +132,9 @@ Respond ONLY with valid JSON:
 {"refined":"<refined translation>","confidence":<number>,"notes":"<brief note>","speakers":["<speaker1>","<speaker2>"]}`;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const auth = await requireAuth(req);
-    // AI keys loaded via aiRouter
-
-    const contentType = req.headers.get("content-type") || "";
+Deno.serve((req) =>
+  handleRequest(req, async ({ req: rawReq }) => {
+    const contentType = rawReq.headers.get("content-type") || "";
 
     let mode: string;
     let text = "";
