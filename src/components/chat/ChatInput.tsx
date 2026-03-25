@@ -97,11 +97,26 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   const [mentionFilter, setMentionFilter] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
 
+  const [voiceLang, setVoiceLang] = useState("en");
+
+  const LANG_BCP47: Record<string, string> = {
+    en: "en-US", fa: "fa-IR", ar: "ar-SA", es: "es-ES", fr: "fr-FR",
+    hi: "hi-IN", zh: "zh-CN", de: "de-DE", tr: "tr-TR", pt: "pt-BR",
+    ru: "ru-RU", ko: "ko-KR", ja: "ja-JP", ur: "ur-PK",
+    it: "it-IT", nl: "nl-NL", pl: "pl-PL", uk: "uk-UA",
+    sv: "sv-SE", no: "nb-NO", da: "da-DK", fi: "fi-FI",
+    cs: "cs-CZ", ro: "ro-RO", hu: "hu-HU", el: "el-GR",
+    th: "th-TH", vi: "vi-VN", id: "id-ID", ms: "ms-MY",
+    bn: "bn-BD", ta: "ta-IN", sw: "sw-KE", he: "he-IL",
+    fil: "fil-PH", ca: "ca-ES",
+  };
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const speech = useSpeechRecognition({
     onError: (error) => toast({ title: "Voice Input", description: error, variant: "destructive" }),
+    lang: LANG_BCP47[voiceLang] || "en-US",
   });
 
   // Auto-resize textarea
@@ -416,11 +431,11 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
           <div className="flex items-center gap-0.5 px-2 pb-2">
             {/* Left actions */}
             {voiceAndAttachOnly ? (
-              <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} />
+              <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} lang={voiceLang} onLangChange={(l) => { if (speech.isListening) speech.stop(); setVoiceLang(l); }} />
             ) : !minimalToolbar ? (
               <>
                 <EmojiPicker onSelect={handleEmojiSelect} disabled={disabled} />
-                <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} />
+                <VoiceInputButton isListening={speech.isListening} isSupported={speech.isSupported} onToggle={handleVoiceToggle} disabled={disabled} lang={voiceLang} onLangChange={(l) => { if (speech.isListening) speech.stop(); setVoiceLang(l); }} />
                 <QuickTemplates onSelect={handleTemplateSelect} disabled={disabled} />
 
                 <Tooltip>
