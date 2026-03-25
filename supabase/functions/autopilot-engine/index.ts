@@ -295,25 +295,10 @@ async function attemptRollback(
 }
 
 // ── Main handler ──
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const auth = await requireAuth(req);
-    const { userId, serviceClient: svcClient } = auth;
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, companyId, serviceClient: svcClient, body } = ctx;
     const { action } = body;
-
-    // Get user's company_id
-    const { data: profile } = await svcClient
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", userId)
-      .single();
-    const companyId = profile?.company_id;
-    if (!companyId) return json({ error: "No company" }, 403);
 
     // Check admin role
     const { data: roleRow } = await svcClient
