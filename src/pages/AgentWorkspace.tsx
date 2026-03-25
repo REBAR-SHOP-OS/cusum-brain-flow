@@ -933,6 +933,7 @@ export default function AgentWorkspace() {
 
 
       <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />
+      <EisenhowerInstructionsDialog open={eisenhowerInstrOpen} onOpenChange={setEisenhowerInstrOpen} />
       
       {/* VizzyApprovalDialog removed — actions auto-execute */}
     </div>
