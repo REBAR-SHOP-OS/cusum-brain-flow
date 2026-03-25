@@ -431,31 +431,17 @@ async function generatePixelImage(
 }
 
 // Main Handler
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async ({ body, userId, serviceClient, userClient }) => {
+    const { agent, message, history = [], context: userContext = {}, attachedFiles = [], pixelSlot, preferredModel } = body as AgentRequest;
 
-  try {
-    const { agent, message, history = [], context: userContext = {}, attachedFiles = [], pixelSlot, preferredModel } = await req.json() as AgentRequest;
-    
-    // Auth check
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Missing Authorization header");
+    const supabase = userClient;
+    const svcClient = serviceClient;
+    const user = { id: userId, user_metadata: {}, email: "" } as any;
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const svcClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) throw new Error("Invalid user token");
+    // getUser for metadata (email etc)
+    const { data: { user: fullUser } } = await supabase.auth.getUser();
+    if (fullUser) Object.assign(user, fullUser);
 
     // Fetch user details
     const { data: profile } = await svcClient
