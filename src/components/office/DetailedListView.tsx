@@ -214,37 +214,85 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
           ) : (
             items.map((item, idx) => {
               const dims = item.bend_dimensions || {};
+              const isEditing = editingItemId === item.id;
               return (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_70px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center"
+                  className={`grid grid-cols-[60px_50px_60px_80px_60px_60px_50px_80px_repeat(12,60px)_70px] gap-0 px-4 py-2.5 border-b border-border/50 hover:bg-muted/30 text-sm items-center ${isEditing ? "bg-muted/40 ring-1 ring-primary/30" : ""}`}
                 >
-                  <span className="text-xs text-muted-foreground">{item.drawing_ref || "—"}</span>
+                  {/* DWG # */}
+                  {isEditing ? (
+                    <Input className="h-6 text-xs px-1 w-14" value={editValues.drawing_ref} onChange={e => setEditValues(v => ({ ...v, drawing_ref: e.target.value }))} />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">{item.drawing_ref || "—"}</span>
+                  )}
+                  {/* Item # */}
                   <span className="text-xs text-muted-foreground">{idx + 1}</span>
+                  {/* Grade */}
                   <span className="text-xs text-muted-foreground">400W</span>
-                  <span className="text-xs font-bold text-primary">{item.mark_number || item.id.slice(0, 5)}</span>
-                  <span className="text-xs font-medium">{item.total_pieces}</span>
+                  {/* Mark */}
+                  {isEditing ? (
+                    <Input className="h-6 text-xs px-1 w-16" value={editValues.mark_number} onChange={e => setEditValues(v => ({ ...v, mark_number: e.target.value }))} />
+                  ) : (
+                    <span className="text-xs font-bold text-primary">{item.mark_number || item.id.slice(0, 5)}</span>
+                  )}
+                  {/* Qty */}
+                  {isEditing ? (
+                    <Input type="number" className="h-6 text-xs px-1 w-12" value={editValues.total_pieces} onChange={e => setEditValues(v => ({ ...v, total_pieces: parseInt(e.target.value) || 0 }))} />
+                  ) : (
+                    <span className="text-xs font-medium">{item.total_pieces}</span>
+                  )}
+                  {/* Size */}
                   <span className="text-xs">{barSizeLabel(item.bar_code, unitSystem)}</span>
-                  <span>
-                    {item.bend_type === "bend" ? (
-                      <Badge className="bg-orange-500/20 text-orange-400 text-[9px] px-1">
-                        {item.asa_shape_code || "BEND"}
-                      </Badge>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </span>
-                  <span className="text-xs font-bold">{formatLength(item.cut_length_mm, unitSystem)}</span>
-                  {dimCols.map(c => (
-                    <span key={c} className="text-xs text-muted-foreground">
-                      {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">{unitSystem === "imperial" ? "IN" : "MM"}</sub></span> : ""}
+                  {/* Type */}
+                  {isEditing ? (
+                    <Input className="h-6 text-xs px-1 w-12" value={editValues.asa_shape_code} onChange={e => setEditValues(v => ({ ...v, asa_shape_code: e.target.value }))} />
+                  ) : (
+                    <span>
+                      {item.bend_type === "bend" ? (
+                        <Badge className="bg-orange-500/20 text-orange-400 text-[9px] px-1">
+                          {item.asa_shape_code || "BEND"}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </span>
+                  )}
+                  {/* Length */}
+                  {isEditing ? (
+                    <Input type="number" className="h-6 text-xs px-1 w-16" value={editValues.cut_length_mm} onChange={e => setEditValues(v => ({ ...v, cut_length_mm: parseInt(e.target.value) || 0 }))} />
+                  ) : (
+                    <span className="text-xs font-bold">{formatLength(item.cut_length_mm, unitSystem)}</span>
+                  )}
+                  {/* Dim columns */}
+                  {dimCols.map(c => (
+                    isEditing ? (
+                      <Input key={c} type="number" className="h-6 text-xs px-1 w-12" value={editValues.bend_dimensions?.[c] || ""} onChange={e => setEditValues(v => ({ ...v, bend_dimensions: { ...v.bend_dimensions, [c]: parseInt(e.target.value) || undefined } }))} />
+                    ) : (
+                      <span key={c} className="text-xs text-muted-foreground">
+                        {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">{unitSystem === "imperial" ? "IN" : "MM"}</sub></span> : ""}
+                      </span>
+                    )
                   ))}
+                  {/* Actions */}
                   <div className="flex items-center gap-1">
-                    <button className="text-muted-foreground hover:text-foreground transition-colors">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <DeleteItemButton itemId={item.id} markNumber={item.mark_number} />
+                    {isEditing ? (
+                      <>
+                        <button className="text-primary hover:text-primary/80 transition-colors" onClick={saveEdit} title="Save">
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button className="text-muted-foreground hover:text-destructive transition-colors" onClick={cancelEdit} title="Cancel">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={() => startEdit(item)}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <DeleteItemButton itemId={item.id} markNumber={item.mark_number} />
+                      </>
+                    )}
                   </div>
                 </div>
               );
