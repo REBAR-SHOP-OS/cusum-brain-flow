@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { format } from "date-fns";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, PanelLeftClose, PanelLeft, Brain, CalendarIcon, PhoneOff, MessageSquare, LayoutGrid, Menu } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeft, Brain, CalendarIcon, PhoneOff, MessageSquare, LayoutGrid, Menu, CheckCircle2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -98,6 +98,7 @@ export default function AgentWorkspace() {
   const [purchasingDate, setPurchasingDate] = useState<Date | undefined>();
   const [activePurchasingDateStr, setActivePurchasingDateStr] = useState<string | null>(null);
   const [purchasingKey, setPurchasingKey] = useState(0);
+  const [sessionFinalized, setSessionFinalized] = useState(false);
 
   const { dates: purchasingDates, getConfirmedSnapshot, deleteConfirmedList } = usePurchasingDates();
 
@@ -155,6 +156,14 @@ export default function AgentWorkspace() {
     );
     setActiveSessionId(sessionId);
     setAutoBriefingSent(true); // don't auto-brief when loading history
+
+    // Check if session is finalized
+    const { data: sessionData } = await supabase
+      .from("chat_sessions")
+      .select("is_finalized")
+      .eq("id", sessionId)
+      .single();
+    setSessionFinalized(sessionData?.is_finalized === true);
   }, [getSessionMessages]);
 
   // Background service: subscribe/unsubscribe on session changes, check for undelivered
@@ -225,6 +234,7 @@ export default function AgentWorkspace() {
     setActiveSessionId(null);
     setAutoBriefingSent(true); // don't auto-brief on manual new chat
     setShowRecipeTable(false);
+    setSessionFinalized(false);
     // Reset purchasing state so user sees fresh default list
     if (agentId === "purchasing") {
       await resetPurchasingItems();
@@ -556,7 +566,29 @@ export default function AgentWorkspace() {
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
   const [eisenhowerInstrOpen, setEisenhowerInstrOpen] = useState(false);
-  
+
+  // Finalize day — lock session for eisenhower
+  const handleFinalizeDay = useCallback(async () => {
+    if (!activeSessionId) return;
+    const thankYouMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "agent",
+      content: "✅ **Day Finalized**\n\nThank you for completing your Eisenhower Matrix for today! Your report has been saved and is now available in the Team Reports for CEO review.\n\nHave a productive day! 💪",
+      agent: config.agentType as any,
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, thankYouMsg]);
+    addMessage(activeSessionId, "agent", thankYouMsg.content, config.agentType);
+    setSessionFinalized(true);
+
+    // Mark session as finalized in DB
+    await supabase
+      .from("chat_sessions")
+      .update({ is_finalized: true } as any)
+      .eq("id", activeSessionId);
+
+    toast.success("Day finalized successfully");
+  }, [activeSessionId, addMessage, config.agentType]);
 
   const handleDateChange = useCallback((date: Date | undefined) => {
     if (date) {
@@ -919,23 +951,47 @@ export default function AgentWorkspace() {
               agentName={config.name}
               isPixelAgent={agentId === "social"}
             />
-            <ChatInput
-              onSend={handleSend}
-              placeholder={config.placeholder}
-              disabled={isLoading}
-              showFileUpload={true}
-              showSmartMode={agentId !== "social"}
-              minimalToolbar={agentId === "social"}
-              voiceAndAttachOnly={agentId === "eisenhower"}
-              selectedModel={aiModel}
-              onModelChange={setAiModel}
-                imageStyles={imageStyles}
-                onImageStylesChange={setImageStyles}
-                selectedProducts={selectedProducts}
-                onSelectedProductsChange={setSelectedProducts}
-                imageAspectRatio={imageAspectRatio}
-                onImageAspectRatioChange={setImageAspectRatio}
-            />
+            {sessionFinalized ? (
+              <div className="w-full text-center py-4 px-6">
+                <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-4 py-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  This day has been finalized. Start a new chat for a new session.
+                </div>
+              </div>
+            ) : (
+              <>
+                {agentId === "eisenhower" && messages.length >= 2 && !isLoading && (
+                  <div className="w-full flex justify-center mb-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+                      onClick={handleFinalizeDay}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      Finalize Day
+                    </Button>
+                  </div>
+                )}
+                <ChatInput
+                  onSend={handleSend}
+                  placeholder={config.placeholder}
+                  disabled={isLoading}
+                  showFileUpload={true}
+                  showSmartMode={agentId !== "social"}
+                  minimalToolbar={agentId === "social"}
+                  voiceAndAttachOnly={agentId === "eisenhower"}
+                  selectedModel={aiModel}
+                  onModelChange={setAiModel}
+                  imageStyles={imageStyles}
+                  onImageStylesChange={setImageStyles}
+                  selectedProducts={selectedProducts}
+                  onSelectedProductsChange={setSelectedProducts}
+                  imageAspectRatio={imageAspectRatio}
+                  onImageAspectRatioChange={setImageAspectRatio}
+                />
+              </>
+            )}
           </>
         )}
       </div>
