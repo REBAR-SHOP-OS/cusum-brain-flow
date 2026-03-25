@@ -1,8 +1,6 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { isOdooEnabled } from "../_shared/featureFlags.ts";
-
-import { corsHeaders } from "../_shared/auth.ts";
 
 const TIME_LIMIT_MS = 45_000;
 const BATCH_SIZE = 5;
@@ -83,59 +81,32 @@ async function logMigrationRun(
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: supabaseAdmin, userId, req: rawReq }) => {
+    const startTime = Date.now();
 
-  const startTime = Date.now();
-  const supabaseAdmin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
+    // ODOO_ENABLED feature flag guard
+    if (!isOdooEnabled()) {
+      console.warn("ODOO_ENABLED guard: flag resolved to false");
+      return { error: "Odoo integration is disabled. File migration paused.", disabled: true };
+    }
 
-  // ODOO_ENABLED feature flag guard
-  if (!isOdooEnabled()) {
-    console.warn("ODOO_ENABLED guard: flag resolved to false");
-    return new Response(JSON.stringify({ error: "Odoo integration is disabled. File migration paused.", disabled: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
+    // Dual-auth: allow service_role (cron) OR authenticated user
+    // handleRequest with authMode "optional" gives us userId if JWT present.
+    // Also allow service_role key calls (from cron).
+    const authHeader = rawReq.headers.get("Authorization") || "";
+    const token = authHeader.replace("Bearer ", "");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const isServiceRole = token === serviceKey;
 
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    if (!userId && !isServiceRole) {
       await logMigrationRun(supabaseAdmin, {
         migrated: 0, failed: 0, remaining: -1,
         elapsed_s: 0, errors: ["No Authorization header"], status: "auth_error",
       });
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { "Content-Type": "application/json" },
       });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Allow service-role calls (from cron) OR authenticated user calls
-    if (token !== serviceRoleKey) {
-      const supabaseUser = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
-      );
-      const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
-      if (authError || !user) {
-        await logMigrationRun(supabaseAdmin, {
-          migrated: 0, failed: 0, remaining: -1,
-          elapsed_s: 0, errors: ["Invalid token / unauthorized user"], status: "auth_error",
-        });
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
     }
 
     const rawUrl = Deno.env.get("ODOO_URL")!;
@@ -160,10 +131,7 @@ serve(async (req) => {
         elapsed_s: parseFloat(((Date.now() - startTime) / 1000).toFixed(1)),
         errors: [], status: "success",
       });
-      return new Response(
-        JSON.stringify({ migrated: 0, remaining: 0, message: "All files already migrated" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+      return { migrated: 0, remaining: 0, message: "All files already migrated" };
     }
 
     let migrated = 0;
@@ -175,13 +143,9 @@ serve(async (req) => {
 
       try {
         const odooId = parseInt(String(file.odoo_id));
-        if (isNaN(odooId)) {
-          failed++;
-          continue;
-        }
+        if (isNaN(odooId)) { failed++; continue; }
 
         const result = await fetchOdooFile(odoo, odooId);
-        // Sanitize filename: remove chars invalid for Supabase storage keys
         const safeName = result.fileName.replace(/[~#%&{}\\<>*?/$!'":@+`|=]/g, "_");
         const storagePath = `odoo-archive/${file.lead_id}/${file.odoo_id}-${safeName}`;
 
@@ -192,29 +156,16 @@ serve(async (req) => {
             upsert: true,
           });
 
-        if (uploadErr) {
-          failed++;
-          errors.push(`Upload ${file.odoo_id}: ${uploadErr.message}`);
-          continue;
-        }
+        if (uploadErr) { failed++; errors.push(`Upload ${file.odoo_id}: ${uploadErr.message}`); continue; }
 
-        const { data: urlData } = supabaseAdmin.storage
-          .from(BUCKET)
-          .getPublicUrl(storagePath);
+        const { data: urlData } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(storagePath);
 
         const { error: updateErr } = await supabaseAdmin
           .from("lead_files")
-          .update({
-            storage_path: storagePath,
-            file_url: urlData.publicUrl || storagePath,
-          })
+          .update({ storage_path: storagePath, file_url: urlData.publicUrl || storagePath })
           .eq("id", file.id);
 
-        if (updateErr) {
-          failed++;
-          errors.push(`Update ${file.id}: ${updateErr.message}`);
-          continue;
-        }
+        if (updateErr) { failed++; errors.push(`Update ${file.id}: ${updateErr.message}`); continue; }
 
         migrated++;
       } catch (err) {
@@ -234,30 +185,11 @@ serve(async (req) => {
     const remaining = (count ?? 0);
     console.log(`archive-odoo-files: ${migrated} migrated, ${failed} failed, ${remaining} remaining in ${elapsed}s`);
 
-    // Log to migration_logs
     await logMigrationRun(supabaseAdmin, {
       migrated, failed, remaining, elapsed_s: elapsed,
       errors, status: failed > 0 ? "error" : "success",
     });
 
-    return new Response(
-      JSON.stringify({ migrated, failed, remaining, elapsed_s: elapsed, errors: errors.slice(0, 10) }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (error) {
-    const elapsed = parseFloat(((Date.now() - startTime) / 1000).toFixed(1));
-    console.error("archive-odoo-files error:", error);
-
-    await logMigrationRun(supabaseAdmin, {
-      migrated: 0, failed: 0, remaining: -1,
-      elapsed_s: elapsed,
-      errors: [error instanceof Error ? error.message : "Unknown error"],
-      status: "error",
-    });
-
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
-});
+    return { migrated, failed, remaining, elapsed_s: elapsed, errors: errors.slice(0, 10) };
+  }, { functionName: "archive-odoo-files", authMode: "optional", requireCompany: false, wrapResult: false })
+);

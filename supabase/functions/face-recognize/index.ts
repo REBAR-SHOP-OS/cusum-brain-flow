@@ -1,41 +1,21 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    let _userId: string;
-    try {
-      const auth = await requireAuth(req);
-      _userId = auth.userId;
-    } catch (res) {
-      if (res instanceof Response) return res;
-      throw res;
-    }
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: supabase, body }) => {
     const faceSchema = z.object({
       capturedImageBase64: z.string().min(100).max(10_000_000, "Image too large (max ~7.5MB)"),
       companyId: z.string().uuid().optional(),
     });
-    const parsed = faceSchema.safeParse(await req.json());
+    const parsed = faceSchema.safeParse(body);
     if (!parsed.success) {
       console.error("Validation failed:", parsed.error.flatten().fieldErrors);
       return new Response(JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { "Content-Type": "application/json" },
       });
     }
     const { capturedImageBase64, companyId } = parsed.data;
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Fetch all active face enrollments
     const { data: enrollments, error: enrollErr } = await supabase
@@ -46,23 +26,18 @@ serve(async (req) => {
     if (enrollErr) {
       console.error("Error fetching enrollments:", enrollErr);
       return new Response(JSON.stringify({ error: "Failed to fetch enrollments" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { "Content-Type": "application/json" },
       });
     }
 
     if (!enrollments || enrollments.length === 0) {
-      return new Response(
-        JSON.stringify({ matched: false, reason: "No enrolled faces found" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { matched: false, reason: "No enrolled faces found" };
     }
 
-    // Group enrollments by profile_id, limit to 2 per person
+    // Group enrollments by profile_id, limit to 5 per person
     const profileEnrollments = new Map<string, string[]>();
     const profileEnrollmentCounts = new Map<string, number>();
     for (const e of enrollments) {
-      // Track total count
       profileEnrollmentCounts.set(e.profile_id, (profileEnrollmentCounts.get(e.profile_id) || 0) + 1);
       const urls = profileEnrollments.get(e.profile_id) || [];
       if (urls.length < 5) {
@@ -107,13 +82,10 @@ serve(async (req) => {
     }
 
     if (enrolledFaces.length === 0) {
-      return new Response(
-        JSON.stringify({ matched: false, reason: "No valid enrollment photos found" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { matched: false, reason: "No valid enrollment photos found" };
     }
 
-    // Build the prompt for AI vision — STRICT matching
+    // Build the prompt for AI vision
     const employeeList = enrolledFaces
       .map((e, i) => `Employee ${i + 1}: profile_id="${e.profile_id}", name="${e.name}"`)
       .join("\n");
@@ -147,29 +119,34 @@ You MUST call the face_match_result function with your answer.`,
 
     // Add enrolled reference photos
     for (const face of enrolledFaces) {
-      contentParts.push({
-        type: "text",
-        text: `\n--- Reference photos for ${face.name} (${face.profile_id}) ---`,
-      });
+      contentParts.push({ type: "text", text: `\n--- Reference photos for ${face.name} (${face.profile_id}) ---` });
       for (const url of face.photo_urls) {
-        contentParts.push({
-          type: "image_url",
-          image_url: { url },
-        });
+        contentParts.push({ type: "image_url", image_url: { url } });
       }
     }
 
     // Add captured photo
-    contentParts.push({
-      type: "text",
-      text: "\n--- CAPTURED PHOTO TO IDENTIFY ---",
-    });
-    contentParts.push({
-      type: "image_url",
-      image_url: {
-        url: `data:image/jpeg;base64,${capturedImageBase64}`,
+    contentParts.push({ type: "text", text: "\n--- CAPTURED PHOTO TO IDENTIFY ---" });
+    contentParts.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${capturedImageBase64}` } });
+
+    const toolDef = {
+      type: "function" as const,
+      function: {
+        name: "face_match_result",
+        description: "Return the result of facial recognition matching.",
+        parameters: {
+          type: "object",
+          properties: {
+            matched_profile_id: { type: "string", description: "The profile_id of the matched person, or 'null' if no match." },
+            matched_name: { type: "string", description: "The name of the matched person, or 'Unknown'." },
+            confidence: { type: "number", description: "Confidence score from 0-100." },
+            reason: { type: "string", description: "Brief explanation of the match or non-match." },
+          },
+          required: ["matched_profile_id", "matched_name", "confidence", "reason"],
+          additionalProperties: false,
+        },
       },
-    });
+    };
 
     // Call AI with vision
     let aiResult;
@@ -179,58 +156,18 @@ You MUST call the face_match_result function with your answer.`,
         provider: "gemini",
         model: "gemini-2.5-pro",
         agentName: "shopfloor",
-        messages: [
-          {
-            role: "user",
-            content: contentParts,
-          },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "face_match_result",
-              description: "Return the result of facial recognition matching.",
-              parameters: {
-                type: "object",
-                properties: {
-                  matched_profile_id: {
-                    type: "string",
-                    description: "The profile_id of the matched person, or 'null' if no match.",
-                  },
-                  matched_name: {
-                    type: "string",
-                    description: "The name of the matched person, or 'Unknown'.",
-                  },
-                  confidence: {
-                    type: "number",
-                    description: "Confidence score from 0-100.",
-                  },
-                  reason: {
-                    type: "string",
-                    description: "Brief explanation of the match or non-match.",
-                  },
-                },
-                required: ["matched_profile_id", "matched_name", "confidence", "reason"],
-                additionalProperties: false,
-              },
-            },
-          },
-        ],
+        messages: [{ role: "user", content: contentParts }],
+        tools: [toolDef],
         toolChoice: { type: "function", function: { name: "face_match_result" } },
       });
       console.log(`[face-recognize] AI response: toolCalls=${aiResult.toolCalls?.length}, content=${aiResult.content?.slice(0, 200)}`);
     } catch (aiErr) {
       if (aiErr instanceof AIError) {
         console.error("[face-recognize] AI error:", aiErr.status, aiErr.message);
-        return new Response(JSON.stringify({ matched: false, reason: `Recognition unavailable: ${aiErr.message}` }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return { matched: false, reason: `Recognition unavailable: ${aiErr.message}` };
       }
       console.error("[face-recognize] AI error:", aiErr);
-      return new Response(JSON.stringify({ matched: false, reason: "Recognition unavailable, please register manually" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { matched: false, reason: "Recognition unavailable, please register manually" };
     }
 
     // Try to extract result from tool calls first, then fallback to text parsing
@@ -246,7 +183,7 @@ You MUST call the face_match_result function with your answer.`,
       }
     }
 
-    // Fallback: parse from text content if no tool call
+    // Fallback: parse from text content
     if (!resultData && aiResult.content) {
       console.log("[face-recognize] No tool call, attempting text parse...");
       try {
@@ -268,26 +205,7 @@ You MUST call the face_match_result function with your answer.`,
           provider: "gemini",
           model: "gemini-2.5-pro",
           messages: [{ role: "user", content: contentParts }],
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "face_match_result",
-                description: "Return the result of facial recognition matching.",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    matched_profile_id: { type: "string", description: "The profile_id of the matched person, or 'null' if no match." },
-                    matched_name: { type: "string", description: "The name of the matched person, or 'Unknown'." },
-                    confidence: { type: "number", description: "Confidence score from 0-100." },
-                    reason: { type: "string", description: "Brief explanation of the match or non-match." },
-                  },
-                  required: ["matched_profile_id", "matched_name", "confidence", "reason"],
-                  additionalProperties: false,
-                },
-              },
-            },
-          ],
+          tools: [toolDef],
           toolChoice: { type: "function", function: { name: "face_match_result" } },
         });
         const retryTc = retryResult.toolCalls?.[0];
@@ -302,47 +220,25 @@ You MUST call the face_match_result function with your answer.`,
 
     if (!resultData) {
       console.error("[face-recognize] No structured result after retry. Raw:", aiResult.content?.slice(0, 500));
-      return new Response(
-        JSON.stringify({ matched: false, reason: "AI returned no structured result" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { matched: false, reason: "AI returned no structured result" };
     }
 
-    // STRICT threshold: only match at confidence >= 75
     const isMatched =
       resultData.matched_profile_id &&
       resultData.matched_profile_id !== "null" &&
       resultData.confidence >= 50;
 
-    const matchedProfile = isMatched
-      ? profileMap.get(resultData.matched_profile_id)
-      : null;
+    const matchedProfile = isMatched ? profileMap.get(resultData.matched_profile_id) : null;
+    const enrollCount = isMatched ? (profileEnrollmentCounts.get(resultData.matched_profile_id) || 0) : 0;
 
-    // Include enrollment_count so the frontend can decide whether to require confirmation
-    const enrollCount = isMatched
-      ? (profileEnrollmentCounts.get(resultData.matched_profile_id) || 0)
-      : 0;
-
-    return new Response(
-      JSON.stringify({
-        matched: isMatched,
-        profile_id: isMatched ? resultData.matched_profile_id : null,
-        name: isMatched ? resultData.matched_name : null,
-        confidence: resultData.confidence,
-        reason: resultData.reason,
-        avatar_url: matchedProfile?.avatar || null,
-        enrollment_count: enrollCount,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("[face-recognize] Unhandled error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  }
-});
+    return {
+      matched: isMatched,
+      profile_id: isMatched ? resultData.matched_profile_id : null,
+      name: isMatched ? resultData.matched_name : null,
+      confidence: resultData.confidence,
+      reason: resultData.reason,
+      avatar_url: matchedProfile?.avatar || null,
+      enrollment_count: enrollCount,
+    };
+  }, { functionName: "face-recognize", requireCompany: false, wrapResult: false })
+);
