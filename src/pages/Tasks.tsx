@@ -357,8 +357,15 @@ export default function Tasks() {
     return TASK_DELEGATES[currentProfileId]?.includes(taskAssignedTo) ?? false;
   };
 
+  const isFeedbackTask = (task: TaskRow) => {
+    const src = (task as any).source as string | undefined;
+    return (src === "screenshot_feedback" || src === "feedback_verification") &&
+      !!currentProfileId && MIRROR_FEEDBACK_PROFILES.includes(currentProfileId);
+  };
+
   // Assigned user, creator, delegate, or admin can mark a task complete
   const canMarkComplete = (task: TaskRow) =>
+    isFeedbackTask(task) ||
     isAdmin ||
     currentProfileId === task.assigned_to ||
     currentProfileId === task.created_by_profile_id ||
@@ -366,6 +373,7 @@ export default function Tasks() {
 
   // Assigned user, creator, delegate, or admin can reopen/uncomplete
   const canUncomplete = (task: TaskRow) =>
+    isFeedbackTask(task) ||
     isAdmin ||
     currentProfileId === task.assigned_to ||
     currentProfileId === task.created_by_profile_id ||
