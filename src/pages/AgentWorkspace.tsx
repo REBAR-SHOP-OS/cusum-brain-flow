@@ -228,6 +228,26 @@ export default function AgentWorkspace() {
       .eq("company_id", profile.company_id);
   }, [user]);
 
+  // Auto-start Eisenhower session with welcome message
+  const autoStartEisenhower = useCallback(async () => {
+    if (!user) return;
+    const welcomeMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "agent",
+      content: "سلام! 👋\n\nلطفاً ابتدا **تاریخ مورد نظر** را از تقویم بالای صفحه انتخاب کنید 📅",
+      agent: "eisenhower" as any,
+      timestamp: new Date(),
+    };
+    setMessages([welcomeMsg]);
+    setSessionFinalized(false);
+
+    const sessionId = await createSession("Eisenhower — " + format(new Date(), "yyyy-MM-dd"), config.name);
+    if (sessionId) {
+      setActiveSessionId(sessionId);
+      addMessage(sessionId, "agent", welcomeMsg.content, "eisenhower");
+    }
+  }, [user, createSession, addMessage, config.name]);
+
   // Start a new empty chat
   const handleNewChat = useCallback(async () => {
     setMessages([]);
@@ -242,7 +262,11 @@ export default function AgentWorkspace() {
       setActivePurchasingDateStr(null);
       setPurchasingKey((k) => k + 1);
     }
-  }, [agentId, resetPurchasingItems]);
+    // Auto-start Eisenhower with welcome message
+    if (agentId === "eisenhower") {
+      setTimeout(() => autoStartEisenhower(), 100);
+    }
+  }, [agentId, resetPurchasingItems, autoStartEisenhower]);
 
   // Auto-send initial message from Quick Actions
   useEffect(() => {
