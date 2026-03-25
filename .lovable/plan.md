@@ -1,37 +1,44 @@
 
 
-## Reset Purchasing List on "New Chat"
+## Fix: Allow Zahra to Complete Feedback Tasks (RLS Policy)
 
-### Problem
-When "New Chat" is clicked, the component remounts but DB rows with `is_purchased=true` or `is_rejected=true` (and no `due_date`) persist, so default items still appear selected.
+### Root Cause
+The `tasks` table has two UPDATE RLS policies:
+1. **"Assignee can complete tasks"** — requires `assigned_to = current_profile_id`
+2. **"Creator or admin can reopen and edit tasks"** — requires admin, creator, or assignee
+
+Zahra's mirrored feedback tasks are assigned to Radin, not Zahra. She is neither the assignee, creator, nor admin — so the database silently rejects her updates.
 
 ### Solution
-Add a `resetItems` function to `usePurchasingList` that deletes all company items with no `due_date` from the database, effectively clearing all selections back to the clean default list.
+Add a new RLS UPDATE policy that allows delegate users to update feedback tasks assigned to their delegated profiles.
 
-Call this function from `handleNewChat` in `AgentWorkspace.tsx` before incrementing the key.
+### Database Migration
 
-### Changes
-
-| File | Change |
-|---|---|
-| `src/hooks/usePurchasingList.ts` | Add `resetItems()` — deletes all rows where `due_date IS NULL` for the user's company |
-| `src/pages/AgentWorkspace.tsx` | Import and call `resetItems()` in `handleNewChat` before remounting the panel |
-
-### Implementation Detail
-
-**`usePurchasingList.ts`** — new function:
-```typescript
-const resetItems = useCallback(async () => {
-  if (!user) return;
-  const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
-  if (!profile?.company_id) return;
-  await supabase.from("purchasing_list_items").delete()
-    .eq("company_id", profile.company_id)
-    .is("due_date", null);
-}, [user]);
+```sql
+-- Allow Zahra (delegate) to update feedback tasks assigned to Radin
+CREATE POLICY "Delegate can update feedback tasks"
+ON public.tasks
+FOR UPDATE
+TO authenticated
+USING (
+  company_id = get_user_company_id(auth.uid())
+  AND source IN ('screenshot_feedback', 'feedback_verification')
+  AND assigned_to IN (
+    SELECT unnest(ARRAY['5d948a66-619b-4ee1-b5e3-063194db7171']::uuid[])
+    FROM profiles
+    WHERE profiles.user_id = auth.uid()
+      AND profiles.id = '3a59f057-b232-4654-a2ea-d519fe22ccd5'
+  )
+);
 ```
 
-**`AgentWorkspace.tsx`** — in `handleNewChat`:
-- Create a standalone `resetPurchasingItems` function (or call the hook at workspace level)
-- Before `setPurchasingKey(k => k + 1)`, await deletion of undated items so the remounted panel fetches a clean state
+This policy grants Zahra (profile `3a59...`) UPDATE access on feedback tasks (`source = screenshot_feedback` or `feedback_verification`) that are assigned to Radin (profile `5d94...`).
+
+### Changes Summary
+
+| Change | Detail |
+|---|---|
+| Migration | Add one new RLS UPDATE policy on `tasks` table for delegate feedback access |
+
+No frontend code changes needed — the `canMarkComplete` / `isFeedbackTask` logic already permits Zahra on the client side. Only the server-side RLS was blocking.
 
