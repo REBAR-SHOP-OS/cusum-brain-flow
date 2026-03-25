@@ -621,16 +621,9 @@ export default function SocialMediaManager() {
                posts={filteredPosts}
                weekStart={weekStart}
                onPostClick={(p) => {
-                 const siblingPages = [...new Set(
-                   filteredPosts
-                     .filter(s => s.title === p.title && s.platform === p.platform && s.scheduled_date === p.scheduled_date)
-                     .map(s => s.page_name)
-                     .filter(Boolean)
-                 )] as string[];
-                 setGroupPages(siblingPages.length > 0 ? siblingPages : []);
                  setSelectedPost(p);
                }}
-               onGroupClick={(post, pages) => { setGroupPages(pages); setSelectedPost(post); }}
+               onGroupClick={(post, pages) => { setSelectedPost(post); }}
                selectedPostIds={selectionMode ? selectedPostIds : undefined}
                onToggleSelect={selectionMode ? toggleSelectPost : undefined}
                onSelectDay={selectionMode ? handleSelectDay : undefined}
