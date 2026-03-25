@@ -94,10 +94,17 @@ serve((req) =>
         .trim();
     }
 
-    const emailBody = [
+    // Internal email body (with record link)
+    const internalEmailBody = [
       actionDesc,
       cleanNote ? `\n${cleanNote}` : "",
       `\nView record: ${recordLink}`,
+    ].join("\n").trim();
+
+    // Customer email body (professional, no internal links)
+    const customerEmailBody = [
+      cleanNote || actionDesc,
+      `\nBest regards,\nRebar.shop Team`,
     ].join("\n").trim();
 
     // 5. Send emails via gmail-send edge function (internal call)
