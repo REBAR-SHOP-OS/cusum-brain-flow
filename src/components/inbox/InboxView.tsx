@@ -3,6 +3,16 @@ import {
   Trash2, Archive, X, Mail, Phone,
   MessageSquare, FileText, Volume2
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxDetailView } from "./InboxDetailView";
 import { InboxManagerSettings } from "./InboxManagerSettings";
