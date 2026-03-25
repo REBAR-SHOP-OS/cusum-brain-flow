@@ -8,22 +8,6 @@ const LINKEDIN_API_BASE = "https://api.linkedin.com/v2";
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data?.user) return null;
-  return data.user.id;
-}
-
 function jsonRes(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,

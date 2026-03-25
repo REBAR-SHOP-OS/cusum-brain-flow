@@ -692,22 +692,5 @@ Deno.serve((req) =>
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Gmail sync error:", error);
-
-    // Return specific error for "not connected" so UI can handle it
-    const message = error instanceof Error ? error.message : "Unknown error";
-    const isNotConnected = message.includes("not connected") || message.includes("reconnect");
-
-    return new Response(
-      JSON.stringify({
-        error: isNotConnected ? "gmail_not_connected" : "sync_error",
-        message,
-      }),
-      {
-        status: isNotConnected ? 403 : 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  }
-});
+  }, { functionName: "gmail-sync", authMode: "optional", requireCompany: false, wrapResult: false })
+);
