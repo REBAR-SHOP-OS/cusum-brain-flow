@@ -320,7 +320,7 @@ ENFORCEMENT RULES:
           seo: "Seomi",
           bizdev: "Buddy",
           copywriting: "Penn",
-          eisenhower: "Vizzy",
+          eisenhower: "Eisenhower",
           assistant: "Vizzy",
           growth: "Buddy",
           webbuilder: "Commet",
