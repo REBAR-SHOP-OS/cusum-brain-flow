@@ -169,7 +169,7 @@ Deno.serve((req) =>
       }
       audioBase64 = btoa(binary);
     } else {
-      const body = await req.json();
+      const body = await rawReq.json();
       mode = body.mode || "text";
       text = body.text || "";
       sourceLang = body.sourceLang || "auto";
