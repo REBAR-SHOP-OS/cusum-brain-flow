@@ -294,7 +294,13 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
           const effectiveDate = filterDate ?? new Date();
           setConfirmLoading(true);
           const dateStr = format(effectiveDate, "yyyy-MM-dd");
-          await confirmList(dateStr);
+          const result = await confirmList(dateStr);
+          if (result) {
+            await generatePdf(
+              { due_date: result.due_date, confirmed_at: result.confirmed_at } as any,
+              result.snapshot
+            );
+          }
           await refetch();
           setConfirmLoading(false);
           setConfirmDialogOpen(false);
