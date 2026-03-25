@@ -129,6 +129,7 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
+    await fetchPlans();
   };
 
   // Fetch only the customers referenced by projects (avoids 1000-row limit)
