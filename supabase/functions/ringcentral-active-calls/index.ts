@@ -1,43 +1,11 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 
 const RC_SERVER = "https://platform.ringcentral.com";
-// Intentional access normalization: radin@rebar.shop added (was missing, already super admin elsewhere)
-import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
-import { corsHeaders } from "../_shared/auth.ts";
 
-// SUPER_ADMIN_EMAILS replaces local const — now includes both sattar and radin
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const token = authHeader.replace("Bearer ", "");
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
-
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const userId = user.id;
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabaseAdmin } = ctx;
 
     // Super admin check
     const { data: profile } = await supabaseAdmin
@@ -49,23 +17,20 @@ serve(async (req) => {
     if (!profile || !SUPER_ADMIN_EMAILS.includes(profile.email ?? "")) {
       return new Response(JSON.stringify({ error: "Forbidden: Super admin only" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     }
 
     if (!profile.company_id) {
-      return new Response(JSON.stringify({ activeCalls: [], error: "No company" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { activeCalls: [], error: "No company" };
     }
 
-    // Get any RC token for this company to query active calls
     const { data: companyProfiles } = await supabaseAdmin
       .from("profiles")
       .select("user_id")
       .eq("company_id", profile.company_id);
 
-    const userIds = (companyProfiles || []).map((p) => p.user_id);
+    const userIds = (companyProfiles || []).map((p: any) => p.user_id);
     const { data: tokenRow } = await supabaseAdmin
       .from("user_ringcentral_tokens")
       .select("access_token, token_expires_at, refresh_token, user_id")
@@ -75,9 +40,7 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!tokenRow) {
-      return new Response(JSON.stringify({ activeCalls: [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { activeCalls: [] };
     }
 
     let accessToken = tokenRow.access_token;
@@ -98,9 +61,7 @@ serve(async (req) => {
         }),
       });
       if (!resp.ok) {
-        return new Response(JSON.stringify({ activeCalls: [], error: "Token refresh failed" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return { activeCalls: [], error: "Token refresh failed" };
       }
       const tokens = await resp.json();
       accessToken = tokens.access_token;
@@ -111,7 +72,6 @@ serve(async (req) => {
       }).eq("user_id", tokenRow.user_id);
     }
 
-    // Fetch active calls
     const resp = await fetch(
       `${RC_SERVER}/restapi/v1.0/account/~/extension/~/active-calls?view=Detailed`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -120,9 +80,7 @@ serve(async (req) => {
     if (!resp.ok) {
       const errText = await resp.text();
       console.error("Active calls fetch failed:", errText);
-      return new Response(JSON.stringify({ activeCalls: [], error: "Failed to fetch" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { activeCalls: [], error: "Failed to fetch" };
     }
 
     const data = await resp.json();
@@ -137,14 +95,6 @@ serve(async (req) => {
       duration: call.duration || 0,
     }));
 
-    return new Response(JSON.stringify({ activeCalls }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("ringcentral-active-calls error:", err);
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { activeCalls };
+  }, { functionName: "ringcentral-active-calls", requireCompany: false, wrapResult: false })
+);

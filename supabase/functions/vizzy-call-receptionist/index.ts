@@ -1,53 +1,17 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 /**
  * vizzy-call-receptionist — Generates a context-rich receptionist prompt
  * for OpenAI Realtime when Vizzy auto-answers a call.
- *
- * Input: { callerNumber: string }
- * Output: { instructions: string, contactName?: string, context: object }
  */
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { callerNumber } = await req.json();
-    const svc = createClient(supabaseUrl, serviceKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { body, serviceClient: svc } = ctx;
+    const { callerNumber } = body;
 
     // Normalize phone for matching
     const normalized = (callerNumber || "").replace(/^\+1/, "").replace(/\D/g, "");
 
-    // Try to match caller to a contact
     let contactName: string | null = null;
     let customerName: string | null = null;
     let contactContext: Record<string, any> = {};
@@ -66,7 +30,6 @@ serve(async (req) => {
         contactContext.contact_id = contact.id;
         contactContext.customer_id = contact.customer_id;
 
-        // Fetch recent orders/leads for this customer
         if (contact.customer_id) {
           const [{ data: leads }, { data: deliveries }] = await Promise.all([
             svc
@@ -143,20 +106,11 @@ TONE:
 - Match the caller's energy — friendly but professional
 - Use natural fillers: "Sure thing", "Got it", "No problem"`;
 
-    return new Response(
-      JSON.stringify({
-        instructions,
-        contactName: contactName || undefined,
-        customerName: customerName || undefined,
-        context: contactContext,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("vizzy-call-receptionist error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return {
+      instructions,
+      contactName: contactName || undefined,
+      customerName: customerName || undefined,
+      context: contactContext,
+    };
+  }, { functionName: "vizzy-call-receptionist", requireCompany: false, wrapResult: false })
+);

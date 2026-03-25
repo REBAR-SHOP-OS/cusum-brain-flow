@@ -1,27 +1,9 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Missing authorization");
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const { data: { user }, error: authErr } = await createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    ).auth.getUser();
-    if (authErr || !user) throw new Error("Unauthorized");
-
-    const { domain_id, ideas, traffic, audit_pages, position_tracking } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, body } = ctx;
+    const { domain_id, ideas, traffic, audit_pages, position_tracking } = body;
     if (!domain_id) throw new Error("domain_id required");
 
     // Verify domain exists
@@ -55,7 +37,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Upsert keywords into seo_keyword_ai
       for (const [keyword, info] of kwMap) {
         const { error } = await supabase.from("seo_keyword_ai").upsert({
           domain_id,
@@ -69,7 +50,6 @@ Deno.serve(async (req) => {
         if (!error) keywordsUpserted++;
       }
 
-      // Upsert pages into seo_page_ai (from ideas)
       for (const [url, issueCount] of pageIssues) {
         const { error } = await supabase.from("seo_page_ai").upsert({
           domain_id,
@@ -81,7 +61,6 @@ Deno.serve(async (req) => {
         if (!error) pagesUpserted++;
       }
 
-      // Create insights from ideas
       for (const [keyword, info] of kwMap) {
         for (const idea of info.ideas) {
           const isRisk = idea.toLowerCase().includes("bounce") || idea.toLowerCase().includes("couldn't find") || idea.toLowerCase().includes("low");
@@ -99,7 +78,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Process audit_pages from mega export
+    // Process audit_pages
     let auditPagesUpserted = 0;
     if (audit_pages?.length) {
       for (const page of audit_pages) {
@@ -145,17 +124,12 @@ Deno.serve(async (req) => {
       }).eq("id", domain_id);
     }
 
-    return new Response(JSON.stringify({
+    return {
       success: true,
       keywords_upserted: keywordsUpserted,
       pages_upserted: pagesUpserted + auditPagesUpserted,
       insights_created: insightsCreated,
       audit_pages_upserted: auditPagesUpserted,
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  } catch (e) {
-    return new Response(JSON.stringify({ error: e.message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    };
+  }, { functionName: "seo-semrush-import", requireCompany: false, wrapResult: false })
+);
