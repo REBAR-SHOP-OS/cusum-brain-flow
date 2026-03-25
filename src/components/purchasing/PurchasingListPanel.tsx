@@ -43,7 +43,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const [newCategory, setNewCategory] = useState("");
   const [newPriority, setNewPriority] = useState("medium");
 
-  const { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, confirmList, refetch } = usePurchasingList(filterDate, filterStatus);
+  const { items, loading, addItem, addItemAsPurchased, addItemAsRejected, togglePurchased, toggleRejected, deleteItem, confirmList, refetch } = usePurchasingList(filterDate, "all");
 
   const customItems = items.filter(item =>
     !COMPANY_DEFAULTS.some(d => d.title === item.title && d.category === item.category)
