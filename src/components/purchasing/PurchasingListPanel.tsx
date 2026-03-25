@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { format } from "date-fns";
 import { CalendarIcon, Package, Check, X, CheckCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { generatePdf } from "@/components/purchasing/PurchasingConfirmedView";
 import { Button } from "@/components/ui/button";
 import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
 import { Input } from "@/components/ui/input";
@@ -293,7 +294,13 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
           const effectiveDate = filterDate ?? new Date();
           setConfirmLoading(true);
           const dateStr = format(effectiveDate, "yyyy-MM-dd");
-          await confirmList(dateStr);
+          const result = await confirmList(dateStr);
+          if (result) {
+            await generatePdf(
+              { due_date: result.due_date, confirmed_at: result.confirmed_at } as any,
+              result.snapshot
+            );
+          }
           await refetch();
           setConfirmLoading(false);
           setConfirmDialogOpen(false);

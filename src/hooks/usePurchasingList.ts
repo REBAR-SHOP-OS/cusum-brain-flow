@@ -234,7 +234,7 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
       title: item.title,
       category: item.category || null,
       quantity: item.quantity,
-      status: item.is_purchased ? "purchased" : item.is_rejected ? "rejected" : "pending",
+      status: (item.is_purchased ? "purchased" : item.is_rejected ? "rejected" : "pending") as "purchased" | "rejected" | "pending",
       priority: item.priority,
     }));
 
@@ -250,8 +250,10 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     if (snapError) {
       console.error("Snapshot save error:", snapError);
       toast.error("List confirmed but snapshot failed to save");
+      return null;
     } else {
       toast.success(`List confirmed for ${date}`);
+      return { due_date: date, confirmed_at: new Date().toISOString(), snapshot };
     }
   }, [user]);
 

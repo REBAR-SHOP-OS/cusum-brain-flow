@@ -9,7 +9,7 @@ interface PurchasingConfirmedViewProps {
   record: ConfirmedListRecord;
 }
 
-type SnapshotItem = {
+export type SnapshotItem = {
   title: string;
   category: string | null;
   quantity: number;
@@ -17,7 +17,7 @@ type SnapshotItem = {
   priority: string;
 };
 
-async function generatePdf(record: ConfirmedListRecord, snapshot: SnapshotItem[]) {
+export async function generatePdf(record: ConfirmedListRecord, snapshot: SnapshotItem[]) {
   const purchased = snapshot.filter(i => i.status === "purchased");
   if (!purchased.length) return;
 
