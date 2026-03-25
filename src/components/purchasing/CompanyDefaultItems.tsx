@@ -62,6 +62,7 @@ export const COMPANY_DEFAULTS: DefaultItem[] = [
 interface CompanyDefaultItemsProps {
   dbItems: PurchasingItem[];
   customItems?: PurchasingItem[];
+  disabled?: boolean;
   onMarkPurchased: (title: string, category: string) => void;
   onUnmarkPurchased: (itemId: string) => void;
   onMarkRejected: (title: string, category: string) => void;
