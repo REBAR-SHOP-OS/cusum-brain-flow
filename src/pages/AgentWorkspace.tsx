@@ -643,6 +643,7 @@ export default function AgentWorkspace() {
             <PurchasingListPanel
               key={purchasingKey}
               filterDate={purchasingDate}
+              defaultFilterStatus="pending"
               onFilterDateChange={(d) => {
                 setPurchasingDate(d);
                 setActivePurchasingDateStr(d ? d.toISOString().split("T")[0] : null);

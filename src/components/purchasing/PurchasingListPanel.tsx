@@ -28,14 +28,15 @@ const PRIORITY_COLORS: Record<string, string> = {
 interface PurchasingListPanelProps {
   filterDate?: Date;
   onFilterDateChange?: (date: Date | undefined) => void;
+  defaultFilterStatus?: "all" | "pending" | "purchased";
 }
 
-export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange }: PurchasingListPanelProps = {}) {
+export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange, defaultFilterStatus = "all" }: PurchasingListPanelProps = {}) {
   const [internalDate, setInternalDate] = useState<Date | undefined>();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const filterDate = externalDate !== undefined ? externalDate : internalDate;
   const setFilterDate = onFilterDateChange || setInternalDate;
-  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "purchased">("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "purchased">(defaultFilterStatus);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [newTitle, setNewTitle] = useState("");
