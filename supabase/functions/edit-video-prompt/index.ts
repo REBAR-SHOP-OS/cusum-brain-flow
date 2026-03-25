@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 type EditAction =
@@ -56,51 +55,18 @@ const EDIT_ACTION_INSTRUCTIONS: Record<EditAction, string> = {
   "custom": "",
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const { originalPrompt, editAction, editDetail } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { originalPrompt, editAction, editDetail } = ctx.body;
     if (!originalPrompt || !editAction) {
-      return new Response(
-        JSON.stringify({ error: "originalPrompt and editAction are required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "originalPrompt and editAction are required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: "LOVABLE_API_KEY is not configured" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const instruction = (EDIT_ACTION_INSTRUCTIONS[editAction as EditAction] || "") + (editDetail || "");
     const userMessage = `Original prompt:\n"${originalPrompt}"\n\nEdit instruction:\n${instruction}`;
@@ -123,10 +89,10 @@ serve(async (req) => {
     if (!aiResp.ok) {
       const errText = await aiResp.text();
       console.error("AI gateway error:", aiResp.status, errText);
-      return new Response(
-        JSON.stringify({ error: "Prompt editing failed" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "Prompt editing failed" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const aiData = await aiResp.json();
@@ -137,32 +103,18 @@ serve(async (req) => {
       const jsonStr = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(jsonStr);
     } catch {
-      // Fallback: treat as generative edit
       parsed = { type: "generative", editedPrompt: content.trim() };
     }
 
-    // Route based on intent type
     if (parsed.type === "overlay" && parsed.overlay) {
-      return new Response(
-        JSON.stringify({ type: "overlay", overlay: parsed.overlay }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { type: "overlay", overlay: parsed.overlay };
     }
 
-    return new Response(
-      JSON.stringify({
-        type: "generative",
-        editedPrompt: parsed.editedPrompt || content.trim(),
-        editAction,
-        editDetail,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("edit-video-prompt error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return {
+      type: "generative",
+      editedPrompt: parsed.editedPrompt || content.trim(),
+      editAction,
+      editDetail,
+    };
+  }, { functionName: "edit-video-prompt", requireCompany: false, wrapResult: false })
+);

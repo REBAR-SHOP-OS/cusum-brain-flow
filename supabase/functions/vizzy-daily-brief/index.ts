@@ -1,60 +1,30 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
-
-serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
-    const { data: { user } } = await anonClient.auth.getUser(token);
-
-    if (!user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
     // Rate limit: 10 per 5 minutes
-    const { data: allowed } = await supabase.rpc("check_rate_limit", {
-      _user_id: user.id,
+    const { data: allowed } = await ctx.serviceClient.rpc("check_rate_limit", {
+      _user_id: ctx.userId,
       _function_name: "vizzy-daily-brief",
       _max_requests: 10,
       _window_seconds: 300,
     });
     if (allowed === false) {
-      return new Response(
+      throw new Response(
         JSON.stringify({ error: "Rate limited. Try again in a few minutes." }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 429, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    const context = await buildFullVizzyContext(supabase, user.id, {
+    const context = await buildFullVizzyContext(ctx.serviceClient, ctx.userId, {
       includeFinancials: true,
     });
 
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-    // Gemini chosen: large context input (full business snapshot) is its strength
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
@@ -94,25 +64,14 @@ CLOSE with ONE strategic recommendation — the single most important thing the 
 Keep each finding to 1-2 sentences. Be direct, analytical, and actionable. Never pad with "everything looks fine" — only flag what matters.
 Always respond in English for the daily briefing.`,
         },
-        {
-          role: "user",
-          content: context,
-        },
+        { role: "user", content: context },
       ],
     });
 
-    const briefing = result.content || "No briefing available.";
-
-    return new Response(
-      JSON.stringify({ briefing, rawContext: context, generated_at: new Date().toISOString() }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("vizzy-daily-brief error:", e);
-    const status = e instanceof AIError ? e.status : 500;
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return {
+      briefing: result.content || "No briefing available.",
+      rawContext: context,
+      generated_at: new Date().toISOString(),
+    };
+  }, { functionName: "vizzy-daily-brief", requireCompany: false, wrapResult: false })
+);

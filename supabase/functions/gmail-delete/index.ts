@@ -1,29 +1,10 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
-  return user.id;
-}
-
-async function getAccessToken(userId: string): Promise<string> {
-  const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
-  const { data: tokenRow } = await admin
+async function getAccessToken(serviceClient: ReturnType<typeof createClient>, userId: string): Promise<string> {
+  const { data: tokenRow } = await serviceClient
     .from("user_gmail_tokens")
     .select("refresh_token, is_encrypted")
     .eq("user_id", userId)
@@ -58,21 +39,9 @@ async function getAccessToken(userId: string): Promise<string> {
   return data.access_token;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { messageId } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { messageId } = ctx.body;
     if (!messageId) {
       return new Response(JSON.stringify({ error: "messageId required" }), {
         status: 400,
@@ -80,15 +49,11 @@ serve(async (req) => {
       });
     }
 
-    const accessToken = await getAccessToken(userId);
+    const accessToken = await getAccessToken(ctx.serviceClient, ctx.userId);
 
-    // Trash the message in Gmail
     const trashRes = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/trash`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      { method: "POST", headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
     if (!trashRes.ok) {
@@ -100,18 +65,7 @@ serve(async (req) => {
       );
     }
 
-    // Consume response body
     await trashRes.json();
-
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("gmail-delete error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: "delete_failed", message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { success: true };
+  }, { functionName: "gmail-delete", requireCompany: false, wrapResult: false })
+);

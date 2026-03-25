@@ -1,18 +1,13 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    await requireAuth(req);
-
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
     if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY not configured");
 
-    const formData = await req.formData();
+    // Need raw request for FormData
+    const formData = await ctx.req.formData();
     const audioFile = formData.get("audio") as File;
     if (!audioFile) return json({ error: "No audio file provided" }, 400);
 
@@ -42,10 +37,6 @@ serve(async (req) => {
     }
 
     const transcription = await response.json();
-    return json(transcription);
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("elevenlabs-transcribe error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
-  }
-});
+    return transcription;
+  }, { functionName: "elevenlabs-transcribe", requireCompany: false, wrapResult: false })
+);
