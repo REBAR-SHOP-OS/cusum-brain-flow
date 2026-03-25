@@ -117,21 +117,9 @@ function buildAdPrompt(
   return parts.join("\n");
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const { prompt, model, brandContext, logoUrl, aspectRatio, editImage, originalImage, referenceImage } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, body }) => {
+    const { prompt, model, brandContext, logoUrl, aspectRatio, editImage, originalImage, referenceImage } = body;
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
