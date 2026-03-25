@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, mode, lang } = await req.json();
+    const { messages, mode } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
@@ -24,9 +24,9 @@ serve(async (req) => {
     const systemPrompt =
       mode === "translate"
         ? "Strict translator. Persian→English, English→Persian. Output ONLY the translation. No explanations."
-        : "تو یک دستیار فارسی هستی. کوتاه و دقیق جواب بده. اگر سوال به انگلیسی بود، به انگلیسی جواب بده.";
+        : "You are Nila, a helpful and concise voice assistant. Reply in the same language the user speaks. Keep answers short (2-3 sentences max). Be friendly and direct.";
 
-    const maxTokens = mode === "translate" ? 100 : 150;
+    const maxTokens = mode === "translate" ? 100 : 300;
     const temperature = mode === "translate" ? 0 : 0.2;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {

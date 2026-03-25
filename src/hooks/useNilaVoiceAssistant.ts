@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { NilaLang, loadNilaLang, saveNilaLang } from "@/lib/nilaI18n";
 
 export type NilaMode = "normal" | "silent" | "translate";
 export type NilaStatus = "ready" | "listening" | "processing" | "speaking";
@@ -37,25 +36,25 @@ function splitSentences(text: string): string[] {
 }
 
 export function useNilaVoiceAssistant() {
-  const [mode, setMode] = useState<NilaMode>("silent");
+  const [mode, setMode] = useState<NilaMode>("normal");
   const [status, setStatus] = useState<NilaStatus>("ready");
   const [messages, setMessages] = useState<NilaMessage[]>([]);
   const [interimText, setInterimText] = useState("");
-  const [lang, setLangState] = useState<NilaLang>(loadNilaLang);
   const [selectedVoice, setSelectedVoice] = useState<string>(NILA_VOICES[0].id);
   const [isRecognizing, setIsRecognizing] = useState(false);
 
   const recognitionRef = useRef<any>(null);
+  const isRecognizingRef = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const audioCache = useRef(new Map<string, HTMLAudioElement>());
   const ttsQueueRef = useRef<string[]>([]);
   const isPlayingRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
-  const setLang = useCallback((l: NilaLang) => {
-    setLangState(l);
-    saveNilaLang(l);
-  }, []);
+  // Keep ref in sync with state
+  useEffect(() => {
+    isRecognizingRef.current = isRecognizing;
+  }, [isRecognizing]);
 
   const addMessage = useCallback((role: NilaMessage["role"], content: string) => {
     const msg: NilaMessage = { id: crypto.randomUUID(), role, content, timestamp: Date.now() };
@@ -107,7 +106,6 @@ export function useNilaVoiceAssistant() {
     setStatus("speaking");
     while (ttsQueueRef.current.length > 0) {
       const sentence = ttsQueueRef.current.shift()!;
-      // Prefetch next
       const next = ttsQueueRef.current[0];
       if (next) {
         const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
@@ -127,8 +125,8 @@ export function useNilaVoiceAssistant() {
       await playTts(sentence);
     }
     isPlayingRef.current = false;
-    setStatus(isRecognizing ? "listening" : "ready");
-  }, [playTts, selectedVoice, isRecognizing]);
+    setStatus(isRecognizingRef.current ? "listening" : "ready");
+  }, [playTts, selectedVoice]);
 
   // ---- AI Chat (streaming) ----
   const sendToAI = useCallback(async (userText: string) => {
@@ -147,7 +145,7 @@ export function useNilaVoiceAssistant() {
           apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify({ messages: chatMessages, mode, lang }),
+        body: JSON.stringify({ messages: chatMessages, mode }),
         signal: abortRef.current.signal,
       });
 
@@ -195,16 +193,16 @@ export function useNilaVoiceAssistant() {
         ttsQueueRef.current.push(...sentences);
         processTtsQueue();
       } else {
-        setStatus(isRecognizing ? "listening" : "ready");
+        setStatus(isRecognizingRef.current ? "listening" : "ready");
       }
     } catch (err: any) {
       if (err.name !== "AbortError") {
         console.error("[Nila chat]", err);
         addMessage("system", `Error: ${err.message}`);
       }
-      setStatus(isRecognizing ? "listening" : "ready");
+      setStatus(isRecognizingRef.current ? "listening" : "ready");
     }
-  }, [messages, mode, lang, processTtsQueue, addMessage, isRecognizing]);
+  }, [messages, mode, processTtsQueue, addMessage]);
 
   // ---- Process Input ----
   const processInput = useCallback((text: string) => {
@@ -214,12 +212,12 @@ export function useNilaVoiceAssistant() {
     const modeCmd = detectModeCommand(trimmed);
     if (modeCmd) {
       setMode(modeCmd);
-      const labels = { normal: "Normal / عادی", silent: "Silent / سکوت", translate: "Translate / ترجمه" };
+      const labels = { normal: "Normal", silent: "Silent", translate: "Translate" };
       addMessage("system", `Mode: ${labels[modeCmd]}`);
       return;
     }
 
-    if (mode === "silent") return; // ignore non-command input in silent mode
+    if (mode === "silent") return;
 
     addMessage("user", trimmed);
     sendToAI(trimmed);
@@ -240,7 +238,7 @@ export function useNilaVoiceAssistant() {
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = lang === "fa" ? "fa-IR" : "en-US";
+    // Don't set recognition.lang — let browser auto-detect the spoken language
 
     recognition.onresult = (event: any) => {
       let interim = "";
@@ -268,13 +266,14 @@ export function useNilaVoiceAssistant() {
       if (e.error === "not-allowed") {
         addMessage("system", "Microphone access denied.");
         setIsRecognizing(false);
+        isRecognizingRef.current = false;
         setStatus("ready");
       }
     };
 
     recognition.onend = () => {
-      // Auto-restart if still supposed to be recording
-      if (isRecognizing) {
+      // Use ref to avoid stale closure
+      if (isRecognizingRef.current) {
         try { recognition.start(); } catch {}
       }
     };
@@ -282,8 +281,9 @@ export function useNilaVoiceAssistant() {
     recognition.start();
     recognitionRef.current = recognition;
     setIsRecognizing(true);
+    isRecognizingRef.current = true;
     setStatus("listening");
-  }, [lang, processInput, addMessage, isRecognizing]);
+  }, [processInput, addMessage]);
 
   const stopRecognition = useCallback(() => {
     if (recognitionRef.current) {
@@ -291,6 +291,7 @@ export function useNilaVoiceAssistant() {
       recognitionRef.current = null;
     }
     setIsRecognizing(false);
+    isRecognizingRef.current = false;
     if (status === "listening") setStatus("ready");
     setInterimText("");
   }, [status]);
@@ -302,15 +303,6 @@ export function useNilaVoiceAssistant() {
       startRecognition();
     }
   }, [isRecognizing, startRecognition, stopRecognition]);
-
-  // Update recognition language when lang changes
-  useEffect(() => {
-    if (isRecognizing && recognitionRef.current) {
-      stopRecognition();
-      setTimeout(() => startRecognition(), 200);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -335,7 +327,6 @@ export function useNilaVoiceAssistant() {
     status,
     messages, addMessage, clearMessages,
     interimText,
-    lang, setLang,
     selectedVoice, setSelectedVoice,
     isRecognizing,
     toggleRecognition,
