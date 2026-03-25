@@ -1,41 +1,14 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const serviceClient = createClient(supabaseUrl, serviceKey);
-
-    const { estimation_project_id, lead_id, customer_name_override } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, companyId, serviceClient, body }) => {
+    const { estimation_project_id, lead_id, customer_name_override } = body;
 
     if (!estimation_project_id) {
       return new Response(JSON.stringify({ error: "estimation_project_id is required" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -48,7 +21,8 @@ serve(async (req) => {
 
     if (projErr || !project) {
       return new Response(JSON.stringify({ error: "Estimation project not found" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -101,11 +75,11 @@ serve(async (req) => {
     const totalWeight = bomItems.reduce((s, i) => s + Number(i.weight_kg || 0), 0);
     const totalCost = bomItems.reduce((s, i) => s + Number(i.line_cost || 0), 0);
 
-    // Call Lovable AI to structure the quotation
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
       return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -196,7 +170,6 @@ Group items by element type. Apply a 15% margin on costs. Include standard rebar
     if (toolCall?.function?.arguments) {
       quotationData = JSON.parse(toolCall.function.arguments);
     } else {
-      // Fallback if no tool call
       const totalWithMargin = totalCost * 1.15;
       quotationData = {
         line_items: [{
@@ -211,26 +184,17 @@ Group items by element type. Apply a 15% margin on costs. Include standard rebar
       };
     }
 
-    // Calculate total
     const quoteTotal = quotationData.line_items.reduce((s: number, li: any) => s + (li.amount || 0), 0);
     const validUntil = new Date();
     validUntil.setDate(validUntil.getDate() + (quotationData.validity_days || 30));
-
-    // Get company_id from user profile
-    const { data: profile } = await serviceClient
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
 
     // Generate quote number
     const { count } = await serviceClient
       .from("quotes")
       .select("*", { count: "exact", head: true })
-      .eq("company_id", profile?.company_id);
+      .eq("company_id", companyId);
     const quoteNum = `QAI-${String((count || 0) + 1).padStart(4, "0")}`;
 
-    // Insert quote
     const { data: newQuote, error: insertErr } = await serviceClient
       .from("quotes")
       .insert({
@@ -241,8 +205,8 @@ Group items by element type. Apply a 15% margin on costs. Include standard rebar
         notes: quotationData.notes || null,
         source: "ai_estimation",
         salesperson: "AI Generated",
-        company_id: profile?.company_id,
-        created_by: user.id,
+        company_id: companyId,
+        created_by: userId,
         status: "Draft Quotation",
         metadata: {
           line_items: quotationData.line_items,
@@ -265,12 +229,8 @@ Group items by element type. Apply a 15% margin on costs. Include standard rebar
     }
 
     return new Response(JSON.stringify({ quote: newQuote }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e) {
-    console.error("ai-generate-quotation error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "ai-generate-quotation", wrapResult: false, rawResponse: true })
+);

@@ -1,11 +1,9 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { file_urls } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { file_urls } = body;
     if (!file_urls?.length) {
       return new Response(JSON.stringify({ error: "No file URLs provided" }), {
         status: 400,
@@ -17,26 +15,21 @@ serve(async (req) => {
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
     const urls = file_urls as string[];
-
-    // Extract filenames from URLs for context
     const filenames = urls.map((u: string) => {
       try {
         const decoded = decodeURIComponent(u.split("/").pop() || u);
-        // Strip timestamp prefix like "1771561615192_"
         return decoded.replace(/^\d+_/, "");
       } catch {
         return u.split("/").pop() || u;
       }
     });
 
-    // Build content parts — use direct URLs for images only
     const contentParts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [];
     contentParts.push({
       type: "text",
       text: `Analyze these structural drawing files and recommend a scope of work for rebar estimation.\n\nFile names uploaded:\n${filenames.map((f: string, i: number) => `${i + 1}. ${f}`).join("\n")}\n\nBased on the file names, infer the project and structural scope. If the names contain sheet references, element types, or project info, use that to build a detailed scope.`,
     });
 
-    // For image files, attach them for visual analysis (lightweight, no memory issue)
     for (const url of urls.slice(0, 3)) {
       const lower = url.toLowerCase();
       if (/\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower)) {
@@ -92,14 +85,6 @@ If you can see images, use visual details. If only filenames are available, make
       parsed = { scope: content.trim(), elements_found: [], confidence: 50 };
     }
 
-    return new Response(JSON.stringify(parsed), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("analyze-scope error:", e);
-    return new Response(JSON.stringify({ error: e.message || "Analysis failed" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return parsed;
+  }, { functionName: "analyze-scope", requireCompany: false, wrapResult: false })
+);

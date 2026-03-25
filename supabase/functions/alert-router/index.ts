@@ -1,13 +1,11 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 interface AlertPayload {
   company_id: string;
-  category: string; // finance, sales, production, support, hr, system
-  type?: string; // e.g. invoice_overdue, deal_lost
-  severity?: string; // low, normal, high, critical
+  category: string;
+  type?: string;
+  severity?: string;
   title: string;
   message?: string;
   link_to?: string;
@@ -15,16 +13,9 @@ interface AlertPayload {
   agent_name?: string;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
-
-  try {
-    const payload: AlertPayload = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient, body }) => {
+    const payload = body as AlertPayload;
     const {
       company_id,
       category,
@@ -44,42 +35,36 @@ serve(async (req) => {
       );
     }
 
-    // 1. Find matching routing rules
-    let query = supabase
+    const { data: rules, error: rulesErr } = await serviceClient
       .from("alert_routing_rules")
       .select("*")
       .eq("company_id", company_id)
       .eq("event_category", category)
       .eq("enabled", true);
 
-    const { data: rules, error: rulesErr } = await query;
     if (rulesErr) throw rulesErr;
 
-    // Filter: match exact type or null (wildcard)
     const matched = (rules || []).filter(
       (r: any) => r.event_type === null || r.event_type === type
     );
 
     if (matched.length === 0) {
-      // No rules found — fall back to inserting a plain notification for admins
       console.log(`No routing rules for ${category}/${type} in company ${company_id}`);
-      return new Response(
-        JSON.stringify({ ok: true, matched: 0, dispatched: 0 }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { ok: true, matched: 0, dispatched: 0 };
     }
 
     let totalDispatched = 0;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     for (const rule of matched) {
       const effectivePriority = severity || rule.priority || "normal";
       const targetRoles: string[] = rule.target_roles || [];
       const channels: string[] = rule.channels || ["in_app"];
 
-      // 2. Resolve target users from user_roles + profiles
       if (targetRoles.length === 0) continue;
 
-      const { data: targetUsers, error: usersErr } = await supabase
+      const { data: targetUsers, error: usersErr } = await serviceClient
         .from("user_roles")
         .select("user_id, role")
         .in("role", targetRoles);
@@ -89,9 +74,8 @@ serve(async (req) => {
         continue;
       }
 
-      // Filter to same company
       const userIds = [...new Set((targetUsers || []).map((u: any) => u.user_id))];
-      const { data: profiles } = await supabase
+      const { data: profiles } = await serviceClient
         .from("profiles")
         .select("user_id, email, phone_number, full_name")
         .eq("company_id", company_id)
@@ -100,11 +84,10 @@ serve(async (req) => {
       const companyUsers = profiles || [];
       if (companyUsers.length === 0) continue;
 
-      // 3. Dispatch to each user × channel
       for (const user of companyUsers) {
         for (const channel of channels) {
           try {
-            await dispatchAlert(supabase, supabaseUrl, serviceKey, {
+            await dispatchAlert(serviceClient, supabaseUrl, serviceKey, {
               channel,
               company_id,
               user,
@@ -119,14 +102,13 @@ serve(async (req) => {
                 rule_id: rule.id,
               },
               agent_name: agent_name || categoryToAgent(category),
-              notification_id: null, // will be set for in_app
+              notification_id: null,
               rule,
             });
             totalDispatched++;
           } catch (err) {
             console.error(`Dispatch failed [${channel}] to ${user.email}:`, err);
-            // Log failure
-            await supabase.from("alert_dispatch_log").insert({
+            await serviceClient.from("alert_dispatch_log").insert({
               company_id,
               channel,
               recipient_user_id: user.user_id,
@@ -140,18 +122,9 @@ serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, matched: matched.length, dispatched: totalDispatched }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("alert-router error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { ok: true, matched: matched.length, dispatched: totalDispatched };
+  }, { functionName: "alert-router", requireCompany: false, wrapResult: false })
+);
 
 function categoryToAgent(category: string): string {
   const map: Record<string, string> = {
@@ -188,7 +161,6 @@ async function dispatchAlert(
   const { channel, company_id, user, title, message, link_to, priority, metadata, agent_name, rule } = ctx;
 
   if (channel === "in_app") {
-    // Insert into notifications table (triggers push-on-notify automatically)
     const { data: notif, error } = await supabase.from("notifications").insert({
       user_id: user.user_id,
       type: "notification",
@@ -203,7 +175,6 @@ async function dispatchAlert(
 
     if (error) throw error;
 
-    // Log dispatch
     await supabase.from("alert_dispatch_log").insert({
       company_id,
       notification_id: notif.id,
@@ -213,7 +184,6 @@ async function dispatchAlert(
       status: "delivered",
     });
 
-    // Create escalation entry if rule has escalation
     if (rule.escalate_to_role) {
       const escalateAt = new Date(Date.now() + (rule.escalate_after_minutes || 60) * 60000);
       await supabase.from("alert_escalation_queue").insert({
@@ -226,7 +196,6 @@ async function dispatchAlert(
       });
     }
   } else if (channel === "email") {
-    // Call gmail-send edge function
     if (!user.email) return;
     try {
       const resp = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
@@ -262,7 +231,6 @@ async function dispatchAlert(
       });
     }
   } else if (channel === "sms") {
-    // Twilio SMS
     const phone = user.phone_number;
     if (!phone) return;
 
@@ -320,7 +288,6 @@ async function dispatchAlert(
       });
     }
   } else if (channel === "slack") {
-    // Slack via connector gateway
     const slackApiKey = Deno.env.get("SLACK_API_KEY");
     const slackChannel = rule.slack_channel || "#alerts";
 
@@ -338,7 +305,6 @@ async function dispatchAlert(
     }
 
     try {
-      const GATEWAY_URL = "https://connector-gateway.lovable.dev/slack/api";
       const priorityEmoji = priority === "critical" ? "🔴" : priority === "high" ? "🟠" : "🔵";
       const text = `${priorityEmoji} *${title}*\n${message}${link_to ? `\n<${link_to}|View Details>` : ""}`;
 
