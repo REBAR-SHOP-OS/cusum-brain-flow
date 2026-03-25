@@ -1,34 +1,17 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: userErr } = await supabase.auth.getUser();
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
-    }
-
-    const { imageUrl, prompt } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { imageUrl, prompt } = ctx.body;
     if (!imageUrl) {
-      return new Response(JSON.stringify({ error: "imageUrl required" }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "imageUrl required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Download the image and convert to base64
     const imgRes = await fetch(imageUrl);
     if (!imgRes.ok) throw new Error(`Failed to fetch image: ${imgRes.status}`);
     const imgBuffer = await imgRes.arrayBuffer();
@@ -46,7 +29,6 @@ If the user included a specific question, answer it directly.`;
 
     const userPrompt = prompt || "What do you see in this photo? Any issues or things I should know about?";
 
-    // Gemini: vision/multimodal task
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
@@ -65,15 +47,6 @@ If the user included a specific question, answer it directly.`;
       temperature: 0.3,
     });
 
-    return new Response(JSON.stringify({ analysis: result.content || "Could not analyze image." }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("vizzy-photo-analyze error:", err);
-    const status = err instanceof AIError ? err.status : 500;
-    return new Response(JSON.stringify({ error: err.message }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { analysis: result.content || "Could not analyze image." };
+  }, { functionName: "vizzy-photo-analyze", requireCompany: false, wrapResult: false })
+);

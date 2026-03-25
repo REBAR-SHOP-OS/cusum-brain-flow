@@ -1,52 +1,9 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Verify caller
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: { user }, error: userErr } = await userClient.auth.getUser();
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Check role
-    const svc = createClient(supabaseUrl, serviceKey);
-    const { data: roles } = await svc
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id);
-
-    const userRoles = (roles || []).map((r: any) => r.role);
-    if (!userRoles.includes("admin") && !userRoles.includes("workshop") && !userRoles.includes("shop_supervisor")) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { profileId, faceBase64 } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { profileId, faceBase64 } = ctx.body;
     if (!profileId) {
       return new Response(JSON.stringify({ error: "profileId is required" }), {
         status: 400,
@@ -54,11 +11,8 @@ Deno.serve(async (req) => {
       });
     }
 
-
-
-
     // Check for open shift
-    const { data: openShifts } = await svc
+    const { data: openShifts } = await ctx.serviceClient
       .from("time_clock_entries")
       .select("id")
       .eq("profile_id", profileId)
@@ -68,7 +22,7 @@ Deno.serve(async (req) => {
 
     if (openShifts && openShifts.length > 0) {
       // Clock out — close all open shifts
-      const { error } = await svc
+      const { error } = await ctx.serviceClient
         .from("time_clock_entries")
         .update({ clock_out: new Date().toISOString() })
         .eq("profile_id", profileId)
@@ -81,10 +35,10 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      await svc.from("profiles").update({ is_active: false }).eq("id", profileId);
+      await ctx.serviceClient.from("profiles").update({ is_active: false }).eq("id", profileId);
       action = "clock_out";
     } else {
-      // Enforce 6 AM ET restriction for all users
+      // Enforce 6 AM ET restriction
       const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
       if (nowET.getHours() < 6) {
         return new Response(JSON.stringify({ error: "Clock-in is only available from 6:00 AM ET" }), {
@@ -93,8 +47,7 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Clock in
-      const { error } = await svc
+      const { error } = await ctx.serviceClient
         .from("time_clock_entries")
         .insert({ profile_id: profileId, source: "kiosk" });
 
@@ -105,14 +58,14 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      await svc.from("profiles").update({ is_active: true }).eq("id", profileId);
+      await ctx.serviceClient.from("profiles").update({ is_active: true }).eq("id", profileId);
       action = "clock_in";
     }
 
-    // Auto-enroll face if < 3 photos
+    // Auto-enroll face if < 5 photos
     if (faceBase64) {
       try {
-        const { count } = await svc
+        const { count } = await ctx.serviceClient
           .from("face_enrollments")
           .select("*", { count: "exact", head: true })
           .eq("profile_id", profileId);
@@ -121,12 +74,12 @@ Deno.serve(async (req) => {
           const filePath = `${profileId}/auto-${Date.now()}.jpg`;
           const byteArray = Uint8Array.from(atob(faceBase64), (c) => c.charCodeAt(0));
 
-          const { error: uploadErr } = await svc.storage
+          const { error: uploadErr } = await ctx.serviceClient.storage
             .from("face-enrollments")
             .upload(filePath, byteArray, { contentType: "image/jpeg" });
 
           if (!uploadErr) {
-            await svc.from("face_enrollments").insert({ profile_id: profileId, photo_url: filePath });
+            await ctx.serviceClient.from("face_enrollments").insert({ profile_id: profileId, photo_url: filePath });
           }
         }
       } catch (err) {
@@ -134,14 +87,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ action, profile_id: profileId }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("[kiosk-punch] exception:", err);
-    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { action, profile_id: profileId };
+  }, {
+    functionName: "kiosk-punch",
+    requireCompany: false,
+    requireAnyRole: ["admin", "workshop", "shop_supervisor"],
+    wrapResult: false,
+  })
+);

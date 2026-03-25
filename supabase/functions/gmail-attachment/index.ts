@@ -1,31 +1,10 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
-  return user.id;
-}
-
-async function getAccessToken(userId: string): Promise<string> {
-  const supabaseAdmin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-  );
-
-  const { data: tokenRow } = await supabaseAdmin
+async function getAccessToken(serviceClient: ReturnType<typeof createClient>, userId: string): Promise<string> {
+  const { data: tokenRow } = await serviceClient
     .from("user_gmail_tokens")
     .select("refresh_token, is_encrypted")
     .eq("user_id", userId)
@@ -36,9 +15,7 @@ async function getAccessToken(userId: string): Promise<string> {
     refreshToken = await decryptToken(refreshToken);
   }
 
-  if (!refreshToken) {
-    throw new Error("Gmail not connected.");
-  }
+  if (!refreshToken) throw new Error("Gmail not connected.");
 
   const clientId = Deno.env.get("GMAIL_CLIENT_ID");
   const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
@@ -60,21 +37,9 @@ async function getAccessToken(userId: string): Promise<string> {
   return data.access_token;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { messageId, attachmentId } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { messageId, attachmentId } = ctx.body;
     if (!messageId || !attachmentId) {
       return new Response(JSON.stringify({ error: "messageId and attachmentId required" }), {
         status: 400,
@@ -82,7 +47,7 @@ serve(async (req) => {
       });
     }
 
-    const accessToken = await getAccessToken(userId);
+    const accessToken = await getAccessToken(ctx.serviceClient, ctx.userId);
 
     const attRes = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`,
@@ -94,20 +59,8 @@ serve(async (req) => {
     }
 
     const attData = await attRes.json();
+    const base64Data = (attData.data || "").replace(/-/g, "+").replace(/_/g, "/");
 
-    // Gmail returns base64url-encoded data
-    const base64Data = (attData.data || "")
-      .replace(/-/g, "+")
-      .replace(/_/g, "/");
-
-    return new Response(JSON.stringify({ data: base64Data, size: attData.size }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("Gmail attachment error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { data: base64Data, size: attData.size };
+  }, { functionName: "gmail-attachment", requireCompany: false, wrapResult: false })
+);
