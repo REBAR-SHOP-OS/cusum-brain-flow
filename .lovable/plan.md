@@ -1,32 +1,52 @@
 
 
-## تغییر فلوی ایجنت آیزنهاور به مکالمه‌ای مرحله‌ای
+## اصلاح پاسخ آیزنهاور + افزودن دکمه ترجمه
 
-### وضعیت فعلی
-الان وقتی صفحه آیزنهاور باز می‌شود، یک hero/landing با تاریخ و فرم ورود نمایش داده می‌شود. کاربر باید خودش پیام بزند تا چت شروع شود.
+### مشکل ۱: پاسخ آیزنهاور بر اساس ایمیل‌ها و تماس‌ها
+الان ایجنت آیزنهاور اطلاعات ایمیل‌ها، مشتری‌ها و پروژه‌ها را دریافت می‌کند و از آن‌ها در ماتریس استفاده می‌کند، در حالی که فقط باید بر اساس آنچه کاربر در چت نوشته تحلیل کند.
 
-### فلوی جدید
-1. با کلیک "New chat"، بلافاصله یک **سشن چت ساخته شود** و ایجنت اولین پیام را بفرستد: "سلام! لطفاً ابتدا تاریخ مورد نظر را انتخاب کنید 📅" + دکمه تقویم inline
-2. بعد از انتخاب تاریخ، ایجنت پیام دوم: "تاریخ [X] انتخاب شد. حالا لیست کارهایی که انجام داده‌اید و کارهایی که قصد دارید انجام دهید را بنویسید."
-3. کاربر می‌نویسد → ایجنت با ماتریس آیزنهاور دسته‌بندی می‌کند
-4. بعد از پاسخ ایجنت، دکمه "Finalize Day ✅" ظاهر شود. با کلیک، پیام تشکر + قفل شدن ورودی
+### مشکل ۲: ترجمه پاسخ
+گزارش نهایی آیزنهاور به انگلیسی نوشته می‌شود و کاربر ممکن است بخواهد آن را به زبان خودش بخواند.
 
-### تغییرات فنی
+---
 
-**فایل: `src/pages/AgentWorkspace.tsx`**
+### تغییرات
 
-1. **حذف hero/landing آیزنهاور** (خطوط 908-921): بخش `agentId === "eisenhower"` در شرط `!hasConversation` حذف شود. به جای آن، وقتی آیزنهاور هست و هنوز مکالمه‌ای نیست، خودکار سشن ساخته شود و پیام اول ایجنت اضافه شود.
+#### ۱. `supabase/functions/_shared/agentContext.ts`
+در بخش ابتدایی (خطوط ۲۶-۴۵)، ایجنت `eisenhower` را به شرط skip اضافه می‌کنیم تا مانند `social` از دریافت ایمیل‌ها و مشتری‌ها صرف‌نظر کند:
 
-2. **افزودن `useEffect` برای auto-start آیزنهاور**: هنگام mount یا "New chat" اگر `agentId === "eisenhower"` و `messages.length === 0` و `!activeSessionId`:
-   - سشن جدید بساز
-   - پیام اولیه ایجنت را اضافه کن: "سلام! ابتدا تاریخ مورد نظر را از تقویم بالای صفحه انتخاب کنید 📅"
-   - `hasConversation` فعال شود تا مستقیم وارد ChatThread شویم
+```typescript
+if (agent === "social" || agent === "eisenhower") {
+  // Skip heavy communications context
+} else {
+  // ... existing email/customer fetches
+}
+```
 
-3. **واکنش به انتخاب تاریخ** در `handleDateChange`: اگر `agentId === "eisenhower"`، پیام جدید agent اضافه شود:
-   - `"📅 تاریخ [X] انتخاب شد.\n\nحالا لطفاً لیست کارهایی که انجام داده‌اید و کارهایی که قصد دارید انجام دهید را بنویسید."`
+#### ۲. `supabase/functions/_shared/agents/growth.ts`
+پرامت آیزنهاور را اصلاح می‌کنیم تا صریحاً بگوید **فقط** از تسک‌هایی که کاربر در چت نوشته استفاده کند و از اطلاعات context مانند ایمیل‌ها استفاده نکند:
 
-4. **بقیه فلو بدون تغییر**: کاربر می‌نویسد → `handleSend` ارسال به AI → ایجنت ماتریس برمی‌گرداند → دکمه "Finalize Day" (خطوط 977-988) همان‌طور که هست کار می‌کند.
+اضافه کردن به بخش Rules:
+```
+- ONLY analyze tasks that the user has explicitly typed in this chat session
+- Do NOT use context data like emails, missed calls, projects, or customer info to generate tasks
+- If the user hasn't listed tasks yet, ask them to do so. Never auto-generate tasks from system context.
+```
+
+#### ۳. `src/components/chat/MessageActions.tsx`
+افزودن دکمه ترجمه (🌐 Translate) به لیست اکشن‌ها:
+- با کلیک، یک دیالوگ/منو با لیست زبان‌ها نمایش داده شود (فارسی، عربی، ترکی، اسپانیایی، فرانسوی، آلمانی و ...)
+- با انتخاب زبان، edge function `translate-message` فراخوانی شود
+- متن ترجمه‌شده در یک بلاک جدید زیر پیام اصلی نمایش داده شود
+
+#### ۴. `src/components/chat/ChatMessage.tsx`
+- state برای نمایش متن ترجمه‌شده اضافه شود
+- بعد از bubble اصلی، اگر ترجمه وجود داشته باشد، یک بلاک ترجمه با پس‌زمینه متفاوت و لیبل زبان نمایش داده شود
+- callback `onTranslate` را از `MessageActions` دریافت کند
 
 ### فایل‌های درگیر
-- `src/pages/AgentWorkspace.tsx` — تنها فایل
+- `supabase/functions/_shared/agentContext.ts` — skip context برای eisenhower
+- `supabase/functions/_shared/agents/growth.ts` — اصلاح پرامت
+- `src/components/chat/MessageActions.tsx` — افزودن دکمه ترجمه
+- `src/components/chat/ChatMessage.tsx` — نمایش متن ترجمه‌شده
 
