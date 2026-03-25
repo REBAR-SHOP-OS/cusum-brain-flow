@@ -67,6 +67,18 @@ export default function SocialMediaManager() {
     () => (selectedPostId ? posts.find((p) => p.id === selectedPostId) ?? null : null),
     [selectedPostId, posts]
   );
+
+  // Derive groupPages from current posts so it always reflects latest DB state
+  const groupPages = useMemo(() => {
+    if (!selectedPost) return [];
+    const day = selectedPost.scheduled_date?.substring(0, 10);
+    const siblings = posts.filter(s =>
+      s.title === selectedPost.title &&
+      s.platform === selectedPost.platform &&
+      (day ? s.scheduled_date?.substring(0, 10) === day : s.id === selectedPost.id)
+    );
+    return [...new Set(siblings.map(s => s.page_name).filter(Boolean))] as string[];
+  }, [selectedPost, posts]);
   const setSelectedPost = useCallback((post: SocialPost | null) => {
     setSelectedPostId(post?.id ?? null);
   }, []);
