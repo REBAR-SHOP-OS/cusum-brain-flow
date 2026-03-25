@@ -1,23 +1,29 @@
 
 
-## Fix: Eisenhower Agent Language Policy
+## اصلاح تولبار چت ایجنت آیزنهاور
 
-### Problem
-The current prompt (line 116) says "Always respond in the same language the user writes in" — so when the user writes in Persian, the agent responds in English saying "Farsi is for internal use only." The user wants Persian input to be accepted, but the final structured report (quadrants + action plan) must always be in English.
+### مشکل
+در صفحه ایجنت آیزنهاور، تولبار پایین چت شامل آیکون‌های اضافی (ایموجی، تمپلیت، فرمتینگ، هش‌تگ) است. کاربر فقط می‌خواهد آیکون **ویس** (با انتخاب زبان) و **Attach** باقی بمانند.
 
-### Change
+### تغییرات
 
-**File: `supabase/functions/_shared/agents/growth.ts`** — line 116
+**فایل: `src/pages/AgentWorkspace.tsx`**
+- یک prop جدید به `ChatInput` اضافه شود: `voiceAndAttachOnly={agentId === "eisenhower"}`
+- این prop در هر دو جایی که `ChatInput` رندر می‌شود (خط 891 و 921) اعمال شود
 
-Replace the current LANGUAGE rule:
+**فایل: `src/components/chat/ChatInput.tsx`**
+- prop جدید `voiceAndAttachOnly?: boolean` به interface اضافه شود
+- در بخش تولبار (خط 416-460): وقتی `voiceAndAttachOnly` فعال باشد، فقط `VoiceInputButton` رندر شود (بدون ایموجی، تمپلیت، فرمتینگ، هش)
+- بخش `showFileUpload` (attach) بدون تغییر باقی بماند چون همین الان هم نمایش داده می‌شود
+
+### منطق تولبار بعد از تغییر
+
+```text
+voiceAndAttachOnly=true  →  [Voice+LangSelector] [Attach]  [........textarea........]  [Send]
+voiceAndAttachOnly=false →  [Emoji] [Voice] [Templates] [Format] [Hash] [Attach]  [textarea]  [Send]
 ```
-- **LANGUAGE**: Always respond in the same language the user writes in. If the user writes in Persian, respond entirely in Persian. If English, respond in English. Match the user's language exactly.
-```
 
-With:
-```
-- **LANGUAGE**: You MUST understand and accept input in ANY language, including Persian (Farsi). However, your final structured output (quadrant categorization and action plan) MUST ALWAYS be written in English. If the user writes in Persian, you may acknowledge their input briefly in Persian, but the Eisenhower Matrix report itself must be in English. Never refuse or redirect a user for writing in a non-English language.
-```
-
-Single-line change in one file.
+### فایل‌های درگیر
+- `src/components/chat/ChatInput.tsx`
+- `src/pages/AgentWorkspace.tsx`
 
