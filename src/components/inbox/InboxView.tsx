@@ -727,7 +727,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
                     </span>
                     {selectedIds.size > 0 && (
                       <div className="flex items-center gap-1 ml-auto">
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive" onClick={handleBulkDelete}>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive" onClick={() => setShowDeleteConfirm(true)}>
                           <Trash2 className="w-3.5 h-3.5" />Delete
                         </Button>
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={handleBulkArchive}>
