@@ -784,6 +784,27 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         <SMSTemplateManager open={showSMSTemplates} onOpenChange={setShowSMSTemplates} />
         <CallAnalyticsDashboard open={showCallAnalytics} onOpenChange={setShowCallAnalytics} />
         <EmailAnalyticsDashboard open={showEmailAnalytics} onOpenChange={setShowEmailAnalytics} />
+
+        {/* Bulk Delete Confirmation */}
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {selectedIds.size} email(s)?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. The selected emails will be permanently deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => { handleBulkDelete(); setShowDeleteConfirm(false); }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </TooltipProvider>
   );
