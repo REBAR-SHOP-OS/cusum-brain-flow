@@ -1,15 +1,8 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase } = ctx;
 
     // 1. Get all enabled automations
     const { data: automations, error: autoErr } = await supabase
@@ -19,9 +12,7 @@ Deno.serve(async (req) => {
 
     if (autoErr) throw autoErr;
     if (!automations || automations.length === 0) {
-      return new Response(JSON.stringify({ message: "No enabled automations" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { message: "No enabled automations" };
     }
 
     const results: Record<string, { triggered: boolean; campaigns_created: number; reason?: string }> = {};
@@ -36,7 +27,6 @@ Deno.serve(async (req) => {
 
         switch (key) {
           case "abandoned_cart": {
-            // Quotes sent > delay_hours ago with no matching order
             const delayHours = (config as any).delay_hours || 48;
             const cutoff = new Date(Date.now() - delayHours * 3600 * 1000).toISOString();
             const { data: staleQuotes } = await supabase
@@ -84,7 +74,6 @@ Deno.serve(async (req) => {
               .limit(20);
 
             if (recentOrders?.length) {
-              // Get contacts for these customers
               const customerIds = [...new Set(recentOrders.map((o: any) => o.customer_id).filter(Boolean))];
               if (customerIds.length) {
                 const { data: contacts } = await supabase
@@ -129,14 +118,12 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Deduplicate and create campaign if contacts found
         contactIds = [...new Set(contactIds)];
         if (contactIds.length === 0) {
           results[key] = { triggered: false, campaigns_created: 0, reason: "No qualifying contacts" };
           continue;
         }
 
-        // Check if a pending campaign already exists for this automation (avoid duplicates)
         const { data: existing } = await supabase
           .from("email_campaigns")
           .select("id")
@@ -151,7 +138,6 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Create a pending_approval campaign
         const { error: insertErr } = await supabase.from("email_campaigns").insert({
           title: `[Auto] ${automation.name} — ${new Date().toLocaleDateString()}`,
           campaign_type: automation.campaign_type,
@@ -164,7 +150,6 @@ Deno.serve(async (req) => {
 
         if (insertErr) throw insertErr;
 
-        // Update automation stats
         await supabase
           .from("email_automations")
           .update({
@@ -179,13 +164,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { results };
+  }, { functionName: "email-automation-check", authMode: "none", requireCompany: false, wrapResult: false })
+);

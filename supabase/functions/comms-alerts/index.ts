@@ -1,7 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
 interface CommsConfig {
@@ -51,13 +49,8 @@ const SKIP_SUBJECT_PATTERNS: RegExp[] = [
   /\bSynology\b/i,
 ];
 
-// Bot / system recipient addresses that should never receive alerts about themselves
 const BOT_RECIPIENTS = ["ai@rebar.shop"];
 
-/**
- * Determines whether an alert should be skipped for a given communication.
- * Returns a reason string if skipped, or null if the alert should proceed.
- */
 function shouldSkipAlert(
   comm: { from_address?: string; to_address?: string; subject?: string },
   internalDomain: string,
@@ -66,22 +59,18 @@ function shouldSkipAlert(
   const to = (comm.to_address || "").toLowerCase();
   const subject = comm.subject || "";
 
-  // Layer 1: Known spam / system senders
   for (const pattern of SKIP_SENDERS) {
     if (from.includes(pattern)) return `skip_sender:${pattern}`;
   }
 
-  // Layer 2: Internal emails (same domain)
   if (internalDomain && from.includes(`@${internalDomain.replace(/^@/, "").toLowerCase()}`)) {
     return "internal_sender";
   }
 
-  // Bot recipients — don't alert about emails TO the bot
   for (const bot of BOT_RECIPIENTS) {
     if (to.includes(bot)) return `bot_recipient:${bot}`;
   }
 
-  // Layer 4: Subject-based spam detection
   for (const rx of SKIP_SUBJECT_PATTERNS) {
     if (rx.test(subject)) return `skip_subject:${rx.source}`;
   }
@@ -89,23 +78,22 @@ function shouldSkipAlert(
   return null;
 }
 
-// ── Layer 3 helper: pick only the highest breached threshold ──
 function highestBreachedThreshold(
   receivedAt: string,
   thresholds: number[],
   now: Date,
 ): number | null {
-  const age = (now.getTime() - new Date(receivedAt).getTime()) / 3_600_000; // hours
-  const sorted = [...thresholds].sort((a, b) => b - a); // descending
+  const age = (now.getTime() - new Date(receivedAt).getTime()) / 3_600_000;
+  const sorted = [...thresholds].sort((a, b) => b - a);
   for (const t of sorted) {
     if (age >= t) return t;
   }
   return null;
 }
 
-// ── Gmail helpers (unchanged) ──
+// ── Gmail helpers ──
 
-async function getInternalSenderToken(svc: ReturnType<typeof createClient>): Promise<string> {
+async function getInternalSenderToken(svc: any): Promise<string> {
   const { data: profile } = await svc
     .from("profiles")
     .select("user_id")
@@ -156,7 +144,6 @@ async function getInternalSenderToken(svc: ReturnType<typeof createClient>): Pro
   return data.access_token;
 }
 
-// Safe base64 encode for potentially large strings
 function uint8ToBase64(bytes: Uint8Array): string {
   let binary = "";
   const chunkSize = 8192;
@@ -171,12 +158,8 @@ function uint8ToBase64(bytes: Uint8Array): string {
 
 function createRawEmail(to: string, subject: string, body: string, fromEmail: string): string {
   const encoder = new TextEncoder();
-
-  // MIME encoded-word (RFC 2047) for subject to handle Unicode
   const subjectB64 = uint8ToBase64(encoder.encode(subject));
   const encodedSubject = `=?UTF-8?B?${subjectB64}?=`;
-
-  // Base64-encode the HTML body separately
   const bodyB64 = uint8ToBase64(encoder.encode(body));
 
   const lines = [
@@ -190,7 +173,6 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
     bodyB64,
   ];
   const raw = lines.join("\r\n");
-  // Gmail API expects URL-safe base64 of the entire raw message
   const rawB64 = uint8ToBase64(encoder.encode(raw));
   return rawB64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -218,7 +200,6 @@ function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentN
     ? `Missed Call from ${comm.from_address || "Unknown"}`
     : `Unanswered Email \u2014 ${breachLabel} breach`;
 
-  // Calculate how long ago the email was received
   const receivedDate = comm.received_at ? new Date(comm.received_at) : null;
   const ageHours = receivedDate ? Math.round((Date.now() - receivedDate.getTime()) / 3_600_000 * 10) / 10 : null;
   const ageLabel = ageHours != null ? `${ageHours}h ago` : "";
@@ -248,14 +229,9 @@ function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentN
 </div></body></html>`;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const svc = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: svc } = ctx;
 
     // Load config
     const { data: configRow } = await svc
@@ -264,12 +240,7 @@ serve(async (req) => {
       .eq("company_id", "a0000000-0000-0000-0000-000000000001")
       .maybeSingle();
 
-    if (!configRow) {
-      return new Response(JSON.stringify({ error: "No comms_config found" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!configRow) throw new Error("No comms_config found");
 
     const config: CommsConfig = {
       external_sender: configRow.external_sender,
@@ -282,7 +253,6 @@ serve(async (req) => {
       no_act_global: configRow.no_act_global,
     };
 
-    // Load pairings for owner lookup
     const { data: pairings } = await svc.from("comms_agent_pairing").select("*");
     const pairingMap = new Map((pairings || []).map((p: any) => [p.user_email, p]));
 
@@ -290,9 +260,7 @@ serve(async (req) => {
     const alerts: { type: string; commId: string; owner: string; agent: string; comm: any }[] = [];
     let skippedCount = 0;
 
-    // --- Response-time alerts (with Layer 1-4 filtering + Layer 3 escalation) ---
-
-    // Gather ALL unanswered inbound emails from last 48h
+    // --- Response-time alerts ---
     const oldestWindow = new Date(now.getTime() - 48 * 3600 * 1000);
     const { data: unanswered } = await svc
       .from("communications")
@@ -303,30 +271,16 @@ serve(async (req) => {
       .limit(200);
 
     for (const comm of unanswered || []) {
-      // Skip already-resolved or archived communications
-      if (comm.resolved_at || comm.status === "archived") {
-        skippedCount++;
-        continue;
-      }
+      if (comm.resolved_at || comm.status === "archived") { skippedCount++; continue; }
 
-      // ── Layers 1/2/4: Should we skip this comm entirely? ──
       const skipReason = shouldSkipAlert(comm, config.internal_domain);
-      if (skipReason) {
-        skippedCount++;
-        continue;
-      }
+      if (skipReason) { skippedCount++; continue; }
 
-      // ── Layer 3: Only fire the HIGHEST breached threshold ──
-      const highestThreshold = highestBreachedThreshold(
-        comm.received_at,
-        config.response_thresholds_hours,
-        now,
-      );
-      if (!highestThreshold) continue; // not old enough for any threshold
+      const highestThreshold = highestBreachedThreshold(comm.received_at, config.response_thresholds_hours, now);
+      if (!highestThreshold) continue;
 
       const alertType = `response_time_${highestThreshold}h`;
 
-      // Check if a reply exists — by thread_id OR by matching from→to outbound
       let hasReply = false;
       if (comm.thread_id) {
         const { count } = await svc
@@ -337,7 +291,6 @@ serve(async (req) => {
           .gt("received_at", comm.received_at);
         if (count && count > 0) hasReply = true;
       }
-      // Fallback: check if there's ANY outbound to this sender after received_at
       if (!hasReply && comm.from_address) {
         const senderEmail = comm.from_address.toLowerCase();
         const { count: directReply } = await svc
@@ -350,7 +303,6 @@ serve(async (req) => {
       }
       if (hasReply) continue;
 
-      // Check if THIS specific alert already exists (dedup)
       const { count: alertExists } = await svc
         .from("comms_alerts")
         .select("id", { count: "exact", head: true })
@@ -358,7 +310,6 @@ serve(async (req) => {
         .eq("alert_type", alertType);
       if (alertExists && alertExists > 0) continue;
 
-      // Find owner from to_address
       const ownerEmail = comm.to_address?.toLowerCase() || "";
       const pairing = pairingMap.get(ownerEmail);
 
@@ -390,7 +341,6 @@ serve(async (req) => {
         .eq("alert_type", "missed_call");
       if (alertExists && alertExists > 0) continue;
 
-      // Map RC extension to owner
       let ownerEmail = comm.to_address || "";
       if (meta?.extension) {
         const extPairing = (pairings || []).find((p: any) => p.rc_extension === meta.extension);
@@ -411,7 +361,6 @@ serve(async (req) => {
     const results: { type: string; owner: string; sent: boolean }[] = [];
 
     for (const alert of alerts) {
-      // Insert alert record
       await svc.from("comms_alerts").insert({
         alert_type: alert.type,
         communication_id: alert.commId,
@@ -420,7 +369,6 @@ serve(async (req) => {
         metadata: { agent_name: alert.agent, subject: alert.comm.subject },
       });
 
-      // Send email notifications
       try {
         if (!accessToken) accessToken = await getInternalSenderToken(svc);
 
@@ -429,7 +377,6 @@ serve(async (req) => {
           ? `[Alert] Missed call from ${alert.comm.from_address || "Unknown"}`
           : `[Alert] Unanswered email - ${alert.type.replace("response_time_", "")} - ${alert.comm.subject || ""}`;
 
-        // Send to owner
         if (alert.owner) {
           const ownerOk = await sendAlertEmail(accessToken, alert.owner, subj, html);
           if (ownerOk) {
@@ -440,7 +387,6 @@ serve(async (req) => {
           }
         }
 
-        // Send to CEO
         const ceoOk = await sendAlertEmail(accessToken, config.ceo_email, subj, html);
         if (ceoOk) {
           await svc.from("comms_alerts")
@@ -469,15 +415,6 @@ serve(async (req) => {
       });
     }
 
-    return new Response(
-      JSON.stringify({ success: true, alertsProcessed: alerts.length, skipped: skippedCount, results }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("comms-alerts error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { success: true, alertsProcessed: alerts.length, skipped: skippedCount, results };
+  }, { functionName: "comms-alerts", authMode: "none", requireCompany: false, wrapResult: false })
+);

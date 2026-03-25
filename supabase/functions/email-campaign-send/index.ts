@@ -1,44 +1,13 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const RATE_LIMIT_PER_MINUTE = 50;
-const DELAY_MS = Math.ceil(60000 / RATE_LIMIT_PER_MINUTE); // ~1200ms between sends
+const DELAY_MS = Math.ceil(60000 / RATE_LIMIT_PER_MINUTE);
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabaseAdmin, body } = ctx;
 
-  try {
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: claims, error: claimsErr } = await supabase.auth.getClaims(
-      authHeader.replace("Bearer ", "")
-    );
-    if (claimsErr || !claims?.claims) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const userId = claims.claims.sub as string;
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
-
-    const { campaign_id } = await req.json();
+    const { campaign_id } = body;
     if (!campaign_id) throw new Error("campaign_id required");
 
     // Load campaign
@@ -76,7 +45,7 @@ serve(async (req) => {
       .update({ status: "sending" })
       .eq("id", campaign_id);
 
-    // Get eligible contacts (have email, not suppressed)
+    // Get eligible contacts
     const { data: suppressedEmails } = await supabaseAdmin
       .from("email_suppressions")
       .select("email");
@@ -91,20 +60,14 @@ serve(async (req) => {
       (c: any) => c.email && !suppressSet.has(c.email.toLowerCase())
     );
 
-    // TODO: Apply segment_rules filtering here for targeted campaigns
-    // For MVP, send to all non-suppressed contacts with email
-
     let sentCount = 0;
     let failCount = 0;
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Get the unsubscribe base URL
     const unsubscribeBase = `${supabaseUrl}/functions/v1/email-unsubscribe`;
 
     for (const contact of eligible) {
       try {
-        // Create unsubscribe token (simple base64 for MVP)
         const unsubToken = btoa(JSON.stringify({
           email: contact.email,
           campaign_id,
@@ -112,13 +75,11 @@ serve(async (req) => {
         }));
         const unsubscribeUrl = `${unsubscribeBase}?token=${encodeURIComponent(unsubToken)}`;
 
-        // Replace unsubscribe placeholder
         const personalizedHtml = (campaign.body_html || "")
           .replace(/\{\{unsubscribe_url\}\}/g, unsubscribeUrl)
           .replace(/\{\{first_name\}\}/g, contact.first_name || "")
           .replace(/\{\{last_name\}\}/g, contact.last_name || "");
 
-        // Log the send
         await supabaseAdmin.from("email_campaign_sends").insert({
           campaign_id,
           contact_id: contact.id,
@@ -126,13 +87,11 @@ serve(async (req) => {
           status: "queued",
         });
 
-        // Build RFC 8058 List-Unsubscribe headers
         const listUnsubscribeHeaders: Record<string, string> = {
           "List-Unsubscribe": `<${unsubscribeUrl}>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         };
 
-        // Send via gmail-send with RFC 8058 headers
         const sendResp = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
           method: "POST",
           headers: {
@@ -162,7 +121,6 @@ serve(async (req) => {
             .eq("campaign_id", campaign_id)
             .eq("email", contact.email);
 
-          // Auto-suppress bounces
           if (sendResp.status >= 400) {
             await supabaseAdmin.from("email_suppressions").upsert({
               email: contact.email.toLowerCase(),
@@ -174,7 +132,6 @@ serve(async (req) => {
           failCount++;
         }
 
-        // Rate limit
         await new Promise((r) => setTimeout(r, DELAY_MS));
       } catch (err) {
         console.error(`Failed to send to ${contact.email}:`, err);
@@ -192,18 +149,10 @@ serve(async (req) => {
       })
       .eq("id", campaign_id);
 
-    return new Response(
-      JSON.stringify({
-        message: `Campaign sent. ${sentCount} delivered, ${failCount} failed.`,
-        sent: sentCount,
-        failed: failCount,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("email-campaign-send error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return {
+      message: `Campaign sent. ${sentCount} delivered, ${failCount} failed.`,
+      sent: sentCount,
+      failed: failCount,
+    };
+  }, { functionName: "email-campaign-send", requireCompany: false, wrapResult: false })
+);

@@ -1,37 +1,14 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, userId } = ctx;
 
-  try {
-    // Authenticate: accept service_role key only (cron / manual admin trigger)
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const token = authHeader.replace("Bearer ", "");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-
-    // Allow service role or check user is admin
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
-
-    if (token !== serviceRoleKey) {
-      // Verify the caller is an admin
-      const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      });
-      const { data: { user } } = await userClient.auth.getUser();
-      if (!user) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    // If authenticated but not admin, reject
+    if (userId) {
       const { data: isAdmin } = await supabase.rpc("has_role", {
-        _user_id: user.id,
+        _user_id: userId,
         _role: "admin",
       });
       if (!isAdmin) {
@@ -74,13 +51,11 @@ serve(async (req) => {
       for (const lead of breachedLeads) {
         const slaInfo = SLA_ESCALATION_MAP[lead.stage] || { hours: 24, target: "Ops Mgr" };
 
-        // Mark breached
         await supabase
           .from("leads")
           .update({ sla_breached: true, escalated_to: slaInfo.target })
           .eq("id", lead.id);
 
-        // Log to escalation table
         await supabase.from("sla_escalation_log").insert({
           entity_type: "lead",
           entity_id: lead.id,
@@ -90,7 +65,6 @@ serve(async (req) => {
           company_id: lead.company_id,
         });
 
-        // Create human_task
         const dedupeKey = `sla:lead:${lead.id}:${lead.stage}`;
         await supabase.from("human_tasks").upsert(
           {
@@ -114,7 +88,6 @@ serve(async (req) => {
     }
 
     // ── 2. Order-level breaches ──
-    // Production blocked > 12h
     const twelveHoursAgo = new Date(now.getTime() - 12 * 3600000).toISOString();
     const { data: blockedOrders } = await supabase
       .from("orders")
@@ -196,7 +169,7 @@ serve(async (req) => {
       }
     }
 
-    // ── 3. Revision offenders (>1 revision — immediate escalation) ──
+    // ── 3. Revision offenders ──
     const { data: revisionOrders } = await supabase
       .from("orders")
       .select("id, order_number, company_id, customer_revision_count")
@@ -227,15 +200,6 @@ serve(async (req) => {
       }
     }
 
-    return new Response(
-      JSON.stringify({ breaches_processed: breachCount, checked_at: now.toISOString() }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("check-sla-breaches error:", e);
-    return new Response(JSON.stringify({ error: String(e) }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { breaches_processed: breachCount, checked_at: now.toISOString() };
+  }, { functionName: "check-sla-breaches", authMode: "optional", requireCompany: false, wrapResult: false })
+);
