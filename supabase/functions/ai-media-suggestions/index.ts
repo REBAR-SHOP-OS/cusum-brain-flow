@@ -1,18 +1,12 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI } from "../_shared/aiRouter.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { type, keywords, brand_context } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { type, keywords, brand_context } = body;
 
     if (!type || !["video", "image"].includes(type)) {
-      return new Response(JSON.stringify({ error: "type must be 'video' or 'image'" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      throw new Error("type must be 'video' or 'image'");
     }
 
     const keywordList = (keywords || [])
@@ -64,18 +58,11 @@ ${brandInfo}`;
       const cleaned = result.content.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       suggestions = JSON.parse(cleaned);
       if (!Array.isArray(suggestions)) suggestions = [];
-      suggestions = suggestions.slice(0, 4).map(s => String(s).trim()).filter(Boolean);
+      suggestions = suggestions.slice(0, 4).map((s) => String(s).trim()).filter(Boolean);
     } catch {
       console.error("Failed to parse AI suggestions:", result.content);
     }
 
-    return new Response(JSON.stringify({ suggestions }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("ai-media-suggestions error:", e);
-    return new Response(JSON.stringify({ error: e.message || "Failed to generate suggestions" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { suggestions };
+  }, { functionName: "ai-media-suggestions", requireCompany: false, wrapResult: false })
+);

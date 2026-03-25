@@ -1,14 +1,8 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { callAI } from "../_shared/aiRouter.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const payload = await req.json();
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
     const systemPrompt = `You are a senior forensic accountant AI. Analyze the QuickBooks data provided and return actionable audit findings.
 
 Return ONLY a JSON object with this exact shape:
@@ -35,35 +29,19 @@ Rules:
 - Be specific: name customers, amounts, dates when available
 - Look for: overdue AR/AP, duplicate invoices, cash flow gaps, unusual patterns, collection efficiency, vendor concentration risk, dormant accounts`;
 
-    const userPrompt = `Analyze this QuickBooks data:\n\n${JSON.stringify(payload, null, 2)}`;
-
     const result = await callAI({
       provider: "gemini",
       model: "gemini-2.5-flash",
       agentName: "accounting",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
+        { role: "user", content: `Analyze this QuickBooks data:\n\n${JSON.stringify(body, null, 2)}` },
       ],
       temperature: 0.3,
     });
 
     const raw = result.content;
     const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, raw];
-    const parsed = JSON.parse(jsonMatch[1]!.trim());
-
-    return new Response(JSON.stringify(parsed), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("qb-audit error:", e);
-    if (e instanceof AIError) {
-      return new Response(JSON.stringify({ error: e.message }), {
-        status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return JSON.parse(jsonMatch[1]!.trim());
+  }, { functionName: "qb-audit", requireCompany: false, wrapResult: false })
+);
