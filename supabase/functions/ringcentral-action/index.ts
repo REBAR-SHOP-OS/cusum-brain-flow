@@ -1,11 +1,9 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const RC_SERVER = "https://platform.ringcentral.com";
-// Intentional access normalization: radin@rebar.shop added
 import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
   const { data: tokenRow } = await supabaseAdmin
