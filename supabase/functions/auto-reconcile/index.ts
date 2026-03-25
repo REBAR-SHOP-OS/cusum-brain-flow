@@ -1,25 +1,16 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 
 /**
  * Auto-Reconciliation Engine
  * 
  * CRITICAL RULE: Only auto-match at 100% confidence.
  * Anything below 100% creates a human_task for Vicky to review.
- * 
- * Matching criteria for 100% confidence:
- * - Exact amount match (to the cent)
- * - Exact date match (same day)
- * - Customer/vendor name match
- * - Single possible match (no ambiguity)
  */
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId, serviceClient: supabase } = await requireAuth(req);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase } = ctx;
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -29,10 +20,6 @@ serve(async (req) => {
 
     if (!profile?.company_id) return json({ error: "No company found" }, 400);
     const companyId = profile.company_id;
-
-    // Load bank feed balances (these represent known bank transactions)
-    // In a real integration, we'd pull actual bank transactions. 
-    // For now, we match against accounting_mirror entries.
 
     // Load all unreconciled transactions from accounting_mirror
     const { data: mirrorTxns } = await supabase
@@ -44,7 +31,7 @@ serve(async (req) => {
       .limit(500);
 
     if (!mirrorTxns || mirrorTxns.length === 0) {
-      return json({ matched: 0, pending_review: 0, message: "No transactions to reconcile" });
+      return { matched: 0, pending_review: 0, message: "No transactions to reconcile" };
     }
 
     // Load existing matches to deduplicate
@@ -67,7 +54,6 @@ serve(async (req) => {
       (customers || []).forEach(c => customerMap.set(c.id, c.name));
     }
 
-    // Group transactions by amount+date for matching
     interface TxnEntry {
       id: string;
       quickbooks_id: string;
@@ -110,7 +96,6 @@ serve(async (req) => {
       }
     }
 
-    // Match payments to receivables
     const matchResults: {
       mirror_id: string;
       entity_type: string;
@@ -123,20 +108,17 @@ serve(async (req) => {
     }[] = [];
 
     for (const payment of payments) {
-      // Find receivables with exact same amount
       const amountMatches = receivables.filter(r =>
         Math.abs(r.amount - payment.amount) < 0.01
       );
 
       if (amountMatches.length === 0) continue;
 
-      // Filter by same customer
       const customerMatches = amountMatches.filter(r =>
         r.customer_name && payment.customer_name &&
         r.customer_name.toLowerCase() === payment.customer_name.toLowerCase()
       );
 
-      // Filter by same date
       const dateAndCustomerMatches = customerMatches.filter(r => r.date === payment.date);
 
       let confidence = 0;
@@ -144,24 +126,20 @@ serve(async (req) => {
       let reason = "";
 
       if (dateAndCustomerMatches.length === 1) {
-        // EXACT match: same amount, same customer, same date, single result
         confidence = 100;
         matchedTo = dateAndCustomerMatches[0];
         reason = `Exact match: amount $${payment.amount}, customer "${payment.customer_name}", date ${payment.date}`;
       } else if (customerMatches.length === 1) {
-        // Same amount + same customer, different date
         confidence = 85;
         matchedTo = customerMatches[0];
         reason = `Amount + customer match: $${payment.amount}, "${payment.customer_name}". Dates differ: payment ${payment.date} vs receivable ${matchedTo.date}`;
       } else if (amountMatches.length === 1) {
-        // Same amount, different customer or no customer
         confidence = 60;
         matchedTo = amountMatches[0];
         reason = `Amount-only match: $${payment.amount}. Customer may differ.`;
       } else if (amountMatches.length > 1) {
-        // Multiple amount matches — ambiguous
         confidence = 30;
-        matchedTo = amountMatches[0]; // Pick first as suggestion
+        matchedTo = amountMatches[0];
         reason = `Ambiguous: ${amountMatches.length} transactions with same amount $${payment.amount}. Manual review required.`;
       }
 
@@ -185,7 +163,6 @@ serve(async (req) => {
     for (const match of matchResults) {
       const isAutoMatch = match.confidence === 100;
 
-      // Insert reconciliation match record
       await supabase.from("reconciliation_matches").insert({
         company_id: companyId,
         bank_account_id: "qb-mirror",
@@ -205,8 +182,6 @@ serve(async (req) => {
       } else {
         pendingReviewCount++;
 
-        // Create human_task for Vicky to review
-        // Find Vicky's profile
         const { data: vickyProfile } = await supabase
           .from("profiles")
           .select("id")
@@ -215,7 +190,6 @@ serve(async (req) => {
           .limit(1)
           .single();
 
-        // Also try by email if not found by name
         let assignedTo = vickyProfile?.id;
         if (!assignedTo) {
           const { data: vickyByEmail } = await supabase
@@ -226,12 +200,6 @@ serve(async (req) => {
             .limit(1)
             .single();
           assignedTo = vickyByEmail?.id;
-        }
-
-        // Fallback: assign to any admin
-        if (!assignedTo) {
-          const { data: adminProfile } = await supabase.rpc("get_user_company_id", { _user_id: userId });
-          // Just leave unassigned if no Vicky found
         }
 
         await supabase.from("human_tasks").insert({
@@ -247,7 +215,6 @@ serve(async (req) => {
     }
 
     // ── Stripe-QB Reconciliation ──
-    // Check Stripe payments against cached payment links
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     if (stripeKey) {
       try {
@@ -258,7 +225,6 @@ serve(async (req) => {
           .eq("status", "active");
 
         for (const link of activeLinks || []) {
-          // Check if this invoice is already matched
           const { data: existingMatch } = await supabase
             .from("reconciliation_matches")
             .select("id")
@@ -268,7 +234,6 @@ serve(async (req) => {
 
           if (existingMatch) continue;
 
-          // Query Stripe for completed checkout sessions for this payment link
           try {
             const sessionsRes = await fetch(
               `https://api.stripe.com/v1/checkout/sessions?payment_link=${link.stripe_payment_link_id}&status=complete&limit=5`,
@@ -283,7 +248,6 @@ serve(async (req) => {
               const paidAmount = (session.amount_total || 0) / 100;
               const amountMatch = Math.abs(paidAmount - Number(link.amount)) < 0.01;
 
-              // Find corresponding QB invoice in mirror
               const { data: mirrorInvoice } = await supabase
                 .from("accounting_mirror")
                 .select("id, quickbooks_id, data")
@@ -315,7 +279,6 @@ serve(async (req) => {
                 autoMatchCount++;
               } else {
                 pendingReviewCount++;
-                // Create human task for review
                 await supabase.from("human_tasks").insert({
                   company_id: companyId,
                   title: `💳 Stripe Payment Review: Invoice #${link.invoice_number} $${paidAmount}`,
@@ -335,7 +298,7 @@ serve(async (req) => {
       }
     }
 
-    return json({
+    return {
       total_processed: mirrorTxns.length,
       matched: autoMatchCount,
       pending_review: pendingReviewCount,
@@ -344,10 +307,6 @@ serve(async (req) => {
         : pendingReviewCount > 0
         ? `${pendingReviewCount} potential match(es) sent to Vicky for review (below 100% confidence).`
         : "No new matches found.",
-    });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("auto-reconcile error:", e);
-    return json({ error: String(e) }, 500);
-  }
-});
+    };
+  }, { functionName: "auto-reconcile", requireCompany: false, wrapResult: false })
+);

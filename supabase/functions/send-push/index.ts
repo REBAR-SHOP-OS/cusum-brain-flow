@@ -1,9 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 // Web Push crypto utilities for Deno (no npm dependency needed)
-// Uses the Web Push protocol directly with the Web Crypto API
 
 async function importVapidKeys(publicKeyB64: string, privateKeyB64: string) {
   const publicKeyBytes = base64UrlToUint8Array(publicKeyB64);
@@ -46,11 +44,9 @@ async function createJWT(audience: string, subject: string, vapidPrivateKey: Cry
     { name: "ECDSA", hash: "SHA-256" }, vapidPrivateKey, enc.encode(unsigned)
   );
 
-  // Convert DER signature to raw r||s format
   const sigBytes = new Uint8Array(signature);
   let r: Uint8Array, s: Uint8Array;
   if (sigBytes[0] === 0x30) {
-    // DER encoded
     const rLen = sigBytes[3];
     const rStart = 4;
     const rBytes = sigBytes.slice(rStart, rStart + rLen);
@@ -92,7 +88,6 @@ async function encryptPayload(
     { name: "ECDH", public: userPublicKey }, localKeyPair.privateKey, 256
   ));
 
-  // HKDF for auth info
   const authInfo = enc.encode("Content-Encoding: auth\0");
   const prkKey = await crypto.subtle.importKey("raw", sharedSecret, { name: "HKDF" }, false, ["deriveBits"]);
   const ikm = new Uint8Array(await crypto.subtle.deriveBits(
@@ -101,7 +96,6 @@ async function encryptPayload(
 
   const salt = crypto.getRandomValues(new Uint8Array(16));
 
-  // Key info and nonce info
   const keyInfoBuf = new Uint8Array([
     ...enc.encode("Content-Encoding: aesgcm\0P-256\0"),
     0, 65, ...userPublicKeyBytes, 0, 65, ...localPublicKeyRaw
@@ -119,7 +113,6 @@ async function encryptPayload(
     { name: "HKDF", hash: "SHA-256", salt, info: nonceInfoBuf }, ikmKey, 96
   ));
 
-  // Pad and encrypt
   const padded = new Uint8Array(2 + enc.encode(payload).length);
   padded.set([0, 0], 0);
   padded.set(enc.encode(payload), 2);
@@ -162,7 +155,7 @@ async function sendWebPush(
 
     if (resp.status === 410 || resp.status === 404) {
       console.log(`Subscription expired/invalid: ${subscription.endpoint.slice(0, 60)}...`);
-      return false; // Subscription gone
+      return false;
     }
     if (!resp.ok) {
       console.error(`Push failed (${resp.status}):`, await resp.text());
@@ -174,21 +167,16 @@ async function sendWebPush(
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: svc, body } = ctx;
+    const { user_id, title, body: pushBody, linkTo, tag } = body;
 
-  try {
-    const { user_id, title, body, linkTo, tag } = await req.json();
     if (!user_id || !title) {
       return new Response(JSON.stringify({ error: "user_id and title required" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const svc = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY");
     const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY");
@@ -198,19 +186,16 @@ serve(async (req) => {
       });
     }
 
-    // Get all push subscriptions for this user
     const { data: subs } = await svc
       .from("push_subscriptions")
       .select("endpoint, p256dh, auth")
       .eq("user_id", user_id);
 
     if (!subs || subs.length === 0) {
-      return new Response(JSON.stringify({ sent: 0, message: "No subscriptions" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { sent: 0, message: "No subscriptions" };
     }
 
-    const payload = JSON.stringify({ title, body, linkTo, tag: tag || "notification" });
+    const payload = JSON.stringify({ title, body: pushBody, linkTo, tag: tag || "notification" });
     let sent = 0;
     const expired: string[] = [];
 
@@ -223,18 +208,10 @@ serve(async (req) => {
       }
     }
 
-    // Clean up expired subscriptions
     if (expired.length > 0) {
       await svc.from("push_subscriptions").delete().in("endpoint", expired);
     }
 
-    return new Response(JSON.stringify({ sent, expired: expired.length }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("send-push error:", error);
-    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Unknown" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { sent, expired: expired.length };
+  }, { functionName: "send-push", authMode: "none", requireCompany: false, wrapResult: false })
+);

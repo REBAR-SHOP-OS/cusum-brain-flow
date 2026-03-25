@@ -1,7 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
 function json(body: unknown, status = 200) {
@@ -11,27 +9,9 @@ function json(body: unknown, status = 200) {
   });
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const svc = createClient(supabaseUrl, serviceKey);
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) return json({ error: "Invalid token" }, 401);
-    const userId = claimsData.claims.sub as string;
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: svc, body: rawBody } = ctx;
 
     // Role check
     const { data: userRoles } = await svc.from("user_roles").select("role").eq("user_id", userId);
@@ -46,7 +26,7 @@ serve(async (req) => {
     const topSchema = z.object({
       action: z.enum(["dispatch", "start-task", "move-task", "get-queues"]),
     }).passthrough();
-    const parsed = topSchema.safeParse(await req.json());
+    const parsed = topSchema.safeParse(rawBody);
     if (!parsed.success) {
       return json({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }, 400);
     }
@@ -56,13 +36,11 @@ serve(async (req) => {
     const events: Record<string, unknown>[] = [];
 
     switch (action) {
-      // ─── SMART DISPATCH: score machines and assign task ────────────
       case "dispatch": {
         if (!hasWriteRole) return json({ error: "Forbidden" }, 403);
         const { taskId } = body;
         if (!taskId) return json({ error: "Missing taskId" }, 400);
 
-        // Fetch task
         const { data: task, error: taskErr } = await svc
           .from("production_tasks")
           .select("*")
@@ -73,7 +51,6 @@ serve(async (req) => {
           return json({ error: `Task already ${task.status}` }, 400);
         }
 
-        // If locked to a machine, use that
         if (task.locked_to_machine_id) {
           const position = await getNextPosition(svc, task.locked_to_machine_id);
           const { data: qi, error: qiErr } = await svc.from("machine_queue_items").insert({
@@ -107,11 +84,9 @@ serve(async (req) => {
           break;
         }
 
-        // Smart dispatch scoring
         const processMap: Record<string, string> = { cut: "cut", bend: "bend", spiral: "bend", load: "load", other: "other" };
         const machineProcess = processMap[task.task_type] || task.task_type;
 
-        // Get capable machines
         const { data: capabilities } = await svc
           .from("machine_capabilities")
           .select("machine_id, max_bars")
@@ -124,7 +99,6 @@ serve(async (req) => {
 
         const capableMachineIds = capabilities.map((c: any) => c.machine_id);
 
-        // Get machines with status
         const { data: machines } = await svc
           .from("machines")
           .select("id, name, status, current_run_id")
@@ -133,7 +107,6 @@ serve(async (req) => {
 
         if (!machines?.length) return json({ error: "No available machines" }, 400);
 
-        // Get queue counts
         const { data: queueCounts } = await svc
           .from("machine_queue_items")
           .select("machine_id")
@@ -146,7 +119,6 @@ serve(async (req) => {
           queueMap.set(mid, (queueMap.get(mid) || 0) + 1);
         }
 
-        // Get setup_keys currently on each machine
         const { data: currentSetups } = await svc
           .from("machine_queue_items")
           .select("machine_id, task_id")
@@ -166,22 +138,17 @@ serve(async (req) => {
           }
         }
 
-        // Score each machine
         let bestMachine = machines[0];
         let bestScore = -Infinity;
 
         for (const m of machines) {
           let score = 0;
-          // Idle bonus
           if (m.status === "idle" && !m.current_run_id) score += 50;
           else if (m.status === "running") score += 10;
-          // Blocked/down penalty
           if (m.status === "blocked") score -= 30;
           if (m.status === "down") score -= 100;
-          // Shortest queue bonus (fewer = better)
           const qLen = queueMap.get(m.id) || 0;
           score -= qLen * 10;
-          // Same setup_key bonus
           const currentSetup = setupMap.get(m.id);
           if (currentSetup && currentSetup === task.setup_key) score += 25;
 
@@ -191,7 +158,6 @@ serve(async (req) => {
           }
         }
 
-        // Assign to best machine
         const position = await getNextPosition(svc, bestMachine.id);
         const { error: qiErr } = await svc.from("machine_queue_items").insert({
           company_id: companyId,
@@ -224,13 +190,11 @@ serve(async (req) => {
         break;
       }
 
-      // ─── START TASK (transactional) ────────────────────────────────
       case "start-task": {
         if (!hasWriteRole) return json({ error: "Forbidden" }, 403);
         const { queueItemId } = body;
         if (!queueItemId) return json({ error: "Missing queueItemId" }, 400);
 
-        // a) Fetch queue item
         const { data: qi, error: qiErr } = await svc
           .from("machine_queue_items")
           .select("*")
@@ -239,7 +203,6 @@ serve(async (req) => {
         if (qiErr || !qi) return json({ error: "Queue item not found" }, 404);
         if (qi.status !== "queued") return json({ error: `Queue item already ${qi.status}` }, 400);
 
-        // b) Verify task not running/done
         const { data: task } = await svc
           .from("production_tasks")
           .select("*")
@@ -249,7 +212,6 @@ serve(async (req) => {
         if (task.status === "running") return json({ error: "Task already running" }, 409);
         if (task.status === "done") return json({ error: "Task already completed" }, 400);
 
-        // c) Check machine not already running another task
         const { data: machine } = await svc
           .from("machines")
           .select("id, name, status, current_run_id, company_id, current_operator_profile_id")
@@ -258,13 +220,9 @@ serve(async (req) => {
         if (!machine) return json({ error: "Machine not found" }, 404);
         if (machine.current_run_id) return json({ error: "Machine already has an active run" }, 400);
 
-        // d) Set task status = running
         await svc.from("production_tasks").update({ status: "running" }).eq("id", qi.task_id);
-
-        // e) Mark queue item running
         await svc.from("machine_queue_items").update({ status: "running" }).eq("id", queueItemId);
 
-        // f) Create machine_run
         const processMap2: Record<string, string> = { cut: "cut", bend: "bend", spiral: "bend", load: "load", other: "other" };
         const runProcess = processMap2[task.task_type] || "other";
 
@@ -285,7 +243,6 @@ serve(async (req) => {
           .single();
         if (runErr) throw runErr;
 
-        // g) Update machine
         await svc.from("machines").update({
           current_run_id: newRun.id,
           status: "running",
@@ -315,7 +272,6 @@ serve(async (req) => {
         break;
       }
 
-      // ─── MOVE TASK between machines or positions ───────────────────
       case "move-task": {
         if (!hasWriteRole) return json({ error: "Forbidden" }, 403);
         const { queueItemId, targetMachineId, targetPosition } = body;
@@ -331,7 +287,6 @@ serve(async (req) => {
 
         const updates: Record<string, unknown> = {};
         if (targetMachineId && targetMachineId !== qi.machine_id) {
-          // Validate capability
           const { data: task } = await svc.from("production_tasks").select("task_type, bar_code").eq("id", qi.task_id).single();
           if (task) {
             const processMap3: Record<string, string> = { cut: "cut", bend: "bend", spiral: "bend", load: "load", other: "other" };
@@ -366,9 +321,7 @@ serve(async (req) => {
         break;
       }
 
-      // ─── GET QUEUE: fetch queue items grouped by machine and project ─
       case "get-queues": {
-        // Readable by all roles
         const { data: queueItems, error: qErr } = await svc
           .from("machine_queue_items")
           .select(`
@@ -393,12 +346,8 @@ serve(async (req) => {
     }
 
     return json({ success: true, action });
-  } catch (error) {
-    console.error("smart-dispatch error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, 500);
-  }
-});
+  }, { functionName: "smart-dispatch", requireCompany: false, wrapResult: false })
+);
 
 async function getNextPosition(svc: any, machineId: string): Promise<number> {
   const { data } = await svc

@@ -1,25 +1,8 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { encryptToken, decryptToken } from "../_shared/tokenEncryption.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
-
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
-
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
-
-  return user.id;
-}
 
 async function getAccessTokenForUser(userId: string, clientIp: string): Promise<string> {
   const supabaseAdmin = createClient(
@@ -34,12 +17,10 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
     .maybeSingle();
 
   let refreshToken = tokenRow?.refresh_token;
-  // Decrypt if stored encrypted
   if (refreshToken && tokenRow?.is_encrypted) {
     refreshToken = await decryptToken(refreshToken);
   }
 
-  // Fallback to shared env var if user email matches
   if (!refreshToken) {
     const sharedToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
     if (sharedToken) {
@@ -80,7 +61,6 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
 
   const data = await response.json();
 
-  // Token rotation: if Google issued a new refresh token, encrypt & store it
   if (data.refresh_token) {
     const encNew = await encryptToken(data.refresh_token);
     await supabaseAdmin
@@ -89,7 +69,6 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
       .eq("user_id", userId);
   }
 
-  // Track usage for anomaly detection
   await supabaseAdmin
     .from("user_gmail_tokens")
     .update({ last_used_at: new Date().toISOString(), last_used_ip: clientIp })
@@ -112,7 +91,6 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
     emailLines.push(`References: ${replyTo.references || replyTo.messageId}`);
   }
 
-  // Inject custom headers (e.g. List-Unsubscribe for RFC 8058)
   if (customHeaders) {
     for (const [key, value] of Object.entries(customHeaders)) {
       emailLines.push(`${key}: ${value}`);
@@ -137,21 +115,9 @@ interface SendEmailRequest {
   custom_headers?: Record<string, string>;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const clonedReq = req.clone();
-
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabaseAdmin, body: rawBody, req: originalReq } = ctx;
 
     const sendSchema = z.object({
       to: z.string().email("Invalid recipient email").max(320),
@@ -163,7 +129,7 @@ serve(async (req) => {
       sent_by_agent: z.boolean().optional(),
       custom_headers: z.record(z.string()).optional(),
     });
-    const parsed = sendSchema.safeParse(await clonedReq.json());
+    const parsed = sendSchema.safeParse(rawBody);
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
@@ -171,11 +137,6 @@ serve(async (req) => {
       );
     }
     const { to, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers }: SendEmailRequest = parsed.data;
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     // --- Comms Engine: no_act_global + email routing ---
     if (sent_by_agent) {
@@ -193,11 +154,9 @@ serve(async (req) => {
       }
     }
 
-    // Use this user's own Gmail token with IP tracking
-    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const clientIp = originalReq.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const accessToken = await getAccessTokenForUser(userId, clientIp);
 
-    // Fetch user's email signature
     const { data: sigRow } = await supabaseAdmin
       .from("email_signatures")
       .select("signature_html")
@@ -205,7 +164,6 @@ serve(async (req) => {
       .maybeSingle();
     const signature = sigRow?.signature_html || "";
 
-    // Get user's email address
     const profileResponse = await fetch(
       "https://gmail.googleapis.com/gmail/v1/users/me/profile",
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -218,7 +176,6 @@ serve(async (req) => {
     const profile = await profileResponse.json();
     let fromEmail = profile.emailAddress;
 
-    // --- Agent email routing: use rfq@ for external, ai@ for internal ---
     if (sent_by_agent) {
       const { data: commsConfig } = await supabaseAdmin
         .from("comms_config")
@@ -234,7 +191,6 @@ serve(async (req) => {
       }
     }
 
-    // Wrap body in modern HTML email template
     const styledBody = `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.7;color:#1a1a1a;">${body}</div>`;
     const bodyWithSig = signature ? `${styledBody}<br>${signature}` : styledBody;
 
@@ -262,10 +218,9 @@ serve(async (req) => {
       }
     );
 
-    // If 404 with threadId, retry without it (thread may not exist in user's mailbox)
     if (!sendResponse.ok && sendResponse.status === 404 && threadId) {
       console.warn("Gmail 404 with threadId, retrying without threadId | userId:", userId);
-      await sendResponse.text(); // consume body
+      await sendResponse.text();
       sendResponse = await fetch(
         "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
         {
@@ -287,7 +242,6 @@ serve(async (req) => {
 
     const result = await sendResponse.json();
 
-    // Log email send as employee activity event
     try {
       await supabaseAdmin.from("activity_events").insert({
         company_id: "a0000000-0000-0000-0000-000000000001",
@@ -302,19 +256,10 @@ serve(async (req) => {
       });
     } catch { /* non-critical logging */ }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        messageId: result.id,
-        threadId: result.threadId,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("Send email error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return {
+      success: true,
+      messageId: result.id,
+      threadId: result.threadId,
+    };
+  }, { functionName: "gmail-send", requireCompany: false, wrapResult: false })
+);
