@@ -1,46 +1,31 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-camera-api-key",
-};
-
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
-  }
-
-  // API-key auth for external FastAPI caller
-  const apiKey = req.headers.get("x-camera-api-key");
-  const expectedKey = Deno.env.get("CAMERA_API_KEY");
-  if (!expectedKey || apiKey !== expectedKey) {
-    return json({ error: "Unauthorized" }, 401);
-  }
-
-  try {
-    const body = await req.json();
-
-    // Validate required fields
-    if (!body.company_id || !body.event_type) {
-      return json({ error: "company_id and event_type are required" }, 400);
+Deno.serve((req) =>
+  handleRequest(req, async ({ body, serviceClient }) => {
+    if (req.method !== "POST") {
+      return new Response(JSON.stringify({ error: "Method not allowed" }), {
+        status: 405,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    const sb = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    // API-key auth for external FastAPI caller
+    const apiKey = req.headers.get("x-camera-api-key");
+    const expectedKey = Deno.env.get("CAMERA_API_KEY");
+    if (!expectedKey || apiKey !== expectedKey) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!body.company_id || !body.event_type) {
+      return new Response(JSON.stringify({ error: "company_id and event_type are required" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const row = {
       company_id: body.company_id,
@@ -57,7 +42,7 @@ Deno.serve(async (req) => {
       metadata: body.metadata ?? {},
     };
 
-    const { data, error } = await sb
+    const { data, error } = await serviceClient
       .from("camera_events")
       .insert(row)
       .select("id")
@@ -65,12 +50,12 @@ Deno.serve(async (req) => {
 
     if (error) {
       console.error("Insert error:", error);
-      return json({ error: error.message }, 500);
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    return json({ id: data.id, status: "ok" });
-  } catch (err) {
-    console.error("camera-events error:", err);
-    return json({ error: "Internal server error" }, 500);
-  }
-});
+    return { id: data.id, status: "ok" };
+  }, { functionName: "camera-events", authMode: "none", requireCompany: false, rawResponse: true })
+);

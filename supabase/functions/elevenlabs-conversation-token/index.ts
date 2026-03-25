@@ -1,12 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
+Deno.serve((req) =>
+  handleRequest(req, async () => {
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
     const ELEVENLABS_AGENT_ID = Deno.env.get("ELEVENLABS_AGENT_ID");
 
@@ -15,22 +10,16 @@ serve(async (req) => {
 
     const response = await fetch(
       `https://api.elevenlabs.io/v1/convai/conversation/get-signed-url?agent_id=${ELEVENLABS_AGENT_ID}`,
-      {
-        headers: { "xi-api-key": ELEVENLABS_API_KEY },
-      }
+      { headers: { "xi-api-key": ELEVENLABS_API_KEY } }
     );
 
     if (!response.ok) {
       const errText = await response.text();
       console.error("ElevenLabs signed URL error:", response.status, errText);
-      return json({ error: "Failed to get signed URL" }, 500);
+      throw new Error("Failed to get signed URL");
     }
 
     const { signed_url } = await response.json();
-    return json({ signed_url });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("elevenlabs-conversation-token error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
-  }
-});
+    return { signed_url };
+  }, { functionName: "elevenlabs-conversation-token", authMode: "none", requireCompany: false, wrapResult: false })
+);

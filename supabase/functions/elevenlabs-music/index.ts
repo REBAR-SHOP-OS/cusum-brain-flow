@@ -1,22 +1,12 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { prompt, duration, type } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { prompt, duration, type } = body;
     const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
 
-    if (!ELEVENLABS_API_KEY) {
-      return new Response(JSON.stringify({ error: "ElevenLabs API key not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    if (!ELEVENLABS_API_KEY) throw new Error("ElevenLabs API key not configured");
     if (!prompt) {
       return new Response(JSON.stringify({ error: "prompt is required" }), {
         status: 400,
@@ -29,16 +19,9 @@ serve(async (req) => {
       ? "https://api.elevenlabs.io/v1/sound-generation"
       : "https://api.elevenlabs.io/v1/music";
 
-    const body = isSfx
-      ? {
-          text: prompt,
-          duration_seconds: duration || 5,
-          prompt_influence: 0.3,
-        }
-      : {
-          prompt,
-          duration_seconds: duration || 30,
-        };
+    const reqBody = isSfx
+      ? { text: prompt, duration_seconds: duration || 5, prompt_influence: 0.3 }
+      : { prompt, duration_seconds: duration || 30 };
 
     const response = await fetch(apiUrl, {
       method: "POST",
@@ -46,7 +29,7 @@ serve(async (req) => {
         "xi-api-key": ELEVENLABS_API_KEY,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(reqBody),
     });
 
     if (!response.ok) {
@@ -59,18 +42,8 @@ serve(async (req) => {
     }
 
     const audioBuffer = await response.arrayBuffer();
-
     return new Response(audioBuffer, {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "audio/mpeg",
-      },
+      headers: { ...corsHeaders, "Content-Type": "audio/mpeg" },
     });
-  } catch (error) {
-    console.error("Music/SFX function error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "elevenlabs-music", authMode: "none", requireCompany: false, rawResponse: true })
+);
