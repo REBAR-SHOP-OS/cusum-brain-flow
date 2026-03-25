@@ -1,80 +1,93 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Paintbrush, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { useTheme } from "next-themes";
 
 const STORAGE_KEY = "teamhub_bg_theme";
 
 export interface ThemeOption {
   id: string;
   name: string;
-  preview: string; // CSS gradient/color for the swatch
-  style: React.CSSProperties;
+  preview: string;
+  lightStyle: React.CSSProperties;
+  darkStyle: React.CSSProperties;
 }
 
 const DARK_TEXT = "hsl(222 47% 11%)";
+const LIGHT_TEXT = "hsl(210 40% 96%)";
 
 const THEMES: ThemeOption[] = [
   {
     id: "default",
     name: "Default",
     preview: "hsl(222 47% 6%)",
-    style: {},
+    lightStyle: {},
+    darkStyle: {},
   },
   {
     id: "sky",
     name: "Sky Blue",
-    preview: "linear-gradient(135deg, hsl(210 60% 85%), hsl(220 50% 75%))",
-    style: { background: "linear-gradient(180deg, hsl(210 60% 85%), hsl(220 50% 75%))", color: DARK_TEXT },
+    preview: "linear-gradient(135deg, hsl(210 65% 65%), hsl(220 60% 55%))",
+    lightStyle: { background: "linear-gradient(180deg, hsl(210 65% 68%), hsl(220 60% 58%))", color: DARK_TEXT },
+    darkStyle: { background: "linear-gradient(180deg, hsl(215 50% 16%), hsl(220 45% 12%))", color: LIGHT_TEXT },
   },
   {
     id: "mint",
     name: "Mint Green",
-    preview: "linear-gradient(135deg, hsl(160 40% 85%), hsl(170 35% 75%))",
-    style: { background: "linear-gradient(180deg, hsl(160 40% 85%), hsl(170 35% 75%))", color: DARK_TEXT },
+    preview: "linear-gradient(135deg, hsl(160 55% 60%), hsl(170 50% 50%))",
+    lightStyle: { background: "linear-gradient(180deg, hsl(160 55% 65%), hsl(170 50% 55%))", color: DARK_TEXT },
+    darkStyle: { background: "linear-gradient(180deg, hsl(160 40% 15%), hsl(170 35% 11%))", color: LIGHT_TEXT },
   },
   {
     id: "lavender",
     name: "Lavender",
-    preview: "linear-gradient(135deg, hsl(270 40% 85%), hsl(260 35% 78%))",
-    style: { background: "linear-gradient(180deg, hsl(270 40% 85%), hsl(260 35% 78%))", color: DARK_TEXT },
+    preview: "linear-gradient(135deg, hsl(270 55% 68%), hsl(260 50% 58%))",
+    lightStyle: { background: "linear-gradient(180deg, hsl(270 55% 72%), hsl(260 50% 62%))", color: DARK_TEXT },
+    darkStyle: { background: "linear-gradient(180deg, hsl(270 40% 16%), hsl(260 35% 12%))", color: LIGHT_TEXT },
   },
   {
     id: "peach",
     name: "Peach",
-    preview: "linear-gradient(135deg, hsl(20 60% 88%), hsl(15 50% 80%))",
-    style: { background: "linear-gradient(180deg, hsl(20 60% 88%), hsl(15 50% 80%))", color: DARK_TEXT },
+    preview: "linear-gradient(135deg, hsl(20 70% 68%), hsl(15 65% 58%))",
+    lightStyle: { background: "linear-gradient(180deg, hsl(20 70% 72%), hsl(15 65% 62%))", color: DARK_TEXT },
+    darkStyle: { background: "linear-gradient(180deg, hsl(20 45% 16%), hsl(15 40% 12%))", color: LIGHT_TEXT },
   },
   {
     id: "rose",
     name: "Rose",
-    preview: "linear-gradient(135deg, hsl(340 40% 88%), hsl(350 35% 80%))",
-    style: { background: "linear-gradient(180deg, hsl(340 40% 88%), hsl(350 35% 80%))", color: DARK_TEXT },
+    preview: "linear-gradient(135deg, hsl(340 55% 65%), hsl(350 50% 55%))",
+    lightStyle: { background: "linear-gradient(180deg, hsl(340 55% 70%), hsl(350 50% 60%))", color: DARK_TEXT },
+    darkStyle: { background: "linear-gradient(180deg, hsl(340 40% 16%), hsl(350 35% 12%))", color: LIGHT_TEXT },
   },
   {
     id: "sand",
     name: "Sand",
-    preview: "linear-gradient(135deg, hsl(40 40% 88%), hsl(35 35% 80%))",
-    style: { background: "linear-gradient(180deg, hsl(40 40% 88%), hsl(35 35% 80%))", color: DARK_TEXT },
+    preview: "linear-gradient(135deg, hsl(40 60% 65%), hsl(35 55% 55%))",
+    lightStyle: { background: "linear-gradient(180deg, hsl(40 60% 70%), hsl(35 55% 60%))", color: DARK_TEXT },
+    darkStyle: { background: "linear-gradient(180deg, hsl(40 35% 15%), hsl(35 30% 11%))", color: LIGHT_TEXT },
   },
   {
     id: "teal",
     name: "Teal",
-    preview: "linear-gradient(135deg, hsl(180 40% 82%), hsl(190 35% 72%))",
-    style: { background: "linear-gradient(180deg, hsl(180 40% 82%), hsl(190 35% 72%))", color: DARK_TEXT },
+    preview: "linear-gradient(135deg, hsl(180 55% 55%), hsl(190 50% 45%))",
+    lightStyle: { background: "linear-gradient(180deg, hsl(180 55% 60%), hsl(190 50% 50%))", color: DARK_TEXT },
+    darkStyle: { background: "linear-gradient(180deg, hsl(180 40% 14%), hsl(190 35% 10%))", color: LIGHT_TEXT },
   },
   {
     id: "lilac",
     name: "Lilac",
-    preview: "linear-gradient(135deg, hsl(280 35% 88%), hsl(290 30% 80%))",
-    style: { background: "linear-gradient(180deg, hsl(280 35% 88%), hsl(290 30% 80%))", color: DARK_TEXT },
+    preview: "linear-gradient(135deg, hsl(280 50% 68%), hsl(290 45% 58%))",
+    lightStyle: { background: "linear-gradient(180deg, hsl(280 50% 72%), hsl(290 45% 62%))", color: DARK_TEXT },
+    darkStyle: { background: "linear-gradient(180deg, hsl(280 35% 16%), hsl(290 30% 12%))", color: LIGHT_TEXT },
   },
   {
     id: "cloud",
     name: "Cloud",
-    preview: "linear-gradient(135deg, hsl(220 15% 90%), hsl(220 10% 82%))",
-    style: { background: "linear-gradient(180deg, hsl(220 15% 90%), hsl(220 10% 82%))", color: DARK_TEXT },
+    preview: "linear-gradient(135deg, hsl(220 30% 72%), hsl(220 25% 62%))",
+    lightStyle: { background: "linear-gradient(180deg, hsl(220 30% 75%), hsl(220 25% 65%))", color: DARK_TEXT },
+    darkStyle: { background: "linear-gradient(180deg, hsl(220 20% 14%), hsl(220 15% 10%))", color: LIGHT_TEXT },
   },
 ];
 
@@ -87,7 +100,13 @@ export function useTeamHubTheme() {
     }
   });
 
-  const theme = THEMES.find((t) => t.id === themeId) || THEMES[0];
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
+
+  const selected = THEMES.find((t) => t.id === themeId) || THEMES[0];
+  const style = isDark ? selected.darkStyle : selected.lightStyle;
+
+  const theme = { ...selected, style };
 
   const setTheme = useCallback((id: string) => {
     setThemeId(id);
