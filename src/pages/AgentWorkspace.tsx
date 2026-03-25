@@ -620,8 +620,22 @@ export default function AgentWorkspace() {
       if (agentId === "social" && activeSessionId) {
         updateSessionTitle(activeSessionId, format(date, "yyyy-MM-dd"));
       }
+      // Eisenhower: send date-selected follow-up message
+      if (agentId === "eisenhower" && activeSessionId) {
+        const dateStr = format(date, "yyyy-MM-dd (EEE, MMM d)");
+        const dateMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: `📅 تاریخ **${dateStr}** انتخاب شد.\n\nحالا لطفاً لیست **کارهایی که انجام داده‌اید** و **کارهایی که قصد دارید انجام دهید** را بنویسید.`,
+          agent: "eisenhower" as any,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, dateMsg]);
+        addMessage(activeSessionId, "agent", dateMsg.content, "eisenhower");
+        updateSessionTitle(activeSessionId, "Eisenhower — " + format(date, "yyyy-MM-dd"));
+      }
     }
-  }, [agentId, activeSessionId, updateSessionTitle]);
+  }, [agentId, activeSessionId, updateSessionTitle, addMessage]);
 
   return (
     <div className="flex h-full">
