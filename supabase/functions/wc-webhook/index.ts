@@ -320,24 +320,5 @@ Deno.serve((req) =>
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (error) {
-    console.error("[wc-webhook] Error:", error);
-
-    try {
-      await svc.from("notifications").insert({
-        company_id: DEFAULT_COMPANY_ID,
-        type: "wc_qb_sync_error",
-        title: "WooCommerce → QuickBooks Sync Failed",
-        message: error instanceof Error ? error.message : "Unknown error",
-        priority: "high",
-      });
-    } catch {}
-
-    return new Response(JSON.stringify({
-      error: error instanceof Error ? error.message : "Unknown error",
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "wc-webhook", authMode: "none", requireCompany: false, parseBody: false, wrapResult: false })
+);
