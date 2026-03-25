@@ -1,7 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
-import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { callAI } from "../_shared/aiRouter.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 
 const TEAM_DIR: Record<string, { name: string; role: string; agent?: string }> = {
   "sattar@rebar.shop": { name: "Sattar Esmaeili", role: "CEO", agent: "Vizzy" },
@@ -44,9 +44,7 @@ function formatDate(): string {
   return new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 }
 
-// Get Gmail access token for ai@rebar.shop
-async function getSupervisorAccessToken(serviceClient: ReturnType<typeof createClient>): Promise<string> {
-  // Find the user_id for ai@rebar.shop
+async function getSupervisorAccessToken(serviceClient: any): Promise<string> {
   const { data: profile } = await serviceClient
     .from("profiles")
     .select("user_id")
@@ -85,7 +83,6 @@ async function getSupervisorAccessToken(serviceClient: ReturnType<typeof createC
   if (!resp.ok) throw new Error(`Token refresh failed: ${await resp.text()}`);
   const data = await resp.json();
 
-  // Rotate if needed
   if (data.refresh_token) {
     const { encryptToken } = await import("../_shared/tokenEncryption.ts");
     const enc = await encryptToken(data.refresh_token);
@@ -139,8 +136,6 @@ async function sendEmail(accessToken: string, to: string, subject: string, htmlB
 
 async function aiSummarize(personData: PersonActivity): Promise<string> {
   try {
-    const { callAI } = await import("../_shared/aiRouter.ts");
-
     const emailList = [
       ...personData.emailsSent.map(e => `SENT to ${e.to}: "${e.subject}" — ${e.preview}`),
       ...personData.emailsReceived.map(e => `RECEIVED from ${e.from}: "${e.subject}" — ${e.preview}`),
@@ -180,7 +175,6 @@ KEY NOTES (max 4):
 
 RULES: Be supportive but honest. Use data evidence. No fluff. Short sentences.`;
 
-    // GPT-4o-mini: short structured analysis
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o-mini",
@@ -198,14 +192,11 @@ RULES: Be supportive but honest. Use data evidence. No fluff. Short sentences.`;
 }
 
 function buildPersonalReportHTML(person: PersonActivity, dateStr: string): string {
-  // Extract score from AI summary
   const scoreMatch = person.aiSummary.match(/SCORE:\s*(\d+)/i);
   const score = scoreMatch ? parseInt(scoreMatch[1]) : 0;
   const scoreColor = score >= 80 ? "#22c55e" : score >= 60 ? "#f59e0b" : "#ef4444";
   const scoreLabel = score >= 80 ? "Excellent" : score >= 60 ? "Good" : "Needs Attention";
 
-  // Parse sections from AI summary
-  const sections = person.aiSummary.split(/\n(?=STRENGTHS|AREAS TO IMPROVE|COACHING TIPS|KEY NOTES|SCORE)/i);
   const formatSection = (text: string) => text.replace(/^- /gm, "• ").replace(/\n/g, "<br>");
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -213,7 +204,7 @@ function buildPersonalReportHTML(person: PersonActivity, dateStr: string): strin
 <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
   <div style="background:#1a1a2e;padding:24px 32px;color:#fff;position:relative;">
     <h1 style="margin:0;font-size:20px;">🧠 Business Pulse — Performance Report</h1>
-    <p style="margin:4px 0 0;opacity:0.8;font-size:14px;">${person.name} (${person.role}${(person as any).agentShadow ? ` — AI: ${(person as any).agentShadow}` : ''}) — ${dateStr}</p>
+    <p style="margin:4px 0 0;opacity:0.8;font-size:14px;">${person.name} (${person.role}${person.agentShadow ? ` — AI: ${person.agentShadow}` : ''}) — ${dateStr}</p>
     <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);background:${scoreColor};color:#fff;border-radius:50%;width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-direction:column;">
       <span style="font-size:18px;font-weight:bold;line-height:1;">${score}</span>
       <span style="font-size:8px;opacity:0.9;">${scoreLabel}</span>
@@ -238,7 +229,6 @@ function buildPersonalReportHTML(person: PersonActivity, dateStr: string): strin
         <div style="font-size:11px;color:#666;">AI Sessions</div>
       </div>
     </div>
-    
     <div style="font-size:14px;color:#333;line-height:1.6;white-space:pre-wrap;background:#f8f9fa;padding:16px;border-radius:6px;">${formatSection(person.aiSummary)}</div>
   </div>
   <div style="padding:16px 32px;background:#f8f9fa;text-align:center;font-size:12px;color:#888;">
@@ -248,7 +238,6 @@ function buildPersonalReportHTML(person: PersonActivity, dateStr: string): strin
 }
 
 function buildMasterReportHTML(people: PersonActivity[], dateStr: string, alertSummaryHtml?: string): string {
-  // Extract scores and sort for leaderboard
   const scored = people.map(p => {
     const scoreMatch = p.aiSummary.match(/SCORE:\s*(\d+)/i);
     return { ...p, score: scoreMatch ? parseInt(scoreMatch[1]) : 0 };
@@ -262,7 +251,7 @@ function buildMasterReportHTML(people: PersonActivity[], dateStr: string, alertS
     const scoreColor = p.score >= 80 ? "#22c55e" : p.score >= 60 ? "#f59e0b" : "#ef4444";
     return `<tr>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;">${medal}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;"><strong>${p.name}</strong><br><span style="color:#888;font-size:12px;">${p.role}${(p as any).agentShadow ? ` (${(p as any).agentShadow})` : ''}</span></td>
+      <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;"><strong>${p.name}</strong><br><span style="color:#888;font-size:12px;">${p.role}${p.agentShadow ? ` (${p.agentShadow})` : ''}</span></td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;color:${scoreColor};font-weight:bold;">${p.score}/100</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${p.emailsSent.length}/${p.emailsReceived.length}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #eee;font-size:14px;text-align:center;">${p.tasksOpen}/${p.tasksDone}</td>
@@ -276,7 +265,7 @@ function buildMasterReportHTML(people: PersonActivity[], dateStr: string, alertS
   const summaries = scored.map(p => {
     const scoreColor = p.score >= 80 ? "#22c55e" : p.score >= 60 ? "#f59e0b" : "#ef4444";
     return `<div style="margin-bottom:20px;border-left:3px solid ${scoreColor};padding-left:12px;">
-      <h3 style="font-size:15px;color:#1a1a2e;margin:0 0 8px;">${p.name} (${p.role}${(p as any).agentShadow ? ` — ${(p as any).agentShadow}` : ''}) — <span style="color:${scoreColor}">${p.score}/100</span></h3>
+      <h3 style="font-size:15px;color:#1a1a2e;margin:0 0 8px;">${p.name} (${p.role}${p.agentShadow ? ` — ${p.agentShadow}` : ''}) — <span style="color:${scoreColor}">${p.score}/100</span></h3>
       <div style="font-size:13px;color:#333;line-height:1.5;white-space:pre-wrap;background:#f8f9fa;padding:12px;border-radius:6px;">${p.aiSummary.replace(/\n/g, "<br>")}</div>
     </div>`;
   }).join("");
@@ -319,11 +308,9 @@ function buildMasterReportHTML(people: PersonActivity[], dateStr: string, alertS
 </div></body></html>`;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId, serviceClient } = await requireAuth(req);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient } = ctx;
 
     // Admin-only check
     const { data: roles } = await serviceClient
@@ -342,7 +329,7 @@ serve(async (req) => {
     });
     if (allowed === false) return json({ error: "Rate limited. Max 3 reports per hour." }, 429);
 
-    const body = await req.json().catch(() => ({}));
+    const body = ctx.body;
     const todayISO = todayISOString(body.date);
     const companyId = body.company_id;
 
@@ -380,7 +367,6 @@ serve(async (req) => {
     const tasks = tasksResult.data || [];
     const sessions = sessionsResult.data || [];
 
-    // Fetch profiles to map user_ids to emails
     const { data: profiles } = await serviceClient
       .from("profiles")
       .select("user_id, email, full_name");
@@ -394,12 +380,11 @@ serve(async (req) => {
     const people: PersonActivity[] = [];
 
     for (const [email, info] of Object.entries(TEAM_DIR)) {
-      if (email === SUPERVISOR_EMAIL) continue; // skip ai@ for personal reports
+      if (email === SUPERVISOR_EMAIL) continue;
 
       const sent = comms.filter(c => matchEmail(c.from_address, email));
       const received = comms.filter(c => matchEmail(c.to_address, email));
 
-      // Tasks for this person (match by email in assigned_to or profile lookup)
       const personProfile = (profiles || []).find((p: any) => p.email === email);
       const personTasks = personProfile
         ? tasks.filter((t: any) => t.assigned_to === personProfile.user_id)
@@ -407,7 +392,6 @@ serve(async (req) => {
       const tasksOpen = personTasks.filter((t: any) => t.status !== "done" && t.status !== "completed").length;
       const tasksDone = personTasks.filter((t: any) => t.status === "done" || t.status === "completed").length;
 
-      // Agent sessions
       const personSessions = personProfile
         ? sessions.filter((s: any) => s.user_id === personProfile.user_id).length
         : 0;
@@ -430,7 +414,7 @@ serve(async (req) => {
       people.push(activity);
     }
 
-    // AI summarize each person (sequential to avoid rate limits)
+    // AI summarize each person
     for (const person of people) {
       person.aiSummary = await aiSummarize(person);
     }
@@ -453,9 +437,8 @@ serve(async (req) => {
       }
     }
 
-    // Master report to ai@rebar.shop (or comms_config brief_recipients)
+    // Master report
     if (people.length > 0) {
-      // Fetch open alerts for summary
       let alertSummaryHtml = "";
       try {
         const { data: openAlerts } = await serviceClient
@@ -478,7 +461,6 @@ serve(async (req) => {
         console.warn("Alert summary fetch failed (non-fatal):", e);
       }
 
-      // Fetch brief recipients from config
       let briefRecipients = [SUPERVISOR_EMAIL];
       try {
         const { data: commsConf } = await serviceClient
@@ -503,15 +485,11 @@ serve(async (req) => {
       }
     }
 
-    return json({
+    return {
       success: true,
       date: todayISO,
       peopleProcessed: people.length,
       sendResults,
-    });
-  } catch (error) {
-    if (error instanceof Response) return error;
-    console.error("email-activity-report error:", error);
-    return json({ error: error instanceof Error ? error.message : "Unknown error" }, 500);
-  }
-});
+    };
+  }, { functionName: "email-activity-report", requireCompany: false, wrapResult: false })
+);

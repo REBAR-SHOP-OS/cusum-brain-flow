@@ -1,17 +1,9 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase } = ctx;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
-
-  try {
     // 1. Find pending escalations that are due
     const { data: pending, error: fetchErr } = await supabase
       .from("alert_escalation_queue")
@@ -22,10 +14,7 @@ serve(async (req) => {
 
     if (fetchErr) throw fetchErr;
     if (!pending || pending.length === 0) {
-      return new Response(
-        JSON.stringify({ ok: true, escalated: 0 }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { ok: true, escalated: 0 };
     }
 
     let escalatedCount = 0;
@@ -39,7 +28,6 @@ serve(async (req) => {
         .single();
 
       if (notif && (notif.status === "read" || notif.status === "actioned")) {
-        // Already acknowledged — mark queue entry as acknowledged
         await supabase
           .from("alert_escalation_queue")
           .update({
@@ -66,7 +54,6 @@ serve(async (req) => {
       if (nextLevel === 1 && rule.escalate_to_role) {
         escalateToRole = rule.escalate_to_role;
       } else if (nextLevel >= 2) {
-        // Escalate to CEO / admin
         escalateToRole = "admin";
       }
 
@@ -94,9 +81,8 @@ serve(async (req) => {
 
       const escalationUsers = profiles || [];
 
-      // 5. Re-dispatch to escalation targets (in-app only for escalations)
+      // 5. Re-dispatch to escalation targets
       for (const user of escalationUsers) {
-        const escalationTitle = `⚠️ ESCALATION (Level ${nextLevel}): ${notif ? "" : ""}`;
         const { data: origNotif } = await supabase
           .from("notifications")
           .select("title, description, link_to, metadata, agent_name")
@@ -123,7 +109,6 @@ serve(async (req) => {
           .select("id")
           .single();
 
-        // Log escalation dispatch
         await supabase.from("alert_dispatch_log").insert({
           company_id: entry.company_id,
           notification_id: newNotif?.id,
@@ -143,7 +128,6 @@ serve(async (req) => {
       const nextEscalateAt = new Date(Date.now() + nextEscalateMinutes * 60000);
 
       if (nextLevel >= 2) {
-        // Max escalation reached
         await supabase
           .from("alert_escalation_queue")
           .update({
@@ -152,7 +136,6 @@ serve(async (req) => {
           })
           .eq("id", entry.id);
       } else {
-        // Set up next escalation level
         await supabase
           .from("alert_escalation_queue")
           .update({
@@ -166,15 +149,6 @@ serve(async (req) => {
       escalatedCount++;
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, checked: pending.length, escalated: escalatedCount }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("check-escalations error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { ok: true, checked: pending.length, escalated: escalatedCount };
+  }, { functionName: "check-escalations", authMode: "none", requireCompany: false, wrapResult: false })
+);

@@ -1,44 +1,25 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: svcClient, body } = ctx;
 
-  try {
-    let rateLimitId: string;
     let userName = "Team Member";
     let userTitle = "";
 
-    try {
-      const auth = await requireAuth(req);
-      rateLimitId = auth.userId;
+    const { data: profile } = await svcClient
+      .from("profiles")
+      .select("full_name, title")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (profile?.full_name) userName = profile.full_name;
+    if (profile?.title) userTitle = profile.title;
 
-      const svcClient2 = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-      );
-      const { data: profile } = await svcClient2
-        .from("profiles")
-        .select("full_name, title")
-        .eq("user_id", rateLimitId)
-        .maybeSingle();
-      if (profile?.full_name) userName = profile.full_name;
-      if (profile?.title) userTitle = profile.title;
-    } catch (res) {
-      if (res instanceof Response) return res;
-      throw res;
-    }
-
-    const svcClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    // Rate limit
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
-      _user_id: rateLimitId,
+      _user_id: userId,
       _function_name: "draft-email",
       _max_requests: 20,
       _window_seconds: 60,
@@ -50,11 +31,9 @@ serve(async (req) => {
       });
     }
 
-    const body = await req.json();
     const action = body.action || "draft";
     const titleLine = userTitle ? ` (${userTitle})` : "";
 
-    // Helper: all draft-email calls use GPT-4o-mini (customer-facing writing, fast)
     async function aiCall(systemPrompt: string, userPrompt: string, opts?: { maxTokens?: number; temperature?: number }) {
       const result = await callAI({
         provider: "gpt",
@@ -81,9 +60,7 @@ serve(async (req) => {
       const jsonMatch = raw.match(/\[[\s\S]*\]/);
       let replies: string[] = [];
       try { replies = JSON.parse(jsonMatch?.[0] || "[]"); } catch { replies = ["Thanks, got it!", "Let me check on this.", "Sounds good!"]; }
-      return new Response(JSON.stringify({ replies: replies.slice(0, 3) }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { replies: replies.slice(0, 3) };
     }
 
     // ─── Action: summarize-email ────────────────────────────────────
@@ -94,9 +71,7 @@ serve(async (req) => {
         `Summarize this email:\n\nFrom: ${senderName}\nSubject: ${emailSubject}\n\n${emailBody}`,
         { maxTokens: 400, temperature: 0.3 }
       );
-      return new Response(JSON.stringify({ summary }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { summary };
     }
 
     // ─── Action: polish ───────────────────────────────────────────
@@ -107,9 +82,7 @@ serve(async (req) => {
         draftText,
         { temperature: 0.3 }
       );
-      return new Response(JSON.stringify({ draft: polished || draftText }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { draft: polished || draftText };
     }
 
     // ─── Action: prompt-to-draft ────────────────────────────────────
@@ -119,9 +92,7 @@ serve(async (req) => {
         `You are Cassie, an AI email assistant for ${userName}${titleLine} at Rebar.Shop (Ontario Rebars Ltd.). Write a complete email body from a short prompt. Be professional and concise. Sign off with "Best regards,\\n${userName}". Return ONLY the email body text.`,
         `Write an email${recipientName ? ` to ${recipientName}` : ""}${emailSubject ? ` about: ${emailSubject}` : ""}.\n\nWhat I want to say: ${prompt}`
       );
-      return new Response(JSON.stringify({ draft }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { draft };
     }
 
     // ─── Action: adjust-tone ────────────────────────────────────────
@@ -137,9 +108,7 @@ serve(async (req) => {
       };
       const instruction = toneInstructions[tone] || toneInstructions.formal;
       const adjusted = await aiCall(`${instruction} Return ONLY the rewritten text, nothing else.`, draftText);
-      return new Response(JSON.stringify({ draft: adjusted || draftText }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { draft: adjusted || draftText };
     }
 
     // ─── Action: draft (default) ────────────────────────────────────
@@ -161,15 +130,6 @@ Guidelines:
       `Draft a reply to this email:\n\nFrom: ${senderName} <${senderEmail}>\nSubject: ${emailSubject}\n\nEmail content:\n${emailBody}\n\nWrite only the reply text, no subject line or email headers.`
     );
 
-    return new Response(JSON.stringify({ draft }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("draft-email error:", error);
-    const status = error instanceof AIError ? error.status : 500;
-    return new Response(JSON.stringify({ error: error.message || "Failed to generate draft" }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { draft };
+  }, { functionName: "draft-email", requireCompany: false, wrapResult: false })
+);

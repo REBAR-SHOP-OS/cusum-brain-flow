@@ -1,23 +1,10 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
-import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { callAI } from "../_shared/aiRouter.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    // Auth guard — accept service role key (for cron) or authenticated user
-    const authHeader = req.headers.get("Authorization") || "";
-    const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-    const isServiceRole = authHeader === `Bearer ${svcKey}`;
-    if (!isServiceRole) {
-      try { await requireAuth(req); } catch (res) { if (res instanceof Response) return res; throw res; }
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase } = ctx;
 
     const today = new Date().toISOString().split("T")[0];
     const dayStart = `${today}T00:00:00.000Z`;
@@ -30,9 +17,7 @@ serve(async (req) => {
       .eq("is_active", true);
 
     if (!profiles?.length) {
-      return new Response(JSON.stringify({ ok: true, message: "No active profiles" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { ok: true, message: "No active profiles" };
     }
 
     // 2. Fetch all activity data for the day in parallel
@@ -189,7 +174,7 @@ Keep it punchy, use emojis sparingly. No JSON, just plain text.`,
       console.warn("AI summary failed, using fallback:", e);
     }
 
-    // 5. Find admin users to notify (scoped to company via profiles)
+    // 5. Find admin users to notify
     const { data: adminProfiles } = await supabase
       .from("profiles")
       .select("user_id, user_roles!inner(role)")
@@ -201,9 +186,7 @@ Keep it punchy, use emojis sparingly. No JSON, just plain text.`,
     )];
 
     if (!adminUserIds.length) {
-      return new Response(JSON.stringify({ ok: true, message: "No admin users to notify" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { ok: true, message: "No admin users to notify" };
     }
 
     // 6. Insert notification for each admin
@@ -232,15 +215,6 @@ Keep it punchy, use emojis sparingly. No JSON, just plain text.`,
       throw new Error("Failed to create notification");
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, adminsNotified: adminUserIds.length, employeesReported: employeeSummaries.length }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("Daily team report error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { ok: true, adminsNotified: adminUserIds.length, employeesReported: employeeSummaries.length };
+  }, { functionName: "daily-team-report", authMode: "optional", requireCompany: false, wrapResult: false })
+);
