@@ -96,15 +96,15 @@ export default function Home() {
   const navigate = useNavigate();
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const { user } = useAuth();
+  const { isSuperAdmin } = useSuperAdmin();
 
   useEffect(() => {
-    if (isTablet) {
+    if (isTablet && !isSuperAdmin && !ACCESS_POLICIES.blockedFromShopFloor.includes(user?.email?.toLowerCase() ?? "")) {
       navigate("/shop-floor", { replace: true });
     }
-  }, [isTablet, navigate]);
+  }, [isTablet, navigate, isSuperAdmin, user?.email]);
 
   const mapping = getUserAgentMapping(user?.email);
-  const { isSuperAdmin } = useSuperAdmin();
   const { roles, isAdmin, isWorkshop, hasRole } = useUserRole();
 
   // Resolve agent for suggestions
