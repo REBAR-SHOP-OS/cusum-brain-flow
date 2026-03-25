@@ -7,12 +7,9 @@ import { handleRequest } from "../_shared/requestHandler.ts";
  * Scans all business domains for anomalies and writes alerts to notifications.
  * Uses metadata.dedupe_key to prevent duplicate alerts within 24 hours.
  */
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase } = ctx;
 
   const now = new Date();
   const today = now.toISOString().split("T")[0];
