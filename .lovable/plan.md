@@ -1,46 +1,29 @@
 
 
-## اعمال زبان انتخاب‌شده به تشخیص گفتار
+## تغییر رفتار زبانی ایجنت آیزنهاور
 
-### مشکل
-وقتی کاربر زبانی را از لیست انتخاب می‌کند، این انتخاب به موتور Speech Recognition اعمال نمی‌شود. بنابراین متن همیشه به انگلیسی تشخیص داده می‌شود.
+### هدف
+ایجنت باید به همان زبانی که کاربر صحبت می‌کند پاسخ دهد (مثلاً فارسی، عربی، فرانسه)، اما گزارش نهایی ماتریس آیزنهاور همیشه به انگلیسی و بسیار جامع و دقیق باشد.
 
-### تغییرات
+### تغییر
 
-**فایل: `src/components/chat/ChatInput.tsx`**
+**فایل: `supabase/functions/_shared/agents/growth.ts`**
 
-1. اضافه کردن state: `const [voiceLang, setVoiceLang] = useState("en")`
-2. اضافه کردن mapping از کدهای ساده به BCP-47:
-   ```typescript
-   const LANG_BCP47: Record<string, string> = {
-     en: "en-US", fa: "fa-IR", ar: "ar-SA", es: "es-ES", fr: "fr-FR",
-     hi: "hi-IN", zh: "zh-CN", de: "de-DE", tr: "tr-TR", pt: "pt-BR",
-     ru: "ru-RU", ko: "ko-KR", ja: "ja-JP", ur: "ur-PK",
-     it: "it-IT", nl: "nl-NL", pl: "pl-PL", uk: "uk-UA",
-     sv: "sv-SE", no: "nb-NO", da: "da-DK", fi: "fi-FI",
-     cs: "cs-CZ", ro: "ro-RO", hu: "hu-HU", el: "el-GR",
-     th: "th-TH", vi: "vi-VN", id: "id-ID", ms: "ms-MY",
-     bn: "bn-BD", ta: "ta-IN", sw: "sw-KE", he: "he-IL",
-     fil: "fil-PH", ca: "ca-ES",
-   };
-   ```
-3. پاس دادن `lang` به `useSpeechRecognition`:
-   ```typescript
-   const speech = useSpeechRecognition({
-     onError: ...,
-     lang: LANG_BCP47[voiceLang] || "en-US",
-   });
-   ```
-4. پاس دادن `lang` و `onLangChange` به هر دو `VoiceInputButton`:
-   ```typescript
-   <VoiceInputButton ... lang={voiceLang} onLangChange={(l) => { if (speech.isListening) speech.stop(); setVoiceLang(l); }} />
-   ```
+بخش `LANGUAGE` در prompt ایجنت (خط 116) بازنویسی می‌شود:
 
-**فایل: `src/hooks/useSpeechRecognition.ts`**
+**قبل:**
+> اگر کاربر فارسی بنویسد، ممکن است مختصر به فارسی تأیید کنید، اما گزارش ماتریس باید انگلیسی باشد.
 
-5. وقتی `lang` تغییر می‌کند، recognition باید restart شود تا زبان جدید اعمال شود. یک `useEffect` یا تغییر در `start` لازم است تا `recognition.lang` را از آخرین مقدار `optionsRef` بخواند (این الان هم کار می‌کند چون `optionsRef.current` همیشه به‌روز است، اما باید وقتی زبان عوض می‌شود recognition متوقف و دوباره شروع شود — این کار را در `onLangChange` ChatInput انجام می‌دهیم با `speech.stop()` قبل از `setVoiceLang`).
+**بعد:**
+- مکالمه عادی (سؤال، توضیح، تأیید) به همان زبان کاربر باشد
+- گزارش نهایی ماتریس (4 ربع + Action Plan) همیشه انگلیسی و بسیار جامع:
+  - هر تسک باید دلیل دقیق قرارگیری در آن ربع، ریسک‌ها، و پیشنهاد اجرایی داشته باشد
+  - Action Plan باید شامل timeline، معیارهای موفقیت، و وابستگی‌ها باشد
+  - بخش Executive Summary به ابتدای گزارش اضافه شود
 
-### فایل‌های درگیر
-- `src/components/chat/ChatInput.tsx`
-- (hook نیاز به تغییر ندارد — فقط ChatInput)
+### جزئیات فنی
+فقط بخش `LANGUAGE` در خط 116 تغییر می‌کند و گزارش نهایی غنی‌تر و جامع‌تر خواهد شد. یک edge function deploy خودکار انجام می‌شود.
+
+### فایل درگیر
+- `supabase/functions/_shared/agents/growth.ts`
 
