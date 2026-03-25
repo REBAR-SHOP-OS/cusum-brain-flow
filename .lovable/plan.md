@@ -1,40 +1,47 @@
 
 
-## Enable Feedback Completion for Both Radin & Zahra with Mirroring
+## Fix Platform & Pages Changes Not Applying to Card
 
-### Current Behavior
-- Feedback tasks (`screenshot_feedback`) are assigned to Radin and mirrored into Zahra's column (same DB record).
-- `canMarkComplete` allows Zahra via the delegate system, but the `mirrorFeedbackCompletion` function only handles `feedback_verification` ↔ `screenshot_feedback` pairs — it does not ensure both users' related tasks are marked complete when a plain `screenshot_feedback` task is completed.
+### Root Cause
 
-### What Needs to Change
+`groupPages` is stored as independent state in `SocialMediaManager.tsx`, set only when a card is clicked. After saving platform/page changes in the sub-panel:
+1. DB is updated and queries are invalidated
+2. `selectedPost` refreshes correctly (derived from query data)
+3. But `groupPages` stays **stale** — still holding the values from the original card click
+4. The sync `useEffect` in `PostReviewPanel` (line 205) runs on post change and resets `localPages` from stale `groupPages`, overwriting the just-saved values
 
-**File: `src/pages/Tasks.tsx`**
+Additionally, `handlePlatformsSaveMulti` only saves `sanitized[0]` to existing rows — it doesn't create new sibling rows for additional platforms.
 
-1. **Ensure `canMarkComplete` explicitly allows both Radin and Zahra for feedback tasks**: Add a check so that for tasks with `source === "screenshot_feedback"` or `source === "feedback_verification"`, both `RADIN_PROFILE_ID` and `ZAHRA_PROFILE_ID` can always mark them complete — regardless of assigned_to or created_by.
+### Fix
 
-2. **Extend `mirrorFeedbackCompletion` for `screenshot_feedback` tasks**: Currently when a `screenshot_feedback` task is completed, the function only marks linked `feedback_verification` tasks as complete. Add logic so that completing a `screenshot_feedback` task also completes any duplicate/mirrored feedback tasks that share the same source and title (if separate records exist). Since mirrored tasks are the same DB record, the main gap is ensuring the `feedback_verification` counterpart is also completed.
+**File: `src/pages/SocialMediaManager.tsx`**
 
-### Implementation
+Replace `groupPages` state with a `useMemo` derived from current `posts` and `selectedPost`. This ensures it always reflects the latest DB state after any mutation:
 
-**`canMarkComplete` update (around line 361):**
 ```typescript
-const canMarkComplete = (task: TaskRow) => {
-  // Both Radin and Zahra can always complete feedback tasks
-  const src = (task as any).source;
-  if ((src === "screenshot_feedback" || src === "feedback_verification") &&
-      currentProfileId && MIRROR_FEEDBACK_PROFILES.includes(currentProfileId)) {
-    return true;
-  }
-  return isAdmin ||
-    currentProfileId === task.assigned_to ||
-    currentProfileId === task.created_by_profile_id ||
-    isDelegateFor(task.assigned_to);
-};
+const groupPages = useMemo(() => {
+  if (!selectedPost) return [];
+  const siblings = posts.filter(s =>
+    s.title === selectedPost.title &&
+    s.platform === selectedPost.platform &&
+    s.scheduled_date === selectedPost.scheduled_date
+  );
+  return [...new Set(siblings.map(s => s.page_name).filter(Boolean))] as string[];
+}, [selectedPost, posts]);
 ```
 
-**Same for `canUncomplete` (around line 368)** — add the same feedback override.
+Remove `setGroupPages` calls from `onPostClick`, `onGroupClick`, and `onClose`.
+
+**File: `src/components/social/PostReviewPanel.tsx`**
+
+Fix `handlePlatformsSaveMulti` to handle multi-platform properly — create new sibling rows for additional platforms (similar to how `handlePagesSaveMulti` creates rows for new pages):
+
+1. Keep existing rows updated to first platform
+2. For each additional platform, clone sibling rows with the new platform
+3. Properly reconcile: delete rows for deselected platforms, create for new ones
 
 | File | Change |
 |---|---|
-| `src/pages/Tasks.tsx` | Add explicit feedback task permission for Radin & Zahra in `canMarkComplete` and `canUncomplete` |
+| `src/pages/SocialMediaManager.tsx` | Derive `groupPages` via `useMemo` instead of stale state |
+| `src/components/social/PostReviewPanel.tsx` | Fix `handlePlatformsSaveMulti` to create/delete rows for multi-platform changes |
 
