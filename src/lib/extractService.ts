@@ -200,23 +200,17 @@ export async function runExtract(params: {
     .update({ status: "extracting", progress: 0 } as any)
     .eq("id", params.sessionId);
 
-  // Await the edge function so errors propagate to the caller
-  const res = await supabase.functions.invoke("extract-manifest", {
-    body: {
-      sessionId: params.sessionId,
-      fileUrl: params.fileUrl,
-      fileName: params.fileName,
-      manifestContext: params.manifestContext,
-    },
-  });
+  // Use project-standard invokeEdgeFunction for reliable error bodies & timeout
+  const data = await invokeEdgeFunction("extract-manifest", {
+    sessionId: params.sessionId,
+    fileUrl: params.fileUrl,
+    fileName: params.fileName,
+    manifestContext: params.manifestContext,
+  }, { timeoutMs: 120_000, retries: 1 });
 
-  if (res.error) {
-    console.error("Extract invoke error:", res.error);
-    throw new Error(res.error.message || "Extract invocation failed");
-  }
-  if (res.data?.status === "error") {
-    console.error("Extract returned error:", res.data.error);
-    throw new Error(res.data.error || "Extraction failed");
+  if (data?.status === "error") {
+    console.error("Extract returned error:", data.error);
+    throw new Error(data.error || "Extraction failed");
   }
 }
 
