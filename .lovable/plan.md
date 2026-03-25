@@ -1,31 +1,36 @@
 
 
-## Fix: Edit Button Should Navigate to Detailed List
+## Enable Edit Functionality in Detailed List
 
 ### Problem
-In the Production Queue, the "Edit" button on each manifest navigates to `/shopfloor/cutter?planId=${id}` (the cutting station). It should navigate to the **Detailed List** view instead.
+The pencil (edit) icon button on each row in the Detailed List view has no `onClick` handler — it's purely decorative. Users cannot edit item fields.
 
-### Change
+### Solution
+Add inline row editing. When the pencil is clicked, that row switches to edit mode with input fields for editable columns. A save/cancel button pair replaces the pencil. On save, update the row in `cut_plan_items` via Supabase.
 
-**File: `src/components/office/ProductionQueueView.tsx`** (line 193)
+### Editable Fields
+- **Mark Number** (mark_number)
+- **Qty** (total_pieces)
+- **Cut Length** (cut_length_mm)
+- **Bend Type / ASA Shape Code** (bend_type, asa_shape_code)
+- **Drawing Ref** (drawing_ref)
+- **Bend Dimensions** (A–R in bend_dimensions JSON)
 
-Change the `onEditPlan` handler from:
-```typescript
-onEditPlan={(id) => navigate(`/shopfloor/cutter?planId=${id}`)}
-```
-to:
-```typescript
-onEditPlan={(id) => navigate("/office", { state: { section: "detailed-list", planId: id } })}
-```
-
-**File: `src/pages/OfficePortal.tsx`**
-
-Read `planId` from `location.state` and, when the initial section is `"detailed-list"` with a `planId`, pass it down to `DetailedListView` so it auto-selects that plan.
+### Changes
 
 **File: `src/components/office/DetailedListView.tsx`**
 
-Accept an optional `initialPlanId` prop and use it to pre-select the plan on mount.
+1. Add `editingItemId` state and `editValues` state to track which row is being edited and the draft values
+2. Wire the Pencil button's `onClick` to enter edit mode for that row
+3. When editing, render `<input>` fields instead of static text for editable columns
+4. Add Save (Check icon) and Cancel (X icon) buttons in the actions column
+5. On Save: call `supabase.from("cut_plan_items").update(...)` with changed values, then call `fetchItems()` to refresh
+6. On Cancel: clear editing state
 
-### Result
-Clicking "Edit" on a manifest in the Production Queue opens the Detailed List view with that plan selected.
+### Technical Details
+- Edit state: `useState<string | null>(null)` for `editingItemId`
+- Draft values stored in a `Record<string, any>` state
+- Inputs styled as small inline fields matching the table cell widths
+- Save calls Supabase directly (same pattern as `DeleteItemButton`)
+- After save, invalidate query or call `fetchItems` from the hook
 
