@@ -20,6 +20,7 @@ import { agentConfigs } from "@/components/agent/agentConfigs";
 import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { PixelBrainDialog } from "@/components/social/PixelBrainDialog";
+import { EisenhowerInstructionsDialog } from "@/components/agent/EisenhowerInstructionsDialog";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { useUserRole, AppRole } from "@/hooks/useUserRole";
 // VizzyApprovalDialog removed — actions auto-execute
