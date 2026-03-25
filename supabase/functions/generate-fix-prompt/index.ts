@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI } from "../_shared/aiRouter.ts";
-import { corsHeaders } from "../_shared/auth.ts";
 
 const SYSTEM_PROMPT = `You are a senior full-stack developer and debugging expert analyzing bug reports for a production application built with:
 - **Frontend:** React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
@@ -59,18 +58,14 @@ Every generated prompt MUST include ALL of these sections:
 - Do NOT include greetings or pleasantries — just the structured prompt
 - Format as something ready to paste directly into the Lovable AI chat`;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { title, description, comments, screenshots, priority, status, attachment_urls, source } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { title, description, comments, screenshots, priority, status, attachment_urls, source } = body;
 
     if (!title) {
       return new Response(JSON.stringify({ error: "Title is required" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -144,14 +139,6 @@ serve(async (req) => {
       fallback: { provider: "gemini", model: "gemini-2.5-flash" },
     });
 
-    return new Response(JSON.stringify({ prompt: result.content }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("generate-fix-prompt error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { prompt: result.content };
+  }, { functionName: "generate-fix-prompt", authMode: "none", requireCompany: false, wrapResult: false })
+);

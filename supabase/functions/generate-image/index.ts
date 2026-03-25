@@ -1,22 +1,6 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { cropToAspectRatio } from "../_shared/imageResize.ts";
-import { corsHeaders } from "../_shared/auth.ts";
-
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
-  return user.id;
-}
 
 /** Search Pexels for a reference photo matching the prompt keywords */
 async function searchPexelsReference(query: string): Promise<string | null> {
@@ -133,21 +117,9 @@ function buildAdPrompt(
   return parts.join("\n");
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const { prompt, model, brandContext, logoUrl, aspectRatio, editImage, originalImage, referenceImage } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, body }) => {
+    const { prompt, model, brandContext, logoUrl, aspectRatio, editImage, originalImage, referenceImage } = body;
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
@@ -434,11 +406,5 @@ Instructions:
       JSON.stringify({ imageUrl, revisedPrompt: imageData?.revised_prompt || null, pexelsInspired: false }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("generate-image error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "generate-image", requireCompany: false, wrapResult: false })
+);

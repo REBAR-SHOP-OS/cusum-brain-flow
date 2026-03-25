@@ -1,6 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import {
   calculateItem,
   applyWasteFactor,
@@ -13,54 +11,10 @@ import {
   type ValidationRule,
 } from "../_shared/rebarCalcEngine.ts";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    // Auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const { data: { user }, error: authError } = await supabaseUser.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Get company_id
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!profile?.company_id) {
-      return new Response(JSON.stringify({ error: "No company found" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const companyId = profile.company_id;
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, companyId, serviceClient: supabaseAdmin, body }) => {
     const {
       name,
       customer_id,
@@ -72,8 +26,7 @@ serve(async (req) => {
 
     if (!name) {
       return new Response(JSON.stringify({ error: "Project name is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -89,7 +42,6 @@ serve(async (req) => {
         .from("estimation_validation_rules")
         .select("*")
         .eq("is_active", true),
-      // Historical learnings for few-shot context
       supabaseAdmin
         .from("estimation_learnings")
         .select("element_type, bar_size, mark, field_name, original_value, corrected_value, weight_delta_pct, context, confidence_score")
@@ -97,7 +49,6 @@ serve(async (req) => {
         .gte("confidence_score", 70)
         .order("confidence_score", { ascending: false })
         .limit(50),
-      // Weight benchmarks from coordination logs
       supabaseAdmin
         .from("project_coordination_log")
         .select("project_name, estimation_weight_kg, detailing_weight_kg, weight_difference_kg, elements")
@@ -123,7 +74,6 @@ serve(async (req) => {
       historicalContext += `\n## HISTORICAL ACCURACY DATA (from ${learnings.length} past corrections)\n`;
       historicalContext += `Average estimation overestimate: ${avgDelta.toFixed(1)}%\n`;
 
-      // Group learnings by element type
       const byElement = new Map<string, { count: number; avgDelta: number }>();
       for (const l of learnings) {
         const et = l.element_type ?? "unknown";
@@ -142,6 +92,7 @@ serve(async (req) => {
         historicalContext += `- "${b.project_name}": est=${b.estimation_weight_kg}kg, actual=${b.detailing_weight_kg}kg (${((b.weight_difference_kg / b.estimation_weight_kg) * 100).toFixed(1)}% delta)\n`;
       }
     }
+
     // ─── 2. Send files directly to Gemini 2.5 Pro for vision extraction ───
     let extractedItems: EstimationItemInput[] = [];
 
@@ -149,7 +100,6 @@ serve(async (req) => {
       try {
         const contentParts: any[] = [];
 
-        // Helper: chunked base64 encoder (avoids call-stack overflow on large files)
         function arrayBufferToBase64(buffer: Uint8Array): string {
           const chunkSize = 8192;
           let binary = "";
@@ -162,7 +112,6 @@ serve(async (req) => {
           return btoa(binary);
         }
 
-        // Build content parts — handle PDFs via base64, images via direct URL
         for (const url of file_urls.slice(0, 4)) {
           const lower = url.toLowerCase();
           const isPdf = /\.pdf(\?|$)/.test(lower);
@@ -192,7 +141,6 @@ serve(async (req) => {
           } else if (isImage) {
             contentParts.push({ type: "image_url", image_url: { url } });
           } else {
-            // Fallback: try as base64 with generic mime
             try {
               const res = await fetch(url);
               if (!res.ok) continue;
@@ -297,9 +245,7 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
           },
           body: JSON.stringify({
             model: "google/gemini-2.5-pro",
-            messages: [
-              { role: "user", content: contentParts },
-            ],
+            messages: [{ role: "user", content: contentParts }],
             max_tokens: 16000,
             temperature: 0.1,
           }),
@@ -314,7 +260,6 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
           console.log("AI extraction response length:", content.length);
           console.log("AI response preview:", content.substring(0, 500));
 
-          // Robust JSON parsing: strip markdown fences, try direct parse, then regex fallback
           let cleaned = content.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
 
           try {
@@ -370,7 +315,6 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
       calculatedItems.push(result);
     }
 
-    // Apply waste factor
     if (waste_factor_pct > 0) {
       calculatedItems = applyWasteFactor(calculatedItems, waste_factor_pct);
     }
@@ -400,7 +344,7 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
         total_cost: summary.total_cost,
         waste_factor_pct,
         labor_hours: Math.round(totalLaborHours * 100) / 100,
-        created_by: user.id,
+        created_by: userId,
         company_id: companyId,
       })
       .select("id")
@@ -409,8 +353,7 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
     if (projErr) {
       console.error("Project insert error:", projErr);
       return new Response(JSON.stringify({ error: "Failed to save project" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 500, headers: { "Content-Type": "application/json" },
       });
     }
 
@@ -440,7 +383,6 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
         page_index: (item as any).page_index ?? 0,
       }));
 
-      // Batch insert in groups of 25 to reduce memory spikes
       for (let i = 0; i < itemRows.length; i += 25) {
         const batch = itemRows.slice(i, i + 25);
         const { error: itemsErr } = await supabaseAdmin
@@ -453,25 +395,16 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
     }
 
     // ─── 6. Return ───
-    return new Response(
-      JSON.stringify({
-        success: true,
-        project_id: project.id,
-        summary: {
-          ...summary,
-          labor_hours: Math.round(totalLaborHours * 100) / 100,
-          waste_factor_pct,
-        },
-        items: calculatedItems,
-        warnings: calculatedItems.flatMap((i) => i.warnings),
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (error) {
-    console.error("ai-estimate error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Estimation failed" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return {
+      success: true,
+      project_id: project.id,
+      summary: {
+        ...summary,
+        labor_hours: Math.round(totalLaborHours * 100) / 100,
+        waste_factor_pct,
+      },
+      items: calculatedItems,
+      warnings: calculatedItems.flatMap((i) => i.warnings),
+    };
+  }, { functionName: "ai-estimate", wrapResult: false })
+);

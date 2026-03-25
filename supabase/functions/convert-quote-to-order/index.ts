@@ -1,59 +1,16 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
-
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    // Verify auth
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: authErr } = await anonClient.auth.getClaims(token);
-    if (authErr || !claims?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const userId = claims.claims.sub as string;
-
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Get user's company
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (!profile?.company_id) throw new Error("No company assigned");
-    const companyId = profile.company_id;
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, companyId, serviceClient: supabase, body }) => {
     const bodySchema = z.object({
       quoteId: z.string().uuid("quoteId must be a valid UUID"),
     });
-    const parsed = bodySchema.safeParse(await req.json());
+    const parsed = bodySchema.safeParse(body);
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
     const { quoteId } = parsed.data;
@@ -66,12 +23,12 @@ serve(async (req) => {
       .maybeSingle();
     if (qErr || !quote) throw new Error("Quote not found");
 
-    // R15-3: Validate quote status before conversion
+    // Validate quote status before conversion
     const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed"];
     if (!CONVERTIBLE_STATUSES.includes(quote.status)) {
       return new Response(
         JSON.stringify({ error: `Cannot convert quote in status: ${quote.status}. Must be one of: ${CONVERTIBLE_STATUSES.join(", ")}` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -84,11 +41,11 @@ serve(async (req) => {
     if (existing) {
       return new Response(
         JSON.stringify({ error: `Order ${existing.order_number} already exists for this quote`, existingOrderId: existing.id }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 409, headers: { "Content-Type": "application/json" } }
       );
     }
 
-    // Generate order number with retry loop to handle concurrency
+    // Generate order number with retry loop
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     let orderNumber = "";
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -99,7 +56,6 @@ serve(async (req) => {
       const seq = String((count || 0) + 1 + attempt).padStart(3, "0");
       orderNumber = `ORD-${today}-${seq}`;
 
-      // Try inserting — if duplicate, retry with next seq
       const { data: order, error: oErr } = await supabase
         .from("orders")
         .insert({
@@ -117,8 +73,7 @@ serve(async (req) => {
         .single();
 
       if (!oErr) {
-        // Success — continue with line items
-        // Try to extract line items from quote metadata
+        // Success — extract line items
         const metadata = quote.metadata as Record<string, unknown> | null;
         const odooLines = (metadata?.order_lines || metadata?.line_items) as Array<Record<string, unknown>> | undefined;
 
@@ -145,29 +100,18 @@ serve(async (req) => {
           if (!iErr) itemsCreated = 1;
         }
 
-        return new Response(
-          JSON.stringify({
-            success: true,
-            order: { id: order.id, order_number: order.order_number, total_amount: order.total_amount },
-            itemsCreated,
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return {
+          success: true,
+          order: { id: order.id, order_number: order.order_number, total_amount: order.total_amount },
+          itemsCreated,
+        };
       }
 
-      // If error is not a unique violation, throw
       if (!oErr.message?.includes("duplicate") && !oErr.message?.includes("unique")) {
         throw new Error(`Failed to create order: ${oErr.message}`);
       }
-      // Otherwise retry with next attempt
     }
 
     throw new Error("Failed to generate unique order number after 5 attempts");
-  } catch (err) {
-    console.error("convert-quote-to-order error:", err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "convert-quote-to-order", wrapResult: false })
+);

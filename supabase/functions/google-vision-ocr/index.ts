@@ -1,12 +1,11 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { optionalAuth, corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 interface VisionRequest {
   imageUrl?: string;
   imageBase64?: string;
-  mode?: "standard" | "deep";   // deep = quadrant-based multi-pass
-  quadrants?: 4 | 9;            // 4 = 2x2, 9 = 3x3
+  mode?: "standard" | "deep";
+  quadrants?: 4 | 9;
   features?: string[];
 }
 
@@ -51,7 +50,6 @@ function deduplicateText(texts: string[]): string {
     for (const line of text.split("\n")) {
       const trimmed = line.trim();
       if (!trimmed) continue;
-      // Normalize whitespace for dedup comparison
       const normalized = trimmed.replace(/\s+/g, " ").toLowerCase();
       if (!seen.has(normalized)) {
         seen.add(normalized);
@@ -62,26 +60,22 @@ function deduplicateText(texts: string[]): string {
   return allLines.join("\n");
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const userId = await optionalAuth(req);
-    const isInternalCall = req.headers.get("apikey") === Deno.env.get("SUPABASE_ANON_KEY");
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, body, req: rawReq }) => {
+    // Also allow internal calls via apikey header
+    const isInternalCall = rawReq.headers.get("apikey") === Deno.env.get("SUPABASE_ANON_KEY");
     if (!userId && !isInternalCall) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401, headers: { "Content-Type": "application/json" },
       });
     }
 
-    const { imageUrl, imageBase64, mode = "standard", quadrants = 4 }: VisionRequest = await req.json();
+    const { imageUrl, imageBase64, mode = "standard", quadrants = 4 }: VisionRequest = body;
 
     if (!imageUrl && !imageBase64) {
       return new Response(
         JSON.stringify({ error: "Either imageUrl or imageBase64 is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 400, headers: { "Content-Type": "application/json" } }
       );
     }
 
@@ -98,20 +92,15 @@ serve(async (req) => {
         messages: [{ role: "user", content: [{ type: "text", text: STANDARD_PROMPT }, imageContent] }],
       });
 
-      return new Response(
-        JSON.stringify({ fullText: result.content, textBlocks: [], mode: "standard" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { fullText: result.content, textBlocks: [], mode: "standard" };
     }
 
-    // ═══════════════════════════════════════
     // DEEP MODE — Multi-pass quadrant scanning
-    // ═══════════════════════════════════════
     console.log(`🔬 Deep OCR: ${quadrants} quadrants`);
     const positions = quadrants === 9 ? QUADRANT_POSITIONS_9 : QUADRANT_POSITIONS_4;
     const extractedTexts: string[] = [];
 
-    // Pass 1: Full image scan for layout context (Gemini Pro)
+    // Pass 1: Full image scan
     try {
       const fullResult = await callAI({
         provider: "gemini",
@@ -127,7 +116,7 @@ serve(async (req) => {
       console.error("Full scan failed:", e);
     }
 
-    // Pass 2-N: Quadrant-focused scans (Gemini Pro)
+    // Pass 2-N: Quadrant-focused scans
     for (const position of positions) {
       try {
         const quadResult = await callAI({
@@ -148,31 +137,15 @@ serve(async (req) => {
       }
     }
 
-    // Merge & deduplicate
     const mergedText = deduplicateText(extractedTexts);
     console.log(`🔬 Deep OCR complete: ${mergedText.length} chars merged from ${extractedTexts.length} passes`);
 
-    return new Response(
-      JSON.stringify({
-        fullText: mergedText,
-        textBlocks: [],
-        mode: "deep",
-        passes: extractedTexts.length,
-        quadrants,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-
-  } catch (error) {
-    console.error("OCR error:", error);
-    if (error instanceof AIError) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: error.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return {
+      fullText: mergedText,
+      textBlocks: [],
+      mode: "deep",
+      passes: extractedTexts.length,
+      quadrants,
+    };
+  }, { functionName: "google-vision-ocr", authMode: "optional", requireCompany: false, wrapResult: false })
+);
