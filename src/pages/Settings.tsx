@@ -33,7 +33,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { resetTour, restartTour } = useTour();
   const userEmail = user?.email ?? "";
-  const { profiles } = useProfiles();
+  const { profiles, updateProfile } = useProfiles();
   const { uploading, uploadSingle } = useAvatarUpload();
   const avatarFileRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("settings");
