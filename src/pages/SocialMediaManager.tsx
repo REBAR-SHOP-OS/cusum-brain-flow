@@ -645,7 +645,7 @@ export default function SocialMediaManager() {
         post={selectedPost}
         groupPages={groupPages}
         postsToReview={postsToReview}
-        onClose={() => { setSelectedPost(null); setGroupPages([]); }}
+        onClose={() => { setSelectedPost(null); }}
         onSchedule={() => selectedPost && handleSchedule(selectedPost)}
         onDecline={() => selectedPost && handleDecline(selectedPost)}
       />
