@@ -55,14 +55,9 @@ function extractToolResult(data: any): any | null {
   return null;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    // Auth guard
-    try { await requireAuth(req); } catch (res) { if (res instanceof Response) return res; throw res; }
-
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { body } = ctx;
     const { lead, activities, action, userMessage, pipelineStats, auditType } = body;
 
     // ── pipeline_audit (no lead context needed) ──
