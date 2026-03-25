@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { DOMParser } from "https://deno.land/x/deno_dom@v0.1.48/deno-dom-wasm.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 interface PageResult {
   url: string;
