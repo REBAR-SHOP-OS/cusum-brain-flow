@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 const DIARIZATION_INSTRUCTION = `
