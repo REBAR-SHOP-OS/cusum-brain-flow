@@ -129,21 +129,7 @@ function buildScheduledDate(baseDate: string, hour: number, minute: number): str
   return eastern.toISOString();
 }
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) {
-    console.error("auto-generate-post auth failed:", error?.message);
-    return null;
-  }
-  return user.id;
-}
+// verifyAuth removed — handled by handleRequest wrapper
 
 async function fetchBusinessIntelligence(authHeader: string): Promise<string> {
   try {
