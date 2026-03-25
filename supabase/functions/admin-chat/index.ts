@@ -2908,14 +2908,8 @@ INSTEAD: End with a sharp next action, a proactive insight, or just stop talking
     return new Response(encoder.encode(ssePayload), {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
-  } catch (e) {
-    console.error("admin-chat error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "admin-chat", authMode: "optional", requireCompany: false, wrapResult: false })
+);
 
 function buildActionDescription(tool: string, args: any): string {
   switch (tool) {
