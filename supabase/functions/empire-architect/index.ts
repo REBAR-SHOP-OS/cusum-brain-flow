@@ -1,12 +1,9 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { callAI, AIError } from "../_shared/aiRouter.ts";
-import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { callAI } from "../_shared/aiRouter.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { venture } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { venture } = body;
 
     const prompt = `You are a ruthless startup advisor. Analyze this venture idea and return ONLY valid JSON.
 
@@ -32,7 +29,6 @@ Return JSON with these exact fields:
   "recommendation": "<continue|kill>"
 }`;
 
-    // GPT: strict JSON output
     const result = await callAI({
       provider: "gpt",
       model: "gpt-4o-mini",
@@ -48,16 +44,6 @@ Return JSON with these exact fields:
     if (!jsonMatch) throw new Error("No JSON in AI response");
 
     const analysis = JSON.parse(jsonMatch[0]);
-
-    return new Response(JSON.stringify({ analysis }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("empire-architect error:", e);
-    const status = e instanceof AIError ? e.status : 500;
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { analysis };
+  }, { functionName: "empire-architect", requireCompany: false, wrapResult: false })
+);
