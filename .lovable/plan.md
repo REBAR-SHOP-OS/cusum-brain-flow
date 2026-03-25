@@ -1,22 +1,21 @@
 
 
-## Fix: "New Chat" Should Reset Purchasing List to Clean State
-
-### Root Cause
-When "New Chat" is pressed, `resetPurchasingItems` only deletes items where `due_date IS NULL`. Items that were previously confirmed (and received a `due_date`) remain in the database. Since the panel loads with no date filter, ALL items (including dated/purchased ones) appear — so the list still shows green/selected items.
-
-### Solution
-Change `resetPurchasingItems` in `AgentWorkspace.tsx` to delete **all** purchasing items for the company, not just undated ones. Confirmed lists are already preserved as snapshots in the `purchasing_confirmed_lists` table, so no data is lost.
+## Make zahra@rebar.shop a Super Admin
 
 ### Changes
 
-**File: `src/pages/AgentWorkspace.tsx`** (lines 213-221)
-- Remove the `.is("due_date", null)` filter from the delete query so ALL items for the company are deleted on reset
+**1. Frontend: `src/lib/accessPolicies.ts`**
+- Add `"zahra@rebar.shop"` to `superAdmins` array
+- Add `"zahra@rebar.shop"` to `ceoPortalAccess` array
+- Remove `"zahra@rebar.shop"` from `blockedFromCustomers` and `blockedFromShopFloor` (super admins bypass all restrictions)
 
-**File: `src/hooks/usePurchasingList.ts`** (lines 260-267)
-- Same fix in the hook's `resetItems` for consistency — remove `.is("due_date", null)`
+**2. Edge Functions: `supabase/functions/_shared/accessPolicies.ts`**
+- Add `"zahra@rebar.shop"` to `SUPER_ADMIN_EMAILS` array
+
+**3. Database: Add admin role**
+- Insert `admin` role for zahra's user in `user_roles` table
 
 ### Result
-- "New Chat" → all items deleted → panel remounts → default list shows with zero selections
-- Historical confirmed lists remain safe in the snapshots table
+- zahra@rebar.shop gets full super admin access identical to radin@rebar.shop
+- All route blocks removed, CEO Portal visible, Admin Console accessible
 
