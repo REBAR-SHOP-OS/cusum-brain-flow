@@ -510,27 +510,13 @@ async function syncAllUsers(body: { action?: string }) {
   );
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const clonedReq = req.clone();
-
-    // Parse body early
-    let body: { maxResults?: number; pageToken?: string; query?: string; action?: string } = {};
-    try {
-      body = await clonedReq.json();
-    } catch {
-      // No body
-    }
-
-    const userId = await verifyAuth(req);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient, body, req: rawReq } = ctx;
 
     if (!userId) {
       // Check if cron call (anon/service key)
-      const authHeader = req.headers.get("Authorization") || "";
+      const authHeader = rawReq.headers.get("Authorization") || "";
       const token = authHeader.replace("Bearer ", "");
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
