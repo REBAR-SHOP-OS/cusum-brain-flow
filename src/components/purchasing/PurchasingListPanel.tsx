@@ -14,10 +14,7 @@ import { cn } from "@/lib/utils";
 import { usePurchasingList } from "@/hooks/usePurchasingList";
 import { CompanyDefaultItems, COMPANY_DEFAULTS } from "./CompanyDefaultItems";
 
-const STATUS_TABS = [
-  { value: "all" as const, label: "All" },
-  { value: "purchased" as const, label: "Purchased" },
-];
+
 
 const PRIORITY_COLORS: Record<string, string> = {
   high: "text-red-500",
