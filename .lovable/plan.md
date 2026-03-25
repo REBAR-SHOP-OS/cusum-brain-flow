@@ -1,37 +1,27 @@
 
 
-## Replace Brain Icon with Hamburger Menu + Instructions Panel for Eisenhower Agent
+## Add Delete Confirmation Dialog to Inbox Bulk Delete
 
-### What Changes
+### Problem
+The bulk delete button in the Inbox fires immediately without a confirmation dialog. When clicked, there is no warning showing how many emails will be deleted.
 
-**Problem**: The Eisenhower agent currently shows a Brain (🧠) icon that opens the full Pixel Brain dialog (with knowledge items, logo upload, etc.). The user wants a simple hamburger menu (☰) that opens an instructions-only panel where they can write custom instructions for the agent.
+### Solution
+Add a confirmation `AlertDialog` before executing `handleBulkDelete` (and `handleBulkArchive`), displaying the correct count from `selectedIds.size`.
 
-### Plan
+### Changes
 
-**1. `src/components/agent/EisenhowerInstructionsDialog.tsx` (NEW)**
-- Simple dialog/sheet with a textarea for writing custom instructions
-- Save/load instructions from the `knowledge` table using `metadata: { agent: "eisenhower", type: "instructions" }`
-- Same pattern as Pixel Brain's instructions save/load (lines 143-174 of PixelBrainDialog)
-- No knowledge items, no logo upload — just a textarea + save button
+**File: `src/components/inbox/InboxView.tsx`**
 
-**2. `src/pages/AgentWorkspace.tsx`**
-- Import `Menu` icon from lucide-react (hamburger/three lines)
-- Import the new `EisenhowerInstructionsDialog`
-- Split the Brain icon button: show `Brain` for `social`, show `Menu` for `eisenhower`
-- Add state `eisenhowerInstrOpen` and render the new dialog
-- Keep existing `PixelBrainDialog` only for `social` agent
+1. Add state for delete confirmation: `const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);`
+2. Change the Delete button's `onClick` from `handleBulkDelete` to `() => setShowDeleteConfirm(true)`
+3. Add an `AlertDialog` that:
+   - Shows: `"Delete ${selectedIds.size} email(s)?"`
+   - Description: `"This action cannot be undone. The selected emails will be permanently deleted."`
+   - On confirm: calls `handleBulkDelete()` then `setShowDeleteConfirm(false)`
+   - On cancel: closes the dialog
+4. Import `AlertDialog` components from `@/components/ui/alert-dialog`
 
-**3. `supabase/functions/_shared/agentContext.ts`**
-- Add a block similar to the social agent's instructions fetch (lines 348-378) but for `eisenhower`
-- Query `knowledge` table for items with `metadata.agent = "eisenhower"` and `metadata.type = "instructions"`
-- Inject found instructions into `brainBlock` as `USER CUSTOM INSTRUCTIONS (ALWAYS FOLLOW THESE)`
-
-### Files
-
-| File | Action |
+| File | Change |
 |---|---|
-| `src/components/agent/EisenhowerInstructionsDialog.tsx` | Create — simple instructions textarea + save |
-| `src/pages/AgentWorkspace.tsx` | Edit — hamburger icon for eisenhower, Brain for social |
-| `supabase/functions/_shared/agentContext.ts` | Edit — load eisenhower instructions from knowledge table |
-| Deploy `ai-agent` | Redeploy to pick up context changes |
+| `src/components/inbox/InboxView.tsx` | Add confirmation dialog before bulk delete using `selectedIds.size` for count |
 
