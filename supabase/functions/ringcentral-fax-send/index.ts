@@ -1,11 +1,8 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const RC_SERVER = "https://platform.ringcentral.com";
-// Intentional access normalization: radin@rebar.shop added
 import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 
-import { corsHeaders } from "../_shared/auth.ts";
+const RC_SERVER = "https://platform.ringcentral.com";
 
 async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, userId: string): Promise<string | null> {
   const { data: tokenRow } = await supabaseAdmin
@@ -49,40 +46,11 @@ async function getAccessToken(supabaseAdmin: ReturnType<typeof createClient>, us
   return tokens.access_token;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabaseAdmin } = ctx;
 
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const userId = claimsData.claims.sub as string;
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
-
+    // Super admin check
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("email")
@@ -92,7 +60,7 @@ serve(async (req) => {
     if (!SUPER_ADMIN_EMAILS.includes(profile?.email ?? "")) {
       return new Response(JSON.stringify({ error: "Forbidden: Super admin only" }), {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     }
 
@@ -104,7 +72,7 @@ serve(async (req) => {
     if (!faxNumber) {
       return new Response(JSON.stringify({ error: "fax_number required" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     }
 
@@ -112,11 +80,10 @@ serve(async (req) => {
     if (!accessToken) {
       return new Response(JSON.stringify({ error: "RingCentral not connected" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     }
 
-    // Build multipart form for RC fax API
     const rcForm = new FormData();
     const faxJson = JSON.stringify({
       to: [{ phoneNumber: faxNumber }],
@@ -143,18 +110,10 @@ serve(async (req) => {
       console.error("Fax send failed:", data);
       return new Response(JSON.stringify({ error: "Failed to send fax", details: data }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     }
 
-    return new Response(JSON.stringify({ success: true, fax_id: data.id, status: data.messageStatus }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("ringcentral-fax-send error:", err);
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { success: true, fax_id: data.id, status: data.messageStatus };
+  }, { functionName: "ringcentral-fax-send", parseBody: false, requireCompany: false, wrapResult: false })
+);

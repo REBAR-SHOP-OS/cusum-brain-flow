@@ -1,57 +1,10 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const RC_SERVER = "https://platform.ringcentral.com";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const userId = claimsData.claims.sub as string;
-    const supabaseAdmin = createClient(supabaseUrl, serviceKey);
-
-    // Get company_id
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    const companyId = profile?.company_id;
-    if (!companyId) {
-      return new Response(JSON.stringify({ error: "No company" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabaseAdmin, companyId } = ctx;
 
     // Get all users in company who have RC tokens
     const { data: companyProfiles } = await supabaseAdmin
@@ -60,12 +13,10 @@ serve(async (req) => {
       .eq("company_id", companyId);
 
     if (!companyProfiles?.length) {
-      return new Response(JSON.stringify({ presenceData: [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { presenceData: [] };
     }
 
-    const userIds = companyProfiles.map((p) => p.user_id);
+    const userIds = companyProfiles.map((p: any) => p.user_id);
 
     const { data: tokenRows } = await supabaseAdmin
       .from("user_ringcentral_tokens")
@@ -73,9 +24,7 @@ serve(async (req) => {
       .in("user_id", userIds);
 
     if (!tokenRows?.length) {
-      return new Response(JSON.stringify({ presenceData: [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return { presenceData: [] };
     }
 
     const clientId = Deno.env.get("RINGCENTRAL_CLIENT_ID");
@@ -139,7 +88,6 @@ serve(async (req) => {
         };
         presenceResults.push(entry);
 
-        // Upsert to rc_presence table
         await supabaseAdmin.from("rc_presence").upsert({
           user_id: row.user_id,
           company_id: companyId,
@@ -154,14 +102,6 @@ serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ presenceData: presenceResults }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("ringcentral-presence error:", err);
-    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { presenceData: presenceResults };
+  }, { functionName: "ringcentral-presence", wrapResult: false })
+);
