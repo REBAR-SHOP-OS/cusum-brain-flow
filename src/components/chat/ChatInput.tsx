@@ -74,6 +74,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
   showFileUpload = false,
   showSmartMode = false,
   minimalToolbar = false,
+  voiceAndAttachOnly = false,
   selectedModel = "gemini",
   onModelChange,
   imageStyles = [],
