@@ -1,33 +1,26 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
-  try {
-    const { userId, serviceClient: supabase } = await requireAuth(req);
-
-    // Get user's company_id
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", userId)
-      .single();
-
-    if (!profile?.company_id) return json({ error: "No company found" }, 400);
-    const companyId = profile.company_id;
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase, companyId } = ctx;
 
     // Check for purge flag
-    const body = await req.json().catch(() => ({}));
-    const purge = body?.purge === true;
+    const purge = ctx.body?.purge === true;
 
     if (purge) {
       await supabase.from("penny_collection_queue").delete().eq("company_id", companyId);
       console.log("[penny-auto-actions] Purged all queue items for company", companyId);
     }
 
-    // Force QB sync before scanning to ensure fresh balance data
+    // Force QB sync before scanning
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -49,7 +42,7 @@ serve(async (req) => {
       console.warn("[penny-auto-actions] QB sync failed, proceeding with cached data:", syncErr);
     }
 
-    // Load configurable thresholds from comms_config (penny_config JSON field)
+    // Load configurable thresholds
     let thresholds = { email_reminder: 7, call_collection: 14, send_invoice: 30, escalate: 60 };
     try {
       const { data: config } = await supabase
@@ -66,7 +59,7 @@ serve(async (req) => {
       }
     } catch (_e) { /* use defaults */ }
 
-    // Load overdue invoices from accounting_mirror
+    // Load overdue invoices
     const { data: overdueInvoices } = await supabase
       .from("accounting_mirror")
       .select("id, quickbooks_id, data, balance, customer_id")
@@ -103,7 +96,7 @@ serve(async (req) => {
       return json({ queued: 0, auto_resolved: autoResolved, message: "No overdue invoices found" });
     }
 
-    // Batch-load customer names from customers table
+    // Batch-load customer names
     const custIds = [...new Set(overdueInvoices.map(i => i.customer_id).filter(Boolean))];
     const customerNameMap = new Map<string, string>();
     if (custIds.length > 0) {
@@ -114,7 +107,7 @@ serve(async (req) => {
       (customers || []).forEach(c => { if (c.name) customerNameMap.set(c.id, c.name); });
     }
 
-    // Load existing pending actions to deduplicate (by invoice_id AND customer_id)
+    // Load existing pending actions to deduplicate
     const { data: existingActions } = await supabase
       .from("penny_collection_queue")
       .select("invoice_id, customer_name")
@@ -122,11 +115,9 @@ serve(async (req) => {
       .eq("status", "pending_approval");
 
     const existingInvoiceIds = new Set((existingActions || []).map(a => a.invoice_id));
-    
-    // Customer-level dedup: track which customers already have a pending consolidated action
     const existingCustomerPending = new Set((existingActions || []).map(a => a.customer_name));
 
-    // Load customer contacts for email/phone
+    // Load customer contacts
     const customerIds = [...new Set(overdueInvoices.map(i => i.customer_id).filter(Boolean))];
     const { data: contacts } = customerIds.length > 0
       ? await supabase.from("contacts").select("customer_id, email, phone").in("customer_id", customerIds)
@@ -141,7 +132,7 @@ serve(async (req) => {
 
     const now = new Date();
 
-    // Group overdue invoices by customer_id for consolidated actions
+    // Group overdue invoices by customer_id
     const customerInvoiceGroups = new Map<string, {
       customerName: string;
       customerId: string | null;
@@ -165,7 +156,6 @@ serve(async (req) => {
       const customerName = (inv.customer_id ? customerNameMap.get(inv.customer_id) : undefined) ?? customerRef?.name ?? "Unknown Customer";
       const groupKey = inv.customer_id || customerName;
 
-      // Skip if this customer already has a pending consolidated action
       if (existingCustomerPending.has(customerName)) continue;
 
       if (!customerInvoiceGroups.has(groupKey)) {
@@ -219,7 +209,6 @@ serve(async (req) => {
         reasoning = `${customerName} has ${invoices.length} overdue invoice(s) totaling $${totalAmount.toLocaleString()} (oldest: ${maxDaysOverdue} days). A friendly email reminder should suffice. Invoices: ${invoiceList}`;
       }
 
-      // Generate AI-powered draft content via Lovable AI gateway
       let emailBody: string | undefined;
       let emailSubject: string | undefined;
       let callScript: string | undefined;
@@ -248,7 +237,7 @@ serve(async (req) => {
 
       actionsToQueue.push({
         company_id: companyId,
-        invoice_id: invoices[0].quickbooksId, // primary invoice
+        invoice_id: invoices[0].quickbooksId,
         customer_name: customerName,
         customer_email: contact?.email || null,
         customer_phone: contact?.phone || null,
@@ -269,7 +258,6 @@ serve(async (req) => {
       });
     }
 
-    // Batch insert
     if (actionsToQueue.length > 0) {
       const { error: insertError } = await supabase
         .from("penny_collection_queue")
@@ -281,14 +269,10 @@ serve(async (req) => {
     }
 
     return json({ queued: actionsToQueue.length, consolidated_customers: customerInvoiceGroups.size });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("penny-auto-actions error:", e);
-    return json({ error: String(e) }, 500);
-  }
-});
+  }, { functionName: "penny-auto-actions", requireCompany: true, wrapResult: false })
+);
 
-// AI-powered email draft generation — GPT for customer-facing writing
+// AI-powered email draft generation
 async function generateAIDraft(
   customer: string,
   invoices: { docNumber: string; balance: number; daysOverdue: number }[],
@@ -344,7 +328,7 @@ async function generateAICallScript(
   return result.content || generateCallScriptFallback(customer, invoices, totalAmount, maxDays);
 }
 
-// Fallback templates (used when AI generation fails)
+// Fallback templates
 function generateEmailDraftFallback(
   customer: string,
   invoices: { docNumber: string; balance: number; daysOverdue: number }[],
@@ -355,30 +339,10 @@ function generateEmailDraftFallback(
   const invoiceList = invoices.map(i => `  • Invoice #${i.docNumber} — $${i.balance.toLocaleString()} (${i.daysOverdue} days overdue)`).join("\n");
 
   if (type === "send_invoice") {
-    return `Dear ${customer},
-
-This is a follow-up regarding ${invoices.length === 1 ? `Invoice #${invoices[0].docNumber}` : `${invoices.length} outstanding invoices`} totaling $${totalAmount.toLocaleString()}, now up to ${maxDays} days past due.
-
-${invoiceList}
-
-We kindly request immediate payment to avoid any disruption to your account. If payment has already been sent, please disregard this notice.
-
-Please contact us if you have any questions or need to discuss payment arrangements.
-
-Best regards,
-Accounts Receivable — Rebar.shop`;
+    return `Dear ${customer},\n\nThis is a follow-up regarding ${invoices.length === 1 ? `Invoice #${invoices[0].docNumber}` : `${invoices.length} outstanding invoices`} totaling $${totalAmount.toLocaleString()}, now up to ${maxDays} days past due.\n\n${invoiceList}\n\nWe kindly request immediate payment to avoid any disruption to your account. If payment has already been sent, please disregard this notice.\n\nPlease contact us if you have any questions or need to discuss payment arrangements.\n\nBest regards,\nAccounts Receivable — Rebar.shop`;
   }
 
-  return `Hi ${customer},
-
-This is a friendly reminder that you have ${invoices.length === 1 ? `an outstanding invoice` : `${invoices.length} outstanding invoices`} totaling $${totalAmount.toLocaleString()}:
-
-${invoiceList}
-
-If payment has already been sent, please disregard this message. Otherwise, we'd appreciate payment at your earliest convenience.
-
-Best regards,
-Accounts Receivable — Rebar.shop`;
+  return `Hi ${customer},\n\nThis is a friendly reminder that you have ${invoices.length === 1 ? `an outstanding invoice` : `${invoices.length} outstanding invoices`} totaling $${totalAmount.toLocaleString()}:\n\n${invoiceList}\n\nIf payment has already been sent, please disregard this message. Otherwise, we'd appreciate payment at your earliest convenience.\n\nBest regards,\nAccounts Receivable — Rebar.shop`;
 }
 
 function generateCallScriptFallback(
@@ -388,22 +352,5 @@ function generateCallScriptFallback(
   maxDays: number,
 ): string {
   const invoiceList = invoices.map(i => `Invoice #${i.docNumber}: $${i.balance.toLocaleString()} (${i.daysOverdue} days)`).join(", ");
-  return `COLLECTION CALL SCRIPT — ${customer}
-
-Opening: "Hi, this is [Your Name] from Rebar.shop. I'm calling regarding ${invoices.length === 1 ? `Invoice #${invoices[0].docNumber}` : `${invoices.length} outstanding invoices`} totaling $${totalAmount.toLocaleString()}, up to ${maxDays} days past due."
-
-Invoices: ${invoiceList}
-
-If they answer:
-• Confirm they received the invoice(s)
-• Confirm the total amount: $${totalAmount.toLocaleString()}
-• Ask when payment can be expected
-• Offer payment plan if > 30 days overdue
-• Note the commitment date
-
-If voicemail:
-• Leave a brief message requesting a callback
-• Reference the total amount and number of invoices
-
-Follow-up: Log outcome and schedule next action.`;
+  return `COLLECTION CALL SCRIPT — ${customer}\n\nOpening: "Hi, this is [Your Name] from Rebar.shop. I'm calling regarding ${invoices.length === 1 ? `Invoice #${invoices[0].docNumber}` : `${invoices.length} outstanding invoices`} totaling $${totalAmount.toLocaleString()}, up to ${maxDays} days past due."\n\nInvoices: ${invoiceList}\n\nIf they answer:\n• Confirm they received the invoice(s)\n• Confirm the total amount: $${totalAmount.toLocaleString()}\n• Ask when payment can be expected\n• Offer payment plan if > 30 days overdue\n• Note the commitment date\n\nIf voicemail:\n• Leave a brief message requesting a callback\n• Reference the total amount and number of invoices\n\nFollow-up: Log outcome and schedule next action.`;
 }
