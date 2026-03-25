@@ -1,6 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 interface LeadData {
@@ -68,65 +66,18 @@ const leadsData: LeadData[] = [
   { title: "FW: Canada Post Phase 2 - Price for Rebar", company_name: "BERKIM CONSTRUCTION INC.", contact_name: "Victoria Silva", email: "victorias@berkim.com", phone: "+1 416-224-2550", expected_value: null, probability: 100, stage: mapStage("Delivered/Pickup Done"), priority: "high", source: "odoo-import", deadline: "2025-02-05", notes: "Assigned: Swapnil Mahajan | Vendor: Maverick | Quote: S01643" },
 ];
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-
-    // 1. Verify authentication
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const anonClient = createClient(
-      supabaseUrl,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await anonClient.auth.getUser();
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Invalid token" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // 2. Verify admin role
-    const { data: roles } = await anonClient
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id);
-
-    const hasAdminRole = roles?.some((r: { role: string }) => r.role === "admin");
-    if (!hasAdminRole) {
-      return new Response(
-        JSON.stringify({ error: "Admin access required" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // 3. Proceed with service role client for data import
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase } = ctx;
 
     const results = { customers_created: 0, leads_created: 0, errors: [] as string[] };
     const customerCache: Record<string, string> = {};
 
     for (const lead of leadsData) {
       try {
-        // Check if customer exists or create new one
         let customerId = customerCache[lead.company_name];
         
         if (!customerId) {
-          // Check existing customer
           const { data: existing } = await supabase
             .from("customers")
             .select("id")
@@ -159,7 +110,6 @@ serve(async (req) => {
           customerCache[lead.company_name] = customerId;
         }
 
-        // Create contact if we have contact info
         if (lead.contact_name && lead.email) {
           const { data: existingContact } = await supabase
             .from("contacts")
@@ -182,7 +132,6 @@ serve(async (req) => {
           }
         }
 
-        // Check for duplicate lead
         const { data: existingLead } = await supabase
           .from("leads")
           .select("id")
@@ -190,11 +139,8 @@ serve(async (req) => {
           .eq("customer_id", customerId)
           .maybeSingle();
 
-        if (existingLead) {
-          continue; // Skip duplicate
-        }
+        if (existingLead) continue;
 
-        // Create lead
         const { error: leadErr } = await supabase.from("leads").insert({
           title: lead.title,
           customer_id: customerId,
@@ -213,18 +159,10 @@ serve(async (req) => {
           results.leads_created++;
         }
       } catch (e) {
-        results.errors.push(`${lead.title}: ${e.message}`);
+        results.errors.push(`${lead.title}: ${(e as Error).message}`);
       }
     }
 
-    return new Response(JSON.stringify(results), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("Import CRM error:", error);
-    return new Response(
-      JSON.stringify({ error: "Import failed" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return results;
+  }, { functionName: "import-crm-data", requireRole: "admin", requireCompany: false, wrapResult: false })
+);

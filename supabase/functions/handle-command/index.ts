@@ -1,6 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
@@ -13,60 +12,39 @@ function parseIntent(input: string) {
   let intent = "ai_ask"; // Default intent
 
   if (inputLower.startsWith("navigate to")) {
-    intent = "navigate";
     const page = input.substring("navigate to".length).trim();
     return { intent: "navigate", params: { page } };
   }
 
   if (inputLower.startsWith("show") && inputLower.includes("machines")) {
-    intent = "query_machines";
     const statusMatch = inputLower.match(/(idle|active|stopped)/);
     const status = statusMatch ? statusMatch[0] : "idle";
     return { intent: "query_machines", params: { status } };
   }
 
   if (inputLower.includes("stock levels") || inputLower.includes("inventory")) {
-    intent = "query_inventory";
     return { intent: "query_inventory", params: {} };
   }
 
   if (inputLower.includes("work orders") || inputLower.includes("orders")) {
-    intent = "query_orders";
     return { intent: "query_orders", params: {} };
   }
 
   if (inputLower.includes("next suggestion")) {
-    intent = "suggest_next";
     return { intent: "suggest_next", params: {} };
   }
 
   return { intent, params: {} };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Auth guard — enforce authentication
-    let userId: string;
-    try {
-      const auth = await requireAuth(req);
-      userId = auth.userId;
-    } catch (res) {
-      if (res instanceof Response) return res;
-      throw res;
-    }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase } = ctx;
 
     const commandSchema = z.object({
       input: z.string().min(1, "Command cannot be empty").max(1000, "Command too long (max 1000 chars)"),
     });
-    const parsed = commandSchema.safeParse(await req.json());
+    const parsed = commandSchema.safeParse(ctx.body);
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
@@ -183,15 +161,6 @@ serve(async (req) => {
       });
     }
 
-    return new Response(
-      JSON.stringify({ intent, params, result, message: resultMessage }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (e) {
-    console.error("Command handler error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { intent, params, result, message: resultMessage };
+  }, { functionName: "handle-command", requireCompany: false, wrapResult: false })
+);

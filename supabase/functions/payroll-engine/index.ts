@@ -1,34 +1,35 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { callAI } from "../_shared/aiRouter.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+interface DailySnapshot {
+  profile_id: string;
+  work_date: string;
+  employee_type: string;
+  raw_clock_in: string | null;
+  raw_clock_out: string | null;
+  lunch_deducted_minutes: number;
+  paid_break_minutes: number;
+  expected_minutes: number;
+  paid_minutes: number;
+  overtime_minutes: number;
+  exceptions: any[];
+  ai_notes: string | null;
+  status: string;
+  company_id: string;
+}
 
-  try {
-    // Auth guard — must be authenticated (admin/accounting role)
-    let authUserId: string;
-    try {
-      const auth = await requireAuth(req);
-      authUserId = auth.userId;
-    } catch (res) {
-      if (res instanceof Response) return res;
-      throw res;
-    }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, body } = ctx;
+    const { company_id, week_start } = body;
 
-    const { company_id, week_start } = await req.json();
     if (!company_id || !week_start) {
       return new Response(JSON.stringify({ error: "company_id and week_start required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceKey);
 
     // Calculate week range (Mon-Sun)
     const wsDate = new Date(week_start + "T00:00:00Z");
@@ -75,7 +76,6 @@ Deno.serve(async (req) => {
     const aiPrompts: { profileName: string; profileId: string; summaryText: string }[] = [];
 
     for (const profile of profiles || []) {
-      // Determine employee type
       const empType = profile.employee_type ||
         (["office", "admin", "management"].some((d) => (profile.department || "").toLowerCase().includes(d))
           ? "office"
@@ -98,10 +98,9 @@ Deno.serve(async (req) => {
         let paidBreak = empType === "workshop" ? 30 : 0;
 
         if (dayEntries.length === 0) {
-          // Missing punch entirely
           exceptions.push({ type: "missing_punch", message: "No clock entry for this workday", confidence: 95 });
         } else {
-          const entry = dayEntries[0]; // Primary entry
+          const entry = dayEntries[0];
           rawIn = entry.clock_in;
           rawOut = entry.clock_out;
 
@@ -112,13 +111,11 @@ Deno.serve(async (req) => {
             const grossMin = Math.round((new Date(rawOut).getTime() - new Date(rawIn!).getTime()) / 60000);
             paidMinutes = Math.max(0, grossMin - lunchDeducted);
 
-            // Check for lunch overlap (shift < 5h = no lunch deduction needed)
             if (grossMin < 300) {
               lunchDeducted = 0;
               paidMinutes = grossMin;
             }
 
-            // Check hours mismatch
             if (paidMinutes !== 510 && rawOut) {
               const diff = paidMinutes - 510;
               if (Math.abs(diff) > 15) {
@@ -130,7 +127,6 @@ Deno.serve(async (req) => {
               }
             }
 
-            // Early/late check (before 5:30 AM or after 8 PM)
             const clockInHour = new Date(rawIn!).getUTCHours();
             if (clockInHour < 5 || clockInHour > 10) {
               exceptions.push({ type: "early_late", message: `Unusual clock-in time: ${new Date(rawIn!).toLocaleTimeString()}`, confidence: 70 });
@@ -167,9 +163,7 @@ Deno.serve(async (req) => {
 
       // Weekly overtime calc (>44h = 2640min)
       const overtimeMin = Math.max(0, weekTotalPaidMin - 2640);
-      const regularMin = weekTotalPaidMin - overtimeMin;
 
-      // Distribute overtime to last days
       if (overtimeMin > 0) {
         let remaining = overtimeMin;
         for (let i = profileSnapshots.length - 1; i >= 0 && remaining > 0; i--) {
@@ -191,7 +185,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Generate AI notes via Lovable AI
+    // Generate AI notes
     let aiNotesMap: Record<string, string> = {};
     try {
       if (aiPrompts.length > 0) {
@@ -228,18 +222,15 @@ Deno.serve(async (req) => {
       console.error("AI notes generation failed (non-fatal):", aiErr);
     }
 
-    // Apply AI notes to snapshots
     for (const snap of allSnapshots) {
       snap.ai_notes = aiNotesMap[snap.profile_id] || null;
     }
 
-    // Upsert daily snapshots
     const { error: upsertErr } = await supabase
       .from("payroll_daily_snapshot")
       .upsert(allSnapshots, { onConflict: "profile_id,work_date" });
     if (upsertErr) throw upsertErr;
 
-    // Upsert weekly summaries
     const weeklySummaries = (profiles || []).map((p: any) => {
       const snaps = allSnapshots.filter((s) => s.profile_id === p.id);
       const totalPaid = snaps.reduce((s, sn) => s + sn.paid_minutes, 0);
@@ -265,20 +256,11 @@ Deno.serve(async (req) => {
       .upsert(weeklySummaries, { onConflict: "profile_id,week_start" });
     if (wsErr) throw wsErr;
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        employees_processed: profiles!.length,
-        snapshots_created: allSnapshots.length,
-        week: { start: week_start, end: weekEnd },
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (err) {
-    console.error("Payroll engine error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return {
+      success: true,
+      employees_processed: profiles!.length,
+      snapshots_created: allSnapshots.length,
+      week: { start: week_start, end: weekEnd },
+    };
+  }, { functionName: "payroll-engine", requireCompany: false, wrapResult: false })
+);

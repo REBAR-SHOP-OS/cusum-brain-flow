@@ -1,14 +1,17 @@
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
-  try {
-    const { userId, serviceClient } = await requireAuth(req);
-
-    const { post_id, scheduled_date, qa_status, status, platform, page_name, extra_combos, delete_original } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient, body } = ctx;
+    const { post_id, scheduled_date, qa_status, status, platform, page_name, extra_combos, delete_original } = body;
 
     if (!post_id || !scheduled_date) {
       return json({ error: "post_id and scheduled_date are required" }, 400);
@@ -22,7 +25,7 @@ Deno.serve(async (req) => {
 
     console.log(`[schedule-post] user=${userId} post=${post_id} date=${scheduled_date} platform=${platform} page=${page_name} delete_original=${delete_original}`);
 
-    // Fetch full post data (needed for cloning and for unassigned detection)
+    // Fetch full post data
     const { data: fullPost } = await serviceClient
       .from("social_posts")
       .select("*")
@@ -42,17 +45,14 @@ Deno.serve(async (req) => {
     const isUnassigned = delete_original === true || fullPost.platform === "unassigned";
     const cloned: string[] = [];
 
-    // Sanitize extra_combos: never create clones with platform "unassigned"
     const sanitizedCombos = (extra_combos && Array.isArray(extra_combos))
       ? extra_combos.filter((c: any) => c.platform && c.platform !== "unassigned")
       : [];
 
     if (isUnassigned && sanitizedCombos.length > 0) {
-      // UNASSIGNED flow: clone for ALL combos, then delete original
       const scheduledDay = scheduled_date.substring(0, 10);
 
       for (const combo of sanitizedCombos) {
-        // Duplicate check
         const { data: existing } = await serviceClient
           .from("social_posts")
           .select("id")
@@ -105,7 +105,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Delete the original unassigned post
       const { error: delErr } = await serviceClient
         .from("social_posts")
         .delete()
@@ -117,8 +116,6 @@ Deno.serve(async (req) => {
         console.log(`[schedule-post] Deleted original unassigned post=${post_id}`);
       }
 
-      // Clean up sibling unassigned DRAFT posts with same title on same day
-      // GUARD: Never touch scheduled or published posts
       if (fullPost.title) {
         const { data: siblings, error: sibErr } = await serviceClient
           .from("social_posts")
@@ -167,7 +164,6 @@ Deno.serve(async (req) => {
 
     console.log(`[schedule-post] PRIMARY updated:`, JSON.stringify(data));
 
-    // Handle extra platform×page combos (clone post for each)
     if (sanitizedCombos.length > 0 && fullPost) {
       const scheduledDay = scheduled_date.substring(0, 10);
       for (const combo of sanitizedCombos) {
@@ -225,9 +221,5 @@ Deno.serve(async (req) => {
     }
 
     return json({ success: true, post: data, cloned_ids: cloned });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error(`[schedule-post] Unhandled:`, e);
-    return json({ error: (e as Error).message || "Unknown error" }, 500);
-  }
-});
+  }, { functionName: "schedule-post", requireCompany: false, wrapResult: false })
+);
