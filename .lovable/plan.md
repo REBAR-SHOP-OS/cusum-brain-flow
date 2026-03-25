@@ -1,21 +1,31 @@
 
 
-## Make zahra@rebar.shop a Super Admin
+## Fix: Edit Button Should Navigate to Detailed List
 
-### Changes
+### Problem
+In the Production Queue, the "Edit" button on each manifest navigates to `/shopfloor/cutter?planId=${id}` (the cutting station). It should navigate to the **Detailed List** view instead.
 
-**1. Frontend: `src/lib/accessPolicies.ts`**
-- Add `"zahra@rebar.shop"` to `superAdmins` array
-- Add `"zahra@rebar.shop"` to `ceoPortalAccess` array
-- Remove `"zahra@rebar.shop"` from `blockedFromCustomers` and `blockedFromShopFloor` (super admins bypass all restrictions)
+### Change
 
-**2. Edge Functions: `supabase/functions/_shared/accessPolicies.ts`**
-- Add `"zahra@rebar.shop"` to `SUPER_ADMIN_EMAILS` array
+**File: `src/components/office/ProductionQueueView.tsx`** (line 193)
 
-**3. Database: Add admin role**
-- Insert `admin` role for zahra's user in `user_roles` table
+Change the `onEditPlan` handler from:
+```typescript
+onEditPlan={(id) => navigate(`/shopfloor/cutter?planId=${id}`)}
+```
+to:
+```typescript
+onEditPlan={(id) => navigate("/office", { state: { section: "detailed-list", planId: id } })}
+```
+
+**File: `src/pages/OfficePortal.tsx`**
+
+Read `planId` from `location.state` and, when the initial section is `"detailed-list"` with a `planId`, pass it down to `DetailedListView` so it auto-selects that plan.
+
+**File: `src/components/office/DetailedListView.tsx`**
+
+Accept an optional `initialPlanId` prop and use it to pre-select the plan on mount.
 
 ### Result
-- zahra@rebar.shop gets full super admin access identical to radin@rebar.shop
-- All route blocks removed, CEO Portal visible, Admin Console accessible
+Clicking "Edit" on a manifest in the Production Queue opens the Detailed List view with that plan selected.
 
