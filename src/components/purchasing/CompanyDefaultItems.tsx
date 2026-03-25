@@ -62,6 +62,7 @@ export const COMPANY_DEFAULTS: DefaultItem[] = [
 interface CompanyDefaultItemsProps {
   dbItems: PurchasingItem[];
   customItems?: PurchasingItem[];
+  disabled?: boolean;
   onMarkPurchased: (title: string, category: string) => void;
   onUnmarkPurchased: (itemId: string) => void;
   onMarkRejected: (title: string, category: string) => void;
@@ -165,7 +166,7 @@ function DefaultRow({
   );
 }
 
-export function CompanyDefaultItems({ dbItems, customItems = [], onMarkPurchased, onUnmarkPurchased, onMarkRejected, onUnmarkRejected, onTogglePurchased, onToggleRejected, onDeleteItem }: CompanyDefaultItemsProps) {
+export function CompanyDefaultItems({ dbItems, customItems = [], disabled, onMarkPurchased, onUnmarkPurchased, onMarkRejected, onUnmarkRejected, onTogglePurchased, onToggleRejected, onDeleteItem }: CompanyDefaultItemsProps) {
   const officeItems = COMPANY_DEFAULTS.filter((d) => d.category === "Office");
   const workshopItems = COMPANY_DEFAULTS.filter((d) => d.category === "Workshop");
 
@@ -232,7 +233,7 @@ export function CompanyDefaultItems({ dbItems, customItems = [], onMarkPurchased
   };
 
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", disabled && "opacity-50 pointer-events-none")}>
       {renderGroup("Office", officeItems)}
       {renderGroup("Workshop", workshopItems)}
     </div>

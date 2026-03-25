@@ -119,7 +119,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
 
 
       {/* Always-visible Add form */}
-      <div className="p-3 border-b border-border bg-muted/30 space-y-2">
+      <div className={cn("p-3 border-b border-border bg-muted/30 space-y-2", !filterDate && "opacity-50 pointer-events-none")}>
         <div className="flex gap-2">
           <Input
             placeholder="Item name..."
@@ -162,9 +162,17 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
       </div>
 
       {/* Items list */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      <div className="flex-1 overflow-y-auto p-2 space-y-1 relative">
+        {!filterDate && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/80 backdrop-blur-[1px] rounded-lg">
+            <CalendarIcon className="w-10 h-10 text-muted-foreground mb-3" />
+            <p className="text-sm font-medium text-muted-foreground">Please select a date first</p>
+            <p className="text-xs text-muted-foreground/70 mt-1">Use the calendar button above to pick a date</p>
+          </div>
+        )}
         {/* Company Defaults */}
         <CompanyDefaultItems
+          disabled={!filterDate}
           dbItems={items}
           customItems={categorizedCustom}
           onMarkPurchased={(title, category) => addItemAsPurchased(title, category, filterDate ? format(filterDate, "yyyy-MM-dd") : undefined)}
