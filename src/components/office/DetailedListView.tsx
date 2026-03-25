@@ -21,9 +21,7 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
 
   // Sync when parent navigates with a new planId (e.g. Edit from Production Queue)
   useEffect(() => {
-    if (initialPlanId) {
-      setSelectedPlanId(initialPlanId);
-    }
+    setSelectedPlanId(initialPlanId ?? null);
   }, [initialPlanId]);
   const { items, loading: itemsLoading, fetchItems } = useCutPlanItems(selectedPlanId);
   const unitSystem = useUnitSystem();
