@@ -361,9 +361,5 @@ Deno.serve((req) =>
     }
 
     return json(result);
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("transcribe-translate error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
-  }
-});
+  }, { functionName: "transcribe-translate", parseBody: false, requireCompany: false, wrapResult: false })
+);

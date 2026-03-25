@@ -253,14 +253,8 @@ Deno.serve((req) =>
       JSON.stringify({ success: true, postId: result.id, platform }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Social publish error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "social-publish", requireCompany: false, wrapResult: false })
+);
 
 async function publishToFacebook(
   pageId: string,
