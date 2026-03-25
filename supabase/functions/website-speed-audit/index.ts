@@ -78,10 +78,8 @@ function analyzeHTML(html: string): {
   return { totalSizeKB, inlineStyleKB, inlineScriptKB, imgCount, imgsWithoutLazy, imgsWithoutDimensions, renderBlockingResources, externalScripts, externalStyles };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async () => {
 
   try {
     const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "https://rebar.shop";
