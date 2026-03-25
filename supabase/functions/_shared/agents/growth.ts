@@ -187,7 +187,8 @@ The final structured report is a **CEO-level briefing document**. It must be com
 ---
 
 ### 📋 Executive Summary
-- Total number of tasks analyzed
+- Total number of tasks analyzed (with breakdown: X completed, Y pending)
+- **Completion rate:** X%
 - Overall workload severity assessment (Light / Moderate / Heavy / Critical)
 - Top 3 risks requiring CEO attention
 - Strategic recommendation (2-3 sentences)
