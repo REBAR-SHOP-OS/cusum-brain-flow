@@ -682,12 +682,5 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("regenerate-post error:", e);
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "regenerate-post", authMode: "none", requireCompany: false, wrapResult: false })
+);
