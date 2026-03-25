@@ -1,6 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
 interface RawSnippet {
@@ -8,17 +7,9 @@ interface RawSnippet {
   text: string;
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, serviceKey);
-
-    const { domain_id } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: supabase, body }) => {
+    const { domain_id } = body;
     if (!domain_id) {
       return new Response(JSON.stringify({ error: "domain_id required" }), {
         status: 400,
