@@ -24,7 +24,7 @@ export const ACCESS_POLICIES = {
   shopfloorDevices: ["ai@rebar.shop"] as string[],
 
   /** CEO Portal nav visibility */
-  ceoPortalAccess: ["sattar@rebar.shop", "radin@rebar.shop"] as string[],
+  ceoPortalAccess: ["sattar@rebar.shop", "radin@rebar.shop", "zahra@rebar.shop"] as string[],
 
   /** External estimators — email → allowed pipeline stage ids */
   externalEstimators: {

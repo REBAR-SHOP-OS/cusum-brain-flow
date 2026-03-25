@@ -8,6 +8,7 @@
 export const SUPER_ADMIN_EMAILS: readonly string[] = [
   "sattar@rebar.shop",
   "radin@rebar.shop",
+  "zahra@rebar.shop",
 ];
 
 /** Device/service accounts with special system access (e.g. backup) */
