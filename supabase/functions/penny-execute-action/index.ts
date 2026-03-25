@@ -1,31 +1,31 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { json } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId, serviceClient: supabase } = await requireAuth(req);
-    const { action_id } = await req.json();
-
-    if (!action_id) return json({ error: "action_id required" }, 400);
+/**
+ * Executes a Penny collection action (email reminder, call, escalation).
+ * Migrated to handleRequest wrapper (Phase 1.2).
+ */
+serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient, body }) => {
+    const { action_id } = body;
+    if (!action_id) throw json({ error: "action_id required" }, 400);
 
     // Load the action
-    const { data: action, error: loadErr } = await supabase
+    const { data: action, error: loadErr } = await serviceClient
       .from("penny_collection_queue")
       .select("*")
       .eq("id", action_id)
       .single();
 
-    if (loadErr || !action) return json({ error: "Action not found" }, 404);
+    if (loadErr || !action) throw json({ error: "Action not found" }, 404);
     if (action.status !== "approved" && action.status !== "pending_approval") {
-      return json({ error: `Action status is '${action.status}', cannot execute` }, 400);
+      throw json({ error: `Action status is '${action.status}', cannot execute` }, 400);
     }
 
     // Mark as approved if still pending
     if (action.status === "pending_approval") {
-      await supabase
+      await serviceClient
         .from("penny_collection_queue")
         .update({ status: "approved", approved_by: userId, approved_at: new Date().toISOString() })
         .eq("id", action_id);
@@ -36,7 +36,6 @@ serve(async (req) => {
     switch (action.action_type) {
       case "email_reminder":
       case "send_invoice": {
-        // Try to send via QuickBooks if invoice exists
         if (action.invoice_id && action.customer_email) {
           try {
             const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -65,8 +64,7 @@ serve(async (req) => {
       }
 
       case "call_collection": {
-        // Create a call_task record
-        const { data: callTask, error: callErr } = await supabase
+        const { data: callTask, error: callErr } = await serviceClient
           .from("call_tasks")
           .insert({
             company_id: action.company_id,
@@ -89,15 +87,14 @@ serve(async (req) => {
       }
 
       case "escalate": {
-        // Create a human_task for Vizzy
-        const { data: agents } = await supabase
+        const { data: agents } = await serviceClient
           .from("agents")
           .select("id")
           .eq("code", "vizzy")
           .single();
 
         if (agents?.id) {
-          await supabase.from("human_tasks").insert({
+          await serviceClient.from("human_tasks").insert({
             company_id: action.company_id,
             agent_id: agents.id,
             title: `Escalation: ${action.customer_name} — $${action.amount} overdue ${action.days_overdue}d`,
@@ -122,7 +119,7 @@ serve(async (req) => {
 
     // Update queue item as executed
     const finalStatus = result.error ? "failed" : "executed";
-    await supabase
+    await serviceClient
       .from("penny_collection_queue")
       .update({
         status: finalStatus,
@@ -135,8 +132,7 @@ serve(async (req) => {
     // Auto-create task for assigned user on successful execution
     if (finalStatus === "executed" && action.assigned_to) {
       try {
-        // Look up approver's profile ID
-        const { data: approverProfile } = await supabase
+        const { data: approverProfile } = await serviceClient
           .from("profiles")
           .select("id")
           .eq("user_id", userId)
@@ -150,7 +146,7 @@ serve(async (req) => {
           `Result: ${JSON.stringify(result)}`,
         ].filter(Boolean).join("\n");
 
-        await supabase.from("tasks").insert({
+        await serviceClient.from("tasks").insert({
           title: `Collection: ${action.customer_name} - $${action.amount}`,
           description: taskDescription,
           assigned_to: action.assigned_to,
@@ -170,8 +166,7 @@ serve(async (req) => {
 
     // Auto-queue next follow-up if executed successfully
     if (finalStatus === "executed" && action.action_type !== "escalate") {
-      // Dedup check: skip if a pending_approval item already exists for same customer
-      const { data: existing } = await supabase
+      const { data: existing } = await serviceClient
         .from("penny_collection_queue")
         .select("id")
         .eq("customer_name", action.customer_name)
@@ -188,7 +183,7 @@ serve(async (req) => {
           : action.action_type === "call_collection" ? "send_invoice"
           : "escalate";
 
-        await supabase.from("penny_collection_queue").insert({
+        await serviceClient.from("penny_collection_queue").insert({
           company_id: action.company_id,
           invoice_id: action.invoice_id,
           customer_name: action.customer_name,
@@ -207,10 +202,6 @@ serve(async (req) => {
       }
     }
 
-    return json({ executed: true, result, status: finalStatus });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("penny-execute-action error:", e);
-    return json({ error: String(e) }, 500);
-  }
-});
+    return { executed: true, result, status: finalStatus };
+  }, { functionName: "penny-execute-action", requireCompany: false, wrapResult: false }),
+);

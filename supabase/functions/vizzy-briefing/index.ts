@@ -1,23 +1,18 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
-import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { callAI } from "../_shared/aiRouter.ts";
+import { json } from "../_shared/auth.ts";
 
 /**
  * Uses Gemini to compress the massive Vizzy business context
  * into a concise, intelligent briefing for the AI assistant.
- * Gemini chosen here: large context input (4000+ words) is its strength.
+ * Migrated to handleRequest wrapper (Phase 1.2).
  */
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    await requireAuth(req);
-
-    const { rawContext } = await req.json();
+serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { rawContext } = body;
     if (!rawContext || typeof rawContext !== "string") {
-      return json({ error: "rawContext string is required" }, 400);
+      throw json({ error: "rawContext string is required" }, 400);
     }
 
     try {
@@ -42,22 +37,15 @@ RULES:
 - Do NOT add commentary — just output the compressed context
 - Maintain the same instruction format so the voice agent understands its role`,
           },
-          {
-            role: "user",
-            content: rawContext,
-          },
+          { role: "user", content: rawContext },
         ],
       });
 
-      return json({ briefing: result.content || rawContext });
+      return { briefing: result.content || rawContext };
     } catch (aiErr: any) {
       // Fallback: return raw context on any AI error
       console.warn("AI error, returning raw context:", aiErr.message);
-      return json({ briefing: rawContext });
+      return { briefing: rawContext };
     }
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("vizzy-briefing error:", e);
-    return json({ error: "Internal server error" }, 500);
-  }
-});
+  }, { functionName: "vizzy-briefing", requireCompany: false, wrapResult: false }),
+);

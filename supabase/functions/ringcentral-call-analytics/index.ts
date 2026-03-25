@@ -1,41 +1,24 @@
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { userId, serviceClient } = await requireAuth(req);
-
-    // Get user's company
-    const { data: profile } = await serviceClient
-      .from("profiles")
-      .select("company_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (!profile?.company_id) {
-      return json({ error: "No company found" }, 403);
-    }
-
-    const body = await req.json().catch(() => ({}));
+/**
+ * Aggregates RingCentral call analytics (daily volume, outcomes, top callers) for the user's company.
+ * Migrated to handleRequest wrapper (Phase 1.2).
+ */
+Deno.serve((req) =>
+  handleRequest(req, async ({ companyId, serviceClient, body }) => {
     const daysBack = body.daysBack ?? 30;
     const since = new Date(Date.now() - daysBack * 86400000).toISOString();
 
-    // Query all company calls with service role (bypasses RLS)
     const { data: rows, error } = await serviceClient
       .from("communications")
       .select("direction, received_at, metadata, from_address, to_address")
-      .eq("company_id", profile.company_id)
+      .eq("company_id", companyId)
       .eq("source", "ringcentral")
       .gte("received_at", since)
       .order("received_at", { ascending: false })
       .limit(1000);
 
-    if (error) {
-      return json({ error: error.message }, 500);
-    }
+    if (error) throw new Error(error.message);
 
     // Filter to calls only
     const calls = (rows || []).filter((r: any) => {
@@ -43,7 +26,7 @@ Deno.serve(async (req) => {
       return meta?.type === "call";
     });
 
-    // Aggregate analytics server-side
+    // Aggregate analytics
     const dailyMap = new Map<string, { inbound: number; outbound: number }>();
     const outcomes: Record<string, number> = {};
     const callerCounts = new Map<string, number>();
@@ -54,7 +37,6 @@ Deno.serve(async (req) => {
       const meta = call.metadata as Record<string, unknown> | null;
       const dir = (call.direction || "inbound").toLowerCase();
 
-      // Date bucketing
       const dateStr = call.received_at
         ? new Date(call.received_at).toISOString().slice(0, 10)
         : "unknown";
@@ -63,16 +45,13 @@ Deno.serve(async (req) => {
       if (dir === "inbound") day.inbound++;
       else day.outbound++;
 
-      // Outcomes
       const result = (meta?.result as string) || "Unknown";
       outcomes[result] = (outcomes[result] || 0) + 1;
       if (result === "Missed") missed++;
 
-      // Duration
       const duration = (meta?.duration as number) || 0;
       totalDuration += duration;
 
-      // Top contacts
       const phone = dir === "inbound"
         ? call.from_address || "Unknown"
         : call.to_address || "Unknown";
@@ -92,7 +71,7 @@ Deno.serve(async (req) => {
       .slice(0, 10)
       .map(([phone, count]) => ({ phone, count }));
 
-    return json({
+    return {
       dailyVolume,
       totalCalls: calls.length,
       totalInbound,
@@ -103,9 +82,6 @@ Deno.serve(async (req) => {
       outcomeDistribution: outcomes,
       topCallers,
       totalDuration,
-    });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    return json({ error: (e as Error).message }, 500);
-  }
-});
+    };
+  }, { functionName: "ringcentral-call-analytics", wrapResult: false }),
+);

@@ -1,20 +1,17 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
-import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { callAI } from "../_shared/aiRouter.ts";
+import { json } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    // Auth guard
-    try { await requireAuth(req); } catch (res) { if (res instanceof Response) return res; throw res; }
-
-    const { meetingId, transcript, previousNotes } = await req.json();
+/**
+ * AI-powered live meeting note-taker. Analyzes transcript and produces structured notes.
+ * Migrated to handleRequest wrapper (Phase 1.2).
+ */
+serve((req) =>
+  handleRequest(req, async ({ body }) => {
+    const { meetingId, transcript, previousNotes } = body;
     if (!meetingId || !transcript) {
-      throw new Error("meetingId and transcript are required");
+      throw json({ error: "meetingId and transcript are required" }, 400);
     }
 
     const result = await callAI({
@@ -37,23 +34,18 @@ ${previousNotes ? `Previous notes from earlier in this meeting (build on these, 
 
 Be concise. Focus on actionable items. If you can identify who said what, attribute it.`,
         },
-        {
-          role: "user",
-          content: `Live meeting transcript:\n\n${transcript}`,
-        },
+        { role: "user", content: `Live meeting transcript:\n\n${transcript}` },
       ],
       temperature: 0.3,
     });
 
-    const rawContent = result.content;
-
     let parsed;
     try {
-      const cleaned = rawContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+      const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
       parsed = {
-        keyPoints: [rawContent.slice(0, 200)],
+        keyPoints: [result.content.slice(0, 200)],
         decisions: [],
         actionItems: [],
         questions: [],
@@ -61,19 +53,6 @@ Be concise. Focus on actionable items. If you can identify who said what, attrib
       };
     }
 
-    return new Response(JSON.stringify({ success: true, notes: parsed }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("Meeting live notes error:", error);
-    if (error instanceof AIError) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: error.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { success: true, notes: parsed };
+  }, { functionName: "meeting-live-notes", requireCompany: false, wrapResult: false }),
+);
