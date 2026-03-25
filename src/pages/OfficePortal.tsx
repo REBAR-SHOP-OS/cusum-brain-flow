@@ -36,6 +36,7 @@ export default function OfficePortal() {
   const location = useLocation();
   const rawSection = (location.state as any)?.section || "ai-extract";
   const initialSection = rawSection === "ceo-dashboard" ? "ai-extract" : rawSection;
+  const initialPlanId = (location.state as any)?.planId || null;
   const [activeSection, setActiveSection] = useState<OfficeSection>(initialSection);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -98,7 +99,11 @@ export default function OfficePortal() {
           </span>
         </div>
         <div className="flex-1 overflow-auto">
-          <ActiveComponent />
+          {activeSection === "detailed-list" ? (
+            <DetailedListView initialPlanId={initialPlanId} />
+          ) : (
+            <ActiveComponent />
+          )}
         </div>
       </main>
       {isRebarUser && <ScreenshotFeedbackButton />}
