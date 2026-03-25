@@ -14,9 +14,9 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
 
-export function DetailedListView() {
+export function DetailedListView({ initialPlanId }: { initialPlanId?: string | null }) {
   const { plans, loading: plansLoading } = useCutPlans();
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(initialPlanId ?? null);
   const { items, loading: itemsLoading } = useCutPlanItems(selectedPlanId);
   const unitSystem = useUnitSystem();
 
