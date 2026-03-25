@@ -30,6 +30,7 @@ import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
 import { useSocialApprovals } from "@/hooks/useSocialApprovals";
 import { ApprovalsPanel } from "@/components/social/ApprovalsPanel";
+import { DeclineReasonDialog } from "@/components/social/DeclineReasonDialog";
 
 const platformFilters = [
   { id: "all", label: "All" },
@@ -261,11 +262,12 @@ export default function SocialMediaManager() {
     setSelectedPost(null);
   };
 
-  const handleDecline = async (post: SocialPost) => {
-    // Get current user email to record who declined
+  const [declineTarget, setDeclineTarget] = useState<SocialPost | null>(null);
+
+  const handleDecline = async (post: SocialPost, reason?: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     const declinedBy = user?.email || "unknown";
-    updatePost.mutate({ id: post.id, status: "declined", neel_approved: false, declined_by: declinedBy } as any);
+    updatePost.mutate({ id: post.id, status: "declined", neel_approved: false, declined_by: declinedBy, decline_reason: reason || null } as any);
     setSelectedPost(null);
   };
 
@@ -647,7 +649,7 @@ export default function SocialMediaManager() {
         postsToReview={postsToReview}
         onClose={() => { setSelectedPost(null); }}
         onSchedule={() => selectedPost && handleSchedule(selectedPost)}
-        onDecline={() => selectedPost && handleDecline(selectedPost)}
+        onDecline={() => selectedPost && setDeclineTarget(selectedPost)}
       />
 
       {/* Brand Kit Dialog */}
@@ -669,6 +671,16 @@ export default function SocialMediaManager() {
         confirmLabel="Delete all"
         onConfirm={handleBulkDelete}
         loading={bulkDeleting}
+      />
+
+      {/* Decline Reason Dialog */}
+      <DeclineReasonDialog
+        open={!!declineTarget}
+        onOpenChange={(open) => { if (!open) setDeclineTarget(null); }}
+        onConfirm={(reason) => {
+          if (declineTarget) handleDecline(declineTarget, reason);
+          setDeclineTarget(null);
+        }}
       />
     </div>
   );

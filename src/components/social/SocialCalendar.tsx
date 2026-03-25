@@ -245,9 +245,14 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                           ? "Pending Approval"
                           : status === "scheduled" && isApproved
                           ? "Scheduled · Approved"
-                          : statusLabel}
+                        : statusLabel}
                       </span>
                     </div>
+                    {status === "declined" && firstPost.decline_reason && (
+                      <p className="text-[10px] text-destructive/70 truncate mt-0.5" title={firstPost.decline_reason}>
+                        💬 {firstPost.decline_reason}
+                      </p>
+                    )}
                   </button>
                 );
               })}
