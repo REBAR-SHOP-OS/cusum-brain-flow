@@ -34,6 +34,12 @@ export interface HandlerOptions {
   requireAnyRole?: AppRole[];
   /** If true, the handler must return a Response object directly. Skips { ok, data } wrapping. */
   rawResponse?: boolean;
+  /**
+   * If false, the handler's return value is serialized as-is (no { ok, data } wrapping).
+   * Useful for migrating legacy functions that have an established API contract.
+   * Default: true (wraps in { ok: true, data: result }).
+   */
+  wrapResult?: boolean;
 }
 
 /**
@@ -96,13 +102,16 @@ export async function handleRequest(
 
     log.done("Success", { companyId });
 
-    // If rawResponse is enabled and handler returned a Response, use it directly
-    if (options.rawResponse && result instanceof Response) {
+    // If handler returned a Response, always pass it through directly
+    if (result instanceof Response) {
       return result;
     }
 
+    // Serialize result — legacy functions use wrapResult: false to preserve API shape
+    const payload = options.wrapResult === false ? result : { ok: true, data: result };
+
     return new Response(
-      JSON.stringify({ ok: true, data: result }),
+      JSON.stringify(payload),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {

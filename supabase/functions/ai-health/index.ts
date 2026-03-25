@@ -1,13 +1,15 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
+import { json } from "../_shared/auth.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId, serviceClient } = await requireAuth(req);
-
+/**
+ * AI health dashboard — pings OpenAI, Gemini, and Lovable gateways.
+ * Super admin only.
+ * Migrated to handleRequest wrapper (Phase 1.2).
+ */
+serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient }) => {
     // Super admin gate — email check
     const { data: profile } = await serviceClient
       .from("profiles")
@@ -17,7 +19,7 @@ serve(async (req) => {
 
     const email = (profile?.email ?? "").toLowerCase();
     if (!SUPER_ADMIN_EMAILS.includes(email)) {
-      return json({ error: "Forbidden: super admin only" }, 403);
+      throw json({ error: "Forbidden: super admin only" }, 403);
     }
 
     // 1. Environment presence (booleans only)
@@ -31,7 +33,7 @@ serve(async (req) => {
     const openai_ping = await pingEndpoint(
       "https://api.openai.com/v1/models",
       { Authorization: `Bearer ${Deno.env.get("GPT_API_KEY")}` },
-      "HEAD"
+      "HEAD",
     );
 
     // 3. Gemini ping
@@ -39,7 +41,7 @@ serve(async (req) => {
     const gemini_ping = await pingEndpoint(
       `https://generativelanguage.googleapis.com/v1beta/models?key=${geminiKey}`,
       {},
-      "GET"
+      "GET",
     );
 
     // 4. Lovable gateway ping
@@ -54,28 +56,24 @@ serve(async (req) => {
         model: "google/gemini-2.5-flash-lite",
         messages: [{ role: "user", content: "ping" }],
         max_tokens: 1,
-      })
+      }),
     );
 
-    return json({
+    return {
       timestamp: new Date().toISOString(),
       env_present,
       openai_ping,
       gemini_ping,
       lovable_ping,
-    });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("ai-health error:", e);
-    return json({ error: "Internal error" }, 500);
-  }
-});
+    };
+  }, { functionName: "ai-health", requireCompany: false, wrapResult: false }),
+);
 
 async function pingEndpoint(
   url: string,
   headers: Record<string, string>,
   method: string,
-  body?: string
+  body?: string,
 ): Promise<{ status: number; latency_ms: number; ok: boolean }> {
   const start = performance.now();
   try {
@@ -86,7 +84,7 @@ async function pingEndpoint(
     });
     const latency_ms = Math.round(performance.now() - start);
     return { status: resp.status, latency_ms, ok: resp.ok };
-  } catch (e) {
+  } catch {
     const latency_ms = Math.round(performance.now() - start);
     return { status: 0, latency_ms, ok: false };
   }
