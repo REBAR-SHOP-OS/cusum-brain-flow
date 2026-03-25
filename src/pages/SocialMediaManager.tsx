@@ -61,13 +61,24 @@ export default function SocialMediaManager() {
   const [showApprovals, setShowApprovals] = useState(false);
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
    const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
-   const [groupPages, setGroupPages] = useState<string[]>([]);
 
   // Derive selectedPost from fresh query data so it updates after mutations
   const selectedPost = useMemo(
     () => (selectedPostId ? posts.find((p) => p.id === selectedPostId) ?? null : null),
     [selectedPostId, posts]
   );
+
+  // Derive groupPages from current posts so it always reflects latest DB state
+  const groupPages = useMemo(() => {
+    if (!selectedPost) return [];
+    const day = selectedPost.scheduled_date?.substring(0, 10);
+    const siblings = posts.filter(s =>
+      s.title === selectedPost.title &&
+      s.platform === selectedPost.platform &&
+      (day ? s.scheduled_date?.substring(0, 10) === day : s.id === selectedPost.id)
+    );
+    return [...new Set(siblings.map(s => s.page_name).filter(Boolean))] as string[];
+  }, [selectedPost, posts]);
   const setSelectedPost = useCallback((post: SocialPost | null) => {
     setSelectedPostId(post?.id ?? null);
   }, []);
@@ -610,16 +621,9 @@ export default function SocialMediaManager() {
                posts={filteredPosts}
                weekStart={weekStart}
                onPostClick={(p) => {
-                 const siblingPages = [...new Set(
-                   filteredPosts
-                     .filter(s => s.title === p.title && s.platform === p.platform && s.scheduled_date === p.scheduled_date)
-                     .map(s => s.page_name)
-                     .filter(Boolean)
-                 )] as string[];
-                 setGroupPages(siblingPages.length > 0 ? siblingPages : []);
                  setSelectedPost(p);
                }}
-               onGroupClick={(post, pages) => { setGroupPages(pages); setSelectedPost(post); }}
+               onGroupClick={(post, pages) => { setSelectedPost(post); }}
                selectedPostIds={selectionMode ? selectedPostIds : undefined}
                onToggleSelect={selectionMode ? toggleSelectPost : undefined}
                onSelectDay={selectionMode ? handleSelectDay : undefined}
@@ -641,7 +645,7 @@ export default function SocialMediaManager() {
         post={selectedPost}
         groupPages={groupPages}
         postsToReview={postsToReview}
-        onClose={() => { setSelectedPost(null); setGroupPages([]); }}
+        onClose={() => { setSelectedPost(null); }}
         onSchedule={() => selectedPost && handleSchedule(selectedPost)}
         onDecline={() => selectedPost && handleDecline(selectedPost)}
       />
