@@ -36,7 +36,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const [calendarOpen, setCalendarOpen] = useState(false);
   const filterDate = externalDate !== undefined ? externalDate : internalDate;
   const setFilterDate = onFilterDateChange || setInternalDate;
-  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "purchased">(defaultFilterStatus);
+  const [filterStatus, setFilterStatus] = useState<"all" | "purchased">(defaultFilterStatus);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [newTitle, setNewTitle] = useState("");
