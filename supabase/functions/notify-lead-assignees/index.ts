@@ -137,6 +137,9 @@ serve((req) =>
     let sentCount = 0;
     for (const recipient of recipients) {
       try {
+        const isCustomer = customerEmail && recipient.email.toLowerCase() === customerEmail;
+        const body = isCustomer ? customerEmailBody : internalEmailBody;
+
         // Build RFC 2822 email
         const rawEmail = [
           `From: ai@rebar.shop`,
@@ -144,7 +147,7 @@ serve((req) =>
           `Subject: ${subject}`,
           `Content-Type: text/plain; charset=UTF-8`,
           "",
-          emailBody,
+          body,
         ].join("\r\n");
 
         const encodedMessage = btoa(unescape(encodeURIComponent(rawEmail)))
