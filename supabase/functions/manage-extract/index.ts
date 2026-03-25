@@ -116,28 +116,10 @@ async function logProductionEvent(sb: any, event: {
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) throw new Error("Missing authorization");
-
-    const supabaseUser = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-
-    const {
-      data: { user },
-    } = await supabaseUser.auth.getUser();
-    if (!user) throw new Error("Unauthorized");
-
-    const { action, sessionId, ...params } = await req.json();
-    const sb = supabaseAdmin();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: sb, body } = ctx;
+    const { action, sessionId, ...params } = body;
 
     switch (action) {
       case "apply-mapping":
@@ -147,25 +129,19 @@ serve(async (req) => {
         return await validateExtract(sb, sessionId);
 
       case "detect-duplicates":
-        return await detectDuplicates(sb, sessionId, user.id, params.dryRun === true);
+        return await detectDuplicates(sb, sessionId, userId, params.dryRun === true);
 
       case "approve":
-        return await approveExtract(sb, sessionId, user.id, params.optimizerConfig);
+        return await approveExtract(sb, sessionId, userId, params.optimizerConfig);
 
       case "reject":
-        return await rejectExtract(sb, sessionId, user.id, params.reason);
+        return await rejectExtract(sb, sessionId, userId, params.reason);
 
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400);
     }
-  } catch (err) {
-    console.error("manage-extract error:", err);
-    return jsonResponse(
-      { error: err instanceof Error ? err.message : "Unknown error" },
-      500,
-    );
-  }
-});
+  }, { functionName: "manage-extract", requireCompany: false, wrapResult: false })
+);
 
 // ─── Detect Duplicates ──────────────────────────────────────
 async function detectDuplicates(sb: any, sessionId: string, userId: string, dryRun: boolean = false) {

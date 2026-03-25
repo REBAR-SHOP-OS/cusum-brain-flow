@@ -17,24 +17,19 @@ function jsonRes(data: unknown, status = 200) {
 
 // ─── Main Handler ──────────────────────────────────────────────────
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase, body, req: rawReq } = ctx;
 
     const clientId = Deno.env.get("LINKEDIN_CLIENT_ID");
     const clientSecret = Deno.env.get("LINKEDIN_CLIENT_SECRET");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 
     if (!clientId || !clientSecret) {
       throw new Error("LinkedIn credentials not configured");
     }
 
-    const url = new URL(req.url);
+    const url = new URL(rawReq.url);
     const pathParts = url.pathname.split("/");
     const pathAction = pathParts[pathParts.length - 1];
 
@@ -44,12 +39,10 @@ serve(async (req) => {
     }
 
     // ─── All other actions require authentication ────────────────
-    const userId = await verifyAuth(req);
     if (!userId) {
       return jsonRes({ error: "Unauthorized" }, 401);
     }
 
-    const body = await req.json().catch(() => ({}));
     const { action } = body;
 
     switch (action) {
@@ -68,22 +61,8 @@ serve(async (req) => {
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
-  } catch (error) {
-    console.error("LinkedIn OAuth error:", error);
-    // If this is a callback request, redirect to app with error instead of returning JSON
-    const reqUrl = new URL(req.url);
-    if (reqUrl.pathname.endsWith("/callback")) {
-      const errUrl = new URL("/integrations/callback", "https://erp.rebar.shop");
-      errUrl.searchParams.set("status", "error");
-      errUrl.searchParams.set("message", error instanceof Error ? error.message : "Unknown error");
-      return Response.redirect(errUrl.toString(), 302);
-    }
-    return jsonRes(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      500
-    );
-  }
-});
+  }, { functionName: "linkedin-oauth", authMode: "optional", requireCompany: false, wrapResult: false })
+);
 
 // ─── OAuth Callback ────────────────────────────────────────────────
 
