@@ -233,7 +233,7 @@ export function CompanyDefaultItems({ dbItems, customItems = [], disabled, onMar
   };
 
   return (
-    <div className="space-y-2">
+    <div className={cn("space-y-2", disabled && "opacity-50 pointer-events-none")}>
       {renderGroup("Office", officeItems)}
       {renderGroup("Workshop", workshopItems)}
     </div>
