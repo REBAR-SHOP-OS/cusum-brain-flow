@@ -562,21 +562,14 @@ const widgetJS = `
 })();
 `;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, {
+Deno.serve((req) =>
+  handleRequest(req, async () => {
+    return new Response(widgetJS, {
       headers: {
+        "Content-Type": "application/javascript; charset=utf-8",
         "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*",
+        "Cache-Control": "public, max-age=300",
       },
     });
-  }
-
-  return new Response(widgetJS, {
-    headers: {
-      "Content-Type": "application/javascript; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Cache-Control": "public, max-age=300",
-    },
-  });
-});
+  }, { functionName: "website-chat-widget", authMode: "none", requireCompany: false, wrapResult: false })
+);

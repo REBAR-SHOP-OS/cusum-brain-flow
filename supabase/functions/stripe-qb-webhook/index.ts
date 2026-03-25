@@ -435,18 +435,8 @@ Deno.serve((req) =>
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
-  } catch (error) {
-    console.error("[stripe-qb] Error:", error);
-    await notifyError(svc, DEFAULT_COMPANY_ID, "Stripe → QuickBooks Sync Failed", error instanceof Error ? error.message : "Unknown error");
-
-    return new Response(JSON.stringify({
-      error: error instanceof Error ? error.message : "Unknown error",
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "stripe-qb-webhook", authMode: "none", requireCompany: false, parseBody: false, wrapResult: false })
+);
 
 // ─── Helper: Notify admin of errors ────────────────────────────────
 

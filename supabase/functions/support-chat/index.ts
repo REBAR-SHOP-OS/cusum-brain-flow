@@ -1,40 +1,25 @@
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { callAI } from "../_shared/aiRouter.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const supabase = createClient(supabaseUrl, serviceKey);
-
-  try {
-    const url = new URL(req.url);
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: supabase, req: rawReq }) => {
+    const url = new URL(rawReq.url);
     const action = url.searchParams.get("action") || "send";
 
-    if (action === "widget.js") return handleWidgetJs(url, supabase, supabaseUrl);
-    if (action === "start") return handleStart(req, supabase);
-    if (action === "send") return handleSend(req, supabase);
-    if (action === "upload") return handleUpload(req, supabase);
+    if (action === "widget.js") return handleWidgetJs(url, supabase, Deno.env.get("SUPABASE_URL")!);
+    if (action === "start") return handleStart(rawReq, supabase);
+    if (action === "send") return handleSend(rawReq, supabase);
+    if (action === "upload") return handleUpload(rawReq, supabase);
     if (action === "poll") return handlePoll(url, supabase);
-    if (action === "heartbeat") return handleHeartbeat(req, supabase);
-    if (action === "heartbeat") return handleHeartbeat(req, supabase);
+    if (action === "heartbeat") return handleHeartbeat(rawReq, supabase);
 
     return new Response(JSON.stringify({ error: "Unknown action" }), {
       status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Internal error";
-    console.error("support-chat error:", err);
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "support-chat", authMode: "none", requireCompany: false, parseBody: false, wrapResult: false })
+);
 
 // ── IP Geolocation ──
 async function resolveGeo(ip: string): Promise<{ city: string; country: string } | null> {

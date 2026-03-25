@@ -386,12 +386,5 @@ ${contextData}`;
     return new Response(stream, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("seo-ai-copilot error:", e);
-    if (e instanceof AIError) {
-      return json({ error: "AI service error" }, e.status);
-    }
-    return json({ error: "Internal server error" }, 500);
-  }
-});
+  }, { functionName: "seo-ai-copilot", requireCompany: false, wrapResult: false })
+);
