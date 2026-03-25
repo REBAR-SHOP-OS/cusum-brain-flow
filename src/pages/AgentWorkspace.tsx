@@ -228,6 +228,26 @@ export default function AgentWorkspace() {
       .eq("company_id", profile.company_id);
   }, [user]);
 
+  // Auto-start Eisenhower session with welcome message
+  const autoStartEisenhower = useCallback(async () => {
+    if (!user) return;
+    const welcomeMsg: Message = {
+      id: crypto.randomUUID(),
+      role: "agent",
+      content: "سلام! 👋\n\nلطفاً ابتدا **تاریخ مورد نظر** را از تقویم بالای صفحه انتخاب کنید 📅",
+      agent: "eisenhower" as any,
+      timestamp: new Date(),
+    };
+    setMessages([welcomeMsg]);
+    setSessionFinalized(false);
+
+    const sessionId = await createSession("Eisenhower — " + format(new Date(), "yyyy-MM-dd"), config.name);
+    if (sessionId) {
+      setActiveSessionId(sessionId);
+      addMessage(sessionId, "agent", welcomeMsg.content, "eisenhower");
+    }
+  }, [user, createSession, addMessage, config.name]);
+
   // Start a new empty chat
   const handleNewChat = useCallback(async () => {
     setMessages([]);
@@ -242,7 +262,20 @@ export default function AgentWorkspace() {
       setActivePurchasingDateStr(null);
       setPurchasingKey((k) => k + 1);
     }
-  }, [agentId, resetPurchasingItems]);
+    // Auto-start Eisenhower with welcome message
+    if (agentId === "eisenhower") {
+      setTimeout(() => autoStartEisenhower(), 100);
+    }
+  }, [agentId, resetPurchasingItems, autoStartEisenhower]);
+
+  // Auto-start Eisenhower on initial mount (no existing session)
+  const eisenhowerAutoStarted = useRef(false);
+  useEffect(() => {
+    if (agentId === "eisenhower" && !activeSessionId && messages.length === 0 && !eisenhowerAutoStarted.current && user) {
+      eisenhowerAutoStarted.current = true;
+      autoStartEisenhower();
+    }
+  }, [agentId, activeSessionId, messages.length, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-send initial message from Quick Actions
   useEffect(() => {
@@ -596,8 +629,22 @@ export default function AgentWorkspace() {
       if (agentId === "social" && activeSessionId) {
         updateSessionTitle(activeSessionId, format(date, "yyyy-MM-dd"));
       }
+      // Eisenhower: send date-selected follow-up message
+      if (agentId === "eisenhower" && activeSessionId) {
+        const dateStr = format(date, "yyyy-MM-dd (EEE, MMM d)");
+        const dateMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: `📅 تاریخ **${dateStr}** انتخاب شد.\n\nحالا لطفاً لیست **کارهایی که انجام داده‌اید** و **کارهایی که قصد دارید انجام دهید** را بنویسید.`,
+          agent: "eisenhower" as any,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, dateMsg]);
+        addMessage(activeSessionId, "agent", dateMsg.content, "eisenhower");
+        updateSessionTitle(activeSessionId, "Eisenhower — " + format(date, "yyyy-MM-dd"));
+      }
     }
-  }, [agentId, activeSessionId, updateSessionTitle]);
+  }, [agentId, activeSessionId, updateSessionTitle, addMessage]);
 
   return (
     <div className="flex h-full">
@@ -905,20 +952,6 @@ export default function AgentWorkspace() {
                 </button>
               </div>
               )
-            ) : agentId === "eisenhower" ? (
-              <div className="w-full max-w-xl text-center space-y-4 mb-6">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-                  <CalendarIcon className="w-8 h-8 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-foreground mb-1">📊 Eisenhower Matrix</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {selectedDate
-                      ? `📅 تاریخ ${format(selectedDate, "yyyy-MM-dd (EEE, MMM d)")} انتخاب شده.\nلطفاً لیست کارهایی که انجام داده‌اید و کارهایی که قصد دارید انجام دهید را بنویسید.`
-                      : "لطفاً ابتدا تاریخ مورد نظر را از تقویم بالای صفحه انتخاب کنید."}
-                  </p>
-                </div>
-              </div>
             ) : (
               <>
                 <div className="flex justify-center mb-3">
