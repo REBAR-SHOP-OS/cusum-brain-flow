@@ -40,6 +40,12 @@ export interface HandlerOptions {
    * Default: true (wraps in { ok: true, data: result }).
    */
   wrapResult?: boolean;
+  /**
+   * If false, the wrapper skips req.json() parsing and passes an empty body {}.
+   * The handler can then call req.formData() or req.text() itself.
+   * Default: true.
+   */
+  parseBody?: boolean;
 }
 
 /**
@@ -79,9 +85,9 @@ export async function handleRequest(
       await requireAnyRole(serviceClient, userId, options.requireAnyRole);
     }
 
-    // Parse body
+    // Parse body (skip if parseBody is false — e.g. FormData functions)
     let body: Record<string, any> = {};
-    if (req.method !== "GET" && req.method !== "HEAD") {
+    if (options.parseBody !== false && req.method !== "GET" && req.method !== "HEAD") {
       try {
         body = await req.json();
       } catch {

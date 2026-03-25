@@ -1,6 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 // ─── Model Routing Table ────────────────────────────────────────
@@ -53,19 +51,7 @@ const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
   "generate-subtitles":     { model: "google/gemini-2.5-flash-lite", fallback: "google/gemini-2.5-flash",      temperature: 0.1, maxTokens: 2048 },
 };
 
-// ─── Auth Helper ────────────────────────────────────────────────
-async function verifyAuth(req: Request) {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-  const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-  if (error || !user) return null;
-  return { userId: user.id };
-}
+// Auth is now handled by handleRequest wrapper
 
 // ─── AI Gateway Call with Fallback ──────────────────────────────
 const PER_ATTEMPT_TIMEOUT_MS = 50_000; // 50s default per single AI call attempt
@@ -636,18 +622,8 @@ const WRITE_SCRIPT_SYSTEM = `You are an expert ad scriptwriter for B2B video ads
 Format each section with timestamps and labels, like "0:00–0:04 — Hook". Write in a punchy, conversational, professional tone. Keep narration natural and speakable aloud.`;
 
 // ─── Main Handler ───────────────────────────────────────────────
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const auth = await verifyAuth(req);
-    if (!auth) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ body }) => {
     const { action, modelOverrides } = body;
     if (!action) {
       return new Response(JSON.stringify({ error: "action is required" }), {
@@ -672,64 +648,50 @@ serve(async (req) => {
       case "analyze-script":
         result = await handleAnalyzeScript(LOVABLE_API_KEY, body, modelOverride);
         break;
-
       case "write-cinematic-prompt":
         result = await handleWriteCinematicPrompt(LOVABLE_API_KEY, body, modelOverride);
         break;
-
       case "score-prompt-quality":
         result = await handleScorePromptQuality(LOVABLE_API_KEY, body, modelOverride);
         break;
-
       case "improve-prompt":
         result = await handleImprovePrompt(LOVABLE_API_KEY, body, modelOverride);
         break;
-
       case "rewrite-cta":
         result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
           "You are a persuasive B2B copywriter. Rewrite this CTA to be more compelling, urgent, and action-oriented. Keep it under 15 words.", modelOverride);
         break;
-
       case "generate-subtitles":
         result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
           "Extract timed subtitle segments from this ad script. Return one subtitle per line in SRT-like format: index, timestamp range, text.", modelOverride);
         break;
-
       case "generate-voiceover":
         result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
           "Rewrite this ad script into smooth voiceover narration text. Natural conversational tone, concise, punchy. Remove stage directions.", modelOverride);
         break;
-
       case "classify-scene":
         result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
           "Classify this scene description into one category: cinematic-hero, product-demo, testimonial, data-visual, cta-card, transition, b-roll. Return just the category.", modelOverride);
         break;
-
       case "quality-review":
         result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
           "Review this full storyboard for quality issues: weak scenes, inconsistency, bland visuals, broken continuity, or off-brand messaging. Return a structured critique with scene-level notes.", modelOverride);
         break;
-
       case "optimize-ad":
         result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
           "Polish and optimize this ad storyboard for maximum impact. Suggest pacing improvements, stronger emotional arcs, and visual upgrades.", modelOverride);
         break;
-
       case "continuity-check":
         result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
           "Compare these two adjacent scene prompts and identify continuity issues: lighting changes, environment shifts, subject inconsistencies, camera style breaks. Return a list of issues found.", modelOverride);
         break;
-
       case "analyze-reference":
         result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, body,
           "Analyze this reference image/asset description and extract: dominant colors, environment type, lighting style, subjects present, mood, textures. Return structured analysis.", modelOverride);
         break;
-
       case "generate-storyboard":
-        // Reuse analyze-script handler for this action
         result = await handleAnalyzeScript(LOVABLE_API_KEY, body, modelOverride);
         break;
-
       case "write-script": {
         const { input: desc, brand: scriptBrand } = body;
         if (!desc) throw new Error("Product description is required");
@@ -737,26 +699,17 @@ serve(async (req) => {
         result = await handleSimpleTextTask(LOVABLE_API_KEY, taskType, { input: userMsg }, WRITE_SCRIPT_SYSTEM, modelOverride);
         break;
       }
-
       default:
         return new Response(JSON.stringify({ error: `Unhandled action: ${action}` }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
     }
 
-    return new Response(JSON.stringify({
+    return {
       result: result.result,
       modelUsed: result.modelUsed,
       fallbackUsed: result.fallbackUsed,
       taskType,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-
-  } catch (e) {
-    console.error("ad-director-ai error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    };
+  }, { functionName: "ad-director-ai", requireCompany: false, wrapResult: false })
+);
