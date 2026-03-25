@@ -1,5 +1,5 @@
 import { useCutPlans, useCutPlanItems } from "@/hooks/useCutPlans";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,13 @@ import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
 export function DetailedListView({ initialPlanId }: { initialPlanId?: string | null }) {
   const { plans, loading: plansLoading } = useCutPlans();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(initialPlanId ?? null);
+
+  // Sync when parent navigates with a new planId (e.g. Edit from Production Queue)
+  useEffect(() => {
+    if (initialPlanId) {
+      setSelectedPlanId(initialPlanId);
+    }
+  }, [initialPlanId]);
   const { items, loading: itemsLoading, fetchItems } = useCutPlanItems(selectedPlanId);
   const unitSystem = useUnitSystem();
   const qc = useQueryClient();
