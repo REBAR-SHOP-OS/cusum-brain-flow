@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
+import { encodeBase64 as base64Encode } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import * as XLSX from "npm:xlsx@0.18.5";
 import { requireAuth, corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
