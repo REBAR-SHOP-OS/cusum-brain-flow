@@ -31,24 +31,10 @@ export function EisenhowerInstructionsDialog({ open, onOpenChange }: EisenhowerI
       const { data: profile } = await supabase
         .from("profiles")
         .select("company_id")
-        .eq("id", user!.id)
-        .single();
+        .eq("user_id", user!.id)
+        .maybeSingle();
       if (!profile?.company_id) return;
 
-      const { data } = await supabase
-        .from("knowledge")
-        .select("id, content")
-        .eq("company_id", profile.company_id)
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      const instrItem = data?.find((d: any) => {
-        const meta = d as any;
-        // metadata is not directly selectable with typed client, so we fetch all and filter
-        return false; // will use raw approach below
-      });
-
-      // Re-fetch with metadata filtering via raw query approach
       const { data: allItems } = await supabase
         .from("knowledge")
         .select("id, content, metadata")
@@ -78,9 +64,9 @@ export function EisenhowerInstructionsDialog({ open, onOpenChange }: EisenhowerI
       const { data: profile } = await supabase
         .from("profiles")
         .select("company_id")
-        .eq("id", user.id)
-        .single();
-      if (!profile?.company_id) throw new Error("No company");
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!profile?.company_id) throw new Error("پروفایل یا شرکت کاربر پیدا نشد");
 
       if (existingId) {
         const { error } = await supabase
