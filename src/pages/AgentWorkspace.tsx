@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { format } from "date-fns";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, PanelLeftClose, PanelLeft, Brain, CalendarIcon, PhoneOff, MessageSquare, LayoutGrid } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeft, Brain, CalendarIcon, PhoneOff, MessageSquare, LayoutGrid, Menu } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { agentConfigs } from "@/components/agent/agentConfigs";
 import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { PixelBrainDialog } from "@/components/social/PixelBrainDialog";
+import { EisenhowerInstructionsDialog } from "@/components/agent/EisenhowerInstructionsDialog";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { useUserRole, AppRole } from "@/hooks/useUserRole";
 // VizzyApprovalDialog removed — actions auto-execute
@@ -547,6 +548,7 @@ export default function AgentWorkspace() {
 
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
+  const [eisenhowerInstrOpen, setEisenhowerInstrOpen] = useState(false);
   
 
   const handleDateChange = useCallback((date: Date | undefined) => {
@@ -717,15 +719,28 @@ export default function AgentWorkspace() {
                   />
                 </PopoverContent>
               </Popover>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setBrainOpen(true)}
-                title="Pixel Brain – Knowledge & Instructions"
-              >
-                <Brain className="w-4 h-4" />
-              </Button>
+              {agentId === "social" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setBrainOpen(true)}
+                  title="Pixel Brain – Knowledge & Instructions"
+                >
+                  <Brain className="w-4 h-4" />
+                </Button>
+              )}
+              {agentId === "eisenhower" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setEisenhowerInstrOpen(true)}
+                  title="Agent Instructions"
+                >
+                  <Menu className="w-4 h-4" />
+                </Button>
+              )}
             </>
           )}
           {isLoading && (
@@ -918,6 +933,7 @@ export default function AgentWorkspace() {
 
 
       <PixelBrainDialog open={brainOpen} onOpenChange={setBrainOpen} />
+      <EisenhowerInstructionsDialog open={eisenhowerInstrOpen} onOpenChange={setEisenhowerInstrOpen} />
       
       {/* VizzyApprovalDialog removed — actions auto-execute */}
     </div>
