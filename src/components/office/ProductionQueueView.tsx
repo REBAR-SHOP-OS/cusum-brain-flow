@@ -56,7 +56,7 @@ interface CustomerNode {
 // --- Main Component ---
 
 export function ProductionQueueView() {
-  const { plans, loading, deletePlan } = useCutPlans();
+  const { plans, loading, deletePlan, fetchPlans } = useCutPlans();
   const { user } = useAuth();
   const navigate = useNavigate();
   const { companyId } = useCompanyId();
