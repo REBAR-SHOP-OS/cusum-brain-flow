@@ -76,6 +76,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
   const [snoozedUntil, setSnoozedUntil] = useState<Map<string, Date>>(new Map());
   const [showCompose, setShowCompose] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { toast } = useToast();
 
   // Toggle star
