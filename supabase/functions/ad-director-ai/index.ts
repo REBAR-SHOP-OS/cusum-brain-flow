@@ -51,19 +51,7 @@ const MODEL_ROUTES: Record<TaskType, ModelRoute> = {
   "generate-subtitles":     { model: "google/gemini-2.5-flash-lite", fallback: "google/gemini-2.5-flash",      temperature: 0.1, maxTokens: 2048 },
 };
 
-// ─── Auth Helper ────────────────────────────────────────────────
-async function verifyAuth(req: Request) {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-  const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-  if (error || !user) return null;
-  return { userId: user.id };
-}
+// Auth is now handled by handleRequest wrapper
 
 // ─── AI Gateway Call with Fallback ──────────────────────────────
 const PER_ATTEMPT_TIMEOUT_MS = 50_000; // 50s default per single AI call attempt
