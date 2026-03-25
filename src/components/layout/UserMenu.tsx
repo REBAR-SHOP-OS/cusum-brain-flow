@@ -5,7 +5,8 @@ import { useWorkspace } from "@/contexts/WorkspaceContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { ThemeToggle } from "./ThemeToggle";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useProfiles } from "@/hooks/useProfiles";
 import {
   DropdownMenu,
   DropdownMenuContent,
