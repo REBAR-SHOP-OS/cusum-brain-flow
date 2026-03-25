@@ -905,6 +905,20 @@ export default function AgentWorkspace() {
                 </button>
               </div>
               )
+            ) : agentId === "eisenhower" ? (
+              <div className="w-full max-w-xl text-center space-y-4 mb-6">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+                  <CalendarIcon className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-foreground mb-1">📊 Eisenhower Matrix</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    {selectedDate
+                      ? `📅 تاریخ ${format(selectedDate, "yyyy-MM-dd (EEE, MMM d)")} انتخاب شده.\nلطفاً لیست کارهایی که انجام داده‌اید و کارهایی که قصد دارید انجام دهید را بنویسید.`
+                      : "لطفاً ابتدا تاریخ مورد نظر را از تقویم بالای صفحه انتخاب کنید."}
+                  </p>
+                </div>
+              </div>
             ) : (
               <>
                 <div className="flex justify-center mb-3">
