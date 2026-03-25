@@ -21,41 +21,9 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const service = createClient(supabaseUrl, serviceKey);
-
-    // Auth check
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const userClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsErr } = await userClient.auth.getClaims(token);
-    if (claimsErr || !claims?.claims?.sub) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const userId = claims.claims.sub as string;
-
-    // Get company
-    const { data: profile } = await service.from("profiles").select("company_id").eq("user_id", userId).single();
-    if (!profile?.company_id) {
-      return new Response(JSON.stringify({ error: "No company" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const companyId = profile.company_id;
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: service, companyId, body, req: originalReq } = ctx;
 
     // GET — list webhooks
     if (req.method === "GET") {
