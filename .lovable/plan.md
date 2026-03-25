@@ -1,27 +1,37 @@
 
 
-## Add Delete Confirmation Dialog to Inbox Bulk Delete
+## Fix Inbox Summary Total Count
 
 ### Problem
-The bulk delete button in the Inbox fires immediately without a confirmation dialog. When clicked, there is no warning showing how many emails will be deleted.
+The AI Summary panel shows the total count of *all* emails (including hidden/snoozed) instead of the count of currently visible emails.
 
-### Solution
-Add a confirmation `AlertDialog` before executing `handleBulkDelete` (and `handleBulkArchive`), displaying the correct count from `selectedIds.size`.
+### Root Cause
+Line 536 in `src/components/inbox/InboxView.tsx` uses `allEmails.length` for `totalEmails`, but the user only sees the filtered `emails` list (which excludes hidden and snoozed items).
 
-### Changes
+### Fix
 
-**File: `src/components/inbox/InboxView.tsx`**
+**File: `src/components/inbox/InboxView.tsx` (line 536)**
 
-1. Add state for delete confirmation: `const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);`
-2. Change the Delete button's `onClick` from `handleBulkDelete` to `() => setShowDeleteConfirm(true)`
-3. Add an `AlertDialog` that:
-   - Shows: `"Delete ${selectedIds.size} email(s)?"`
-   - Description: `"This action cannot be undone. The selected emails will be permanently deleted."`
-   - On confirm: calls `handleBulkDelete()` then `setShowDeleteConfirm(false)`
-   - On cancel: closes the dialog
-4. Import `AlertDialog` components from `@/components/ui/alert-dialog`
+Change:
+```typescript
+setSummary({ totalEmails: allEmails.length, toRespond, fyi, marketing, spam, highlights });
+```
+To:
+```typescript
+setSummary({ totalEmails: emails.length, toRespond, fyi, marketing, spam, highlights });
+```
+
+Also update the category counts (lines 525-528) to use `emails` instead of `allEmails` so all numbers are consistent with what the user sees:
+```typescript
+const toRespond = emails.filter(...)
+const fyi = emails.filter(...)
+const marketing = emails.filter(...)
+const spam = emails.filter(...)
+```
+
+This ensures the summary card reflects only the emails currently visible to the user.
 
 | File | Change |
 |---|---|
-| `src/components/inbox/InboxView.tsx` | Add confirmation dialog before bulk delete using `selectedIds.size` for count |
+| `src/components/inbox/InboxView.tsx` | Replace `allEmails` with `emails` in the summarize action (lines 525-536) |
 
