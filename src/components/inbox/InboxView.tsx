@@ -3,6 +3,16 @@ import {
   Trash2, Archive, X, Mail, Phone,
   MessageSquare, FileText, Volume2
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { InboxEmailList, type InboxEmail } from "./InboxEmailList";
 import { InboxDetailView } from "./InboxDetailView";
 import { InboxManagerSettings } from "./InboxManagerSettings";
@@ -66,6 +76,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
   const [snoozedUntil, setSnoozedUntil] = useState<Map<string, Date>>(new Map());
   const [showCompose, setShowCompose] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { toast } = useToast();
 
   // Toggle star
@@ -716,7 +727,7 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
                     </span>
                     {selectedIds.size > 0 && (
                       <div className="flex items-center gap-1 ml-auto">
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive" onClick={handleBulkDelete}>
+                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 text-destructive hover:text-destructive" onClick={() => setShowDeleteConfirm(true)}>
                           <Trash2 className="w-3.5 h-3.5" />Delete
                         </Button>
                         <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" onClick={handleBulkArchive}>
@@ -773,6 +784,27 @@ export function InboxView({ connectedEmail }: InboxViewProps) {
         <SMSTemplateManager open={showSMSTemplates} onOpenChange={setShowSMSTemplates} />
         <CallAnalyticsDashboard open={showCallAnalytics} onOpenChange={setShowCallAnalytics} />
         <EmailAnalyticsDashboard open={showEmailAnalytics} onOpenChange={setShowEmailAnalytics} />
+
+        {/* Bulk Delete Confirmation */}
+        <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {selectedIds.size} email(s)?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. The selected emails will be permanently deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => { handleBulkDelete(); setShowDeleteConfirm(false); }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </TooltipProvider>
   );
