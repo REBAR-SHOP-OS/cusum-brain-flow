@@ -120,19 +120,6 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
         </div>
       </div>
 
-      {/* Status tabs */}
-      <div className="flex gap-1 p-2 border-b border-border">
-        {STATUS_TABS.map((tab) => (
-          <Button
-            key={tab.value}
-            variant={filterStatus === tab.value ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setFilterStatus(tab.value)}
-          >
-            {tab.label}
-          </Button>
-        ))}
-      </div>
 
       {/* Always-visible Add form */}
       <div className="p-3 border-b border-border bg-muted/30 space-y-2">
