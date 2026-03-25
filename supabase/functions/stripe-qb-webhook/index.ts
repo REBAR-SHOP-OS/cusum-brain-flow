@@ -157,19 +157,10 @@ function buildPaymentPayload(
 
 // ─── Main Handler ──────────────────────────────────────────────────
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  const svc = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  );
-
-  try {
-    const rawBody = await req.text();
-    const sigHeader = req.headers.get("stripe-signature") || "";
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: svc, req: rawReq }) => {
+    const rawBody = await rawReq.text();
+    const sigHeader = rawReq.headers.get("stripe-signature") || "";
     const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 
     if (!webhookSecret) {
