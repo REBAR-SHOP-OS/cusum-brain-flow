@@ -482,10 +482,5 @@ Suggest specific tasks with expected impact.`,
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    console.error("seo-ai-analyze error:", err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "seo-ai-analyze", authMode: "none", requireCompany: false, wrapResult: false })
+);
