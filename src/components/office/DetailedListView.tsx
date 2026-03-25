@@ -18,9 +18,11 @@ import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
 export function DetailedListView({ initialPlanId }: { initialPlanId?: string | null }) {
   const { plans, loading: plansLoading } = useCutPlans();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(initialPlanId ?? null);
-  const { items, loading: itemsLoading } = useCutPlanItems(selectedPlanId);
+  const { items, loading: itemsLoading, fetchItems } = useCutPlanItems(selectedPlanId);
   const unitSystem = useUnitSystem();
-
+  const qc = useQueryClient();
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<Record<string, any>>({});
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
   // Separate plans into active (running/draft/ready/queued) and completed
