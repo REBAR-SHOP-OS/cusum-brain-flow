@@ -210,20 +210,30 @@ export default function AgentWorkspace() {
     return () => { backgroundAgentService.unsubscribe(activeSessionId); };
   }, [activeSessionId, config.agentType]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Reset purchasing items (delete undated rows) for clean new chat
+  const resetPurchasingItems = useCallback(async () => {
+    if (!user) return;
+    const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user.id).single();
+    if (!profile?.company_id) return;
+    await supabase.from("purchasing_list_items").delete()
+      .eq("company_id", profile.company_id)
+      .is("due_date", null);
+  }, [user]);
+
   // Start a new empty chat
-  const handleNewChat = useCallback(() => {
+  const handleNewChat = useCallback(async () => {
     setMessages([]);
     setActiveSessionId(null);
     setAutoBriefingSent(true); // don't auto-brief on manual new chat
     setShowRecipeTable(false);
-    // Pixel agent: no longer auto-send; user picks mode from empty state
     // Reset purchasing state so user sees fresh default list
     if (agentId === "purchasing") {
+      await resetPurchasingItems();
       setPurchasingDate(undefined);
       setActivePurchasingDateStr(null);
       setPurchasingKey((k) => k + 1);
     }
-  }, [agentId]);
+  }, [agentId, resetPurchasingItems]);
 
   // Auto-send initial message from Quick Actions
   useEffect(() => {
