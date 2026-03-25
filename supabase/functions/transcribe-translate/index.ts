@@ -149,7 +149,7 @@ Deno.serve((req) =>
     let customPrompt = "";
 
     if (contentType.includes("multipart/form-data")) {
-      const formData = await req.formData();
+      const formData = await rawReq.formData();
       mode = "audio";
       sourceLang = (formData.get("sourceLang") as string) || "auto";
       targetLang = (formData.get("targetLang") as string) || "English";
