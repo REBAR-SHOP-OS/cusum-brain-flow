@@ -1,29 +1,41 @@
 
 
-## تغییر رفتار زبانی ایجنت آیزنهاور
+## بهبود گزارش آیزنهاور + دکمه پایان چت
 
 ### هدف
-ایجنت باید به همان زبانی که کاربر صحبت می‌کند پاسخ دهد (مثلاً فارسی، عربی، فرانسه)، اما گزارش نهایی ماتریس آیزنهاور همیشه به انگلیسی و بسیار جامع و دقیق باشد.
+1. گزارش نهایی باید سطح CEO باشد — جامع، دقیق، حرفه‌ای
+2. دکمه "Finalize Day" در پایین چت اضافه شود که وقتی کاربر کلیک کند، یک پیام تشکر نمایش داده شود و چت برای آن روز قفل شود
 
-### تغییر
+### تغییرات
 
-**فایل: `supabase/functions/_shared/agents/growth.ts`**
+#### 1. بهبود prompt گزارش — `supabase/functions/_shared/agents/growth.ts`
+بخش `REPORT QUALITY` را به‌روز می‌کنیم تا گزارش نهایی:
+- عنوان رسمی داشته باشد: "Eisenhower Matrix Report — CEO Briefing"
+- بخش Executive Summary با ارزیابی عملکرد کارمند و ریسک‌های کلیدی
+- هر تسک با جزئیات کامل: دلیل، ریسک تأخیر، پیشنهاد اجرایی، زمان‌بندی، مسئول
+- بخش "Employee Performance Assessment" اضافه شود
+- بخش "Red Flags for CEO Attention" اضافه شود
+- لحن رسمی و مناسب گزارش‌دهی به مدیرعامل
 
-بخش `LANGUAGE` در prompt ایجنت (خط 116) بازنویسی می‌شود:
+#### 2. دکمه Finalize Day — `src/pages/AgentWorkspace.tsx`
+- یک state `sessionFinalized` اضافه شود
+- وقتی کاربر روی دکمه "Finalize Day ✅" کلیک کند:
+  - پیام سیستمی تشکر به چت اضافه شود (به زبان کاربر، fallback انگلیسی)
+  - `sessionFinalized = true` شود
+  - `ChatInput` غیرفعال (disabled) شود با پیام "This day has been finalized"
+  - در `chat_sessions` یک فیلد metadata یا status ذخیره شود
+- وقتی session قبلی لود می‌شود، اگر finalized باشد input غیرفعال بماند
 
-**قبل:**
-> اگر کاربر فارسی بنویسد، ممکن است مختصر به فارسی تأیید کنید، اما گزارش ماتریس باید انگلیسی باشد.
+#### 3. Migration — اضافه کردن فیلد `is_finalized` به `chat_sessions`
+```sql
+ALTER TABLE public.chat_sessions ADD COLUMN is_finalized boolean DEFAULT false;
+```
 
-**بعد:**
-- مکالمه عادی (سؤال، توضیح، تأیید) به همان زبان کاربر باشد
-- گزارش نهایی ماتریس (4 ربع + Action Plan) همیشه انگلیسی و بسیار جامع:
-  - هر تسک باید دلیل دقیق قرارگیری در آن ربع، ریسک‌ها، و پیشنهاد اجرایی داشته باشد
-  - Action Plan باید شامل timeline، معیارهای موفقیت، و وابستگی‌ها باشد
-  - بخش Executive Summary به ابتدای گزارش اضافه شود
+#### 4. بررسی finalized هنگام لود session
+در `AgentWorkspace.tsx` وقتی session قبلی انتخاب می‌شود، اگر `is_finalized = true` بود، input غیرفعال شود.
 
-### جزئیات فنی
-فقط بخش `LANGUAGE` در خط 116 تغییر می‌کند و گزارش نهایی غنی‌تر و جامع‌تر خواهد شد. یک edge function deploy خودکار انجام می‌شود.
-
-### فایل درگیر
-- `supabase/functions/_shared/agents/growth.ts`
+### فایل‌های درگیر
+- `supabase/functions/_shared/agents/growth.ts` — بهبود prompt برای گزارش CEO-level
+- `src/pages/AgentWorkspace.tsx` — دکمه Finalize + state مدیریت قفل
+- Migration: اضافه کردن ستون `is_finalized` به `chat_sessions`
 
