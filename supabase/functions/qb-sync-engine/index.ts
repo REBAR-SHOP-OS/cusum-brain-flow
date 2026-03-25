@@ -1288,44 +1288,31 @@ function jsonRes(data: unknown, status = 200) {
   });
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const svcUrl = Deno.env.get("SUPABASE_URL")!;
-    const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const svc = createClient(svcUrl, svcKey);
-
-    // Auth: accept service role key, cron secret, OR authenticated user
-    const authHeader = req.headers.get("Authorization") || "";
-    const token = authHeader.replace("Bearer ", "");
-    const cronSecret = req.headers.get("x-cron-secret") || "";
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: svc, body, req: rawReq } = ctx;
 
     let companyId: string | null = null;
-    const mcpKey = Deno.env.get("MCP_API_KEY") || "";
 
-    if (token === svcKey) {
-      // Service role — get company_id from body
-    } else if (cronSecret && mcpKey && cronSecret === mcpKey) {
-      // Cron job auth via shared secret — get company_id from body
-    } else {
-      // User auth
-      const anonClient = createClient(svcUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-        global: { headers: { Authorization: authHeader } },
-      });
-      const { data: claims, error: claimsErr } = await anonClient.auth.getClaims(token);
-      if (claimsErr || !claims?.claims?.sub) {
-        return jsonRes({ error: "Unauthorized" }, 401);
-      }
-      const userId = claims.claims.sub as string;
+    // If authenticated user, resolve company from wrapper
+    if (userId) {
       const { data: profile } = await svc.from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
-      if (!profile?.company_id) return jsonRes({ error: "No company" }, 403);
-      companyId = profile.company_id;
+      companyId = profile?.company_id || null;
+    } else {
+      // Unauthenticated — check if cron secret
+      const cronSecret = rawReq.headers.get("x-cron-secret") || "";
+      const mcpKey = Deno.env.get("MCP_API_KEY") || "";
+      if (!(cronSecret && mcpKey && cronSecret === mcpKey)) {
+        // Also allow service role key (already handled by wrapper's optional auth)
+        const authHeader = rawReq.headers.get("Authorization") || "";
+        const token = authHeader.replace("Bearer ", "");
+        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        if (token !== svcKey) {
+          return jsonRes({ error: "Unauthorized" }, 401);
+        }
+      }
     }
 
-    const body = await req.json().catch(() => ({}));
     const action = body.action as string;
     companyId = companyId || body.company_id;
 
