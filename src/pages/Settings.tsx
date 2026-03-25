@@ -1,4 +1,4 @@
-import { useState, useRef, lazy, Suspense } from "react";
+import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import {
   Lock, Tag, CreditCard, Lightbulb, HelpCircle, LogOut,
   Camera, Settings as SettingsIcon, Users, Loader2, GraduationCap,
@@ -33,7 +33,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { resetTour, restartTour } = useTour();
   const userEmail = user?.email ?? "";
-  const { profiles } = useProfiles();
+  const { profiles, updateProfile } = useProfiles();
   const { uploading, uploadSingle } = useAvatarUpload();
   const avatarFileRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("settings");
@@ -47,6 +47,31 @@ export default function Settings() {
   });
 
   const myProfile = profiles.find((p) => p.user_id === user?.id);
+  const [saving, setSaving] = useState(false);
+
+  // Populate form from profile
+  useEffect(() => {
+    if (myProfile) {
+      const parts = (myProfile.full_name || "").split(" ");
+      setFormData((prev) => ({
+        ...prev,
+        name: parts[0] || "",
+        surname: parts.slice(1).join(" ") || "",
+        jobTitle: myProfile.title || "",
+        email: userEmail,
+      }));
+    }
+  }, [myProfile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSave = async () => {
+    if (!myProfile) return;
+    setSaving(true);
+    const fullName = [formData.name, formData.surname].filter(Boolean).join(" ");
+    updateProfile.mutate(
+      { id: myProfile.id, full_name: fullName, title: formData.jobTitle },
+      { onSettled: () => setSaving(false) }
+    );
+  };
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -178,6 +203,10 @@ export default function Settings() {
                     <Input value={formData.jobTitle} onChange={(e) => handleInputChange("jobTitle", e.target.value)} placeholder="Job title" className="bg-secondary/50 border-0 h-12" />
                   </div>
                 </div>
+                <Button onClick={handleSave} disabled={saving} className="w-full h-12 mt-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  Save changes
+                </Button>
               </section>
 
               {/* Language */}
