@@ -693,7 +693,7 @@ export default function AgentWorkspace() {
               </Button>
             </div>
           )}
-          {agentId === "social" && (
+          {(agentId === "social" || agentId === "eisenhower") && (
             <>
               <Popover>
                 <PopoverTrigger asChild>
