@@ -241,9 +241,5 @@ Deno.serve((req) =>
       has_more: files.length === MAX_FILES_PER_BATCH,
       files_processed: processedFiles,
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("ingest-historical-barlists error:", err);
-    return json({ error: err instanceof Error ? err.message : "Ingestion failed" }, 500);
-  }
-});
+  }, { functionName: "ingest-historical-barlists", wrapResult: false })
+);

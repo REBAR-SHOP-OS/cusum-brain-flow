@@ -396,17 +396,5 @@ Deno.serve((req) =>
     }, { onConflict: "dedupe_key", ignoreDuplicates: true });
 
     return new Response("OK", { status: 200 });
-  } catch (error) {
-    console.error("gmail-webhook error:", error);
-    // R16-3: Differentiate transient vs permanent errors
-    // Transient errors (DB, network, decryption) → 500 so Pub/Sub retries
-    // Permanent errors (bad data, missing user) → 200 to stop retries
-    const errMsg = String(error);
-    const isTransient = /connect|timeout|network|ECONNREFUSED|database|pool|decrypt/i.test(errMsg);
-    if (isTransient) {
-      console.warn("gmail-webhook: transient error, returning 500 for retry");
-      return new Response("Transient error", { status: 500 });
-    }
-    return new Response("OK", { status: 200 });
-  }
-});
+  }, { functionName: "gmail-webhook", authMode: "none", requireCompany: false, wrapResult: false })
+);

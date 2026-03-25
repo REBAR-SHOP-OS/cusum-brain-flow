@@ -346,9 +346,5 @@ Deno.serve((req) =>
       has_more: pdfFiles.length === batchSize,
       files_processed: processedCount,
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("ingest-shop-drawings error:", err);
-    return json({ error: err instanceof Error ? err.message : "Ingestion failed" }, 500);
-  }
-});
+  }, { functionName: "ingest-shop-drawings", wrapResult: false })
+);

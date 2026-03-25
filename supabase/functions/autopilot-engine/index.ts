@@ -627,9 +627,5 @@ Deno.serve((req) =>
     }
 
     return json({ error: `Unknown action: ${action}` }, 400);
-  } catch (e) {
-    if (e instanceof Response) return e;
-    console.error("autopilot-engine error:", e);
-    return json({ error: e instanceof Error ? e.message : "Internal error" }, 500);
-  }
-});
+  }, { functionName: "autopilot-engine", requireRole: "admin", wrapResult: false })
+);

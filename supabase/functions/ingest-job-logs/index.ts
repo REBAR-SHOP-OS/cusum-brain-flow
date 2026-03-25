@@ -221,9 +221,5 @@ Deno.serve((req) =>
       last_lead_id: lastLeadId,
       has_more: jobLogFiles.length === batchSize,
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("ingest-job-logs error:", err);
-    return json({ error: err instanceof Error ? err.message : "Ingestion failed" }, 500);
-  }
-});
+  }, { functionName: "ingest-job-logs", wrapResult: false })
+);
