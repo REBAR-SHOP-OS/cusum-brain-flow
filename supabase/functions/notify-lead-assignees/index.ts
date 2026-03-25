@@ -17,7 +17,7 @@ serve((req) =>
     // 1. Fetch lead title
     const { data: lead, error: leadErr } = await serviceClient
       .from("sales_leads")
-      .select("title")
+      .select("title, contact_email, contact_name")
       .eq("id", sales_lead_id)
       .single();
     if (leadErr) throw new Error("Lead not found: " + leadErr.message);
@@ -59,6 +59,15 @@ serve((req) =>
       }
     }
 
+    // Add customer (contact_email) as recipient if available
+    const customerEmail = lead.contact_email?.trim().toLowerCase() || "";
+    if (customerEmail) {
+      const alreadyIncluded = recipients.some(r => r.email.toLowerCase() === customerEmail);
+      if (!alreadyIncluded) {
+        recipients.push({ email: lead.contact_email, full_name: lead.contact_name || lead.contact_email });
+      }
+    }
+
     if (recipients.length === 0) {
       log.info("No qualifying recipients");
       return { sent: 0 };
@@ -85,10 +94,17 @@ serve((req) =>
         .trim();
     }
 
-    const emailBody = [
+    // Internal email body (with record link)
+    const internalEmailBody = [
       actionDesc,
       cleanNote ? `\n${cleanNote}` : "",
       `\nView record: ${recordLink}`,
+    ].join("\n").trim();
+
+    // Customer email body (professional, no internal links)
+    const customerEmailBody = [
+      cleanNote || actionDesc,
+      `\nBest regards,\nRebar.shop Team`,
     ].join("\n").trim();
 
     // 5. Send emails via gmail-send edge function (internal call)
@@ -121,6 +137,9 @@ serve((req) =>
     let sentCount = 0;
     for (const recipient of recipients) {
       try {
+        const isCustomer = customerEmail && recipient.email.toLowerCase() === customerEmail;
+        const body = isCustomer ? customerEmailBody : internalEmailBody;
+
         // Build RFC 2822 email
         const rawEmail = [
           `From: ai@rebar.shop`,
@@ -128,7 +147,7 @@ serve((req) =>
           `Subject: ${subject}`,
           `Content-Type: text/plain; charset=UTF-8`,
           "",
-          emailBody,
+          body,
         ].join("\r\n");
 
         const encodedMessage = btoa(unescape(encodeURIComponent(rawEmail)))
