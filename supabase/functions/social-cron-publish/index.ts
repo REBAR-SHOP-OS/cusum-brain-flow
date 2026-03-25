@@ -335,14 +335,8 @@ Deno.serve((req) =>
       JSON.stringify({ published, failed, results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Social cron publish error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "social-cron-publish", authMode: "none", requireCompany: false, wrapResult: false })
+);
 
 // ── Publishing Functions ──────────────────────────────────────────
 

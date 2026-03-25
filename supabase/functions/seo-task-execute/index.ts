@@ -518,11 +518,5 @@ Deno.serve((req) =>
       JSON.stringify({ error: 'Invalid phase. Use "analyze" or "execute"' }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (err) {
-    console.error("seo-task-execute error:", err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "seo-task-execute", authMode: "none", requireCompany: false, wrapResult: false })
+);

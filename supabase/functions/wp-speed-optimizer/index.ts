@@ -159,17 +159,8 @@ async function optimizeImgTags(html: string, isFirstContent: boolean): Promise<{
   return { html: result, changes, imagesFixed };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    const body = await req.json().catch(() => ({}));
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: supabase, body }) => {
     const dryRun = body.dry_run !== false;
     const contentTypes = body.content_types || ["posts", "pages", "products"];
     const includeMediaAudit = body.media_audit !== false;
@@ -177,11 +168,7 @@ serve(async (req) => {
     // For live mode (not dry run), respond immediately and process in background
     if (!dryRun) {
       const jobId = crypto.randomUUID();
-      
-      // Start background processing (don't await)
       const bgPromise = runOptimization(supabase, contentTypes, includeMediaAudit, false, jobId);
-      
-      // Fire and forget - log errors but don't block
       bgPromise.catch((err) => {
         console.error("Background optimization error:", err);
       });
@@ -200,15 +187,8 @@ serve(async (req) => {
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-
-  } catch (e) {
-    console.error("Speed optimizer error:", e);
-    return new Response(
-      JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "wp-speed-optimizer", authMode: "none", requireCompany: false, wrapResult: false })
+);
 
 async function runOptimization(
   supabase: any,
