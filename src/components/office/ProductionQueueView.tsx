@@ -79,6 +79,7 @@ export function ProductionQueueView() {
     toast({ title: "Barlist deleted" });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["production-queues"] });
+    await fetchPlans();
   };
 
   const handleDeleteProject = async (projectId: string): Promise<boolean> => {
