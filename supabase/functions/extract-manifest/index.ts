@@ -492,6 +492,20 @@ Rules:
     }
   } catch (error) {
     console.error("Extract manifest error:", error);
+    // Attempt to mark the session as errored so the UI doesn't show a blank screen
+    try {
+      const body = await req.clone().json().catch(() => ({}));
+      if (body?.sessionId) {
+        await svcClient
+          .from("extract_sessions")
+          .update({
+            status: "error",
+            error_message: error instanceof Error ? error.message : "Unknown extraction error",
+            progress: 0,
+          })
+          .eq("id", body.sessionId);
+      }
+    } catch (_) { /* best-effort */ }
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
