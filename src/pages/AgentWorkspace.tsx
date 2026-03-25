@@ -274,6 +274,9 @@ export default function AgentWorkspace() {
       if (selectedProducts.length > 0) extraContext.selectedProducts = selectedProducts;
       extraContext.imageAspectRatio = imageAspectRatio;
     }
+    if (agentId === "eisenhower") {
+      extraContext.selectedDate = format(selectedDate, "yyyy-MM-dd");
+    }
     if (mapping) {
       extraContext.userRole = mapping.userRole;
       if (mapping.userRole === "ceo") extraContext.isCEO = true;
