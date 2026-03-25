@@ -1,44 +1,22 @@
 
 
-## Fix: Allow Zahra to Complete Feedback Tasks (RLS Policy)
+## Remove "Not Purchased" Tab & Keep "Purchased" Always Visible
 
-### Root Cause
-The `tasks` table has two UPDATE RLS policies:
-1. **"Assignee can complete tasks"** — requires `assigned_to = current_profile_id`
-2. **"Creator or admin can reopen and edit tasks"** — requires admin, creator, or assignee
+### What Changes
 
-Zahra's mirrored feedback tasks are assigned to Radin, not Zahra. She is neither the assignee, creator, nor admin — so the database silently rejects her updates.
+**File: `src/components/purchasing/PurchasingListPanel.tsx`**
 
-### Solution
-Add a new RLS UPDATE policy that allows delegate users to update feedback tasks assigned to their delegated profiles.
+1. Remove the "Not Purchased" (`pending`) entry from `STATUS_TABS` — only keep `All` and `Purchased`
+2. Change `defaultFilterStatus` default from `"all"` to `"all"` (stays same — user sees all items by default)
+3. The "New Chat" reset already clears DB items (implemented previously) — no change needed there
 
-### Database Migration
+### Result
+- Two tabs only: **All** | **Purchased**
+- "Not Purchased" filter disappears completely
+- Default view shows all items with no selections
+- "New Chat" continues to reset everything as already implemented
 
-```sql
--- Allow Zahra (delegate) to update feedback tasks assigned to Radin
-CREATE POLICY "Delegate can update feedback tasks"
-ON public.tasks
-FOR UPDATE
-TO authenticated
-USING (
-  company_id = get_user_company_id(auth.uid())
-  AND source IN ('screenshot_feedback', 'feedback_verification')
-  AND assigned_to IN (
-    SELECT unnest(ARRAY['5d948a66-619b-4ee1-b5e3-063194db7171']::uuid[])
-    FROM profiles
-    WHERE profiles.user_id = auth.uid()
-      AND profiles.id = '3a59f057-b232-4654-a2ea-d519fe22ccd5'
-  )
-);
-```
-
-This policy grants Zahra (profile `3a59...`) UPDATE access on feedback tasks (`source = screenshot_feedback` or `feedback_verification`) that are assigned to Radin (profile `5d94...`).
-
-### Changes Summary
-
-| Change | Detail |
+| File | Change |
 |---|---|
-| Migration | Add one new RLS UPDATE policy on `tasks` table for delegate feedback access |
-
-No frontend code changes needed — the `canMarkComplete` / `isFeedbackTask` logic already permits Zahra on the client side. Only the server-side RLS was blocking.
+| `src/components/purchasing/PurchasingListPanel.tsx` | Remove `pending` tab from `STATUS_TABS` |
 
