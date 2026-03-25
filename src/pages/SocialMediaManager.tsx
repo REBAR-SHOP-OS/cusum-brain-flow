@@ -649,7 +649,7 @@ export default function SocialMediaManager() {
         postsToReview={postsToReview}
         onClose={() => { setSelectedPost(null); }}
         onSchedule={() => selectedPost && handleSchedule(selectedPost)}
-        onDecline={() => selectedPost && handleDecline(selectedPost)}
+        onDecline={() => selectedPost && setDeclineTarget(selectedPost)}
       />
 
       {/* Brand Kit Dialog */}
