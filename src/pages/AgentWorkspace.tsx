@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { format } from "date-fns";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronDown, PanelLeftClose, PanelLeft, Brain, CalendarIcon, PhoneOff, MessageSquare, LayoutGrid, Menu } from "lucide-react";
+import { ChevronDown, PanelLeftClose, PanelLeft, Brain, CalendarIcon, PhoneOff, MessageSquare, LayoutGrid, Menu, CheckCircle2 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
