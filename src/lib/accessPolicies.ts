@@ -18,7 +18,7 @@ export const ACCESS_POLICIES = {
   blockedFromCustomers: [] as string[],
 
   /** Blocked from /shop-floor and /shopfloor routes */
-  blockedFromShopFloor: [] as string[],
+  blockedFromShopFloor: ["zahra@rebar.shop"] as string[],
 
   /** Shared shopfloor device accounts — locked to shop routes */
   shopfloorDevices: ["ai@rebar.shop"] as string[],
