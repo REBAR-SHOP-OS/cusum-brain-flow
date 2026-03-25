@@ -187,27 +187,11 @@ async function fetchBrandKit(supabase: ReturnType<typeof createClient>, userId: 
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const authHeader = req.headers.get("Authorization")!;
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabaseAdmin, body, req: originalReq } = ctx;
+    const authHeader = originalReq.headers.get("Authorization")!;
     const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate } = body;
-
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     const postDate = scheduledDate || new Date().toISOString();
     const dateStr = new Date(postDate).toLocaleDateString("en-US", {
