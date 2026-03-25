@@ -416,23 +416,15 @@ async function executeSingleAction(
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const { task_id, phase } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: sb, body }) => {
+    const { task_id, phase } = body;
     if (!task_id || !phase) {
       return new Response(
         JSON.stringify({ error: "task_id and phase required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const sb = createClient(supabaseUrl, serviceKey);
 
     const { data: task, error: taskErr } = await sb
       .from("seo_tasks")
