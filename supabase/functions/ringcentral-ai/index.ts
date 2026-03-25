@@ -5,20 +5,7 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 
 const RC_SERVER = "https://platform.ringcentral.com";
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
-  return user.id;
-}
+// verifyAuth removed — handled by handleRequest wrapper
 
 async function getRCAccessTokenForUser(userId: string): Promise<string> {
   const supabaseAdmin = createClient(
