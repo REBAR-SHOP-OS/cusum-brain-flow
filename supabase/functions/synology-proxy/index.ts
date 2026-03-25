@@ -1,4 +1,5 @@
-import { corsHeaders, requireAuth, json } from "../_shared/auth.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 interface QuickConnectInfo {
   baseUrl: string;
