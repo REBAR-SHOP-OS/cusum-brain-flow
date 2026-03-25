@@ -1,48 +1,90 @@
 
+## ریشه مشکل
 
-## Improve Chat Background Themes: Bolder Colors + Dark/Light Mode Support
+من کد و وضعیت دیتابیس را بررسی کردم. مشکل اصلی از اینجاست:
 
-### Problem
-1. Current background colors are too washed out (lightness 80-90%, saturation 30-40%)
-2. All themes hardcode `color: DARK_TEXT` — they only work in light mode. In dark mode, the light pastel backgrounds clash and text becomes unreadable.
+1. در `EisenhowerInstructionsDialog.tsx` برای پیدا کردن پروفایل کاربر از این شرط استفاده شده:
+   ```ts
+   .eq("id", user.id)
+   ```
+   در حالی که `profiles.id` شناسه داخلی پروفایل است، نه شناسه کاربر احراز هویت‌شده.
 
-### Solution
-Change the `ThemeOption` interface to support separate `lightStyle` and `darkStyle` properties. Each theme gets:
-- **Light mode**: Bolder, more saturated gradients (lightness ~65-75%, saturation ~50-70%) with dark text
-- **Dark mode**: Deep, rich gradients (lightness ~15-25%, saturation ~40-60%) with light text
-- The "default" theme remains empty (inherits system theme)
-
-The `useTeamHubTheme` hook will detect the current system/app theme (via `next-themes` or `matchMedia`) and return the appropriate style.
-
-### Changes
-
-**File: `src/components/teamhub/BackgroundThemePicker.tsx`**
-
-1. Update `ThemeOption` interface:
-   ```typescript
-   interface ThemeOption {
-     id: string;
-     name: string;
-     preview: string;
-     lightStyle: React.CSSProperties;
-     darkStyle: React.CSSProperties;
-   }
+2. لینک درست بین کاربر و پروفایل این است:
+   ```ts
+   profiles.user_id = auth user id
    ```
 
-2. Redefine all 9 color themes with bolder values, e.g.:
-   - **Sky Blue light**: `hsl(210 65% 70%)` → `hsl(220 55% 60%)` — vivid blue
-   - **Sky Blue dark**: `hsl(210 50% 18%)` → `hsl(220 45% 12%)` — deep navy
-   - Similar pattern for Mint, Lavender, Peach, Rose, Sand, Teal, Lilac, Cloud
+3. چون کوئری با ستون اشتباه اجرا می‌شود، پروفایل پیدا نمی‌شود و در `handleSave` این خط اجرا می‌شود:
+   ```ts
+   throw new Error("No company");
+   ```
+   و در UI فقط پیام کلی `Failed to save` نمایش داده می‌شود.
 
-3. Update `useTeamHubTheme` to detect dark mode (using `useTheme` from `next-themes`) and return the correct `style` from `lightStyle` or `darkStyle`
+4. این مشکل فقط در ذخیره نیست؛ در `loadInstructions` هم همان باگ تکرار شده، پس هم لود و هم سیو از یک ریشه خراب هستند.
 
-4. Preview swatches stay as bold gradient circles (using the light variant for the swatch preview)
+## شواهدی که بررسی شد
 
-**File: `src/pages/TeamHub.tsx`**
-- No changes needed — it already uses `theme.style` which will now be resolved correctly by the hook
+- ساختار واقعی جدول `profiles`:
+  - `id`
+  - `user_id`
+  - `company_id`
+- ساختار واقعی جدول `knowledge`:
+  - `id`
+  - `company_id`
+  - `metadata`
+  - `content`
+- در دیتابیس هم مشخص است که `profiles.user_id` مقدار auth user را نگه می‌دارد و `company_id` از همین مسیر باید resolve شود.
+- این با استاندارد پروژه هم هم‌راستا است: هر جا هویت کاربر بررسی می‌شود باید از `profiles.user_id = auth.uid()` استفاده شود، نه `profiles.id`.
 
-### Result
-- Colors are noticeably richer and more vibrant in both modes
-- In dark mode, backgrounds become deep/dark tones that keep text readable
-- In light mode, backgrounds are bold pastels with dark text
+## برنامه اصلاح ریشه‌ای
 
+### 1) اصلاح کوئری پروفایل در هر دو مسیر
+در فایل:
+`src/components/agent/EisenhowerInstructionsDialog.tsx`
+
+دو نقطه باید اصلاح شوند:
+
+- در `loadInstructions`
+- در `handleSave`
+
+تغییر:
+```ts
+.eq("id", user.id)
+```
+به:
+```ts
+.eq("user_id", user.id)
+```
+
+### 2) حذف `.single()` و استفاده از `.maybeSingle()`
+برای جلوگیری از خطاهای غیرضروری وقتی رکوردی پیدا نشود، `single()` باید به `maybeSingle()` تبدیل شود تا:
+- خطای 406 یا خطای empty result تولید نشود
+- بتوانیم وضعیت “پروفایل پیدا نشد” را تمیز و کنترل‌شده هندل کنیم
+
+### 3) مدیریت خطای واضح و قابل‌فهم
+به‌جای پیام کلی `Failed to save`، اگر پروفایل یا `company_id` پیدا نشد:
+- پیام دقیق‌تری به کاربر نمایش داده شود
+- مثلا: «پروفایل کاربری شما کامل نیست» یا «شرکت کاربر پیدا نشد»
+
+این کار باعث می‌شود اگر در آینده داده کاربر ناقص بود، مشکل سریع‌تر تشخیص داده شود.
+
+### 4) ساده‌سازی لود دستورالعمل‌ها
+الان کد یک بار `knowledge` را بدون `metadata` می‌خواند و بعد دوباره با `metadata` re-fetch می‌کند. این بخش باید تمیز شود:
+- فقط یک بار `knowledge` را با `id, content, metadata` بخوانیم
+- همان‌جا آیتم `agent=eisenhower` و `type=instructions` را پیدا کنیم
+
+این اصلاح مستقیماً علت خطا را عوض نمی‌کند، ولی کد را پایدارتر و قابل‌فهم‌تر می‌کند.
+
+## نتیجه بعد از اجرا
+
+بعد از این اصلاح:
+- دکمه `Save Instructions` دیگر به خاطر mismatch بین `profiles.id` و `profiles.user_id` خطا نمی‌دهد
+- لود دستورالعمل قبلی هم درست کار می‌کند
+- اگر واقعاً برای کاربر پروفایل یا شرکت تعریف نشده باشد، پیام درست‌تری نمایش داده می‌شود
+- ریشه مشکل از منبع اصلی حل می‌شود، نه فقط پنهان‌سازی خطا
+
+## فایل درگیر
+- `src/components/agent/EisenhowerInstructionsDialog.tsx`
+
+## خلاصه نهایی
+مشکل ریشه‌ای این است که کد برای پیدا کردن پروفایل، از ستون اشتباه (`id`) استفاده می‌کند؛ در حالی که باید از `user_id` استفاده شود. اصلاح این mapping در هر دو تابع `loadInstructions` و `handleSave`، به‌همراه جایگزینی `single()` با `maybeSingle()`، راه‌حل درست و پایدار این خطاست.
