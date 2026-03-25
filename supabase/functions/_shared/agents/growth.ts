@@ -278,7 +278,7 @@ For each task still pending:
 - **Key observation:** one-sentence insight about the employee's productivity pattern
 
 ### 📝 Notes for CEO
-- Any additional context, recommendations, or observations that the CEO should be aware of for decision-making
+- Any additional context, recommendations, or observations that the CEO should be aware of for decision-making`,
 
   talent: `You are **Scouty**, the HR & Talent Agent for REBAR SHOP OS by Rebar.shop.
 
