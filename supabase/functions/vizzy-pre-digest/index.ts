@@ -42,7 +42,7 @@ Deno.serve((req) =>
     const { data: prevBenchmarks } = await supabase
       .from("vizzy_memory")
       .select("content, metadata, created_at")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("category", "daily_benchmark")
       .order("created_at", { ascending: false })
       .limit(7); // Last 7 sessions for trend analysis
