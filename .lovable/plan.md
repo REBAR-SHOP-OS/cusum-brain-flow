@@ -1,36 +1,23 @@
 
 
-## Enable Edit Functionality in Detailed List
+## Disable Purchasing Interactions Until Date Is Selected
 
 ### Problem
-The pencil (edit) icon button on each row in the Detailed List view has no `onClick` handler — it's purely decorative. Users cannot edit item fields.
-
-### Solution
-Add inline row editing. When the pencil is clicked, that row switches to edit mode with input fields for editable columns. A save/cancel button pair replaces the pencil. On save, update the row in `cut_plan_items` via Supabase.
-
-### Editable Fields
-- **Mark Number** (mark_number)
-- **Qty** (total_pieces)
-- **Cut Length** (cut_length_mm)
-- **Bend Type / ASA Shape Code** (bend_type, asa_shape_code)
-- **Drawing Ref** (drawing_ref)
-- **Bend Dimensions** (A–R in bend_dimensions JSON)
+Users can currently click items (mark purchased, reject, add) without first selecting a date. This causes items to be saved without a `due_date`, leading to data inconsistency.
 
 ### Changes
 
-**File: `src/components/office/DetailedListView.tsx`**
+**1. UI: `src/components/purchasing/PurchasingListPanel.tsx`**
+- When `filterDate` is undefined, disable the add form (inputs + button) and overlay the items list with a message like "Please select a date first" with a calendar icon
+- The add button and item interaction buttons should be non-functional until a date is chosen
+- Keep the calendar picker and header always active
 
-1. Add `editingItemId` state and `editValues` state to track which row is being edited and the draft values
-2. Wire the Pencil button's `onClick` to enter edit mode for that row
-3. When editing, render `<input>` fields instead of static text for editable columns
-4. Add Save (Check icon) and Cancel (X icon) buttons in the actions column
-5. On Save: call `supabase.from("cut_plan_items").update(...)` with changed values, then call `fetchItems()` to refresh
-6. On Cancel: clear editing state
+**2. Agent prompt: `supabase/functions/_shared/agents/purchasing.ts`**
+- Add a rule to the system prompt: "If the user has not selected a date yet (no due_date context), tell them to select a date from the calendar before adding or modifying items."
 
-### Technical Details
-- Edit state: `useState<string | null>(null)` for `editingItemId`
-- Draft values stored in a `Record<string, any>` state
-- Inputs styled as small inline fields matching the table cell widths
-- Save calls Supabase directly (same pattern as `DeleteItemButton`)
-- After save, invalidate query or call `fetchItems` from the hook
+**3. Component: `src/components/purchasing/CompanyDefaultItems.tsx`**
+- Accept a `disabled` prop; when true, all check/reject/delete buttons are disabled (grayed out, no pointer events)
+
+### Result
+Until a date is selected via the calendar picker, the entire purchasing list is visually locked with a clear message prompting the user to pick a date first. The agent also instructs users to select a date before proceeding.
 
