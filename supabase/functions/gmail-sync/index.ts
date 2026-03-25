@@ -1,24 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptToken, decryptToken } from "../_shared/tokenEncryption.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
-
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
-
-  return user.id;
-}
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 async function getAccessTokenForUser(userId: string, clientIp: string): Promise<string> {
   const supabaseAdmin = createClient(
@@ -527,27 +510,13 @@ async function syncAllUsers(body: { action?: string }) {
   );
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const clonedReq = req.clone();
-
-    // Parse body early
-    let body: { maxResults?: number; pageToken?: string; query?: string; action?: string } = {};
-    try {
-      body = await clonedReq.json();
-    } catch {
-      // No body
-    }
-
-    const userId = await verifyAuth(req);
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient, body, req: rawReq } = ctx;
 
     if (!userId) {
       // Check if cron call (anon/service key)
-      const authHeader = req.headers.get("Authorization") || "";
+      const authHeader = rawReq.headers.get("Authorization") || "";
       const token = authHeader.replace("Bearer ", "");
       const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -564,7 +533,7 @@ serve(async (req) => {
     }
 
     // Get the user's own Gmail access token with IP tracking
-    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    const clientIp = rawReq.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const accessToken = await getAccessTokenForUser(userId, clientIp);
 
     // body already parsed above (before auth check)
@@ -723,22 +692,5 @@ serve(async (req) => {
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("Gmail sync error:", error);
-
-    // Return specific error for "not connected" so UI can handle it
-    const message = error instanceof Error ? error.message : "Unknown error";
-    const isNotConnected = message.includes("not connected") || message.includes("reconnect");
-
-    return new Response(
-      JSON.stringify({
-        error: isNotConnected ? "gmail_not_connected" : "sync_error",
-        message,
-      }),
-      {
-        status: isNotConnected ? 403 : 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  }
-});
+  }, { functionName: "gmail-sync", authMode: "optional", requireCompany: false, wrapResult: false })
+);

@@ -1,5 +1,5 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, corsHeaders } from "../_shared/auth.ts";
+import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI as routerCallAI, AIError } from "../_shared/aiRouter.ts";
 
 const systemPrompt = `You are Blitz, an AI sales assistant for rebar.shop — a Canadian rebar fabrication company.
@@ -55,14 +55,9 @@ function extractToolResult(data: any): any | null {
   return null;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    // Auth guard
-    try { await requireAuth(req); } catch (res) { if (res instanceof Response) return res; throw res; }
-
-    const body = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { body } = ctx;
     const { lead, activities, action, userMessage, pipelineStats, auditType } = body;
 
     // ── pipeline_audit (no lead context needed) ──
@@ -528,13 +523,5 @@ Consider: stage progression velocity, win probability, client history, deal valu
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (e: any) {
-    console.error("pipeline-ai error:", e);
-    const status = e?.status || 500;
-    const message = e?.message || (e instanceof Error ? e.message : "Unknown error");
-    return new Response(JSON.stringify({ error: message }), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+  }, { functionName: "pipeline-ai", requireCompany: false, wrapResult: false })
+);

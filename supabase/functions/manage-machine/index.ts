@@ -1,8 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 // ═══════════════════════════════════════════════════════════
 // HELPERS (inlined from lib/helpers.ts)
@@ -653,49 +652,27 @@ async function handleSupervisorUnlock(ctx: ActionContext): Promise<Response | nu
 // MAIN ROUTER
 // ═══════════════════════════════════════════════════════════
 
-serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabaseService, userClient: supabaseUser, body: rawBody, req: rawReq } = ctx;
 
-  try {
-    // ── Auth ──
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) return json({ error: "Unauthorized" }, 401);
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const supabaseService = createClient(supabaseUrl, serviceKey);
-
-    // ── Stable auth via getUser() ──
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
-    if (userError || !user) return json({ error: "Invalid token" }, 401);
-    const userId = user.id;
-
-    // ── Role check ──
+    // ── Role check (get roles for ActionContext) ──
     const { data: userRoles } = await supabaseService.from("user_roles").select("role").eq("user_id", userId);
     const roles = (userRoles || []).map((r: { role: string }) => r.role);
-    if (!roles.some((r: string) => ["admin", "workshop"].includes(r))) {
-      return json({ error: "Forbidden: insufficient role" }, 403);
-    }
 
-    // ── Parse body ──
+    // ── Parse body with Zod ──
     const topSchema = z.object({
       action: z.string().min(1).max(50),
       machineId: z.string().uuid("machineId must be a valid UUID"),
     }).passthrough();
-    const parsed = topSchema.safeParse(await req.json());
+    const parsed = topSchema.safeParse(rawBody);
     if (!parsed.success) {
       return json({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }, 400);
     }
     const body = parsed.data;
     const { action, machineId } = body;
 
-    const { data: machine, error: machineError } = await supabaseUser
+    const { data: machine, error: machineError } = await supabaseUser!
       .from("machines").select("*").eq("id", machineId).single();
     if (machineError || !machine) return json({ error: "Machine not found or access denied" }, 404);
 
@@ -703,30 +680,30 @@ serve(async (req) => {
     const events: Record<string, unknown>[] = [];
     let machineRunId: string | null = null;
 
-    const ctx: ActionContext = {
+    const actionCtx: ActionContext = {
       userId, machineId, machine, body, roles,
-      supabaseUser, supabaseService, events, now,
+      supabaseUser: supabaseUser!, supabaseService, events, now,
     };
 
     switch (action) {
       case "update-status": {
-        const resp = await handleUpdateStatus(ctx);
+        const resp = await handleUpdateStatus(actionCtx);
         if (resp) return resp;
         break;
       }
       case "assign-operator": {
-        const resp = await handleAssignOperator(ctx);
+        const resp = await handleAssignOperator(actionCtx);
         if (resp) return resp;
         break;
       }
       case "start-run": {
-        const result = await handleStartRun(ctx);
+        const result = await handleStartRun(actionCtx);
         if (result.response) return result.response;
         machineRunId = result.machineRunId || null;
         break;
       }
       case "start-queued-run": {
-        const result = await handleStartQueuedRun(ctx);
+        const result = await handleStartQueuedRun(actionCtx);
         if (result.response) return result.response;
         machineRunId = result.machineRunId || null;
         break;
@@ -734,12 +711,12 @@ serve(async (req) => {
       case "pause-run":
       case "block-run":
       case "complete-run": {
-        const resp = await handlePauseBlockComplete(ctx, action);
+        const resp = await handlePauseBlockComplete(actionCtx, action);
         if (resp) return resp;
         break;
       }
       case "supervisor-unlock": {
-        const resp = await handleSupervisorUnlock(ctx);
+        const resp = await handleSupervisorUnlock(actionCtx);
         if (resp) return resp;
         break;
       }
@@ -751,9 +728,5 @@ serve(async (req) => {
     await flushEvents(supabaseService, events, machine.company_id);
 
     return json({ success: true, machineId, action, machineRunId: machineRunId ?? undefined });
-  } catch (error) {
-    console.error("manage-machine error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, 500);
-  }
-});
+  }, { functionName: "manage-machine", requireAnyRole: ["admin", "workshop"], requireCompany: false, wrapResult: false })
+);

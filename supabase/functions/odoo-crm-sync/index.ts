@@ -1,6 +1,7 @@
 import { corsHeaders, json } from "../_shared/auth.ts";
 import { isOdooEnabled } from "../_shared/featureFlags.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import {
   STAGE_MAP, TERMINAL_STAGES, ACTIVE_STAGES,
   validateOdooLead, persistValidationWarnings, summarizeWarnings,
@@ -76,47 +77,24 @@ async function logDedupRollback(
   });
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient, body: reqBody } = ctx;
 
-  // ODOO_ENABLED feature flag guard
-  if (!isOdooEnabled()) {
-    console.warn("ODOO_ENABLED guard: flag resolved to false");
-    return json({ error: "Odoo integration is disabled", disabled: true }, 200);
-  }
-
-  try {
-    // Dual-path auth: service role key (cron) OR valid user JWT (manual UI trigger)
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const token = authHeader.replace("Bearer ", "");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-
-    const serviceClient = createClient(supabaseUrl, serviceRoleKey);
-
-    if (token !== serviceRoleKey) {
-      const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      });
-      const { data: { user } } = await userClient.auth.getUser();
-      if (!user) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
-      }
+    // ODOO_ENABLED feature flag guard
+    if (!isOdooEnabled()) {
+      console.warn("ODOO_ENABLED guard: flag resolved to false");
+      return json({ error: "Odoo integration is disabled", disabled: true }, 200);
     }
 
     // Parse mode from request body
     let mode = "incremental";
     let singleOdooId: string | null = null;
-    try {
-      const body = await req.json();
-      if (body?.mode === "full") mode = "full";
-      if (body?.mode === "single" && body?.odoo_id) {
-        mode = "single";
-        singleOdooId = String(body.odoo_id);
-      }
-    } catch { /* no body = incremental */ }
+    if (reqBody?.mode === "full") mode = "full";
+    if (reqBody?.mode === "single" && reqBody?.odoo_id) {
+      mode = "single";
+      singleOdooId = String(reqBody.odoo_id);
+    }
 
     const odooUrl = Deno.env.get("ODOO_URL")!.trim();
     const odooKey = Deno.env.get("ODOO_API_KEY")!;
@@ -775,9 +753,5 @@ Deno.serve(async (req) => {
       mode,
       validation: validationSummary,
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("Sync error:", err);
-    return json({ error: err.message || "Sync failed" }, 500);
-  }
-});
+  }, { functionName: "odoo-crm-sync", authMode: "optional", requireCompany: false, wrapResult: false })
+);

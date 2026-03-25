@@ -1,6 +1,7 @@
 import { corsHeaders, json } from "../_shared/auth.ts";
 import { isOdooEnabled } from "../_shared/featureFlags.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const MESSAGE_TYPE_MAP: Record<string, string> = {
   comment: "note",
@@ -51,23 +52,15 @@ function stripHtml(html: string | false): string {
     .trim();
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient, body: reqBody } = ctx;
 
-  // ODOO_ENABLED feature flag guard
-  if (!isOdooEnabled()) {
-    console.warn("ODOO_ENABLED guard: flag resolved to false");
-    return json({ error: "Odoo integration is disabled", disabled: true }, 200);
-  }
-
-  try {
-    // Dual-path auth: service role key (cron) OR valid user JWT (manual UI trigger)
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const token = authHeader.replace("Bearer ", "");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-
-    const serviceClient = createClient(supabaseUrl, serviceRoleKey);
+    // ODOO_ENABLED feature flag guard
+    if (!isOdooEnabled()) {
+      console.warn("ODOO_ENABLED guard: flag resolved to false");
+      return json({ error: "Odoo integration is disabled", disabled: true }, 200);
+    }
 
     // ── Schema preflight: ensure odoo_message_id column exists ──
     const { error: schemaErr } = await serviceClient
@@ -82,28 +75,13 @@ Deno.serve(async (req) => {
       }, 500);
     }
 
-    if (token !== serviceRoleKey) {
-      const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-      });
-      const { data: { user } } = await userClient.auth.getUser();
-      if (!user) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" }
-        });
-      }
-    }
-
     let mode = "missing";
-    try {
-      const body = await req.json();
-      if (body?.mode === "full") mode = "full";
-      if (body?.mode === "single" && body?.odoo_id) {
-        mode = "single";
-        // Handle single-lead test below
-        var singleOdooId = String(body.odoo_id);
-      }
-    } catch { /* no body */ }
+    var singleOdooId: string | undefined;
+    if (reqBody?.mode === "full") mode = "full";
+    if (reqBody?.mode === "single" && reqBody?.odoo_id) {
+      mode = "single";
+      singleOdooId = String(reqBody.odoo_id);
+    }
 
     const odooUrl = Deno.env.get("ODOO_URL")!.trim();
     const odooKey = Deno.env.get("ODOO_API_KEY")!;
@@ -531,9 +509,5 @@ Deno.serve(async (req) => {
       files_linked: filesLinked || 0,
       files_unlinked_remaining: filesUnlinked || 0,
     });
-  } catch (err) {
-    if (err instanceof Response) return err;
-    console.error("Chatter sync error:", err);
-    return json({ error: err.message || "Chatter sync failed" }, 500);
-  }
-});
+  }, { functionName: "odoo-chatter-sync", authMode: "optional", requireCompany: false, wrapResult: false })
+);

@@ -1,22 +1,7 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-
-async function verifyAuth(req: Request): Promise<{ userId: string } | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) return null;
-  return { userId: user.id };
-}
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const OPENAI_BASE = "https://api.openai.com/v1";
@@ -533,19 +518,10 @@ function concatVideoBytes(clips: Uint8Array[]): Uint8Array {
 
 // ─── Main handler ───────────────────────────────────────────
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const auth = await verifyAuth(req);
-    if (!auth) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient, req: rawReq } = ctx;
+    const auth = { userId };
 
     const videoSchema = z.object({
       action: z.enum(["generate", "poll", "download", "generate-multi", "poll-multi", "list-library", "delete-library"]),
@@ -571,7 +547,7 @@ serve(async (req) => {
       lastFrameBase64: z.string().optional(),
       lastFrameMimeType: z.string().max(50).optional(),
     });
-    const parsed = videoSchema.safeParse(await req.json());
+    const parsed = videoSchema.safeParse(await rawReq.json());
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
@@ -1161,11 +1137,5 @@ serve(async (req) => {
       JSON.stringify({ error: 'Invalid action' }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (e) {
-    console.error("generate-video error:", e);
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "generate-video", requireCompany: false, parseBody: false, wrapResult: false })
+);
