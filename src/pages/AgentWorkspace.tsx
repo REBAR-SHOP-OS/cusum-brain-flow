@@ -268,6 +268,15 @@ export default function AgentWorkspace() {
     }
   }, [agentId, resetPurchasingItems, autoStartEisenhower]);
 
+  // Auto-start Eisenhower on initial mount (no existing session)
+  const eisenhowerAutoStarted = useRef(false);
+  useEffect(() => {
+    if (agentId === "eisenhower" && !activeSessionId && messages.length === 0 && !eisenhowerAutoStarted.current && user) {
+      eisenhowerAutoStarted.current = true;
+      autoStartEisenhower();
+    }
+  }, [agentId, activeSessionId, messages.length, user]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-send initial message from Quick Actions
   useEffect(() => {
     const state = location.state as { initialMessage?: string } | null;
