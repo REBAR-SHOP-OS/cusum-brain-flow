@@ -16,10 +16,7 @@ import {
 } from "../_shared/agentSharedInstructions.ts";
 import type { AgentRequest, ChatMessage, ValidationRule, ExtractedRebarData, DetectedZone } from "../_shared/agentTypes.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
-};
+import { corsHeaders } from "../_shared/auth.ts";
 
 // ─── Pixel Slot Template Definitions (no hardcoded captions — all generated dynamically) ───
 // ─── Diverse Visual Styles Pool (randomly selected per generation to guarantee uniqueness) ───
@@ -532,7 +529,6 @@ Deno.serve(async (req) => {
           });
         }
       }
-
 
       if (documentResults.length > 0) {
         mergedContext.documentResults = documentResults;
