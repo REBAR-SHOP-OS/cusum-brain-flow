@@ -234,6 +234,7 @@ export default function AgentWorkspace() {
     setActiveSessionId(null);
     setAutoBriefingSent(true); // don't auto-brief on manual new chat
     setShowRecipeTable(false);
+    setSessionFinalized(false);
     // Reset purchasing state so user sees fresh default list
     if (agentId === "purchasing") {
       await resetPurchasingItems();
