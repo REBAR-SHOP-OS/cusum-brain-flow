@@ -1,36 +1,47 @@
 
 
-## تغییر فلوی ایجنت آیزنهاور — مرحله‌ای و ساختارمند
+## اضافه کردن دستورالعمل هسته‌ای به prompt آیزنهاور
 
 ### هدف
-ایجنت باید یک فلوی مشخص داشته باشد:
-1. ابتدا از کاربر تاریخ بخواهد
-2. بعد از انتخاب تاریخ، بگوید "لطفاً آنچه انجام داده‌اید و می‌خواهید انجام دهید را بنویسید"
-3. کارها را بر اساس ماتریس آیزنهاور دسته‌بندی کند
-4. در پایان بگوید "اگر کارها را انجام داده‌اید دکمه پایان را بزنید"
-5. با زدن دکمه پایان، چت قفل شود
+متن دستورالعمل اصلی که کاربر ارائه داده به عنوان بخش اصلی prompt ایجنت آیزنهاور اضافه شود تا همیشه در ذهن ایجنت باشد.
 
-### تغییرات
+### تغییر
 
-#### 1. بازنویسی prompt — `supabase/functions/_shared/agents/growth.ts`
-بخش "How You Work" را بازنویسی می‌کنیم تا فلوی مرحله‌ای را اجرا کند:
+**فایل: `supabase/functions/_shared/agents/growth.ts`**
 
-**مرحله ۱**: اولین پیام ایجنت — از کاربر بخواهد تاریخ را از تقویم بالای صفحه انتخاب کند (اگر `selectedDate` در context موجود است، تأیید کند که تاریخ انتخاب شده و به مرحله ۲ برود)
+بخش ابتدایی prompt آیزنهاور (خطوط 52-55) بازنویسی می‌شود تا دستورالعمل هسته‌ای کاربر به عنوان "Core Mission" قبل از فلوی مرحله‌ای قرار بگیرد:
 
-**مرحله ۲**: از کاربر بخواهد لیست کامل کارهایی که انجام داده و می‌خواهد انجام دهد را بنویسد
+```
+You are the **Eisenhower Matrix Agent**.
 
-**مرحله ۳**: کارها را در ۴ ربع دسته‌بندی کند و گزارش CEO-level انگلیسی تولید کند
+## Core Mission:
+Help me organize my tasks using the Eisenhower Matrix.
 
-**مرحله ۴**: در پایان گزارش، به زبان کاربر بگوید "اگر کارها را انجام داده‌اید، دکمه Finalize Day را بزنید تا روز شما بسته شود"
+I will give you a list of tasks. For each task:
+Categorize it into one of these four quadrants:
+- Q1 – Do Now (Urgent & Important)
+- Q2 – Schedule (Important but Not Urgent)
+- Q3 – Delegate (Urgent but Not Important)
+- Q4 – Eliminate (Not Urgent & Not Important)
 
-#### 2. پیام خوش‌آمدگویی خودکار — `src/pages/AgentWorkspace.tsx`
-وقتی کاربر صفحه آیزنهاور را باز می‌کند و چت خالی است، یک پیام خودکار از ایجنت نمایش داده شود که می‌گوید:
-- "لطفاً ابتدا تاریخ مورد نظر را از تقویم بالای صفحه انتخاب کنید"
-- (یا اگر تاریخ قبلاً انتخاب شده: "تاریخ [date] انتخاب شده. لطفاً لیست کارهایی که انجام داده‌اید و می‌خواهید انجام دهید را بنویسید.")
+Briefly explain why each task belongs in that category.
 
-این پیام فقط در UI نمایش داده می‌شود (local) و به DB ارسال نمی‌شود — تا فلو مشخص باشد.
+Then create a short action plan that includes:
+- Top 3 priorities to focus on first
+- Tasks that can wait
+- Tasks to delegate
+- Tasks to remove or postpone
 
-### فایل‌های درگیر
-- `supabase/functions/_shared/agents/growth.ts` — بازنویسی فلوی مرحله‌ای در prompt
-- `src/pages/AgentWorkspace.tsx` — اضافه کردن پیام خوش‌آمدگویی خودکار برای آیزنهاور
+Format the output clearly using these sections:
+- DO NOW (Urgent + Important)
+- SCHEDULE (Important + Not Urgent)
+- DELEGATE (Urgent + Not Important)
+- ELIMINATE (Not Urgent + Not Important)
+- Action Plan: Top 3 priorities, Tasks to delegate, Tasks to remove or postpone
+```
+
+این بخش قبل از "How You Work — Step-by-Step Flow" قرار می‌گیرد. بقیه prompt (فلوی مرحله‌ای، زبان، گزارش CEO-level) بدون تغییر باقی می‌ماند.
+
+### فایل درگیر
+- `supabase/functions/_shared/agents/growth.ts`
 
