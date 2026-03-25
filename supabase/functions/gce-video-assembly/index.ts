@@ -28,7 +28,7 @@ Deno.serve((req) =>
     const { body } = ctx;
     const typedBody = body as AssemblyRequest;
 
-    if (!body.clips || body.clips.length === 0) {
+    if (!typedBody.clips || typedBody.clips.length === 0) {
       return new Response(
         JSON.stringify({ error: "No clips provided" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
