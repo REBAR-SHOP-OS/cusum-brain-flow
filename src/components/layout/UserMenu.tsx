@@ -67,12 +67,13 @@ export function UserMenu() {
         <DropdownMenuLabel className="font-normal">
           <div className="flex items-center gap-3">
             <Avatar className="w-10 h-10">
+              {myProfile?.avatar_url && <AvatarImage src={myProfile.avatar_url} />}
               <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="text-sm font-medium truncate">{user.email?.split("@")[0]}</p>
+              <p className="text-sm font-medium truncate">{displayName}</p>
               <p className="text-xs text-muted-foreground truncate">{user.email}</p>
             </div>
           </div>
