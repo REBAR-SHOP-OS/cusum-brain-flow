@@ -548,6 +548,7 @@ export default function AgentWorkspace() {
 
   const [mobileHistoryOpen, setMobileHistoryOpen] = useState(false);
   const [brainOpen, setBrainOpen] = useState(false);
+  const [eisenhowerInstrOpen, setEisenhowerInstrOpen] = useState(false);
   
 
   const handleDateChange = useCallback((date: Date | undefined) => {
