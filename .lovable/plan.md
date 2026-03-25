@@ -1,27 +1,40 @@
 
 
-## Fix "New Chat" Reset for Purchasing Agent
+## Send Email to Customer on Note Logged
 
 ### Problem
-When "New Chat" is clicked, the purchasing list still shows all items (including purchased ones with green checkmarks) because the data reflects actual DB state. The user expects a clean, fresh view.
+When a user logs a note in the Sales Lead drawer, the `notify-lead-assignees` edge function sends notification emails only to internal assignees and @mentioned vendors. It does NOT send an email to the **customer** (the lead's `contact_email`). The user expects the customer to also receive an email from `ai@rebar.shop`.
 
-### Solution
-Two changes:
+### Root Cause
+The edge function queries `sales_leads` for only the `title` field and builds recipients exclusively from `sales_lead_assignees`. The lead's `contact_email` is never fetched or used.
 
-**1. `src/pages/AgentWorkspace.tsx` — `handleNewChat`**
-- Set `purchasingDate` to `undefined` and `activePurchasingDateStr` to `null` instead of today's date
-- This shows a fresh "no date" view — items without a due date (i.e., newly added, unconfirmed items)
-- Keep the `purchasingKey` increment for full remount
+### Fix
 
-**2. `src/components/purchasing/PurchasingListPanel.tsx`**
-- Add an optional `defaultFilterStatus` prop (default: `"all"`)
-- Initialize `filterStatus` state from this prop
-- In `AgentWorkspace.tsx`, pass `defaultFilterStatus="pending"` so that after "New Chat", the panel defaults to showing only un-purchased items
+**File: `supabase/functions/notify-lead-assignees/index.ts`**
 
-### Files
+1. Expand the lead query to also select `contact_email` and `contact_name`:
+   ```typescript
+   .select("title, contact_email, contact_name")
+   ```
+
+2. After building the assignee recipient list, add the customer as a recipient if `contact_email` exists and is not already in the list:
+   ```typescript
+   if (lead.contact_email) {
+     const alreadyIncluded = recipients.some(r => r.email.toLowerCase() === lead.contact_email.toLowerCase());
+     if (!alreadyIncluded) {
+       recipients.push({ email: lead.contact_email, full_name: lead.contact_name || lead.contact_email });
+     }
+   }
+   ```
+
+3. Differentiate the email body for the customer vs internal assignees — the customer should receive a professional message without internal details like "View record" links. Build a separate `customerEmailBody` that contains only the note text and a professional closing, while keeping the current `emailBody` (with record link) for internal recipients.
+
+4. In the send loop, check if the recipient is the customer and use the appropriate email body.
+
+### Deployment
+After editing the edge function, redeploy `notify-lead-assignees`.
 
 | File | Change |
 |---|---|
-| `src/pages/AgentWorkspace.tsx` | Reset date to `undefined`/`null` on new chat; pass `defaultFilterStatus="pending"` |
-| `src/components/purchasing/PurchasingListPanel.tsx` | Accept `defaultFilterStatus` prop, use it as initial state |
+| `supabase/functions/notify-lead-assignees/index.ts` | Add customer (`contact_email`) as email recipient with professional email body |
 
