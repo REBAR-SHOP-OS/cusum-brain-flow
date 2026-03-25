@@ -22,7 +22,7 @@ export interface RequestContext {
   userId: string;
   companyId: string;
   serviceClient: ReturnType<typeof createClient>;
-  userClient: ReturnType<typeof createClient>;
+  userClient: ReturnType<typeof createClient> | null;
   body: Record<string, any>;
   log: ReturnType<typeof createLogger>;
 }
