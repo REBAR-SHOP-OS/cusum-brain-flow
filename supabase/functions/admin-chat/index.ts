@@ -1,10 +1,9 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 import { buildPageContext } from "../_shared/pageMap.ts";
 import { WPClient } from "../_shared/wpClient.ts";
 import { callAI, callAIStream, AIError } from "../_shared/aiRouter.ts";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 // ═══ JARVIS TOOLS ═══
