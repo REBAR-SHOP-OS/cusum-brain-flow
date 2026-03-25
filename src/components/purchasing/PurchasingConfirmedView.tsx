@@ -9,7 +9,7 @@ interface PurchasingConfirmedViewProps {
   record: ConfirmedListRecord;
 }
 
-type SnapshotItem = {
+export type SnapshotItem = {
   title: string;
   category: string | null;
   quantity: number;
