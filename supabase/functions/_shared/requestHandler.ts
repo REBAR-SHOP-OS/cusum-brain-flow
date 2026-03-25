@@ -36,7 +36,6 @@ export interface HandlerOptions {
   rawResponse?: boolean;
   /**
    * If false, the handler's return value is serialized as-is (no { ok, data } wrapping).
-   * Useful for migrating legacy functions that have an established API contract.
    * Default: true (wraps in { ok: true, data: result }).
    */
   wrapResult?: boolean;
@@ -46,6 +45,13 @@ export interface HandlerOptions {
    * Default: true.
    */
   parseBody?: boolean;
+  /**
+   * Authentication mode:
+   * - "required" (default): calls requireAuth(), throws 401 if no valid token
+   * - "optional": resolves auth if Bearer token present, otherwise userId="" and userClient=null
+   * - "none": skips auth entirely, only creates serviceClient
+   */
+  authMode?: "required" | "optional" | "none";
 }
 
 /**
