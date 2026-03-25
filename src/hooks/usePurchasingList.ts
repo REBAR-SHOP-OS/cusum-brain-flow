@@ -250,8 +250,10 @@ export function usePurchasingList(filterDate?: Date, filterStatus?: "all" | "pen
     if (snapError) {
       console.error("Snapshot save error:", snapError);
       toast.error("List confirmed but snapshot failed to save");
+      return null;
     } else {
       toast.success(`List confirmed for ${date}`);
+      return { due_date: date, confirmed_at: new Date().toISOString(), snapshot };
     }
   }, [user]);
 

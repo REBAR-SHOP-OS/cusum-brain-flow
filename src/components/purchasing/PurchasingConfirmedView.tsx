@@ -17,7 +17,7 @@ type SnapshotItem = {
   priority: string;
 };
 
-async function generatePdf(record: ConfirmedListRecord, snapshot: SnapshotItem[]) {
+export async function generatePdf(record: ConfirmedListRecord, snapshot: SnapshotItem[]) {
   const purchased = snapshot.filter(i => i.status === "purchased");
   if (!purchased.length) return;
 
