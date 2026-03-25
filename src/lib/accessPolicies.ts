@@ -9,16 +9,16 @@
  */
 export const ACCESS_POLICIES = {
   /** Full system access — CEO Portal, diagnostics, admin tools */
-  superAdmins: ["sattar@rebar.shop", "radin@rebar.shop"] as string[],
+  superAdmins: ["sattar@rebar.shop", "radin@rebar.shop", "zahra@rebar.shop"] as string[],
 
   /** Accounting workspace + nav access */
   accountingAccess: ["sattar@rebar.shop", "neel@rebar.shop", "vicky@rebar.shop"] as string[],
 
   /** Blocked from /customers route */
-  blockedFromCustomers: ["zahra@rebar.shop"] as string[],
+  blockedFromCustomers: [] as string[],
 
   /** Blocked from /shop-floor and /shopfloor routes */
-  blockedFromShopFloor: ["zahra@rebar.shop"] as string[],
+  blockedFromShopFloor: [] as string[],
 
   /** Shared shopfloor device accounts — locked to shop routes */
   shopfloorDevices: ["ai@rebar.shop"] as string[],
