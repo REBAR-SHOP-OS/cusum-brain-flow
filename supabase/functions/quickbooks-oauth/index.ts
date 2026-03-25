@@ -56,21 +56,7 @@ async function getCompanyQBConfig(supabase: ReturnType<typeof createClient>, com
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
-async function verifyAuth(req: Request): Promise<string | null> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } }
-  );
-
-  const token = authHeader.replace("Bearer ", "");
-  const { data, error } = await supabase.auth.getClaims(token);
-  if (error || !data?.claims?.sub) return null;
-  return data.claims.sub as string;
-}
+// verifyAuth removed — handled by handleRequest
 
 async function getUserCompanyId(supabase: ReturnType<typeof createClient>, userId: string): Promise<string> {
   const { data: profile } = await supabase

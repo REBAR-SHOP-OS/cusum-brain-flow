@@ -1374,8 +1374,5 @@ Deno.serve((req) =>
         console.error("[qb-sync-engine] Lock release failed:", e);
       }
     }
-  } catch (error) {
-    console.error("qb-sync-engine error:", error);
-    return jsonRes({ error: error instanceof Error ? error.message : String(error) }, 500);
-  }
-});
+  }, { functionName: "qb-sync-engine", authMode: "optional", requireCompany: false, wrapResult: false })
+);
