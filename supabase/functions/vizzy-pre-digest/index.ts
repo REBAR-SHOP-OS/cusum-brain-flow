@@ -1,8 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 import { callAI } from "../_shared/aiRouter.ts";
-
 import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
 
 /**
  * Vizzy Pre-Digest: Before a voice session starts, this function:
