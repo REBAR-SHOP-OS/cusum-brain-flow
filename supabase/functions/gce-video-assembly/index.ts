@@ -23,13 +23,10 @@ interface AssemblyRequest {
   audioUrl?: string;
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const body: AssemblyRequest = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { body } = ctx;
+    const typedBody = body as AssemblyRequest;
 
     if (!body.clips || body.clips.length === 0) {
       return new Response(
