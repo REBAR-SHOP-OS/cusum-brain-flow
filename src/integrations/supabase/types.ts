@@ -13352,6 +13352,7 @@ export type Database = {
           content_type: string | null
           cover_image_url: string | null
           created_at: string
+          decline_reason: string | null
           declined_by: string | null
           hashtags: string[] | null
           id: string
@@ -13379,6 +13380,7 @@ export type Database = {
           content_type?: string | null
           cover_image_url?: string | null
           created_at?: string
+          decline_reason?: string | null
           declined_by?: string | null
           hashtags?: string[] | null
           id?: string
@@ -13406,6 +13408,7 @@ export type Database = {
           content_type?: string | null
           cover_image_url?: string | null
           created_at?: string
+          decline_reason?: string | null
           declined_by?: string | null
           hashtags?: string[] | null
           id?: string

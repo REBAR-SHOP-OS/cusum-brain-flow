@@ -1,0 +1,1 @@
+ALTER TABLE public.social_posts ADD COLUMN decline_reason text;
