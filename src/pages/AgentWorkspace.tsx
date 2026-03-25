@@ -253,7 +253,7 @@ export default function AgentWorkspace() {
     let sessionId = activeSessionId;
     if (!sessionId) {
       const sessionTitle = agentId === "eisenhower"
-        ? format(new Date(), "yyyy-MM-dd (EEE, MMM d)")
+        ? format(selectedDate, "yyyy-MM-dd (EEE, MMM d)")
         : agentId === "social"
           ? format(selectedDate, "yyyy-MM-dd")
           : content;
@@ -273,6 +273,9 @@ export default function AgentWorkspace() {
       if (imageStyles.length > 0) extraContext.imageStyles = imageStyles;
       if (selectedProducts.length > 0) extraContext.selectedProducts = selectedProducts;
       extraContext.imageAspectRatio = imageAspectRatio;
+    }
+    if (agentId === "eisenhower") {
+      extraContext.selectedDate = format(selectedDate, "yyyy-MM-dd");
     }
     if (mapping) {
       extraContext.userRole = mapping.userRole;
@@ -690,7 +693,7 @@ export default function AgentWorkspace() {
               </Button>
             </div>
           )}
-          {agentId === "social" && (
+          {(agentId === "social" || agentId === "eisenhower") && (
             <>
               <Popover>
                 <PopoverTrigger asChild>
@@ -740,7 +743,7 @@ export default function AgentWorkspace() {
               <p className="text-base sm:text-2xl font-semibold text-foreground mt-1">
                 What can I help you with?
               </p>
-              {agentId === "social" && (
+              {(agentId === "social" || agentId === "eisenhower") && (
                 <div className="mt-4 p-3 rounded-lg bg-muted/50 border border-border inline-block">
                   <p className="text-sm text-muted-foreground">📅 Selected date:</p>
                   <p className="text-lg font-bold text-primary">{format(selectedDate, "yyyy-MM-dd (EEEE, MMMM d)")}</p>
