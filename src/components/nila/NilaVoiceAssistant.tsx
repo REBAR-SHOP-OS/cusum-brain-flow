@@ -19,16 +19,12 @@ interface Props {
 export function NilaVoiceAssistant({ onClose }: Props) {
   const {
     mode, status, messages, clearMessages,
-    interimText, lang, setLang,
+    interimText,
     selectedVoice, setSelectedVoice,
     isRecognizing, toggleRecognition, sendText,
   } = useNilaVoiceAssistant();
 
   const [showVoiceSelector, setShowVoiceSelector] = useState(false);
-
-  const handleToggleLang = useCallback(() => {
-    setLang(lang === "fa" ? "en" : "fa");
-  }, [lang, setLang]);
 
   const handleMicToggle = useCallback(() => {
     primeMobileAudio();
@@ -57,7 +53,7 @@ export function NilaVoiceAssistant({ onClose }: Props) {
     md += `**Mode:** ${mode} | **Messages:** ${messages.length}\n\n`;
     md += `## Conversation\n\n`;
 
-    messages.forEach((m: NilaMessage, i: number) => {
+    messages.forEach((m: NilaMessage) => {
       const roleLabel = m.role === "user" ? "User" : m.role === "assistant" ? "Nila" : "System";
       md += `- **${roleLabel}:** ${m.content}\n`;
     });
@@ -72,7 +68,6 @@ export function NilaVoiceAssistant({ onClose }: Props) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[100] flex flex-col nila-bg"
-      dir={lang === "fa" ? "rtl" : "ltr"}
     >
       {/* Ambient glow */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -84,8 +79,6 @@ export function NilaVoiceAssistant({ onClose }: Props) {
       <NilaHeader
         status={status}
         mode={mode}
-        lang={lang}
-        onToggleLang={handleToggleLang}
         onToggleVoiceSelector={() => setShowVoiceSelector((v) => !v)}
         onDownloadPdf={handleDownloadPdf}
         onClose={handleClose}
@@ -103,7 +96,7 @@ export function NilaVoiceAssistant({ onClose }: Props) {
       </div>
 
       {/* Chat messages */}
-      <NilaChatMessages messages={messages} lang={lang} />
+      <NilaChatMessages messages={messages} />
 
       {/* Mic button */}
       <div className="flex justify-center py-4">
@@ -111,7 +104,7 @@ export function NilaVoiceAssistant({ onClose }: Props) {
       </div>
 
       {/* Text input */}
-      <NilaTextInput lang={lang} interimText={interimText} onSend={sendText} />
+      <NilaTextInput interimText={interimText} onSend={sendText} />
     </motion.div>
   );
 }

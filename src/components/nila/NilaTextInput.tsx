@@ -1,16 +1,15 @@
 import { useState, useCallback } from "react";
 import { Send } from "lucide-react";
-import { NilaLang, getNilaT } from "@/lib/nilaI18n";
+import { getNilaT } from "@/lib/nilaI18n";
 
 interface Props {
-  lang: NilaLang;
   interimText: string;
   onSend: (text: string) => void;
 }
 
-export function NilaTextInput({ lang, interimText, onSend }: Props) {
+export function NilaTextInput({ interimText, onSend }: Props) {
   const [input, setInput] = useState("");
-  const t = getNilaT(lang);
+  const t = getNilaT();
 
   const handleSubmit = useCallback(() => {
     const trimmed = input.trim();
@@ -29,8 +28,6 @@ export function NilaTextInput({ lang, interimText, onSend }: Props) {
           onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
           placeholder={interimText || t.placeholder}
           className="flex-1 bg-transparent text-white text-sm outline-none placeholder:text-gray-500"
-          dir={lang === "fa" ? "rtl" : "ltr"}
-          style={lang === "fa" ? { fontFamily: '"Vazirmatn", "Tahoma", sans-serif' } : undefined}
         />
         <button
           onClick={handleSubmit}

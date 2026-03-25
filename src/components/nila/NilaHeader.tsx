@@ -1,13 +1,11 @@
-import { Globe, Volume2, FileText, X } from "lucide-react";
+import { Volume2, FileText, X } from "lucide-react";
 import { NilaMode, NilaStatus } from "@/hooks/useNilaVoiceAssistant";
-import { NilaLang, getNilaT } from "@/lib/nilaI18n";
+import { getNilaT } from "@/lib/nilaI18n";
 import { cn } from "@/lib/utils";
 
 interface Props {
   status: NilaStatus;
   mode: NilaMode;
-  lang: NilaLang;
-  onToggleLang: () => void;
   onToggleVoiceSelector: () => void;
   onDownloadPdf: () => void;
   onClose: () => void;
@@ -21,8 +19,8 @@ const statusDotColor: Record<NilaStatus, string> = {
   speaking: "bg-purple-400 animate-pulse",
 };
 
-export function NilaHeader({ status, mode, lang, onToggleLang, onToggleVoiceSelector, onDownloadPdf, onClose, hasMessages }: Props) {
-  const t = getNilaT(lang);
+export function NilaHeader({ status, mode, onToggleVoiceSelector, onDownloadPdf, onClose, hasMessages }: Props) {
+  const t = getNilaT();
   const modeLabels: Record<NilaMode, string> = {
     normal: t.modeNormal,
     silent: t.modeSilent,
@@ -50,9 +48,6 @@ export function NilaHeader({ status, mode, lang, onToggleLang, onToggleVoiceSele
       <div className="flex items-center gap-1">
         <button onClick={onToggleVoiceSelector} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label={t.selectVoice}>
           <Volume2 className="w-4 h-4 text-gray-400" />
-        </button>
-        <button onClick={onToggleLang} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label="Toggle language">
-          <Globe className="w-4 h-4 text-gray-400" />
         </button>
         {hasMessages && (
           <button onClick={onDownloadPdf} className="p-2 rounded-full hover:bg-white/10 transition-colors" aria-label={t.downloadPdf}>

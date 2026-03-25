@@ -1,18 +1,17 @@
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { NilaMessage } from "@/hooks/useNilaVoiceAssistant";
-import { NilaLang, getNilaT } from "@/lib/nilaI18n";
+import { getNilaT } from "@/lib/nilaI18n";
 import { cn } from "@/lib/utils";
 import { detectRtl } from "@/utils/textDirection";
 
 interface Props {
   messages: NilaMessage[];
-  lang: NilaLang;
 }
 
-export function NilaChatMessages({ messages, lang }: Props) {
+export function NilaChatMessages({ messages }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const t = getNilaT(lang);
+  const t = getNilaT();
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -28,7 +27,7 @@ export function NilaChatMessages({ messages, lang }: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3 nila-scrollbar">
-      {messages.map((msg, i) => {
+      {messages.map((msg) => {
         const isRtl = detectRtl(msg.content);
         const isUser = msg.role === "user";
         const isSystem = msg.role === "system";
@@ -44,7 +43,6 @@ export function NilaChatMessages({ messages, lang }: Props) {
               isSystem && "mx-auto nila-glass text-purple-300 text-center text-xs"
             )}
             dir={isRtl ? "rtl" : "ltr"}
-            style={isRtl ? { fontFamily: '"Vazirmatn", "Tahoma", sans-serif' } : undefined}
           >
             {isAssistant ? (
               <div className="prose prose-sm prose-invert max-w-none">
