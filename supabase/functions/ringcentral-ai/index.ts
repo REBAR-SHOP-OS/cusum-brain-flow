@@ -253,28 +253,11 @@ function formatToFrontendResponse(analysis: any) {
   };
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: svcClient, body } = ctx;
 
-  try {
-    const userId = await verifyAuth(req);
-    if (!userId) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    // Rate limit: 5 requests per 60 seconds per user (expensive audio analysis)
-    const svcClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
+    // Rate limit: 5 requests per 60 seconds per user
     const { data: allowed } = await svcClient.rpc("check_rate_limit", {
       _user_id: userId,
       _function_name: "ringcentral-ai",
@@ -288,8 +271,7 @@ serve(async (req) => {
       });
     }
 
-    const { recordingUri, analysisType, fromNumber, toNumber } =
-      await req.json();
+    const { recordingUri, analysisType, fromNumber, toNumber } = body;
 
     if (!recordingUri) {
       return new Response(
