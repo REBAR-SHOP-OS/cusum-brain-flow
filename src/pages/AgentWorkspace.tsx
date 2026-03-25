@@ -219,10 +219,8 @@ export default function AgentWorkspace() {
     // Pixel agent: no longer auto-send; user picks mode from empty state
     // Reset purchasing state so user sees fresh default list
     if (agentId === "purchasing") {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      setPurchasingDate(today);
-      setActivePurchasingDateStr(today.toISOString().split("T")[0]);
+      setPurchasingDate(undefined);
+      setActivePurchasingDateStr(null);
       setPurchasingKey((k) => k + 1);
     }
   }, [agentId]);
@@ -645,6 +643,7 @@ export default function AgentWorkspace() {
             <PurchasingListPanel
               key={purchasingKey}
               filterDate={purchasingDate}
+              defaultFilterStatus="pending"
               onFilterDateChange={(d) => {
                 setPurchasingDate(d);
                 setActivePurchasingDateStr(d ? d.toISOString().split("T")[0] : null);
