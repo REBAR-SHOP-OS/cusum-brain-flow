@@ -1,56 +1,32 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 /**
  * Server-side context endpoint for the Vizzy AI assistant.
  * Returns the business snapshot so the client doesn't need 13+ DB queries.
  */
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAdmin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-    const anonClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!);
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userErr } = await anonClient.auth.getUser(token);
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
-    }
-
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient: supabaseAdmin }) => {
     // Admin check
     const { data: adminRole } = await supabaseAdmin
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("role", "admin")
       .maybeSingle();
 
     if (!adminRole) {
-      return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Admin access required" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Build snapshot server-side (single set of DB queries)
-    const snapshot = await buildSnapshotFromContext(supabaseAdmin, user.id);
+    const snapshot = await buildSnapshotFromContext(supabaseAdmin, userId);
 
-    return new Response(JSON.stringify({ snapshot }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (err) {
-    console.error("vizzy-context error:", err);
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-});
+    return { snapshot };
+  }, { functionName: "vizzy-context", requireCompany: false, wrapResult: false })
+);
 
 // Build a minimal snapshot for client-side buildVizzyContext compatibility
 async function buildSnapshotFromContext(supabase: any, userId: string) {
@@ -83,11 +59,8 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
   ] = await Promise.all([
     supabase.from("cut_plans").select("id, status").in("status", ["queued", "running"]),
     supabase.from("cut_plan_items").select("id, phase, completed_pieces, total_pieces").in("phase", ["queued", "cutting", "bending"]).limit(500),
-    // placeholder — completedToday now derived from machine_runs below
     Promise.resolve({ data: [] }),
-    // machine runs today (with operator profile id for name resolution)
     supabase.from("machine_runs").select("id, machine_id, process, status, started_at, output_qty, operator_profile_id").gte("started_at", today + "T00:00:00").order("started_at", { ascending: false }).limit(100),
-    // machine names for joining
     supabase.from("machines").select("id, name").limit(100),
     supabase.from("machines").select("id, name, status, type").eq("status", "running"),
     supabase.from("leads").select("id, title, stage, expected_value, probability").in("stage", ["new", "contacted", "qualified", "proposal"]).order("probability", { ascending: false }).limit(20),
@@ -101,7 +74,6 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Invoice").gt("balance", 0).limit(50),
     supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Vendor").gt("balance", 0).limit(50),
     supabase.from("communications").select("subject, from_address, to_address, body_preview, received_at").eq("direction", "inbound").ilike("to_address", "%@rebar.shop%").order("received_at", { ascending: false }).limit(50),
-    // RingCentral calls today
     supabase.from("communications").select("from_address, to_address, direction, received_at, metadata, source").eq("source", "ringcentral").gte("received_at", today + "T00:00:00").order("received_at", { ascending: false }).limit(500),
   ]);
 

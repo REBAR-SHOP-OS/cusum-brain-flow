@@ -1,18 +1,10 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
-
-  try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    const supabase = createClient(supabaseUrl, serviceKey);
-    const { domain_id } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: supabase, body }) => {
+    const { domain_id } = body;
 
     if (!domain_id) {
       return new Response(JSON.stringify({ error: "domain_id required" }), {
@@ -33,7 +25,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Fetch all AI data
     const [keywordsRes, pagesRes, existingTasksRes] = await Promise.all([
       supabase
         .from("seo_keyword_ai")
@@ -58,7 +49,6 @@ Deno.serve(async (req) => {
     const pages = pagesRes.data || [];
     const existingTasks = existingTasksRes.data || [];
 
-    // Find strategic opportunities
     const nearTop3 = keywords.filter((k: any) => k.avg_position && k.avg_position <= 5 && k.avg_position > 3);
     const risingImpressions = keywords.filter((k: any) => k.trend_score && k.trend_score > 20);
     const lowScorePages = pages.filter((p: any) => p.seo_score && p.seo_score < 50);
@@ -157,20 +147,6 @@ Generate 5-10 high-impact strategic tasks.`,
       if (!error) tasksCreated++;
     }
 
-    return new Response(
-      JSON.stringify({ success: true, tasks_created: tasksCreated }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (err) {
-    console.error("seo-ai-strategy error:", err);
-    if (err instanceof AIError) {
-      return new Response(JSON.stringify({ error: err.message }), {
-        status: err.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+    return { success: true, tasks_created: tasksCreated };
+  }, { functionName: "seo-ai-strategy", requireCompany: false, wrapResult: false })
+);

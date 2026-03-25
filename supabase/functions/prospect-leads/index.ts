@@ -1,17 +1,10 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { requireAuth, corsHeaders, json } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders, json } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-
-  try {
-    const { userId, serviceClient } = await requireAuth(req).catch((r) => {
-      if (r instanceof Response) throw r;
-      throw r;
-    });
-
-    const { region } = await req.json();
+Deno.serve((req) =>
+  handleRequest(req, async ({ userId, serviceClient, body }) => {
+    const { region } = body;
     const targetRegion = region || "Ontario, Canada";
 
     // Get user's company_id
@@ -167,13 +160,6 @@ Make prospects diverse across industries, cities, and company sizes. Include bot
       prospect_count: prospects.length,
     }).eq("id", batch.id);
 
-    return json({ batchId: batch.id, count: prospects.length });
-  } catch (e) {
-    if (e instanceof Response) return e;
-    if (e instanceof AIError) {
-      return json({ error: e.message }, e.status);
-    }
-    console.error("prospect-leads error:", e);
-    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
-  }
-});
+    return { batchId: batch.id, count: prospects.length };
+  }, { functionName: "prospect-leads", requireCompany: false, wrapResult: false })
+);
