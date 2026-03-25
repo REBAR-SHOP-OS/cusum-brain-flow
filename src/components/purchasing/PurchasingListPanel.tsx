@@ -16,7 +16,6 @@ import { CompanyDefaultItems, COMPANY_DEFAULTS } from "./CompanyDefaultItems";
 
 const STATUS_TABS = [
   { value: "all" as const, label: "All" },
-  { value: "pending" as const, label: "Not Purchased" },
   { value: "purchased" as const, label: "Purchased" },
 ];
 
@@ -29,7 +28,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 interface PurchasingListPanelProps {
   filterDate?: Date;
   onFilterDateChange?: (date: Date | undefined) => void;
-  defaultFilterStatus?: "all" | "pending" | "purchased";
+  defaultFilterStatus?: "all" | "purchased";
 }
 
 export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChange, defaultFilterStatus = "all" }: PurchasingListPanelProps = {}) {
@@ -37,7 +36,7 @@ export function PurchasingListPanel({ filterDate: externalDate, onFilterDateChan
   const [calendarOpen, setCalendarOpen] = useState(false);
   const filterDate = externalDate !== undefined ? externalDate : internalDate;
   const setFilterDate = onFilterDateChange || setInternalDate;
-  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "purchased">(defaultFilterStatus);
+  const [filterStatus, setFilterStatus] = useState<"all" | "purchased">(defaultFilterStatus);
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [newTitle, setNewTitle] = useState("");
