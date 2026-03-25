@@ -156,6 +156,14 @@ export default function AgentWorkspace() {
     );
     setActiveSessionId(sessionId);
     setAutoBriefingSent(true); // don't auto-brief when loading history
+
+    // Check if session is finalized
+    const { data: sessionData } = await supabase
+      .from("chat_sessions")
+      .select("is_finalized")
+      .eq("id", sessionId)
+      .single();
+    setSessionFinalized(sessionData?.is_finalized === true);
   }, [getSessionMessages]);
 
   // Background service: subscribe/unsubscribe on session changes, check for undelivered
