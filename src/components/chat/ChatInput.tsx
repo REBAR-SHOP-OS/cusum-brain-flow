@@ -56,6 +56,7 @@ interface ChatInputProps {
   showFileUpload?: boolean;
   showSmartMode?: boolean;
   minimalToolbar?: boolean;
+  voiceAndAttachOnly?: boolean;
   selectedModel?: string;
   onModelChange?: (model: string) => void;
   imageStyles?: string[];
