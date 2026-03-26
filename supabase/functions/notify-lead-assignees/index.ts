@@ -329,13 +329,13 @@ serve((req) =>
     // If actor token failed, try ai@rebar.shop (if not already tried)
     if (!tokenData && senderUserId && senderUserId === actor_id) {
       log.info("Actor token invalid_grant, trying ai@rebar.shop fallback");
-      const { data: aiProfile } = await serviceClient.from("profiles").select("id").eq("email", "ai@rebar.shop").maybeSingle();
-      if (aiProfile?.id) {
-        const { data: aiToken } = await serviceClient.from("user_gmail_tokens").select("refresh_token, is_encrypted").eq("user_id", aiProfile.id).maybeSingle();
+      const { data: aiProfile } = await serviceClient.from("profiles").select("id, user_id").eq("email", "ai@rebar.shop").maybeSingle();
+      if (aiProfile?.user_id) {
+        const { data: aiToken } = await serviceClient.from("user_gmail_tokens").select("refresh_token, is_encrypted").eq("user_id", aiProfile.user_id).maybeSingle();
         if (aiToken?.refresh_token) {
           const aiRefresh = aiToken.is_encrypted ? await decryptToken(aiToken.refresh_token) : aiToken.refresh_token;
           tokenData = await tryGetAccessToken(aiRefresh);
-          if (tokenData) { senderUserId = aiProfile.id; senderEmail = "ai@rebar.shop"; }
+          if (tokenData) { senderUserId = aiProfile.user_id; senderEmail = "ai@rebar.shop"; }
         }
       }
     }
