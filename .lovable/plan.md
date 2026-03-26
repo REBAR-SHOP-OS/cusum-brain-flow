@@ -1,38 +1,27 @@
 
 
-# Investigation: Pixel "Edge Function returned a non-2xx status code"
+# Fix: Contact Picker Missing Records (Supabase 1000-Row Limit)
 
-## Findings
+## Root Cause
 
-The `ai-agent` edge function is **deployed and syntactically valid** — it returns 401 when called without auth, confirming the bundle is fine.
+The `useSalesContacts` hook fetches from three sources without pagination:
+- `contacts` table: **1,341 rows** → silently truncated to 1,000
+- `v_customers_clean` view: **2,653 rows** → silently truncated to 1,000
+- `sales_contacts` table: small, no issue
 
-The error at 08:27 AM is a **runtime failure** (500), not a deploy issue. Key evidence:
+Swapzero and other recent customers are dropped because Supabase returns only the first 1,000 rows. After deduplication, the contact picker shows an incomplete list — so when the user selects a contact, it may not exist, and newly created leads may appear to "not work."
 
-1. **Zero logs captured** for `ai-agent` in the edge function dashboard — this means the crash happened either during boot (import resolution) or the function hit a **wall-clock timeout** before any `console.log` could flush.
+## Solution
 
-2. **"Generate all 5 slots now"** is the heaviest operation in the entire system: for each of 5 slots, it runs:
-   - 1 AI call to generate dynamic caption/slogan/hashtags (`generateDynamicContent`)
-   - 1 AI image generation call via Lovable AI gateway
-   - 1 image upload to storage
-   - Optional crop/resize
-   
-   That's **10+ AI API calls** sequentially — easily exceeding the edge function's **default 60s wall-clock limit**.
+Two changes in `src/hooks/useSalesContacts.ts`:
 
-## Most Likely Cause
+1. **Add `.limit(5000)`** to both the `contacts` and `v_customers_clean` queries to fetch all records (safe — these are lightweight rows with only name/email/phone fields)
 
-**Edge function timeout.** Supabase edge functions have a ~60s execution limit. Generating all 5 slots sequentially takes 2-3 minutes of AI calls. The function dies mid-execution with a generic 500, and no logs are flushed.
-
-## Proposed Fix
-
-### Option A: Parallelize slot generation (recommended)
-Change the `for (const slot of slotsToGenerate)` loop to use `Promise.all` or `Promise.allSettled` so all 5 slots generate concurrently. This cuts wall time from ~150s to ~30s.
-
-### Option B: Break into per-slot calls from frontend
-Instead of sending "all" as a single request, have the frontend fire 5 parallel requests — one per slot. This keeps each request under the timeout limit.
+2. **Add `.order("created_at", { ascending: false })`** to the `v_customers_clean` query so that if a limit is ever hit, the most recent customers (like Swapzero) are always included
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/ai-agent/index.ts` | Parallelize the `slotsToGenerate` loop using `Promise.allSettled` instead of sequential `for` loop |
+| `src/hooks/useSalesContacts.ts` | Add `.limit(5000)` and `.order()` to contacts + v_customers_clean queries |
 
