@@ -209,6 +209,22 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
       }, {
         onSuccess: () => {
           setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false);
+
+          // Auto-add @mentioned users as assignees
+          if (onAddAssignee && allProfiles) {
+            const mentionRegex = /@([A-Za-z\u0600-\u06FF\s]+?)(?=\s@|\s*$)/g;
+            const matches = [...body.matchAll(mentionRegex)];
+            const assignedIds = new Set(assignees.map(a => a.profile_id));
+            matches.forEach(match => {
+              const name = match[1].trim().toLowerCase();
+              const profile = allProfiles.find(p => p.full_name?.toLowerCase().trim() === name);
+              if (profile && !assignedIds.has(profile.id)) {
+                onAddAssignee(profile.id);
+                assignedIds.add(profile.id); // prevent duplicates within same note
+              }
+            });
+          }
+
           // Fire notification email to assignees (fire-and-forget)
           supabase.functions.invoke("notify-lead-assignees", {
             body: {
