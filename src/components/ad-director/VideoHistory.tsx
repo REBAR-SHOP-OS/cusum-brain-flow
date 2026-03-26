@@ -35,6 +35,18 @@ function resolvePreviewUrl(project: AdProjectRow): string | null {
   return null;
 }
 
+/** Extract a short text preview from the storyboard for drafts without video */
+function resolvePreviewText(project: AdProjectRow): string | null {
+  if (Array.isArray(project.storyboard) && project.storyboard.length > 0) {
+    const scene = (project.storyboard as any[])[0];
+    const text = scene?.prompt || scene?.voiceover || scene?.objective;
+    if (text && typeof text === "string") {
+      return text.length > 80 ? text.substring(0, 80).replace(/\s+\S*$/, "…") : text;
+    }
+  }
+  return project.name || null;
+}
+
 export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete, onRename }: VideoHistoryProps) {
   const visible = projects.filter((p) => {
     const hasVideo = p.final_video_url && !p.final_video_url.startsWith("blob:");
@@ -145,10 +157,18 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
       {/* Video thumbnail */}
       <div className="aspect-video bg-muted/30 relative">
         {!previewUrl || hasError ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
-            {isDraft ? <FileText className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
-            <span className="text-[10px]">{isDraft ? "Draft" : "Video unavailable"}</span>
-          </div>
+          isDraft ? (
+            <div className="absolute inset-0 flex items-end bg-gradient-to-t from-background/80 to-muted/20 p-3">
+              <p className="text-[11px] leading-relaxed text-muted-foreground italic line-clamp-3">
+                {resolvePreviewText(project) || "Draft project"}
+              </p>
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
+              <AlertTriangle className="w-6 h-6" />
+              <span className="text-[10px]">Video unavailable</span>
+            </div>
+          )
         ) : (
           <>
             <video
