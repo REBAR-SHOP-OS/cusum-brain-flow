@@ -284,10 +284,46 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-8">
+      {/* Email dialog */}
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Quotation to Customer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="customer-email" className="text-sm">Customer Email</Label>
+              <Input
+                id="customer-email"
+                type="email"
+                placeholder="customer@example.com"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                className="mt-1"
+                autoFocus
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This will save the current draft and send a branded quotation email to the customer.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={sendingEmail}>Cancel</Button>
+            <Button onClick={handleSendEmail} disabled={sendingEmail || !customerEmail.trim()} className="gap-2">
+              {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              {sendingEmail ? "Sending…" : "Send Email"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Action buttons */}
       <div className="fixed top-4 right-4 flex gap-2 print:hidden z-50">
         <Button size="sm" onClick={handleSave} disabled={saving} className="gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Draft
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setEmailDialogOpen(true)} className="gap-2">
+          <Mail className="w-4 h-4" /> Send Email
         </Button>
         <Button size="sm" variant="outline" onClick={handlePrint} className="gap-2">
           <Printer className="w-4 h-4" /> Print / PDF
