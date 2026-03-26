@@ -507,7 +507,7 @@ const WRITE_PROMPT_TOOLS = [{
 // ─── Action Handlers ────────────────────────────────────────────
 
 async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: string) {
-  const { script, brand, assetDescriptions, characterImageUrl } = body;
+  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl } = body;
   if (!script) throw new Error("Script is required");
 
   const characterBlock = characterImageUrl
@@ -519,8 +519,16 @@ async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: st
 - Never replace them with a generic or different person.`
     : "";
 
+  const introBlock = introImageUrl
+    ? `\n\nINTRO REFERENCE IMAGE: A reference image has been provided for the opening scene. Scene 1 (hook) MUST visually match and be inspired by this image — same composition, color palette, and visual style. Set generationMode to "image-to-video" for scene 1.`
+    : "";
+
+  const outroBlock = outroImageUrl
+    ? `\n\nOUTRO REFERENCE IMAGE: A reference image has been provided for the closing visual scene. The LAST visual scene (before any end-card) MUST visually match and be inspired by this image — same composition, color palette, and visual style. Set generationMode to "image-to-video" for that scene.`
+    : "";
+
   const userPrompt = `Brand: ${brand?.name || "Rebar.Shop"} | Website: ${brand?.website || "Rebar.Shop"} | CTA: ${brand?.cta || "Upload your drawings and get fast rebar shop drawings delivered."} | Tagline: ${brand?.tagline || "Fast, precise rebar detailing when time matters."} | Audience: ${brand?.targetAudience || "Construction contractors and engineers"} | Colors: ${brand?.primaryColor || "#ef4444"} / ${brand?.secondaryColor || "#1e293b"} | Aesthetic: ${brand?.referenceAesthetic || "Premium cinematic industrial B2B"}
-${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}
+${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}${introBlock}${outroBlock}
 
 Script:
 ${script}`;
