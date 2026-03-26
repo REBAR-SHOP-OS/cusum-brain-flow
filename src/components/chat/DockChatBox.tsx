@@ -567,7 +567,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                         </div>
                       )}
 
-                      <div className={cn("flex flex-col max-w-[75%] overflow-hidden", isMe ? "items-end" : "items-start")}>
+                      <div className={cn("flex flex-col max-w-[75%] overflow-x-hidden", isMe ? "items-end" : "items-start")}>
                         {!isMe && isFirstInSequence && channelType === "group" && (
                           <span className="text-[10px] font-semibold text-muted-foreground mb-0.5 px-1">{sender?.full_name || "Unknown"}</span>
                         )}
@@ -595,14 +595,14 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                           ];
                           const seen = new Set<string>();
                           const uniqueAttachments = allAttachments.filter((a) => { if (seen.has(a.url)) return false; seen.add(a.url); return true; });
-                          const hasText = !!cleanText && cleanText !== "📎" && cleanText !== "🎤";
+                          const hasText = cleanText.length > 0 && cleanText !== "📎" && cleanText !== "🎤";
 
                           return (
                             <>
                               {hasText && (
                                 <div
                                   className={cn(
-                                    "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden",
+                                    "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit",
                                     isMe ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm" : "bg-muted text-foreground rounded-2xl rounded-bl-sm",
                                     detectRtl(cleanText) && "text-right"
                                   )}
