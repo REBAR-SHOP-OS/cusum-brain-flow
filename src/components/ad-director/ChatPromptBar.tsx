@@ -137,7 +137,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
       const rawResult = data?.result || data?.text || "";
       if (rawResult) {
         setPrompt(rawResult.trim());
-        toast({ title: "✨ پرامپت آماده شد", description: `${sceneCount} سکانس با Voiceover تولید شد. بررسی و ویرایش کنید.` });
+        toast({ title: "✨ Prompt ready", description: `${sceneCount} scenes with voiceover generated. Review and edit.` });
       }
     } catch (err: any) {
       console.error("Auto-generate prompt error:", err);
