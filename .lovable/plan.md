@@ -1,34 +1,37 @@
 
 
-# Add User Audio Upload to Timeline
+# Make Music Tab Prompt-Driven with AI Generation
 
 ## What
-The "Add audio" button in the timeline currently only triggers auto-voiceover generation. The user wants to upload audio files (music/sound) from their computer and have them applied to the video as audio tracks.
+Redesign the Music tab so the **primary interface is a text prompt** for AI music generation. The stock track list becomes secondary. The existing ElevenLabs music generation backend already works — this is a UI restructuring.
+
+Note: Gemini models don't generate audio files. The existing ElevenLabs music API (`elevenlabs-music` edge function) is already configured and is the correct backend for this. The change is purely in MusicTab UI layout.
 
 ## Changes
 
-### 1. `src/components/ad-director/ProVideoEditor.tsx`
-- Add a hidden `<input type="file" accept="audio/*">` ref
-- Create `handleUploadAudio` function that:
-  - Opens file picker
-  - Creates a blob URL from the selected file
-  - Adds a new `AudioTrackItem` with `kind: "music"`, the blob URL, and file name as label
-  - Appends to `audioTracks` state
-- Change `onAddAudio` prop from `generateAllVoiceovers` to `handleUploadAudio`
+### `src/components/ad-director/editor/MusicTab.tsx`
+Restructure the layout:
 
-### 2. `src/components/ad-director/editor/TimelineBar.tsx`
-- Update the "Add audio" button label to "Add audio" (keep as is) with an `Upload` icon instead of just `Music`
-- No structural changes needed — uploaded tracks will render in the existing audio track UI with volume controls and remove button
+1. **Top section — AI Music Generator (always visible)**:
+   - Large text input/textarea with placeholder like "توصیف موسیقی مورد نظر..." / "Describe your music..."
+   - Duration selector (15s, 30s, 60s) as small chips
+   - Type selector chips: "Music" / "Sound Effect"
+   - Generate button (full-width, prominent)
+   - Loading state with spinner during generation
 
-## Flow
-1. User clicks "Add audio" in timeline
-2. File picker opens (accepts audio/*)
-3. User selects MP3/WAV/etc
-4. Audio track appears in timeline with volume slider and remove button
-5. Audio plays alongside video during playback
+2. **Bottom section — Generated & Uploaded tracks**:
+   - Show AI-generated and uploaded tracks (remove the 12 fake stock tracks that have no actual audio URLs)
+   - Keep upload button (+) for user audio files
+   - Keep play/pause, waveform visualization, and "Use" button
+   - Keep volume slider and search
+
+3. **Remove**:
+   - The sparkles toggle button (prompt is now always visible)
+   - The `showPromptInput` state toggle
+   - The 12 `STOCK_TRACKS` entries (they have no real audio and just show "Generate or upload a track to play it")
+   - The filter dropdown (All audio / Music / Sound effects) — replaced by type chips in the generator
 
 | File | Change |
 |---|---|
-| `ProVideoEditor.tsx` | Add file input ref, upload handler, wire to `onAddAudio` |
-| `TimelineBar.tsx` | Update button icon to Upload |
+| `MusicTab.tsx` | Restructure: prompt-first UI, remove fake stock tracks, add duration/type selectors |
 
