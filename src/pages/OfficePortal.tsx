@@ -28,6 +28,7 @@ const sectionComponents: Record<OfficeSection, React.ComponentType> = {
   "tags-export": TagsExportView,
   "packing-slips": PackingSlipsView,
   "payroll": PayrollAuditView,
+  "order-calc": OrderCalcView,
 };
 
 export default function OfficePortal() {
