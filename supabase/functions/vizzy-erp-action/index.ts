@@ -851,7 +851,7 @@ Deno.serve((req) =>
         source: "system",
         dedupe_key: `vizzy_action:${action}:${params?.id || ""}:${new Date().toISOString().slice(0, 13)}`,
       });
-    } catch { /* ignore */ }
+    } catch (_e) { /* ignore */ }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
