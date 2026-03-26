@@ -1,49 +1,32 @@
 
 
-# Redesign CameraLoader — Frameless Spinning Camera with Scene Count
+# Black Background for Result/Storyboard View
 
 ## Problem
-The current loader has a bordered card/box. User wants: no card, just a large spinning camera icon with the number of films/scenes being generated.
+In the "result" state (where generated scenes and video preview are shown), the video background bleeds through, creating visual clutter. The user wants a solid black background in this section.
 
-## Changes
+## Change
 
-### `src/components/ad-director/CameraLoader.tsx` — Full rewrite
+### `src/components/ad-director/AdDirectorContent.tsx` — Line 422-423
 
-Replace the entire boxed viewfinder with a minimal, frameless design:
-- **Large Camera icon** (lucide `Camera` or `Video`), ~20×20 (80px), spinning continuously with a glow effect
-- **Pulsing ring** around the icon for extra cinematic feel
-- **Status text** below the icon (e.g. "Assembling final video...")
-- **Scene count badge** showing number of scenes/films being generated (e.g. "🎬 4 Scenes")
-- **Progress bar** — minimal circular or linear, no box
-- **Cancel button** — small, subtle
-- No card, no border, no background box — content floats over the video background
+Wrap the result section with a full-screen black background overlay so the video background is hidden when viewing results.
 
-### `src/components/ad-director/CameraLoader.tsx` — Props update
-
-Add `sceneCount` prop:
-```ts
-interface CameraLoaderProps {
-  statusText: string;
-  progressValue: number;
-  sceneCount?: number;
-  onCancel: () => void;
-}
-```
-
-### `src/components/ad-director/AdDirectorContent.tsx` — Pass scene count
-
-Update the `<CameraLoader>` call to pass `sceneCount={storyboard.length}`:
+Change line 422-423 from:
 ```tsx
-<CameraLoader 
-  statusText={statusText} 
-  progressValue={progressValue} 
-  sceneCount={storyboard.length}
-  onCancel={handleCancel} 
-/>
+{flowState === "result" && (
+  <div className="w-full max-w-2xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
 ```
+To:
+```tsx
+{flowState === "result" && (
+  <>
+    <div className="fixed inset-0 z-[5] bg-black" />
+    <div className="w-full max-w-2xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+```
+
+And close the fragment at the end of the result block (after the closing `</div>` and before the `)}` on the result section end).
 
 | File | Change |
 |---|---|
-| `CameraLoader.tsx` | Rewrite: frameless spinning camera icon + scene count badge |
-| `AdDirectorContent.tsx` | Pass `sceneCount={storyboard.length}` to CameraLoader |
+| `AdDirectorContent.tsx` | Add fixed black overlay behind result view, close fragment |
 
