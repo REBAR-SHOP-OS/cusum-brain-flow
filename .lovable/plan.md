@@ -1,36 +1,75 @@
 
 
-# Investigate Sales Agent Error — Actual Root Cause Analysis
+# Audit & Fix: Manual + AI Auto Quotation Flows
 
-## Finding: The stated root cause is **incorrect**
+## Issues Found
 
-After thorough investigation, the model `gpt-4-1106-preview` does **not exist anywhere** in this codebase. The `ai-agent` edge function routes the sales agent to `gemini-2.5-flash` by default (via `selectModel` in `aiRouter.ts`). All OpenAI references use current models (`gpt-4o`, `gpt-4o-mini`, `gpt-5`).
+### Bug 1: Query key mismatch in GenerateQuotationDialog
+`GenerateQuotationDialog.tsx` line 59 invalidates `["archived_quotations"]` (underscore) but the hook `useArchivedQuotations` uses `["archived-quotations"]` (hyphen). Result: after AI generation, the quotation list does not refresh.
 
-The error "Edge Function returned a non-2xx status code" is a **generic Supabase SDK wrapper** — it doesn't indicate which model failed. The real failure could be:
+### Bug 2: AI Auto dialog is project-picker only — no file upload
+The current "AI Auto" flow only lets users select an existing estimation project from a dropdown. There is no way to drag-and-drop or paste files directly. Users must first go to the Estimation page, create a project, then come back. This is the main gap.
 
-1. **Quote-engine returning 404** — no active pricing config for the user's company
-2. **Timeout** — the ai-agent has a complex tool execution loop (quote generation) that may exceed the 60s edge function wall clock
-3. **Gemini API rate limit or transient failure** — retries exhausted
-4. **Auth or company resolution issue** — intermittent
+### Bug 3: No pipeline task linking from AI Auto
+After generating a quotation via AI Auto, there is no option to link it to a sales lead or add it to the pipeline.
 
-## What I Need
+---
 
-Since there are no recent `sales` agent entries in the edge function logs (all recent logs show `accounting` agent only), I cannot determine the exact cause from server logs alone.
+## Plan
 
-### Proposed diagnostic approach
+### 1. Fix query key mismatch
+**File: `src/components/accounting/GenerateQuotationDialog.tsx`**
+- Line 59: Change `["archived_quotations"]` to `["archived-quotations"]`
 
-1. **Add targeted error logging** to the `ai-agent` function specifically around the sales/quote flow to capture the actual HTTP status and error body when it fails
-2. **Test the quote-engine** directly with sample cage data to see if it returns a proper response or a 404/500
-3. **Check `quote_pricing_configs` table** — if no active config exists for the user's company, the quote-engine returns 404, which bubbles up as a non-2xx error
+### 2. Expand AI Auto dialog with drag-and-drop file upload
+**File: `src/components/accounting/GenerateQuotationDialog.tsx`** — major enhancement
 
-### Immediate safe fix
+Add two modes inside the dialog:
+- **Mode A (existing)**: Select from existing estimation projects (current dropdown)
+- **Mode B (new)**: Upload files directly (drag-and-drop zone + paste support) to run a new takeoff inline
 
-Add better error surfacing so that instead of "Edge Function returned a non-2xx status code", the user sees the **actual error message** (e.g., "No pricing config found" or "Quote engine timeout"). This is done by checking if the `ai-agent`'s `handleRequest` properly catches and returns descriptive error messages for quote-engine failures.
+The dialog becomes a tabbed interface:
+```text
+┌──────────────────────────────────────────┐
+│ ✨ Generate AI Quotation                 │
+│                                          │
+│  [From Project]  [Upload New Files]      │
+│                                          │
+│  Tab 1: existing project dropdown        │
+│  Tab 2: drag/drop zone + project name    │
+│         + customer select + lead select  │
+│         → runs ai-estimate → then        │
+│           ai-generate-quotation          │
+│                                          │
+│  ☐ Add to Sales Pipeline                 │
+│                                          │
+│  [Cancel]  [Generate with AI]            │
+└──────────────────────────────────────────┘
+```
 
-## Files to investigate/change
-- `supabase/functions/ai-agent/index.ts` — verify error propagation from tool execution
-- `supabase/functions/_shared/agentToolExecutor.ts` — check quote-engine error handling (~line 497-510)
-- Database: `quote_pricing_configs` table — verify active config exists
+**Upload tab features:**
+- Drag-and-drop zone (accepts PDF, images, XLSX, CSV)
+- Paste support via `onPaste` event (for pasted images/files)
+- File preview badges
+- Project name input (auto-generated from filename if empty)
+- Customer dropdown (from `v_customers_clean`)
+- Lead dropdown (filtered by customer)
+- On generate: calls `ai-estimate` first to create estimation project, then calls `ai-generate-quotation` with the new project ID
 
-## Shall I proceed with the diagnostic (check DB for pricing config, improve error messages), or would you like to try reproducing the error first so I can capture the actual logs?
+### 3. Add "Link to Pipeline" option
+In both modes, add a checkbox: "Add to Sales Pipeline". When checked, after quotation is created:
+- If a lead is selected, create a `sales_lead_activities` entry linking the quote
+- If no lead exists, create a new lead with the quotation amount and customer
+
+### Technical details
+
+**Files changed:**
+- `src/components/accounting/GenerateQuotationDialog.tsx` — expand with upload mode, paste/drop, customer/lead selectors, pipeline toggle, fix query key
+- No backend changes needed — uses existing `ai-estimate` and `ai-generate-quotation` edge functions
+
+**Dependencies used:**
+- Existing `uploadToStorage` from `@/lib/storageUpload`
+- Existing `supabase.functions.invoke("ai-estimate")` 
+- Existing `supabase.functions.invoke("ai-generate-quotation")`
+- Existing `v_customers_clean` view for customer list
 
