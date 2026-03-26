@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExportDialog } from "./ExportDialog";
+// ExportDialog removed — scheduling now handled inside ProVideoEditor
 import { ChatPromptBar } from "./ChatPromptBar";
 import {
   type BrandProfile, type ScriptSegment, type StoryboardScene,
@@ -43,7 +43,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const service = backgroundAdDirectorService;
 
   // Local UI-only state
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  // exportDialogOpen removed — scheduling is handled inside ProVideoEditor
   const [showIntro, setShowIntro] = useState(true);
   const [modelOverrides] = useState<ModelOverrides>({});
   const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
@@ -383,7 +383,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           onBack={() => service.patchState({ flowState: "result" })}
           onExport={handleExport}
           exporting={exporting}
-          onOpenExportDialog={() => setExportDialogOpen(true)}
           onRegenerateScene={handleRegenerateScene}
           onUpdateClipUrl={(sceneId, url) => service.patchState({
             clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: url, progress: 100 } : c),
@@ -397,14 +396,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           onUpdateStoryboard={(sb) => service.patchState({ storyboard: sb })}
           onUpdateBrand={(b) => service.patchState({ brand: b })}
           onMusicSelect={(url) => service.patchState({ musicTrackUrl: url })}
-        />
-        <ExportDialog
-          open={exportDialogOpen}
-          onOpenChange={setExportDialogOpen}
-          finalVideoUrl={finalVideoUrl}
-          brandName={brand.name}
-          onExport={handleExport}
-          exporting={exporting}
         />
       </div>
     );

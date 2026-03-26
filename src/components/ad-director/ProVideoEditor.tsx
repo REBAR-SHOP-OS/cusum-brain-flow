@@ -7,10 +7,15 @@ import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import {
   Play, Pause, Volume2, VolumeX, Maximize2,
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
-  Music, FileText, Loader2,
+  Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
   FolderOpen, Type, Palette, SquarePen,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
 import { DEFAULT_CARD_SETTINGS } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
@@ -44,9 +49,8 @@ interface ProVideoEditorProps {
   brand: BrandProfile;
   finalVideoUrl: string | null;
   onBack: () => void;
-  onExport: () => void;
-  exporting: boolean;
-  onOpenExportDialog?: () => void;
+  onExport?: () => void;
+  exporting?: boolean;
   onRegenerateScene?: (sceneId: string) => void;
   onUpdateClipUrl?: (sceneId: string, url: string) => void;
   onUpdateSegment?: (id: string, text: string) => void;
@@ -58,9 +62,122 @@ interface ProVideoEditorProps {
   onActiveTabChanged?: (tab: string | null) => void;
 }
 
+function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: {
+  finalVideoUrl: string | null;
+  brandName: string;
+  segments: ScriptSegment[];
+  clips: ClipOutput[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [hour, setHour] = useState("09");
+  const [minute, setMinute] = useState("00");
+  const [scheduling, setScheduling] = useState(false);
+  const { toast } = useToast();
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+
+  const handleSchedule = async () => {
+    if (!selectedDate) return;
+    const scheduledDateTime = new Date(selectedDate);
+    scheduledDateTime.setHours(parseInt(hour), parseInt(minute), 0, 0);
+
+    if (scheduledDateTime <= new Date()) {
+      toast({ title: "Invalid Time", description: "Cannot schedule in the past.", variant: "destructive" });
+      return;
+    }
+
+    setScheduling(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const content = segments.map(s => s.text).join(" ").slice(0, 2200);
+      const videoUrl = finalVideoUrl || clips.find(c => c.status === "completed")?.videoUrl || null;
+
+      const { error } = await supabase.from("social_posts").insert({
+        platform: "instagram",
+        content_type: "reel",
+        status: "scheduled",
+        qa_status: "scheduled",
+        title: brandName || "Ad Video",
+        content,
+        image_url: videoUrl,
+        scheduled_date: scheduledDateTime.toISOString(),
+        user_id: user.id,
+        hashtags: [],
+        reach: 0, impressions: 0, likes: 0, comments: 0, shares: 0, saves: 0, clicks: 0,
+        neel_approved: false,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Scheduled ✅",
+        description: `Post scheduled for ${format(scheduledDateTime, "PPP")} at ${hour}:${minute}`,
+      });
+      setOpen(false);
+    } catch (err: any) {
+      toast({ title: "Scheduling failed", description: err.message, variant: "destructive" });
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          size="sm"
+          className="gap-1.5 text-xs h-7 bg-gradient-to-r from-primary to-primary/70 hover:from-primary/90 hover:to-primary/60"
+          disabled={clips.every(c => c.status !== "completed")}
+        >
+          <CalendarClock className="w-3.5 h-3.5" />
+          Schedule
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="end" side="top">
+        <div className="p-3 space-y-3">
+          <p className="text-sm font-medium text-foreground">Schedule to Social</p>
+          <Calendar
+            mode="single"
+            selected={selectedDate}
+            onSelect={setSelectedDate}
+            disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+            className={cn("p-3 pointer-events-auto")}
+          />
+          <div className="flex items-center gap-2">
+            <Select value={hour} onValueChange={setHour}>
+              <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {hours.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <span className="text-muted-foreground font-bold">:</span>
+            <Select value={minute} onValueChange={setMinute}>
+              <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {minutes.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            className="w-full"
+            disabled={!selectedDate || scheduling}
+            onClick={handleSchedule}
+          >
+            {scheduling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
+            {scheduling ? "Scheduling…" : "Confirm Schedule"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 export function ProVideoEditor({
   clips, storyboard, segments, brand,
-  finalVideoUrl, onBack, onExport, exporting, onOpenExportDialog,
+  finalVideoUrl, onBack, onExport, exporting,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming,
   onUpdateStoryboard, onUpdateBrand, onMusicSelect,
   externalActiveTab, onActiveTabChanged,
@@ -1059,15 +1176,12 @@ export function ProVideoEditor({
 
         <Badge variant="secondary" className="text-[9px]">Edit</Badge>
 
-        <Button
-          size="sm"
-          className="gap-1.5 text-xs h-7 bg-gradient-to-r from-primary to-emerald-500 hover:from-primary/90 hover:to-emerald-400"
-          onClick={() => onOpenExportDialog ? onOpenExportDialog() : onExport()}
-          disabled={exporting || clips.every(c => c.status !== "completed")}
-        >
-          <Download className="w-3.5 h-3.5" />
-          {exporting ? "Exporting…" : "Export"}
-        </Button>
+        <ScheduleToSocialPopover
+          finalVideoUrl={finalVideoUrl}
+          brandName={brand.name}
+          segments={segments}
+          clips={clips}
+        />
       </div>
 
       {/* ─── Main 3-Panel Area ─── */}
