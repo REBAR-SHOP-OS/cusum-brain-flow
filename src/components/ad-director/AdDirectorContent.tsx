@@ -613,6 +613,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
