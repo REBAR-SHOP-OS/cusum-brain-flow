@@ -145,6 +145,8 @@ class BackgroundAdDirectorService {
     saveProject: (data: any) => Promise<string>,
     videoModel?: string,
     videoProvider?: string,
+    selectedProducts?: string[],
+    selectedStyles?: string[],
   ) {
     this.cancelFlag = false;
     this.running = true;
