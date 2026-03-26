@@ -68,15 +68,10 @@ export function LeadSmartButtons({ leadId }: Props) {
     },
   ];
 
-  const hasAny = items.some((i) => i.count > 0);
-  if (!hasAny) return null;
-
   return (
     <div className="px-4 py-2 border-b border-border bg-background">
       <div className="grid grid-cols-3 gap-2">
-        {items
-          .filter((i) => i.count > 0)
-          .map((item) => (
+        {items.map((item) => (
             <div
               key={item.label}
               className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-center hover:bg-accent/30 transition-colors cursor-default"
