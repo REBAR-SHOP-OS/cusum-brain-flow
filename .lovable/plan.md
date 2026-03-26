@@ -1,26 +1,28 @@
 
 
-# Add Product and Style Selectors to Ad Director Chat Bar
+# Fix: `notify-lead-assignees` crashes due to undefined `customerEmail`
 
-## What
-Add the same product icons (Fiberglass, Stirrups, Cages, etc.) and style selectors (Realism, Construction, Cartoon, etc.) from the Pixel agent's chat input to the Ad Director's `ChatPromptBar`. The selected product and style will be injected into the video generation prompt so the AI creates videos tailored to the chosen product and visual style.
+## Problem
+Line 314 references `customerEmail` which was removed in a previous fix (when we stopped auto-adding `contact_email` to recipients). This causes a runtime `ReferenceError`, crashing the function — **no one** gets email notifications for lead notes or stage changes.
 
-## How
+## Fix
+On line 314, replace the `customerEmail` check with a direct comparison against `lead.contact_email`. Since customers are no longer auto-added to `recipients`, this branch will almost never match (only if a customer is explicitly assigned AND @mentioned), but it needs to be valid code.
 
-### 1. Update `ChatPromptBar.tsx`
-- Import the same `PRODUCT_ICONS` and `IMAGE_STYLES` arrays (and their icon components) used in `ChatInput.tsx`
-- Add state for `selectedProducts` and `selectedStyles`
-- Render two popover buttons ("Products" and "Style") in the bottom toolbar bar, between Duration and Send — using the same grid/icon pattern as Pixel
-- Pass selected product/style keys into `onSubmit` so the parent can inject them into the AI prompt
+### Change in `supabase/functions/notify-lead-assignees/index.ts`
 
-### 2. Update `AdDirectorContent.tsx`
-- Accept `selectedProducts` and `selectedStyles` from `ChatPromptBar`
-- Prepend product and style context to the user prompt before sending to the pipeline (e.g., `"Product: Fiberglass, Cages. Style: Construction, Realism. [user prompt]"`)
+**Line 314** — replace:
+```ts
+const isCustomer = customerEmail && recipient.email.toLowerCase() === customerEmail;
+```
+with:
+```ts
+const isCustomer = lead.contact_email && recipient.email.toLowerCase() === lead.contact_email.toLowerCase();
+```
 
-## Files Changed
+This restores the logic: if the recipient happens to be the lead's contact (rare, only via @mention), send them the customer-safe email (no internal links). Everyone else gets the internal branded email.
 
-| File | Change |
-|---|---|
-| `src/components/ad-director/ChatPromptBar.tsx` | Add product/style popover selectors with icons, pass selections via onSubmit |
-| `src/components/ad-director/AdDirectorContent.tsx` | Receive product/style from ChatPromptBar, prepend to AI prompt |
+## Result
+- The function stops crashing
+- Saurabh and all assignees will receive email notifications again
+- One file changed: `supabase/functions/notify-lead-assignees/index.ts`
 
