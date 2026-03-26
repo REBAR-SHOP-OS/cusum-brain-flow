@@ -31,7 +31,13 @@ Deno.serve((req) =>
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const base64 = btoa(String.fromCharCode(...bytes));
+    // Chunk to avoid "Maximum call stack size exceeded" with large files
+    let binary = "";
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    const base64 = btoa(binary);
 
     let mimeType = file.type || "application/octet-stream";
     const name = file.name.toLowerCase();
