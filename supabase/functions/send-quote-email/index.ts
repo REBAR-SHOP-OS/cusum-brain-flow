@@ -289,6 +289,160 @@ Deno.serve((req) =>
       };
     }
 
+    if (action === "accept_and_convert") {
+      // ── Public acceptance: convert to invoice (no auth required) ──
+      // Validate quote is in a sendable state
+      const { data: sqCheck } = await svc
+        .from("sales_quotations")
+        .select("id, status, customer_name, customer_company, company_id, amount, lead_id, notes")
+        .eq("quote_id", quote_id)
+        .maybeSingle();
+
+      const sqStatus = sqCheck?.status || "";
+      const validStatuses = ["sent", "sent_to_customer"];
+      if (!validStatuses.includes(sqStatus) && !validStatuses.includes(quote.status || "")) {
+        throw new Error("This quotation can no longer be accepted. It may have already been processed, expired, or cancelled.");
+      }
+
+      // Resolve customer email from sales_quotation or metadata
+      const resolvedEmail = customer_email || (meta.customer_email as string) || (sqCheck as any)?.customer_email || "";
+      if (!resolvedEmail) {
+        throw new Error("No customer email found for this quotation");
+      }
+
+      const companyId = sqCheck?.company_id || quote.company_id || "a0000000-0000-0000-0000-000000000001";
+      const amount = sqCheck?.amount || totalAmount;
+
+      // Generate invoice number
+      const year = new Date().getFullYear();
+      const { data: latestInv } = await svc
+        .from("sales_invoices")
+        .select("invoice_number")
+        .like("invoice_number", `INV-${year}%`)
+        .order("invoice_number", { ascending: false })
+        .limit(1);
+
+      let invSeq = 1;
+      if (latestInv && latestInv.length > 0) {
+        const lastNum = parseInt(latestInv[0].invoice_number.replace(`INV-${year}`, ""), 10);
+        if (!isNaN(lastNum)) invSeq = lastNum + 1;
+      }
+      const invoiceNumber = `INV-${year}${String(invSeq).padStart(4, "0")}`;
+      const issuedDate = new Date().toISOString().split("T")[0];
+      const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+
+      // Create invoice
+      const { data: newInvoice, error: invErr } = await svc
+        .from("sales_invoices")
+        .insert({
+          company_id: companyId,
+          invoice_number: invoiceNumber,
+          quotation_id: sqCheck?.id || null,
+          customer_name: sqCheck?.customer_name || customerName,
+          customer_company: sqCheck?.customer_company || null,
+          amount,
+          status: "sent",
+          issued_date: issuedDate,
+          due_date: dueDate,
+          notes: sqCheck?.notes || notes || null,
+          sales_lead_id: sqCheck?.lead_id || null,
+        })
+        .select()
+        .single();
+
+      if (invErr) throw new Error(`Invoice creation failed: ${invErr.message}`);
+
+      // Generate Stripe payment link (use service role key for auth)
+      let stripePaymentUrl = "";
+      try {
+        const stripeRes = await fetch(`${supabaseUrl}/functions/v1/stripe-payment`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+          },
+          body: JSON.stringify({
+            action: "create-payment-link",
+            amount,
+            currency: "cad",
+            invoiceNumber,
+            customerName: sqCheck?.customer_name || customerName,
+            qbInvoiceId: newInvoice.id,
+          }),
+        });
+        if (stripeRes.ok) {
+          const stripeData = await stripeRes.json();
+          stripePaymentUrl = stripeData.paymentLink?.stripe_url || "";
+        }
+      } catch (e) {
+        console.warn("Stripe error:", e);
+      }
+
+      // Build and send invoice email
+      const payNowButton = stripePaymentUrl
+        ? `<div style="text-align:center;margin:32px 0;">
+            <a href="${stripePaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#e94560 0%,#c23152 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(233,69,96,0.4);">💳 Pay Now</a>
+            <p style="color:#888;font-size:12px;margin-top:10px;">Secure payment powered by Stripe</p>
+           </div>`
+        : "";
+
+      const invoiceBodyHtml = `
+        <p style="font-size:16px;color:#333;">Dear ${customerName},</p>
+        <p style="font-size:15px;color:#555;line-height:1.6;">Thank you for accepting quotation <strong>${quoteNumber}</strong> and confirming your order. Please find your invoice below.</p>
+        <div style="background:#f8f9fc;border-radius:8px;padding:20px;margin:24px 0;border-left:4px solid #e94560;">
+          <table style="width:100%;">
+            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Invoice #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${invoiceNumber}</td></tr>
+            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Amount Due</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:22px;">$${amount.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Issue Date</td><td style="text-align:right;color:#1a1a2e;">${issuedDate}</td></tr>
+            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Due Date</td><td style="text-align:right;color:#1a1a2e;font-weight:600;">${dueDate}</td></tr>
+          </table>
+        </div>
+        ${lineItemsTable}
+        ${payNowButton}
+        <p style="font-size:14px;color:#555;line-height:1.6;margin-top:24px;">
+          All amounts are in Canadian Dollars (CAD). Payment is due by <strong>${dueDate}</strong>.
+        </p>
+      `;
+
+      const brandedInvoiceHtml = buildBrandedEmail({ bodyHtml: invoiceBodyHtml });
+
+      // Send invoice email using service role
+      const emailRes = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+        },
+        body: JSON.stringify({
+          to: resolvedEmail,
+          subject: `Invoice ${invoiceNumber} - REBAR.SHOP`,
+          body: brandedInvoiceHtml,
+        }),
+      });
+
+      // Update statuses
+      if (sqCheck) {
+        await svc.from("sales_quotations").update({
+          status: "customer_approved",
+          customer_approved_at: new Date().toISOString(),
+        } as any).eq("id", sqCheck.id);
+      }
+      await svc.from("quotes").update({ status: "accepted" } as any).eq("id", quote_id);
+
+      const emailOk = emailRes.ok;
+
+      return {
+        success: true,
+        invoice_id: newInvoice.id,
+        invoice_number: invoiceNumber,
+        payment_link: stripePaymentUrl || null,
+        email_sent: emailOk,
+        message: `Invoice ${invoiceNumber} created${emailOk ? ` and sent to ${resolvedEmail}` : " (email failed)"}${stripePaymentUrl ? " with payment link" : ""}`,
+      };
+    }
+
     throw new Error(`Unknown action: ${action}`);
-  }, { functionName: "send-quote-email", requireCompany: false, wrapResult: false })
+  }, { functionName: "send-quote-email", requireCompany: false, wrapResult: false, authMode: "optional" })
 );
