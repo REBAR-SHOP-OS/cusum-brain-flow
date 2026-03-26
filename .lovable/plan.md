@@ -1,36 +1,35 @@
 
 
-# Add Visible Regenerate Button on Scene Cards
+# Enable Subtitle Text Editing via Proper Dialog
 
 ## Problem
-The current regenerate button (small RefreshCw icon next to the custom prompt input) is not clearly visible. The user wants a prominent regenerate icon on each scene card that re-generates the video using the **original scene prompt** from the storyboard.
+The "Edit Text" button on subtitle overlays currently uses `window.prompt()` — a raw browser dialog. The user wants a proper editing experience for the main subtitle text displayed on the video.
 
-## Current Behavior
-- Line 563: `handleRegenerateScene(clip.sceneId, scenePrompts[clip.sceneId])` — uses custom prompt if filled, falls back to `scene.prompt` (line 296)
-- The button is a tiny 7×7 ghost icon, easy to miss
+## Current Flow
+1. Subtitles are auto-generated from `segment.text` (voiceover) → split into chunks → rendered as timed `VideoOverlay` items
+2. Clicking "Edit Text" on a text overlay in the timeline triggers `prompt("Edit overlay text:", ov.content)` and updates the overlay
+3. This works but is not user-friendly
 
 ## Solution
-Add a visible regenerate overlay button **on the scene card thumbnail** (similar to the play button overlay) that calls `handleRegenerateScene(clip.sceneId)` with **no custom prompt** — forcing it to use the original `scene.prompt`.
+Replace the `prompt()` call with a proper inline edit dialog that allows editing the subtitle text with a text input, preview of the current text, and save/cancel buttons.
 
-### `src/components/ad-director/AdDirectorContent.tsx`
+### Changes
 
-Add a regenerate button overlay on each completed scene card (next to the play overlay), visible on hover:
+#### 1. Create `EditOverlayDialog.tsx`
+New dialog component at `src/components/ad-director/editor/EditOverlayDialog.tsx`:
+- Props: `open`, `overlay` (VideoOverlay | null), `onSave(id, newContent)`, `onClose`
+- Shows overlay's current `content` in an `Input` field
+- Save button updates the overlay, Cancel closes
+- Enter key submits
 
-```text
-Location: Inside the group-hover overlay area (around lines 521-525)
-
-Add a RefreshCw button in the top-right corner of the scene card:
-- Positioned absolute top-2 right-2
-- Small rounded bg-black/50 button
-- On click: handleRegenerateScene(clip.sceneId) — no custom prompt, uses original scene prompt
-- stopPropagation to prevent triggering the card click (video selection)
-- Disabled when clip.status === "generating"
-- Shows spinning animation when generating
-```
-
-Also add the same regenerate button on **failed** scene cards (line 531-534) so the user can retry failed generations.
+#### 2. Update `ProVideoEditor.tsx`
+- Import and render `EditOverlayDialog`
+- Add state: `editingOverlay: VideoOverlay | null`
+- Replace `prompt()` in `onEditOverlay` callback (line 1403-1406) with: `setEditingOverlay(ov)`
+- On dialog save: update the overlay content in `setOverlays`
 
 | File | Change |
 |---|---|
-| `AdDirectorContent.tsx` | Add hover-visible regenerate button overlay on completed and failed scene card thumbnails |
+| `src/components/ad-director/editor/EditOverlayDialog.tsx` | New — edit dialog with Input, save/cancel |
+| `src/components/ad-director/ProVideoEditor.tsx` | Replace `prompt()` with dialog state + render `EditOverlayDialog` |
 
