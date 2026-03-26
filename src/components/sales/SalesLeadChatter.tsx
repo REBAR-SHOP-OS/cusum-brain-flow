@@ -28,6 +28,8 @@ interface Props {
   contactPhone?: string | null;
   leadTitle?: string;
   onComposeEmail?: () => void;
+  onAddAssignee?: (profileId: string) => void;
+  allProfiles?: { id: string; full_name: string }[];
 }
 
 type TabMode = "note" | "activity" | null;
