@@ -262,7 +262,8 @@ Deno.serve((req) =>
       replyToMessageId ? { messageId: replyToMessageId, references: references || "" } : undefined,
       custom_headers,
       cc,
-      bcc
+      bcc,
+      emailAttachments
     );
 
     let sendResponse = await fetch(
