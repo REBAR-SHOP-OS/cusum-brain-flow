@@ -251,32 +251,35 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
 
           // Fire notification email to assignees and track outcome
           const noteTimestamp = new Date().toISOString();
+          const notifyBody = {
+            sales_lead_id: salesLeadId,
+            event_type: "note",
+            note_text: noteTextForEmail,
+            actor_name: currentUserName || "Someone",
+            actor_id: currentUserId,
+          };
           try {
             const { data: notifyResult, error: notifyError } = await supabase.functions.invoke("notify-lead-assignees", {
-              body: {
-                sales_lead_id: salesLeadId,
-                event_type: "note",
-                note_text: noteTextForEmail,
-                actor_name: currentUserName || "Someone",
-                actor_id: currentUserId,
-              },
+              body: notifyBody,
             });
             if (notifyError) {
-              setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+              setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "failed", error: notifyError.message || "Unknown error", noteBody: JSON.stringify(notifyBody) } }));
+            } else if (notifyResult?.error) {
+              setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "failed", error: notifyResult.error, noteBody: JSON.stringify(notifyBody) } }));
             } else {
               const sent = notifyResult?.sent ?? 0;
               const total = notifyResult?.total ?? 0;
               if (sent > 0 && sent >= total) {
-                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "success" }));
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "success" } }));
               } else if (sent > 0) {
-                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "partial" }));
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "partial" } }));
               } else {
-                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "failed", error: notifyResult?.reason || "No emails sent", noteBody: JSON.stringify(notifyBody) } }));
               }
             }
-          } catch (err) {
+          } catch (err: any) {
             console.error("notify-lead-assignees error:", err);
-            setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+            setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "failed", error: err?.message || "Network error", noteBody: JSON.stringify(notifyBody) } }));
           }
         },
         onError: () => setUploading(false),
