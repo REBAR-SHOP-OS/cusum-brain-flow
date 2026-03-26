@@ -1,43 +1,33 @@
 
 
-# Add Inline Voiceover Text Editing in Audio Popover
+# Restore Timeline Toolbar Feature Icons
 
 ## Problem
-Currently, "Edit Text" in the audio popover just switches to the Script tab. The user wants to edit the voiceover text **directly in the audio popover** and then re-record based on the new text.
+The timeline toolbar (between playback controls and tracks) only shows "TIMELINE 0:15 / 0:15" and zoom buttons. The sidebar tab icons (Media, Text, Music, Brand Kit, Script, Card Editor) that previously appeared there are gone because `sidebarTabs={[]}` is passed as an empty array.
+
+## Root Cause
+In `ProVideoEditor.tsx` line 1379, `sidebarTabs` is hardcoded to `[]` instead of being populated with the available editor tabs.
 
 ## Solution
-Replace the "Edit Text" button with an inline `Textarea` showing the current voiceover text. The user edits it, then clicks "Re-record" which uses the edited text.
+Populate `sidebarTabs` with the actual editor tab icons so they appear in the timeline toolbar, allowing quick tab switching.
 
-### Changes
-
-#### 1. `src/components/ad-director/editor/TimelineBar.tsx`
-- Add local state `editingVoiceoverText: Record<string, string>` to track edited text per scene
-- Replace the "Edit Text" button with a small `Textarea` pre-filled with the scene's voiceover text
-- When the popover opens, initialize the textarea with current voiceover text from the scene
-- Pass the edited text to `onReRecordVoiceover` as a second parameter
-- Add a new callback prop: `onUpdateVoiceoverText?: (sceneId: string, text: string) => void` to persist the text change
-
-#### 2. `src/components/ad-director/ProVideoEditor.tsx`
-- Update `handleReRecordVoiceover` to accept an optional `customText` parameter — if provided, use it instead of `scene.voiceover`
-- Before re-recording, update the storyboard scene's voiceover field via `onUpdateStoryboard`
-- Add `handleUpdateVoiceoverText` callback that updates the storyboard voiceover and regenerates subtitle overlays
-- Pass `onUpdateVoiceoverText` to `TimelineBar`
+### `src/components/ad-director/ProVideoEditor.tsx`
+Replace `sidebarTabs={[]}` with an array of tab objects matching the `EditorTab` type:
 
 ```text
-Current popover:
-  [Volume slider]
-  [Edit Text] → switches tab
-  [Re-record] → uses existing text
-
-New popover:
-  [Volume slider]
-  [Textarea with voiceover text - editable]
-  [Save Text] → persists text + updates subtitles
-  [Re-record] → TTS with current textarea text
+sidebarTabs={[
+  { id: "media",       label: "Media",     icon: <Film className="w-3.5 h-3.5" /> },
+  { id: "text",        label: "Text",      icon: <Type className="w-3.5 h-3.5" /> },
+  { id: "music",       label: "Music",     icon: <Music className="w-3.5 h-3.5" /> },
+  { id: "script",      label: "Script",    icon: <FileText className="w-3.5 h-3.5" /> },
+  { id: "brand-kit",   label: "Brand Kit", icon: <Palette className="w-3.5 h-3.5" /> },
+  { id: "card-editor", label: "Card",      icon: <LayoutGrid className="w-3.5 h-3.5" /> },
+]}
 ```
+
+Ensure required icons (`Film`, `Palette`, `LayoutGrid`) are imported from lucide-react (some may already be imported).
 
 | File | Change |
 |---|---|
-| `TimelineBar.tsx` | Replace "Edit Text" button with inline Textarea + Save, pass edited text to re-record |
-| `ProVideoEditor.tsx` | Add `handleUpdateVoiceoverText` to update storyboard + subtitles, update re-record to use custom text |
+| `ProVideoEditor.tsx` | Populate `sidebarTabs` array with 6 editor tab icons instead of empty `[]` |
 
