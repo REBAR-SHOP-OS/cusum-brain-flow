@@ -104,8 +104,6 @@ Deno.serve((req) =>
 
       const brandedHtml = buildBrandedEmail({
         bodyHtml,
-        signatureHtml: sigHtml || undefined,
-        actorName: meta.actor_name,
       });
 
       // Send via gmail-send
