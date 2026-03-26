@@ -283,11 +283,21 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
 
     undoTimerRef.current = setTimeout(async () => {
       try {
+        // Convert attachments to base64
+        const attachmentPayloads = await Promise.all(
+          attachments.map(async (att) => ({
+            filename: att.name,
+            contentType: att.file.type || "application/octet-stream",
+            base64: await fileToBase64(att.file),
+          }))
+        );
+
         const { data, error } = await supabase.functions.invoke("gmail-send", {
           body: {
             to,
             subject: subject || "(no subject)",
             body: body.replace(/\n/g, "<br>"),
+            ...(attachmentPayloads.length > 0 && { attachments: attachmentPayloads }),
           },
         });
         if (error) throw error;
