@@ -1225,7 +1225,7 @@ export function ProVideoEditor({
           </div>
 
           {/* Video / Static Card */}
-          <div className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[50vh]">
+          <div className="flex-1 flex items-center justify-center relative overflow-hidden aspect-square max-h-[60vh]">
             {videoSrc ? (
               <>
                 {isStaticCard ? (
