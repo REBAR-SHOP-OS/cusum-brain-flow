@@ -1,31 +1,25 @@
 
 
-# Fix Toast Pointer-Events Passthrough
+# Add Delete Button to Video History Cards
 
-## Problem
-Both the shadcn `Toaster` (radix) and `Sonner` toaster are rendered in `App.tsx`. The Sonner container uses `pointer-events: none` on its wrapper so it doesn't block the page, but individual toast elements don't reliably get `pointer-events: auto`, causing visible toasts to be click-through "ghosts" that let users accidentally trigger buttons behind them.
+## What
+Add a trash/delete icon next to the download button on each video history card. Clicking it will delete the project from the database using the existing `deleteProject` mutation from `useAdProjectHistory`.
 
-## Fix
+## Changes
 
-### `src/components/ui/sonner.tsx`
-Add `pointer-events: auto` to the individual toast className so each toast element is always interactive:
+### `src/components/ad-director/VideoHistory.tsx`
 
-```tsx
-toast:
-  "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg group-[.toaster]:pointer-events-auto",
-```
+1. **Props**: Add `onDelete?: (id: string) => void` to both `VideoHistoryProps` and `VideoCard` props
+2. **Import**: Add `Trash2` from lucide-react
+3. **VideoCard**: Add a delete button next to the download button with `e.stopPropagation()`, matching the download button style but with red hover color
+4. **Pass through**: `VideoHistory` passes `onDelete` down to each `VideoCard`
 
-### `src/components/ui/toast.tsx`
-Add `pointer-events-auto` to the `toastVariants` base class so the radix-based toasts are also always interactive:
+### Where `VideoHistory` is used — pass `deleteProject`
 
-Current base: `"group pointer-events-auto relative flex ..."`
-This already has it — verify it's present. If not, add it.
-
-### Validation
-Both toaster systems will have `pointer-events: auto` on each toast element, ensuring they block clicks to elements behind them while visible.
+Find the parent that renders `<VideoHistory>` and pass `onDelete={deleteProject.mutate}` from `useAdProjectHistory`.
 
 | File | Change |
 |---|---|
-| `src/components/ui/sonner.tsx` | Add `pointer-events-auto` to toast classNames |
-| `src/components/ui/toast.tsx` | Verify `pointer-events-auto` is present in `toastVariants` base |
+| `VideoHistory.tsx` | Add `Trash2` delete button next to download, with `onDelete` callback |
+| Parent component | Pass `deleteProject.mutate` as `onDelete` prop |
 
