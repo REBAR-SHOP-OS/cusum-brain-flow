@@ -96,15 +96,21 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
       const { data, error } = await supabase.functions.invoke("ai-generic", {
         body: {
           prompt: `Products: ${productLabels}\nStyles: ${styleLabels}\nDuration: ${dur}\nAspect Ratio: ${ratio}`,
-          systemPrompt: "You are a cinematic video ad prompt writer for a construction/rebar company. Write a single concise, vivid video prompt (2-3 sentences) for the given parameters. Return ONLY the prompt text, no quotes or extra formatting.",
+          systemPrompt: "You are a cinematic video ad prompt writer for a construction/rebar company.\nWrite a single concise, vivid video prompt (2-3 sentences) for the given parameters.\nThen on a new line, write '---VOICEOVER---' followed by a professional voiceover narration script (2-4 sentences) matching the video content.\nThe voiceover should be persuasive advertising copy suitable for text-to-speech.\nReturn ONLY the prompt text and voiceover, no quotes or extra formatting.",
           model: "google/gemini-2.5-flash",
         },
       });
 
       if (error) throw error;
-      const result = data?.result || data?.text || "";
-      if (result) {
-        setPrompt(result.trim());
+      const rawResult = data?.result || data?.text || "";
+      if (rawResult) {
+        const parts = rawResult.split("---VOICEOVER---");
+        const visualPrompt = (parts[0] || "").trim();
+        const voiceover = (parts[1] || "").trim();
+        const formatted = voiceover
+          ? `${visualPrompt}\n\n🎙️ Voiceover:\n${voiceover}`
+          : visualPrompt;
+        setPrompt(formatted);
         toast({ title: "✨ پرامپت آماده شد", description: "بررسی کنید و در صورت نیاز ویرایش کنید." });
       }
     } catch (err: any) {
