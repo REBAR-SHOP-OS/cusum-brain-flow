@@ -1,50 +1,57 @@
 
 
-# Sync Audio/Text/Video & Add Live Thumbnails to Timeline
+# Add Per-Scene Custom Prompt Regeneration Input
 
 ## Problem
-1. Audio, text, and video can desync — no enforcement mechanism ensures they stay aligned
-2. Timeline video track shows only colored blocks with text labels — no visual preview of what each scene contains
+Users cannot write a custom prompt to regenerate a specific scene card. Currently regeneration reuses the original scene prompt — there's no way to customize it per-scene from the result view.
 
 ## Changes
 
-### 1. Live Thumbnail Previews in Timeline — `TimelineBar.tsx`
+### `src/components/ad-director/AdDirectorContent.tsx`
 
-**What**: When a clip has `videoUrl`, extract a thumbnail frame and display it as the background of that timeline segment instead of a plain colored block.
+**1. Add state for per-scene prompts**
+- Add `scenePrompts` state: `Record<string, string>` mapping sceneId → user prompt text
 
-**How**:
-- Create a helper component `SceneThumbnail` that loads a `<video>` element offscreen, seeks to 0.5s, draws a frame to a tiny canvas, and caches the result as a data URL
-- Use `useMemo` + `useEffect` to generate thumbnails only when `clip.videoUrl` changes
-- Display the thumbnail as `backgroundImage` on the timeline segment div (with `object-fit: cover` via `bg-cover bg-center`)
-- Keep the existing label overlay on top with a subtle dark gradient for readability
+**2. Modify `handleRegenerateScene` to accept optional custom prompt**
+- Change signature to `(sceneId: string, customPrompt?: string)`
+- If `customPrompt` is provided, use it instead of `scene.prompt` for the `motionPrompt`
 
-**Visual result**: Each completed scene shows a small frame from its video in the timeline bar, giving a true "live preview" feel.
+**3. Add prompt input + regenerate button below each scene card** (lines 355-401)
+- Below the label overlay div, outside the video card but inside the map wrapper, add:
+  - A small text input for the custom prompt (placeholder: "Custom prompt...")
+  - A small regenerate button (⟳ icon) that calls `handleRegenerateScene(clip.sceneId, scenePrompts[clip.sceneId])`
+- Wrap each card + input in a flex-col container
+- Stop click propagation on the input to prevent selecting the video
 
-### 2. Audio/Text/Video Sync Enforcement — `videoStitch.ts`
-
-**What**: Ensure subtitle text appears/disappears precisely aligned with voiceover timing, and both stay in sync with the video frames.
-
-**How**:
-- In the `drawSubtitle` function, use `elapsed` time (which is already derived from the same clock as video playback) to determine which subtitle segment to show — this is already the mechanism in place
-- Add a guard: if voiceover audio (`voiceElement`) has drifted more than 0.3s from the video's elapsed time, resync it by setting `voiceElement.currentTime`
-- Add the same drift check for music element
-- This ensures that even if audio buffers or lags, it snaps back to match the video timeline
-
-**Key code addition** in the render loop (`drawFrame` or equivalent):
-```typescript
-// Drift correction: keep voice & music in sync with video elapsed time
-if (voiceElement && Math.abs(voiceElement.currentTime - elapsed) > 0.3) {
-  voiceElement.currentTime = elapsed;
-}
-if (musicElement && Math.abs(musicElement.currentTime - elapsed) > 0.3) {
-  musicElement.currentTime = elapsed;
-}
+```tsx
+<div key={clip.sceneId} className="flex-shrink-0 w-[280px] space-y-1.5">
+  {/* Existing card div */}
+  <div className="relative rounded-xl border overflow-hidden cursor-pointer ...">
+    ...existing card content...
+  </div>
+  {/* New: prompt input + regenerate */}
+  <div className="flex gap-1">
+    <Input
+      value={scenePrompts[clip.sceneId] || ""}
+      onChange={e => setScenePrompts(p => ({...p, [clip.sceneId]: e.target.value}))}
+      placeholder="Custom prompt..."
+      className="h-7 text-xs flex-1"
+      onClick={e => e.stopPropagation()}
+    />
+    <Button
+      size="sm"
+      variant="ghost"
+      className="h-7 w-7 p-0"
+      disabled={clip.status === "generating"}
+      onClick={() => handleRegenerateScene(clip.sceneId, scenePrompts[clip.sceneId])}
+    >
+      <RefreshCw className="w-3.5 h-3.5" />
+    </Button>
+  </div>
+</div>
 ```
-
-## Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/ad-director/editor/TimelineBar.tsx` | Add `SceneThumbnail` component that extracts video frame; use as background for each timeline scene segment |
-| `src/lib/videoStitch.ts` | Add audio drift correction in render loop to keep voice/music synced with video elapsed time |
+| `src/components/ad-director/AdDirectorContent.tsx` | Add `scenePrompts` state, update `handleRegenerateScene` to accept custom prompt, add input+button below each scene card |
 
