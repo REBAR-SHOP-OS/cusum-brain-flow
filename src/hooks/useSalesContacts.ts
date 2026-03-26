@@ -40,7 +40,9 @@ export function useSalesContacts() {
         supabase
           .from("v_customers_clean" as any)
           .select("*")
-          .eq("company_id", companyId!),
+          .eq("company_id", companyId!)
+          .order("created_at", { ascending: false })
+          .limit(5000),
       ]);
 
       if (systemRes.error) throw systemRes.error;
