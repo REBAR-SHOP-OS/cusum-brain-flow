@@ -371,10 +371,28 @@ class BackgroundAdDirectorService {
         clips: initialClips,
       });
 
-      // Auto-save
+      // Auto-save — reuse existing project with same prompt if possible
       try {
+        let projectId = this.state.projectId;
+        if (!projectId && prompt) {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              const { data: existing } = await supabase
+                .from("ad_projects")
+                .select("id")
+                .eq("user_id", user.id)
+                .eq("script", prompt)
+                .order("updated_at", { ascending: false })
+                .limit(1);
+              if (existing && existing.length > 0) {
+                projectId = existing[0].id;
+              }
+            }
+          } catch (_) { /* ignore lookup failure */ }
+        }
         const savedId = await saveProject({
-          id: this.state.projectId ?? undefined,
+          id: projectId ?? undefined,
           name: prompt ? (prompt.length > 50 ? prompt.substring(0, 50).replace(/\s+\S*$/, "…") : prompt) : (brand.name ? `${brand.name} Ad` : "Untitled Ad"),
           brandName: brand.name, script: prompt,
           segments: newSegments, storyboard: storyboardWithDefaults,
