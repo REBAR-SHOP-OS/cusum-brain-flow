@@ -1,48 +1,52 @@
 
 
-# Fix Attachment Button in Email Composer
+# Auto-Post Email Replies to Sales Lead Timeline
 
 ## Problem
-The Paperclip (attachment) button in `ComposeEmailDialog.tsx` (line 392-394) is a dummy button with no `onClick` handler. Additionally, the `gmail-send` Edge Function uses a simple `text/html` content type and does not support MIME multipart messages with attachments.
+When an email is sent from the Sales Lead drawer via "Send Message", the sent email and any customer replies do not appear in the lead's timeline. The user wants a full email conversation thread visible inside the timeline.
 
-## Solution — Two-part fix
+## Solution — Two parts
 
-### 1. Add file selection and state to `ComposeEmailDialog.tsx`
+### Part 1: Log outbound email to timeline on send
 
-- Add a hidden `<input type="file" multiple>` ref
-- Wire the Paperclip button's `onClick` to trigger the file input
-- Store selected files in state as `{ file: File; name: string; size: number }[]`
-- Show attached files as removable chips below the body textarea
-- Convert files to base64 before sending and include in the `gmail-send` body as an `attachments` array
-- Limit: max 5 files, max 10MB each
+**`ComposeEmailDialog.tsx`** — Add an optional `onSent` callback prop that returns `{ to, subject, body, threadId, messageId }`.
 
-### 2. Update `gmail-send` Edge Function to support MIME multipart
+**`SalesLeadDrawer.tsx`** — Pass `onSent` to `ComposeEmailDialog`. When fired:
+- Insert a `sales_lead_activities` row with `activity_type: "email"`, subject, and body preview
+- Store the Gmail `threadId` in a new `email_thread_id` column on `sales_leads` so we can match replies later
 
-- Update the `createRawEmail` function to generate a `multipart/mixed` MIME message when attachments are present
-- Each attachment encoded as a base64 MIME part with proper `Content-Disposition: attachment` headers
-- Update the Zod schema to accept an optional `attachments` array: `{ filename: string; contentType: string; base64: string }[]`
-- When no attachments, keep the current simple `text/html` format (backward compatible)
+### Part 2: Match inbound emails to leads and auto-post to timeline
 
-## Technical Details
+**`gmail-sync/index.ts`** — After upserting each message to `communications`, check if the email's `from_address` matches any `sales_leads.contact_email` OR the `thread_id` matches any `sales_leads.email_thread_id`. If matched, auto-insert a `sales_lead_activities` row with `activity_type: "email"`, direction `inbound`.
 
-```text
-ComposeEmailDialog.tsx changes:
-├── Add: fileInputRef, attachments state
-├── Wire: Paperclip onClick → fileInputRef.click()
-├── Display: attachment chips with X to remove
-├── Convert: files to base64 on send
-└── Pass: attachments array to gmail-send
-
-gmail-send/index.ts changes:
-├── Update Zod schema: add optional attachments[]
-├── Update createRawEmail: multipart/mixed when attachments present
-│   ├── boundary-based MIME structure
-│   ├── text/html part for body
-│   └── base64 parts for each attachment
-└── Backward compatible: no attachments = same behavior
-```
+### Database changes
+1. Add `email_thread_id text` column to `sales_leads` — stores the Gmail thread ID for reply matching
+2. No other table changes needed; `sales_lead_activities` already supports `activity_type: "email"`
 
 ## Files Changed
-- `src/components/inbox/ComposeEmailDialog.tsx` — add file input, state, UI chips, base64 conversion
-- `supabase/functions/gmail-send/index.ts` — support multipart MIME attachments
+
+| File | Change |
+|------|--------|
+| Migration SQL | Add `email_thread_id` to `sales_leads` |
+| `src/components/inbox/ComposeEmailDialog.tsx` | Add optional `onSent` callback prop |
+| `src/components/sales/SalesLeadDrawer.tsx` | Pass `onSent` → log email activity + save threadId to lead |
+| `supabase/functions/gmail-sync/index.ts` | After upsert, match inbound emails to leads by contact_email or thread_id → auto-insert activity |
+
+## Flow
+
+```text
+User sends email from Lead Drawer
+  → ComposeEmailDialog calls gmail-send
+  → onSent callback fires
+  → SalesLeadDrawer inserts activity (type=email, outbound)
+  → Saves threadId to sales_leads.email_thread_id
+
+Customer replies via Gmail
+  → gmail-sync cron picks up new message
+  → Upserts to communications table
+  → Checks: does from_address match any lead's contact_email?
+     OR does thread_id match any lead's email_thread_id?
+  → If yes: inserts sales_lead_activities (type=email, inbound)
+  → Timeline auto-shows the reply
+```
 
