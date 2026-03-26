@@ -553,7 +553,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         if (!data?.jobId || !data?.provider) { setError("No generation job was returned."); setStatus("failed"); return; }
         jobRef.current = { id: data.jobId, provider: data.provider };
         setStatus("processing"); setProgress(5); setProgressLabel("Generating video...");
-        pollTimerRef.current = setTimeout(pollForResult, 5000);
+        pollTimerRef.current = setTimeout(pollForResult, 3000);
       }
     } catch (err: any) { setError(err?.message || "Failed to start video generation."); setStatus("failed"); }
   };
