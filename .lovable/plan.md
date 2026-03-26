@@ -1,57 +1,48 @@
 
 
-# Add Per-Scene Custom Prompt Regeneration Input
+# Change Flow: Approve First, Then Edit
 
-## Problem
-Users cannot write a custom prompt to regenerate a specific scene card. Currently regeneration reuses the original scene prompt — there's no way to customize it per-scene from the result view.
+## What
+Currently both "Approve & Download" and "Edit Video" buttons are available simultaneously. The user wants a two-step flow:
+1. First, user must **approve** the scene composition (without downloading)
+2. Only after approval, the user can enter the edit page
 
-## Changes
+## Change
 
 ### `src/components/ad-director/AdDirectorContent.tsx`
 
-**1. Add state for per-scene prompts**
-- Add `scenePrompts` state: `Record<string, string>` mapping sceneId → user prompt text
+**1. Add `approved` state** — `useState<boolean>(false)`, reset to `false` when `flowState` changes away from `"result"`
 
-**2. Modify `handleRegenerateScene` to accept optional custom prompt**
-- Change signature to `(sceneId: string, customPrompt?: string)`
-- If `customPrompt` is provided, use it instead of `scene.prompt` for the `motionPrompt`
-
-**3. Add prompt input + regenerate button below each scene card** (lines 355-401)
-- Below the label overlay div, outside the video card but inside the map wrapper, add:
-  - A small text input for the custom prompt (placeholder: "Custom prompt...")
-  - A small regenerate button (⟳ icon) that calls `handleRegenerateScene(clip.sceneId, scenePrompts[clip.sceneId])`
-- Wrap each card + input in a flex-col container
-- Stop click propagation on the input to prevent selecting the video
+**2. Change button layout:**
+- **Before approval**: Show a single "Approve Composition" button (with `Check` icon). Clicking sets `approved = true`.
+- **After approval**: Show "Download" button and "Edit Video" button side by side. "Edit Video" navigates to editing as before.
 
 ```tsx
-<div key={clip.sceneId} className="flex-shrink-0 w-[280px] space-y-1.5">
-  {/* Existing card div */}
-  <div className="relative rounded-xl border overflow-hidden cursor-pointer ...">
-    ...existing card content...
-  </div>
-  {/* New: prompt input + regenerate */}
-  <div className="flex gap-1">
-    <Input
-      value={scenePrompts[clip.sceneId] || ""}
-      onChange={e => setScenePrompts(p => ({...p, [clip.sceneId]: e.target.value}))}
-      placeholder="Custom prompt..."
-      className="h-7 text-xs flex-1"
-      onClick={e => e.stopPropagation()}
-    />
-    <Button
-      size="sm"
-      variant="ghost"
-      className="h-7 w-7 p-0"
-      disabled={clip.status === "generating"}
-      onClick={() => handleRegenerateScene(clip.sceneId, scenePrompts[clip.sceneId])}
-    >
-      <RefreshCw className="w-3.5 h-3.5" />
+{/* Action buttons */}
+<div className="flex items-center justify-center gap-3">
+  {!approved ? (
+    <Button onClick={() => setApproved(true)} className="gap-2">
+      <Check className="w-4 h-4" />
+      Approve Composition
     </Button>
-  </div>
+  ) : (
+    <>
+      <Button onClick={handleDownload} disabled={!finalVideoUrl} className="gap-2">
+        <Download className="w-4 h-4" />
+        Download
+      </Button>
+      <Button variant="outline" onClick={() => service.patchState({ flowState: "editing" })} className="gap-2">
+        <Pencil className="w-4 h-4" />
+        Edit Video
+      </Button>
+    </>
+  )}
 </div>
 ```
 
+**3. Reset `approved` to `false`** when scenes are regenerated (in `handleRegenerateScene`), so user must re-approve after changes.
+
 | File | Change |
 |---|---|
-| `src/components/ad-director/AdDirectorContent.tsx` | Add `scenePrompts` state, update `handleRegenerateScene` to accept custom prompt, add input+button below each scene card |
+| `src/components/ad-director/AdDirectorContent.tsx` | Add `approved` state, split buttons into approve-first then edit/download flow |
 
