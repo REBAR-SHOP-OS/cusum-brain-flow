@@ -24,7 +24,7 @@ export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete }: Vi
 
   return (
     <div className="w-full max-w-4xl mx-auto mt-8 animate-in fade-in duration-500">
-      <h3 className="text-sm font-medium text-muted-foreground mb-3">ویدئوهای قبلی شما</h3>
+      <h3 className="text-sm font-medium text-muted-foreground mb-3">Your Previous Videos</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {visible.map((p) => (
           <VideoCard key={p.id} project={p} onSelect={onSelect} onSelectDraft={onSelectDraft} onDelete={onDelete} />
@@ -47,7 +47,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
   const isDraft = !project.final_video_url;
   // For drafts, use the first completed clip's videoUrl as thumbnail
   const url = isDraft
-    ? (Array.isArray(project.clips) ? (project.clips as any[]).find((c) => c.videoUrl)?.videoUrl : null)
+    ? (Array.isArray(project.clips) ? (project.clips as any[]).find((c) => c.videoUrl || c.video_url || c.url)?.videoUrl || (project.clips as any[]).find((c) => c.video_url)?.video_url || (project.clips as any[]).find((c) => c.url)?.url : null)
     : project.final_video_url!;
 
   const handleMouseEnter = () => {
@@ -90,7 +90,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
         {!url || hasError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
             {isDraft ? <FileText className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
-            <span className="text-[10px]">{isDraft ? "پیش‌نویس" : "ویدیو در دسترس نیست"}</span>
+            <span className="text-[10px]">{isDraft ? "Draft" : "Video unavailable"}</span>
           </div>
         ) : (
           <>
@@ -115,7 +115,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
         {/* Draft badge */}
         {isDraft && (
           <div className="absolute top-1.5 right-1.5">
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0">پیش‌نویس</Badge>
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Draft</Badge>
           </div>
         )}
       </div>
@@ -133,7 +133,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
             <button
               onClick={handleDownload}
               className="shrink-0 p-1.5 rounded-lg hover:bg-muted/60 transition-colors"
-              title="دانلود"
+              title="Download"
             >
               <Download className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
@@ -142,7 +142,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(project.id); }}
               className="shrink-0 p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
-              title="حذف"
+              title="Delete"
             >
               <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
             </button>

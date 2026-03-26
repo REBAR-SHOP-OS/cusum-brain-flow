@@ -605,14 +605,14 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                     continuity,
                     status: "draft",
                   });
-                  toast({ title: "پیش‌نویس ذخیره شد", description: "پروژه در بخش ویدئوهای قبلی نمایش داده می‌شود." });
+                  toast({ title: "Draft saved", description: "Project will appear in your video history." });
                 } catch {
-                  toast({ title: "خطا در ذخیره", variant: "destructive" });
+                  toast({ title: "Failed to save", variant: "destructive" });
                 }
               }}
             >
               <BookmarkCheck className="w-4 h-4" />
-              ذخیره پیش‌نویس
+              Save Draft
             </Button>
             {!approved ? (
               <Button onClick={() => setApproved(true)} className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400">
