@@ -1426,6 +1426,7 @@ export function ProVideoEditor({
               {activeTab === "card-editor" && currentCardSettings && (
                 <IntroOutroEditor
                   settings={currentCardSettings}
+                  brand={brand}
                   onChange={handleCardSettingsChange}
                   onApply={handleApplyCard}
                 />
