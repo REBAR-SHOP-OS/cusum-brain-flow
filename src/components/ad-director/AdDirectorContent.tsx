@@ -414,22 +414,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
       {/* Analyzing / Generating */}
       {(flowState === "analyzing" || flowState === "generating") && (
-        <div className="w-full max-w-lg space-y-6 animate-in fade-in duration-300">
-          {/* Progress */}
-          <div className="rounded-2xl border border-border/20 bg-card/40 p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <Loader2 className="w-5 h-5 text-primary animate-spin shrink-0" />
-              <span className="text-sm font-medium">{statusText}</span>
-            </div>
-            <Progress value={progressValue} className="h-2" />
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground">{progressValue}%</span>
-              <Button variant="ghost" size="sm" onClick={handleCancel} className="h-7 text-xs text-destructive hover:text-destructive">
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
+        <CameraLoader statusText={statusText} progressValue={progressValue} onCancel={handleCancel} />
       )}
 
       {/* Result */}
