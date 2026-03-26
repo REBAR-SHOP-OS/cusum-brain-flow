@@ -111,7 +111,11 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         setTaxRate(meta.tax_rate ?? 13);
         setNotes(meta.notes || "");
         if (Array.isArray(meta.line_items) && meta.line_items.length > 0) {
-          setItems(meta.line_items);
+          setItems(meta.line_items.map((li: any) => ({
+            description: li.description || "",
+            quantity: Number(li.quantity) || 1,
+            unitPrice: Number(li.unitPrice ?? li.unit_price) || 0,
+          })));
         }
       }
 
