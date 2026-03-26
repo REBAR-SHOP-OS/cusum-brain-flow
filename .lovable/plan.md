@@ -1,75 +1,49 @@
 
 
-# Audit & Fix: Manual + AI Auto Quotation Flows
+# Make Tag Cards Horizontal and Fit to Page
 
-## Issues Found
+## Problem
+The Cards view in Tags & Export currently displays `RebarTagCard` components in a **single-column vertical stack** constrained to `max-w-[4.5in]`. The user wants them laid out **horizontally** (side by side), fitting the available page width.
 
-### Bug 1: Query key mismatch in GenerateQuotationDialog
-`GenerateQuotationDialog.tsx` line 59 invalidates `["archived_quotations"]` (underscore) but the hook `useArchivedQuotations` uses `["archived-quotations"]` (hyphen). Result: after AI generation, the quotation list does not refresh.
+## Root Cause
+Line 429 in `TagsExportView.tsx`:
+```
+grid grid-cols-1 gap-6 max-w-[4.5in] mx-auto
+```
+This forces a single column with a narrow max-width.
 
-### Bug 2: AI Auto dialog is project-picker only — no file upload
-The current "AI Auto" flow only lets users select an existing estimation project from a dropdown. There is no way to drag-and-drop or paste files directly. Users must first go to the Estimation page, create a project, then come back. This is the main gap.
+## Fix
 
-### Bug 3: No pipeline task linking from AI Auto
-After generating a quotation via AI Auto, there is no option to link it to a sales lead or add it to the pipeline.
+### File: `src/components/office/TagsExportView.tsx` (line 429)
 
----
+Change the grid container from single-column to a responsive multi-column layout that fills the page:
 
-## Plan
+```
+// Before
+<div className="p-6 grid grid-cols-1 gap-6 max-w-[4.5in] mx-auto">
 
-### 1. Fix query key mismatch
-**File: `src/components/accounting/GenerateQuotationDialog.tsx`**
-- Line 59: Change `["archived_quotations"]` to `["archived-quotations"]`
-
-### 2. Expand AI Auto dialog with drag-and-drop file upload
-**File: `src/components/accounting/GenerateQuotationDialog.tsx`** — major enhancement
-
-Add two modes inside the dialog:
-- **Mode A (existing)**: Select from existing estimation projects (current dropdown)
-- **Mode B (new)**: Upload files directly (drag-and-drop zone + paste support) to run a new takeoff inline
-
-The dialog becomes a tabbed interface:
-```text
-┌──────────────────────────────────────────┐
-│ ✨ Generate AI Quotation                 │
-│                                          │
-│  [From Project]  [Upload New Files]      │
-│                                          │
-│  Tab 1: existing project dropdown        │
-│  Tab 2: drag/drop zone + project name    │
-│         + customer select + lead select  │
-│         → runs ai-estimate → then        │
-│           ai-generate-quotation          │
-│                                          │
-│  ☐ Add to Sales Pipeline                 │
-│                                          │
-│  [Cancel]  [Generate with AI]            │
-└──────────────────────────────────────────┘
+// After
+<div className="p-6 flex flex-wrap gap-6 justify-center">
 ```
 
-**Upload tab features:**
-- Drag-and-drop zone (accepts PDF, images, XLSX, CSV)
-- Paste support via `onPaste` event (for pasted images/files)
-- File preview badges
-- Project name input (auto-generated from filename if empty)
-- Customer dropdown (from `v_customers_clean`)
-- Lead dropdown (filtered by customer)
-- On generate: calls `ai-estimate` first to create estimation project, then calls `ai-generate-quotation` with the new project ID
+### File: `src/components/office/RebarTagCard.tsx` (line 63)
 
-### 3. Add "Link to Pipeline" option
-In both modes, add a checkbox: "Add to Sales Pipeline". When checked, after quotation is created:
-- If a lead is selected, create a `sales_lead_activities` entry linking the quote
-- If no lead exists, create a new lead with the quotation amount and customer
+Remove the fixed `height: "6in"` so the card sizes naturally to its content (prevents empty space on cards with no shape image), and use `min-height` instead for print:
 
-### Technical details
+```tsx
+// Before
+style={{ width: "4in", height: "6in", boxSizing: "border-box" }}
 
-**Files changed:**
-- `src/components/accounting/GenerateQuotationDialog.tsx` — expand with upload mode, paste/drop, customer/lead selectors, pipeline toggle, fix query key
-- No backend changes needed — uses existing `ai-estimate` and `ai-generate-quotation` edge functions
+// After
+style={{ width: "4in", minHeight: "auto", boxSizing: "border-box" }}
+```
 
-**Dependencies used:**
-- Existing `uploadToStorage` from `@/lib/storageUpload`
-- Existing `supabase.functions.invoke("ai-estimate")` 
-- Existing `supabase.functions.invoke("ai-generate-quotation")`
-- Existing `v_customers_clean` view for customer list
+Keep the `print:break-after-page` class so printing still works at 4×6.
+
+## Result
+Cards flow horizontally across the page width, wrapping to the next row when space runs out. On a typical 1200px viewport, 2 cards fit side by side. The layout is responsive — narrower screens show 1 column, wider screens show 2-3.
+
+## Files Changed
+- `src/components/office/TagsExportView.tsx` — change grid to flex-wrap layout (line 429)
+- `src/components/office/RebarTagCard.tsx` — remove fixed height (line 63)
 
