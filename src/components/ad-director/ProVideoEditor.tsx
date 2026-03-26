@@ -1413,6 +1413,7 @@ export function ProVideoEditor({
         onResizeOverlay={handleResizeOverlay}
         onToggleOverlayAnimation={handleToggleOverlayAnimation}
         onReRecordVoiceover={handleReRecordVoiceover}
+        onUpdateVoiceoverText={handleUpdateVoiceoverText}
         onEditVoiceoverText={handleEditVoiceoverText}
         onMoveOverlay={handleMoveOverlay}
         onMoveAudioTrack={handleMoveAudioTrack}
