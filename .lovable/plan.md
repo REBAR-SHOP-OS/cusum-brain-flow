@@ -1,33 +1,55 @@
 
 
-# Auto-Sync Pipeline on Every Page Open
+# Speed Up Video Generation Pipeline
 
 ## Problem
-Users must manually click the Sync button when opening the Pipeline. The user wants an automatic Odoo sync to fire every time the pipeline page is opened.
+Video generation is slow because scenes are generated **sequentially** — each scene waits for the previous one to fully complete (including polling) before starting. For a 60s video with 4 scenes, this means ~4x the generation time.
 
-## Solution
-Add a `useEffect` that triggers `handleOdooSync()` once on component mount. Use a `useRef` flag to ensure it only fires once per mount (not on re-renders), and skip if a sync is already in progress.
+## Root Causes Identified
 
-## Changes
+1. **Sequential scene generation** (`backgroundAdDirectorService.ts` line 385-461): A `for` loop with `await` processes scenes one-by-one
+2. **2-second artificial delay** between scenes (line 460): `await new Promise(r => setTimeout(r, 2000))`
+3. **5-second polling interval** (line 519): Could start faster and adapt
+4. **Score + improve loop** (lines 292-338): Up to 2 improvement attempts per prompt, each requiring 2 edge function calls — can be made optional or parallelized better
 
-### `src/pages/Pipeline.tsx`
-- Add a `useEffect` after `handleOdooSync` is defined (~line 678) that calls it on mount
-- Use a `hasAutoSynced` ref to prevent double-firing in StrictMode
-- Guard: skip if `isSyncingOdoo` is already true
+## Solution — Parallel Scene Generation + Faster Polling
+
+### 1. `src/lib/backgroundAdDirectorService.ts`
+
+**Parallelize scene generation:**
+- Replace the sequential `for` loop (lines 385-461) with `Promise.allSettled()` — submit all scenes simultaneously, then poll all in parallel
+- Remove the 2-second inter-scene delay
+
+**Adaptive polling interval:**
+- Start polling at 3s, increase to 5s after 10 attempts (API is doing heavy work early, results come later)
+- Poll all active scenes in a single loop instead of separate sequential polls
+
+**Skip quality improvement when speed matters:**
+- Make the score+improve phase run in parallel for all prompts (already partially parallel)
+- Reduce `MAX_IMPROVE_ATTEMPTS` from 2 to 1
+
+### 2. `src/components/social/VideoStudioContent.tsx`
+
+- Reduce initial poll interval from 5000ms to 3000ms for single-clip generation
+
+## Changes Summary
 
 ```text
-const hasAutoSynced = useRef(false);
-useEffect(() => {
-  if (!hasAutoSynced.current && !isSyncingOdoo) {
-    hasAutoSynced.current = true;
-    handleOdooSync();
-  }
-}, []);
-```
+Before (sequential):
+  Scene 1: submit → poll (2-10min) → done
+  Scene 2: submit → poll (2-10min) → done  
+  Scene 3: submit → poll (2-10min) → done
+  Total: 6-30 min
 
-This ensures every time a user navigates to `/pipeline`, a fresh Odoo sync starts immediately — no cooldown, no manual button press needed.
+After (parallel):
+  Scene 1: submit ─┐
+  Scene 2: submit ─┤→ poll all → all done
+  Scene 3: submit ─┘
+  Total: 2-10 min (limited by slowest scene)
+```
 
 | File | Change |
 |---|---|
-| `Pipeline.tsx` | Add mount-triggered auto-sync via useEffect + ref guard |
+| `backgroundAdDirectorService.ts` | Parallel scene submission + parallel polling, remove 2s delay, adaptive poll interval |
+| `VideoStudioContent.tsx` | Reduce poll interval from 5s to 3s |
 
