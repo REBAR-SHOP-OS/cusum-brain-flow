@@ -567,7 +567,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                         </div>
                       )}
 
-                      <div className={cn("flex flex-col max-w-[75%]", isMe ? "items-end" : "items-start")}>
+                      <div className={cn("flex flex-col max-w-[75%] overflow-hidden", isMe ? "items-end" : "items-start")}>
                         {!isMe && isFirstInSequence && channelType === "group" && (
                           <span className="text-[10px] font-semibold text-muted-foreground mb-0.5 px-1">{sender?.full_name || "Unknown"}</span>
                         )}
