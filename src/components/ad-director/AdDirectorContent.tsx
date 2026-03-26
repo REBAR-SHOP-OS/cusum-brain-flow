@@ -450,6 +450,26 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                   });
                 }}
                 onDelete={(id) => deleteProject.mutate(id)}
+                onRename={async (id, newName) => {
+                  const proj = (projects.data ?? []).find((p) => p.id === id);
+                  if (!proj) return;
+                  try {
+                    await saveProject.mutateAsync({
+                      id,
+                      name: newName,
+                      brandName: proj.brand_name ?? undefined,
+                      script: proj.script ?? undefined,
+                      segments: proj.segments ?? [],
+                      storyboard: proj.storyboard ?? [],
+                      clips: proj.clips ?? [],
+                      continuity: proj.continuity ?? null,
+                      finalVideoUrl: proj.final_video_url ?? null,
+                      status: proj.status,
+                    });
+                  } catch {
+                    toast({ title: "Failed to rename", variant: "destructive" });
+                  }
+                }}
               />
             </div>
            )}
