@@ -121,7 +121,7 @@ serve((req) =>
       actorName: actor_name || "Rebar.shop Team",
     });
 
-    // 6. Get Gmail access token for ai@rebar.shop from DB
+    // 6. Get Gmail access token — actor first, then ai@rebar.shop, then admin fallback
     const gmailClientId = Deno.env.get("GMAIL_CLIENT_ID");
     const gmailClientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
 
@@ -129,39 +129,70 @@ serve((req) =>
       throw new Error("Gmail OAuth credentials not configured");
     }
 
-    // Try ai@rebar.shop first
-    const { data: aiProfile } = await serviceClient
-      .from("profiles")
-      .select("id")
-      .eq("email", "ai@rebar.shop")
-      .maybeSingle();
-
     let refreshToken: string | null = null;
-    let senderUserId: string | null = aiProfile?.id || null;
+    let senderUserId: string | null = null;
+    let senderEmail = "ai@rebar.shop";
 
-    if (aiProfile?.id) {
-      const { data: tokenRow } = await serviceClient
+    // Priority 1: Actor's own Gmail token
+    if (actor_id) {
+      const { data: actorToken } = await serviceClient
         .from("user_gmail_tokens")
         .select("refresh_token, is_encrypted")
-        .eq("user_id", aiProfile.id)
+        .eq("user_id", actor_id)
         .maybeSingle();
 
-      if (tokenRow?.refresh_token) {
-        refreshToken = tokenRow.is_encrypted
-          ? await decryptToken(tokenRow.refresh_token)
-          : tokenRow.refresh_token;
+      if (actorToken?.refresh_token) {
+        refreshToken = actorToken.is_encrypted
+          ? await decryptToken(actorToken.refresh_token)
+          : actorToken.refresh_token;
+        senderUserId = actor_id;
+
+        // Get actor's email for From header
+        const { data: actorProfile } = await serviceClient
+          .from("profiles")
+          .select("email")
+          .eq("id", actor_id)
+          .maybeSingle();
+        if (actorProfile?.email) senderEmail = actorProfile.email;
+        log.info(`Using actor's own Gmail token (${senderEmail})`);
       }
     }
 
-    // Fallback: find any admin user with a valid Gmail token
+    // Priority 2: ai@rebar.shop
     if (!refreshToken) {
-      log.info("No token for ai@rebar.shop, trying admin fallback");
+      const { data: aiProfile } = await serviceClient
+        .from("profiles")
+        .select("id")
+        .eq("email", "ai@rebar.shop")
+        .maybeSingle();
+
+      if (aiProfile?.id) {
+        const { data: tokenRow } = await serviceClient
+          .from("user_gmail_tokens")
+          .select("refresh_token, is_encrypted")
+          .eq("user_id", aiProfile.id)
+          .maybeSingle();
+
+        if (tokenRow?.refresh_token) {
+          refreshToken = tokenRow.is_encrypted
+            ? await decryptToken(tokenRow.refresh_token)
+            : tokenRow.refresh_token;
+          senderUserId = aiProfile.id;
+          senderEmail = "ai@rebar.shop";
+          log.info("Using ai@rebar.shop token");
+        }
+      }
+    }
+
+    // Priority 3: Any admin with a valid token
+    if (!refreshToken) {
+      log.info("No actor/ai token, trying admin fallback");
       const { data: adminTokens } = await serviceClient
         .from("user_gmail_tokens")
         .select("user_id, refresh_token, is_encrypted")
         .not("refresh_token", "is", null);
 
-      if (adminTokens && adminTokens.length > 0) {
+      if (adminTokens) {
         for (const candidate of adminTokens) {
           const { data: roleRow } = await serviceClient
             .from("user_roles")
@@ -175,19 +206,27 @@ serve((req) =>
               ? await decryptToken(candidate.refresh_token)
               : candidate.refresh_token;
             senderUserId = candidate.user_id;
-            log.info(`Using admin fallback token from user ${candidate.user_id}`);
+
+            const { data: adminProfile } = await serviceClient
+              .from("profiles")
+              .select("email")
+              .eq("id", candidate.user_id)
+              .maybeSingle();
+            if (adminProfile?.email) senderEmail = adminProfile.email;
+            log.info(`Using admin fallback token from ${senderEmail}`);
             break;
           }
         }
       }
     }
 
+    // Priority 4: Env var fallback
     if (!refreshToken) {
       refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN") || null;
     }
 
     if (!refreshToken) {
-      throw new Error("No Gmail refresh token found — no ai@rebar.shop token and no admin fallback available");
+      throw new Error("No Gmail refresh token found — no actor, ai@rebar.shop, or admin fallback available");
     }
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
