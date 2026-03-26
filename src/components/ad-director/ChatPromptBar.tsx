@@ -436,15 +436,43 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
             </Popover>
           </div>
 
-          {/* Send */}
-          <Button
-            size="sm"
-            onClick={handleSubmit}
-            disabled={!prompt.trim() || disabled}
-            className="h-8 w-8 rounded-xl p-0"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-1.5">
+            {/* Auto-generate prompt */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={handleAutoGenerate}
+                  disabled={!canAutoGenerate || isAutoGenerating || disabled}
+                  className={cn(
+                    "h-8 w-8 rounded-xl flex items-center justify-center transition-all border",
+                    canAutoGenerate && !isAutoGenerating
+                      ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 hover:scale-105"
+                      : "bg-muted/40 border-border text-muted-foreground opacity-40 cursor-not-allowed"
+                  )}
+                >
+                  {isAutoGenerating ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs">
+                {canAutoGenerate ? "تولید خودکار پرامپت" : "ابتدا استایل و محصول را انتخاب کنید"}
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Send */}
+            <Button
+              size="sm"
+              onClick={handleSubmit}
+              disabled={!prompt.trim() || disabled}
+              className="h-8 w-8 rounded-xl p-0"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
