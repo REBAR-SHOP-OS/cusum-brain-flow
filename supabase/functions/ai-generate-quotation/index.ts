@@ -156,7 +156,7 @@ Deno.serve((req) =>
     }
 
     const totalWeightKg = bomItems.reduce((s, i) => s + Number(i.weight_kg || 0), 0);
-    const scrapPct = pricingConfig.scrap_percentage ?? pricingConfig.default_scrap_percent ?? 15;
+    const scrapPct = Number(scrap_percent ?? pricingConfig.scrap_percentage ?? pricingConfig.default_scrap_percent ?? 15);
     const totalWithScrap = totalWeightKg * (1 + scrapPct / 100);
     const totalTonnes = totalWithScrap / 1000;
     const cageTonnes = (cageWeightKg * (1 + scrapPct / 100)) / 1000;
