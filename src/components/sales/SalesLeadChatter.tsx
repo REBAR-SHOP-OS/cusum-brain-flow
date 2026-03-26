@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   MessageSquare, Phone, Mail, Calendar, Clock, Send,
-  CheckCircle2, Loader2, ArrowRight, Zap, Paperclip, X, Image, Video,
+  CheckCircle2, XCircle, Loader2, ArrowRight, Zap, Paperclip, X, Image, Video,
   MessageCircle,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
@@ -114,6 +114,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [emailOutcomes, setEmailOutcomes] = useState<Record<string, "success" | "failed" | "partial">>({});
 
   const handleTextChange = useCallback((val: string) => {
     setText(val);
@@ -207,7 +208,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
         activity_type: "note",
         body,
       }, {
-        onSuccess: () => {
+        onSuccess: async () => {
           setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false);
 
           // Auto-add @mentioned users as assignees
@@ -225,16 +226,35 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
             });
           }
 
-          // Fire notification email to assignees (fire-and-forget)
-          supabase.functions.invoke("notify-lead-assignees", {
-            body: {
-              sales_lead_id: salesLeadId,
-              event_type: "note",
-              note_text: noteTextForEmail,
-              actor_name: currentUserName || "Someone",
-              actor_id: currentUserId,
-            },
-          }).catch((err) => console.error("notify-lead-assignees error:", err));
+          // Fire notification email to assignees and track outcome
+          const noteTimestamp = new Date().toISOString();
+          try {
+            const { data: notifyResult, error: notifyError } = await supabase.functions.invoke("notify-lead-assignees", {
+              body: {
+                sales_lead_id: salesLeadId,
+                event_type: "note",
+                note_text: noteTextForEmail,
+                actor_name: currentUserName || "Someone",
+                actor_id: currentUserId,
+              },
+            });
+            if (notifyError) {
+              setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+            } else {
+              const sent = notifyResult?.sent ?? 0;
+              const total = notifyResult?.total ?? 0;
+              if (sent > 0 && sent >= total) {
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "success" }));
+              } else if (sent > 0) {
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "partial" }));
+              } else {
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+              }
+            }
+          } catch (err) {
+            console.error("notify-lead-assignees error:", err);
+            setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+          }
         },
         onError: () => setUploading(false),
       });
@@ -471,16 +491,33 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
         </div>
       ) : (
         <div className="space-y-0">
-          {filtered.map((activity) => (
-            <ActivityItem key={activity.id} activity={activity} onMarkDone={() => markDone.mutate(activity.id)} />
-          ))}
+          {filtered.map((activity) => {
+            // Find the closest email outcome for this activity (match by timestamp proximity)
+            const activityTime = new Date(activity.created_at).getTime();
+            let emailStatus: "success" | "failed" | "partial" | undefined;
+            for (const [ts, status] of Object.entries(emailOutcomes)) {
+              const diff = Math.abs(new Date(ts).getTime() - activityTime);
+              if (diff < 10000) { // within 10 seconds
+                emailStatus = status;
+                break;
+              }
+            }
+            return (
+              <ActivityItem
+                key={activity.id}
+                activity={activity}
+                onMarkDone={() => markDone.mutate(activity.id)}
+                emailStatus={activity.activity_type === "note" && activity.body?.includes("@") ? emailStatus : undefined}
+              />
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-function ActivityItem({ activity, onMarkDone }: { activity: SalesLeadActivity; onMarkDone: () => void }) {
+function ActivityItem({ activity, onMarkDone, emailStatus }: { activity: SalesLeadActivity; onMarkDone: () => void; emailStatus?: "success" | "failed" | "partial" }) {
   const Icon = activityIcons[activity.activity_type] || MessageSquare;
   const isScheduled = !!activity.scheduled_date && !activity.completed_at;
   const initials = activity.user_name ? getInitials(activity.user_name) : "??";
@@ -527,6 +564,24 @@ function ActivityItem({ activity, onMarkDone }: { activity: SalesLeadActivity; o
           <span className="text-[10px] text-green-600 flex items-center gap-1 mt-1">
             <CheckCircle2 className="w-3 h-3" />
             Completed {format(new Date(activity.completed_at), "MMM d")}
+          </span>
+        )}
+        {emailStatus === "success" && (
+          <span className="text-[10px] text-green-600 flex items-center gap-1 mt-1 font-medium">
+            <CheckCircle2 className="w-3 h-3" />
+            Email sent successfully
+          </span>
+        )}
+        {emailStatus === "partial" && (
+          <span className="text-[10px] text-amber-500 flex items-center gap-1 mt-1 font-medium">
+            <CheckCircle2 className="w-3 h-3" />
+            Email partially sent
+          </span>
+        )}
+        {emailStatus === "failed" && (
+          <span className="text-[10px] text-red-500 flex items-center gap-1 mt-1 font-medium">
+            <XCircle className="w-3 h-3" />
+            Email failed to send
           </span>
         )}
       </div>
