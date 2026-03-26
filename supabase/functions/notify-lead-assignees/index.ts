@@ -311,7 +311,7 @@ serve((req) =>
     let sentCount = 0;
     for (const recipient of recipients) {
       try {
-        const isCustomer = customerEmail && recipient.email.toLowerCase() === customerEmail;
+        const isCustomer = lead.contact_email && recipient.email.toLowerCase() === lead.contact_email.toLowerCase();
         const htmlBody = isCustomer ? customerEmailHtml : internalEmail;
 
         const rawEmail = [
