@@ -144,7 +144,7 @@ Deno.serve((req) =>
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { to, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers }: SendEmailRequest = parsed.data;
+    const { to, cc, bcc, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers } = parsed.data;
 
     // --- Comms Engine: no_act_global + email routing ---
     if (sent_by_agent) {
