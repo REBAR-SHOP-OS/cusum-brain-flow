@@ -439,7 +439,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     const wanExtras: Record<string, unknown> = {};
     if (refImageStorageUrl) wanExtras.imageUrl = refImageStorageUrl;
     if (audioStorageUrl) wanExtras.audioUrl = audioStorageUrl;
-    if (negativePrompt.trim()) wanExtras.negativePrompt = negativePrompt.trim();
+    const baseNegative = "text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind";
+    const userNeg = negativePrompt.trim();
+    wanExtras.negativePrompt = userNeg ? `${baseNegative}, ${userNeg}` : baseNegative;
     wanExtras.aspectRatio = "16:9";
 
     // Upload first/last frame images for Veo I2V and convert to base64
