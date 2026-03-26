@@ -59,6 +59,13 @@ Deno.serve((req) =>
     // Strip Persian translation block — server-side safety net
     let message = rawMessage;
 
+    if (post_id) {
+      const { data: existing } = await supabaseAdmin
+        .from("social_posts")
+        .select("status, neel_approved, declined_by")
+        .eq("id", post_id)
+        .maybeSingle();
+
       if (existing?.status === "published") {
         return new Response(
           JSON.stringify({ error: "This post has already been published." }),
