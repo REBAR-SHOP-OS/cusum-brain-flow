@@ -54,13 +54,24 @@ export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete, onRe
     const hasThumbnail = !!p.thumbnail_url;
     return hasVideo || hasDraftClips || hasThumbnail;
   });
-  if (visible.length === 0) return null;
+
+  // Deduplicate: keep only the most recent project per script/name
+  const deduped = Object.values(
+    visible.reduce((acc, p) => {
+      const key = p.script || p.name || p.id;
+      if (!acc[key] || new Date(p.updated_at) > new Date(acc[key].updated_at)) {
+        acc[key] = p;
+      }
+      return acc;
+    }, {} as Record<string, AdProjectRow>)
+  );
+  if (deduped.length === 0) return null;
 
   return (
     <div className="w-full max-w-4xl mx-auto mt-8 animate-in fade-in duration-500">
       <h3 className="text-sm font-medium text-muted-foreground mb-3">Your Previous Videos</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {visible.map((p) => (
+        {deduped.map((p) => (
           <VideoCard
             key={p.id}
             project={p}
