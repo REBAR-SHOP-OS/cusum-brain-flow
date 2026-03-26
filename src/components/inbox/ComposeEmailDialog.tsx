@@ -91,7 +91,9 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
   const [polishing, setPolishing] = useState(false);
   const [hasDrafted, setHasDrafted] = useState(false);
   const [adjustingTone, setAdjustingTone] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const speech = useSpeechRecognition({
