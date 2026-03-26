@@ -103,16 +103,42 @@ serve((req) =>
 
           if (mentionedProfiles) {
             const existingEmails = new Set(recipients.map(r => r.email.toLowerCase()));
+
+            // Fetch existing assignee profile_ids to avoid duplicate inserts
+            const { data: existingAssignees } = await serviceClient
+              .from("sales_lead_assignees")
+              .select("profile_id")
+              .eq("sales_lead_id", sales_lead_id);
+            const existingAssigneeIds = new Set((existingAssignees || []).map((a: any) => a.profile_id));
+
             for (const mp of mentionedProfiles as any[]) {
               if (!mp.email) continue;
               const mpEmail = mp.email.toLowerCase();
               if (actorEmail && mpEmail === actorEmail) continue;
-              if (existingEmails.has(mpEmail)) continue;
               if (!mpEmail.endsWith("@rebar.shop")) continue;
 
-              recipients.push({ email: mp.email, full_name: mp.full_name || mp.email });
-              existingEmails.add(mpEmail);
-              log.info(`Added @mentioned user: ${mp.full_name} (${mp.email})`);
+              // Auto-add to assignees if not already assigned
+              if (!existingAssigneeIds.has(mp.id) && mp.id) {
+                const { error: assignErr } = await serviceClient
+                  .from("sales_lead_assignees")
+                  .insert({
+                    sales_lead_id,
+                    profile_id: mp.id,
+                    company_id: actorCompanyId,
+                  });
+                if (assignErr) {
+                  log.error(`Failed to auto-assign ${mp.full_name}: ${assignErr.message}`);
+                } else {
+                  log.info(`Auto-assigned @mentioned user: ${mp.full_name} to lead ${sales_lead_id}`);
+                }
+              }
+
+              // Add to email recipients
+              if (!existingEmails.has(mpEmail)) {
+                recipients.push({ email: mp.email, full_name: mp.full_name || mp.email });
+                existingEmails.add(mpEmail);
+                log.info(`Added @mentioned user to recipients: ${mp.full_name} (${mp.email})`);
+              }
             }
           }
         }
