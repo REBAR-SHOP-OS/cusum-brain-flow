@@ -84,7 +84,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         image_url: finalVideoUrl,
         scheduled_date: scheduledDateTime.toISOString(),
         title: pipelineState.brand?.name || "AI Video",
-        content: pipelineState.prompt || "",
+        content: pipelineState.userPrompt || "",
         user_id: user.id,
         neel_approved: false,
       });
