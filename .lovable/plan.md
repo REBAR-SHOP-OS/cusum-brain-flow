@@ -1,44 +1,37 @@
 
 
-# Add Video History to Ad Director Idle Screen
+# Simplify & Widen the Editor View
 
-## What
-Show all previously created videos (from `ad_projects` table) as a history grid below the prompt bar on the idle screen. Users can see thumbnails, download, or click to reload past projects.
+## Problem
+The Pro Editor (editing mode) is constrained to `max-w-4xl` from the parent page, making it narrow. The UI has too many icons/tabs and the name says "Pro Editor" but should be called "Edit". The overall look needs to be simpler and cleaner.
 
-## Data Source
-The `ad_projects` table already stores `final_video_url`, `name`, `created_at`, `status`, and `clips` (with individual scene video URLs). The `useAdProjectHistory` hook already fetches this data. We just need to display it.
+## Changes
 
-## Implementation
+### 1. Widen the page when in editing mode — `AdDirector.tsx`
+- Remove `max-w-4xl` constraint when the editor is active
+- The page wrapper should go full-width (edge-to-edge) when `flowState === "editing"`
+- Pass `flowState` info up or conditionally render the editor outside the constrained wrapper
 
-### 1. New Component: `src/components/ad-director/VideoHistory.tsx`
-- Receives `projects` from `useAdProjectHistory`
-- Filters to only show projects with a `final_video_url` (completed renders)
-- Renders a responsive grid (2-3 columns) of cards, each showing:
-  - Video thumbnail (using `<video>` with `preload="metadata"` + hover-to-play)
-  - Project name + date (formatted with `date-fns`)
-  - Download button
-  - Click to reload into the player
-- Empty state: hidden (no message if no history)
+### 2. Widen editing wrapper — `AdDirectorContent.tsx`
+- When `flowState === "editing"`, return the `ProVideoEditor` without the `max-w-4xl` parent constraint — render it full-width with minimal padding (e.g. `px-2`)
 
-### 2. Update `AdDirectorContent.tsx`
-- In the `idle` flowState block (line 263-275), after `<ChatPromptBar>`, render `<VideoHistory>` component
-- Pass `projects.data` from the existing `useAdProjectHistory` hook (already imported)
-- On card click: set `selectedPreviewUrl` and switch to result view, or open video in a modal
+### 3. Simplify the Pro Editor UI — `ProVideoEditor.tsx`
+- **Rename**: Change "Pro Editor" badge to "Edit" or remove it entirely
+- **Simplify top bar**: Reduce icon clutter — keep only essential actions (Back, Undo/Redo, Auto Voiceover, Export). Remove Reset button, reduce spacing
+- **Simplify sidebar tabs**: Keep icons only (no labels), make sidebar narrower default (e.g. `w-52`)
+- **Reduce visual noise**: Simplify borders, reduce backdrop-blur effects, use cleaner button styles
+- **Simplify playback controls**: Keep essential controls only (play/pause, skip, scrub, volume, fullscreen) — already clean, just make icons slightly larger for readability
+- **Timeline**: Keep as-is (already functional)
 
-### Layout
-```text
-[  Hero: "What video do you want to create?"  ]
-[  Upload slots: Intro | Character | Outro     ]
-[  ChatPromptBar                                ]
-[  ──── Your Previous Videos ────               ]
-[  [Video 1]  [Video 2]  [Video 3]             ]
-[  [Video 4]  [Video 5]  ...                   ]
-```
+### 4. Full-width layout — `AdDirector.tsx`
+- Detect editing state and conditionally remove `max-w-4xl` + reduce padding
+- The editor should use nearly the full viewport width
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/ad-director/VideoHistory.tsx` | New component — grid of past rendered videos with thumbnails, names, dates, download |
-| `src/components/ad-director/AdDirectorContent.tsx` | Add `VideoHistory` to idle state, pass projects data |
+| `src/pages/AdDirector.tsx` | Conditionally go full-width when editing mode is active |
+| `src/components/ad-director/AdDirectorContent.tsx` | Pass editing state up; render editor full-width |
+| `src/components/ad-director/ProVideoEditor.tsx` | Rename to "Edit", simplify top bar, cleaner sidebar, reduce visual noise |
 
