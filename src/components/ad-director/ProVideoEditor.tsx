@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +68,7 @@ function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: 
   const [minute, setMinute] = useState("00");
   const [scheduling, setScheduling] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
   const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
@@ -111,6 +113,7 @@ function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: 
         description: `Post scheduled for ${format(scheduledDateTime, "PPP")} at ${hour}:${minute}`,
       });
       setOpen(false);
+      setTimeout(() => navigate("/home"), 1200);
     } catch (err: any) {
       toast({ title: "Scheduling failed", description: err.message, variant: "destructive" });
     } finally {
