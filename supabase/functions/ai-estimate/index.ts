@@ -451,9 +451,9 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
       const p = pricingMap.get(input.bar_size);
       const result = calculateItem(input, std, p);
 
-      // For summary items with AI-provided weight, preserve the exact weight
+      // Preserve AI-provided weight when calculation produced zero (e.g. summary PDFs with no cut_length)
       const aiWeight = (input as any).weight_kg;
-      if (aiWeight && aiWeight > 0 && input.mark?.startsWith("SUM-")) {
+      if (aiWeight && aiWeight > 0 && result.weight_kg === 0) {
         result.weight_kg = Math.round(aiWeight * 1000) / 1000;
         const materialCost = p?.material_cost_per_kg ?? 0;
         result.unit_cost = Math.round(result.weight_kg * materialCost * 100) / 100;
