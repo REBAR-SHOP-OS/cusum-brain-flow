@@ -140,6 +140,48 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
 
   const itemsTotal = items.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
 
+  const handleEmailAction = async () => {
+    if (!customerEmail.trim() || !quotation) return;
+    setSendingEmail(true);
+    try {
+      const quoteId = quotation.quote_id || quotation.id;
+      const { data, error } = await supabase.functions.invoke("send-quote-email", {
+        body: { quote_id: quoteId, customer_email: customerEmail.trim(), action: emailDialogAction },
+      });
+      if (error) throw new Error(error.message || "Failed");
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(data?.message || "Done");
+      setEmailDialogOpen(false);
+
+      // Refresh quotation data
+      if (emailDialogAction === "send_quote") {
+        onUpdate({ id: quotation.id, status: "sent_to_customer" });
+      } else {
+        onUpdate({ id: quotation.id, status: "customer_approved" });
+      }
+      qc.invalidateQueries({ queryKey: ["sales-quotations"] });
+    } catch (err: any) {
+      toast.error(err.message || "Operation failed");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  const handleTransitionClick = (targetStatus: string) => {
+    if (targetStatus === "sent_to_customer") {
+      setEmailDialogAction("send_quote");
+      setEmailDialogOpen(true);
+      return;
+    }
+    if (targetStatus === "customer_approved") {
+      setEmailDialogAction("convert_to_invoice");
+      setEmailDialogOpen(true);
+      return;
+    }
+    onUpdate({ id: quotation.id, status: targetStatus });
+  };
+
   if (!quotation) return null;
 
   const statusInfo = getStatusInfo(quotation.status);
