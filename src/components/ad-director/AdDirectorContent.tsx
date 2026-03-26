@@ -65,6 +65,11 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     exporting, musicTrackUrl, brand, videoParams, projectId,
   } = pipelineState;
 
+  // Notify parent when editing state changes
+  useEffect(() => {
+    onEditingChange?.(flowState === "editing");
+  }, [flowState, onEditingChange]);
+
   // ─── Submit handler → delegates to service ───
   const handleSubmit = useCallback(async (
     prompt: string, ratio: string, images: File[],
