@@ -1,36 +1,25 @@
 
 
-# Add Related Entities Bar to Sales Lead Drawer
+# Fix Message Overflow in DockChatBox
 
-## What
-Add a horizontal summary bar at the top of the Sales Lead Drawer (below the stage ribbon, above the info grid) showing counts and totals for related Quotations, Invoices, and Orders — similar to Odoo's smart buttons (circled in the screenshot).
+## Problem
+Messages in the dock chat widget overflow horizontally — text (especially forwarded messages) extends beyond the chat box boundary instead of wrapping properly.
 
-## How
+## Root Cause
+In `DockChatBox.tsx` line 618, the message bubble has `w-fit` which sizes to content width. While `break-words` and `overflow-hidden` are present, the lack of `max-w-full` means the bubble can exceed its parent container's width before word-breaking kicks in.
 
-### New component: `src/components/sales/LeadSmartButtons.tsx`
+## Fix
+**File: `src/components/chat/DockChatBox.tsx`**
 
-A compact row of clickable stat buttons that queries:
-- **Quotations**: `sales_quotations` where `sales_lead_id = lead.id` → show count + total amount
-- **Orders**: `orders` where `lead_id = lead.id` → show count + total amount  
-- **Invoices**: `sales_invoices` where `sales_lead_id = lead.id` → show count + total amount
+Single change on line 618 — add `max-w-full` to the bubble `div` class:
 
-Each button shows an icon, count, label, and dollar total. Clicking a button could expand a small inline list or navigate — initially just display counts.
-
-Uses 3 lightweight queries with `useQuery` keyed by `lead.id`.
-
-### Update: `src/components/sales/SalesLeadDrawer.tsx`
-
-Insert `<LeadSmartButtons leadId={lead.id} />` between the stage ribbon (line 137) and the info grid (line 141).
-
-## Visual Design
-```text
-┌─────────────┬──────────────┬──────────────┐
-│ 📋 Quotes 2 │ 📦 Orders 1  │ 📄 Invoices 1│
-│  $83,252.10  │   $41,500    │   $41,500    │
-└─────────────┴──────────────┴──────────────┘
+```
+Before: "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit"
+After:  "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit max-w-full"
 ```
 
+This constrains the bubble to never exceed its parent (`max-w-[75%]` container), ensuring all text wraps properly including forwarded messages and long strings.
+
 ## Files Changed
-- `src/components/sales/LeadSmartButtons.tsx` — new component
-- `src/components/sales/SalesLeadDrawer.tsx` — import and render it
+- `src/components/chat/DockChatBox.tsx` — add `max-w-full` to bubble className (line 618)
 
