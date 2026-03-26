@@ -76,21 +76,78 @@ serve((req) =>
 
     // 4b. Extract @mentioned users from note_text and add if not already in recipients
     if (event_type === "note" && note_text) {
-      const mentionMatches = note_text.match(/@([A-Za-z\s]+?)(?=\s@|\s*$|[.,!?])/g);
-      if (mentionMatches && mentionMatches.length > 0) {
-        const mentionedNames = mentionMatches.map((m: string) => m.slice(1).trim()).filter(Boolean);
-        log.info(`Found @mentions: ${JSON.stringify(mentionedNames)}`);
+      // Get actor company for scoping
+      let actorCompanyId: string | null = null;
+      if (actor_id) {
+        const { data: actorProf } = await serviceClient
+          .from("profiles")
+          .select("company_id")
+          .eq("user_id", actor_id)
+          .maybeSingle();
+        actorCompanyId = actorProf?.company_id || null;
+      }
 
-        if (mentionedNames.length > 0) {
-          let actorCompanyId: string | null = null;
-          if (actor_id) {
-            const { data: actorProf } = await serviceClient
-              .from("profiles")
-              .select("company_id")
-              .eq("user_id", actor_id)
-              .maybeSingle();
-            actorCompanyId = actorProf?.company_id || null;
+      const existingEmails = new Set(recipients.map(r => r.email.toLowerCase()));
+      const { data: existingAssignees } = await serviceClient
+        .from("sales_lead_assignees")
+        .select("profile_id")
+        .eq("sales_lead_id", sales_lead_id);
+      const existingAssigneeIds = new Set((existingAssignees || []).map((a: any) => a.profile_id));
+
+      // 1. Extract email-style mentions: @user@rebar.shop
+      const emailMentionRegex = /@([a-zA-Z0-9._%+-]+@rebar\.shop)/gi;
+      const emailMentionMatches = [...note_text.matchAll(emailMentionRegex)];
+      const mentionedEmails = emailMentionMatches.map(m => m[1].toLowerCase()).filter(Boolean);
+
+      if (mentionedEmails.length > 0) {
+        log.info(`Found email @mentions: ${JSON.stringify(mentionedEmails)}`);
+        let emailQuery = serviceClient
+          .from("profiles")
+          .select("id, user_id, email, full_name");
+        if (actorCompanyId) {
+          emailQuery = emailQuery.eq("company_id", actorCompanyId);
+        }
+        const { data: emailProfiles } = await emailQuery;
+
+        if (emailProfiles) {
+          for (const mp of emailProfiles as any[]) {
+            if (!mp.email) continue;
+            const mpEmail = mp.email.toLowerCase();
+            if (!mentionedEmails.includes(mpEmail)) continue;
+            if (actorEmail && mpEmail === actorEmail) continue;
+
+            // Auto-add to assignees
+            if (!existingAssigneeIds.has(mp.id) && mp.id) {
+              const { error: assignErr } = await serviceClient
+                .from("sales_lead_assignees")
+                .insert({ sales_lead_id, profile_id: mp.id, company_id: actorCompanyId });
+              if (assignErr) {
+                log.error(`Failed to auto-assign ${mp.full_name}: ${assignErr.message}`);
+              } else {
+                log.info(`Auto-assigned email-mentioned user: ${mp.full_name} to lead ${sales_lead_id}`);
+                existingAssigneeIds.add(mp.id);
+              }
+            }
+
+            // Add to email recipients
+            if (!existingEmails.has(mpEmail)) {
+              recipients.push({ email: mp.email, full_name: mp.full_name || mp.email });
+              existingEmails.add(mpEmail);
+              log.info(`Added email-mentioned user to recipients: ${mp.full_name} (${mp.email})`);
+            }
           }
+        }
+      }
+
+      // 2. Extract name-style mentions: @Full Name (fallback)
+      const nameMentionMatches = note_text.match(/@([A-Za-z\u0600-\u06FF\s]+?)(?=\s@|\s*$|[.,!?])/g);
+      if (nameMentionMatches && nameMentionMatches.length > 0) {
+        const mentionedNames = nameMentionMatches
+          .map((m: string) => m.slice(1).trim())
+          .filter((n: string) => Boolean(n) && !n.includes("@")); // skip email fragments
+        
+        if (mentionedNames.length > 0) {
+          log.info(`Found name @mentions: ${JSON.stringify(mentionedNames)}`);
 
           let profileQuery = serviceClient
             .from("profiles")
@@ -102,42 +159,28 @@ serve((req) =>
           const { data: mentionedProfiles } = await profileQuery;
 
           if (mentionedProfiles) {
-            const existingEmails = new Set(recipients.map(r => r.email.toLowerCase()));
-
-            // Fetch existing assignee profile_ids to avoid duplicate inserts
-            const { data: existingAssignees } = await serviceClient
-              .from("sales_lead_assignees")
-              .select("profile_id")
-              .eq("sales_lead_id", sales_lead_id);
-            const existingAssigneeIds = new Set((existingAssignees || []).map((a: any) => a.profile_id));
-
             for (const mp of mentionedProfiles as any[]) {
               if (!mp.email) continue;
               const mpEmail = mp.email.toLowerCase();
               if (actorEmail && mpEmail === actorEmail) continue;
               if (!mpEmail.endsWith("@rebar.shop")) continue;
 
-              // Auto-add to assignees if not already assigned
               if (!existingAssigneeIds.has(mp.id) && mp.id) {
                 const { error: assignErr } = await serviceClient
                   .from("sales_lead_assignees")
-                  .insert({
-                    sales_lead_id,
-                    profile_id: mp.id,
-                    company_id: actorCompanyId,
-                  });
+                  .insert({ sales_lead_id, profile_id: mp.id, company_id: actorCompanyId });
                 if (assignErr) {
                   log.error(`Failed to auto-assign ${mp.full_name}: ${assignErr.message}`);
                 } else {
-                  log.info(`Auto-assigned @mentioned user: ${mp.full_name} to lead ${sales_lead_id}`);
+                  log.info(`Auto-assigned name-mentioned user: ${mp.full_name} to lead ${sales_lead_id}`);
+                  existingAssigneeIds.add(mp.id);
                 }
               }
 
-              // Add to email recipients
               if (!existingEmails.has(mpEmail)) {
                 recipients.push({ email: mp.email, full_name: mp.full_name || mp.email });
                 existingEmails.add(mpEmail);
-                log.info(`Added @mentioned user to recipients: ${mp.full_name} (${mp.email})`);
+                log.info(`Added name-mentioned user to recipients: ${mp.full_name} (${mp.email})`);
               }
             }
           }
