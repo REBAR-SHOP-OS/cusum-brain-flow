@@ -136,12 +136,91 @@ export function TimelineBar({
   onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onEditVoiceoverText,
+  onMoveOverlay, onMoveAudioTrack,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [textTrackMuted, setTextTrackMuted] = useState(false);
   const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const thumbnails = useVideoThumbnails(clips);
+
+  // ─── Item drag-to-reposition state ───
+  const itemDragRef = useRef<{
+    type: "text" | "audio";
+    id: string;       // overlay id or audio track index as string
+    startX: number;
+    origLeftPct: number;
+    origWidthPct: number;
+  } | null>(null);
+  const [itemDragOffsetPx, setItemDragOffsetPx] = useState(0);
+  const [itemDragging, setItemDragging] = useState(false);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+
+  // Find which scene a percentage position falls into
+  const findSceneAtPct = useCallback((pct: number) => {
+    for (let i = 0; i < storyboard.length; i++) {
+      const start = (cumulativeStarts[i] || 0) / totalDuration * 100;
+      const dur = getSceneDur(i);
+      const end = start + (dur / totalDuration) * 100;
+      if (pct >= start && pct < end) return i;
+    }
+    return storyboard.length - 1;
+  }, [storyboard, cumulativeStarts, totalDuration]);
+
+  const handleItemDragStart = useCallback((
+    e: React.MouseEvent,
+    type: "text" | "audio",
+    id: string,
+    leftPct: number,
+    widthPct: number,
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    itemDragRef.current = { type, id, startX: e.clientX, origLeftPct: leftPct, origWidthPct: widthPct };
+    setItemDragOffsetPx(0);
+    setItemDragging(true);
+    setDraggedItemId(id);
+  }, []);
+
+  useEffect(() => {
+    if (!itemDragging) return;
+    const onMove = (e: MouseEvent) => {
+      if (!itemDragRef.current) return;
+      setItemDragOffsetPx(e.clientX - itemDragRef.current.startX);
+    };
+    const onUp = (e: MouseEvent) => {
+      if (!itemDragRef.current || !trackRef.current) {
+        setItemDragging(false);
+        setDraggedItemId(null);
+        return;
+      }
+      const trackWidth = trackRef.current.getBoundingClientRect().width;
+      const dx = e.clientX - itemDragRef.current.startX;
+      const deltaPct = (dx / trackWidth) * 100;
+      const centerPct = itemDragRef.current.origLeftPct + itemDragRef.current.origWidthPct / 2 + deltaPct;
+      const targetIdx = findSceneAtPct(Math.max(0, Math.min(100, centerPct)));
+      const targetSceneId = storyboard[targetIdx]?.id;
+
+      if (targetSceneId) {
+        if (itemDragRef.current.type === "text") {
+          onMoveOverlay?.(itemDragRef.current.id, targetSceneId);
+        } else {
+          onMoveAudioTrack?.(parseInt(itemDragRef.current.id), targetSceneId);
+        }
+      }
+
+      itemDragRef.current = null;
+      setItemDragging(false);
+      setItemDragOffsetPx(0);
+      setDraggedItemId(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [itemDragging, storyboard, findSceneAtPct, onMoveOverlay, onMoveAudioTrack]);
 
   // Drag-to-resize handlers
   const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
