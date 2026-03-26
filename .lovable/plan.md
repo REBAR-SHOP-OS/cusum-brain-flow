@@ -1,70 +1,34 @@
 
 
-# Add Inclusions/Exclusions from Estimation to Quote Notes
-
-## Problem
-The AI-generated quotation stores `assumptions` in metadata but doesn't populate the Notes/Terms field with standard inclusions/exclusions. The DraftQuotationEditor only reads `meta.notes` (a single string), missing the structured `assumptions` array.
+# Add Scrap % Control, Extract Info from Estimate & Terms/Conditions
 
 ## Changes
 
-### 1. Backend: Add inclusions/exclusions to quote metadata (`supabase/functions/ai-generate-quotation/index.ts`)
-Add explicit `inclusions` and `exclusions` arrays to the metadata object:
-```ts
-inclusions: [
-  "Material supply (cut & bent rebar)",
-  "Shop drawings",
-  shouldIncludeShopDrawings ? "Shop drawing preparation included" : null,
-  deliveryDistanceKm > 0 ? `Delivery within ${deliveryDistanceKm} km` : null,
-  "Tagging and bundling per schedule",
-].filter(Boolean),
-exclusions: [
-  "Installation labour",
-  "Engineering stamps / sealed drawings",
-  deliveryDistanceKm <= 0 ? "Delivery / shipping (distance TBD)" : null,
-  "Crane / unloading at site",
-  "Permits and inspections",
-].filter(Boolean),
-```
+### 1. `src/components/accounting/GenerateQuotationDialog.tsx`
+- Add `scrapPercent` state (default `"15"`)
+- Add a number input for scrap % in the delivery/shop-drawings grid (make it 3-col)
+- Pass `scrap_percent` in the body to both `ai-estimate` and `ai-generate-quotation` calls
+- Reset `scrapPercent` on dialog close
+- Auto-populate `customerName`, `projectName`, `deliveryDistance` from selected estimation project data when available
 
-Also append inclusions/exclusions into the `notes` field so it pre-populates the editor:
-```ts
-notes: [
-  `Prices valid for 30 days. All weights include ${scrapPct}% scrap.`,
-  "",
-  "INCLUSIONS:",
-  ...inclusions.map(i => `✅ ${i}`),
-  "",
-  "EXCLUSIONS:",
-  ...exclusions.map(e => `➖ ${e}`),
-].join("\n"),
-```
+### 2. `supabase/functions/ai-generate-quotation/index.ts`
+- Read `scrap_percent` from request body; use it instead of config default
+- Add a `terms` array to quote metadata:
+  ```
+  ["Prices valid for 30 days from quote date.",
+   "Payment terms: Net 30.",
+   "Full Terms & Conditions: https://www.crm.rebar.shop/terms"]
+  ```
+- Store `terms` in metadata and in the `notes` text (appended after exclusions)
+- Pass `project.name` into metadata as `project_name` so DraftQuotationEditor can display it
 
-### 2. Frontend: Load assumptions/inclusions/exclusions into notes if notes is empty (`src/components/accounting/documents/DraftQuotationEditor.tsx`)
-When loading quote metadata, if `notes` is empty but `assumptions`, `inclusions`, or `exclusions` arrays exist, build the notes string from them:
-```ts
-let resolvedNotes = meta.notes || "";
-if (!resolvedNotes && (meta.inclusions || meta.exclusions || meta.assumptions)) {
-  const parts: string[] = [];
-  if (meta.inclusions?.length) {
-    parts.push("INCLUSIONS:", ...meta.inclusions.map(i => `✅ ${i}`), "");
-  }
-  if (meta.exclusions?.length) {
-    parts.push("EXCLUSIONS:", ...meta.exclusions.map(e => `➖ ${e}`), "");
-  }
-  if (meta.assumptions?.length) {
-    parts.push("NOTES:", ...meta.assumptions.map(a => `• ${a}`));
-  }
-  resolvedNotes = parts.join("\n");
-}
-setNotes(resolvedNotes);
-```
-
-## Result
-- New AI quotes will have inclusions/exclusions pre-filled in the Notes/Terms area
-- Existing quotes with `assumptions` in metadata will also show them if notes was blank
-- The QuotationTemplate print view already renders `inclusions`/`exclusions` arrays — this populates them
+### 3. `src/components/accounting/documents/DraftQuotationEditor.tsx`
+- When loading metadata, also read `meta.terms` and store in local state
+- Pass `terms` through to the QuotationTemplate preview (already renders `data.terms`)
+- Use `data.notes` (from DB column) as the notes source — the backend now writes the full formatted text there, so the existing `resolvedNotes` fallback handles older quotes
 
 ## Files Changed
+- `src/components/accounting/GenerateQuotationDialog.tsx`
 - `supabase/functions/ai-generate-quotation/index.ts`
 - `src/components/accounting/documents/DraftQuotationEditor.tsx`
 
