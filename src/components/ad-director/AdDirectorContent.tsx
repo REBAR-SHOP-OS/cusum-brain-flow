@@ -591,10 +591,9 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                           className="h-7 text-xs flex-1"
                           onClick={e => e.stopPropagation()}
                         />
-                        <Button
+                         <Button
                           size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
+                          className="h-7 w-7 p-0 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0"
                           disabled={clip.status === "generating"}
                           onClick={() => handleRegenerateScene(clip.sceneId, scenePrompts[clip.sceneId])}
                         >
