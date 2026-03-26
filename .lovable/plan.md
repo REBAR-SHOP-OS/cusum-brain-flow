@@ -1,55 +1,37 @@
 
-
-# Speed Up Video Generation Pipeline
+# Remove Text from Generated Videos
 
 ## Problem
-Video generation is slow because scenes are generated **sequentially** — each scene waits for the previous one to fully complete (including polling) before starting. For a 60s video with 4 scenes, this means ~4x the generation time.
+The AI video generation models (Wan, Veo, Sora) are rendering the descriptive prompt text as visual text inside the generated video frames. The user sees the cinematic prompt description overlaid on the actual video content.
 
-## Root Causes Identified
+## Root Cause
+Video generation AI models sometimes interpret descriptive text in prompts as instructions to render text in the video. The current `negativePrompt` only includes `"text overlay"` as a weak signal. The system prompts already say "NO text/titles/brand names in video prompts" but this only controls what the AI prompt writer outputs — it doesn't instruct the video generation model itself to avoid rendering text.
 
-1. **Sequential scene generation** (`backgroundAdDirectorService.ts` line 385-461): A `for` loop with `await` processes scenes one-by-one
-2. **2-second artificial delay** between scenes (line 460): `await new Promise(r => setTimeout(r, 2000))`
-3. **5-second polling interval** (line 519): Could start faster and adapt
-4. **Score + improve loop** (lines 292-338): Up to 2 improvement attempts per prompt, each requiring 2 edge function calls — can be made optional or parallelized better
+## Solution
+Add explicit "no text" instructions at every level where prompts reach video generation models.
 
-## Solution — Parallel Scene Generation + Faster Polling
-
-### 1. `src/lib/backgroundAdDirectorService.ts`
-
-**Parallelize scene generation:**
-- Replace the sequential `for` loop (lines 385-461) with `Promise.allSettled()` — submit all scenes simultaneously, then poll all in parallel
-- Remove the 2-second inter-scene delay
-
-**Adaptive polling interval:**
-- Start polling at 3s, increase to 5s after 10 attempts (API is doing heavy work early, results come later)
-- Poll all active scenes in a single loop instead of separate sequential polls
-
-**Skip quality improvement when speed matters:**
-- Make the score+improve phase run in parallel for all prompts (already partially parallel)
-- Reduce `MAX_IMPROVE_ATTEMPTS` from 2 to 1
-
-### 2. `src/components/social/VideoStudioContent.tsx`
-
-- Reduce initial poll interval from 5000ms to 3000ms for single-clip generation
-
-## Changes Summary
-
-```text
-Before (sequential):
-  Scene 1: submit → poll (2-10min) → done
-  Scene 2: submit → poll (2-10min) → done  
-  Scene 3: submit → poll (2-10min) → done
-  Total: 6-30 min
-
-After (parallel):
-  Scene 1: submit ─┐
-  Scene 2: submit ─┤→ poll all → all done
-  Scene 3: submit ─┘
-  Total: 2-10 min (limited by slowest scene)
-```
+### Changes
 
 | File | Change |
 |---|---|
-| `backgroundAdDirectorService.ts` | Parallel scene submission + parallel polling, remove 2s delay, adaptive poll interval |
-| `VideoStudioContent.tsx` | Reduce poll interval from 5s to 3s |
+| `src/lib/backgroundAdDirectorService.ts` | 1. Strengthen `negativePrompt` to explicitly forbid all text rendering. 2. Append a "no text" suffix to every `motionPrompt` before sending to generate-video |
+| `src/components/ad-director/AdDirectorContent.tsx` | Same treatment for the single-scene regeneration path |
+| `src/components/social/VideoStudioContent.tsx` | Append "no text" suffix to prompts in VideoStudio generation paths |
+| `supabase/functions/generate-video/index.ts` | Server-side safety net: always append "no text" instruction to any prompt before sending to Wan/Veo/Sora APIs, and strengthen negative prompt |
+| `supabase/functions/ad-director-ai/index.ts` | Add explicit instruction in ANALYZE_SCRIPT_PROMPT and WRITE_CINEMATIC_PROMPT_SYSTEM: "NEVER describe any text, words, letters, typography, titles, or written content in the video prompt" |
+| `supabase/functions/transform-video-prompt/index.ts` | Add rule to SYSTEM_PROMPT: "NEVER include any text, words, letters, or typography descriptions in the output prompt" |
 
+### Key additions
+
+**Negative prompt** (strengthened):
+```
+"static image, zoom only, no motion, blurry, text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind"
+```
+
+**Prompt suffix** (appended to every video prompt):
+```
+" No text, no words, no letters, no titles, no typography, no written content anywhere in the video."
+```
+
+**Edge function safety net** (in generate-video):
+Before sending to any provider API, strip any remaining text-rendering instructions and append the no-text suffix — ensuring zero text in generated videos regardless of what the prompt says.
