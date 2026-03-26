@@ -1415,6 +1415,14 @@ export function ProVideoEditor({
         onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
       />
 
+      {/* Edit Overlay Dialog */}
+      <EditOverlayDialog
+        open={!!editingOverlay}
+        overlay={editingOverlay}
+        onSave={(id, newContent) => setOverlays(prev => prev.map(o => o.id === id ? { ...o, content: newContent } : o))}
+        onClose={() => setEditingOverlay(null)}
+      />
+
       {/* Hidden audio file input */}
       <input
         ref={audioUploadRef}
