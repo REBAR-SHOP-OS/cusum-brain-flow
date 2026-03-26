@@ -1,77 +1,79 @@
 
+Goal: make AI Auto quotation generation succeed for weight-summary PDFs like `20.pdf` by fixing the root extraction path, not just the UI error toast.
 
-# Fix: AI Estimate Still Producing $0 Quotes from Weight Summary PDFs
+What I found
+- The failure is real and reproducible in the backend:
+  - recent `estimation_projects` for file `20.pdf` all saved with `total_weight_kg = 0`
+  - `ai-estimate` logs show the AI returns JSON items with `bar_size: null`, `quantity: null`, `cut_length_mm: null`
+  - one run even inserted/attempted useless rows and still completed with zero totals
+- The frontend message is just the last guard:
+  - `GenerateQuotationDialog.tsx` throws `"No rebar data could be extracted..."` when `estData.summary.total_weight_kg <= 0`
+- The current rescue logic is not strong enough:
+  - `parseWeightSummaryFallback()` only parses the AI response text, not the actual extracted PDF text
+  - `rescueAIItems()` only works if AI already gave valid `bar_size` + `weight_kg`, which it did not
+  - rows with missing `bar_size` still pass too far through the pipeline and produce zero-weight projects
 
-## Root Cause (3 issues)
+Plan
 
-### Issue 1: Useless-data fallback parses wrong text
-Line 412 calls `parseWeightSummaryFallback(content)` where `content` is the AI's JSON response (e.g. `[{"bar_size":"10M","quantity":null,...}]`). The fallback regex looks for patterns like `10M = 261.74 kg` — these patterns exist in the original PDF text but NOT in a JSON array. The fallback finds nothing and the useless items remain.
+1. Strengthen `ai-estimate` fallback hierarchy
+- Keep AI extraction as the first attempt
+- Add a stricter “useful extraction” test:
+  - require at least one item with valid `bar_size`
+  - and either positive `weight_kg` or positive `cut_length_mm`
+- If the AI response fails that test, discard it entirely and switch to deterministic summary extraction
 
-### Issue 2: AI returns items with quantity=null, bypassing null-safe defaults
-The DB error shows `quantity: null` despite `?? 1` guards. This happens because the AI explicitly returns `quantity: null` (not `undefined`). While `null ?? 1` should return `1`, the error log timestamps suggest the recently-added null guards may not have deployed successfully, OR the items bypass the calculation loop entirely.
+2. Make deterministic summary extraction work from the real document signal
+- Expand `parseWeightSummaryFallback()` to support the actual summary formats seen in weight-summary reports:
+  - bar-size totals like `10M 261.74`, `15M 18,657.43`, `20M 25,858.14`
+  - grand totals like `Grand Total 44,777 kg`
+  - common summary labels like `Weight Summary Report`, `Element wise Summary`
+- Use multiple text sources for fallback in order:
+  - AI response text
+  - filename/context prompt text
+  - any fetched plain-text content when available
+- If bar-size totals are found, create synthetic `SUM-TOT-*` items directly
 
-### Issue 3: No raw PDF text available for fallback parsing  
-The function sends the PDF as base64 to the AI but never stores the AI's text interpretation of the document. When the fallback needs to regex-parse for weight patterns, it has no useful text to work with.
+3. Harden item sanitation before calculation
+- Normalize every extracted item before `calculateItem()`:
+  - coerce `quantity`, `cut_length_mm`, `weight_kg`
+  - default hooks/laps safely
+  - drop items with missing `bar_size` unless they have enough data to be converted into a summary item
+- This prevents null/garbage items from influencing summary totals
 
-## Fix — `supabase/functions/ai-estimate/index.ts`
+4. Prevent zero-weight projects from being persisted as “successful”
+- In `ai-estimate`, add a final backend guard before inserting the project:
+  - if `summary.total_weight_kg <= 0`, return a structured extraction error instead of inserting a completed zero-weight project
+- This keeps bad estimation projects out of the database and gives the upload flow a real backend failure instead of a misleading “completed but zero” state
 
-### A. Extract weight data directly from AI JSON items (new approach)
-Instead of relying on regex parsing of text, add a new fallback that extracts data from the AI's own JSON items. If items have `bar_size` but null weights/quantities, create proper SUM- items using the bar sizes and any weight hints from the AI response.
+5. Improve the upload flow error handling
+- In `GenerateQuotationDialog.tsx`, preserve the current user-facing error, but prefer backend-provided extraction failure messages when available
+- This will show a more accurate reason if extraction failed upstream
 
-```ts
-function rescueAIItems(items: any[]): EstimationItemInput[] {
-  // Group by bar_size and sum any weight_kg hints
-  const bySize = new Map<string, number>();
-  for (const item of items) {
-    const size = item.bar_size;
-    if (!size || !MASS_PER_M[size]) continue;
-    const w = parseFloat(item.weight_kg) || 0;
-    bySize.set(size, (bySize.get(size) || 0) + w);
-  }
-  // Create SUM items from grouped data
-  const rescued: EstimationItemInput[] = [];
-  for (const [barSize, weightKg] of bySize) {
-    if (weightKg <= 0) continue;
-    const massPerM = MASS_PER_M[barSize];
-    rescued.push({
-      element_type: "mixed", element_ref: "Weight Summary",
-      mark: `SUM-TOT-${barSize}`, bar_size: barSize,
-      quantity: 1, cut_length_mm: Math.round((weightKg / massPerM) * 1000),
-      weight_kg: weightKg, shape_code: "straight",
-      hook_type_near: "none", hook_type_far: "none",
-      lap_type: "none", num_laps: 0,
-    } as any);
-  }
-  return rescued;
-}
+Expected result
+- Weight summary PDFs produce synthetic summary items with non-zero tonnage
+- `estimation_projects.total_weight_kg` is non-zero for valid summary reports
+- quotation generation proceeds and uses the existing pricing rules, delivery, and shop drawing options
+- invalid/empty AI responses no longer create misleading zero-value estimation projects
+
+Technical details
+```text
+Current failing path:
+PDF -> AI returns null-filled JSON -> rescue logic too weak -> zero-weight items/project -> UI blocks quote
+
+Planned fixed path:
+PDF -> AI attempt
+   -> if useful: calculate normally
+   -> if useless: deterministic summary parser builds SUM items
+   -> if still zero: return extraction error and do not save project
 ```
 
-### B. Fix the useless-data fallback to try all sources
-After the useless-data check, try three fallback sources in order:
-1. `parseWeightSummaryFallback(content)` — existing (AI response text)
-2. `rescueAIItems(extractedItems)` — NEW: extract from the AI's own JSON
-3. If both fail, the items remain but with hardened null defaults
-
-### C. Harden null defaults with `|| 1` instead of `?? 1`
-Change all null-safe guards to use explicit Number coercion:
-```ts
-quantity: Number(item.quantity) || 1,
-cut_length_mm: Number(item.cut_length_mm) || 0,
-weight_kg: Number(item.weight_kg) || 0,
-```
-This catches `null`, `undefined`, `NaN`, empty strings, and `0` (for quantity only).
-
-### D. Guard the insert with a pre-filter
-Before inserting, filter out any items that still have null/undefined required fields:
-```ts
-const safeRows = itemRows.filter(r => r.quantity != null && r.quantity > 0);
-```
-
-## Result
-- Weight summary PDFs: AI items with bar_size info but null quantities get rescued into proper SUM- items with real weights
-- No more `NOT NULL` constraint violations on insert
-- Downstream quotation generation sees real tonnage
-
-## Files Changed
+Files to update
 - `supabase/functions/ai-estimate/index.ts`
+- `src/components/accounting/GenerateQuotationDialog.tsx`
 
+Validation after implementation
+- Upload the same `20.pdf`
+- Confirm `ai-estimate` returns non-zero `summary.total_weight_kg`
+- Confirm a new estimation project is saved with non-zero weight
+- Confirm `ai-generate-quotation` creates a quotation with non-zero total
+- Confirm delivery and shop drawings appear when selected
