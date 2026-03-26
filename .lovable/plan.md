@@ -1,49 +1,64 @@
 
-
-# Make Tag Cards Horizontal and Fit to Page
+# Fix "Add Quote Manual" runtime error
 
 ## Problem
-The Cards view in Tags & Export currently displays `RebarTagCard` components in a **single-column vertical stack** constrained to `max-w-[4.5in]`. The user wants them laid out **horizontally** (side by side), fitting the available page width.
+The manual quote editor crashes with:
 
-## Root Cause
-Line 429 in `TagsExportView.tsx`:
+```text
+Cannot read properties of undefined (reading 'toLowerCase')
 ```
-grid grid-cols-1 gap-6 max-w-[4.5in] mx-auto
+
+This happens in `src/components/accounting/documents/DraftQuotationEditor.tsx` when opening the customer picker.
+
+## Root cause
+`DraftQuotationEditor` loads customers from `v_customers_clean` using:
+
+```ts
+.select("customer_id, display_name, company_name")
 ```
-This forces a single column with a narrow max-width.
+
+But the component later assumes each customer has this shape:
+
+```ts
+{ id: string; name: string; ... }
+```
+
+So existing customer rows come in with `display_name` / `customer_id`, while the UI uses `c.name` and `c.id`. That makes `c.name` undefined and the filter crashes at:
+
+```ts
+c.name.toLowerCase()
+```
 
 ## Fix
+Apply a surgical fix only in:
 
-### File: `src/components/office/TagsExportView.tsx` (line 429)
+- `src/components/accounting/documents/DraftQuotationEditor.tsx`
 
-Change the grid container from single-column to a responsive multi-column layout that fills the page:
+### Changes
+1. Normalize customer rows from `v_customers_clean` into the local `CustomerOption` shape before saving to state:
+   - `id = customer_id`
+   - `name = display_name || company_name || "Unknown"`
 
-```
-// Before
-<div className="p-6 grid grid-cols-1 gap-6 max-w-[4.5in] mx-auto">
+2. Make customer filtering null-safe:
+   - replace direct `c.name.toLowerCase()` with a safe fallback
 
-// After
-<div className="p-6 flex flex-wrap gap-6 justify-center">
-```
-
-### File: `src/components/office/RebarTagCard.tsx` (line 63)
-
-Remove the fixed `height: "6in"` so the card sizes naturally to its content (prevents empty space on cards with no shape image), and use `min-height` instead for print:
-
-```tsx
-// Before
-style={{ width: "4in", height: "6in", boxSizing: "border-box" }}
-
-// After
-style={{ width: "4in", minHeight: "auto", boxSizing: "border-box" }}
-```
-
-Keep the `print:break-after-page` class so printing still works at 4×6.
+3. Make customer rendering/select logic resilient:
+   - use safe fallbacks where customer name is displayed
+   - keep newly created customers working exactly as they do now
 
 ## Result
-Cards flow horizontally across the page width, wrapping to the next row when space runs out. On a typical 1200px viewport, 2 cards fit side by side. The layout is responsive — narrower screens show 1 column, wider screens show 2-3.
+- Manual quote editor opens without crashing
+- Customer search works for both existing and newly created customers
+- The dropdown shows proper customer names instead of blank/undefined values
+- No backend, routing, database, or unrelated UI changes
 
-## Files Changed
-- `src/components/office/TagsExportView.tsx` — change grid to flex-wrap layout (line 429)
-- `src/components/office/RebarTagCard.tsx` — remove fixed height (line 63)
+## File to change
+- `src/components/accounting/documents/DraftQuotationEditor.tsx`
 
+## Validation
+After implementation, verify:
+1. Open **Add Quote Manual**
+2. Customer dropdown opens without error
+3. Typing in search no longer crashes
+4. Existing customers appear correctly
+5. Creating a new customer still works
