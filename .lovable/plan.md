@@ -1,38 +1,47 @@
 
 
-# Fix: View Record Link + Email Delivery Investigation
+# Fix: Profile Lookup Bug in notify-lead-assignees
 
-## Issue 1: View Record Link Goes to Pipeline Instead of Lead Drawer
+## Investigation Summary
 
-**Current**: `recordLink` in `notify-lead-assignees/index.ts` (line 80) is:
+**Good news**: The latest deployment IS working. At 13:01 UTC, sattar logged "@Neel Mahajan hi yoyo" and emails were successfully sent to neel@rebar.shop, ben@rebar.shop, and ali@epcdesignbuild.ca.
+
+**The failed request at 12:59** was neel logging a note — this ran against the OLD code (before the actor-token-lookup fix was deployed), which fell to the expired admin fallback token → `invalid_grant`. No emails were sent for that request.
+
+## Remaining Bug
+
+There is a `profiles` table lookup bug. The table has two ID columns:
+- `profiles.id` — internal profile ID (e.g., `ee659c5c` for sattar)
+- `profiles.user_id` — auth user ID (e.g., `c9b3adc2` for sattar)
+
+The function receives `actor_id` = auth user ID, but queries `profiles` using `.eq("id", actor_id)` instead of `.eq("user_id", actor_id)`. This causes:
+
+1. **Actor email never resolves** → actor is never excluded from recipients (they get emails about their own actions)
+2. **Sender email defaults to "ai@rebar.shop"** in logs even when using actor's token
+
+## Fix
+
+### `supabase/functions/notify-lead-assignees/index.ts`
+
+Two lines need changing:
+
+**Line 47**: Actor email lookup
 ```
-https://cusum-brain-flow.lovable.app/sales/pipeline?lead={sales_lead_id}
+// FROM:  .eq("id", actor_id)
+// TO:    .eq("user_id", actor_id)
 ```
 
-**Problem**: This loads the pipeline page but doesn't automatically open the lead drawer. The `?lead=` param needs to be handled by the SalesPipeline page to auto-open the drawer.
+**Line 168**: Sender email lookup  
+```
+// FROM:  .eq("id", actor_id)
+// TO:    .eq("user_id", actor_id)
+```
 
-**Fix**: Check if SalesPipeline.tsx already reads the `lead` query param to open a drawer. If not, add that logic.
-
-## Issue 2: neel@rebar.shop Not Receiving Email
-
-The function only sends to **assignees** of the lead. If neel is not assigned to the specific lead, they won't get a notification. Need to verify the recipient logic filters correctly.
-
-Also: the actor (person who logged the note) is NOT excluded from recipients — so if neel is both the actor AND an assignee, they'd get an email about their own action. That's likely undesirable.
-
-## Changes
-
-### 1. `src/pages/sales/SalesPipeline.tsx`
-- On mount / URL change, read `?lead=` query param
-- If present, auto-open the SalesLeadDrawer for that lead ID
-
-### 2. `supabase/functions/notify-lead-assignees/index.ts`
-- **Exclude the actor** from recipients (don't email yourself about your own action)
-- Keep all other assignees as recipients
-
-## Files Changed
+This ensures:
+- Actor is correctly excluded from recipients (no self-notifications)
+- Email "From" header shows the correct sender email in logs
 
 | File | Change |
 |---|---|
-| `src/pages/sales/SalesPipeline.tsx` | Auto-open drawer when `?lead=` query param present |
-| `supabase/functions/notify-lead-assignees/index.ts` | Exclude actor from recipient list |
+| `supabase/functions/notify-lead-assignees/index.ts` | Fix two `profiles` queries to use `user_id` instead of `id` |
 
