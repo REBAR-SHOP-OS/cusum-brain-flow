@@ -208,7 +208,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
         activity_type: "note",
         body,
       }, {
-        onSuccess: () => {
+        onSuccess: async () => {
           setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false);
 
           // Auto-add @mentioned users as assignees
