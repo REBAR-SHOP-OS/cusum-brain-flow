@@ -133,7 +133,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
             <button
               onClick={handleDownload}
               className="shrink-0 p-1.5 rounded-lg hover:bg-muted/60 transition-colors"
-              title="دانلود"
+              title="Download"
             >
               <Download className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
