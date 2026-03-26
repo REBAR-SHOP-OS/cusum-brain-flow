@@ -138,6 +138,9 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
           )}
         </div>
 
+        {/* ── Smart Buttons ── */}
+        <LeadSmartButtons leadId={lead.id} />
+
         {/* ── Info Grid — Odoo form layout ── */}
         <div className="px-4 py-3 border-b border-border bg-background">
           <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 text-[13px]">
