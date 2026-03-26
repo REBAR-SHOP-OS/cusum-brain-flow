@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   MessageSquare, Phone, Mail, Calendar, Clock, Send,
-  CheckCircle2, Loader2, ArrowRight, Zap, Paperclip, X, Image, Video,
+  CheckCircle2, XCircle, Loader2, ArrowRight, Zap, Paperclip, X, Image, Video,
   MessageCircle,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
