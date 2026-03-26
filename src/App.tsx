@@ -67,6 +67,7 @@ import AccountingWorkspace from "./pages/AccountingWorkspace";
 import AccountingHealth from "./pages/AccountingHealth";
 import CustomerAction from "./pages/CustomerAction";
 import CustomerPortal from "./pages/CustomerPortal";
+import AcceptQuote from "./pages/AcceptQuote";
 import CEOPortal from "./pages/CEOPortal";
 import LiveMonitor from "./pages/LiveMonitor";
 import VendorPortal from "./pages/VendorPortal";
@@ -260,6 +261,7 @@ const App = () => (
                     <Route path="/install" element={<Install />} />
                     <Route path="/knowledge-base" element={<KnowledgeBasePublic />} />
                     <Route path="/unsubscribe" element={<Unsubscribe />} />
+                    <Route path="/accept-quote/:quoteId" element={<AcceptQuote />} />
 
                     {/* Redirect broken notification paths */}
                     <Route path="/hr" element={<Navigate to="/timeclock" replace />} />
