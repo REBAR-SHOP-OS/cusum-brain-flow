@@ -617,7 +617,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
               onClick={async () => {
                 try {
                   await saveProject.mutateAsync({
-                    name: brand.name || "Untitled",
+                    name: (() => { const p = service.getState().userPrompt; return p ? (p.length > 50 ? p.substring(0, 50).replace(/\s+\S*$/, "…") : p) : (brand.name || "Untitled"); })(),
                     brandName: brand.name,
                     segments,
                     storyboard,

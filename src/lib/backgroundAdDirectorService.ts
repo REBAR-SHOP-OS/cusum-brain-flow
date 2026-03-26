@@ -366,7 +366,7 @@ class BackgroundAdDirectorService {
       try {
         const savedId = await saveProject({
           id: this.state.projectId ?? undefined,
-          name: brand.name ? `${brand.name} Ad` : "Untitled Ad",
+          name: prompt ? (prompt.length > 50 ? prompt.substring(0, 50).replace(/\s+\S*$/, "…") : prompt) : (brand.name ? `${brand.name} Ad` : "Untitled Ad"),
           brandName: brand.name, script: prompt,
           segments: newSegments, storyboard: storyboardWithDefaults,
           clips: initialClips, continuity: continuityProfile, status: "analyzed",
