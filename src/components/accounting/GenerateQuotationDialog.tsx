@@ -58,6 +58,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
       setAddToPipeline(false);
       setDeliveryDistance("");
       setIncludeShopDrawings(true);
+      setScrapPercent("15");
       setTab("project");
     }
   }, [open, leadCustomerName, leadId]);
