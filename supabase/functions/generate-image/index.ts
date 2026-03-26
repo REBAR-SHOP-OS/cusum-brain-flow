@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 import { cropToAspectRatio } from "../_shared/imageResize.ts";
 
 /** Search Pexels for a reference photo matching the prompt keywords */
