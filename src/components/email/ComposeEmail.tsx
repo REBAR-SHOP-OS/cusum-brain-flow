@@ -22,6 +22,9 @@ interface ComposeEmailProps {
 
 export function ComposeEmail({ onClose, onSent, replyTo }: ComposeEmailProps) {
   const [to, setTo] = useState(replyTo?.to || "");
+  const [cc, setCc] = useState("");
+  const [bcc, setBcc] = useState("");
+  const [showCcBcc, setShowCcBcc] = useState(false);
   const [subject, setSubject] = useState(replyTo?.subject ? `Re: ${replyTo.subject.replace(/^Re:\s*/i, "")}` : "");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
