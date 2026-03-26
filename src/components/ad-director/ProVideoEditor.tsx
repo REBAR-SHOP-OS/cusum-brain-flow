@@ -823,6 +823,10 @@ export function ProVideoEditor({
         const scene = storyboard.find(s => s.segmentId === seg.id);
         if (!scene) continue;
 
+        // Prefer dedicated voiceover text from AI over generic segment text
+        const voiceoverText = scene.voiceover?.trim() || seg.text.trim();
+        if (!voiceoverText) continue;
+
         // Ensure we have clip duration — measure from URL if not cached
         let clipDur = clipDurations[scene.id];
         if (!clipDur) {
