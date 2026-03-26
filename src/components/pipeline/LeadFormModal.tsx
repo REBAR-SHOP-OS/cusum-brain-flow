@@ -55,12 +55,15 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
   const [assigneePopoverOpen, setAssigneePopoverOpen] = useState(false);
 
   const { data: customers = [] } = useQuery({
-    queryKey: ["customers-select"],
+    queryKey: ["customers-select", companyId],
+    enabled: !!companyId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("v_customers_clean" as any)
         .select("customer_id, display_name, company_name")
-        .order("display_name");
+        .eq("company_id", companyId!)
+        .order("display_name")
+        .limit(5000);
       if (error) throw error;
       return (data as unknown) as Array<{customer_id: string; display_name: string; company_name: string | null}>;
     },
