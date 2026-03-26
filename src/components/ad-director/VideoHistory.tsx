@@ -90,7 +90,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
         {!url || hasError ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
             {isDraft ? <FileText className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
-            <span className="text-[10px]">{isDraft ? "پیش‌نویس" : "ویدیو در دسترس نیست"}</span>
+            <span className="text-[10px]">{isDraft ? "Draft" : "Video unavailable"}</span>
           </div>
         ) : (
           <>
