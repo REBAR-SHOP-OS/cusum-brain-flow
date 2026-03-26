@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTeamMessages, useSendMessage, useMyProfile, type TeamMessage, type ChatAttachment } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
+import { useOpenDM } from "@/hooks/useChannelManagement";
 import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
