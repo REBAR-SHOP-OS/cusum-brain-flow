@@ -253,7 +253,7 @@ Deno.serve((req) =>
         headers: { "Content-Type": "application/json", Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY") || "" },
         body: JSON.stringify({
           to: customer_email,
-          subject: `Invoice ${invoiceNumber} — REBAR.SHOP`,
+          subject: `Invoice ${invoiceNumber} - REBAR.SHOP`,
           body: brandedInvoiceHtml,
         }),
       });
