@@ -76,7 +76,7 @@ export function AdDirectorContent() {
   const clipsRef = useRef<ClipOutput[]>([]);
   useEffect(() => { clipsRef.current = clips; }, [clips]);
 
-  const handleSubmit = useCallback(async (prompt: string, ratio: string, images: File[], introImage: File | null, outroImage: File | null, duration: string) => {
+  const handleSubmit = useCallback(async (prompt: string, ratio: string, images: File[], introImage: File | null, outroImage: File | null, duration: string, characterImage: File | null) => {
     setUserPrompt(prompt);
     setUserRatio(ratio);
     setScript(prompt);
@@ -84,6 +84,22 @@ export function AdDirectorContent() {
     setVideoParams(prev => ({ ...prev, ratio }));
     setFinalVideoUrl(null);
     cancelRef.current = false;
+
+    // Upload character image to storage if provided
+    let characterImageUrl: string | undefined;
+    if (characterImage) {
+      try {
+        const path = `character-refs/${Date.now()}-${characterImage.name}`;
+        const { uploadToStorage } = await import("@/lib/storageUpload");
+        const { error: upErr } = await uploadToStorage("ad-assets", path, characterImage);
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from("ad-assets").getPublicUrl(path);
+          characterImageUrl = urlData?.publicUrl;
+        }
+      } catch (e) {
+        console.warn("Character image upload failed, continuing without it", e);
+      }
+    }
 
     try {
       // Phase 1: Analyze
@@ -99,6 +115,7 @@ export function AdDirectorContent() {
         script: prompt,
         brand,
         assetDescriptions: images.length > 0 ? images.map(f => f.name).join(", ") : undefined,
+        characterImageUrl,
         modelOverrides,
       }, { timeoutMs: 90_000 }));
 
@@ -117,6 +134,7 @@ export function AdDirectorContent() {
               action: "write-cinematic-prompt",
               scene, brand, continuityProfile,
               previousScene: idx > 0 ? rawStoryboard[idx - 1] : null,
+              characterImageUrl,
               modelOverrides,
             }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
