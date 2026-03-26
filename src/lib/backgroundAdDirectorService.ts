@@ -220,6 +220,7 @@ class BackgroundAdDirectorService {
         script: prompt,
         brand,
         targetDuration: videoParams.duration,
+        sceneCount: videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15),
         assetDescriptions: images.length > 0 ? images.map(f => f.name).join(", ") : undefined,
         characterImageUrl,
         introImageUrl,
