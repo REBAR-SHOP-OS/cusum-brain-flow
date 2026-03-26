@@ -17,7 +17,8 @@ interface ChatPromptBarProps {
     images: File[],
     introImage: File | null,
     outroImage: File | null,
-    duration: string
+    duration: string,
+    characterImage: File | null
   ) => void;
   disabled?: boolean;
 }
