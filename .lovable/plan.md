@@ -1,25 +1,40 @@
 
 
-# Add Delete Button to Video History Cards
+# Show Welcome Video on Ad Director Entry
 
 ## What
-Add a trash/delete icon next to the download button on each video history card. Clicking it will delete the project from the database using the existing `deleteProject` mutation from `useAdProjectHistory`.
+When a user enters the Ad Director page, display the uploaded intro video (motion graphic) as a welcome/demo reel before they interact with the prompt bar. The video auto-plays muted, and the user can dismiss it or it transitions to the normal idle state after playback ends.
 
 ## Changes
 
-### `src/components/ad-director/VideoHistory.tsx`
+### 1. Copy the video asset
+Copy `user-uploads://Create_motion_graphic_202603261204_1.mp4` to `public/videos/ad-director-intro.mp4` so it can be referenced via `staticFile` or direct URL.
 
-1. **Props**: Add `onDelete?: (id: string) => void` to both `VideoHistoryProps` and `VideoCard` props
-2. **Import**: Add `Trash2` from lucide-react
-3. **VideoCard**: Add a delete button next to the download button with `e.stopPropagation()`, matching the download button style but with red hover color
-4. **Pass through**: `VideoHistory` passes `onDelete` down to each `VideoCard`
+### 2. `src/components/ad-director/AdDirectorContent.tsx`
 
-### Where `VideoHistory` is used — pass `deleteProject`
+In the `flowState === "idle"` block, add a welcome video section above the existing content:
 
-Find the parent that renders `<VideoHistory>` and pass `onDelete={deleteProject.mutate}` from `useAdProjectHistory`.
+- Add state: `const [showIntro, setShowIntro] = useState(true)`
+- When `showIntro` is true and `flowState === "idle"`, render a `<video>` element that:
+  - Auto-plays, muted, with controls visible
+  - Has a rounded container with subtle styling
+  - Shows a "Skip" button overlay (top-right corner)
+  - On `onEnded`, sets `showIntro = false`
+  - On skip click, sets `showIntro = false`
+- When `showIntro` is false, show the normal idle UI (Film icon, prompt bar, history)
+- Use `sessionStorage` to only show the intro once per session (check on mount, set flag after first view)
+
+### Layout
+```text
+┌──────────────────────────────┐
+│  [video player - autoplay]   │
+│                    [Skip ▸]  │
+└──────────────────────────────┘
+```
+After video ends or skip → normal idle state with prompt bar.
 
 | File | Change |
 |---|---|
-| `VideoHistory.tsx` | Add `Trash2` delete button next to download, with `onDelete` callback |
-| Parent component | Pass `deleteProject.mutate` as `onDelete` prop |
+| `public/videos/ad-director-intro.mp4` | Copy uploaded video |
+| `AdDirectorContent.tsx` | Add intro video state + conditional render in idle block, sessionStorage guard |
 
