@@ -249,6 +249,18 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
             });
           }
 
+          // Auto-add the commenter themselves if @rebar.shop and not already assigned
+          if (onAddAssignee && currentUserId) {
+            const assignedIds2 = new Set(assignees.map(a => a.profile_id));
+            if (!assignedIds2.has(currentUserId)) {
+              const myProfile = allProfiles?.find(p => p.id === currentUserId);
+              const myEmail = (myProfile as any)?.email as string | undefined;
+              if (myEmail?.endsWith("@rebar.shop")) {
+                onAddAssignee(currentUserId);
+              }
+            }
+          }
+
           // Fire notification email to assignees and track outcome
           const noteTimestamp = new Date().toISOString();
           const notifyBody = {
