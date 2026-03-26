@@ -279,7 +279,13 @@ function buildMasterReportHTML(people: PersonActivity[], dateStr: string, alertS
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
 <div style="max-width:700px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;margin-top:20px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-  <div style="background:#1a1a2e;padding:24px 32px;color:#fff;position:relative;">
+  <div style="background:#1a1a2e;padding:14px 32px;">
+    <table cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="width:32px;vertical-align:middle;"><img src="https://cusum-brain-flow.lovable.app/brand/rebar-logo.png" alt="Rebar.shop" width="28" height="28" style="display:block;border-radius:4px;" /></td>
+      <td style="padding-left:10px;vertical-align:middle;"><span style="color:#fff;font-size:15px;font-weight:600;">Rebar.shop</span></td>
+    </tr></table>
+  </div>
+  <div style="background:#1a1a2e;padding:0 32px 24px;color:#fff;position:relative;">
     <h1 style="margin:0;font-size:20px;">🧠 Master Business Pulse</h1>
     <p style="margin:4px 0 0;opacity:0.8;font-size:14px;">${dateStr} — Team Performance Intelligence</p>
     <div style="position:absolute;right:32px;top:50%;transform:translateY(-50%);background:${avgColor};color:#fff;border-radius:50%;width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-direction:column;">

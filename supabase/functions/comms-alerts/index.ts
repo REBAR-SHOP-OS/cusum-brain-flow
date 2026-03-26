@@ -209,6 +209,12 @@ function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentN
 
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
 <div style="max-width:560px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+  <div style="background:#1a1a2e;padding:14px 24px;">
+    <table cellpadding="0" cellspacing="0" border="0"><tr>
+      <td style="width:32px;vertical-align:middle;"><img src="https://cusum-brain-flow.lovable.app/brand/rebar-logo.png" alt="Rebar.shop" width="28" height="28" style="display:block;border-radius:4px;" /></td>
+      <td style="padding-left:10px;vertical-align:middle;"><span style="color:#fff;font-size:15px;font-weight:600;">Rebar.shop</span></td>
+    </tr></table>
+  </div>
   <div style="background:#dc2626;padding:16px 24px;color:#fff;">
     <h2 style="margin:0;font-size:16px;">${icon} ${title}</h2>
   </div>
