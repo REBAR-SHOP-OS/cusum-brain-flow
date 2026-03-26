@@ -23,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
+import { LeadSmartButtons } from "./LeadSmartButtons";
 import { LiveNoteTaker } from "./LiveNoteTaker";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { AssigneeManager } from "@/components/pipeline/AssigneeManager";
@@ -136,6 +137,9 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
             </div>
           )}
         </div>
+
+        {/* ── Smart Buttons ── */}
+        <LeadSmartButtons leadId={lead.id} />
 
         {/* ── Info Grid — Odoo form layout ── */}
         <div className="px-4 py-3 border-b border-border bg-background">
