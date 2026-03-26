@@ -23,6 +23,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
+import { LeadSmartButtons } from "./LeadSmartButtons";
 import { LiveNoteTaker } from "./LiveNoteTaker";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
 import { AssigneeManager } from "@/components/pipeline/AssigneeManager";
