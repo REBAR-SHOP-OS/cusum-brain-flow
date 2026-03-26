@@ -1,40 +1,39 @@
 
 
-# Add Looping Background Video to Ad Director
+# Fix Build Error + Enhance Visual Contrast for Ad Director UI
 
-## What
-The uploaded video (`Series_of_pictures_202603261228.mp4`) should play continuously as a muted, looping background behind the Ad Director idle screen. The content (title, prompt bar, history) overlays on top of it.
+## Problem
+1. **Build error** at line 617-618: mismatched closing tags/parentheses
+2. **Visual contrast**: The content area (title, upload boxes, prompt bar) is too faint against the background video — needs stronger colors and backdrop
 
 ## Changes
 
-### 1. Copy uploaded video to project
-Copy `user-uploads://Series_of_pictures_202603261228.mp4` to `public/videos/ad-director-bg.mp4`.
+### 1. `src/components/ad-director/AdDirectorContent.tsx` — Fix build error
 
-### 2. `src/components/ad-director/AdDirectorContent.tsx`
+Line 617-618 has a syntax issue with the closing `)}` and `</div>`. The `)}` on line 617 closes the result state conditional, then `</div>` on 618 closes the `z-10` wrapper div. Need to verify proper nesting — likely a missing or extra parenthesis from the previous edit.
 
-In the idle state (after intro ends, lines 380-398), wrap the content in a relative container and add a `<video>` element behind everything:
+### 2. `src/components/ad-director/AdDirectorContent.tsx` — Stronger overlay content area
 
-- Add a `fixed inset-0 z-0` video element with `autoPlay loop muted playsInline` and `object-cover`
-- Add a dark overlay (`bg-black/50`) on top of the video for readability
-- Place existing content (title, prompt bar, history) in a `relative z-10` container
+In the idle state (lines 392-410), wrap the visible content in a backdrop panel:
+- Add a `rounded-3xl bg-black/60 backdrop-blur-md border border-white/10 p-8` container around the title, upload boxes, and prompt bar
+- This creates a visible "glass card" effect that makes content pop against the video
 
-The background video plays on ALL states (idle, analyzing, generating, result) — always visible behind everything. It stays muted and loops infinitely.
+### 3. `src/components/ad-director/ChatPromptBar.tsx` — Boost upload box & input contrast
 
-### Structure
-```text
-┌─────────────────────────────┐
-│  <video> bg (fixed, loop)   │  ← z-0
-│  ┌───────────────────────┐  │
-│  │  dark overlay bg/50   │  │  ← z-[1]
-│  │  ┌─────────────────┐  │  │
-│  │  │  actual content  │  │  │  ← z-10
-│  │  └─────────────────┘  │  │
-│  └───────────────────────┘  │
-└─────────────────────────────┘
-```
+- **Upload boxes** (lines 158-161, 187-190, 216-219): Change `border-border/40 bg-muted/10` to `border-white/30 bg-white/10 backdrop-blur-sm` for better visibility
+- **Text colors**: Change `text-muted-foreground/60` and `text-muted-foreground` on icons/labels to `text-white/70` and `text-white/80`
+- **Input area** (line 242): Change `bg-card/60` to `bg-black/50 backdrop-blur-md border-white/20` for stronger contrast
+- **Textarea placeholder**: Ensure white text on dark glass background
+- **Bottom bar buttons**: Change `bg-muted/40 border-border` to `bg-white/10 border-white/20 text-white/80`
+
+### 4. `src/components/ad-director/AdDirectorContent.tsx` — Title text contrast
+
+- Title `h2` (line 397): Add `text-white` class
+- Subtitle `p` (line 398): Change to `text-white/70`
+- Icon container (line 394): Change to `bg-white/10`
 
 | File | Change |
 |---|---|
-| `public/videos/ad-director-bg.mp4` | Copy uploaded video |
-| `AdDirectorContent.tsx` | Add looping background video behind all content |
+| `AdDirectorContent.tsx` | Fix build error, add glass-card wrapper, boost text colors to white |
+| `ChatPromptBar.tsx` | Stronger backgrounds, white text/icons, better contrast on all elements |
 
