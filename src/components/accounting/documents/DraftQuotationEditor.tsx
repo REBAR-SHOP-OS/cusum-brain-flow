@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { toast } from "@/components/ui/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import brandLogo from "@/assets/brand-logo.png";
@@ -258,11 +259,9 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     try {
       // Save first to ensure latest data
       await handleSave();
-      const { data, error } = await supabase.functions.invoke("send-quote-email", {
-        body: { quote_id: quoteId, customer_email: customerEmail.trim(), action: "send_quote" },
+      const data = await invokeEdgeFunction("send-quote-email", {
+        quote_id: quoteId, customer_email: customerEmail.trim(), action: "send_quote",
       });
-      if (error) throw new Error(error.message || "Failed to send");
-      if (data?.error) throw new Error(data.error);
       toast({ title: "Email sent", description: data?.message || `Quotation sent to ${customerEmail}` });
       setEmailDialogOpen(false);
     } catch (err: any) {
