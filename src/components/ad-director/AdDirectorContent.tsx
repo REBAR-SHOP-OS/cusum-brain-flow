@@ -37,6 +37,7 @@ export function AdDirectorContent() {
   // Local UI-only state
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [modelOverrides] = useState<ModelOverrides>({});
+  const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
 
   // Pipeline state — driven by singleton service
   const [pipelineState, setPipelineState] = useState<AdDirectorPipelineState>(service.getState());
