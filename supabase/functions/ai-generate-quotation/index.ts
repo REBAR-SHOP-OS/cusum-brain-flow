@@ -151,204 +151,104 @@ Deno.serve((req) =>
     const cageTonnes = (cageWeightKg * (1 + scrapPct / 100)) / 1000;
     const nonCageTonnes = (nonCageWeightKg * (1 + scrapPct / 100)) / 1000;
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      return new Response(JSON.stringify({ error: "AI not configured" }), {
-        status: 500,
+    // ─── GUARD: Block $0 quotes ───
+    if (totalWeightKg <= 0 && bomItems.length === 0) {
+      return new Response(JSON.stringify({
+        error: "No measurable rebar was extracted from this estimation project. Cannot generate a $0 quotation. Please re-upload the document or add items manually.",
+        failure_reason: "zero_weight",
+        total_weight_kg: totalWeightKg,
+        item_count: bomItems.length,
+      }), {
+        status: 422,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Build pricing rules string for the AI prompt
+    // ─── DETERMINISTIC PRICING (no AI arithmetic) ───
     const fabTable = pricingConfig.fabrication_pricing?.price_table || FALLBACK_PRICING_CONFIG.fabrication_pricing.price_table;
     const cageRate = pricingConfig.cage_pricing_rule?.rate_per_ton_cad ?? 5500;
     const shippingPerKm = pricingConfig.shipping_per_km ?? 3;
     const truckCap = pricingConfig.truck_capacity_tons ?? 7;
-    const epoxyMult = pricingConfig.epoxy_galvanized_multiplier ?? 2;
 
-    const systemPrompt = `You are a professional Canadian rebar quotation generator. You MUST use ONLY the pricing rules below. Do NOT guess or invent prices.
-
-PRICING RULES:
-1. SCRAP: Add ${scrapPct}% scrap to all rebar tonnages before pricing.
-2. CAGE PRICING: All rebar cage steel (pile cages, column cages, pier cages, drilled shaft cages) = CAD $${cageRate}/ton. Shop drawings are NOT included — add separately.
-3. NON-CAGE FABRICATION PRICING (by tonnage bracket):
-${fabTable.map((r: any) => `   ${r.ton_range}: $${r.price_per_ton}/ton, Shop Drawings: $${typeof r.shop_drawing_price === 'number' ? r.shop_drawing_price : r.shop_drawing_price}`).join("\n")}
-4. EPOXY/GALVANIZED: Double the fabrication price per ton (${epoxyMult}x multiplier).
-5. SHIPPING: $${shippingPerKm} CAD per km per truckload, ${truckCap} tons per truck. number_of_trips = ceil(total_tonnage / ${truckCap}).
-6. STRAIGHT REBAR PRICES (if applicable): ${JSON.stringify(pricingConfig.straight_rebars || FALLBACK_PRICING_CONFIG.straight_rebars)}
-
-OUTPUT FORMAT:
-- Line Items: material+fabrication, cages (if any), shop drawings, shipping
-- Each line item: description, quantity (tonnes or units), unit (tonnes/ea/km), unit_price, amount
-- Notes section with assumptions and exclusions
-- Validity: 30 days
-- Currency: CAD
-- All prices must come from the rules above. Never invent rates.`;
-
-    const barSizeSummary = Object.entries(barSizeGroups).map(([size, g]) =>
-      `${size}: ${g.count} pieces, ${g.total_weight_kg.toFixed(2)} kg`
-    ).join("\n");
-
-    const userPrompt = `Generate a professional quotation for customer "${customerName}" based on this estimation project:
-
-Project: ${project.name}
-Raw Total Weight: ${totalWeightKg.toFixed(2)} kg (${(totalWeightKg / 1000).toFixed(3)} tonnes)
-With ${scrapPct}% Scrap: ${totalWithScrap.toFixed(2)} kg (${totalTonnes.toFixed(3)} tonnes)
-Cage Steel: ${cageTonnes.toFixed(3)} tonnes (price at $${cageRate}/ton)
-Non-Cage Steel: ${nonCageTonnes.toFixed(3)} tonnes (use fabrication bracket pricing)
-
-Bar Size Breakdown:
-${barSizeSummary}
-
-BOM Items (${bomItems.length} items):
-${JSON.stringify(Object.entries(barSizeGroups).map(([size, g]) => ({ bar_size: size, total_qty: g.count, total_weight_kg: g.total_weight_kg, items: g.items })), null, 2)}
-
-Apply the pricing rules from the system prompt. Include shop drawings as a separate line item. If no shipping distance is specified, note it as TBD in assumptions.`;
-
-    const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "create_quotation",
-              description: "Create a structured quotation with line items using the pricing rules provided",
-              parameters: {
-                type: "object",
-                properties: {
-                  line_items: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        description: { type: "string" },
-                        quantity: { type: "number" },
-                        unit: { type: "string" },
-                        unit_price: { type: "number" },
-                        amount: { type: "number" },
-                      },
-                      required: ["description", "quantity", "unit", "unit_price", "amount"],
-                    },
-                  },
-                  scrap_percentage: { type: "number" },
-                  shipping_cost: { type: "number" },
-                  shop_drawing_cost: { type: "number" },
-                  notes: { type: "string" },
-                  assumptions: {
-                    type: "array",
-                    items: { type: "string" },
-                  },
-                  validity_days: { type: "number" },
-                  delivery_terms: { type: "string" },
-                },
-                required: ["line_items", "notes", "validity_days", "assumptions"],
-              },
-            },
-          },
-        ],
-        tool_choice: { type: "function", function: { name: "create_quotation" } },
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("AI error:", aiResponse.status, errText);
-      if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "AI rate limit exceeded, please try again later." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (aiResponse.status === 402) {
-        return new Response(JSON.stringify({ error: "AI credits exhausted. Please add funds." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ error: "AI generation failed" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const fabRate = getFabricationRate(nonCageTonnes > 0 ? nonCageTonnes : totalTonnes, fabTable);
+    
+    const lineItems: any[] = [];
+    
+    // Line 1: Non-cage rebar fabrication & supply
+    if (nonCageTonnes > 0) {
+      const amount = Number((nonCageTonnes * fabRate.price_per_ton).toFixed(2));
+      lineItems.push({
+        description: `Rebar Fabrication & Supply – ${project.name} (incl. ${scrapPct}% scrap)`,
+        quantity: Number(nonCageTonnes.toFixed(3)),
+        unit: "tonnes",
+        unit_price: fabRate.price_per_ton,
+        amount,
+      });
+    } else if (totalTonnes > 0 && cageTonnes <= 0) {
+      // All rebar, no cage distinction
+      const amount = Number((totalTonnes * fabRate.price_per_ton).toFixed(2));
+      lineItems.push({
+        description: `Rebar Supply & Fabrication – ${project.name} (incl. ${scrapPct}% scrap)`,
+        quantity: Number(totalTonnes.toFixed(3)),
+        unit: "tonnes",
+        unit_price: fabRate.price_per_ton,
+        amount,
       });
     }
 
-    const aiData = await aiResponse.json();
-    const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
-    let quotationData: any;
-
-    if (toolCall?.function?.arguments) {
-      quotationData = JSON.parse(toolCall.function.arguments);
-    } else {
-      // Deterministic fallback using tonnage bracket pricing
-      const fabRate = getFabricationRate(nonCageTonnes, fabTable);
-      const nonCageCost = nonCageTonnes * fabRate.price_per_ton;
-      const cageCost = cageTonnes * cageRate;
-      const shopDrawingCost = fabRate.shop_drawing_price;
-      const grandTotal = nonCageCost + cageCost + shopDrawingCost;
-
-      const lineItems: any[] = [];
-      if (nonCageTonnes > 0) {
-        lineItems.push({
-          description: `Rebar Fabrication & Supply – ${project.name} (incl. ${scrapPct}% scrap)`,
-          quantity: Number(nonCageTonnes.toFixed(3)),
-          unit: "tonnes",
-          unit_price: fabRate.price_per_ton,
-          amount: Number(nonCageCost.toFixed(2)),
-        });
-      }
-      if (cageTonnes > 0) {
-        lineItems.push({
-          description: `Rebar Cage Fabrication & Supply – ${project.name}`,
-          quantity: Number(cageTonnes.toFixed(3)),
-          unit: "tonnes",
-          unit_price: cageRate,
-          amount: Number(cageCost.toFixed(2)),
-        });
-      }
-      if (shopDrawingCost > 0) {
-        lineItems.push({
-          description: "Shop Drawings",
-          quantity: 1,
-          unit: "ea",
-          unit_price: shopDrawingCost,
-          amount: shopDrawingCost,
-        });
-      }
-      if (lineItems.length === 0) {
-        lineItems.push({
-          description: `Rebar Supply – ${project.name}`,
-          quantity: Number(totalTonnes.toFixed(3)),
-          unit: "tonnes",
-          unit_price: fabRate.price_per_ton,
-          amount: Number((totalTonnes * fabRate.price_per_ton).toFixed(2)),
-        });
-      }
-
-      quotationData = {
-        line_items: lineItems,
-        scrap_percentage: scrapPct,
-        shop_drawing_cost: shopDrawingCost,
-        notes: "Prices valid for 30 days. Subject to material availability. All weights include 15% scrap allowance.",
-        assumptions: [
-          "Quote based on customer-provided sizes and quantities",
-          "Design by others",
-          "Shipping distance TBD — not included",
-          "Black rebar unless otherwise specified",
-          `${scrapPct}% scrap factor applied`,
-        ],
-        validity_days: 30,
-      };
+    // Line 2: Cage steel
+    if (cageTonnes > 0) {
+      const amount = Number((cageTonnes * cageRate).toFixed(2));
+      lineItems.push({
+        description: `Rebar Cage Fabrication & Supply`,
+        quantity: Number(cageTonnes.toFixed(3)),
+        unit: "tonnes",
+        unit_price: cageRate,
+        amount,
+      });
     }
 
-    const quoteTotal = quotationData.line_items.reduce((s: number, li: any) => s + (li.amount || 0), 0);
+    // Line 3: Shop drawings
+    const shopDrawingCost = typeof fabRate.shop_drawing_price === 'number' ? fabRate.shop_drawing_price : 2500;
+    if (shopDrawingCost > 0) {
+      lineItems.push({
+        description: "Shop Drawings",
+        quantity: 1,
+        unit: "ea",
+        unit_price: shopDrawingCost,
+        amount: shopDrawingCost,
+      });
+    }
+
+    // Compute total
+    const quoteTotal = lineItems.reduce((s: number, li: any) => s + (li.amount || 0), 0);
+
+    // ─── SECOND GUARD: If deterministic pricing still produces $0 ───
+    if (quoteTotal <= 0) {
+      return new Response(JSON.stringify({
+        error: `Pricing produced $0 total despite ${totalWeightKg.toFixed(0)} kg of rebar. This indicates a pricing configuration issue.`,
+        failure_reason: "pricing_zero",
+        total_weight_kg: totalWeightKg,
+        total_tonnes: totalTonnes,
+        item_count: bomItems.length,
+      }), {
+        status: 422,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const validUntil = new Date();
-    validUntil.setDate(validUntil.getDate() + (quotationData.validity_days || 30));
+    validUntil.setDate(validUntil.getDate() + 30);
+
+    const assumptions = [
+      "Quote based on customer-provided sizes and quantities",
+      "Design by others",
+      "Shipping distance TBD — not included in this quote",
+      "Black rebar unless otherwise specified",
+      `${scrapPct}% scrap factor applied`,
+      "Prices valid for 30 days from quote date",
+      "Subject to material availability",
+    ];
 
     // Generate quote number
     const { count } = await serviceClient
@@ -364,25 +264,27 @@ Apply the pricing rules from the system prompt. Include shop drawings as a separ
         customer_id: project.customer_id || leadInfo?.customer_id || null,
         total_amount: quoteTotal,
         valid_until: validUntil.toISOString(),
-        notes: quotationData.notes || null,
+        notes: `Prices valid for 30 days. Subject to material availability. All weights include ${scrapPct}% scrap allowance.`,
         source: "ai_estimation",
         salesperson: "AI Generated",
         company_id: companyId,
         created_by: userId,
         status: "Draft Quotation",
         metadata: {
-          line_items: quotationData.line_items,
+          line_items: lineItems,
           estimation_project_id,
           estimation_project_name: project.name,
-          delivery_terms: quotationData.delivery_terms || null,
+          delivery_terms: null,
           total_weight_kg: totalWeightKg,
           total_weight_with_scrap_kg: totalWithScrap,
-          scrap_percentage: quotationData.scrap_percentage || scrapPct,
-          shipping_cost: quotationData.shipping_cost || 0,
-          shop_drawing_cost: quotationData.shop_drawing_cost || 0,
-          assumptions: quotationData.assumptions || [],
+          scrap_percentage: scrapPct,
+          shipping_cost: 0,
+          shop_drawing_cost: shopDrawingCost,
+          assumptions,
           customer_name: customerName,
           lead_id: effectiveLeadId || null,
+          pricing_method: "deterministic",
+          tonnage_bracket: fabRate.price_per_ton,
         },
       })
       .select()
@@ -394,6 +296,8 @@ Apply the pricing rules from the system prompt. Include shop drawings as a separ
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    console.log(`Quote ${quoteNum} created: $${quoteTotal.toFixed(2)} for ${totalTonnes.toFixed(3)}t`);
 
     return new Response(JSON.stringify({ quote: newQuote }), {
       status: 200,

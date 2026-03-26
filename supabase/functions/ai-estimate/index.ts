@@ -13,6 +13,95 @@ import {
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
+// Mass per meter lookup for deterministic fallback (kg/m)
+const MASS_PER_M: Record<string, number> = {
+  "10M": 0.785, "15M": 1.570, "20M": 2.355, "25M": 3.925, "30M": 5.495, "35M": 7.850,
+};
+
+/**
+ * Deterministic fallback parser for weight summary PDFs.
+ * Scans AI response text (or raw content) for bar-size weight totals
+ * and creates synthetic SUM- items with preserved weights.
+ */
+function parseWeightSummaryFallback(text: string): EstimationItemInput[] {
+  const items: EstimationItemInput[] = [];
+
+  // Pattern 1: Look for bar size totals like "10M" followed by a weight number
+  // Matches patterns like: "10M = 261.74 kg", "15M: 18,657.43", "20M 25858.14 kg"
+  const barSizePattern = /\b(10|15|20|25|30|35)\s*M\b[^0-9]*?([\d,]+\.?\d*)\s*(?:kg|Kg|KG)?/gi;
+  let match;
+  const barTotals = new Map<string, number>();
+
+  while ((match = barSizePattern.exec(text)) !== null) {
+    const barSize = `${match[1]}M`;
+    const weight = parseFloat(match[2].replace(/,/g, ""));
+    if (weight > 0 && weight < 10_000_000) {
+      // Keep the largest weight found for each bar size (likely the total)
+      const existing = barTotals.get(barSize) || 0;
+      if (weight > existing) barTotals.set(barSize, weight);
+    }
+  }
+
+  // Pattern 2: Look for grand total
+  const grandTotalMatch = text.match(/grand\s*total[^0-9]*([\d,]+\.?\d*)\s*(?:kg|Kg|KG|kgs|Kgs)/i);
+  const grandTotalKg = grandTotalMatch ? parseFloat(grandTotalMatch[1].replace(/,/g, "")) : 0;
+
+  // Pattern 3: Look for element-level weights
+  const elementPatterns = [
+    { regex: /raft\s*slab[^0-9]*([\d,]+\.?\d*)\s*(?:kg)?/gi, type: "slab", ref: "RAFT SLAB", abbr: "RS" },
+    { regex: /\bwall\b[^0-9]*([\d,]+\.?\d*)\s*(?:kg)?/gi, type: "wall", ref: "WALL", abbr: "WALL" },
+    { regex: /grade\s*beam[^0-9]*([\d,]+\.?\d*)\s*(?:kg)?/gi, type: "grade_beam", ref: "GRADE BEAMS", abbr: "GB" },
+    { regex: /\bpier[s]?\b[^0-9]*([\d,]+\.?\d*)\s*(?:kg)?/gi, type: "pier", ref: "PIERS", abbr: "PIER" },
+    { regex: /\bcolumn[s]?\b[^0-9]*([\d,]+\.?\d*)\s*(?:kg)?/gi, type: "column", ref: "COLUMN", abbr: "COL" },
+    { regex: /\bfooting[s]?\b[^0-9]*([\d,]+\.?\d*)\s*(?:kg)?/gi, type: "footing", ref: "FOOTING", abbr: "FT" },
+  ];
+
+  // If we have bar-size totals, create one item per bar size
+  if (barTotals.size > 0) {
+    console.log("Fallback found bar-size totals:", Object.fromEntries(barTotals));
+    for (const [barSize, weightKg] of barTotals) {
+      const massPerM = MASS_PER_M[barSize] || 1.570;
+      const cutLengthMm = (weightKg / massPerM) * 1000;
+      items.push({
+        element_type: "mixed",
+        element_ref: "Weight Summary",
+        mark: `SUM-TOT-${barSize}`,
+        bar_size: barSize,
+        quantity: 1,
+        cut_length_mm: Math.round(cutLengthMm),
+        hook_type_near: "none",
+        hook_type_far: "none",
+        lap_type: "none",
+        num_laps: 0,
+        shape_code: "straight",
+        weight_kg: weightKg,
+      } as any);
+    }
+  }
+  // If no bar-size totals but have grand total, create a single item
+  else if (grandTotalKg > 0) {
+    console.log("Fallback found grand total:", grandTotalKg, "kg");
+    const defaultBarSize = "20M";
+    const massPerM = MASS_PER_M[defaultBarSize]!;
+    items.push({
+      element_type: "mixed",
+      element_ref: "Grand Total",
+      mark: `SUM-TOT-${defaultBarSize}`,
+      bar_size: defaultBarSize,
+      quantity: 1,
+      cut_length_mm: Math.round((grandTotalKg / massPerM) * 1000),
+      hook_type_near: "none",
+      hook_type_far: "none",
+      lap_type: "none",
+      num_laps: 0,
+      shape_code: "straight",
+      weight_kg: grandTotalKg,
+    } as any);
+  }
+
+  return items;
+}
+
 Deno.serve((req) =>
   handleRequest(req, async ({ userId, companyId, serviceClient: supabaseAdmin, body }) => {
     const {
@@ -298,6 +387,16 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
             } else {
               console.error("No JSON array found in AI response");
               console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
+            }
+          }
+
+          // ─── DETERMINISTIC FALLBACK: If AI returned 0 items, parse response text for weight summary data ───
+          if (extractedItems.length === 0 && content.length > 0) {
+            console.log("AI returned 0 items — attempting deterministic weight summary fallback");
+            const fallbackItems = parseWeightSummaryFallback(content);
+            if (fallbackItems.length > 0) {
+              extractedItems = fallbackItems;
+              console.log(`Fallback extracted ${extractedItems.length} summary items`);
             }
           }
         }
