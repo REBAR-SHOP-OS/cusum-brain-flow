@@ -24,7 +24,7 @@ import type { VideoParams } from "@/components/ad-director/VideoParameters";
 export type FlowState = "idle" | "analyzing" | "generating" | "result" | "editing";
 
 const QUALITY_THRESHOLD = 7.0;
-const MAX_IMPROVE_ATTEMPTS = 2;
+const MAX_IMPROVE_ATTEMPTS = 1;
 const EDGE_TIMEOUT_MS = 180_000;
 
 function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
