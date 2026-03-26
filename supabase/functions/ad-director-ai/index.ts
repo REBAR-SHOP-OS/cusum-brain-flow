@@ -365,15 +365,32 @@ Never use generic "cut" — specify type + reasoning.
 ## CONTINUITY PROFILE
 Return: subjectDescriptions, wardrobe, environment, timeOfDay, cameraStyle, motionRhythm, colorMood, lightingType, objectPlacement, lastFrameSummary, nextSceneBridge
 
+## CROSS-SCENE COHERENCE RULES (CRITICAL)
+- ALL scenes MUST share the same color palette, lighting style, and environment type unless the script explicitly changes location
+- Subject descriptions MUST be identical across all scenes — same person, same clothing, same props, same physical appearance
+- Every scene prompt after scene 1 MUST begin with a "continuity anchor": "Continuing in the same [environment], same [lighting], same [subject appearance] as previous scenes —"
+- The viewer MUST feel all clips are from the SAME film shoot, same location, same day, same camera setup
+- Color grading, contrast level, and saturation MUST remain consistent across all scenes
+- If scene 1 establishes warm golden lighting, ALL subsequent scenes must maintain warm golden lighting
+- Camera lens characteristics (focal length, depth of field) should remain consistent unless creatively motivated
+
 ## PROMPT RULES (80-150 words each)
 - Specific camera specs (lens mm, f-stop), lighting angles, material textures
 - NO camera brand names (ARRI, RED, Sony) — describe characteristics instead
 - NO text/titles/brand names in video prompts — overlays handled by editor
 - After scene 1: "Continue seamlessly from previous clip, preserving location, subject, lighting, pacing"
+- Each prompt MUST embed the continuity profile details (environment, lighting, color mood, subject) directly into the description
 - Example lighting: "golden hour backlight, tungsten fill 45° left, volumetric haze"
 - Example materials: "weathered steel rebar with rust patina, fresh concrete with moisture sheen"`;
 
-const WRITE_CINEMATIC_PROMPT_SYSTEM = `Rewrite scene prompts into 80-150 word cinematic video generation prompts. Be specific: lens mm, f-stop, lighting angles, material textures, movement speed. NO camera brand names, NO text/titles in prompts. For continuation scenes, reference previous scene visuals.`;
+const WRITE_CINEMATIC_PROMPT_SYSTEM = `Rewrite scene prompts into 80-150 word cinematic video generation prompts. Be specific: lens mm, f-stop, lighting angles, material textures, movement speed. NO camera brand names, NO text/titles in prompts.
+
+CRITICAL COHERENCE REQUIREMENT:
+- Every prompt after scene 1 MUST begin with a visual continuity statement that references the exact same environment, lighting, color palette, and subject appearance from the continuity profile.
+- You MUST embed the continuity profile details (subject descriptions, wardrobe, environment, lighting type, color mood) directly into every prompt as visual anchors.
+- The viewer must feel ALL clips are from the SAME film shoot — same location, same day, same camera setup, same color grading.
+- Start continuation prompts with: "In the same [environment] with [lighting], [subject with exact appearance] —"
+- Never introduce new visual elements, color schemes, or lighting setups that contradict the established continuity profile.`;
 
 const SCORE_QUALITY_PROMPT = `Score this video generation prompt on 7 dimensions (0-10): realism, specificity, visualRichness, continuityStrength, brandRelevance, emotionalPersuasion, cinematicClarity. Include overall score and suggestion if < 7.`;
 
@@ -514,7 +531,20 @@ async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverri
   const { scene, brand, continuityProfile, previousScene } = body;
   if (!scene) throw new Error("Scene data is required");
 
+  const continuityBlock = continuityProfile ? `
+## MANDATORY CONTINUITY PROFILE (embed these details into the prompt):
+- Subject: ${continuityProfile.subjectDescriptions || "N/A"}
+- Wardrobe: ${continuityProfile.wardrobe || "N/A"}
+- Environment: ${continuityProfile.environment || "N/A"}
+- Time of Day: ${continuityProfile.timeOfDay || "N/A"}
+- Lighting: ${continuityProfile.lightingType || "N/A"}
+- Color Mood: ${continuityProfile.colorMood || "N/A"}
+- Camera Style: ${continuityProfile.cameraStyle || "N/A"}
+- Motion Rhythm: ${continuityProfile.motionRhythm || "N/A"}
+You MUST weave ALL of these visual anchors into the rewritten prompt so the video model generates visuals consistent with all other scenes.` : "";
+
   const userPrompt = `Rewrite this scene's prompt into a premium cinematic video generation prompt.
+${continuityBlock}
 
 Scene Objective: ${scene.objective}
 Visual Style: ${scene.visualStyle}
@@ -529,8 +559,8 @@ Continuity Requirements: ${scene.continuityRequirements}
 Original Prompt: ${scene.prompt}
 
 Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
-${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the first scene."}
-${continuityProfile ? `Continuity: ${JSON.stringify(continuityProfile)}` : ""}`;
+${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the FIRST scene — establish the visual identity that ALL subsequent scenes must follow."}
+${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}`;
 
   return await callAIAndExtract(
     apiKey,
