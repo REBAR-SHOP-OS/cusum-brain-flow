@@ -247,21 +247,6 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
 
   const docTabs: { id: DocType; label: string; icon: typeof Package; count: number }[] = [];
 
-  const handleCreateInvoiceFromQuote = async (quoteId: string) => {
-    setConvertingQuoteId(quoteId);
-    try {
-      const { data: result, error } = await supabase.functions.invoke("qb-sync-engine", {
-        body: { action: "convert-estimate-to-invoice", estimate_id: quoteId },
-      });
-      if (error) throw error;
-      toast({ title: "Invoice created", description: "Quotation converted to invoice successfully." });
-      data.loadAll?.();
-    } catch (err: any) {
-      toast({ title: "Conversion failed", description: err?.message || "Could not convert quotation to invoice.", variant: "destructive" });
-    } finally {
-      setConvertingQuoteId(null);
-    }
-  };
 
   return (
     <div className="space-y-4">
