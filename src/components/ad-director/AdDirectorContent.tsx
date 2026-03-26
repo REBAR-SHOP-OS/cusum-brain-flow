@@ -82,7 +82,7 @@ export function AdDirectorContent() {
     try {
       await service.startPipeline(
         enrichedPrompt, ratio, images, introImage, outroImage, duration, characterImage,
-        currentBrand, { ...currentVideoParams, ratio } as VideoParams,
+        currentBrand, { ...currentVideoParams, ratio, duration: parseInt(duration) || 15 } as VideoParams,
         modelOverrides,
         async (data) => {
           const savedId = await saveProject.mutateAsync(data);
