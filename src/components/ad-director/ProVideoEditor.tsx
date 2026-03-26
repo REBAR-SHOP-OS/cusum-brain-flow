@@ -1380,6 +1380,65 @@ export function ProVideoEditor({
           )}
         </div>
 
+        {/* ─── Right Sidebar Panel ─── */}
+        {panelOpen && (
+          <div className="w-[300px] shrink-0 border-l border-white/10 bg-black/60 backdrop-blur-md flex flex-col animate-in slide-in-from-right-5 duration-200">
+            {/* Panel Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+              <span className="text-xs font-semibold text-white capitalize">
+                {activeTab === "brand-kit" ? "Brand Kit" : activeTab === "card-editor" ? "Card Editor" : activeTab}
+              </span>
+              <button onClick={() => setPanelOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Panel Content */}
+            <ScrollArea className="flex-1 p-3">
+              {activeTab === "media" && (
+                <MediaTab
+                  storyboard={storyboard}
+                  clips={clips}
+                  segments={segments}
+                  selectedSceneIndex={selectedSceneIndex}
+                  onSelectScene={setSelectedSceneIndex}
+                  onRegenerateScene={onRegenerateScene}
+                  onUpdateClipUrl={onUpdateClipUrl}
+                />
+              )}
+              {activeTab === "text" && (
+                <TextTab onAddText={() => setTextDialogOpen(true)} />
+              )}
+              {activeTab === "music" && (
+                <MusicTab onTrackSelect={(track) => handleMusicSelect(track?.url || null)} />
+              )}
+              {activeTab === "script" && (
+                <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />
+              )}
+              {activeTab === "brand-kit" && (
+                <BrandKitTab
+                  brand={brand}
+                  logo={logoSettings}
+                  onLogoChange={setLogoSettings}
+                  onDeleteLogo={handleDeleteLogo}
+                  onReplaceLogo={handleReplaceLogo}
+                />
+              )}
+              {activeTab === "card-editor" && currentCardSettings && (
+                <IntroOutroEditor
+                  settings={currentCardSettings}
+                  onChange={handleCardSettingsChange}
+                  onApply={handleApplyCard}
+                />
+              )}
+              {activeTab === "card-editor" && !currentCardSettings && (
+                <div className="text-xs text-muted-foreground text-center py-8">
+                  Select a static card scene to edit
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+        )}
+
       </div>
 
       {/* ─── Bottom Timeline ─── */}
