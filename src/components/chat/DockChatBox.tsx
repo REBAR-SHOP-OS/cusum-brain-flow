@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTeamMessages, useSendMessage, useMyProfile, type TeamMessage, type ChatAttachment } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
+import { useOpenDM } from "@/hooks/useChannelManagement";
 import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
@@ -350,18 +351,28 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   }, [playingMsgId]);
 
   // --- Forward ---
-  const handleForwardSend = async (targetChannelId: string) => {
+  const openDMMutation = useOpenDM();
+  const forwardMembers = useMemo(() =>
+    profiles.filter(p => p.email?.endsWith("@rebar.shop") && p.id !== myProfile?.id),
+    [profiles, myProfile]
+  );
+
+  const handleForwardToMember = async (profileId: string) => {
     if (!forwardMsg || !myProfile) return;
     try {
-      await sendMutation.mutateAsync({
-        channelId: targetChannelId,
-        senderProfileId: myProfile.id,
-        text: `↪️ Forwarded from ${forwardMsg.sender?.full_name || "Unknown"}:\n${forwardMsg.original_text}`,
-        senderLang: myLang,
-        targetLangs,
-      });
-      toast.success("Message forwarded");
-      setForwardMsg(null);
+      const result = await openDMMutation.mutateAsync({ targetProfileId: profileId });
+      if (result?.id) {
+        await sendMutation.mutateAsync({
+          channelId: result.id,
+          senderProfileId: myProfile.id,
+          text: `↪️ Forwarded from ${forwardMsg.sender?.full_name || "Unknown"}:\n${forwardMsg.original_text}`,
+          senderLang: myLang,
+          targetLangs,
+          attachments: forwardMsg.attachments || [],
+        });
+        toast.success("Message forwarded");
+        setForwardMsg(null);
+      }
     } catch {
       toast.error("Failed to forward");
     }
@@ -454,15 +465,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
 
   const containerStyle: React.CSSProperties = { ...style, transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` };
 
-  // --- Forward channels list (simple: use existing open chats context isn't enough, load channels) ---
-  const [forwardChannels, setForwardChannels] = useState<{ id: string; name: string }[]>([]);
-  useEffect(() => {
-    if (!forwardMsg) return;
-    (async () => {
-      const { data } = await (supabase as any).from("team_channels").select("id, name").limit(20);
-      if (data) setForwardChannels(data.filter((c: any) => c.id !== channelId));
-    })();
-  }, [forwardMsg, channelId]);
+  // Forward members list is computed via forwardMembers memo above
 
   // --- Minimized state ---
   if (minimized) {
@@ -697,17 +700,23 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
             {forwardMsg.original_text.slice(0, 60)}
           </div>
           <ScrollArea className="flex-1">
-            {forwardChannels.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">No channels found</p>
+            {forwardMembers.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">No team members found</p>
             ) : (
               <div className="flex flex-col gap-0.5">
-                {forwardChannels.map((ch) => (
+                {forwardMembers.map((p) => (
                   <button
-                    key={ch.id}
-                    onClick={() => handleForwardSend(ch.id)}
-                    className="text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted transition-colors truncate"
+                    key={p.id}
+                    onClick={() => handleForwardToMember(p.id)}
+                    className="w-full flex items-center gap-2 text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
                   >
-                    # {ch.name}
+                    <Avatar className="w-5 h-5 flex-shrink-0">
+                      <AvatarImage src={p.avatar_url || undefined} />
+                      <AvatarFallback className={`text-[8px] text-white ${getAvatarColor(p.full_name || "?")}`}>
+                        {getInitials(p.full_name || "?")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="truncate">{p.full_name}</span>
                   </button>
                 ))}
               </div>
