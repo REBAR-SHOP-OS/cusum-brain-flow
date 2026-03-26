@@ -8,9 +8,10 @@ import type { AdProjectRow } from "@/hooks/useAdProjectHistory";
 interface VideoHistoryProps {
   projects: AdProjectRow[];
   onSelect?: (url: string) => void;
+  onDelete?: (id: string) => void;
 }
 
-export function VideoHistory({ projects, onSelect }: VideoHistoryProps) {
+export function VideoHistory({ projects, onSelect, onDelete }: VideoHistoryProps) {
   // Filter out blob: URLs (irrecoverable) and show only valid URLs
   const completed = projects.filter(
     (p) => p.final_video_url && !p.final_video_url.startsWith("blob:")
