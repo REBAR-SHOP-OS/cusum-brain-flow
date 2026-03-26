@@ -476,12 +476,5 @@ Rules:
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
     }
-  } catch (error) {
-    console.error("Extract manifest error:", error);
-    return new Response(
-      JSON.stringify({ status: "error", error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
   }, { functionName: "extract-manifest", requireCompany: false, wrapResult: false })
 );
