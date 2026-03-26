@@ -94,10 +94,31 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
       const styleLabels = selectedStyles.map(k => IMAGE_STYLES.find(s => s.key === k)?.label || k).join(", ");
       const dur = DURATIONS.find(d => d.value === duration)?.label || duration + "s";
 
+      // Build context lines
+      const contextLines: string[] = [];
+      if (selectedProducts.length > 0) contextLines.push(`Products: ${productLabels}`);
+      if (selectedStyles.length > 0) contextLines.push(`Styles: ${styleLabels}`);
+      contextLines.push(`Duration: ${dur}`);
+      contextLines.push(`Aspect Ratio: ${ratio}`);
+      if (introImage) contextLines.push("Intro Image: YES — use as opening reference frame, start the video matching this image");
+      if (characterImage) contextLines.push("Character Image: YES — maintain this person as the consistent narrator/subject across ALL scenes");
+      if (outroImage) contextLines.push("Outro Image: YES — use as closing reference frame, end the video transitioning to match this image");
+
+      const systemLines = [
+        "You are a cinematic video ad prompt writer for a construction/rebar company.",
+        "Write a single concise, vivid video prompt (2-3 sentences) for the given parameters.",
+        "Then on a new line, write '---VOICEOVER---' followed by a professional voiceover narration script (2-4 sentences) matching the video content.",
+        "The voiceover should be persuasive advertising copy suitable for text-to-speech.",
+        "Return ONLY the prompt text and voiceover, no quotes or extra formatting.",
+      ];
+      if (introImage) systemLines.push("An Intro Image is provided — start the video with a scene that visually matches and continues from the uploaded reference image.");
+      if (characterImage) systemLines.push("A Character Image is provided — feature that person consistently as the narrator and main subject throughout all scenes. Describe their appearance for continuity.");
+      if (outroImage) systemLines.push("An Outro Image is provided — end the video with a scene that visually transitions into and matches the uploaded closing reference image.");
+
       const { data, error } = await supabase.functions.invoke("ai-generic", {
         body: {
-          prompt: `Products: ${productLabels}\nStyles: ${styleLabels}\nDuration: ${dur}\nAspect Ratio: ${ratio}`,
-          systemPrompt: "You are a cinematic video ad prompt writer for a construction/rebar company.\nWrite a single concise, vivid video prompt (2-3 sentences) for the given parameters.\nThen on a new line, write '---VOICEOVER---' followed by a professional voiceover narration script (2-4 sentences) matching the video content.\nThe voiceover should be persuasive advertising copy suitable for text-to-speech.\nReturn ONLY the prompt text and voiceover, no quotes or extra formatting.",
+          prompt: contextLines.join("\n"),
+          systemPrompt: systemLines.join("\n"),
           model: "google/gemini-2.5-flash",
         },
       });
