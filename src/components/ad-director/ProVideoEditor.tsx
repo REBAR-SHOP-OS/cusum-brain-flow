@@ -998,9 +998,15 @@ export function ProVideoEditor({
     }
   };
 
-  // Overlays for current scene
+  // Overlays for current scene — filter text overlays by currentTime
   const currentSceneId = storyboard[selectedSceneIndex]?.id;
-  const sceneOverlays = overlays.filter(o => o.sceneId === currentSceneId);
+  const sceneOverlays = overlays.filter(o => {
+    if (o.sceneId !== currentSceneId) return false;
+    if (o.kind === "text" && o.startTime != null && o.endTime != null) {
+      return currentTime >= o.startTime && currentTime < o.endTime;
+    }
+    return true; // logos/shapes always visible
+  });
   const textOverlays = overlays.filter(o => o.kind === "text");
 
   // Logo handlers
