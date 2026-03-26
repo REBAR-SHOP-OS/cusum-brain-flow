@@ -129,7 +129,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
         .limit(100);
       return data || [];
     },
-    enabled: open && !!companyId && (tab === "upload" || addToPipeline),
+    enabled: open && !!companyId,
   });
 
   // File handlers
