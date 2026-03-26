@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle } from "lucide-react";
+import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle, Home } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExportDialog } from "./ExportDialog";
 import { ChatPromptBar } from "./ChatPromptBar";
@@ -413,6 +413,16 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
               <Pencil className="w-4 h-4" />
               Edit Video
             </Button>
+          </div>
+          {/* Home button */}
+          <div className="flex justify-center pt-2">
+            <button
+              onClick={() => service.patchState({ flowState: "idle" })}
+              className="w-12 h-12 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
+              title="Back to AI Video Director"
+            >
+              <Home className="w-5 h-5 text-primary" />
+            </button>
           </div>
         </div>
       )}
