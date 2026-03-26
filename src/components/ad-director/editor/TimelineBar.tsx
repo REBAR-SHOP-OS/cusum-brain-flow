@@ -117,7 +117,8 @@ interface TimelineBarProps {
   onResizeOverlay?: (id: string, size: "small" | "medium" | "large") => void;
   onToggleOverlayAnimation?: (id: string) => void;
   // Audio extras
-  onReRecordVoiceover?: (sceneId: string) => void;
+  onReRecordVoiceover?: (sceneId: string, customText?: string) => void;
+  onUpdateVoiceoverText?: (sceneId: string, text: string) => void;
   onEditVoiceoverText?: (sceneId: string) => void;
   // Drag-to-reposition
   onMoveOverlay?: (id: string, newSceneId: string) => void;
@@ -135,11 +136,12 @@ export function TimelineBar({
   onTrimScene, onStretchScene, onSplitScene, onDuplicateScene,
   onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
-  onReRecordVoiceover, onEditVoiceoverText,
+  onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
   onMoveOverlay, onMoveAudioTrack,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [textTrackMuted, setTextTrackMuted] = useState(false);
+  const [voiceoverTexts, setVoiceoverTexts] = useState<Record<string, string>>({});
   const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const thumbnails = useVideoThumbnails(clips);
@@ -701,7 +703,7 @@ export function TimelineBar({
                           <span className="text-[7px] text-sky-300/60 ml-1">{Math.round((at.volume ?? 1) * 100)}%</span>
                         </div>
                       </PopoverTrigger>
-                      <PopoverContent className="w-44 p-2" side="top" align="center">
+                      <PopoverContent className="w-56 p-2" side="top" align="center">
                           <div className="space-y-2">
                             <p className="text-[10px] font-medium text-foreground">{at.label} Volume</p>
                             <Slider
@@ -719,19 +721,36 @@ export function TimelineBar({
                                 ><Trash2 className="w-2.5 h-2.5" />Remove</button>
                               )}
                             </div>
-                            <div className="border-t border-border/30 pt-1.5 space-y-0.5">
-                              {onEditVoiceoverText && (
-                                <button
-                                  onClick={() => onEditVoiceoverText(at.sceneId)}
-                                  className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                                ><Edit3 className="w-2.5 h-2.5" />Edit Text</button>
-                              )}
-                              {onReRecordVoiceover && (
-                                <button
-                                  onClick={() => onReRecordVoiceover(at.sceneId)}
-                                  className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                                ><RotateCcw className="w-2.5 h-2.5" />Re-record</button>
-                              )}
+                            <div className="border-t border-border/30 pt-1.5 space-y-1.5">
+                              <p className="text-[9px] text-muted-foreground">Voiceover Text</p>
+                              <textarea
+                                className="w-full text-[10px] bg-muted/30 border border-border/30 rounded p-1.5 min-h-[48px] max-h-[80px] resize-none focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+                                value={voiceoverTexts[at.sceneId] ?? (() => {
+                                  const sc = storyboard.find(s => s.id === at.sceneId);
+                                  const sg = segments.find(s => s.id === sc?.segmentId);
+                                  return sc?.voiceover || sg?.text || "";
+                                })()}
+                                onChange={(e) => setVoiceoverTexts(prev => ({ ...prev, [at.sceneId]: e.target.value }))}
+                                placeholder="Enter voiceover text…"
+                              />
+                              <div className="flex gap-1">
+                                {onUpdateVoiceoverText && (
+                                  <button
+                                    onClick={() => {
+                                      const txt = voiceoverTexts[at.sceneId]?.trim();
+                                      if (txt) onUpdateVoiceoverText(at.sceneId, txt);
+                                    }}
+                                    disabled={!voiceoverTexts[at.sceneId]?.trim()}
+                                    className="flex-1 text-[9px] px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary flex items-center justify-center gap-1 disabled:opacity-40"
+                                  ><Edit3 className="w-2.5 h-2.5" />Save Text</button>
+                                )}
+                                {onReRecordVoiceover && (
+                                  <button
+                                    onClick={() => onReRecordVoiceover(at.sceneId, voiceoverTexts[at.sceneId]?.trim() || undefined)}
+                                    className="flex-1 text-[9px] px-2 py-1 rounded bg-accent/50 hover:bg-accent text-foreground flex items-center justify-center gap-1"
+                                  ><RotateCcw className="w-2.5 h-2.5" />Re-record</button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </PopoverContent>

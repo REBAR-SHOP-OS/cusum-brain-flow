@@ -759,12 +759,19 @@ export function ProVideoEditor({
     setOverlays(prev => prev.map(o => o.id === id ? { ...o, animated: !o.animated } : o));
   }, []);
 
-  const handleReRecordVoiceover = useCallback(async (sceneId: string) => {
+  const handleReRecordVoiceover = useCallback(async (sceneId: string, customText?: string) => {
     const scene = storyboard.find(s => s.id === sceneId);
     if (!scene) return;
     const seg = segments.find(s => s.id === scene.segmentId);
-    const voiceoverText = scene.voiceover?.trim() || seg?.text?.trim();
+    const voiceoverText = customText?.trim() || scene.voiceover?.trim() || seg?.text?.trim();
     if (!voiceoverText) return;
+
+    // If custom text provided, update the storyboard scene voiceover first
+    if (customText?.trim() && onUpdateStoryboard) {
+      const updated = storyboard.map(s => s.id === sceneId ? { ...s, voiceover: customText.trim() } : s);
+      onUpdateStoryboard(updated);
+    }
+
     toast({ title: "Re-recording voiceover…" });
     try {
       const response = await fetch(
@@ -789,7 +796,14 @@ export function ProVideoEditor({
     } catch (err: any) {
       toast({ title: "Re-record failed", description: err.message, variant: "destructive" });
     }
-  }, [storyboard, segments, toast]);
+  }, [storyboard, segments, toast, onUpdateStoryboard]);
+
+  const handleUpdateVoiceoverText = useCallback((sceneId: string, text: string) => {
+    if (!onUpdateStoryboard) return;
+    const updated = storyboard.map(s => s.id === sceneId ? { ...s, voiceover: text } : s);
+    onUpdateStoryboard(updated);
+    toast({ title: "Voiceover text saved" });
+  }, [storyboard, onUpdateStoryboard, toast]);
 
   const handleEditVoiceoverText = useCallback((sceneId: string) => {
     const sceneIdx = storyboard.findIndex(s => s.id === sceneId);
@@ -1399,6 +1413,7 @@ export function ProVideoEditor({
         onResizeOverlay={handleResizeOverlay}
         onToggleOverlayAnimation={handleToggleOverlayAnimation}
         onReRecordVoiceover={handleReRecordVoiceover}
+        onUpdateVoiceoverText={handleUpdateVoiceoverText}
         onEditVoiceoverText={handleEditVoiceoverText}
         onMoveOverlay={handleMoveOverlay}
         onMoveAudioTrack={handleMoveAudioTrack}
