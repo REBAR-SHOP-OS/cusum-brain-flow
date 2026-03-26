@@ -253,7 +253,7 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
                         key={targetStatus}
                         size="sm"
                         variant={btn.variant || "default"}
-                        onClick={() => onUpdate({ id: quotation.id, status: targetStatus })}
+                        onClick={() => handleTransitionClick(targetStatus)}
                         className="text-xs h-8"
                       >
                         <Icon className="w-3.5 h-3.5 mr-1" />{btn.label}
