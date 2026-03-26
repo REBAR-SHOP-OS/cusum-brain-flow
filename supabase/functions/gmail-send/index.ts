@@ -77,7 +77,26 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
   return data.access_token;
 }
 
-function createRawEmail(to: string, subject: string, body: string, fromEmail: string, replyTo?: { messageId: string; references: string }, customHeaders?: Record<string, string>, cc?: string, bcc?: string): string {
+interface EmailAttachment {
+  filename: string;
+  contentType: string;
+  base64: string;
+}
+
+function createRawEmail(
+  to: string,
+  subject: string,
+  body: string,
+  fromEmail: string,
+  replyTo?: { messageId: string; references: string },
+  customHeaders?: Record<string, string>,
+  cc?: string,
+  bcc?: string,
+  attachments?: EmailAttachment[]
+): string {
+  const boundary = `boundary_${crypto.randomUUID().replace(/-/g, "")}`;
+  const hasAttachments = attachments && attachments.length > 0;
+
   const emailLines = [
     `From: ${fromEmail}`,
     `To: ${to}`,
@@ -89,8 +108,13 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
   emailLines.push(
     `Subject: ${subject}`,
     "MIME-Version: 1.0",
-    "Content-Type: text/html; charset=utf-8",
   );
+
+  if (hasAttachments) {
+    emailLines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+  } else {
+    emailLines.push("Content-Type: text/html; charset=utf-8");
+  }
 
   if (replyTo) {
     emailLines.push(`In-Reply-To: ${replyTo.messageId}`);
@@ -103,7 +127,27 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
     }
   }
 
-  emailLines.push("", body);
+  if (hasAttachments) {
+    emailLines.push("");
+    emailLines.push(`--${boundary}`);
+    emailLines.push("Content-Type: text/html; charset=utf-8");
+    emailLines.push("");
+    emailLines.push(body);
+
+    for (const att of attachments!) {
+      emailLines.push(`--${boundary}`);
+      emailLines.push(`Content-Type: ${att.contentType}; name="${att.filename}"`);
+      emailLines.push("Content-Transfer-Encoding: base64");
+      emailLines.push(`Content-Disposition: attachment; filename="${att.filename}"`);
+      emailLines.push("");
+      // Gmail API expects standard base64 in the MIME part
+      emailLines.push(att.base64);
+    }
+
+    emailLines.push(`--${boundary}--`);
+  } else {
+    emailLines.push("", body);
+  }
 
   const email = emailLines.join("\r\n");
   const base64 = btoa(unescape(encodeURIComponent(email)));
