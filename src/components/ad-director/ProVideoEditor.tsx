@@ -194,6 +194,7 @@ export function ProVideoEditor({
   const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
   
   const [textDialogOpen, setTextDialogOpen] = useState(false);
+  const [editingOverlay, setEditingOverlay] = useState<VideoOverlay | null>(null);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
   const audioUploadRef = useRef<HTMLInputElement>(null);
