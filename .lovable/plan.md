@@ -1,19 +1,41 @@
 
 
-# Always Show Smart Buttons Bar in Sales Lead Drawer
+# Add Download Video Button to Editor Toolbar
 
-## Problem
-The `LeadSmartButtons` component hides itself entirely when there are no related quotations, orders, or invoices (`if (!hasAny) return null`). The user wants it always visible, showing zero counts like Odoo does (e.g., "No Meeting", "Quotations 0", "Orders 0").
+## What
+Add a Download icon button next to the "Edit" badge and "Schedule" button in the Pro Video Editor top toolbar, allowing users to download the final video directly.
 
 ## Fix
-**File: `src/components/sales/LeadSmartButtons.tsx`**
+**File: `src/components/ad-director/ProVideoEditor.tsx`** (around line 1218)
 
-1. Remove the `if (!hasAny) return null` guard (line 75) so the bar always renders
-2. Show all three items regardless of count (remove the `.filter(i => i.count > 0)` on line 82)
-3. Display "0" counts with muted styling to indicate no related records yet
+Insert a Download button between the "Edit" badge and the `ScheduleToSocialPopover`:
 
-This matches Odoo's behavior where smart buttons are always visible with their counts.
+```tsx
+<Badge variant="secondary" className="text-[9px]">Edit</Badge>
+
+{/* NEW: Download button */}
+<Button
+  variant="outline"
+  size="sm"
+  className="h-7 text-[10px] gap-1"
+  disabled={!finalVideoUrl}
+  onClick={() => {
+    if (!finalVideoUrl) return;
+    const a = document.createElement("a");
+    a.href = finalVideoUrl;
+    a.download = `${brand.name || "video"}-ad.mp4`;
+    a.click();
+  }}
+>
+  <Download className="w-3 h-3" />
+  Download
+</Button>
+
+<ScheduleToSocialPopover ... />
+```
+
+`Download` icon is already imported from `lucide-react` in this file.
 
 ## Files Changed
-- `src/components/sales/LeadSmartButtons.tsx` — remove conditional hiding, show all items always
+- `src/components/ad-director/ProVideoEditor.tsx` — add Download button in toolbar (line ~1218)
 
