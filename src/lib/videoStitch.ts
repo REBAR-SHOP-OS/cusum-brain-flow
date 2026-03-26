@@ -362,6 +362,7 @@ export async function stitchClips(
   let musicElement: HTMLAudioElement | null = null;
   let audioCtx: AudioContext | null = null;
   let musicGainNode: GainNode | null = null;
+  let voiceGainNode: GainNode | null = null;
 
   const hasVoice = !!overlays?.audioUrl;
   const hasMusic = !!overlays?.musicUrl;
