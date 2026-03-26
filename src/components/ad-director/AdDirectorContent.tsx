@@ -79,7 +79,7 @@ export function AdDirectorContent() {
 
     try {
       await service.startPipeline(
-        prompt, ratio, images, introImage, outroImage, duration, characterImage,
+        enrichedPrompt, ratio, images, introImage, outroImage, duration, characterImage,
         currentBrand, { ...currentVideoParams, ratio } as VideoParams,
         modelOverrides,
         async (data) => {
