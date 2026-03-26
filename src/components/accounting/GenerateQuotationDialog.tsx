@@ -246,6 +246,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           customer_name_override: customerName || null,
           delivery_distance_km: Number(deliveryDistance) || 0,
           include_shop_drawings: includeShopDrawings,
+          scrap_percent: Number(scrapPercent) || 15,
         },
       });
       if (quoteError) throw quoteError;
