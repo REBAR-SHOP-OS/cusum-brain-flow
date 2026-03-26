@@ -15,6 +15,7 @@ import {
 } from "@/types/adDirector";
 import { usePromptHistory } from "@/hooks/usePromptHistory";
 import { stitchClips } from "@/lib/videoStitch";
+import { VideoHistory } from "./VideoHistory";
 import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
 import { useAdProjectHistory } from "@/hooks/useAdProjectHistory";
 import { supabase } from "@/integrations/supabase/client";
