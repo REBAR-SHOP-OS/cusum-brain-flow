@@ -263,7 +263,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                     "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
                     ratio !== "16:9"
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
                   )}
                 >
                   <RatioIcon className="w-3.5 h-3.5" />
