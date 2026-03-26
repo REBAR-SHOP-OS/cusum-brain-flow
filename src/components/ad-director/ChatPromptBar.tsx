@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush } from "lucide-react";
+import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer } from "lucide-react";
 import { Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Smile, Clapperboard, Palette } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -206,49 +206,81 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
         {/* Bottom bar */}
         <div className="flex items-center justify-between px-3 pb-3">
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Ratio group */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">Ratio</span>
-              <div className="flex gap-0.5 rounded-lg border border-border/20 p-0.5">
-                {RATIOS.map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setRatio(r)}
-                    disabled={disabled}
-                    className={cn(
-                      "px-2 py-1 rounded-md text-[10px] font-medium transition-all",
-                      ratio === r ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
+            {/* Ratio Popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    ratio !== "16:9"
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <RatioIcon className="w-3.5 h-3.5" />
+                  {ratio}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-auto p-2">
+                <div className="grid grid-cols-4 gap-1">
+                  {RATIOS.map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setRatio(r)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                        ratio === r
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
-            <div className="w-px h-5 bg-border/30" />
-
-            {/* Duration group */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">Duration</span>
-              <div className="flex gap-0.5 rounded-lg border border-border/20 p-0.5">
-                {DURATIONS.map((d) => (
-                  <button
-                    key={d.value}
-                    onClick={() => setDuration(d.value)}
-                    disabled={disabled}
-                    className={cn(
-                      "px-2 py-1 rounded-md text-[10px] font-medium transition-all",
-                      duration === d.value ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="w-px h-5 bg-border/30" />
+            {/* Duration Popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    duration !== "15"
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <Timer className="w-3.5 h-3.5" />
+                  {DURATIONS.find(d => d.value === duration)?.label || "15s"}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-auto p-2">
+                <div className="flex gap-1">
+                  {DURATIONS.map((d) => (
+                    <button
+                      key={d.value}
+                      onClick={() => setDuration(d.value)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                        duration === d.value
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
             {/* Style Popover */}
             <Popover>
