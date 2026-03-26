@@ -555,7 +555,19 @@ Deno.serve((req) =>
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt, aspectRatio, firstFrameBase64, firstFrameMimeType, lastFrameBase64, lastFrameMimeType } = parsed.data;
+    let { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt, aspectRatio, firstFrameBase64, firstFrameMimeType, lastFrameBase64, lastFrameMimeType } = parsed.data;
+
+    // ── Server-side safety net: ensure no text in generated videos ──
+    const NO_TEXT_SUFFIX = " No text, no words, no letters, no titles, no typography, no written content anywhere in the video.";
+    if (prompt && !prompt.includes("No text, no words")) {
+      prompt = prompt + NO_TEXT_SUFFIX;
+    }
+    const NO_TEXT_NEGATIVE = "text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind";
+    if (negativePrompt) {
+      if (!negativePrompt.includes("words")) negativePrompt = negativePrompt + ", " + NO_TEXT_NEGATIVE;
+    } else {
+      negativePrompt = NO_TEXT_NEGATIVE;
+    }
 
     const isVeo = provider === "veo";
     const isWan = provider === "wan";
