@@ -203,6 +203,21 @@ export function TimelineBar({
         <span className="text-[10px] text-muted-foreground font-mono ml-2">
           {formatTime(globalTime)} / {formatTime(totalDuration)}
         </span>
+        {sidebarTabs.length > 0 && (
+          <div className="flex items-center gap-0.5 ml-3 pl-3 border-l border-border/20">
+            {sidebarTabs.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => onSidebarTabSelect?.(tab.id)}
+                className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors
+                  ${activeSidebarTab === tab.id ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"}`}
+                title={tab.label}
+              >
+                {tab.icon}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex-1" />
         <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><ZoomOut className="w-3 h-3" /></Button>
         <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><ZoomIn className="w-3 h-3" /></Button>
