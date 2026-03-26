@@ -308,6 +308,13 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
           return;
         }
         toast({ title: "Email sent", description: `Sent to ${to}` });
+        onSent?.({
+          to,
+          subject: subject || "(no subject)",
+          body: body.replace(/\n/g, "<br>"),
+          threadId: data?.threadId,
+          messageId: data?.messageId,
+        });
         reset();
         onOpenChange(false);
       } catch (err) {

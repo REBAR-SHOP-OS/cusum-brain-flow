@@ -383,6 +383,23 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
       onOpenChange={setComposeOpen}
       initialTo={lead.contact_email || ""}
       initialSubject={`Regarding: ${lead.title}`}
+      onSent={async (info) => {
+        // Log outbound email as activity
+        createActivity.mutate({
+          sales_lead_id: lead.id,
+          company_id: lead.company_id,
+          activity_type: "email",
+          subject: info.subject,
+          body: `[Outbound] To: ${info.to}\n\n${info.body?.replace(/<br>/g, "\n").replace(/<[^>]*>/g, "").slice(0, 500) || ""}`,
+        });
+        // Save threadId to lead for reply matching
+        if (info.threadId) {
+          await supabase
+            .from("sales_leads")
+            .update({ email_thread_id: info.threadId } as any)
+            .eq("id", lead.id);
+        }
+      }}
     />
     </>
   );
