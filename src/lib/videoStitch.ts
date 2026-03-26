@@ -395,10 +395,10 @@ export async function stitchClips(
           setTimeout(() => res(), 5000);
         });
         const voiceSource = audioCtx.createMediaElementSource(voiceElement);
-        const voiceGain = audioCtx.createGain();
-        voiceGain.gain.value = 1.4;
-        voiceSource.connect(voiceGain);
-        voiceGain.connect(compressor);
+        voiceGainNode = audioCtx.createGain();
+        voiceGainNode.gain.value = 1.4;
+        voiceSource.connect(voiceGainNode);
+        voiceGainNode.connect(compressor);
       }
 
       // Music track with ducking support
