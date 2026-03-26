@@ -264,7 +264,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
       const totalScenes = data.totalScenes || multiJobsRef.current.length;
       setProgress(data.progress || Math.round((uploaded / totalScenes) * 100));
       setProgressLabel(`Scene ${completed}/${totalScenes} generated, ${uploaded} uploaded`);
-      pollTimerRef.current = setTimeout(pollMultiScene, 5000);
+      pollTimerRef.current = setTimeout(pollMultiScene, 3000);
     } catch (err: any) { setError(err?.message || "Failed to check multi-scene status."); setStatus("failed"); }
   }, [brandKit]);
 
@@ -294,7 +294,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
       if (data.status === "failed") { setError(data.error || "Video generation failed."); setStatus("failed"); return; }
       if (data.progress != null) setProgress(data.progress);
       else setProgress(prev => Math.min(prev + 3, 90));
-      pollTimerRef.current = setTimeout(pollForResult, 5000);
+      pollTimerRef.current = setTimeout(pollForResult, 3000);
     } catch (err: any) { setError(err?.message || "Failed to check video status."); setStatus("failed"); }
   }, [brandKit]);
 
@@ -531,7 +531,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         multiJobsRef.current = data.jobs;
         setStatus("processing"); setProgress(5);
         setProgressLabel(`Generating ${data.totalScenes} scenes (${data.clipDuration}s each)...`);
-        pollTimerRef.current = setTimeout(pollMultiScene, 5000);
+        pollTimerRef.current = setTimeout(pollMultiScene, 3000);
       } else {
         const data = await invokeEdgeFunction("generate-video", {
           action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt,
@@ -553,7 +553,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         if (!data?.jobId || !data?.provider) { setError("No generation job was returned."); setStatus("failed"); return; }
         jobRef.current = { id: data.jobId, provider: data.provider };
         setStatus("processing"); setProgress(5); setProgressLabel("Generating video...");
-        pollTimerRef.current = setTimeout(pollForResult, 5000);
+        pollTimerRef.current = setTimeout(pollForResult, 3000);
       }
     } catch (err: any) { setError(err?.message || "Failed to start video generation."); setStatus("failed"); }
   };
@@ -944,7 +944,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
                       if (!data?.jobId || !data?.provider) { setError("No generation job was returned."); setStatus("failed"); return; }
                       jobRef.current = { id: data.jobId, provider: data.provider };
                       setStatus("processing"); setProgress(5); setProgressLabel("Regenerating video with edits...");
-                      pollTimerRef.current = setTimeout(pollForResult, 5000);
+                      pollTimerRef.current = setTimeout(pollForResult, 3000);
                     } catch (err: any) { setError(err?.message || "Regeneration failed."); setStatus("failed"); }
                   })();
                 }}
