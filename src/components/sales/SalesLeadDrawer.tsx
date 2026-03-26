@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
 import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
+import { useSalesLeadActivities } from "@/hooks/useSalesLeadActivities";
+import { supabase } from "@/integrations/supabase/client";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
@@ -50,6 +52,7 @@ const priorityConfig: Record<string, { label: string; class: string }> = {
 
 export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelete, assignees = [], profiles = [], onAddAssignee, onRemoveAssignee, isExternalEstimator }: Props) {
   const { makeCall, showWidget } = useRingCentralWidget();
+  const { create: createActivity } = useSalesLeadActivities(lead?.id);
   const [activeTab, setActiveTab] = useState<"timeline" | "details">("timeline");
   const [notes, setNotes] = useState("");
   const [composeOpen, setComposeOpen] = useState(false);
@@ -380,6 +383,23 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
       onOpenChange={setComposeOpen}
       initialTo={lead.contact_email || ""}
       initialSubject={`Regarding: ${lead.title}`}
+      onSent={async (info) => {
+        // Log outbound email as activity
+        createActivity.mutate({
+          sales_lead_id: lead.id,
+          company_id: lead.company_id,
+          activity_type: "email",
+          subject: info.subject,
+          body: `[Outbound] To: ${info.to}\n\n${info.body?.replace(/<br>/g, "\n").replace(/<[^>]*>/g, "").slice(0, 500) || ""}`,
+        });
+        // Save threadId to lead for reply matching
+        if (info.threadId) {
+          await supabase
+            .from("sales_leads")
+            .update({ email_thread_id: info.threadId } as any)
+            .eq("id", lead.id);
+        }
+      }}
     />
     </>
   );

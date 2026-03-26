@@ -12022,6 +12022,7 @@ export type Database = {
           contact_phone: string | null
           created_at: string
           description: string | null
+          email_thread_id: string | null
           expected_close_date: string | null
           expected_value: number | null
           id: string
@@ -12046,6 +12047,7 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           description?: string | null
+          email_thread_id?: string | null
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
@@ -12070,6 +12072,7 @@ export type Database = {
           contact_phone?: string | null
           created_at?: string
           description?: string | null
+          email_thread_id?: string | null
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string

@@ -71,9 +71,10 @@ interface ComposeEmailDialogProps {
   onOpenChange: (open: boolean) => void;
   initialTo?: string;
   initialSubject?: string;
+  onSent?: (info: { to: string; subject: string; body: string; threadId?: string; messageId?: string }) => void;
 }
 
-export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubject }: ComposeEmailDialogProps) {
+export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubject, onSent }: ComposeEmailDialogProps) {
   const [to, setTo] = useState(initialTo || "");
   const [subject, setSubject] = useState(initialSubject || "");
 
@@ -307,6 +308,13 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
           return;
         }
         toast({ title: "Email sent", description: `Sent to ${to}` });
+        onSent?.({
+          to,
+          subject: subject || "(no subject)",
+          body: body.replace(/\n/g, "<br>"),
+          threadId: data?.threadId,
+          messageId: data?.messageId,
+        });
         reset();
         onOpenChange(false);
       } catch (err) {
