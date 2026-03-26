@@ -1,36 +1,38 @@
 
 
-# Send Emails From the Logged-In Actor's Gmail Account
+# Fix: View Record Link + Email Delivery Investigation
 
-## Problem
-Currently, `notify-lead-assignees` always sends emails from `ai@rebar.shop` (or an admin fallback). The user wants emails to come **from the person who performed the action** — e.g., if `sattar@rebar.shop` logs a note, the email should be sent from `sattar@rebar.shop`'s Gmail account using their own OAuth token.
+## Issue 1: View Record Link Goes to Pipeline Instead of Lead Drawer
 
-## Solution
-Change the token lookup priority in `notify-lead-assignees`:
+**Current**: `recordLink` in `notify-lead-assignees/index.ts` (line 80) is:
+```
+https://cusum-brain-flow.lovable.app/sales/pipeline?lead={sales_lead_id}
+```
 
-1. **First**: Look up the **actor's** Gmail token in `user_gmail_tokens` using `actor_id`
-2. **Fallback**: If the actor has no token, try `ai@rebar.shop`
-3. **Fallback 2**: Try any admin with a valid token
-4. **Fallback 3**: Env var `GMAIL_REFRESH_TOKEN`
+**Problem**: This loads the pipeline page but doesn't automatically open the lead drawer. The `?lead=` param needs to be handled by the SalesPipeline page to auto-open the drawer.
 
-Also fetch the actor's email from `profiles` to use as the `From:` header instead of hardcoded `ai@rebar.shop`.
+**Fix**: Check if SalesPipeline.tsx already reads the `lead` query param to open a drawer. If not, add that logic.
+
+## Issue 2: neel@rebar.shop Not Receiving Email
+
+The function only sends to **assignees** of the lead. If neel is not assigned to the specific lead, they won't get a notification. Need to verify the recipient logic filters correctly.
+
+Also: the actor (person who logged the note) is NOT excluded from recipients — so if neel is both the actor AND an assignee, they'd get an email about their own action. That's likely undesirable.
 
 ## Changes
 
-### `supabase/functions/notify-lead-assignees/index.ts`
+### 1. `src/pages/sales/SalesPipeline.tsx`
+- On mount / URL change, read `?lead=` query param
+- If present, auto-open the SalesLeadDrawer for that lead ID
 
-1. **Token lookup order** — Replace the current "ai@rebar.shop first" logic with:
-   - Query `user_gmail_tokens` for `actor_id` first
-   - If found, use actor's token and fetch actor's email from `profiles` for the `From:` header
-   - If not found, fall through to existing ai@rebar.shop → admin → env var chain
-
-2. **Dynamic `From:` header** — Replace hardcoded `From: ai@rebar.shop` (line 230) with the resolved sender email (actor's email when using their token, otherwise `ai@rebar.shop`)
-
-3. **Token rotation** — Already handled; just ensure `senderUserId` is set to the correct user whose token was used
+### 2. `supabase/functions/notify-lead-assignees/index.ts`
+- **Exclude the actor** from recipients (don't email yourself about your own action)
+- Keep all other assignees as recipients
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/notify-lead-assignees/index.ts` | Actor-first token lookup + dynamic From header |
+| `src/pages/sales/SalesPipeline.tsx` | Auto-open drawer when `?lead=` query param present |
+| `supabase/functions/notify-lead-assignees/index.ts` | Exclude actor from recipient list |
 
