@@ -101,6 +101,10 @@ Deno.serve((req) =>
         </div>
         ${lineItemsTable}
         ${notes ? `<div style="margin-top:20px;padding:16px;background:#fafafa;border-radius:6px;border:1px solid #e5e7eb;"><p style="font-size:12px;color:#888;margin:0 0 8px;font-weight:600;">Notes / Terms:</p><pre style="font-size:12px;color:#555;margin:0;white-space:pre-wrap;font-family:inherit;">${notes}</pre></div>` : ""}
+        <div style="text-align:center;margin:32px 0;">
+          <a href="${APP_URL}/accept-quote/${quote_id}" style="display:inline-block;background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:0.5px;box-shadow:0 4px 14px rgba(34,197,94,0.4);">✅ Review & Accept Quote</a>
+          <p style="color:#888;font-size:12px;margin-top:10px;">Click to review terms and confirm your order</p>
+        </div>
         <p style="font-size:14px;color:#555;margin-top:24px;">If you have any questions, please don't hesitate to reach out.</p>
       `;
 
