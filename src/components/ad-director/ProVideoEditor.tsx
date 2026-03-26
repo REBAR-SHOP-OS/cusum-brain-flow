@@ -850,7 +850,7 @@ export function ProVideoEditor({
               apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
               Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
-            body: JSON.stringify({ text: seg.text }),
+            body: JSON.stringify({ text: voiceoverText }),
           }
         );
         if (!response.ok) throw new Error(`TTS failed for ${seg.label}`);
