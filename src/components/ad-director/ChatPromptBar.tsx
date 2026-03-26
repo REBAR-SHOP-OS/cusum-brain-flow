@@ -179,7 +179,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-4">
+    <div className="w-full max-w-4xl mx-auto space-y-4">
       {/* Intro / Character / Outro upload boxes */}
       <div className="flex gap-4 justify-center">
         {/* Intro */}
@@ -278,7 +278,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
           onKeyDown={handleKeyDown}
           placeholder="Describe your video idea..."
           disabled={disabled}
-          rows={2}
+          rows={5}
           className="w-full resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-white placeholder:text-white/40 focus:outline-none disabled:opacity-50"
         />
 
