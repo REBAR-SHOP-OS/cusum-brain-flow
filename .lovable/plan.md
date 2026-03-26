@@ -1,26 +1,23 @@
 
 
-# Make Timeline Playhead Draggable
+# Move Home Button to Top & Make It Larger
 
 ## Problem
-The playhead (white vertical line with circle on timeline) is currently `pointer-events-none` — it only moves based on playback time. The user wants to drag it left/right to scrub through the video.
+The Home button (circle with house icon) is at the bottom of the result page, small and subtle. User wants it moved to the top and made bigger/bolder.
 
 ## Changes
 
-### `src/components/ad-director/editor/TimelineBar.tsx`
+### `src/components/ad-director/AdDirectorContent.tsx`
 
-1. **Remove `pointer-events-none`** from the playhead div (line 479)
-2. **Add `cursor-grab` / `cursor-grabbing`** styling and a wider hit area for easier grabbing
-3. **Add `onMouseDown` handler** on the playhead that starts a scrub drag:
-   - Track `scrubbing` state via a ref
-   - On `mousemove`: calculate percentage from mouse X relative to `trackRef`, call `onSeek(pct * totalDuration)`
-   - On `mouseup`: stop scrubbing
-4. **Widen the playhead hit target** — add a transparent 12px-wide div around the 2px line so it's easy to grab
-5. **Visual feedback** — slightly enlarge the playhead circle while dragging
-
-The existing `handleTrackClick` already supports clicking anywhere on the track to seek. This adds continuous drag-to-scrub on the playhead itself.
+1. **Remove** the Home button block at the bottom (lines 582-591)
+2. **Add** a prominent Home button at the **top** of the result section (inside the `z-10` content div, before the preview), styled as a larger, bolder button:
+   - Size: `w-14 h-14` (from `w-12 h-12`)
+   - Icon: `w-7 h-7` (from `w-5 h-5`)
+   - Background: solid `bg-primary` with white icon (from `bg-primary/10` with teal icon)
+   - Shadow and ring for visibility
+   - Positioned at top-left or top-center of the result area
 
 | File | Change |
 |---|---|
-| `TimelineBar.tsx` | Make playhead draggable with mousedown/mousemove/mouseup scrub logic |
+| `AdDirectorContent.tsx` | Move Home button from bottom to top of result section, make it larger and bolder |
 
