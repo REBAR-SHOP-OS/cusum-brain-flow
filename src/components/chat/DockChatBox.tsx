@@ -407,17 +407,30 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   };
 
   const renderMentionText = (text: string) => {
-    const parts = text.split(/(@\S+)/g);
+    // Safer mention regex: only match @Name patterns where Name is a known profile
     const profileNames = new Set(profiles.map(p => p.full_name));
-    return parts.map((part, i) => {
-      if (part.startsWith("@")) {
-        const name = part.slice(1);
-        if (profileNames.has(name)) {
-          return <span key={i} className="inline px-0.5 rounded bg-primary/15 text-primary text-[10px] font-medium">{part}</span>;
+    const mentionPattern = /@([\w\s]+?)(?=\s@|\s*$|[.,!?;:])/g;
+    const result: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    while ((match = mentionPattern.exec(text)) !== null) {
+      const name = match[1].trim();
+      if (profileNames.has(name)) {
+        if (match.index > lastIndex) {
+          result.push(<span key={`t-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
         }
+        result.push(
+          <span key={`m-${match.index}`} className="inline px-0.5 rounded bg-primary/15 text-primary text-[10px] font-medium">
+            @{name}
+          </span>
+        );
+        lastIndex = match.index + match[0].length;
       }
-      return <span key={i}>{part}</span>;
-    });
+    }
+    if (lastIndex < text.length) {
+      result.push(<span key={`t-${lastIndex}`}>{text.slice(lastIndex)}</span>);
+    }
+    return result.length > 0 ? result : [<span key="full">{text}</span>];
   };
 
   const handleEmojiSelect = (emoji: string) => {
