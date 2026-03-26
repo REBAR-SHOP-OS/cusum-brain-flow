@@ -25,8 +25,7 @@ export function useSalesContacts() {
     queryKey: ["sales_contacts", companyId],
     enabled: !!companyId,
     queryFn: async () => {
-      // Fetch from both sources in parallel
-      const [systemRes, manualRes] = await Promise.all([
+      const [systemRes, manualRes, custRes] = await Promise.all([
         supabase
           .from("contacts")
           .select("id, first_name, last_name, email, phone, created_at, updated_at, customer_id, customers(company_name)")
@@ -36,10 +35,15 @@ export function useSalesContacts() {
           .select("*")
           .eq("company_id", companyId!)
           .order("created_at", { ascending: false }),
+        supabase
+          .from("v_customers_clean" as any)
+          .select("*")
+          .eq("company_id", companyId!),
       ]);
 
       if (systemRes.error) throw systemRes.error;
       if (manualRes.error) throw manualRes.error;
+      if (custRes.error) throw custRes.error;
 
       const systemContacts: SalesContact[] = (systemRes.data ?? []).map((c: any) => ({
         id: c.id,
@@ -56,15 +60,38 @@ export function useSalesContacts() {
 
       const manualContacts: SalesContact[] = (manualRes.data ?? []) as SalesContact[];
 
-      // Dedupe by email — manual entries take priority
+      const customerContacts: SalesContact[] = ((custRes.data as any[]) ?? []).map((c: any) => ({
+        id: c.customer_id ?? c.id,
+        company_id: companyId!,
+        name: c.display_name || c.company_name || c.normalized_name || "—",
+        company_name: c.company_name ?? null,
+        email: c.email ?? null,
+        phone: c.phone ?? null,
+        source: "customer",
+        notes: null,
+        created_at: c.created_at ?? new Date().toISOString(),
+        updated_at: c.created_at ?? new Date().toISOString(),
+      }));
+
+      // Dedupe by email — manual > system > customer; also dedupe by name for non-email entries
       const seen = new Set<string>();
+      const seenNames = new Set<string>();
       const merged: SalesContact[] = [];
+
       for (const c of manualContacts) {
         if (c.email) seen.add(c.email.toLowerCase());
+        if (c.name) seenNames.add(c.name.toLowerCase());
         merged.push(c);
       }
       for (const c of systemContacts) {
         if (c.email && seen.has(c.email.toLowerCase())) continue;
+        if (c.email) seen.add(c.email.toLowerCase());
+        if (c.name) seenNames.add(c.name.toLowerCase());
+        merged.push(c);
+      }
+      for (const c of customerContacts) {
+        if (c.email && seen.has(c.email.toLowerCase())) continue;
+        if (!c.email && c.name && seenNames.has(c.name.toLowerCase())) continue;
         merged.push(c);
       }
 
