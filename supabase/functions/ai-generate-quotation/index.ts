@@ -210,15 +210,32 @@ Deno.serve((req) =>
       });
     }
 
-    // Line 3: Shop drawings
-    const shopDrawingCost = typeof fabRate.shop_drawing_price === 'number' ? fabRate.shop_drawing_price : 2500;
-    if (shopDrawingCost > 0) {
+    // Line 3: Shop drawings (conditional)
+    let shopDrawingCost = 0;
+    if (shouldIncludeShopDrawings) {
+      shopDrawingCost = typeof fabRate.shop_drawing_price === 'number' ? fabRate.shop_drawing_price : 2500;
+      if (shopDrawingCost > 0) {
+        lineItems.push({
+          description: "Shop Drawings",
+          quantity: 1,
+          unit: "ea",
+          unit_price: shopDrawingCost,
+          amount: shopDrawingCost,
+        });
+      }
+    }
+
+    // Line 4: Delivery (conditional)
+    let shippingCost = 0;
+    if (deliveryDistanceKm > 0) {
+      const trips = Math.max(1, Math.ceil(totalTonnes / truckCap));
+      shippingCost = Number((trips * deliveryDistanceKm * shippingPerKm * 2).toFixed(2));
       lineItems.push({
-        description: "Shop Drawings",
-        quantity: 1,
-        unit: "ea",
-        unit_price: shopDrawingCost,
-        amount: shopDrawingCost,
+        description: `Delivery — ${deliveryDistanceKm} km × ${trips} trip(s) (round trip)`,
+        quantity: trips,
+        unit: "trips",
+        unit_price: Number((deliveryDistanceKm * shippingPerKm * 2).toFixed(2)),
+        amount: shippingCost,
       });
     }
 
