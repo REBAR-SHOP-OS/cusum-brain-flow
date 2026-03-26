@@ -184,10 +184,6 @@ export function FinalPreview({
       {/* Overlay Toggles */}
       <div className="flex gap-6">
         <div className="flex items-center gap-2">
-          <Switch checked={subtitlesEnabled} onCheckedChange={onToggleSubtitles} />
-          <Label className="text-xs flex items-center gap-1"><Type className="w-3.5 h-3.5" /> Subtitles</Label>
-        </div>
-        <div className="flex items-center gap-2">
           <Badge variant={logoEnabled ? "default" : "outline"} className="text-[10px] gap-1">
             <ImageIcon className="w-3 h-3" /> Logo {logoEnabled ? "✓" : "Off"}
           </Badge>

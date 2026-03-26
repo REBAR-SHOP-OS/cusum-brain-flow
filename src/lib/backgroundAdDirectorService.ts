@@ -586,10 +586,7 @@ class BackgroundAdDirectorService {
           website: brand.website, primaryColor: brand.primaryColor,
           bgColor: brand.secondaryColor, logoUrl: brand.logoUrl,
         },
-        subtitles: {
-          enabled: true,
-          segments: segs.map(s => ({ text: s.text, startTime: s.startTime, endTime: s.endTime })),
-        },
+        subtitles: { enabled: false, segments: [] },
         musicUrl: this.state.musicTrackUrl || undefined,
         musicVolume: 0.15,
       });
