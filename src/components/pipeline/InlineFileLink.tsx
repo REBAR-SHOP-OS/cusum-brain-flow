@@ -22,8 +22,10 @@ function extractFileName(url: string): string {
   try {
     const path = new URL(url).pathname;
     const segments = path.split("/").filter(Boolean);
-    const last = segments[segments.length - 1];
-    return decodeURIComponent(last || "file");
+    let last = decodeURIComponent(segments[segments.length - 1] || "file");
+    // Strip leading timestamp prefix (e.g., "1711234567890-")
+    last = last.replace(/^\d+-/, "");
+    return last || "file";
   } catch {
     return "file";
   }
