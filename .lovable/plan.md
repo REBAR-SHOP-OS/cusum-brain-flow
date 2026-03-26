@@ -1,44 +1,52 @@
 
 
-# Fix: AI-Generated Quotations Not Appearing in List
+# Fix Quotation Cards: Customer Name, Total, Click-to-Edit, Delete
 
-## Problem
-The AI quotation was successfully created (QAI-2612 in the `quotes` table with `source: "ai_estimation"`), but the quotation list filters by `source = "odoo_sync"` only, so AI-generated quotes are invisible.
+## Changes — `src/components/accounting/AccountingDocuments.tsx`
 
-## Root Cause
-`useArchivedQuotations.ts` line 25:
+### A. Fix customer name (line 368)
+Replace single-field lookup with multi-field fallback:
 ```ts
-.eq("source", "odoo_sync")
-```
-This hard filter excludes any quotation with a different source (like `"ai_estimation"` or `"quote_engine"`).
-
-## Fix
-
-### File: `src/hooks/useArchivedQuotations.ts` (line 25)
-
-Remove the `.eq("source", "odoo_sync")` filter so ALL quotations from the `quotes` table are shown, regardless of source.
-
-```ts
-// Before
-let query = supabase
-  .from("quotes")
-  .select("*", { count: "exact" })
-  .eq("source", "odoo_sync");
-
-// After
-let query = supabase
-  .from("quotes")
-  .select("*", { count: "exact" });
+const meta = q.metadata as Record<string, unknown> | null;
+const customer = (meta?.odoo_customer as string)
+  || (meta?.customer_name as string)
+  || q.salesperson
+  || "Unknown";
 ```
 
-### File: `src/components/accounting/GenerateQuotationDialog.tsx`
+### B. Fix total display (line 380)
+Add fallback total from metadata line_items:
+```ts
+const lineItems = (meta?.line_items as Array<Record<string, unknown>>) || [];
+const metaTotal = lineItems.reduce((s: number, li: any) => s + (Number(li.amount) || 0), 0);
+const displayTotal = Number(q.total_amount) || metaTotal;
+// Use displayTotal in the fmt() call
+```
 
-Fix the query key invalidation (from previous plan) — ensure after AI generation it invalidates `["archived-quotations"]` (with hyphen) to refresh the list.
+### C. Make card clickable (line 371)
+Add `onClick` + `cursor-pointer` to open draft editor for manual/AI quotes, or view overlay for others:
+```tsx
+<Card key={q.id}
+  className="hover:ring-2 hover:ring-primary/20 transition-all cursor-pointer"
+  onClick={() => {
+    if (q.source === "manual" || q.source === "ai_estimation") {
+      setDraftEditorId(q.id);
+    } else {
+      setViewQuote(q);
+    }
+  }}
+>
+```
 
-## Result
-All quotations (Odoo-synced, AI-generated, quote-engine) appear in the quotation tab. The existing search and status filters still work.
+### D. Add delete button
+Add a Trash2 delete button in the actions area that removes the quote from the `quotes` table and refreshes the list.
+
+### E. Fix QuotationTemplate customer name (line 588)
+Add `meta?.customer_name` fallback:
+```ts
+customerName: (meta?.odoo_customer as string) || (meta?.customer_name as string) || viewQuote.salesperson || "Unknown",
+```
 
 ## Files Changed
-- `src/hooks/useArchivedQuotations.ts` — remove `odoo_sync` source filter
-- `src/components/accounting/GenerateQuotationDialog.tsx` — fix query key invalidation
+- `src/components/accounting/AccountingDocuments.tsx`
 
