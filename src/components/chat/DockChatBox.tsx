@@ -615,7 +615,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                               {hasText && (
                                 <div
                                   className={cn(
-                                    "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit",
+                                    "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit max-w-full",
                                     isMe ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm" : "bg-muted text-foreground rounded-2xl rounded-bl-sm",
                                     detectRtl(visibleText) && "text-right"
                                   )}
