@@ -465,7 +465,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
                 variant="ghost"
                 className="h-7 w-7 p-0"
                 onClick={() => fileRef.current?.click()}
-                title="Attach photo or video"
+                title="Attach file"
               >
                 <Paperclip className="w-3.5 h-3.5" />
               </Button>
