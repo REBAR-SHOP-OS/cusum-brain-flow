@@ -23,7 +23,7 @@ export function VideoHistory({ projects, onSelect, onDelete }: VideoHistoryProps
       <h3 className="text-sm font-medium text-muted-foreground mb-3">ویدئوهای قبلی شما</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {completed.map((p) => (
-          <VideoCard key={p.id} project={p} onSelect={onSelect} />
+          <VideoCard key={p.id} project={p} onSelect={onSelect} onDelete={onDelete} />
         ))}
       </div>
     </div>
