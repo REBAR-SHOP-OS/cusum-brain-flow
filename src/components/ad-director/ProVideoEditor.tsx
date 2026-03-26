@@ -25,6 +25,7 @@ import { MusicTab } from "./editor/MusicTab";
 import { ScriptTab } from "./editor/ScriptTab";
 import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
 import { TextOverlayDialog } from "./editor/TextOverlayDialog";
+import { EditOverlayDialog } from "./editor/EditOverlayDialog";
 import { TextTab } from "./editor/TextTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
 import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
@@ -193,6 +194,7 @@ export function ProVideoEditor({
   const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
   
   const [textDialogOpen, setTextDialogOpen] = useState(false);
+  const [editingOverlay, setEditingOverlay] = useState<VideoOverlay | null>(null);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
   const audioUploadRef = useRef<HTMLInputElement>(null);
@@ -1400,10 +1402,7 @@ export function ProVideoEditor({
         onEditVoiceoverText={handleEditVoiceoverText}
         onMoveOverlay={handleMoveOverlay}
         onMoveAudioTrack={handleMoveAudioTrack}
-        onEditOverlay={(ov) => {
-          const newText = prompt("Edit overlay text:", ov.content);
-          if (newText !== null) setOverlays(prev => prev.map(o => o.id === ov.id ? { ...o, content: newText } : o));
-        }}
+        onEditOverlay={(ov) => setEditingOverlay(ov)}
       />
 
       {/* Text Overlay Dialog */}
@@ -1414,6 +1413,14 @@ export function ProVideoEditor({
         segments={segments}
         selectedSceneIndex={selectedSceneIndex}
         onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
+      />
+
+      {/* Edit Overlay Dialog */}
+      <EditOverlayDialog
+        open={!!editingOverlay}
+        overlay={editingOverlay}
+        onSave={(id, newContent) => setOverlays(prev => prev.map(o => o.id === id ? { ...o, content: newContent } : o))}
+        onClose={() => setEditingOverlay(null)}
       />
 
       {/* Hidden audio file input */}
