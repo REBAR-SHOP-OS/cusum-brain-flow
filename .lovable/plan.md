@@ -1,36 +1,60 @@
 
 
-# Fix Chat Message Overflow in DockChatBox
+# Show Thumbnail Image on Draft Video Cards
 
 ## Problem
-Messages (especially forwarded ones) overflow outside the chat bubble and card boundaries. The red-circled area in the screenshot shows text and UI elements escaping the chat container.
+All 6 draft cards in the screenshot show only text descriptions instead of images. The user expects to see the first frame/image of each video project. However, these drafts have `idle` clips — videos were never generated, so there are no video frames to extract.
 
-## Root Cause
-1. The bubble container at line 570 (`max-w-[75%]`) lacks `overflow-hidden`, so child elements (hover actions, attachments) can escape
-2. The text bubble uses `break-words` but the rendered text from `renderMentionText` wraps each part in `<span>` without `whitespace-pre-wrap`, so forwarded messages with `\n` newlines don't wrap properly
-3. The hover action bar (line 651) and attachment elements are not constrained to parent width
+## Solution
+Generate a lightweight AI thumbnail image when a project is first saved, store it in the `ad_projects` table as `thumbnail_url`, and display it on the card.
 
 ## Changes
 
-### `src/components/chat/DockChatBox.tsx`
-
-**Line 570** — Add `overflow-hidden` to the message column container:
-```
-"flex flex-col max-w-[75%] overflow-hidden"
-```
-
-**Line 605** — Add `whitespace-pre-wrap` to the text bubble so forwarded messages with newlines render correctly, and ensure `break-words` works:
-```
-"px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden"
+### 1. Database Migration
+Add a `thumbnail_url` column to `ad_projects`:
+```sql
+ALTER TABLE ad_projects ADD COLUMN thumbnail_url text;
 ```
 
-**Line 651** — Constrain hover action bar width:
-```
-"opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0 mt-0.5 flex-wrap"
-```
+### 2. `src/lib/backgroundAdDirectorService.ts`
+After the storyboard is generated (before video generation starts), generate a quick thumbnail image using the Lovable AI image model (`google/gemini-3.1-flash-image-preview`) via the existing edge function infrastructure. Use the first scene's prompt, store the result in `ad-assets` storage, and save the URL to `thumbnail_url` on the project row.
 
-These 3 small changes ensure all message content stays within the bubble boundary.
+### 3. `src/hooks/useAdProjectHistory.ts`
+- Add `thumbnail_url` to `AdProjectRow` interface
+- Include it in the save mutation payload
+
+### 4. `src/components/ad-director/VideoHistory.tsx`
+- Add a `resolveThumbnailUrl` helper that checks `project.thumbnail_url`
+- In the card's fallback (when no video URL exists), show the thumbnail image instead of text:
+  ```
+  {thumbnailUrl ? (
+    <img src={thumbnailUrl} className="w-full h-full object-cover" />
+  ) : (
+    // existing text fallback
+  )}
+  ```
+
+### 5. `src/components/ad-director/AdDirectorContent.tsx`
+Pass `thumbnail_url` when saving projects.
+
+## Visual Result
+```text
+┌─────────────────────────┐
+│ [Draft]                 │
+│  ┌───────────────────┐  │
+│  │  AI-generated     │  │
+│  │  thumbnail image  │  │
+│  └───────────────────┘  │
+├─────────────────────────┤
+│ Macro shot of steel…  🗑│
+│ Mar 26, 2026            │
+└─────────────────────────┘
+```
 
 ## Files Changed
-- `src/components/chat/DockChatBox.tsx` — 3 lines modified
+- Migration: add `thumbnail_url` column
+- `src/lib/backgroundAdDirectorService.ts` — generate thumbnail after storyboard
+- `src/hooks/useAdProjectHistory.ts` — add `thumbnail_url` to type and save
+- `src/components/ad-director/VideoHistory.tsx` — show thumbnail image on cards
+- `src/components/ad-director/AdDirectorContent.tsx` — pass thumbnail in save calls
 
