@@ -14,9 +14,11 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { DEFAULT_CARD_SETTINGS } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
 import { type LogoSettings, DEFAULT_LOGO_SETTINGS } from "@/types/editorSettings";
