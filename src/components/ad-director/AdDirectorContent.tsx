@@ -350,7 +350,7 @@ export function AdDirectorContent() {
                   return (
                     <div
                       key={clip.sceneId}
-                      className={`relative flex-shrink-0 w-[200px] rounded-lg border overflow-hidden cursor-pointer transition-all group ${
+                      className={`relative flex-shrink-0 w-[280px] rounded-xl border overflow-hidden cursor-pointer transition-all group ${
                         isSelected ? "ring-2 ring-primary border-primary" : "border-border/30 hover:border-primary/50"
                       }`}
                       onClick={() => clip.videoUrl && setSelectedPreviewUrl(clip.videoUrl)}
