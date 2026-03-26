@@ -43,7 +43,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
   // Local UI-only state
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [showIntro, setShowIntro] = useState(() => !sessionStorage.getItem("ad-director-intro-seen"));
+  const [showIntro, setShowIntro] = useState(true);
   const [modelOverrides] = useState<ModelOverrides>({});
   const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
   const [scenePrompts, setScenePrompts] = useState<Record<string, string>>({});
@@ -366,32 +366,15 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       {flowState === "idle" && (
         <>
           {showIntro ? (
-            <div className="w-full max-w-2xl animate-in fade-in duration-500 relative">
-              <div className="rounded-2xl overflow-hidden border border-border/20 bg-card/40 shadow-lg">
-                <video
-                  src="/videos/ad-director-intro.mp4"
-                  autoPlay
-                  muted
-                  playsInline
-                  controls
-                  className="w-full"
-                  onEnded={() => {
-                    setShowIntro(false);
-                    sessionStorage.setItem("ad-director-intro-seen", "1");
-                  }}
-                />
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="absolute top-3 right-3 opacity-90 hover:opacity-100"
-                onClick={() => {
-                  setShowIntro(false);
-                  sessionStorage.setItem("ad-director-intro-seen", "1");
-                }}
-              >
-                رد شدن ▸
-              </Button>
+            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+              <video
+                src="/videos/ad-director-intro.mp4"
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+                onEnded={() => setShowIntro(false)}
+              />
             </div>
           ) : (
             <>
