@@ -1,25 +1,26 @@
 
 
-# Always Show Send Button on Scene Custom Prompt
+# Navigate to Home After Successful Schedule in Ad Director
 
 ## Problem
-The Send (paper plane) icon button next to "Custom prompt..." input uses `variant="ghost"` styling, making it nearly invisible against the dark background. The user wants it always clearly visible.
+After clicking "Confirm Schedule" in the Ad Director video editor and getting a success toast, the user stays on the editor page. They want to be redirected to `/home` automatically.
 
 ## Fix
-**File: `src/components/ad-director/AdDirectorContent.tsx`** (line 594-602)
+**File: `src/components/ad-director/ProVideoEditor.tsx`**
 
-Change the Send button from `variant="ghost"` to a visible styled button with a persistent teal/primary background so it's always visible regardless of background:
+In the `SchedulePopover` component (around line 109-113), after the success toast and `setOpen(false)`:
 
+1. Import `useNavigate` from `react-router-dom`
+2. Add `const navigate = useNavigate()` inside `SchedulePopover`
+3. After the success toast (line 112), add a short delay then navigate to `/home`:
 ```tsx
-// Before
-<Button size="sm" variant="ghost" className="h-7 w-7 p-0" ...>
-
-// After
-<Button size="sm" className="h-7 w-7 p-0 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0" ...>
+toast({ title: "Scheduled ✅", ... });
+setOpen(false);
+setTimeout(() => navigate("/home"), 1200);
 ```
 
-This ensures the send icon is always visible with a solid background color, matching the teal style shown in the screenshot.
+The 1.2s delay lets the user see the success toast before navigating away.
 
 ## Files Changed
-- `src/components/ad-director/AdDirectorContent.tsx` — update Send button styling (line 594-597)
+- `src/components/ad-director/ProVideoEditor.tsx` — add `useNavigate`, navigate to `/home` after successful schedule
 
