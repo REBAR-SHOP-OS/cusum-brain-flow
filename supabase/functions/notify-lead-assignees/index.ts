@@ -94,7 +94,7 @@ serve((req) =>
 
           let profileQuery = serviceClient
             .from("profiles")
-            .select("user_id, email, full_name")
+            .select("id, user_id, email, full_name")
             .in("full_name", mentionedNames);
           if (actorCompanyId) {
             profileQuery = profileQuery.eq("company_id", actorCompanyId);
