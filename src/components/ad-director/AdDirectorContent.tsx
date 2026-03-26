@@ -431,14 +431,23 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
           {/* Action buttons */}
           <div className="flex items-center justify-center gap-3">
-            <Button onClick={handleDownload} disabled={!finalVideoUrl} className="gap-2">
-              <Download className="w-4 h-4" />
-              Approve & Download
-            </Button>
-            <Button variant="outline" onClick={() => service.patchState({ flowState: "editing" })} className="gap-2">
-              <Pencil className="w-4 h-4" />
-              Edit Video
-            </Button>
+            {!approved ? (
+              <Button onClick={() => setApproved(true)} className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400">
+                <Check className="w-4 h-4" />
+                Approve Composition
+              </Button>
+            ) : (
+              <>
+                <Button onClick={handleDownload} disabled={!finalVideoUrl} className="gap-2">
+                  <Download className="w-4 h-4" />
+                  Download
+                </Button>
+                <Button variant="outline" onClick={() => service.patchState({ flowState: "editing" })} className="gap-2">
+                  <Pencil className="w-4 h-4" />
+                  Edit Video
+                </Button>
+              </>
+            )}
           </div>
           {/* Home button */}
           <div className="flex justify-center pt-2">
