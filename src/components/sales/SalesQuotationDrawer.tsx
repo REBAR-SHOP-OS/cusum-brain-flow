@@ -90,7 +90,7 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
       loadItems(quotation.id);
     setShowAudit(false);
     setEmailDialogOpen(false);
-    setCustomerEmail(quotation.customer_email || "");
+    setCustomerEmail((quotation as any).customer_email || "");
     }
   }, [quotation?.id]);
 
