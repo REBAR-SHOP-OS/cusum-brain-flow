@@ -102,7 +102,41 @@ function parseWeightSummaryFallback(text: string): EstimationItemInput[] {
   return items;
 }
 
-Deno.serve((req) =>
+/**
+ * Rescue fallback: extract weight data directly from AI's JSON items.
+ * Groups by bar_size, sums any weight_kg hints, creates SUM- items.
+ */
+function rescueAIItems(items: any[]): EstimationItemInput[] {
+  const bySize = new Map<string, number>();
+  for (const item of items) {
+    const size = item.bar_size;
+    if (!size || !MASS_PER_M[size]) continue;
+    const w = parseFloat(item.weight_kg) || 0;
+    bySize.set(size, (bySize.get(size) || 0) + w);
+  }
+  const rescued: EstimationItemInput[] = [];
+  for (const [barSize, weightKg] of bySize) {
+    if (weightKg <= 0) continue;
+    const massPerM = MASS_PER_M[barSize] || 1.570;
+    rescued.push({
+      element_type: "mixed",
+      element_ref: "Weight Summary",
+      mark: `SUM-TOT-${barSize}`,
+      bar_size: barSize,
+      quantity: 1,
+      cut_length_mm: Math.round((weightKg / massPerM) * 1000),
+      hook_type_near: "none",
+      hook_type_far: "none",
+      lap_type: "none",
+      num_laps: 0,
+      shape_code: "straight",
+      weight_kg: weightKg,
+    } as any);
+  }
+  return rescued;
+}
+
+
   handleRequest(req, async ({ userId, companyId, serviceClient: supabaseAdmin, body }) => {
     const {
       name,
