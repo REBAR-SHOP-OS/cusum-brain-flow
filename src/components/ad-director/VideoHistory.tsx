@@ -35,6 +35,18 @@ function resolvePreviewUrl(project: AdProjectRow): string | null {
   return null;
 }
 
+/** Extract a short text preview from the storyboard for drafts without video */
+function resolvePreviewText(project: AdProjectRow): string | null {
+  if (Array.isArray(project.storyboard) && project.storyboard.length > 0) {
+    const scene = (project.storyboard as any[])[0];
+    const text = scene?.prompt || scene?.voiceover || scene?.objective;
+    if (text && typeof text === "string") {
+      return text.length > 80 ? text.substring(0, 80).replace(/\s+\S*$/, "…") : text;
+    }
+  }
+  return project.name || null;
+}
+
 export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete, onRename }: VideoHistoryProps) {
   const visible = projects.filter((p) => {
     const hasVideo = p.final_video_url && !p.final_video_url.startsWith("blob:");
