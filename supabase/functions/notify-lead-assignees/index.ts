@@ -43,7 +43,7 @@ serve((req) =>
       const { data: actorProfile } = await serviceClient
         .from("profiles")
         .select("email")
-        .eq("id", actor_id)
+        .eq("user_id", actor_id)
         .maybeSingle();
       actorEmail = actorProfile?.email?.toLowerCase() || "";
     }
