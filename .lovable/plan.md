@@ -1,18 +1,28 @@
 
 
-# Fix Home Button Visibility in Ad Director Result View
+# Add Draft Save Button to Ad Director Result View
 
 ## Problem
-The Home button (`fixed top-4 left-4`) is partially hidden behind other floating elements (avatar, camera icon, chat button) in the bottom-left area. From the screenshot, users cannot fully see or access it.
+In the result view (where scenes are shown after generation), there's no way to save the current project as a draft. The user wants a "Save Draft" icon next to the "Approve Composition" button so that all generated scene cards are saved and appear in the VideoHistory section on the home screen.
 
-## Solution
-Move the Home button from `top-4 left-4` to a position that doesn't conflict with other fixed UI elements. Since the TopBar is at the top and the floating dock elements are in the bottom-left, the best approach is to move it slightly right and down, or place it inside the content area instead of fixed positioning.
-
-## Change
+## Changes
 
 | File | Change |
 |---|---|
-| `src/components/ad-director/AdDirectorContent.tsx` (line 463) | Change `fixed top-4 left-4` to `fixed top-16 left-4` to position it below the TopBar (46px height), ensuring full visibility without overlap with other elements |
+| `src/components/ad-director/AdDirectorContent.tsx` | Add a "Save Draft" button (with `Save` or `FileDown` icon) next to the "Approve Composition" button in the action buttons section (line ~583-596). On click, it calls `saveProject.mutateAsync` with current state (name, segments, storyboard, clips, continuity) and status `"draft"`, then shows a success toast. Also add a `BookmarkCheck` icon import. |
+| `src/components/ad-director/VideoHistory.tsx` | Update the filter (line 16-17) to also show draft projects (those without `final_video_url` but with clips data). Show a "Draft" badge on draft cards. Use the first clip's video URL as thumbnail for drafts. When a draft is selected, restore it into the pipeline state instead of just setting `finalVideoUrl`. |
 
-This moves the button from behind the TopBar area to just below it, where it's fully visible and accessible.
+## Detail
+
+### Draft Save (AdDirectorContent.tsx)
+- New button with `BookmarkCheck` icon beside "Approve Composition"
+- Saves: `name: brand.name`, `segments`, `storyboard`, `clips`, `continuity`, `status: "draft"`
+- Uses existing `saveProject.mutateAsync`
+- Shows toast on success
+
+### Draft Display (VideoHistory.tsx)
+- Remove the filter that requires `final_video_url`
+- For drafts (no `final_video_url`), use the first completed clip's `videoUrl` as thumbnail
+- Show a small "پیش‌نویس" (Draft) badge overlay
+- `onSelect` for drafts passes project data to restore state
 
