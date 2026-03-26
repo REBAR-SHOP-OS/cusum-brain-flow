@@ -512,8 +512,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
       if (isMultiScene) {
         const sceneCount = Math.ceil(requestedDuration / effectiveMaxClip);
         setProgressLabel(`Generating ${sceneCount} scenes...`);
+        const noTextSuffix = " No text, no words, no letters, no titles, no typography, no written content anywhere in the video.";
         const data = await invokeEdgeFunction("generate-video", {
-          action: "generate-multi", provider: effectiveVideoProvider, prompt: finalPrompt,
+          action: "generate-multi", provider: effectiveVideoProvider, prompt: finalPrompt + noTextSuffix,
           duration: requestedDuration,
           model: selectedModel,
           ...wanExtras,
