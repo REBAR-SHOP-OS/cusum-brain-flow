@@ -127,6 +127,8 @@ Deno.serve((req) =>
 
     const sendSchema = z.object({
       to: z.string().email("Invalid recipient email").max(320),
+      cc: z.string().email().max(320).optional(),
+      bcc: z.string().email().max(320).optional(),
       subject: z.string().min(1, "Subject required").max(998),
       body: z.string().min(1, "Body required").max(500000),
       threadId: z.string().max(100).optional(),
