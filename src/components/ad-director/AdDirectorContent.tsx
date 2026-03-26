@@ -312,20 +312,84 @@ export function AdDirectorContent() {
             </div>
           </div>
 
-          {/* Video */}
+          {/* Main Preview */}
           <div className="rounded-2xl border border-border/20 bg-card/40 overflow-hidden">
-            {finalVideoUrl ? (
+            {(selectedPreviewUrl || finalVideoUrl) ? (
               <video
-                src={finalVideoUrl}
+                key={selectedPreviewUrl || finalVideoUrl}
+                src={selectedPreviewUrl || finalVideoUrl!}
                 controls
+                autoPlay
                 className="w-full aspect-video bg-black"
               />
             ) : (
               <div className="w-full aspect-video bg-muted/20 flex items-center justify-center">
-                <p className="text-sm text-muted-foreground">Video preview not available — use Edit to view scenes</p>
+                <p className="text-sm text-muted-foreground">Click a scene below to preview</p>
               </div>
             )}
           </div>
+
+          {/* Scene Clips Gallery */}
+          {clips.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground px-1">Generated Scenes</p>
+              <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-thin">
+                {clips.map((clip, i) => {
+                  const scene = storyboard[i];
+                  const label = scene?.objective?.split(" ").slice(0, 3).join(" ") || `Scene ${i + 1}`;
+                  const segType = segments.find(s => s.id === scene?.segmentId)?.type;
+                  const isSelected = clip.videoUrl === selectedPreviewUrl;
+
+                  return (
+                    <div
+                      key={clip.sceneId}
+                      className={`relative flex-shrink-0 w-[200px] rounded-lg border overflow-hidden cursor-pointer transition-all group ${
+                        isSelected ? "ring-2 ring-primary border-primary" : "border-border/30 hover:border-primary/50"
+                      }`}
+                      onClick={() => clip.videoUrl && setSelectedPreviewUrl(clip.videoUrl)}
+                    >
+                      {clip.status === "completed" && clip.videoUrl ? (
+                        <>
+                          <video
+                            src={clip.videoUrl}
+                            className="w-full aspect-video object-cover"
+                            muted
+                            preload="metadata"
+                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                            onMouseLeave={(e) => { const el = e.target as HTMLVideoElement; el.pause(); el.currentTime = 0; }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
+                            <div className="w-8 h-8 rounded-full bg-background/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Play className="w-4 h-4 text-foreground ml-0.5" />
+                            </div>
+                          </div>
+                        </>
+                      ) : clip.status === "generating" || clip.status === "queued" ? (
+                        <Skeleton className="w-full aspect-video flex items-center justify-center">
+                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                        </Skeleton>
+                      ) : clip.status === "failed" ? (
+                        <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center">
+                          <AlertCircle className="w-5 h-5 text-destructive" />
+                        </div>
+                      ) : (
+                        <div className="w-full aspect-video bg-muted/20 flex items-center justify-center">
+                          <Film className="w-5 h-5 text-muted-foreground/40" />
+                        </div>
+                      )}
+
+                      {/* Label overlay */}
+                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5">
+                        <p className="text-[10px] font-medium text-white truncate">
+                          {i + 1}. {segType ? segType.charAt(0).toUpperCase() + segType.slice(1) : label}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Action buttons */}
           <div className="flex items-center justify-center gap-3">
