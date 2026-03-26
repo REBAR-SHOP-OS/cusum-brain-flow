@@ -102,7 +102,41 @@ function parseWeightSummaryFallback(text: string): EstimationItemInput[] {
   return items;
 }
 
-Deno.serve((req) =>
+/**
+ * Rescue fallback: extract weight data directly from AI's JSON items.
+ * Groups by bar_size, sums any weight_kg hints, creates SUM- items.
+ */
+function rescueAIItems(items: any[]): EstimationItemInput[] {
+  const bySize = new Map<string, number>();
+  for (const item of items) {
+    const size = item.bar_size;
+    if (!size || !MASS_PER_M[size]) continue;
+    const w = parseFloat(item.weight_kg) || 0;
+    bySize.set(size, (bySize.get(size) || 0) + w);
+  }
+  const rescued: EstimationItemInput[] = [];
+  for (const [barSize, weightKg] of bySize) {
+    if (weightKg <= 0) continue;
+    const massPerM = MASS_PER_M[barSize] || 1.570;
+    rescued.push({
+      element_type: "mixed",
+      element_ref: "Weight Summary",
+      mark: `SUM-TOT-${barSize}`,
+      bar_size: barSize,
+      quantity: 1,
+      cut_length_mm: Math.round((weightKg / massPerM) * 1000),
+      hook_type_near: "none",
+      hook_type_far: "none",
+      lap_type: "none",
+      num_laps: 0,
+      shape_code: "straight",
+      weight_kg: weightKg,
+    } as any);
+  }
+  return rescued;
+}
+
+
   handleRequest(req, async ({ userId, companyId, serviceClient: supabaseAdmin, body }) => {
     const {
       name,
@@ -403,16 +437,25 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
           // ─── USELESS DATA FALLBACK: AI returned items but all have zero weight/length ───
           if (extractedItems.length > 0) {
             const hasUsefulData = extractedItems.some(item =>
-              (item.cut_length_mm && item.cut_length_mm > 0) ||
-              (item.weight_kg && item.weight_kg > 0) ||
-              (item.quantity && item.quantity > 1)
+              (Number(item.cut_length_mm) > 0) ||
+              (Number(item.weight_kg) > 0) ||
+              (Number(item.quantity) > 1)
             );
             if (!hasUsefulData) {
-              console.log("AI returned items but all have zero weight/length — falling back to deterministic parser");
-              const fallbackItems = parseWeightSummaryFallback(content);
-              if (fallbackItems.length > 0) {
-                console.log(`Fallback replaced useless items with ${fallbackItems.length} summary items`);
-                extractedItems = fallbackItems;
+              console.log("AI returned items but all have zero weight/length — trying rescue strategies");
+              
+              // Strategy 1: regex on AI response text
+              let rescued = parseWeightSummaryFallback(content);
+              
+              // Strategy 2: extract from AI's own JSON items (group by bar_size, sum weights)
+              if (rescued.length === 0) {
+                console.log("Regex fallback found nothing — trying rescueAIItems on JSON items");
+                rescued = rescueAIItems(extractedItems);
+              }
+              
+              if (rescued.length > 0) {
+                console.log(`Rescued ${rescued.length} items from useless AI output`);
+                extractedItems = rescued;
               }
             }
           }
@@ -426,9 +469,9 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
     let calculatedItems: EstimationItemResult[] = [];
 
     for (const input of extractedItems) {
-      // Null-safe defaults for required fields
-      input.quantity = input.quantity ?? 1;
-      input.cut_length_mm = input.cut_length_mm ?? 0;
+      // Hardened null-safe defaults — catches null, undefined, NaN, empty strings
+      input.quantity = Number(input.quantity) || 1;
+      input.cut_length_mm = Number(input.cut_length_mm) || 0;
 
       const std = standardsMap.get(input.bar_size);
       if (!std) {
@@ -516,8 +559,8 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
         bar_size: item.bar_size,
         grade: item.grade ?? "400W",
         shape_code: item.shape_code,
-        quantity: item.quantity ?? 1,
-        cut_length_mm: item.cut_length_mm ?? 0,
+        quantity: Number(item.quantity) || 1,
+        cut_length_mm: Number(item.cut_length_mm) || 0,
         total_length_mm: item.total_length_mm ?? 0,
         hook_allowance_mm: item.hook_allowance_mm ?? 0,
         lap_allowance_mm: item.lap_allowance_mm ?? 0,
@@ -531,9 +574,11 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
         bbox: (item as any).bbox ?? null,
         page_index: (item as any).page_index ?? 0,
       }));
+      // Pre-filter: drop rows with invalid required fields
+      const safeRows = itemRows.filter(r => r.quantity != null && r.quantity > 0 && r.bar_size);
 
-      for (let i = 0; i < itemRows.length; i += 25) {
-        const batch = itemRows.slice(i, i + 25);
+      for (let i = 0; i < safeRows.length; i += 25) {
+        const batch = safeRows.slice(i, i + 25);
         const { error: itemsErr } = await supabaseAdmin
           .from("estimation_items")
           .insert(batch);
