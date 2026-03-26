@@ -67,13 +67,19 @@ export function AdDirectorContent() {
     prompt: string, ratio: string, images: File[],
     introImage: File | null, outroImage: File | null,
     duration: string, characterImage: File | null,
+    selectedProducts?: string[], selectedStyles?: string[],
   ) => {
+    // Enrich prompt with product/style context
+    const prefixParts: string[] = [];
+    if (selectedProducts?.length) prefixParts.push(`Product: ${selectedProducts.join(", ")}`);
+    if (selectedStyles?.length) prefixParts.push(`Style: ${selectedStyles.join(", ")}`);
+    const enrichedPrompt = prefixParts.length > 0 ? `${prefixParts.join(". ")}. ${prompt}` : prompt;
     const currentBrand = service.getState().brand?.name ? service.getState().brand : (savedBrand || DEFAULT_BRAND);
     const currentVideoParams = service.getState().videoParams?.ratio ? service.getState().videoParams : DEFAULT_VIDEO_PARAMS;
 
     try {
       await service.startPipeline(
-        prompt, ratio, images, introImage, outroImage, duration, characterImage,
+        enrichedPrompt, ratio, images, introImage, outroImage, duration, characterImage,
         currentBrand, { ...currentVideoParams, ratio } as VideoParams,
         modelOverrides,
         async (data) => {
