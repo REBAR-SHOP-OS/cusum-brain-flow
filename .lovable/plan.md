@@ -1,33 +1,45 @@
 
 
-# Restore Timeline Toolbar Feature Icons
+# Enforce Product & Style Selections in Video Generation Pipeline
 
 ## Problem
-The timeline toolbar (between playback controls and tracks) only shows "TIMELINE 0:15 / 0:15" and zoom buttons. The sidebar tab icons (Media, Text, Music, Brand Kit, Script, Card Editor) that previously appeared there are gone because `sidebarTabs={[]}` is passed as an empty array.
-
-## Root Cause
-In `ProVideoEditor.tsx` line 1379, `sidebarTabs` is hardcoded to `[]` instead of being populated with the available editor tabs.
+When a user selects a product (e.g. Fiberglass) and a style (e.g. Realism), these are weakly prepended as plain text to the prompt (`Product: fiberglass. Style: realism. <user text>`). The AI storyboard generator and cinematic prompt writer have no structured awareness of these selections, so they may ignore them.
 
 ## Solution
-Populate `sidebarTabs` with the actual editor tab icons so they appear in the timeline toolbar, allowing quick tab switching.
+Pass `selectedProducts` and `selectedStyles` as structured data through the entire pipeline and inject them as mandatory directives in the AI system prompts.
 
-### `src/components/ad-director/ProVideoEditor.tsx`
-Replace `sidebarTabs={[]}` with an array of tab objects matching the `EditorTab` type:
+### Changes
+
+#### 1. `src/components/ad-director/AdDirectorContent.tsx`
+- Pass `selectedProducts` and `selectedStyles` as separate parameters to `service.startPipeline()` instead of just prepending text
+
+#### 2. `src/lib/backgroundAdDirectorService.ts`
+- Add `selectedProducts` and `selectedStyles` parameters to `startPipeline()`
+- Forward them to the `ad-director-ai` edge function in both `analyze-script` and `write-cinematic-prompt` calls
+
+#### 3. `supabase/functions/ad-director-ai/index.ts`
+- In `handleAnalyzeScript`: inject a `PRODUCT & STYLE DIRECTIVE` block into the user prompt with human-readable product descriptions and style requirements
+- In `handleWriteCinematicPrompt`: inject the same product/style context so cinematic prompts reflect the selections
+- Add product description mapping (fiberglass → "Fiberglass GFRP reinforcement bars — lightweight, corrosion-resistant") and style description mapping (realism → "Photorealistic, real-world professional photography look")
+- Mark these as **MANDATORY** in the system prompt so the AI cannot ignore them
 
 ```text
-sidebarTabs={[
-  { id: "media",       label: "Media",     icon: <Film className="w-3.5 h-3.5" /> },
-  { id: "text",        label: "Text",      icon: <Type className="w-3.5 h-3.5" /> },
-  { id: "music",       label: "Music",     icon: <Music className="w-3.5 h-3.5" /> },
-  { id: "script",      label: "Script",    icon: <FileText className="w-3.5 h-3.5" /> },
-  { id: "brand-kit",   label: "Brand Kit", icon: <Palette className="w-3.5 h-3.5" /> },
-  { id: "card-editor", label: "Card",      icon: <LayoutGrid className="w-3.5 h-3.5" /> },
-]}
+Pipeline flow:
+  ChatPromptBar → selectedProducts=["fiberglass"], selectedStyles=["realism"]
+  ↓
+  AdDirectorContent → passes structured data to service
+  ↓
+  backgroundAdDirectorService → forwards to edge function
+  ↓
+  ad-director-ai (analyze-script) → "MANDATORY PRODUCT FOCUS: Fiberglass GFRP bars..."
+                                    "MANDATORY VISUAL STYLE: Photorealistic..."
+  ↓
+  ad-director-ai (write-cinematic-prompt) → same directives injected
 ```
-
-Ensure required icons (`Film`, `Palette`, `LayoutGrid`) are imported from lucide-react (some may already be imported).
 
 | File | Change |
 |---|---|
-| `ProVideoEditor.tsx` | Populate `sidebarTabs` array with 6 editor tab icons instead of empty `[]` |
+| `AdDirectorContent.tsx` | Pass products/styles as structured params to `startPipeline` |
+| `backgroundAdDirectorService.ts` | Accept + forward `selectedProducts`/`selectedStyles` to edge functions |
+| `ad-director-ai/index.ts` | Add product/style mappings and inject as mandatory directives in AI prompts |
 
