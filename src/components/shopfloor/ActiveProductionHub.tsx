@@ -215,7 +215,7 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
         })}
 
         {/* Unassigned plans card */}
-        {unassignedPlans.length > 0 && (
+        {trulyUnassigned.length > 0 && (
           <div className="rounded-xl border-2 border-dashed border-warning/50 bg-card p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -225,7 +225,7 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
                 </span>
               </div>
               <Badge className="bg-warning/20 text-warning border-warning/30 text-[10px]">
-                {unassignedPlans.length} PLAN{unassignedPlans.length !== 1 ? "S" : ""}
+                {trulyUnassigned.length} PLAN{trulyUnassigned.length !== 1 ? "S" : ""}
               </Badge>
             </div>
             <div className="space-y-3">
