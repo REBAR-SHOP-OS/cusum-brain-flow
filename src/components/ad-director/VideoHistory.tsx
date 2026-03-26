@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { Download, Play, AlertTriangle } from "lucide-react";
+import { Download, Play, AlertTriangle, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { downloadFile } from "@/lib/downloadUtils";
