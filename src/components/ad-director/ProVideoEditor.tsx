@@ -175,8 +175,7 @@ function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: 
     </Popover>
   );
 }
-
-
+export function ProVideoEditor({
   clips, storyboard, segments, brand,
   finalVideoUrl, onBack, onExport, exporting,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming,
