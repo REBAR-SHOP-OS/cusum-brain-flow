@@ -74,7 +74,7 @@ function renderBodyWithMedia(text: string | null) {
   });
 }
 
-export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, currentUserName: propUserName, currentUserId: propUserId, assignees = [] }: Props) {
+export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, currentUserName: propUserName, currentUserId: propUserId, assignees = [], contactEmail, contactPhone, leadTitle, onComposeEmail }: Props) {
   const { activities, isLoading, create, markDone } = useSalesLeadActivities(salesLeadId);
 
   // Resolve current user if not passed
