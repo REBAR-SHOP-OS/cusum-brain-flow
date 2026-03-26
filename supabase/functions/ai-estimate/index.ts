@@ -466,7 +466,13 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
     // ─── 3. Deterministic Calculation ───
     let calculatedItems: EstimationItemResult[] = [];
 
-    for (const input of extractedItems) {
+    // Pre-filter: drop items with no bar_size before calculation
+    const validItems = extractedItems.filter(item => item.bar_size && typeof item.bar_size === "string");
+    if (validItems.length < extractedItems.length) {
+      console.log(`Dropped ${extractedItems.length - validItems.length} items with missing bar_size`);
+    }
+
+    for (const input of validItems) {
       // Hardened null-safe defaults — catches null, undefined, NaN, empty strings
       input.quantity = Number(input.quantity) || 1;
       input.cut_length_mm = Number(input.cut_length_mm) || 0;

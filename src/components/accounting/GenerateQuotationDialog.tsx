@@ -218,8 +218,13 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           lead_id: selectedLeadId || leadId || undefined,
         },
       });
-      if (estError) throw estError;
+      if (estError) {
+        // supabase.functions.invoke swallows error bodies — try to get the message
+        const errMsg = typeof estError === "object" && estError?.message ? estError.message : String(estError);
+        throw new Error(errMsg);
+      }
       if (estData?.error) throw new Error(estData.error);
+      if (estData?.extraction_failed) throw new Error(estData.error || "Could not extract rebar data from the uploaded file.");
 
       const newProjectId = estData?.project?.id || estData?.project_id;
       if (!newProjectId) throw new Error("Estimation did not return a project ID");
