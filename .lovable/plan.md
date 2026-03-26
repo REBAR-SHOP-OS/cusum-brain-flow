@@ -1,22 +1,32 @@
 
 
-# Add Character/Spokesperson Photo Upload to Ad Director
+# Add "Send Message" and "WhatsApp" Buttons to Sales Lead Chatter
 
 ## What
-Add a 👤 Character upload box alongside the existing Intro/Outro image uploads in the ChatPromptBar. This lets users upload a photo of a person who will act as the product spokesperson in the generated video.
+Add two new action buttons to the SalesLeadChatter timeline tab — **Send Message** (opens the existing ComposeEmailDialog) and **WhatsApp** (opens WhatsApp Web with the lead's phone number pre-filled) — matching the Odoo-style button bar shown in the reference screenshot.
 
 ## Changes
 
-### 1. `src/components/ad-director/ChatPromptBar.tsx`
-- Add `characterImage` state + `characterRef` file input
-- Add a third upload box (styled with a User/UserRound icon) between Intro and Outro, labeled "Character 👤"
-- Update `onSubmit` signature to include `characterImage: File | null`
-- Pass `characterImage` in `handleSubmit`
+### 1. `src/components/sales/SalesLeadChatter.tsx`
+- Add `contact_email`, `contact_phone`, and `lead_title` to the Props interface
+- Add `onComposeEmail` callback prop (to trigger the ComposeEmailDialog in the parent drawer)
+- Add a **Send Message** button (Mail icon) that calls `onComposeEmail`
+- Add a **WhatsApp** button (MessageCircle icon) that opens `https://wa.me/{phone}` in a new tab (stripping non-numeric chars from `contact_phone`)
+- Reorder buttons: **Send Message** | **Log Note** | **WhatsApp** | **Schedule Activity**
+- WhatsApp button is hidden if no `contact_phone` is available
 
-### 2. `src/components/ad-director/AdDirectorContent.tsx`
-- Update `handleSubmit` callback signature to accept `characterImage: File | null`
-- When `characterImage` is provided, upload it to storage and include the URL in the `analyze-script` and `write-cinematic-prompt` edge function calls as `characterImageUrl` so the AI knows to incorporate the spokesperson
+### 2. `src/components/sales/SalesLeadDrawer.tsx`
+- Pass `contact_email`, `contact_phone`, `lead_title` and `onComposeEmail={() => setComposeOpen(true)}` to `SalesLeadChatter`
 
-### Visual Layout
-The three upload boxes will appear in a row: **Intro Image** — **Character 👤** — **Outro Image**, with the character box using a distinct person icon (UserRound from lucide).
+## Button Layout
+```text
+[ ✉ Send Message ] [ 💬 Log Note ] [ WhatsApp ] [ 📅 Schedule Activity ]
+```
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| `src/components/sales/SalesLeadChatter.tsx` | Add props + 2 new buttons |
+| `src/components/sales/SalesLeadDrawer.tsx` | Pass contact info + compose callback |
 
