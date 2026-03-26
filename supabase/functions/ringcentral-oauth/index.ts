@@ -269,14 +269,8 @@ Deno.serve((req) =>
       JSON.stringify({ error: "Invalid action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  } catch (error) {
-    console.error("RingCentral OAuth error:", error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-});
+  }, { functionName: "ringcentral-oauth", requireCompany: false, wrapResult: false })
+);
 
 // ─── Server-side OAuth callback handler ─────────────────────────
 async function handleOAuthCallback(url: URL): Promise<Response> {
