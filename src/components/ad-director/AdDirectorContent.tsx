@@ -140,6 +140,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     introImage: File | null, outroImage: File | null,
     duration: string, characterImage: File | null,
     selectedProducts?: string[], selectedStyles?: string[],
+    videoModel?: string, videoProvider?: string,
   ) => {
     // Enrich prompt with product/style context
     const prefixParts: string[] = [];
@@ -158,6 +159,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           const savedId = await saveProject.mutateAsync(data);
           return savedId;
         },
+        videoModel, videoProvider,
       );
     } catch (err: any) {
       toast({ title: "Failed", description: err.message, variant: "destructive" });
