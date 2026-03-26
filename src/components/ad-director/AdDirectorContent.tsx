@@ -307,9 +307,58 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
       }, { timeoutMs: EDGE_TIMEOUT_MS });
       const videoUrl = result.url || result.videoUrl;
+      const genId = result.jobId;
+      const provider = result.provider || "wan";
+
       if (videoUrl) {
         service.patchState({
           clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl, progress: 100 } : c),
+        });
+      } else if (genId) {
+        // Async job — poll until complete
+        const maxAttempts = 120;
+        let completed = false;
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          try {
+            const pollResult = await invokeEdgeFunction<{
+              status?: string; url?: string; videoUrl?: string; error?: string;
+            }>("generate-video", {
+              action: "poll", jobId: genId, provider,
+            }, { timeoutMs: 30000 });
+
+            const pollUrl = pollResult.url || pollResult.videoUrl;
+            if (pollResult.status === "completed" || pollUrl) {
+              service.patchState({
+                clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: pollUrl!, progress: 100 } : c),
+              });
+              completed = true;
+              break;
+            }
+            if (pollResult.status === "failed") {
+              service.patchState({
+                clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: pollResult.error || "Generation failed", progress: 0 } : c),
+              });
+              completed = true;
+              break;
+            }
+            // Update progress
+            const progress = Math.min(10 + Math.round((i / maxAttempts) * 85), 95);
+            service.patchState({
+              clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, progress } : c),
+            });
+          } catch {
+            // Continue polling on transient errors
+          }
+        }
+        if (!completed) {
+          service.patchState({
+            clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: "Generation timed out", progress: 0 } : c),
+          });
+        }
+      } else {
+        service.patchState({
+          clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: "No video URL or job ID returned", progress: 0 } : c),
         });
       }
     } catch (err: any) {
