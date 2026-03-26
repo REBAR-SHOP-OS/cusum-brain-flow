@@ -1,32 +1,38 @@
 
 
-# Resize Video Preview, Fix Logo Position & Apply Logo to All Scenes
+# Fix Video History: Videos Not Displaying
 
-## What
-1. The video preview canvas area in the editor is too large — reduce its size to a medium proportion
-2. The logo watermark overlay is centered (position x:35, y:40) for intro/outro scenes — move it to bottom-right corner
-3. Logo should be applied to ALL scenes automatically, not just intro/outro scenes
+## Root Cause
+The `final_video_url` saved to the database is a **blob URL** (`blob:https://...`). Blob URLs are temporary — they only work within the browser session that created them. When the page reloads or opens in a new session, the blob URL is invalid and the `<video>` element fails silently, showing a gray/empty box.
+
+## Solution
+Upload the final stitched video to Supabase Storage before saving the project, then store the **permanent public URL** in the database.
 
 ## Changes
 
-### 1. Reduce video preview size — `ProVideoEditor.tsx`
-The center canvas area (`flex-1`) fills all remaining space. Constrain the video preview with a max-height so it doesn't dominate the viewport:
-- Add `max-h-[50vh]` to the video container div (line 1131) so it takes roughly half the viewport height
-- This leaves more room for the timeline below
+### 1. `src/components/ad-director/AdDirectorContent.tsx`
+After `stitchClips` returns the blob (line ~170), **upload the blob to storage** before saving:
+- Fetch the blob from `finalUrl.blobUrl`
+- Upload to `generated-videos` bucket with path `{userId}/{uuid}.webm`
+- Get the public URL
+- Use the **public URL** (not blob URL) when calling `saveProject` with `finalVideoUrl`
+- Still set blob URL in local state for immediate playback
 
-### 2. Fix logo overlay position — `ProVideoEditor.tsx`
-In the auto-seed logo overlay effect (lines 205-209), change the position from center `{ x: 35, y: 40 }` to bottom-right `{ x: 82, y: 85 }` and reduce size from `{ w: 30, h: 20 }` to `{ w: 12, h: 10 }`.
+### 2. `src/lib/backgroundAdDirectorService.ts` (line ~489)
+Same fix for the service's internal export: after stitching, upload the blob to storage and store the permanent URL.
 
-### 3. Apply logo to ALL scenes — `ProVideoEditor.tsx`
-Change the auto-seed logic (lines 195-200) to apply to **all** scenes instead of filtering only intro/outro/hook/closing scenes. Remove the `introOutroScenes` filter — iterate over all `storyboard` scenes and seed a logo overlay for any scene that doesn't already have one.
+### 3. `src/components/ad-director/VideoHistory.tsx`
+Add error handling to the `<video>` element:
+- Add `onError` handler to show a fallback state (broken video icon)
+- Add `crossOrigin="anonymous"` attribute for CORS
+- Show a visual indicator when video can't be loaded
 
-### 4. Keep stitch logo position consistent — `videoStitch.ts`
-The `drawLogo` function already draws at bottom-right (line 185). No change needed there — it's correct.
-
-### 5. Keep `videoWatermark.ts` consistent
-Already draws at bottom-right. No change needed.
+### 4. Migration: Regenerate signed URLs for existing blob URLs
+Add a check in `VideoHistory`: if `final_video_url` starts with `blob:`, skip showing that project (since the blob is irrecoverable).
 
 | File | Change |
 |---|---|
-| `src/components/ad-director/ProVideoEditor.tsx` | Constrain video preview height; change auto-seed logo to all scenes with bottom-right position and smaller size |
+| `AdDirectorContent.tsx` | Upload final video blob to storage, save permanent URL |
+| `backgroundAdDirectorService.ts` | Same upload logic in service export |
+| `VideoHistory.tsx` | Filter out invalid blob URLs, add video error handling |
 
