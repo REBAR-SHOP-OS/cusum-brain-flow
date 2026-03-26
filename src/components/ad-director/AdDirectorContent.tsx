@@ -5,7 +5,7 @@ import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
 import { CameraLoader } from "./CameraLoader";
-import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle, Home, RefreshCw, CalendarDays } from "lucide-react";
+import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle, Home, RefreshCw, CalendarDays, BookmarkCheck } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -440,6 +440,15 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                 onSelect={(url) => {
                   service.patchState({ finalVideoUrl: url, flowState: "result" });
                 }}
+                onSelectDraft={(project) => {
+                  service.patchState({
+                    segments: project.segments ?? [],
+                    storyboard: project.storyboard ?? [],
+                    clips: project.clips ?? [],
+                    continuity: project.continuity ?? null,
+                    flowState: "result",
+                  });
+                }}
                 onDelete={(id) => deleteProject.mutate(id)}
               />
             </div>
@@ -581,6 +590,30 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
           {/* Action buttons */}
           <div className="flex items-center justify-center gap-3">
+            <Button
+              variant="outline"
+              className="gap-2"
+              disabled={saveProject.isPending}
+              onClick={async () => {
+                try {
+                  await saveProject.mutateAsync({
+                    name: brand.name || "Untitled",
+                    brandName: brand.name,
+                    segments,
+                    storyboard,
+                    clips,
+                    continuity,
+                    status: "draft",
+                  });
+                  toast({ title: "پیش‌نویس ذخیره شد", description: "پروژه در بخش ویدئوهای قبلی نمایش داده می‌شود." });
+                } catch {
+                  toast({ title: "خطا در ذخیره", variant: "destructive" });
+                }
+              }}
+            >
+              <BookmarkCheck className="w-4 h-4" />
+              ذخیره پیش‌نویس
+            </Button>
             {!approved ? (
               <Button onClick={() => setApproved(true)} className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400">
                 <Check className="w-4 h-4" />
