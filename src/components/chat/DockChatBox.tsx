@@ -601,14 +601,14 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
 
                         {/* Bubble */}
                         {(() => {
-                          const { cleanText, parsedAttachments } = parseAttachmentLinks(displayText);
-                          const allAttachments = [
-                            ...parsedAttachments,
-                            ...(msg.attachments || []).map((a: any) => ({ name: a.name, url: fixChatFileUrl(a.url) })),
-                          ];
-                          const seen = new Set<string>();
-                          const uniqueAttachments = allAttachments.filter((a) => { if (seen.has(a.url)) return false; seen.add(a.url); return true; });
-                          const hasText = cleanText.length > 0 && cleanText !== "📎" && cleanText !== "🎤";
+                          // Always resolve attachments from original_text + structured attachments
+                          // Never from translated text to avoid translation breaking file links
+                          const { cleanText: originalClean, allAttachments: uniqueAttachments } = resolveMessageContent(msg.original_text, msg.attachments);
+                          
+                          // For display text, strip attachment markdown from the translated/display version too
+                          const { cleanText: displayClean } = parseAttachmentLinks(displayText);
+                          const visibleText = displayClean.trim();
+                          const hasText = visibleText.length > 0 && visibleText !== "📎" && visibleText !== "🎤";
 
                           return (
                             <>
@@ -617,11 +617,11 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                   className={cn(
                                     "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit",
                                     isMe ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm" : "bg-muted text-foreground rounded-2xl rounded-bl-sm",
-                                    detectRtl(cleanText) && "text-right"
+                                    detectRtl(visibleText) && "text-right"
                                   )}
-                                  dir={detectRtl(cleanText) ? "rtl" : "ltr"}
+                                  dir="auto"
                                 >
-                                  {renderMentionText(cleanText)}
+                                  {renderMentionText(visibleText)}
                                 </div>
                               )}
 
@@ -643,13 +643,11 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                 </div>
                               ))}
 
-                              {/* Non-image, non-audio file links */}
+                              {/* Non-image, non-audio file cards */}
                               {uniqueAttachments.filter((a) => !isImageUrl(a.url) && !isAudioUrl(a.url)).map((att, ai) => (
-                                <button key={ai} onClick={() => downloadFile(att.url, att.name)} className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-md border border-border bg-muted/30 text-[10px] text-foreground/80 hover:bg-muted/60 transition-colors cursor-pointer">
-                                  <FileIcon className="w-3 h-3 text-primary" />
-                                  <span className="truncate max-w-[120px]">{att.name}</span>
-                                  <Download className="w-3 h-3 ml-1 text-muted-foreground" />
-                                </button>
+                                <div key={ai} className="mt-1 max-w-full">
+                                  <InlineFileLink url={att.url} fileName={att.name} />
+                                </div>
                               ))}
 
                               {/* Translation toggle */}
@@ -673,7 +671,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                 </button>
                                 <button
                                   className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
-                                  onClick={async () => { try { await navigator.clipboard.writeText(msg.original_text); toast.success("Copied!"); } catch { toast.error("Failed to copy"); } }}
+                                  onClick={async () => { try { await navigator.clipboard.writeText(originalClean || msg.original_text); toast.success("Copied!"); } catch { toast.error("Failed to copy"); } }}
                                   title="Copy"
                                 >
                                   <Copy className="w-3 h-3" />
