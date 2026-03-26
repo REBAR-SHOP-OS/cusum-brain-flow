@@ -49,9 +49,8 @@ interface ProVideoEditorProps {
   brand: BrandProfile;
   finalVideoUrl: string | null;
   onBack: () => void;
-  onExport: () => void;
-  exporting: boolean;
-  onOpenExportDialog?: () => void;
+  onExport?: () => void;
+  exporting?: boolean;
   onRegenerateScene?: (sceneId: string) => void;
   onUpdateClipUrl?: (sceneId: string, url: string) => void;
   onUpdateSegment?: (id: string, text: string) => void;
