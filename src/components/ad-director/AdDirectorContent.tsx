@@ -48,6 +48,61 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const [scenePrompts, setScenePrompts] = useState<Record<string, string>>({});
   const [approved, setApproved] = useState(false);
 
+  // Schedule-to-social state
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
+  const [scheduleHour, setScheduleHour] = useState("09");
+  const [scheduleMinute, setScheduleMinute] = useState("00");
+  const [scheduling, setScheduling] = useState(false);
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+
+  const handleScheduleToSocial = async () => {
+    if (!scheduleDate || !finalVideoUrl) return;
+    const scheduledDateTime = new Date(scheduleDate);
+    scheduledDateTime.setHours(parseInt(scheduleHour), parseInt(scheduleMinute), 0, 0);
+
+    if (scheduledDateTime <= new Date()) {
+      toast({ title: "Invalid Time", description: "Cannot schedule in the past.", variant: "destructive" });
+      return;
+    }
+
+    setScheduling(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({ title: "Authentication required", variant: "destructive" });
+        return;
+      }
+
+      const { error } = await supabase.from("social_posts").insert({
+        platform: "instagram",
+        status: "scheduled",
+        qa_status: "scheduled",
+        content_type: "reel",
+        image_url: finalVideoUrl,
+        scheduled_date: scheduledDateTime.toISOString(),
+        title: pipelineState.brand?.name || "AI Video",
+        content: pipelineState.prompt || "",
+        user_id: user.id,
+        neel_approved: false,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Scheduled ✅",
+        description: `Video scheduled for ${format(scheduledDateTime, "PPP")} at ${scheduleHour}:${scheduleMinute}`,
+      });
+      setScheduleOpen(false);
+    } catch (err: any) {
+      toast({ title: "Scheduling failed", description: err.message, variant: "destructive" });
+    } finally {
+      setScheduling(false);
+    }
+  };
+
   // Pipeline state — driven by singleton service
   const [pipelineState, setPipelineState] = useState<AdDirectorPipelineState>(service.getState());
 
