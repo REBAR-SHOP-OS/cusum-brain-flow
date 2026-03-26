@@ -507,7 +507,7 @@ const WRITE_PROMPT_TOOLS = [{
 // ─── Action Handlers ────────────────────────────────────────────
 
 async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: string) {
-  const { script, brand, assetDescriptions, characterImageUrl } = body;
+  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl } = body;
   if (!script) throw new Error("Script is required");
 
   const characterBlock = characterImageUrl
@@ -519,8 +519,16 @@ async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: st
 - Never replace them with a generic or different person.`
     : "";
 
+  const introBlock = introImageUrl
+    ? `\n\nINTRO REFERENCE IMAGE: A reference image has been provided for the opening scene. Scene 1 (hook) MUST visually match and be inspired by this image — same composition, color palette, and visual style. Set generationMode to "image-to-video" for scene 1.`
+    : "";
+
+  const outroBlock = outroImageUrl
+    ? `\n\nOUTRO REFERENCE IMAGE: A reference image has been provided for the closing visual scene. The LAST visual scene (before any end-card) MUST visually match and be inspired by this image — same composition, color palette, and visual style. Set generationMode to "image-to-video" for that scene.`
+    : "";
+
   const userPrompt = `Brand: ${brand?.name || "Rebar.Shop"} | Website: ${brand?.website || "Rebar.Shop"} | CTA: ${brand?.cta || "Upload your drawings and get fast rebar shop drawings delivered."} | Tagline: ${brand?.tagline || "Fast, precise rebar detailing when time matters."} | Audience: ${brand?.targetAudience || "Construction contractors and engineers"} | Colors: ${brand?.primaryColor || "#ef4444"} / ${brand?.secondaryColor || "#1e293b"} | Aesthetic: ${brand?.referenceAesthetic || "Premium cinematic industrial B2B"}
-${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}
+${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}${introBlock}${outroBlock}
 
 Script:
 ${script}`;
@@ -537,7 +545,7 @@ ${script}`;
 }
 
 async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverride?: string) {
-  const { scene, brand, continuityProfile, previousScene, characterImageUrl } = body;
+  const { scene, brand, continuityProfile, previousScene, characterImageUrl, introImageUrl, outroImageUrl, sceneIndex, totalScenes } = body;
   if (!scene) throw new Error("Scene data is required");
 
   const continuityBlock = continuityProfile ? `
@@ -551,6 +559,17 @@ async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverri
 - Camera Style: ${continuityProfile.cameraStyle || "N/A"}
 - Motion Rhythm: ${continuityProfile.motionRhythm || "N/A"}
 You MUST weave ALL of these visual anchors into the rewritten prompt so the video model generates visuals consistent with all other scenes.` : "";
+
+  const isFirstScene = sceneIndex === 0;
+  const isLastVisualScene = sceneIndex === (totalScenes != null ? totalScenes - 1 : -1);
+
+  const introRefBlock = (isFirstScene && introImageUrl)
+    ? `\nINTRO REFERENCE: A reference image is provided for this opening scene. The prompt MUST describe visuals that closely match the composition, colors, subjects, and style of this reference image. This scene should feel like the image has come alive.`
+    : "";
+
+  const outroRefBlock = (isLastVisualScene && outroImageUrl)
+    ? `\nOUTRO REFERENCE: A reference image is provided for this closing visual scene. The prompt MUST describe visuals that closely match the composition, colors, subjects, and style of this reference image. This scene should feel like the image has come alive.`
+    : "";
 
   const userPrompt = `Rewrite this scene's prompt into a premium cinematic video generation prompt.
 ${continuityBlock}
@@ -570,7 +589,7 @@ Original Prompt: ${scene.prompt}
 Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
 ${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the FIRST scene — establish the visual identity that ALL subsequent scenes must follow."}
 ${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}
-${characterImageUrl ? `\nCHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person. Ensure the person's appearance matches across all scenes.` : ""}`;
+${characterImageUrl ? `\nCHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person. Ensure the person's appearance matches across all scenes.` : ""}${introRefBlock}${outroRefBlock}`;
 
   return await callAIAndExtract(
     apiKey,

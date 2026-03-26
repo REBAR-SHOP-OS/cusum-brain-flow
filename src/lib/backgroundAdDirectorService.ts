@@ -179,6 +179,35 @@ class BackgroundAdDirectorService {
       }
     }
 
+    // Upload intro/outro reference images
+    let introImageUrl: string | undefined;
+    let outroImageUrl: string | undefined;
+    const { uploadToStorage: uploadFn } = await import("@/lib/storageUpload");
+    if (introImage) {
+      try {
+        const path = `intro-refs/${Date.now()}-${introImage.name}`;
+        const { error: upErr } = await uploadFn("ad-assets", path, introImage);
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from("ad-assets").getPublicUrl(path);
+          introImageUrl = urlData?.publicUrl;
+        }
+      } catch (e) {
+        console.warn("Intro image upload failed, continuing without it", e);
+      }
+    }
+    if (outroImage) {
+      try {
+        const path = `outro-refs/${Date.now()}-${outroImage.name}`;
+        const { error: upErr } = await uploadFn("ad-assets", path, outroImage);
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from("ad-assets").getPublicUrl(path);
+          outroImageUrl = urlData?.publicUrl;
+        }
+      } catch (e) {
+        console.warn("Outro image upload failed, continuing without it", e);
+      }
+    }
+
     try {
       // Phase 1: Analyze
       const analyzeResult = await withTimeout(invokeEdgeFunction<{
@@ -191,6 +220,8 @@ class BackgroundAdDirectorService {
         targetDuration: videoParams.duration,
         assetDescriptions: images.length > 0 ? images.map(f => f.name).join(", ") : undefined,
         characterImageUrl,
+        introImageUrl,
+        outroImageUrl,
         modelOverrides,
       }, { timeoutMs: 90_000 }));
 
@@ -209,7 +240,9 @@ class BackgroundAdDirectorService {
               action: "write-cinematic-prompt",
               scene, brand, continuityProfile,
               previousScene: idx > 0 ? rawStoryboard[idx - 1] : null,
-              characterImageUrl, modelOverrides,
+              characterImageUrl, introImageUrl, outroImageUrl,
+              sceneIndex: idx, totalScenes: rawStoryboard.length,
+              modelOverrides,
             }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
           } catch { return { prompt: scene.prompt, modelUsed: "original" }; }
@@ -340,7 +373,24 @@ class BackgroundAdDirectorService {
         this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "generating" as const, progress: 10 } : c));
 
         try {
-          const isI2V = characterImageUrl && scene.generationMode === "image-to-video";
+          // Determine reference image: intro for first scene, outro for last visual scene, character for others
+          const isFirstScene = i === 0;
+          const lastVisualIdx = storyboardWithDefaults.reduce((acc, s, idx) => {
+            const seg = newSegments.find(sg => sg.id === s.segmentId);
+            return (s.generationMode !== "static-card" && seg?.type !== "closing") ? idx : acc;
+          }, 0);
+          const isLastVisualScene = i === lastVisualIdx;
+
+          let referenceImage: string | undefined;
+          if (isFirstScene && introImageUrl) {
+            referenceImage = introImageUrl;
+          } else if (isLastVisualScene && outroImageUrl) {
+            referenceImage = outroImageUrl;
+          } else if (characterImageUrl && scene.generationMode === "image-to-video") {
+            referenceImage = characterImageUrl;
+          }
+
+          const isI2V = !!referenceImage;
           const result = await invokeEdgeFunction<{
             url?: string; videoUrl?: string; generationId?: string; jobId?: string;
             provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
@@ -348,7 +398,7 @@ class BackgroundAdDirectorService {
             action: "generate", prompt: motionPrompt, duration: sceneDuration,
             aspectRatio: wanRatio, provider: "wan",
             model: isI2V ? "wan2.6-i2v" : "wan2.6-t2v",
-            ...(isI2V ? { imageUrl: characterImageUrl } : {}),
+            ...(isI2V ? { imageUrl: referenceImage } : {}),
             negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
           }, { timeoutMs: EDGE_TIMEOUT_MS });
 
