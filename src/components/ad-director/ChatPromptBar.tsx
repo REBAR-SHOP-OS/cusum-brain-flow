@@ -231,8 +231,8 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
             </>
           ) : (
             <>
-              <ImagePlus className="w-7 h-7 text-muted-foreground/60" />
-              <span className="text-[10px] font-medium text-muted-foreground">Outro Image</span>
+              <ImagePlus className="w-7 h-7 text-white/70" />
+              <span className="text-[10px] font-medium text-white/80">Outro Image</span>
             </>
           )}
         </button>
