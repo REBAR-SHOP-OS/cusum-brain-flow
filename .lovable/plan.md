@@ -1,25 +1,25 @@
 
 
-# Fix Message Overflow in DockChatBox
+# Always Show Send Button on Scene Custom Prompt
 
 ## Problem
-Messages in the dock chat widget overflow horizontally — text (especially forwarded messages) extends beyond the chat box boundary instead of wrapping properly.
-
-## Root Cause
-In `DockChatBox.tsx` line 618, the message bubble has `w-fit` which sizes to content width. While `break-words` and `overflow-hidden` are present, the lack of `max-w-full` means the bubble can exceed its parent container's width before word-breaking kicks in.
+The Send (paper plane) icon button next to "Custom prompt..." input uses `variant="ghost"` styling, making it nearly invisible against the dark background. The user wants it always clearly visible.
 
 ## Fix
-**File: `src/components/chat/DockChatBox.tsx`**
+**File: `src/components/ad-director/AdDirectorContent.tsx`** (line 594-602)
 
-Single change on line 618 — add `max-w-full` to the bubble `div` class:
+Change the Send button from `variant="ghost"` to a visible styled button with a persistent teal/primary background so it's always visible regardless of background:
 
+```tsx
+// Before
+<Button size="sm" variant="ghost" className="h-7 w-7 p-0" ...>
+
+// After
+<Button size="sm" className="h-7 w-7 p-0 bg-primary text-primary-foreground hover:bg-primary/90 shrink-0" ...>
 ```
-Before: "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit"
-After:  "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit max-w-full"
-```
 
-This constrains the bubble to never exceed its parent (`max-w-[75%]` container), ensuring all text wraps properly including forwarded messages and long strings.
+This ensures the send icon is always visible with a solid background color, matching the teal style shown in the screenshot.
 
 ## Files Changed
-- `src/components/chat/DockChatBox.tsx` — add `max-w-full` to bubble className (line 618)
+- `src/components/ad-director/AdDirectorContent.tsx` — update Send button styling (line 594-597)
 
