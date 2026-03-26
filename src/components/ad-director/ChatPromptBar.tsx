@@ -141,7 +141,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
       }
     } catch (err: any) {
       console.error("Auto-generate prompt error:", err);
-      toast({ title: "خطا در تولید پرامپت", description: err.message || "لطفاً دوباره تلاش کنید", variant: "destructive" });
+      toast({ title: "Prompt generation failed", description: err.message || "Please try again", variant: "destructive" });
     } finally {
       setIsAutoGenerating(false);
     }
