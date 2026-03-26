@@ -225,7 +225,7 @@ export function TimelineBar({
                   <PopoverTrigger asChild>
                     <div
                       onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
-                      className={`relative h-full flex items-center justify-center transition-all cursor-pointer
+                      className={`relative h-full flex items-center justify-center transition-all cursor-pointer overflow-hidden
                         ${isSelected ? "ring-2 ring-primary ring-inset z-10" : ""}
                         ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
                       `}
@@ -239,10 +239,20 @@ export function TimelineBar({
                           className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 z-20"
                         />
                       )}
-                      {clip?.videoUrl && (
+                      {/* Live thumbnail preview */}
+                      {thumbnails[scene.id] ? (
+                        <>
+                          <img
+                            src={thumbnails[scene.id]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        </>
+                      ) : clip?.videoUrl ? (
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
-                      )}
-                      <span className="text-[8px] text-muted-foreground font-medium z-10 truncate px-1">
+                      ) : null}
+                      <span className="text-[8px] text-white font-medium z-10 truncate px-1 drop-shadow-sm">
                         {seg?.label || `S${i + 1}`}
                       </span>
                       {isSelected && (
