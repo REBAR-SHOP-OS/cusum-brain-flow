@@ -491,9 +491,26 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
         </div>
       ) : (
         <div className="space-y-0">
-          {filtered.map((activity) => (
-            <ActivityItem key={activity.id} activity={activity} onMarkDone={() => markDone.mutate(activity.id)} />
-          ))}
+          {filtered.map((activity) => {
+            // Find the closest email outcome for this activity (match by timestamp proximity)
+            const activityTime = new Date(activity.created_at).getTime();
+            let emailStatus: "success" | "failed" | "partial" | undefined;
+            for (const [ts, status] of Object.entries(emailOutcomes)) {
+              const diff = Math.abs(new Date(ts).getTime() - activityTime);
+              if (diff < 10000) { // within 10 seconds
+                emailStatus = status;
+                break;
+              }
+            }
+            return (
+              <ActivityItem
+                key={activity.id}
+                activity={activity}
+                onMarkDone={() => markDone.mutate(activity.id)}
+                emailStatus={activity.activity_type === "note" && activity.body?.includes("@") ? emailStatus : undefined}
+              />
+            );
+          })}
         </div>
       )}
     </div>
