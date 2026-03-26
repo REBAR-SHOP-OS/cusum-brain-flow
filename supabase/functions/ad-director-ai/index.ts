@@ -383,7 +383,14 @@ Return: subjectDescriptions, wardrobe, environment, timeOfDay, cameraStyle, moti
 - Example lighting: "golden hour backlight, tungsten fill 45° left, volumetric haze"
 - Example materials: "weathered steel rebar with rust patina, fresh concrete with moisture sheen"`;
 
-const WRITE_CINEMATIC_PROMPT_SYSTEM = `Rewrite scene prompts into 80-150 word cinematic video generation prompts. Be specific: lens mm, f-stop, lighting angles, material textures, movement speed. NO camera brand names, NO text/titles in prompts. For continuation scenes, reference previous scene visuals.`;
+const WRITE_CINEMATIC_PROMPT_SYSTEM = `Rewrite scene prompts into 80-150 word cinematic video generation prompts. Be specific: lens mm, f-stop, lighting angles, material textures, movement speed. NO camera brand names, NO text/titles in prompts.
+
+CRITICAL COHERENCE REQUIREMENT:
+- Every prompt after scene 1 MUST begin with a visual continuity statement that references the exact same environment, lighting, color palette, and subject appearance from the continuity profile.
+- You MUST embed the continuity profile details (subject descriptions, wardrobe, environment, lighting type, color mood) directly into every prompt as visual anchors.
+- The viewer must feel ALL clips are from the SAME film shoot — same location, same day, same camera setup, same color grading.
+- Start continuation prompts with: "In the same [environment] with [lighting], [subject with exact appearance] —"
+- Never introduce new visual elements, color schemes, or lighting setups that contradict the established continuity profile.`;
 
 const SCORE_QUALITY_PROMPT = `Score this video generation prompt on 7 dimensions (0-10): realism, specificity, visualRichness, continuityStrength, brandRelevance, emotionalPersuasion, cinematicClarity. Include overall score and suggestion if < 7.`;
 
