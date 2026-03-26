@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { renderDescriptionWithFiles } from "@/components/pipeline/InlineFileLink";
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
