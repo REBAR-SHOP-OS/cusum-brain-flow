@@ -1059,6 +1059,33 @@ export function ProVideoEditor({
     });
   };
 
+  // ─── Drag-to-reposition handlers ───
+  const handleMoveOverlay = useCallback((id: string, newSceneId: string) => {
+    setOverlays(prev => prev.map(o => {
+      if (o.id !== id || o.sceneId === newSceneId) return o;
+      // Recalculate timing for new scene
+      const newSceneIdx = storyboard.findIndex(s => s.id === newSceneId);
+      const seg = newSceneIdx >= 0 ? segments.find(s => s.id === storyboard[newSceneIdx]?.segmentId) : null;
+      const newDur = seg ? seg.endTime - seg.startTime : 4;
+      // If timed overlay, re-proportion to new scene duration
+      if (o.startTime != null && o.endTime != null) {
+        const oldSceneIdx = storyboard.findIndex(s => s.id === o.sceneId);
+        const oldSeg = oldSceneIdx >= 0 ? segments.find(s => s.id === storyboard[oldSceneIdx]?.segmentId) : null;
+        const oldDur = oldSeg ? oldSeg.endTime - oldSeg.startTime : 4;
+        const startRatio = o.startTime / oldDur;
+        const endRatio = o.endTime / oldDur;
+        return { ...o, sceneId: newSceneId, startTime: startRatio * newDur, endTime: endRatio * newDur };
+      }
+      return { ...o, sceneId: newSceneId };
+    }));
+  }, [storyboard, segments]);
+
+  const handleMoveAudioTrack = useCallback((index: number, newSceneId: string) => {
+    setAudioTracks(prev => prev.map((at, i) =>
+      i === index ? { ...at, sceneId: newSceneId } : at
+    ));
+  }, []);
+
   // AI Command Bar
   const handleAiSubmit = async () => {
     if (!aiCommand.trim() || aiProcessing) return;
@@ -1433,6 +1460,8 @@ export function ProVideoEditor({
         onToggleOverlayAnimation={handleToggleOverlayAnimation}
         onReRecordVoiceover={handleReRecordVoiceover}
         onEditVoiceoverText={handleEditVoiceoverText}
+        onMoveOverlay={handleMoveOverlay}
+        onMoveAudioTrack={handleMoveAudioTrack}
         onEditOverlay={(ov) => {
           const newText = prompt("Edit overlay text:", ov.content);
           if (newText !== null) setOverlays(prev => prev.map(o => o.id === ov.id ? { ...o, content: newText } : o));

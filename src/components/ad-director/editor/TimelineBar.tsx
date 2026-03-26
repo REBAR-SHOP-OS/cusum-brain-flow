@@ -119,6 +119,9 @@ interface TimelineBarProps {
   // Audio extras
   onReRecordVoiceover?: (sceneId: string) => void;
   onEditVoiceoverText?: (sceneId: string) => void;
+  // Drag-to-reposition
+  onMoveOverlay?: (id: string, newSceneId: string) => void;
+  onMoveAudioTrack?: (index: number, newSceneId: string) => void;
 }
 
 export function TimelineBar({
@@ -133,12 +136,91 @@ export function TimelineBar({
   onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onEditVoiceoverText,
+  onMoveOverlay, onMoveAudioTrack,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [textTrackMuted, setTextTrackMuted] = useState(false);
   const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const thumbnails = useVideoThumbnails(clips);
+
+  // ─── Item drag-to-reposition state ───
+  const itemDragRef = useRef<{
+    type: "text" | "audio";
+    id: string;       // overlay id or audio track index as string
+    startX: number;
+    origLeftPct: number;
+    origWidthPct: number;
+  } | null>(null);
+  const [itemDragOffsetPx, setItemDragOffsetPx] = useState(0);
+  const [itemDragging, setItemDragging] = useState(false);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+
+  // Find which scene a percentage position falls into
+  const findSceneAtPct = useCallback((pct: number) => {
+    for (let i = 0; i < storyboard.length; i++) {
+      const start = (cumulativeStarts[i] || 0) / totalDuration * 100;
+      const dur = getSceneDur(i);
+      const end = start + (dur / totalDuration) * 100;
+      if (pct >= start && pct < end) return i;
+    }
+    return storyboard.length - 1;
+  }, [storyboard, cumulativeStarts, totalDuration]);
+
+  const handleItemDragStart = useCallback((
+    e: React.MouseEvent,
+    type: "text" | "audio",
+    id: string,
+    leftPct: number,
+    widthPct: number,
+  ) => {
+    e.stopPropagation();
+    e.preventDefault();
+    itemDragRef.current = { type, id, startX: e.clientX, origLeftPct: leftPct, origWidthPct: widthPct };
+    setItemDragOffsetPx(0);
+    setItemDragging(true);
+    setDraggedItemId(type === "audio" ? `audio-${id}` : id);
+  }, []);
+
+  useEffect(() => {
+    if (!itemDragging) return;
+    const onMove = (e: MouseEvent) => {
+      if (!itemDragRef.current) return;
+      setItemDragOffsetPx(e.clientX - itemDragRef.current.startX);
+    };
+    const onUp = (e: MouseEvent) => {
+      if (!itemDragRef.current || !trackRef.current) {
+        setItemDragging(false);
+        setDraggedItemId(null);
+        return;
+      }
+      const trackWidth = trackRef.current.getBoundingClientRect().width;
+      const dx = e.clientX - itemDragRef.current.startX;
+      const deltaPct = (dx / trackWidth) * 100;
+      const centerPct = itemDragRef.current.origLeftPct + itemDragRef.current.origWidthPct / 2 + deltaPct;
+      const targetIdx = findSceneAtPct(Math.max(0, Math.min(100, centerPct)));
+      const targetSceneId = storyboard[targetIdx]?.id;
+
+      if (targetSceneId) {
+        if (itemDragRef.current.type === "text") {
+          onMoveOverlay?.(itemDragRef.current.id, targetSceneId);
+        } else {
+          onMoveAudioTrack?.(parseInt(itemDragRef.current.id), targetSceneId);
+        }
+      }
+
+      itemDragRef.current = null;
+      setItemDragging(false);
+      setItemDragOffsetPx(0);
+      setDraggedItemId(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [itemDragging, storyboard, findSceneAtPct, onMoveOverlay, onMoveAudioTrack]);
 
   // Drag-to-resize handlers
   const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
@@ -420,14 +502,21 @@ export function TimelineBar({
                   const dur = getSceneDur(sceneIdx);
                   const leftPct = totalDuration > 0 ? (start / totalDuration) * 100 : 0;
                   const widthPct = totalDuration > 0 ? (dur / totalDuration) * 100 : 0;
+                  const isDragTarget = draggedItemId === ov.id;
                   return (
                     <Popover key={ov.id}>
                       <PopoverTrigger asChild>
                         <div
-                          className="absolute h-5 top-1 rounded bg-amber-600/50 border border-amber-500/40 flex items-center px-1 cursor-pointer hover:bg-amber-600/70 transition-colors"
-                          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                          onMouseDown={(e) => handleItemDragStart(e, "text", ov.id, leftPct, widthPct)}
+                          className={`absolute h-5 top-1 rounded bg-amber-600/50 border flex items-center px-1 cursor-grab active:cursor-grabbing transition-colors ${isDragTarget ? "border-primary ring-1 ring-primary/50 z-30" : "border-amber-500/40 hover:bg-amber-600/70"}`}
+                          style={{
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                            transform: isDragTarget ? `translateX(${itemDragOffsetPx}px)` : undefined,
+                          }}
                           title={ov.content}
                         >
+                          <Move className="w-2 h-2 text-amber-300 mr-0.5 shrink-0" />
                           <span className="text-[7px] text-white truncate">{ov.content}</span>
                         </div>
                       </PopoverTrigger>
@@ -561,14 +650,21 @@ export function TimelineBar({
                   const dur = getSceneDur(sceneIdx);
                   const leftPct = totalDuration > 0 ? (start / totalDuration) * 100 : 0;
                   const widthPct = totalDuration > 0 ? (dur / totalDuration) * 100 : 0;
+                  const isAudioDragTarget = draggedItemId === `audio-${idx}`;
                   return (
                     <Popover key={`vo-${idx}`}>
                       <PopoverTrigger asChild>
                         <div
-                          className="absolute h-5 top-1 rounded bg-sky-600/50 border border-sky-500/40 flex items-center px-1 cursor-pointer hover:bg-sky-600/70 transition-colors"
-                          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                          onMouseDown={(e) => handleItemDragStart(e, "audio", String(idx), leftPct, widthPct)}
+                          className={`absolute h-5 top-1 rounded bg-sky-600/50 border flex items-center px-1 cursor-grab active:cursor-grabbing transition-colors ${isAudioDragTarget ? "border-primary ring-1 ring-primary/50 z-30" : "border-sky-500/40 hover:bg-sky-600/70"}`}
+                          style={{
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                            transform: isAudioDragTarget ? `translateX(${itemDragOffsetPx}px)` : undefined,
+                          }}
                           title={at.label}
                         >
+                          <Move className="w-2 h-2 text-sky-300 mr-0.5 shrink-0" />
                           <Mic className="w-2 h-2 text-sky-300 mr-0.5" />
                           <span className="text-[7px] text-sky-200 truncate">{at.label}</span>
                           <span className="text-[7px] text-sky-300/60 ml-1">{Math.round((at.volume ?? 1) * 100)}%</span>
