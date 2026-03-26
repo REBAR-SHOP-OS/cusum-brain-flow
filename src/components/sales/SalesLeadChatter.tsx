@@ -566,6 +566,24 @@ function ActivityItem({ activity, onMarkDone, emailStatus }: { activity: SalesLe
             Completed {format(new Date(activity.completed_at), "MMM d")}
           </span>
         )}
+        {emailStatus === "success" && (
+          <span className="text-[10px] text-green-600 flex items-center gap-1 mt-1 font-medium">
+            <CheckCircle2 className="w-3 h-3" />
+            Email sent successfully
+          </span>
+        )}
+        {emailStatus === "partial" && (
+          <span className="text-[10px] text-amber-500 flex items-center gap-1 mt-1 font-medium">
+            <CheckCircle2 className="w-3 h-3" />
+            Email partially sent
+          </span>
+        )}
+        {emailStatus === "failed" && (
+          <span className="text-[10px] text-red-500 flex items-center gap-1 mt-1 font-medium">
+            <XCircle className="w-3 h-3" />
+            Email failed to send
+          </span>
+        )}
       </div>
     </div>
   );
