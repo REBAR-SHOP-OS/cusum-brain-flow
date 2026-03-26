@@ -497,6 +497,43 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
           </div>
         </ScrollArea>
       </SheetContent>
+
+      {/* Email dialog for send_to_customer and customer_approved */}
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {emailDialogAction === "send_quote" ? "Send Quotation to Customer" : "Convert to Invoice & Send Payment Link"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="sq-customer-email" className="text-sm">Customer Email</Label>
+              <Input
+                id="sq-customer-email"
+                type="email"
+                placeholder="customer@example.com"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                className="mt-1"
+                autoFocus
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {emailDialogAction === "send_quote"
+                ? "A branded quotation email will be sent to the customer."
+                : "This will create an invoice, generate a Stripe payment link, and email the invoice to the customer."}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={sendingEmail}>Cancel</Button>
+            <Button onClick={handleEmailAction} disabled={sendingEmail || !customerEmail.trim()} className="gap-2">
+              {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : (emailDialogAction === "send_quote" ? <Mail className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />)}
+              {sendingEmail ? "Processing…" : emailDialogAction === "send_quote" ? "Send Email" : "Create Invoice & Send"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }
