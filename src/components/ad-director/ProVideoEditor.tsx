@@ -178,14 +178,6 @@ export function ProVideoEditor({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeTab, setActiveTab] = useState<EditorTab>("media");
 
-  // Sync from external sidebar navigation
-  useEffect(() => {
-    if (externalActiveTab && TABS.some(t => t.id === externalActiveTab)) {
-      setActiveTab(externalActiveTab as EditorTab);
-    }
-  }, [externalActiveTab]);
-
-  // Notify parent of tab changes
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
     setActiveTab(tab);
     onActiveTabChanged?.(tab);
