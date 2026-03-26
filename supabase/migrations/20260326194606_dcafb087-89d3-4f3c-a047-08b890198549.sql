@@ -1,0 +1,1 @@
+ALTER TABLE public.ad_projects ADD COLUMN IF NOT EXISTS thumbnail_url text;
