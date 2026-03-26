@@ -382,39 +382,33 @@ class BackgroundAdDirectorService {
       const effectiveRatio = ratio === "Smart" ? "16:9" : ratio;
       const wanRatio = ["16:9", "9:16", "1:1", "4:3"].includes(effectiveRatio) ? effectiveRatio : "16:9";
 
-      for (let i = 0; i < storyboardWithDefaults.length; i++) {
-        if (this.cancelFlag) break;
-        const scene = storyboardWithDefaults[i];
+      // Pre-compute shared values
+      const sceneDuration = 15;
+      const cp = continuityProfile;
+      const continuityPrefix = cp
+        ? `[Visual continuity: ${cp.environment || ""}, ${cp.lightingType || ""}, ${cp.colorMood || ""}, subject: ${cp.subjectDescriptions || ""}, wardrobe: ${cp.wardrobe || ""}] `
+        : "";
+      const lastVisualIdx = storyboardWithDefaults.reduce((acc, s, idx) => {
+        const seg = newSegments.find(sg => sg.id === s.segmentId);
+        return (s.generationMode !== "static-card" && seg?.type !== "closing") ? idx : acc;
+      }, 0);
+
+      // Generate all scenes in parallel
+      const scenePromises = storyboardWithDefaults.map(async (scene, i) => {
+        if (this.cancelFlag) return;
         const segment = newSegments.find(seg => seg.id === scene.segmentId);
 
-        this.update({
-          statusText: `Generating scene ${i + 1} of ${storyboardWithDefaults.length}...`,
-          progressValue: Math.round((i / storyboardWithDefaults.length) * 100),
-        });
-
-        // End card
+        // End card — handle synchronously
         if (scene.generationMode === "static-card" || segment?.type === "closing") {
           this.generateEndCard(scene.id, brand);
-          continue;
+          return;
         }
 
-        const sceneDuration = 15; // Always generate 15-second clips
-        // Inject continuity profile into every scene prompt for cross-clip coherence
-        const cp = continuityProfile;
-        const continuityPrefix = cp
-          ? `[Visual continuity: ${cp.environment || ""}, ${cp.lightingType || ""}, ${cp.colorMood || ""}, subject: ${cp.subjectDescriptions || ""}, wardrobe: ${cp.wardrobe || ""}] `
-          : "";
         const motionPrompt = continuityPrefix + scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
-
         this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "generating" as const, progress: 10 } : c));
 
         try {
-          // Determine reference image: intro for first scene, outro for last visual scene, character for others
           const isFirstScene = i === 0;
-          const lastVisualIdx = storyboardWithDefaults.reduce((acc, s, idx) => {
-            const seg = newSegments.find(sg => sg.id === s.segmentId);
-            return (s.generationMode !== "static-card" && seg?.type !== "closing") ? idx : acc;
-          }, 0);
           const isLastVisualScene = i === lastVisualIdx;
 
           let referenceImage: string | undefined;
@@ -457,8 +451,25 @@ class BackgroundAdDirectorService {
         } catch (err: any) {
           this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "failed" as const, error: err.message, progress: 0 } : c));
         }
-        await new Promise(r => setTimeout(r, 2000));
-      }
+      });
+
+      // Update progress while scenes generate in parallel
+      const progressInterval = setInterval(() => {
+        if (this.cancelFlag) { clearInterval(progressInterval); return; }
+        const currentClips = this.state.clips;
+        const total = currentClips.length;
+        const done = currentClips.filter(c => c.status === "completed" || c.status === "failed").length;
+        const generating = currentClips.filter(c => c.status === "generating");
+        const avgProgress = generating.length > 0 ? generating.reduce((s, c) => s + (c.progress || 0), 0) / generating.length : 0;
+        const overallProgress = Math.round(((done + avgProgress / 100) / total) * 100);
+        this.update({
+          statusText: `Generating scenes... ${done}/${total} complete`,
+          progressValue: overallProgress,
+        });
+      }, 2000);
+
+      await Promise.allSettled(scenePromises);
+      clearInterval(progressInterval);
 
       // Phase 3: Export / stitch
       this.update({ statusText: "Assembling final video...", progressValue: 90 });
