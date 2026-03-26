@@ -117,7 +117,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
-    onSubmit(prompt.trim(), ratio, [], introImage, outroImage, duration, characterImage, selectedProducts, selectedStyles);
+    onSubmit(prompt.trim(), ratio, [], introImage, outroImage, duration, characterImage, selectedProducts, selectedStyles, selectedVideoModel.key, selectedVideoModel.provider);
     setPrompt("");
     setIntroImage(null);
     setOutroImage(null);
