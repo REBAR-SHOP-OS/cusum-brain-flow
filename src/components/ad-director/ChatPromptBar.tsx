@@ -187,7 +187,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
           className={cn(
             "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
             "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            characterImage ? "border-primary/40 bg-primary/5" : "border-border/40 bg-muted/10",
+            characterImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
             "disabled:opacity-40 disabled:cursor-not-allowed"
           )}
         >
