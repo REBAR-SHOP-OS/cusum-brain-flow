@@ -166,7 +166,7 @@ serve((req) =>
         const { data: actorProfile } = await serviceClient
           .from("profiles")
           .select("email")
-          .eq("id", actor_id)
+          .eq("user_id", actor_id)
           .maybeSingle();
         if (actorProfile?.email) senderEmail = actorProfile.email;
         log.info(`Using actor's own Gmail token (${senderEmail})`);
