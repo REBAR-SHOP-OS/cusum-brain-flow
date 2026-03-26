@@ -262,7 +262,7 @@ Deno.serve((req) =>
     const assumptions = [
       "Quote based on customer-provided sizes and quantities",
       "Design by others",
-      "Shipping distance TBD — not included in this quote",
+      deliveryDistanceKm > 0 ? `Delivery included: ${deliveryDistanceKm} km round trip` : "Shipping distance TBD — not included in this quote",
       "Black rebar unless otherwise specified",
       `${scrapPct}% scrap factor applied`,
       "Prices valid for 30 days from quote date",
