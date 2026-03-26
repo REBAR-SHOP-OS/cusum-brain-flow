@@ -191,6 +191,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
   // ─── Regenerate scene (from editor) ─────────────
   const handleRegenerateScene = useCallback(async (sceneId: string, customPrompt?: string) => {
+    setApproved(false);
     const currentState = service.getState();
     const scene = currentState.storyboard.find(s => s.id === sceneId);
     if (!scene) return;
