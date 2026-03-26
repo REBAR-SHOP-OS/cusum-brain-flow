@@ -1,65 +1,51 @@
 
 
-# Fix Video Duration: One 15s Clip Per Scene
+# Add Voiceover Script to Storyboard Output
 
-## Problem
-Currently, the AI creates 4-8 short scenes (3s each) regardless of duration. The user wants:
-- **15s** → 1 video clip of 15 seconds
-- **30s** → 2 video clips of 15 seconds each
-- **1min** → 4 video clips of 15 seconds each
+## What
+Add a dedicated `voiceover` field to each storyboard scene so the AI generates a voiceover narration script alongside the visual prompt. This voiceover text will be used for TTS generation and displayed in the editor.
 
-## Root Cause
-Two places control scene count and duration:
-1. The AI system prompt tells it to create 4-14 scenes
-2. The client divides total duration by scene count, producing short clips
+## Current State
+- `segments[].text` contains narration text but it's generic segment text, not explicitly labeled as voiceover
+- The `storyboard[].prompt` only describes visuals
+- Voiceover is generated later from segment text via `generate-voiceover` action
 
 ## Changes
 
-### 1. `supabase/functions/ad-director-ai/index.ts` — Update AI prompt (line ~357)
+### 1. `supabase/functions/ad-director-ai/index.ts`
 
-Change the PACING section in `ANALYZE_SCRIPT_PROMPT`:
-
-**Before:**
+**Update `ANALYZE_SCRIPT_PROMPT`** (line ~361):
+Add to the `## SCENE OUTPUT` section:
 ```
-Scene count: 30s ad = 6-8 scenes, 15s = 4-5, 60s = 10-14
-No scene < 1.5s or > 6s
+- voiceover: The exact narration/voiceover script for this scene. Natural, conversational, punchy advertising copy. This text will be read aloud by a narrator.
 ```
 
-**After:**
-```
-Scene count: 15s ad = 1 scene, 30s = 2 scenes, 60s = 4 scenes
-Each scene MUST be exactly 15 seconds. No exceptions.
-```
-
-Also update the segment timing rules to match (Hook: 15s, etc.)
-
-### 2. `src/lib/backgroundAdDirectorService.ts` — Fix per-scene duration (lines 365-367)
-
-Replace the dynamic calculation with a fixed 15s per clip:
-
+**Update `ANALYZE_SCRIPT_TOOLS`** tool schema (line ~423-442):
+Add `voiceover` property to the `storyboard` items:
 ```ts
-const sceneDuration = 15; // Always generate 15-second clips
+voiceover: { type: "string", description: "Voiceover narration script for this scene" },
 ```
+Add `"voiceover"` to the `required` array.
 
-### 3. `src/lib/backgroundAdDirectorService.ts` — Pass scene count hint to AI
+### 2. `src/types/adDirector.ts`
 
-In the `analyze-script` call (~line 218-228), pass the expected scene count so the AI knows exactly how many scenes to create:
-
+**Update `StoryboardScene` interface** — add:
 ```ts
-const sceneCount = userDuration <= 15 ? 1 : userDuration <= 30 ? 2 : 4;
+voiceover?: string;
 ```
 
-Add `sceneCount` to the edge function body, and reference it in the user prompt sent to the AI.
+### 3. `src/components/ad-director/ProVideoEditor.tsx`
 
-### 4. `supabase/functions/ad-director-ai/index.ts` — Use `sceneCount` in the user prompt
+When auto-generating voiceovers, prefer `scene.voiceover` text over `segment.text` if available. This ensures the dedicated voiceover script is used for TTS.
 
-In `handleAnalyzeScript`, read `body.sceneCount` and append to the user prompt:
-```
-Required scene count: ${sceneCount} scenes of 15 seconds each.
-```
+### 4. `src/lib/backgroundAdDirectorService.ts`
+
+When populating segments from the storyboard result, if `scene.voiceover` exists, use it as the segment `text` so the voiceover pipeline picks it up automatically.
 
 | File | Change |
 |---|---|
-| `supabase/functions/ad-director-ai/index.ts` | Update PACING rules in system prompt to enforce 15s clips |
-| `src/lib/backgroundAdDirectorService.ts` | Set `sceneDuration = 15`, calculate and pass `sceneCount` to edge function |
+| `supabase/functions/ad-director-ai/index.ts` | Add voiceover to prompt instructions + tool schema |
+| `src/types/adDirector.ts` | Add `voiceover` to `StoryboardScene` |
+| `src/components/ad-director/ProVideoEditor.tsx` | Use `scene.voiceover` for TTS when available |
+| `src/lib/backgroundAdDirectorService.ts` | Map voiceover text to segment text |
 
