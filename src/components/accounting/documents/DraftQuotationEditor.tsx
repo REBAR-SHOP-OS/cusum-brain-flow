@@ -46,6 +46,9 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const { companyId } = useCompanyId();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [quoteNumber, setQuoteNumber] = useState("");
   const [quoteDate, setQuoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [expirationDate, setExpirationDate] = useState("");
