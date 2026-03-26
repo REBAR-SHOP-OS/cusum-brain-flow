@@ -379,7 +379,8 @@ export function PostReviewPanel({
     setLocalPages(prev => prev.filter(p => validPages.has(p)));
 
     // Map UI platform keys to DB platform values
-    const dbPlatforms = sanitized.map(p => platformMap[p] || p);
+    // Deduplicate after mapping (instagram_fb and instagram both map to "instagram")
+    const dbPlatforms = [...new Set(sanitized.map(p => platformMap[p] || p))];
 
     // Reconcile sibling rows: find all siblings for this title + day
     const day = post.scheduled_date?.substring(0, 10);
