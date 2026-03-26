@@ -143,6 +143,8 @@ class BackgroundAdDirectorService {
     videoParams: VideoParams,
     modelOverrides: ModelOverrides,
     saveProject: (data: any) => Promise<string>,
+    videoModel?: string,
+    videoProvider?: string,
   ) {
     this.cancelFlag = false;
     this.running = true;
@@ -390,14 +392,16 @@ class BackgroundAdDirectorService {
             referenceImage = characterImageUrl;
           }
 
+          const chosenProvider = videoProvider || "wan";
           const isI2V = !!referenceImage;
+          const chosenModel = videoModel || (isI2V ? "wan2.6-i2v" : "wan2.6-t2v");
           const result = await invokeEdgeFunction<{
             url?: string; videoUrl?: string; generationId?: string; jobId?: string;
             provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
           }>("generate-video", {
             action: "generate", prompt: motionPrompt, duration: sceneDuration,
-            aspectRatio: wanRatio, provider: "wan",
-            model: isI2V ? "wan2.6-i2v" : "wan2.6-t2v",
+            aspectRatio: wanRatio, provider: chosenProvider,
+            model: chosenModel,
             ...(isI2V ? { imageUrl: referenceImage } : {}),
             negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
           }, { timeoutMs: EDGE_TIMEOUT_MS });

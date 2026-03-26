@@ -12,6 +12,14 @@ import {
   DowelIcon, WireMeshIcon, StraightRebarIcon,
 } from "@/components/chat/ProductIcons";
 
+const VIDEO_MODELS: { key: string; provider: string; label: string; description: string }[] = [
+  { key: "wan2.6-t2v", provider: "wan", label: "Wan T2V", description: "Text to Video - 1080P" },
+  { key: "wan2.6-i2v", provider: "wan", label: "Wan I2V", description: "Image to Video" },
+  { key: "wan2.6-i2v-flash", provider: "wan", label: "Wan I2V Flash", description: "Fast Image to Video" },
+  { key: "veo-3.1-generate-preview", provider: "veo", label: "Veo 3.1", description: "Google Video Gen" },
+  { key: "sora-2", provider: "sora", label: "Sora 2", description: "OpenAI Video Gen" },
+];
+
 const RATIOS = ["16:9", "9:16", "1:1", "4:3"] as const;
 const DURATIONS = [
   { label: "15s", value: "15" },
@@ -53,6 +61,8 @@ interface ChatPromptBarProps {
     characterImage: File | null,
     selectedProducts?: string[],
     selectedStyles?: string[],
+    videoModel?: string,
+    videoProvider?: string,
   ) => void;
   disabled?: boolean;
 }
@@ -66,6 +76,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   const [characterImage, setCharacterImage] = useState<File | null>(null);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [selectedVideoModel, setSelectedVideoModel] = useState(VIDEO_MODELS[0]);
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
@@ -106,7 +117,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
-    onSubmit(prompt.trim(), ratio, [], introImage, outroImage, duration, characterImage, selectedProducts, selectedStyles);
+    onSubmit(prompt.trim(), ratio, [], introImage, outroImage, duration, characterImage, selectedProducts, selectedStyles, selectedVideoModel.key, selectedVideoModel.provider);
     setPrompt("");
     setIntroImage(null);
     setOutroImage(null);
@@ -431,6 +442,46 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                       </Tooltip>
                     );
                   })}
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {/* Video Model Popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    selectedVideoModel.key !== "wan2.6-t2v"
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <Clapperboard className="w-3.5 h-3.5" />
+                  {selectedVideoModel.label}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-56 p-2">
+                <div className="space-y-1">
+                  {VIDEO_MODELS.map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setSelectedVideoModel(m)}
+                      className={cn(
+                        "w-full flex flex-col items-start px-3 py-2 rounded-lg text-xs transition-all",
+                        selectedVideoModel.key === m.key
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <span className="font-medium">{m.label}</span>
+                      <span className={cn("text-[10px]", selectedVideoModel.key === m.key ? "text-primary-foreground/70" : "opacity-60")}>{m.description}</span>
+                    </button>
+                  ))}
                 </div>
               </PopoverContent>
             </Popover>
