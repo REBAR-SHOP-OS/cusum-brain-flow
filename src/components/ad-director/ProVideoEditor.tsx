@@ -112,6 +112,7 @@ function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: 
         description: `Post scheduled for ${format(scheduledDateTime, "PPP")} at ${hour}:${minute}`,
       });
       setOpen(false);
+      setTimeout(() => navigate("/home"), 1200);
     } catch (err: any) {
       toast({ title: "Scheduling failed", description: err.message, variant: "destructive" });
     } finally {
