@@ -1020,7 +1020,7 @@ export function ProVideoEditor({
 
         <div className="flex-1" />
 
-        <Badge variant="secondary" className="text-[9px]">Pro Editor</Badge>
+        <Badge variant="secondary" className="text-[9px]">Edit</Badge>
 
         <Button
           size="sm"
