@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { Download, Play } from "lucide-react";
+import { Download, Play, AlertTriangle } from "lucide-react";
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { downloadFile } from "@/lib/downloadUtils";
@@ -11,7 +11,10 @@ interface VideoHistoryProps {
 }
 
 export function VideoHistory({ projects, onSelect }: VideoHistoryProps) {
-  const completed = projects.filter((p) => p.final_video_url);
+  // Filter out blob: URLs (irrecoverable) and show only valid URLs
+  const completed = projects.filter(
+    (p) => p.final_video_url && !p.final_video_url.startsWith("blob:")
+  );
   if (completed.length === 0) return null;
 
   return (
@@ -29,6 +32,7 @@ export function VideoHistory({ projects, onSelect }: VideoHistoryProps) {
 function VideoCard({ project, onSelect }: { project: AdProjectRow; onSelect?: (url: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hovering, setHovering] = useState(false);
+  const [hasError, setHasError] = useState(false);
   const url = project.final_video_url!;
 
   const handleMouseEnter = () => {
@@ -60,19 +64,30 @@ function VideoCard({ project, onSelect }: { project: AdProjectRow; onSelect?: (u
     >
       {/* Video thumbnail */}
       <div className="aspect-video bg-muted/30 relative">
-        <video
-          ref={videoRef}
-          src={url}
-          preload="metadata"
-          muted
-          loop
-          playsInline
-          className="w-full h-full object-cover"
-        />
-        {!hovering && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-            <Play className="w-8 h-8 text-white/80 fill-white/80" />
+        {hasError ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-muted-foreground">
+            <AlertTriangle className="w-6 h-6" />
+            <span className="text-[10px]">ویدیو در دسترس نیست</span>
           </div>
+        ) : (
+          <>
+            <video
+              ref={videoRef}
+              src={url}
+              preload="metadata"
+              muted
+              loop
+              playsInline
+              crossOrigin="anonymous"
+              className="w-full h-full object-cover"
+              onError={() => setHasError(true)}
+            />
+            {!hovering && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                <Play className="w-8 h-8 text-white/80 fill-white/80" />
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -84,13 +99,15 @@ function VideoCard({ project, onSelect }: { project: AdProjectRow; onSelect?: (u
             {format(new Date(project.created_at), "MMM d, yyyy")}
           </p>
         </div>
-        <button
-          onClick={handleDownload}
-          className="shrink-0 p-1.5 rounded-lg hover:bg-muted/60 transition-colors"
-          title="دانلود"
-        >
-          <Download className="w-3.5 h-3.5 text-muted-foreground" />
-        </button>
+        {!hasError && (
+          <button
+            onClick={handleDownload}
+            className="shrink-0 p-1.5 rounded-lg hover:bg-muted/60 transition-colors"
+            title="دانلود"
+          >
+            <Download className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        )}
       </div>
     </div>
   );

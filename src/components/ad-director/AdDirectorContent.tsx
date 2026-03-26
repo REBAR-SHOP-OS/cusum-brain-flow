@@ -167,7 +167,36 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         musicVolume: 0.15,
       });
 
+      // Upload to storage for permanent URL
+      let permanentUrl = finalUrl.blobUrl;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const blob = await fetch(finalUrl.blobUrl).then(r => r.blob());
+          const path = `${user.id}/${crypto.randomUUID()}.webm`;
+          const { error: upErr } = await supabase.storage
+            .from("generated-videos")
+            .upload(path, blob, { contentType: "video/webm", upsert: false });
+          if (!upErr) {
+            const { data: pubData } = supabase.storage.from("generated-videos").getPublicUrl(path);
+            if (pubData?.publicUrl) permanentUrl = pubData.publicUrl;
+          } else {
+            console.warn("[AdDirector] Storage upload failed:", upErr.message);
+          }
+        }
+      } catch (e) { console.warn("[AdDirector] Upload to storage failed:", e); }
+
       service.patchState({ finalVideoUrl: finalUrl.blobUrl });
+      // Save permanent URL to project history
+      const pid = service.getState().projectId;
+      if (pid) {
+        saveProject.mutate({
+          id: pid,
+          name: service.getState().brand.name || "Untitled",
+          finalVideoUrl: permanentUrl,
+          status: "completed",
+        });
+      }
       toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched` });
     } catch (err: any) {
       toast({ title: "Export failed", description: err.message, variant: "destructive" });
