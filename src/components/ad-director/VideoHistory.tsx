@@ -101,13 +101,24 @@ function VideoCard({ project, onSelect, onDelete }: { project: AdProjectRow; onS
           </p>
         </div>
         {!hasError && (
-          <button
-            onClick={handleDownload}
-            className="shrink-0 p-1.5 rounded-lg hover:bg-muted/60 transition-colors"
-            title="دانلود"
-          >
-            <Download className="w-3.5 h-3.5 text-muted-foreground" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={handleDownload}
+              className="shrink-0 p-1.5 rounded-lg hover:bg-muted/60 transition-colors"
+              title="دانلود"
+            >
+              <Download className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+            {onDelete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete(project.id); }}
+                className="shrink-0 p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
+                title="حذف"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

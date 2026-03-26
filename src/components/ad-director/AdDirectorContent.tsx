@@ -377,6 +377,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
             onSelect={(url) => {
               service.patchState({ finalVideoUrl: url, flowState: "result" });
             }}
+            onDelete={(id) => deleteProject.mutate(id)}
           />
         </>
       )}
