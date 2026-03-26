@@ -589,6 +589,19 @@ export async function stitchClips(
         // Update music ducking
         updateMusicDucking();
 
+        // Drift correction: keep voice & music in sync with video elapsed time
+        const currentAbsTimeForSync = clipStartCumulativeTime + video.currentTime;
+        if (voiceElement && !voiceElement.paused && !voiceElement.ended) {
+          if (Math.abs(voiceElement.currentTime - currentAbsTimeForSync) > 0.3) {
+            voiceElement.currentTime = currentAbsTimeForSync;
+          }
+        }
+        if (musicElement && !musicElement.paused && !musicElement.ended) {
+          if (Math.abs(musicElement.currentTime - currentAbsTimeForSync) > 0.3) {
+            musicElement.currentTime = currentAbsTimeForSync;
+          }
+        }
+
         if (!video.paused && !video.ended) {
           const t = video.currentTime;
           const inCrossfade = !isLastClip && crossfadeDur > 0 && t >= fadeStart && clipIndex + 1 < validatedClips.length;

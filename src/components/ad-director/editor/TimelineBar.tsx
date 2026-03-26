@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
@@ -11,6 +11,53 @@ import {
 } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
+
+// ─── Thumbnail extraction helper ───────────────────────────
+function useVideoThumbnails(clips: ClipOutput[]) {
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const extractedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    clips.forEach((clip) => {
+      if (clip.status !== "completed" || !clip.videoUrl || extractedRef.current.has(clip.sceneId)) return;
+      extractedRef.current.add(clip.sceneId);
+
+      const video = document.createElement("video");
+      video.crossOrigin = "anonymous";
+      video.preload = "auto";
+      video.muted = true;
+      video.playsInline = true;
+
+      video.onloadeddata = () => {
+        video.currentTime = Math.min(0.5, video.duration / 2);
+      };
+
+      video.onseeked = () => {
+        try {
+          const c = document.createElement("canvas");
+          c.width = 160;
+          c.height = 90;
+          const cx = c.getContext("2d");
+          if (cx) {
+            cx.drawImage(video, 0, 0, 160, 90);
+            const dataUrl = c.toDataURL("image/jpeg", 0.6);
+            setThumbnails(prev => ({ ...prev, [clip.sceneId]: dataUrl }));
+          }
+        } catch { /* CORS or other — ignore */ }
+        video.src = "";
+        video.load();
+      };
+
+      video.onerror = () => {
+        extractedRef.current.delete(clip.sceneId);
+      };
+
+      video.src = clip.videoUrl;
+    });
+  }, [clips]);
+
+  return thumbnails;
+}
 
 export interface AudioTrackItem {
   sceneId: string;
@@ -80,6 +127,7 @@ export function TimelineBar({
   const [textTrackMuted, setTextTrackMuted] = useState(false);
   const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const thumbnails = useVideoThumbnails(clips);
 
   // Drag-to-resize handlers
   const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
@@ -177,7 +225,7 @@ export function TimelineBar({
                   <PopoverTrigger asChild>
                     <div
                       onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
-                      className={`relative h-full flex items-center justify-center transition-all cursor-pointer
+                      className={`relative h-full flex items-center justify-center transition-all cursor-pointer overflow-hidden
                         ${isSelected ? "ring-2 ring-primary ring-inset z-10" : ""}
                         ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
                       `}
@@ -191,10 +239,20 @@ export function TimelineBar({
                           className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 z-20"
                         />
                       )}
-                      {clip?.videoUrl && (
+                      {/* Live thumbnail preview */}
+                      {thumbnails[scene.id] ? (
+                        <>
+                          <img
+                            src={thumbnails[scene.id]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                        </>
+                      ) : clip?.videoUrl ? (
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
-                      )}
-                      <span className="text-[8px] text-muted-foreground font-medium z-10 truncate px-1">
+                      ) : null}
+                      <span className="text-[8px] text-white font-medium z-10 truncate px-1 drop-shadow-sm">
                         {seg?.label || `S${i + 1}`}
                       </span>
                       {isSelected && (
