@@ -1,40 +1,50 @@
 
 
-# Show Welcome Video on Ad Director Entry
+# Add Video Model Selector to Chat Bar
 
 ## What
-When a user enters the Ad Director page, display the uploaded intro video (motion graphic) as a welcome/demo reel before they interact with the prompt bar. The video auto-plays muted, and the user can dismiss it or it transitions to the normal idle state after playback ends.
+Add a model selector button (with a CPU/Film icon) to the ChatPromptBar toolbar, allowing users to choose which AI video model to use. The currently used models in the backend are displayed as selectable options.
+
+## Available Models (from `generate-video` edge function)
+
+| Provider | Model | Label |
+|---|---|---|
+| wan | wan2.6-t2v | Wan T2V |
+| wan | wan2.6-i2v | Wan I2V |
+| wan | wan2.6-i2v-flash | Wan I2V Flash |
+| veo | veo-3.1-generate-preview | Veo 3.1 |
+| sora | sora-2 | Sora 2 |
 
 ## Changes
 
-### 1. Copy the video asset
-Copy `user-uploads://Create_motion_graphic_202603261204_1.mp4` to `public/videos/ad-director-intro.mp4` so it can be referenced via `staticFile` or direct URL.
+### `src/components/ad-director/ChatPromptBar.tsx`
 
-### 2. `src/components/ad-director/AdDirectorContent.tsx`
-
-In the `flowState === "idle"` block, add a welcome video section above the existing content:
-
-- Add state: `const [showIntro, setShowIntro] = useState(true)`
-- When `showIntro` is true and `flowState === "idle"`, render a `<video>` element that:
-  - Auto-plays, muted, with controls visible
-  - Has a rounded container with subtle styling
-  - Shows a "Skip" button overlay (top-right corner)
-  - On `onEnded`, sets `showIntro = false`
-  - On skip click, sets `showIntro = false`
-- When `showIntro` is false, show the normal idle UI (Film icon, prompt bar, history)
-- Use `sessionStorage` to only show the intro once per session (check on mount, set flag after first view)
-
-### Layout
-```text
-┌──────────────────────────────┐
-│  [video player - autoplay]   │
-│                    [Skip ▸]  │
-└──────────────────────────────┘
+1. **Add model list constant**:
+```ts
+const VIDEO_MODELS = [
+  { key: "wan2.6-t2v", provider: "wan", label: "Wan T2V", description: "Text to Video - 1080P" },
+  { key: "wan2.6-i2v", provider: "wan", label: "Wan I2V", description: "Image to Video" },
+  { key: "wan2.6-i2v-flash", provider: "wan", label: "Wan I2V Flash", description: "Fast Image to Video" },
+  { key: "veo-3.1-generate-preview", provider: "veo", label: "Veo 3.1", description: "Google Video Gen" },
+  { key: "sora-2", provider: "sora", label: "Sora 2", description: "OpenAI Video Gen" },
+];
 ```
-After video ends or skip → normal idle state with prompt bar.
+
+2. **Add state**: `const [selectedModel, setSelectedModel] = useState(VIDEO_MODELS[0])` (default: wan2.6-t2v)
+
+3. **Add Popover** between Products and auto-generate button, styled like the other toolbar pills (with `Clapperboard` or `Cpu` icon). Shows the selected model name and a dropdown with all models, each showing label + short description.
+
+4. **Update props/onSubmit**: Add `selectedModel` and `selectedProvider` to the `onSubmit` signature so the parent can pass them to the edge function.
+
+### `src/components/ad-director/AdDirectorContent.tsx`
+- Update the `handleSubmit` call to accept and forward the selected model/provider to `generate-video` instead of hardcoding `provider: "wan", model: "wan2.6-t2v"`.
+
+### `src/lib/backgroundAdDirectorService.ts`
+- Update to accept and use the selected model/provider passed from the parent.
 
 | File | Change |
 |---|---|
-| `public/videos/ad-director-intro.mp4` | Copy uploaded video |
-| `AdDirectorContent.tsx` | Add intro video state + conditional render in idle block, sessionStorage guard |
+| `ChatPromptBar.tsx` | Add VIDEO_MODELS constant, selectedModel state, model selector Popover, update onSubmit signature |
+| `AdDirectorContent.tsx` | Forward selected model/provider to edge function |
+| `backgroundAdDirectorService.ts` | Accept and use dynamic model/provider |
 
