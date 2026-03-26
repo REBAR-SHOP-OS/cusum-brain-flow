@@ -1,52 +1,36 @@
 
 
-# Auto-Post Email Replies to Sales Lead Timeline
+# Add Related Entities Bar to Sales Lead Drawer
 
-## Problem
-When an email is sent from the Sales Lead drawer via "Send Message", the sent email and any customer replies do not appear in the lead's timeline. The user wants a full email conversation thread visible inside the timeline.
+## What
+Add a horizontal summary bar at the top of the Sales Lead Drawer (below the stage ribbon, above the info grid) showing counts and totals for related Quotations, Invoices, and Orders — similar to Odoo's smart buttons (circled in the screenshot).
 
-## Solution — Two parts
+## How
 
-### Part 1: Log outbound email to timeline on send
+### New component: `src/components/sales/LeadSmartButtons.tsx`
 
-**`ComposeEmailDialog.tsx`** — Add an optional `onSent` callback prop that returns `{ to, subject, body, threadId, messageId }`.
+A compact row of clickable stat buttons that queries:
+- **Quotations**: `sales_quotations` where `sales_lead_id = lead.id` → show count + total amount
+- **Orders**: `orders` where `lead_id = lead.id` → show count + total amount  
+- **Invoices**: `sales_invoices` where `sales_lead_id = lead.id` → show count + total amount
 
-**`SalesLeadDrawer.tsx`** — Pass `onSent` to `ComposeEmailDialog`. When fired:
-- Insert a `sales_lead_activities` row with `activity_type: "email"`, subject, and body preview
-- Store the Gmail `threadId` in a new `email_thread_id` column on `sales_leads` so we can match replies later
+Each button shows an icon, count, label, and dollar total. Clicking a button could expand a small inline list or navigate — initially just display counts.
 
-### Part 2: Match inbound emails to leads and auto-post to timeline
+Uses 3 lightweight queries with `useQuery` keyed by `lead.id`.
 
-**`gmail-sync/index.ts`** — After upserting each message to `communications`, check if the email's `from_address` matches any `sales_leads.contact_email` OR the `thread_id` matches any `sales_leads.email_thread_id`. If matched, auto-insert a `sales_lead_activities` row with `activity_type: "email"`, direction `inbound`.
+### Update: `src/components/sales/SalesLeadDrawer.tsx`
 
-### Database changes
-1. Add `email_thread_id text` column to `sales_leads` — stores the Gmail thread ID for reply matching
-2. No other table changes needed; `sales_lead_activities` already supports `activity_type: "email"`
+Insert `<LeadSmartButtons leadId={lead.id} />` between the stage ribbon (line 137) and the info grid (line 141).
+
+## Visual Design
+```text
+┌─────────────┬──────────────┬──────────────┐
+│ 📋 Quotes 2 │ 📦 Orders 1  │ 📄 Invoices 1│
+│  $83,252.10  │   $41,500    │   $41,500    │
+└─────────────┴──────────────┴──────────────┘
+```
 
 ## Files Changed
-
-| File | Change |
-|------|--------|
-| Migration SQL | Add `email_thread_id` to `sales_leads` |
-| `src/components/inbox/ComposeEmailDialog.tsx` | Add optional `onSent` callback prop |
-| `src/components/sales/SalesLeadDrawer.tsx` | Pass `onSent` → log email activity + save threadId to lead |
-| `supabase/functions/gmail-sync/index.ts` | After upsert, match inbound emails to leads by contact_email or thread_id → auto-insert activity |
-
-## Flow
-
-```text
-User sends email from Lead Drawer
-  → ComposeEmailDialog calls gmail-send
-  → onSent callback fires
-  → SalesLeadDrawer inserts activity (type=email, outbound)
-  → Saves threadId to sales_leads.email_thread_id
-
-Customer replies via Gmail
-  → gmail-sync cron picks up new message
-  → Upserts to communications table
-  → Checks: does from_address match any lead's contact_email?
-     OR does thread_id match any lead's email_thread_id?
-  → If yes: inserts sales_lead_activities (type=email, inbound)
-  → Timeline auto-shows the reply
-```
+- `src/components/sales/LeadSmartButtons.tsx` — new component
+- `src/components/sales/SalesLeadDrawer.tsx` — import and render it
 
