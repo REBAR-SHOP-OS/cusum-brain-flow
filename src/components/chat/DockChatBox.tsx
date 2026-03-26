@@ -253,19 +253,17 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     setInputText("");
 
     try {
-      let attachments: Array<{ name: string; url: string; type: string; size: number }> | undefined;
+      let uploadedAttachments: Array<{ name: string; url: string; type: string; size: number }> = [];
       if (pendingFiles.length > 0) {
         setUploading(true);
-        attachments = await uploadFiles();
+        uploadedAttachments = await uploadFiles();
         setPendingFiles([]);
         setUploading(false);
       }
 
-      const msgText = attachments?.length
-        ? [text, ...attachments.map((a) => `📎 [${a.name}](${a.url})`)].filter(Boolean).join("\n")
-        : text;
-
-      if (!msgText) return;
+      // Send clean text only — attachments go through the structured field
+      const msgText = text || (uploadedAttachments.length > 0 ? "📎" : "");
+      if (!msgText && uploadedAttachments.length === 0) return;
 
       await sendMutation.mutateAsync({
         channelId,
@@ -273,6 +271,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
         text: msgText,
         senderLang: myLang,
         targetLangs,
+        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
         replyToId: replyTo?.id || null,
       });
       setReplyTo(null);
