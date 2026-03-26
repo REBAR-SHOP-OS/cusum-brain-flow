@@ -1,47 +1,31 @@
 
 
-# Replace Export Button with Schedule-to-Social Popover
+# Add Drag-to-Reposition for Text & Audio Track Items
 
 ## Problem
-The user wants the Export button in the video editor toolbar to instead open a date/time picker (calendar + time selector). When confirmed, the video should be scheduled as a social media post card in the Social Media Manager.
+Text overlays and audio track items on the timeline are static — their position is locked to their parent scene. The user wants to drag them horizontally to reposition them across different scenes/time positions.
 
 ## Approach
-
-Replace the Export button (line 1062-1070 in `ProVideoEditor.tsx`) with a Popover containing a Calendar and time selectors. On confirm, insert a record into `social_posts` with the video URL, scheduled date, and platform set to "instagram" (reel). This reuses the same insert pattern already in `AdDirectorContent.tsx` lines 81-92.
+Add mouse-based drag handling to the text and audio track items in `TimelineBar.tsx`. On drag-end, update the overlay's `sceneId` and timing to match the new position, and notify the parent via new callback props.
 
 ## Changes
 
+### `src/components/ad-director/editor/TimelineBar.tsx`
+
+1. **New props**: `onMoveOverlay?: (id: string, newSceneId: string, newStartPct: number) => void` and `onMoveAudioTrack?: (index: number, newSceneId: string) => void`
+2. **Drag state**: Add a ref tracking `{ type: "text"|"audio", id: string|number, startX: number, origLeft: number, origWidth: number }` for the item being dragged
+3. **On text/audio item**: Add `onMouseDown` handler that starts drag tracking
+4. **Global mousemove/mouseup** (via `useEffect`): During drag, update a local `dragOffsetPct` state to visually shift the item. On mouseup, calculate which scene the center of the dragged item falls into (using `cumulativeStarts`) and call the appropriate move callback.
+5. **Visual feedback**: While dragging, apply `translate` transform and a highlight border to the dragged item
+
 ### `src/components/ad-director/ProVideoEditor.tsx`
 
-1. **Replace the Export button** with a Popover trigger button showing a `CalendarClock` icon and "Schedule" label
-2. **Add Popover content** with:
-   - `Calendar` component for date selection (disable past dates)
-   - Hour/Minute `Select` dropdowns (same pattern as `SchedulePopover.tsx`)
-   - Confirm button
-3. **On confirm**: call `supabase.from("social_posts").insert(...)` with:
-   - `platform: "instagram"`, `content_type: "reel"`
-   - `image_url: finalVideoUrl` (the assembled video URL)
-   - `scheduled_date`: selected datetime ISO string
-   - `title`: brand name
-   - `content`: from segments text
-   - `status: "scheduled"`, `qa_status: "scheduled"`
-4. **Remove** `onExport`, `exporting`, `onOpenExportDialog` props (no longer needed)
-5. Show success toast with scheduled date/time
-
-### `src/components/ad-director/AdDirectorContent.tsx`
-
-- Remove `ExportDialog` import and rendering (lines 401-408)
-- Remove `exportDialogOpen` state
-- Remove `handleExport` function
-- Remove `onOpenExportDialog` prop from `<ProVideoEditor>`
-- Keep `onExport` as no-op or remove entirely
-
-### `src/components/ad-director/ExportDialog.tsx`
-
-- No deletion needed, but it will no longer be used from the editor flow
+1. **`handleMoveOverlay`**: When a text overlay is moved to a new scene, update its `sceneId` in the `overlays` state, and recalculate `startTime`/`endTime` proportionally for the new scene duration
+2. **`handleMoveAudioTrack`**: When a voiceover track is moved to a new scene, update its `sceneId` in `audioTracks` state
+3. Pass both handlers as props to `<TimelineBar>`
 
 | File | Change |
 |---|---|
-| `ProVideoEditor.tsx` | Replace Export button with CalendarClock schedule popover, insert social_posts on confirm |
-| `AdDirectorContent.tsx` | Remove ExportDialog, handleExport, and related props |
+| `TimelineBar.tsx` | Add drag-to-reposition logic for text overlay and audio track items |
+| `ProVideoEditor.tsx` | Add `handleMoveOverlay` and `handleMoveAudioTrack` callbacks, pass to TimelineBar |
 
