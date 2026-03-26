@@ -117,7 +117,8 @@ interface TimelineBarProps {
   onResizeOverlay?: (id: string, size: "small" | "medium" | "large") => void;
   onToggleOverlayAnimation?: (id: string) => void;
   // Audio extras
-  onReRecordVoiceover?: (sceneId: string) => void;
+  onReRecordVoiceover?: (sceneId: string, customText?: string) => void;
+  onUpdateVoiceoverText?: (sceneId: string, text: string) => void;
   onEditVoiceoverText?: (sceneId: string) => void;
   // Drag-to-reposition
   onMoveOverlay?: (id: string, newSceneId: string) => void;
