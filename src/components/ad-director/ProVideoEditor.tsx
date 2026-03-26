@@ -591,14 +591,12 @@ export function ProVideoEditor({
   const handleEditPrompt = useCallback((index: number) => {
     setSelectedSceneIndex(index);
     setActiveTab("media");
-    if (sidebarCollapsed) setSidebarCollapsed(false);
-  }, [sidebarCollapsed]);
+  }, []);
 
   const handleEditVoiceover = useCallback((index: number) => {
     setSelectedSceneIndex(index);
     setActiveTab("script");
-    if (sidebarCollapsed) setSidebarCollapsed(false);
-  }, [sidebarCollapsed]);
+  }, []);
 
   const handleMuteScene = useCallback((index: number) => {
     const sceneId = storyboard[index]?.id;
