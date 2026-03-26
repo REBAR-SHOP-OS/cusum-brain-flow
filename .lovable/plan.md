@@ -1,28 +1,46 @@
 
 
-# Fix: `notify-lead-assignees` crashes due to undefined `customerEmail`
+# Display Generated Scene Clips as Thumbnail Cards in Ad Director
 
-## Problem
-Line 314 references `customerEmail` which was removed in a previous fix (when we stopped auto-adding `contact_email` to recipients). This causes a runtime `ReferenceError`, crashing the function — **no one** gets email notifications for lead notes or stage changes.
+## What
+In the "result" view of the Ad Director, replace the single large video preview (or "not available" message) with a horizontal scrollable row of scene thumbnail cards — one card per generated clip. Each card shows the video thumbnail with hover-to-play, scene number, and status. The final stitched video (if available) shows separately below or as a "Full Video" card.
 
-## Fix
-On line 314, replace the `customerEmail` check with a direct comparison against `lead.contact_email`. Since customers are no longer auto-added to `recipients`, this branch will almost never match (only if a customer is explicitly assigned AND @mentioned), but it needs to be valid code.
+## How
 
-### Change in `supabase/functions/notify-lead-assignees/index.ts`
+### Update `AdDirectorContent.tsx` — Result section (lines 313-326)
 
-**Line 314** — replace:
-```ts
-const isCustomer = customerEmail && recipient.email.toLowerCase() === customerEmail;
+Replace the single video preview block with a **scene clips gallery**:
+
+- Render a horizontal scrollable row of cards from the `clips` array (joined with `storyboard` for scene labels)
+- Each card:
+  - Shows a `<video>` element with `preload="metadata"`, hover-to-play behavior
+  - Displays scene number/label overlay (e.g. "Scene 1 — Hook")
+  - Shows status indicator (spinner for generating, checkmark for completed, error for failed)
+  - Completed clips: clickable to play in a larger preview area above
+- Below the scene cards row, keep the existing final video player for the stitched result
+- If no final video but clips exist, clicking a scene card plays it in the main preview area
+
+### Visual Layout (matching user's drawing)
+```text
+┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+│ Scene 1│ │ Scene 2│ │ Scene 3│ │ Scene 4│  ← horizontal scroll
+│  video │ │  video │ │  video │ │  video │
+│  thumb │ │  thumb │ │  thumb │ │  thumb │
+└────────┘ └────────┘ └────────┘ └────────┘
+
+      [ Approve & Download ]  [ Edit Video ]
 ```
-with:
-```ts
-const isCustomer = lead.contact_email && recipient.email.toLowerCase() === lead.contact_email.toLowerCase();
-```
 
-This restores the logic: if the recipient happens to be the lead's contact (rare, only via @mention), send them the customer-safe email (no internal links). Everyone else gets the internal branded email.
+### Implementation Details
+- Add `selectedPreviewUrl` state to track which clip is shown in the main player
+- Scene cards use the same hover-play pattern from `VideoLibrary.tsx`
+- Cards grid: `flex overflow-x-auto gap-3` with `min-w-[200px] aspect-video` per card
+- Generating scenes show a pulsing skeleton with spinner
+- Failed scenes show retry indicator
 
-## Result
-- The function stops crashing
-- Saurabh and all assignees will receive email notifications again
-- One file changed: `supabase/functions/notify-lead-assignees/index.ts`
+## Files Changed
+
+| File | Change |
+|---|---|
+| `src/components/ad-director/AdDirectorContent.tsx` | Replace single video preview with scene clips gallery in result view |
 
