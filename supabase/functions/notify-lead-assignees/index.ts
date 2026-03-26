@@ -108,31 +108,74 @@ serve((req) =>
       `\nBest regards,\nRebar.shop Team`,
     ].join("\n").trim();
 
-    // 5. Send emails via gmail-send edge function (internal call)
+    // 5. Get Gmail access token for ai@rebar.shop from DB
     const gmailClientId = Deno.env.get("GMAIL_CLIENT_ID");
     const gmailClientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
-    const gmailRefreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
 
-    if (!gmailClientId || !gmailClientSecret || !gmailRefreshToken) {
-      log.error("Gmail credentials not configured");
-      throw new Error("Gmail credentials not configured for notifications");
+    if (!gmailClientId || !gmailClientSecret) {
+      throw new Error("Gmail OAuth credentials not configured");
     }
 
-    // Get access token
+    // Look up ai@rebar.shop profile → get user_id → fetch token from DB
+    const { data: aiProfile } = await serviceClient
+      .from("profiles")
+      .select("id")
+      .eq("email", "ai@rebar.shop")
+      .maybeSingle();
+
+    let refreshToken: string | null = null;
+
+    if (aiProfile?.id) {
+      const { data: tokenRow } = await serviceClient
+        .from("user_gmail_tokens")
+        .select("refresh_token, is_encrypted")
+        .eq("user_id", aiProfile.id)
+        .maybeSingle();
+
+      if (tokenRow?.refresh_token) {
+        refreshToken = tokenRow.is_encrypted
+          ? await decryptToken(tokenRow.refresh_token)
+          : tokenRow.refresh_token;
+      }
+    }
+
+    // Fallback to env var
+    if (!refreshToken) {
+      refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN") || null;
+    }
+
+    if (!refreshToken) {
+      throw new Error("No Gmail refresh token found for ai@rebar.shop");
+    }
+
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: gmailClientId,
         client_secret: gmailClientSecret,
-        refresh_token: gmailRefreshToken,
+        refresh_token: refreshToken,
         grant_type: "refresh_token",
       }),
     });
     const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
-      log.error("Gmail token refresh failed. Google response:", JSON.stringify(tokenData));
+      log.error("Gmail token refresh failed:", JSON.stringify(tokenData));
       throw new Error("Failed to get Gmail access token: " + (tokenData.error || "unknown"));
+    }
+
+    // Handle token rotation
+    if (tokenData.refresh_token && aiProfile?.id) {
+      try {
+        const { encryptToken } = await import("../_shared/tokenEncryption.ts");
+        const encNew = await encryptToken(tokenData.refresh_token);
+        await serviceClient
+          .from("user_gmail_tokens")
+          .update({ refresh_token: encNew, is_encrypted: true, token_rotated_at: new Date().toISOString() })
+          .eq("user_id", aiProfile.id);
+      } catch (e) {
+        log.error("Token rotation save failed", e);
+      }
     }
 
     let sentCount = 0;
