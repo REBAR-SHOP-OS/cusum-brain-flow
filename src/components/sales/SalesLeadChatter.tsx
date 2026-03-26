@@ -249,6 +249,18 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
             });
           }
 
+          // Auto-add the commenter themselves if @rebar.shop and not already assigned
+          if (onAddAssignee && currentUserId) {
+            const assignedIds2 = new Set(assignees.map(a => a.profile_id));
+            if (!assignedIds2.has(currentUserId)) {
+              const myProfile = allProfiles?.find(p => p.id === currentUserId);
+              const myEmail = (myProfile as any)?.email as string | undefined;
+              if (myEmail?.endsWith("@rebar.shop")) {
+                onAddAssignee(currentUserId);
+              }
+            }
+          }
+
           // Fire notification email to assignees and track outcome
           const noteTimestamp = new Date().toISOString();
           const notifyBody = {
@@ -454,7 +466,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*,video/*"
+                accept="*/*"
                 multiple
                 className="hidden"
                 onChange={handleFilePick}
@@ -465,7 +477,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
                 variant="ghost"
                 className="h-7 w-7 p-0"
                 onClick={() => fileRef.current?.click()}
-                title="Attach photo or video"
+                title="Attach file"
               >
                 <Paperclip className="w-3.5 h-3.5" />
               </Button>
