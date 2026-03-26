@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   MessageSquare, Phone, Mail, Calendar, Clock, Send,
   CheckCircle2, XCircle, Loader2, ArrowRight, Zap, Paperclip, X, Image, Video,
-  MessageCircle,
+  MessageCircle, RefreshCw,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -114,7 +114,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
-  const [emailOutcomes, setEmailOutcomes] = useState<Record<string, "success" | "failed" | "partial">>({});
+  const [emailOutcomes, setEmailOutcomes] = useState<Record<string, { status: "success" | "failed" | "partial"; error?: string; noteBody?: string; retrying?: boolean }>>({});
 
   const handleTextChange = useCallback((val: string) => {
     setText(val);
@@ -251,32 +251,35 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
 
           // Fire notification email to assignees and track outcome
           const noteTimestamp = new Date().toISOString();
+          const notifyBody = {
+            sales_lead_id: salesLeadId,
+            event_type: "note",
+            note_text: noteTextForEmail,
+            actor_name: currentUserName || "Someone",
+            actor_id: currentUserId,
+          };
           try {
             const { data: notifyResult, error: notifyError } = await supabase.functions.invoke("notify-lead-assignees", {
-              body: {
-                sales_lead_id: salesLeadId,
-                event_type: "note",
-                note_text: noteTextForEmail,
-                actor_name: currentUserName || "Someone",
-                actor_id: currentUserId,
-              },
+              body: notifyBody,
             });
             if (notifyError) {
-              setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+              setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "failed", error: notifyError.message || "Unknown error", noteBody: JSON.stringify(notifyBody) } }));
+            } else if (notifyResult?.error) {
+              setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "failed", error: notifyResult.error, noteBody: JSON.stringify(notifyBody) } }));
             } else {
               const sent = notifyResult?.sent ?? 0;
               const total = notifyResult?.total ?? 0;
               if (sent > 0 && sent >= total) {
-                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "success" }));
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "success" } }));
               } else if (sent > 0) {
-                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "partial" }));
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "partial" } }));
               } else {
-                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "failed", error: notifyResult?.reason || "No emails sent", noteBody: JSON.stringify(notifyBody) } }));
               }
             }
-          } catch (err) {
+          } catch (err: any) {
             console.error("notify-lead-assignees error:", err);
-            setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+            setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: { status: "failed", error: err?.message || "Network error", noteBody: JSON.stringify(notifyBody) } }));
           }
         },
         onError: () => setUploading(false),
@@ -517,20 +520,44 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
           {filtered.map((activity) => {
             // Find the closest email outcome for this activity (match by timestamp proximity)
             const activityTime = new Date(activity.created_at).getTime();
-            let emailStatus: "success" | "failed" | "partial" | undefined;
-            for (const [ts, status] of Object.entries(emailOutcomes)) {
+            let emailOutcome: { status: "success" | "failed" | "partial"; error?: string; noteBody?: string; retrying?: boolean } | undefined;
+            let emailOutcomeKey: string | undefined;
+            for (const [ts, outcome] of Object.entries(emailOutcomes)) {
               const diff = Math.abs(new Date(ts).getTime() - activityTime);
-              if (diff < 10000) { // within 10 seconds
-                emailStatus = status;
+              if (diff < 10000) {
+                emailOutcome = outcome;
+                emailOutcomeKey = ts;
                 break;
               }
             }
+
+            const handleRetry = async () => {
+              if (!emailOutcomeKey || !emailOutcome?.noteBody) return;
+              setEmailOutcomes(prev => ({ ...prev, [emailOutcomeKey!]: { ...prev[emailOutcomeKey!], retrying: true } }));
+              try {
+                const { data: retryResult, error: retryError } = await supabase.functions.invoke("notify-lead-assignees", {
+                  body: JSON.parse(emailOutcome.noteBody),
+                });
+                if (retryError || retryResult?.error) {
+                  setEmailOutcomes(prev => ({ ...prev, [emailOutcomeKey!]: { status: "failed", error: retryError?.message || retryResult?.error || "Retry failed", noteBody: emailOutcome!.noteBody, retrying: false } }));
+                  toast.error("Retry failed: " + (retryError?.message || retryResult?.error));
+                } else {
+                  setEmailOutcomes(prev => ({ ...prev, [emailOutcomeKey!]: { status: "success", retrying: false } }));
+                  toast.success("Email sent successfully on retry");
+                }
+              } catch (err: any) {
+                setEmailOutcomes(prev => ({ ...prev, [emailOutcomeKey!]: { status: "failed", error: err?.message || "Network error", noteBody: emailOutcome!.noteBody, retrying: false } }));
+                toast.error("Retry failed");
+              }
+            };
+
             return (
               <ActivityItem
                 key={activity.id}
                 activity={activity}
                 onMarkDone={() => markDone.mutate(activity.id)}
-                emailStatus={activity.activity_type === "note" && activity.body?.includes("@") ? emailStatus : undefined}
+                emailOutcome={activity.activity_type === "note" && activity.body?.includes("@") ? emailOutcome : undefined}
+                onRetry={handleRetry}
               />
             );
           })}
@@ -540,7 +567,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   );
 }
 
-function ActivityItem({ activity, onMarkDone, emailStatus }: { activity: SalesLeadActivity; onMarkDone: () => void; emailStatus?: "success" | "failed" | "partial" }) {
+function ActivityItem({ activity, onMarkDone, emailOutcome, onRetry }: { activity: SalesLeadActivity; onMarkDone: () => void; emailOutcome?: { status: "success" | "failed" | "partial"; error?: string; noteBody?: string; retrying?: boolean }; onRetry?: () => void }) {
   const Icon = activityIcons[activity.activity_type] || MessageSquare;
   const isScheduled = !!activity.scheduled_date && !activity.completed_at;
   const initials = activity.user_name ? getInitials(activity.user_name) : "??";
@@ -589,23 +616,37 @@ function ActivityItem({ activity, onMarkDone, emailStatus }: { activity: SalesLe
             Completed {format(new Date(activity.completed_at), "MMM d")}
           </span>
         )}
-        {emailStatus === "success" && (
+        {emailOutcome?.status === "success" && (
           <span className="text-[10px] text-green-600 flex items-center gap-1 mt-1 font-medium">
             <CheckCircle2 className="w-3 h-3" />
             Email sent successfully
           </span>
         )}
-        {emailStatus === "partial" && (
+        {emailOutcome?.status === "partial" && (
           <span className="text-[10px] text-amber-500 flex items-center gap-1 mt-1 font-medium">
             <CheckCircle2 className="w-3 h-3" />
             Email partially sent
           </span>
         )}
-        {emailStatus === "failed" && (
-          <span className="text-[10px] text-red-500 flex items-center gap-1 mt-1 font-medium">
-            <XCircle className="w-3 h-3" />
-            Email failed to send
-          </span>
+        {emailOutcome?.status === "failed" && (
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-[10px] text-destructive flex items-center gap-1 font-medium">
+              <XCircle className="w-3 h-3" />
+              Email failed{emailOutcome.error ? `: ${emailOutcome.error}` : " to send"}
+            </span>
+            {onRetry && emailOutcome.noteBody && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 text-[10px] px-1.5 gap-1 text-primary hover:bg-primary/10"
+                onClick={onRetry}
+                disabled={emailOutcome.retrying}
+              >
+                {emailOutcome.retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                Retry
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </div>
