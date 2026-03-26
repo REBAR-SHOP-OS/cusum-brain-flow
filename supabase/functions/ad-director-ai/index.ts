@@ -531,7 +531,8 @@ async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: st
 ${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}${introBlock}${outroBlock}
 
 Script:
-${script}`;
+${script}
+${sceneCount ? `\nCRITICAL: You MUST create exactly ${sceneCount} scene(s), each exactly 15 seconds long. Do NOT create more or fewer scenes.` : ""}`;
 
   return await callAIAndExtract(
     apiKey,
