@@ -9,7 +9,7 @@ const sendSchema = z.object({
   action: z.enum(["send_quote", "convert_to_invoice", "accept_and_convert"]),
 });
 
-const APP_URL = "https://cusum-brain-flow.lovable.app";
+const APP_URL = "https://www.crm.rebar.shop";
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
