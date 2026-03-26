@@ -414,11 +414,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
               Edit Video
             </Button>
           </div>
-
-          {/* New prompt */}
-          <div className="pt-4 border-t border-border/10">
-            <ChatPromptBar onSubmit={handleSubmit} />
-          </div>
         </div>
       )}
     </div>
