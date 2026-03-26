@@ -21,7 +21,8 @@ export type OfficeSection =
   | "optimization"
   | "tags-export"
   | "packing-slips"
-  | "payroll";
+  | "payroll"
+  | "order-calc";
 
 interface OfficeSidebarProps {
   active: OfficeSection;
@@ -37,6 +38,7 @@ const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }
   { id: "tags-export", label: "Tags & Export", icon: Tag },
   { id: "packing-slips", label: "Packing Slips", icon: FileBox },
   { id: "payroll", label: "Payroll", icon: DollarSign },
+  { id: "order-calc", label: "Order Calc", icon: Package },
 ];
 
 export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {

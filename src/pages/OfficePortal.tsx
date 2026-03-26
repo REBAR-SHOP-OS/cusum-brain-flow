@@ -13,6 +13,7 @@ import { InventoryView } from "@/components/office/InventoryView";
 import { OptimizationView } from "@/components/office/OptimizationView";
 import { TagsExportView } from "@/components/office/TagsExportView";
 import { PackingSlipsView } from "@/components/office/PackingSlipsView";
+import { OrderCalcView } from "@/components/office/OrderCalcView";
 
 import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 import { ScreenshotFeedbackButton } from "@/components/feedback/ScreenshotFeedbackButton";
@@ -27,6 +28,7 @@ const sectionComponents: Record<OfficeSection, React.ComponentType> = {
   "tags-export": TagsExportView,
   "packing-slips": PackingSlipsView,
   "payroll": PayrollAuditView,
+  "order-calc": OrderCalcView,
 };
 
 export default function OfficePortal() {
