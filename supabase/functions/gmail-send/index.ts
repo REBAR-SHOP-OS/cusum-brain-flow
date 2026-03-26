@@ -77,14 +77,20 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
   return data.access_token;
 }
 
-function createRawEmail(to: string, subject: string, body: string, fromEmail: string, replyTo?: { messageId: string; references: string }, customHeaders?: Record<string, string>): string {
+function createRawEmail(to: string, subject: string, body: string, fromEmail: string, replyTo?: { messageId: string; references: string }, customHeaders?: Record<string, string>, cc?: string, bcc?: string): string {
   const emailLines = [
     `From: ${fromEmail}`,
     `To: ${to}`,
+  ];
+
+  if (cc) emailLines.push(`Cc: ${cc}`);
+  if (bcc) emailLines.push(`Bcc: ${bcc}`);
+
+  emailLines.push(
     `Subject: ${subject}`,
     "MIME-Version: 1.0",
     "Content-Type: text/html; charset=utf-8",
-  ];
+  );
 
   if (replyTo) {
     emailLines.push(`In-Reply-To: ${replyTo.messageId}`);
@@ -106,6 +112,8 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
 
 interface SendEmailRequest {
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   body: string;
   threadId?: string;
@@ -121,6 +129,8 @@ Deno.serve((req) =>
 
     const sendSchema = z.object({
       to: z.string().email("Invalid recipient email").max(320),
+      cc: z.string().email().max(320).optional(),
+      bcc: z.string().email().max(320).optional(),
       subject: z.string().min(1, "Subject required").max(998),
       body: z.string().min(1, "Body required").max(500000),
       threadId: z.string().max(100).optional(),
@@ -136,7 +146,7 @@ Deno.serve((req) =>
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { to, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers }: SendEmailRequest = parsed.data;
+    const { to, cc, bcc, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers } = parsed.data;
 
     // --- Comms Engine: no_act_global + email routing ---
     if (sent_by_agent) {
@@ -200,7 +210,9 @@ Deno.serve((req) =>
       bodyWithSig,
       fromEmail,
       replyToMessageId ? { messageId: replyToMessageId, references: references || "" } : undefined,
-      custom_headers
+      custom_headers,
+      cc,
+      bcc
     );
 
     let sendResponse = await fetch(

@@ -22,6 +22,9 @@ interface ComposeEmailProps {
 
 export function ComposeEmail({ onClose, onSent, replyTo }: ComposeEmailProps) {
   const [to, setTo] = useState(replyTo?.to || "");
+  const [cc, setCc] = useState("");
+  const [bcc, setBcc] = useState("");
+  const [showCcBcc, setShowCcBcc] = useState(false);
   const [subject, setSubject] = useState(replyTo?.subject ? `Re: ${replyTo.subject.replace(/^Re:\s*/i, "")}` : "");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
@@ -88,6 +91,8 @@ Email body: ${replyTo.originalBody.substring(0, 1000)}`,
     try {
       await sendGmailMessage({
         to,
+        cc: cc || undefined,
+        bcc: bcc || undefined,
         subject,
         body: body.replace(/\n/g, "<br>"),
         threadId: replyTo?.threadId,
@@ -162,7 +167,18 @@ Email body: ${replyTo.originalBody.substring(0, 1000)}`,
         {/* Form */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="to">To</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="to">To</Label>
+              {!showCcBcc && (
+                <button
+                  type="button"
+                  className="text-xs text-primary hover:underline"
+                  onClick={() => setShowCcBcc(true)}
+                >
+                  CC/BCC
+                </button>
+              )}
+            </div>
             <Input
               id="to"
               type="email"
@@ -172,6 +188,33 @@ Email body: ${replyTo.originalBody.substring(0, 1000)}`,
               className="bg-secondary border-0"
             />
           </div>
+
+          {showCcBcc && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="cc">CC</Label>
+                <Input
+                  id="cc"
+                  type="email"
+                  placeholder="cc@example.com"
+                  value={cc}
+                  onChange={(e) => setCc(e.target.value)}
+                  className="bg-secondary border-0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="bcc">BCC</Label>
+                <Input
+                  id="bcc"
+                  type="email"
+                  placeholder="bcc@example.com"
+                  value={bcc}
+                  onChange={(e) => setBcc(e.target.value)}
+                  className="bg-secondary border-0"
+                />
+              </div>
+            </>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="subject">Subject</Label>
