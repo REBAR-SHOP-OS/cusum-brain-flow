@@ -106,13 +106,12 @@ You MUST respond with valid JSON matching this schema:
         image_url: { url: `data:${mimeType};base64,${base64}` },
       });
     } else if (isSpreadsheet) {
+      // Spreadsheet binary can't be sent as image_url — send a note with the filename
+      // For .csv we already handled above; for .xlsx we inform the model
       userContent.push({
         type: "text",
-        text: "This is a spreadsheet file (Excel). Analyze it and extract accounting records.",
-      });
-      userContent.push({
-        type: "image_url",
-        image_url: { url: `data:${mimeType};base64,${base64}` },
+        text: `This is a spreadsheet file (${file.name}). Unfortunately the raw binary cannot be read directly. ` +
+              `Please respond with documentType "unknown" and a warning asking the user to export the file as CSV or PDF and re-upload.`,
       });
     } else {
       userContent.push({
