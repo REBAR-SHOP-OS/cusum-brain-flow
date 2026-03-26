@@ -383,7 +383,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           onBack={() => service.patchState({ flowState: "result" })}
           onExport={handleExport}
           exporting={exporting}
-          onOpenExportDialog={() => setExportDialogOpen(true)}
           onRegenerateScene={handleRegenerateScene}
           onUpdateClipUrl={(sceneId, url) => service.patchState({
             clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: url, progress: 100 } : c),
@@ -397,14 +396,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           onUpdateStoryboard={(sb) => service.patchState({ storyboard: sb })}
           onUpdateBrand={(b) => service.patchState({ brand: b })}
           onMusicSelect={(url) => service.patchState({ musicTrackUrl: url })}
-        />
-        <ExportDialog
-          open={exportDialogOpen}
-          onOpenChange={setExportDialogOpen}
-          finalVideoUrl={finalVideoUrl}
-          brandName={brand.name}
-          onExport={handleExport}
-          exporting={exporting}
         />
       </div>
     );

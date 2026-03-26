@@ -1063,15 +1063,12 @@ export function ProVideoEditor({
 
         <Badge variant="secondary" className="text-[9px]">Edit</Badge>
 
-        <Button
-          size="sm"
-          className="gap-1.5 text-xs h-7 bg-gradient-to-r from-primary to-emerald-500 hover:from-primary/90 hover:to-emerald-400"
-          onClick={() => onOpenExportDialog ? onOpenExportDialog() : onExport()}
-          disabled={exporting || clips.every(c => c.status !== "completed")}
-        >
-          <Download className="w-3.5 h-3.5" />
-          {exporting ? "Exporting…" : "Export"}
-        </Button>
+        <ScheduleToSocialPopover
+          finalVideoUrl={finalVideoUrl}
+          brandName={brand.name}
+          segments={segments}
+          clips={clips}
+        />
       </div>
 
       {/* ─── Main 3-Panel Area ─── */}
