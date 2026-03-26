@@ -567,7 +567,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                         </div>
                       )}
 
-                      <div className={cn("flex flex-col max-w-[75%]", isMe ? "items-end" : "items-start")}>
+                      <div className={cn("flex flex-col max-w-[75%] overflow-hidden", isMe ? "items-end" : "items-start")}>
                         {!isMe && isFirstInSequence && channelType === "group" && (
                           <span className="text-[10px] font-semibold text-muted-foreground mb-0.5 px-1">{sender?.full_name || "Unknown"}</span>
                         )}
@@ -602,7 +602,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                               {hasText && (
                                 <div
                                   className={cn(
-                                    "px-3 py-1.5 text-xs leading-relaxed break-words overflow-hidden",
+                                    "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden",
                                     isMe ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm" : "bg-muted text-foreground rounded-2xl rounded-bl-sm",
                                     detectRtl(cleanText) && "text-right"
                                   )}
@@ -648,7 +648,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                               )}
 
                               {/* Hover action bar */}
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0 mt-0.5">
+                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0 mt-0.5 flex-wrap">
                                 <button onClick={() => handleTTS(displayText, msg.id)} className={cn("p-0.5 rounded transition-colors", playingMsgId === msg.id ? "text-primary" : "text-muted-foreground hover:text-foreground")} title={playingMsgId === msg.id ? "Stop" : "Listen"}>
                                   <Volume2 className="w-3 h-3" />
                                 </button>
