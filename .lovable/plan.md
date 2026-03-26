@@ -1,46 +1,48 @@
 
 
-# Add Delivery & Shop Drawing Options to AI Quotation Generator
+# Fix: Null Quantity Causes Insert Failure in AI Estimation
 
 ## Problem
-The AI quotation currently hardcodes shipping to $0 ("distance TBD") and always includes shop drawings. The user wants explicit controls for delivery distance and shop drawing inclusion so these line items appear correctly on generated quotes.
+The edge function log shows:
+```
+null value in column "quantity" of relation "estimation_items" violates not-null constraint
+```
+The AI extracted 10 items successfully, but some items have `quantity: null` — the DB column requires a non-null value. This causes the entire batch insert to fail, resulting in 0 items saved and a "No rebar data could be extracted" error downstream.
 
-## Changes
-
-### 1. `src/components/accounting/GenerateQuotationDialog.tsx`
-Add two new input fields (visible in both tabs):
-- **Delivery Distance (km)** — number input, optional, default empty (0 = no shipping line)
-- **Include Shop Drawings** — checkbox, default checked
-
-Pass both values to `ai-generate-quotation` via the body:
+## Root Cause
+Line 498 in `supabase/functions/ai-estimate/index.ts`:
 ```ts
-body: {
-  estimation_project_id: ...,
-  delivery_distance_km: deliveryDistance || 0,
-  include_shop_drawings: includeShopDrawings,
-  ...
-}
+quantity: item.quantity,
+```
+No fallback for when the AI omits `quantity`. Same risk exists for other required fields like `cut_length_mm`, `bar_size`, etc.
+
+## Fix — `supabase/functions/ai-estimate/index.ts`
+
+Add null-safe defaults in the item row mapping (line 490-512):
+
+```ts
+quantity: item.quantity ?? 1,
+cut_length_mm: item.cut_length_mm ?? 0,
+total_length_mm: item.total_length_mm ?? 0,
+hook_allowance_mm: item.hook_allowance_mm ?? 0,
+lap_allowance_mm: item.lap_allowance_mm ?? 0,
+weight_kg: item.weight_kg ?? 0,
+unit_cost: item.unit_cost ?? 0,
+line_cost: item.line_cost ?? 0,
+page_index: (item as any).page_index ?? 0,
 ```
 
-### 2. `supabase/functions/ai-generate-quotation/index.ts`
-Read `delivery_distance_km` and `include_shop_drawings` from the request body.
-
-**Delivery line item** — if distance > 0:
-- Calculate trips: `Math.ceil(totalTonnes / truckCap)`
-- Shipping cost: `trips * distance * shippingPerKm * 2` (round trip)
-- Add line item: "Delivery — {distance} km × {trips} trip(s)"
-
-**Shop drawings** — only add the existing shop drawing line item when `include_shop_drawings !== false` (defaults to true for backward compatibility).
-
-Store both values in quote metadata for reference.
+Also add the same guard earlier in the calculation loop (line 411) so `calculateItem` receives valid input:
+```ts
+input.quantity = input.quantity ?? 1;
+input.cut_length_mm = input.cut_length_mm ?? 0;
+```
 
 ## Result
-- User can enter delivery distance (e.g. 50 km) and the quote will include a shipping line item calculated from the pricing config ($3/km)
-- User can toggle shop drawings on/off
-- Both appear as separate line items on the generated quotation
-- Backward compatible: existing calls without these fields behave as before
+- Items with missing `quantity` default to 1 instead of failing the insert
+- The 10 items the AI successfully extracted will be saved
+- Downstream quotation generation will see non-zero weight and produce a real quote
 
 ## Files Changed
-- `src/components/accounting/GenerateQuotationDialog.tsx` — add distance + shop drawing inputs
-- `supabase/functions/ai-generate-quotation/index.ts` — compute delivery line item, conditionally include shop drawings
+- `supabase/functions/ai-estimate/index.ts` — add null-safe defaults for required DB columns
 
