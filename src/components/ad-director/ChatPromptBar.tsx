@@ -76,6 +76,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   const [characterImage, setCharacterImage] = useState<File | null>(null);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [selectedVideoModel, setSelectedVideoModel] = useState(VIDEO_MODELS[0]);
   const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
