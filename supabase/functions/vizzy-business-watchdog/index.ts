@@ -8,7 +8,7 @@ import { handleRequest } from "../_shared/requestHandler.ts";
  * Uses metadata.dedupe_key to prevent duplicate alerts within 24 hours.
  */
 Deno.serve((req) =>
-  handleRequest(req, async (ctx: any) => {
+  handleRequest(req, async (ctx) => {
     const { serviceClient: supabase } = ctx;
 
   const now = new Date();
