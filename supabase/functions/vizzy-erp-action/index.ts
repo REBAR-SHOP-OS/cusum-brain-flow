@@ -313,7 +313,7 @@ Deno.serve((req) =>
               source: "system",
               metadata: { primary_id, duplicate_id: dupId, relinked_counts: relinked, merge_reason: reason },
             });
-          } catch { /* ignore */ }
+          } catch (_e) { /* ignore */ }
 
           allResults.push({ duplicate_id: dupId, duplicate_name: dup.name, relinked_counts: relinked, archived: true });
         }
