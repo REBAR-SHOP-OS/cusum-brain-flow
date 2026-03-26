@@ -12,6 +12,14 @@ import {
   DowelIcon, WireMeshIcon, StraightRebarIcon,
 } from "@/components/chat/ProductIcons";
 
+const VIDEO_MODELS = [
+  { key: "wan2.6-t2v", provider: "wan", label: "Wan T2V", description: "Text to Video - 1080P" },
+  { key: "wan2.6-i2v", provider: "wan", label: "Wan I2V", description: "Image to Video" },
+  { key: "wan2.6-i2v-flash", provider: "wan", label: "Wan I2V Flash", description: "Fast Image to Video" },
+  { key: "veo-3.1-generate-preview", provider: "veo", label: "Veo 3.1", description: "Google Video Gen" },
+  { key: "sora-2", provider: "sora", label: "Sora 2", description: "OpenAI Video Gen" },
+] as const;
+
 const RATIOS = ["16:9", "9:16", "1:1", "4:3"] as const;
 const DURATIONS = [
   { label: "15s", value: "15" },
