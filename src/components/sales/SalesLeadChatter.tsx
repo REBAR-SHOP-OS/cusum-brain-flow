@@ -114,6 +114,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [emailOutcomes, setEmailOutcomes] = useState<Record<string, "success" | "failed" | "partial">>({});
 
   const handleTextChange = useCallback((val: string) => {
     setText(val);
