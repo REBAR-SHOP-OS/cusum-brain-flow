@@ -128,6 +128,7 @@ class BackgroundAdDirectorService {
     this.running = false;
     this.state = this.initialState();
     this.listener?.(this.state);
+  }
 
   /** Fire-and-forget: generate an AI thumbnail for the project */
   private async generateThumbnail(projectId: string, prompt: string): Promise<void> {
@@ -136,7 +137,6 @@ class BackgroundAdDirectorService {
     } catch (e) {
       console.warn("Thumbnail generation failed (non-blocking):", e);
     }
-  }
   }
 
   // ─── Full Pipeline ────────────────────────────────────────
