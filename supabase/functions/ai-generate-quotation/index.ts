@@ -326,7 +326,7 @@ Deno.serve((req) =>
         customer_id: project.customer_id || leadInfo?.customer_id || null,
         total_amount: quoteTotal,
         valid_until: validUntil.toISOString(),
-        notes: `Prices valid for 30 days. Subject to material availability. All weights include ${scrapPct}% scrap allowance.`,
+        notes: notesText,
         source: "ai_estimation",
         salesperson: "AI Generated",
         company_id: companyId,
