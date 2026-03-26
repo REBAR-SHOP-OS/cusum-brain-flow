@@ -527,7 +527,8 @@ class BackgroundAdDirectorService {
         this.updateClips(clips => clips.map(c => c.sceneId === sceneId && c.status === "generating" ? { ...c, status: "failed" as const, error: "Cancelled", progress: 0 } : c));
         return;
       }
-      await new Promise(r => setTimeout(r, 5000));
+      const pollDelay = i < 10 ? 3000 : 5000;
+      await new Promise(r => setTimeout(r, pollDelay));
       try {
         const result = await invokeEdgeFunction<{ status?: string; videoUrl?: string; url?: string }>(
           "generate-video", { action: "poll", jobId: generationId, provider }
