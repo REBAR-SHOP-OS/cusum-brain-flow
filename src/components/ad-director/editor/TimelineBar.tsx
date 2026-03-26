@@ -127,6 +127,7 @@ export function TimelineBar({
   const [textTrackMuted, setTextTrackMuted] = useState(false);
   const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const thumbnails = useVideoThumbnails(clips);
 
   // Drag-to-resize handlers
   const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
