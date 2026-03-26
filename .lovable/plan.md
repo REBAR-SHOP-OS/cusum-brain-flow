@@ -1,40 +1,57 @@
 
 
-# Fix: Quotation Email Issues
+# Add Customer Quote Acceptance Page with Terms & Convert to Invoice
 
-## Issues Identified from the PDF
-
-1. **Valid Until shows raw ISO timestamp**: `2026-04-25T00:00:00+00:00` instead of a formatted date like `Apr 25, 2026`
-2. **Subtotal/HST show extra decimal places**: `$94,860.531` and `$12,331.869` — should be rounded to 2 decimals
-3. **Email subject encoding broken**: `Ã¢Â€Â"` appears instead of `—` (em dash). The subject line uses a literal em dash character which gets double-encoded through `encodeURIComponent` + `btoa` in `createRawEmail`
-4. **Double signature**: The branded email wrapper adds the actor signature, then `gmail-send` fetches and appends the SAME signature again from `email_signatures` table
+## Overview
+Create a public-facing page where customers can view their quotation, read and accept Terms & Conditions, which then converts the quote to an invoice and emails the customer a payment link. The quotation email will include an "Accept Quote" button linking to this page.
 
 ## Changes
 
-### 1. `supabase/functions/send-quote-email/index.ts`
+### 1. New public page: `src/pages/AcceptQuote.tsx`
+- Route: `/accept-quote/:quoteId` (public, no auth required)
+- Fetches quote data via a new edge function (anonymous access)
+- Displays: quotation number, customer name, line items table, totals, notes/terms
+- Shows Terms & Conditions section with link to https://www.crm.rebar.shop/terms
+- Checkbox: "I have read and accept the Terms & Conditions"
+- "Accept & Confirm Order" button (disabled until checkbox is checked)
+- On accept: calls `send-quote-email` with `action: "convert_to_invoice"` — creates invoice, Stripe payment link, sends invoice email
+- Shows success state: "Your order has been confirmed. Invoice and payment link sent to your email."
+- Shows error/expired/already-accepted states
 
-**Fix Valid Until date formatting** (line 97):
-- Replace raw `quote.valid_until` with a formatted date string: `new Date(quote.valid_until).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })`
+### 2. New edge function: `supabase/functions/quote-public-view/index.ts`
+- Anonymous access (no auth required)
+- Accepts `{ quote_id }`, returns quote details (number, customer name, line items, totals, valid_until, status)
+- Only returns data if quote status is `sent` or `sent_to_customer` — rejects if already accepted/expired/cancelled
+- Minimal data exposure (no internal IDs, company details, etc.)
 
-**Fix decimal rounding** (lines 73-75):
-- Use `.toFixed(2)` for subtotal and taxAmount before passing to `toLocaleString`
-- Ensure subtotal and taxAmount are rounded: `Math.round(subtotal * 100) / 100`
+### 3. Update `supabase/functions/send-quote-email/index.ts`
+- Add `action: "accept_and_convert"` — same as `convert_to_invoice` but callable without auth (uses service role internally)
+- Validates quote is in `sent`/`sent_to_customer` status before converting
+- The quotation email (`send_quote` action) now includes an "Accept Quote" button linking to the public accept page URL
 
-**Fix subject encoding** (line 117, 260):
-- Replace em dash `—` with a plain ASCII `–` or `-` in the subject line to avoid encoding issues:
-  ```
-  `Quotation ${quoteNumber} - REBAR.SHOP`
-  ```
+### 4. Update quotation email HTML in `send-quote-email`
+- Add a prominent "Review & Accept Quote" button after the line items table
+- Links to `{app_url}/accept-quote/{quote_id}`
+- Styled consistently with existing email branding
 
-**Fix double signature** (lines 115-119, 255-262):
-- When calling `gmail-send`, pass `sent_by_agent: true` or add a flag to tell gmail-send to skip its own signature. However, since we can't easily modify gmail-send's behavior, the simpler fix is to NOT include the signature in `buildBrandedEmail` and let gmail-send handle it. But that would affect other uses.
-- Better approach: pass the already-branded HTML directly and include a custom header or flag. Actually the simplest fix: the branded email already has the signature, so we should tell gmail-send to skip its own signature. Since gmail-send always appends `sigRow?.signature_html`, we should instead NOT pass the signature to `buildBrandedEmail` in send-quote-email, and let gmail-send handle it naturally. 
-- **Decision**: Remove the signature from `buildBrandedEmail` call in send-quote-email (pass `signatureHtml: undefined, actorName: undefined`) since gmail-send will append the signature itself.
+### 5. Register route in `src/App.tsx`
+- Add `/accept-quote/:quoteId` as a public route (no auth wrapper)
 
-### 2. No other file changes needed
-
-The send-quote-email edge function is the only file that needs fixes. The gmail-send function is working correctly — it's designed to append signatures. The issue is that send-quote-email pre-adds the signature via the branded wrapper.
+## Flow
+```text
+1. User clicks "Send to Customer" → email sent with "Review & Accept Quote" button
+2. Customer clicks button → lands on /accept-quote/:quoteId
+3. Customer sees quote details + Terms & Conditions link
+4. Customer checks "I accept the Terms" checkbox
+5. Customer clicks "Accept & Confirm Order"
+6. Backend: creates invoice → generates Stripe payment link → sends invoice email
+7. Customer sees confirmation message
+8. Customer receives invoice email with "Pay Now" button
+```
 
 ## Files Changed
-- `supabase/functions/send-quote-email/index.ts`
+- `src/pages/AcceptQuote.tsx` — new public acceptance page
+- `src/App.tsx` — add public route
+- `supabase/functions/quote-public-view/index.ts` — new edge function for anonymous quote viewing
+- `supabase/functions/send-quote-email/index.ts` — add accept button to quote email, add `accept_and_convert` action
 
