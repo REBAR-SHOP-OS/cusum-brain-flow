@@ -36,7 +36,6 @@ Deno.serve((req) =>
     const { userId, serviceClient: supabaseAdmin, body } = ctx;
 
     const action = body.action as string;
-    );
 
     // ─── Generate OAuth URL ────────────────────────────────────────
     if (action === "get-auth-url") {
