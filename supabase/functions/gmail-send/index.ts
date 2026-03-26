@@ -210,7 +210,9 @@ Deno.serve((req) =>
       bodyWithSig,
       fromEmail,
       replyToMessageId ? { messageId: replyToMessageId, references: references || "" } : undefined,
-      custom_headers
+      custom_headers,
+      cc,
+      bcc
     );
 
     let sendResponse = await fetch(
