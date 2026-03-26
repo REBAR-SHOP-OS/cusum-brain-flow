@@ -8,7 +8,7 @@ import {
   Play, Pause, Volume2, VolumeX, Maximize2,
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Music, FileText, Loader2,
-  SkipBack, SkipForward, ChevronRight, ChevronLeft,
+  SkipBack, SkipForward,
   FolderOpen, Type, Palette, SquarePen,
 } from "lucide-react";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
