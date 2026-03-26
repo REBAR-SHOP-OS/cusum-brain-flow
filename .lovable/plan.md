@@ -1,28 +1,57 @@
 
 
-# Move Sidebar Tab Icons to Timeline Header
+# Sync Text Overlays with Voiceover Audio (Subtitle-Style)
 
 ## Problem
-The left sidebar has a vertical strip of 6 tab icons (My Media, Text, Music, Script, Brand Kit, Card Editor) plus a collapse toggle. The user wants these icons moved to the timeline toolbar area (between "TIMELINE 0:00 / 0:31" and the zoom buttons) and removed from the left sidebar.
+Currently, text overlays show the full script text statically for the entire scene. The user wants the text to appear **synchronized with the voiceover** — like subtitles that show words/phrases as the audio plays them.
+
+## Approach
+
+Split each scene's voiceover text into short phrases (caption chunks), calculate timing for each chunk based on voiceover duration, and render only the current chunk based on `currentTime` during playback.
 
 ## Changes
 
-### `src/components/ad-director/editor/TimelineBar.tsx`
-- Accept new props: `tabs`, `activeTab`, `onTabSelect` for the editor tab icons
-- In the toolbar row (line 190), insert the tab icon buttons between the time display and the zoom controls (where `<div className="flex-1" />` is)
+### 1. `src/types/videoOverlay.ts` — Add timing fields
 
-### `src/components/ad-director/ProVideoEditor.tsx`
-- **Remove** the icon strip `<div>` (lines 1053-1072) that renders the vertical tab buttons and collapse toggle
-- **Remove** the collapse toggle logic from the sidebar — the sidebar now always shows content or is hidden based on active tab
-- Pass `TABS`, `activeTab`, and `handleSetActiveTab` as props to `<TimelineBar>`
-- Adjust sidebar width logic: instead of collapsed/expanded via icon strip, toggle content visibility based on whether a tab is active (clicking same tab again hides sidebar content)
+Add optional `startTime` and `endTime` fields to `VideoOverlay`:
+```ts
+startTime?: number; // seconds within the scene
+endTime?: number;   // seconds within the scene
+```
 
-### Layout adjustment
-- Left sidebar no longer has the 12px icon strip column — it only shows tab content panel (w-60) when a tab is selected, or nothing (w-0) when deselected
-- The icon strip in timeline toolbar will be horizontal small buttons matching existing toolbar style
+### 2. `src/components/ad-director/ProVideoEditor.tsx` — Generate timed caption chunks
+
+**Replace** the existing auto-seed text overlay logic (lines 233-256) with a new version that:
+- Splits each segment's voiceover text into short phrases (~4-6 words each)
+- Calculates `startTime` and `endTime` for each chunk proportionally based on voiceover duration (from `voiceoverDurations` state) or clip duration
+- Creates one `VideoOverlay` per chunk with timing data
+
+**Update** the overlay rendering (lines 1173-1192) to filter `sceneOverlays` — only show text overlays where `currentTime` falls between `startTime` and `endTime`.
+
+### 3. Re-generate text overlays when voiceovers complete
+
+After `generateAllVoiceovers` finishes and `voiceoverDurations` are populated, re-seed the text overlays with proper timing. Add a `useEffect` that watches `voiceoverDurations` changes and regenerates text overlays with accurate timing.
+
+### 4. Subtitle-style rendering
+
+Change the text overlay visual style to be more subtitle-like:
+- Centered at bottom of video (`position: { x: 5, y: 82 }`, `size: { w: 90, h: 12 }`)
+- Semi-transparent dark background bar
+- Fade-in/out transition between chunks
+
+## Text Splitting Logic
+
+```
+"A 3D animation showcases various stirrup rebar configurations forming the skeletal structure of a concrete beam"
+→ Chunk 1 (0s-3s): "A 3D animation showcases various"
+→ Chunk 2 (3s-6s): "stirrup rebar configurations forming"  
+→ Chunk 3 (6s-9s): "the skeletal structure of a concrete beam"
+```
+
+Timing is proportional: `chunkStart = (chunkIndex / totalChunks) * voDuration`
 
 | File | Change |
 |---|---|
-| `TimelineBar.tsx` | Add tab icon buttons to toolbar header row |
-| `ProVideoEditor.tsx` | Remove left icon strip, pass tab data to TimelineBar, adjust sidebar toggle logic |
+| `videoOverlay.ts` | Add `startTime?` and `endTime?` fields |
+| `ProVideoEditor.tsx` | Split text into timed chunks, render only active chunk based on currentTime |
 
