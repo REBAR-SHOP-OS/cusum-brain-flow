@@ -373,7 +373,24 @@ class BackgroundAdDirectorService {
         this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "generating" as const, progress: 10 } : c));
 
         try {
-          const isI2V = characterImageUrl && scene.generationMode === "image-to-video";
+          // Determine reference image: intro for first scene, outro for last visual scene, character for others
+          const isFirstScene = i === 0;
+          const lastVisualIdx = storyboardWithDefaults.reduce((acc, s, idx) => {
+            const seg = newSegments.find(sg => sg.id === s.segmentId);
+            return (s.generationMode !== "static-card" && seg?.type !== "closing") ? idx : acc;
+          }, 0);
+          const isLastVisualScene = i === lastVisualIdx;
+
+          let referenceImage: string | undefined;
+          if (isFirstScene && introImageUrl) {
+            referenceImage = introImageUrl;
+          } else if (isLastVisualScene && outroImageUrl) {
+            referenceImage = outroImageUrl;
+          } else if (characterImageUrl && scene.generationMode === "image-to-video") {
+            referenceImage = characterImageUrl;
+          }
+
+          const isI2V = !!referenceImage;
           const result = await invokeEdgeFunction<{
             url?: string; videoUrl?: string; generationId?: string; jobId?: string;
             provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
@@ -381,7 +398,7 @@ class BackgroundAdDirectorService {
             action: "generate", prompt: motionPrompt, duration: sceneDuration,
             aspectRatio: wanRatio, provider: "wan",
             model: isI2V ? "wan2.6-i2v" : "wan2.6-t2v",
-            ...(isI2V ? { imageUrl: characterImageUrl } : {}),
+            ...(isI2V ? { imageUrl: referenceImage } : {}),
             negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
           }, { timeoutMs: EDGE_TIMEOUT_MS });
 
