@@ -92,8 +92,25 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
     return hasPlans || hasProgress;
   });
 
+  // Filter out plans that are 100% complete (safety net for trigger lag)
+  const trulyActivePlans = activePlans.filter(p => {
+    if (!itemAggregates) return true;
+    const planItems = itemAggregates.filter(i => i.cut_plan_id === p.id);
+    if (planItems.length === 0) return true;
+    const allDone = planItems.every(i => (i.completed_pieces || 0) >= (i.total_pieces || 1));
+    return !allDone;
+  });
+
+  const trulyUnassigned = unassignedPlans.filter(p => {
+    if (!itemAggregates) return true;
+    const planItems = itemAggregates.filter(i => i.cut_plan_id === p.id);
+    if (planItems.length === 0) return true;
+    const allDone = planItems.every(i => (i.completed_pieces || 0) >= (i.total_pieces || 1));
+    return !allDone;
+  });
+
   // Hide entirely when nothing is actively producing
-  if (allWorkingMachines.length === 0 && unassignedPlans.length === 0) return null;
+  if (allWorkingMachines.length === 0 && trulyUnassigned.length === 0) return null;
 
   return (
     <div className="space-y-4">
