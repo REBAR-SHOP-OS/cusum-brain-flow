@@ -51,7 +51,8 @@ export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete, onRe
   const visible = projects.filter((p) => {
     const hasVideo = p.final_video_url && !p.final_video_url.startsWith("blob:");
     const hasDraftClips = !p.final_video_url && Array.isArray(p.clips) && p.clips.length > 0;
-    return hasVideo || hasDraftClips;
+    const hasThumbnail = !!p.thumbnail_url;
+    return hasVideo || hasDraftClips || hasThumbnail;
   });
   if (visible.length === 0) return null;
 
