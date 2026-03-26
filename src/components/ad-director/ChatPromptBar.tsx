@@ -60,6 +60,11 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
     e.target.value = "";
   };
 
+  const handleCharacterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) setCharacterImage(e.target.files[0]);
+    e.target.value = "";
+  };
+
   return (
     <div className="w-full max-w-2xl mx-auto space-y-4">
       {/* Intro / Outro upload boxes */}
