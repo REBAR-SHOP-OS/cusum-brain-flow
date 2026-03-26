@@ -13,6 +13,7 @@ export interface AdProjectRow {
   clips: ClipOutput[];
   continuity: ContinuityProfile | null;
   final_video_url: string | null;
+  thumbnail_url: string | null;
   status: string;
   created_at: string;
   updated_at: string;
