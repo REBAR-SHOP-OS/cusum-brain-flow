@@ -45,7 +45,9 @@ function getFabricationRate(tonnage: number, table: any[]): { price_per_ton: num
 
 Deno.serve((req) =>
   handleRequest(req, async ({ userId, companyId, serviceClient, body }) => {
-    const { estimation_project_id, lead_id, customer_name_override } = body;
+    const { estimation_project_id, lead_id, customer_name_override, delivery_distance_km, include_shop_drawings } = body;
+    const deliveryDistanceKm = Number(delivery_distance_km) || 0;
+    const shouldIncludeShopDrawings = include_shop_drawings !== false;
 
     if (!estimation_project_id) {
       return new Response(JSON.stringify({ error: "estimation_project_id is required" }), {
