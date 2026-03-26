@@ -52,6 +52,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const [projectName, setProjectName] = useState("");
   const [taxRate, setTaxRate] = useState(13);
   const [notes, setNotes] = useState("");
+  const [terms, setTerms] = useState<string[]>([]);
   const [items, setItems] = useState<LineItem[]>([
     { description: "", quantity: 1, unitPrice: 0 },
   ]);
