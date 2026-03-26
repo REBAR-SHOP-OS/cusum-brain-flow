@@ -295,13 +295,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       {/* Analyzing / Generating */}
       {(flowState === "analyzing" || flowState === "generating") && (
         <div className="w-full max-w-lg space-y-6 animate-in fade-in duration-300">
-          {/* User message bubble */}
-          <div className="flex justify-end">
-            <div className="max-w-[80%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-3 text-sm">
-              {userPrompt}
-            </div>
-          </div>
-
           {/* Progress */}
           <div className="rounded-2xl border border-border/20 bg-card/40 p-6 space-y-4">
             <div className="flex items-center gap-3">
@@ -322,13 +315,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       {/* Result */}
       {flowState === "result" && (
         <div className="w-full max-w-2xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* User message */}
-          <div className="flex justify-end">
-            <div className="max-w-[80%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-3 text-sm">
-              {userPrompt}
-            </div>
-          </div>
-
           {/* Main Preview */}
           <div className="rounded-2xl border border-border/20 bg-card/40 overflow-hidden">
             {(selectedPreviewUrl || finalVideoUrl) ? (
