@@ -365,10 +365,27 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           ))}
 
           {activeDoc === "quotation" && quotations.length > 0 && quotations.map((q) => {
-            const customer = (q.metadata as Record<string, unknown>)?.odoo_customer as string || "Unknown";
+            const meta = q.metadata as Record<string, unknown> | null;
+            const customer = (meta?.odoo_customer as string)
+              || (meta?.customer_name as string)
+              || q.salesperson
+              || "Unknown";
+            const lineItems = (meta?.line_items as Array<Record<string, unknown>>) || [];
+            const metaTotal = lineItems.reduce((s: number, li: any) => s + (Number(li.amount) || 0), 0);
+            const displayTotal = Number(q.total_amount) || metaTotal;
             const isSale = q.odoo_status === "Sales Order";
             return (
-              <Card key={q.id} className="hover:ring-2 hover:ring-primary/20 transition-all">
+              <Card
+                key={q.id}
+                className="hover:ring-2 hover:ring-primary/20 transition-all cursor-pointer"
+                onClick={() => {
+                  if (q.source === "manual" || q.source === "ai_estimation") {
+                    setDraftEditorId(q.id);
+                  } else {
+                    setViewQuote(q);
+                  }
+                }}
+              >
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="p-2 rounded-lg bg-primary/10">
@@ -377,7 +394,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
                     <div>
                       <p className="font-semibold">{q.quote_number} — {customer}</p>
                       <p className="text-sm text-muted-foreground">
-                        {new Date(q.created_at).toLocaleDateString()} · {fmt(Number(q.total_amount) || 0)}
+                        {new Date(q.created_at).toLocaleDateString()} · {fmt(displayTotal)}
                         {q.salesperson && <span className="ml-2 text-muted-foreground">· {q.salesperson}</span>}
                       </p>
                     </div>
@@ -423,6 +440,20 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
                     </Badge>
                     <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={(e) => { e.stopPropagation(); setViewQuote(q); }}>
                       <Eye className="w-3.5 h-3.5" /> View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="gap-1 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const { error } = await supabase.from("quotes").delete().eq("id", q.id);
+                        if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+                        toast({ title: "Deleted", description: `${q.quote_number} removed` });
+                        queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
+                      }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
                 </CardContent>
