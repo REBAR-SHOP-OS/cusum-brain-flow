@@ -74,6 +74,50 @@ serve((req) =>
       }
     }
 
+    // 4b. Extract @mentioned users from note_text and add if not already in recipients
+    if (event_type === "note" && note_text) {
+      const mentionMatches = note_text.match(/@([A-Za-z\s]+?)(?=\s@|\s*$|[.,!?])/g);
+      if (mentionMatches && mentionMatches.length > 0) {
+        const mentionedNames = mentionMatches.map((m: string) => m.slice(1).trim()).filter(Boolean);
+        log.info(`Found @mentions: ${JSON.stringify(mentionedNames)}`);
+
+        if (mentionedNames.length > 0) {
+          let actorCompanyId: string | null = null;
+          if (actor_id) {
+            const { data: actorProf } = await serviceClient
+              .from("profiles")
+              .select("company_id")
+              .eq("user_id", actor_id)
+              .maybeSingle();
+            actorCompanyId = actorProf?.company_id || null;
+          }
+
+          let profileQuery = serviceClient
+            .from("profiles")
+            .select("user_id, email, full_name")
+            .in("full_name", mentionedNames);
+          if (actorCompanyId) {
+            profileQuery = profileQuery.eq("company_id", actorCompanyId);
+          }
+          const { data: mentionedProfiles } = await profileQuery;
+
+          if (mentionedProfiles) {
+            const existingEmails = new Set(recipients.map(r => r.email.toLowerCase()));
+            for (const mp of mentionedProfiles as any[]) {
+              if (!mp.email) continue;
+              const mpEmail = mp.email.toLowerCase();
+              if (actorEmail && mpEmail === actorEmail) continue;
+              if (existingEmails.has(mpEmail)) continue;
+              if (!mpEmail.endsWith("@rebar.shop")) continue;
+
+              recipients.push({ email: mp.email, full_name: mp.full_name || mp.email });
+              existingEmails.add(mpEmail);
+              log.info(`Added @mentioned user: ${mp.full_name} (${mp.email})`);
+            }
+          }
+        }
+      }
+    }
 
     if (recipients.length === 0) {
       log.info("No qualifying recipients");
