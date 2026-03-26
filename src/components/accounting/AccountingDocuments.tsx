@@ -404,19 +404,6 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
                           size="sm"
                           variant="outline"
                           className="gap-1.5 text-xs"
-                          disabled={convertingQuoteId === q.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCreateInvoiceFromQuote(q.id);
-                          }}
-                        >
-                          {convertingQuoteId === q.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileOutput className="w-3.5 h-3.5" />}
-                          → Create Invoice
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5 text-xs"
                           onClick={(e) => {
                             e.stopPropagation();
                             setConvertQuote({
