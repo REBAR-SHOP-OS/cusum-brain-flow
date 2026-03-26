@@ -356,48 +356,69 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                   const isSelected = clip.videoUrl === selectedPreviewUrl;
 
                   return (
-                    <div
-                      key={clip.sceneId}
-                      className={`relative flex-shrink-0 w-[280px] rounded-xl border overflow-hidden cursor-pointer transition-all group ${
-                        isSelected ? "ring-2 ring-primary border-primary" : "border-border/30 hover:border-primary/50"
-                      }`}
-                      onClick={() => clip.videoUrl && setSelectedPreviewUrl(clip.videoUrl)}
-                    >
-                      {clip.status === "completed" && clip.videoUrl ? (
-                        <>
-                          <video
-                            src={clip.videoUrl}
-                            className="w-full aspect-video object-cover"
-                            muted
-                            preload="metadata"
-                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                            onMouseLeave={(e) => { const el = e.target as HTMLVideoElement; el.pause(); el.currentTime = 0; }}
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
-                            <div className="w-8 h-8 rounded-full bg-background/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Play className="w-4 h-4 text-foreground ml-0.5" />
+                    <div key={clip.sceneId} className="flex-shrink-0 w-[280px] space-y-1.5">
+                      <div
+                        className={`relative rounded-xl border overflow-hidden cursor-pointer transition-all group ${
+                          isSelected ? "ring-2 ring-primary border-primary" : "border-border/30 hover:border-primary/50"
+                        }`}
+                        onClick={() => clip.videoUrl && setSelectedPreviewUrl(clip.videoUrl)}
+                      >
+                        {clip.status === "completed" && clip.videoUrl ? (
+                          <>
+                            <video
+                              src={clip.videoUrl}
+                              className="w-full aspect-video object-cover"
+                              muted
+                              preload="metadata"
+                              onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                              onMouseLeave={(e) => { const el = e.target as HTMLVideoElement; el.pause(); el.currentTime = 0; }}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
+                              <div className="w-8 h-8 rounded-full bg-background/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Play className="w-4 h-4 text-foreground ml-0.5" />
+                              </div>
                             </div>
+                          </>
+                        ) : clip.status === "generating" || clip.status === "queued" ? (
+                          <Skeleton className="w-full aspect-video flex items-center justify-center">
+                            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                          </Skeleton>
+                        ) : clip.status === "failed" ? (
+                          <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center">
+                            <AlertCircle className="w-5 h-5 text-destructive" />
                           </div>
-                        </>
-                      ) : clip.status === "generating" || clip.status === "queued" ? (
-                        <Skeleton className="w-full aspect-video flex items-center justify-center">
-                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                        </Skeleton>
-                      ) : clip.status === "failed" ? (
-                        <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center">
-                          <AlertCircle className="w-5 h-5 text-destructive" />
-                        </div>
-                      ) : (
-                        <div className="w-full aspect-video bg-muted/20 flex items-center justify-center">
-                          <Film className="w-5 h-5 text-muted-foreground/40" />
-                        </div>
-                      )}
+                        ) : (
+                          <div className="w-full aspect-video bg-muted/20 flex items-center justify-center">
+                            <Film className="w-5 h-5 text-muted-foreground/40" />
+                          </div>
+                        )}
 
-                      {/* Label overlay */}
-                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5">
-                        <p className="text-[10px] font-medium text-white truncate">
-                          {i + 1}. {segType ? segType.charAt(0).toUpperCase() + segType.slice(1) : label}
-                        </p>
+                        {/* Label overlay */}
+                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5">
+                          <p className="text-[10px] font-medium text-white truncate">
+                            {i + 1}. {segType ? segType.charAt(0).toUpperCase() + segType.slice(1) : label}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Custom prompt input + regenerate */}
+                      <div className="flex gap-1">
+                        <Input
+                          value={scenePrompts[clip.sceneId] || ""}
+                          onChange={e => setScenePrompts(p => ({ ...p, [clip.sceneId]: e.target.value }))}
+                          placeholder="Custom prompt..."
+                          className="h-7 text-xs flex-1"
+                          onClick={e => e.stopPropagation()}
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          disabled={clip.status === "generating"}
+                          onClick={() => handleRegenerateScene(clip.sceneId, scenePrompts[clip.sceneId])}
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
                   );
