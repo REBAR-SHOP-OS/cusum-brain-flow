@@ -207,8 +207,6 @@ Deno.serve((req) =>
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-      return json({ error: "domain_id and messages required" }, 400);
-    }
 
     const { data: profile } = await serviceClient
       .from("profiles")
