@@ -61,6 +61,8 @@ interface ChatPromptBarProps {
     characterImage: File | null,
     selectedProducts?: string[],
     selectedStyles?: string[],
+    videoModel?: string,
+    videoProvider?: string,
   ) => void;
   disabled?: boolean;
 }
