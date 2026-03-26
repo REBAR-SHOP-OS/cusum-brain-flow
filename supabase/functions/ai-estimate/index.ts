@@ -425,39 +425,36 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
             }
           }
 
-          // ─── DETERMINISTIC FALLBACK: If AI returned 0 items, parse response text for weight summary data ───
-          if (extractedItems.length === 0 && content.length > 0) {
-            console.log("AI returned 0 items — attempting deterministic weight summary fallback");
-            const fallbackItems = parseWeightSummaryFallback(content);
-            if (fallbackItems.length > 0) {
-              extractedItems = fallbackItems;
-              console.log(`Fallback extracted ${extractedItems.length} summary items`);
-            }
-          }
+          // ─── STRICT USEFULNESS TEST ───
+          // Require at least one item with a valid bar_size AND positive weight or length
+          const hasUsefulItem = extractedItems.some(item =>
+            item.bar_size && MASS_PER_M[item.bar_size] &&
+            (Number(item.weight_kg) > 0 || Number(item.cut_length_mm) > 0)
+          );
 
-          // ─── USELESS DATA FALLBACK: AI returned items but all have zero weight/length ───
-          if (extractedItems.length > 0) {
-            const hasUsefulData = extractedItems.some(item =>
-              (Number(item.cut_length_mm) > 0) ||
-              (Number(item.weight_kg) > 0) ||
-              (Number(item.quantity) > 1)
-            );
-            if (!hasUsefulData) {
-              console.log("AI returned items but all have zero weight/length — trying rescue strategies");
-              
-              // Strategy 1: regex on AI response text
-              let rescued = parseWeightSummaryFallback(content);
-              
-              // Strategy 2: extract from AI's own JSON items (group by bar_size, sum weights)
-              if (rescued.length === 0) {
-                console.log("Regex fallback found nothing — trying rescueAIItems on JSON items");
-                rescued = rescueAIItems(extractedItems);
-              }
-              
-              if (rescued.length > 0) {
-                console.log(`Rescued ${rescued.length} items from useless AI output`);
-                extractedItems = rescued;
-              }
+          if (!hasUsefulItem) {
+            console.log(`AI returned ${extractedItems.length} items but none are useful — running deterministic fallback`);
+            
+            // Strategy 1: parse weight patterns from AI response text
+            let rescued = parseWeightSummaryFallback(content);
+            
+            // Strategy 2: rescue from AI JSON items (group by bar_size, sum weights)
+            if (rescued.length === 0) {
+              console.log("Text fallback found nothing — trying rescueAIItems");
+              rescued = rescueAIItems(extractedItems);
+            }
+            
+            // Strategy 3: parse the cleaned JSON text itself for weight patterns
+            if (rescued.length === 0) {
+              console.log("rescueAIItems found nothing — trying fallback on raw cleaned text");
+              rescued = parseWeightSummaryFallback(cleaned);
+            }
+            
+            if (rescued.length > 0) {
+              console.log(`Deterministic fallback produced ${rescued.length} items`);
+              extractedItems = rescued;
+            } else {
+              console.log("All fallback strategies failed — keeping original AI items with null guards");
             }
           }
         }
