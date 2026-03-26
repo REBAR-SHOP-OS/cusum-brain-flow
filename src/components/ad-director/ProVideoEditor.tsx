@@ -230,30 +230,52 @@ export function ProVideoEditor({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storyboard.length, brand.logoUrl]);
 
-  // Auto-seed text overlays from script segments
+  // Helper: split text into caption chunks of ~4-6 words
+  const splitIntoChunks = useCallback((text: string, maxWords = 5): string[] => {
+    const words = text.split(/\s+/).filter(Boolean);
+    const chunks: string[] = [];
+    for (let i = 0; i < words.length; i += maxWords) {
+      chunks.push(words.slice(i, i + maxWords).join(" "));
+    }
+    return chunks.length > 0 ? chunks : [text];
+  }, []);
+
+  // Build timed subtitle overlays from voiceover text
+  const buildTimedOverlays = useCallback((sceneId: string, voText: string, totalDur: number): VideoOverlay[] => {
+    const chunks = splitIntoChunks(voText);
+    const chunkDur = totalDur / chunks.length;
+    return chunks.map((chunk, i) => ({
+      id: crypto.randomUUID(),
+      kind: "text" as const,
+      position: { x: 5, y: 82 },
+      size: { w: 90, h: 12 },
+      content: chunk,
+      opacity: 0.95,
+      sceneId,
+      animated: false,
+      startTime: +(i * chunkDur).toFixed(2),
+      endTime: +((i + 1) * chunkDur).toFixed(2),
+    }));
+  }, [splitIntoChunks]);
+
+  // Auto-seed & resync text overlays when voiceover durations change
   useEffect(() => {
     if (storyboard.length === 0 || segments.length === 0) return;
     const newOverlays: VideoOverlay[] = [];
     for (const scene of storyboard) {
       const seg = segments.find(s => s.id === scene.segmentId);
-      if (!seg?.text?.trim()) continue;
-      const hasText = overlays.some(o => o.sceneId === scene.id && o.kind === "text");
-      if (!hasText) {
-        newOverlays.push({
-          id: crypto.randomUUID(),
-          kind: "text",
-          position: { x: 10, y: 80 },
-          size: { w: 80, h: 15 },
-          content: seg.text,
-          opacity: 0.95,
-          sceneId: scene.id,
-          animated: true,
-        });
-      }
+      const voText = seg?.voiceover || seg?.text;
+      if (!voText?.trim()) continue;
+      const voDur = voiceoverDurations[scene.id] || clipDurations[scene.id] || (seg ? seg.endTime - seg.startTime : 4);
+      newOverlays.push(...buildTimedOverlays(scene.id, voText, voDur));
     }
-    if (newOverlays.length > 0) setOverlays(prev => [...prev, ...newOverlays]);
+    // Replace all text overlays, keep logos/shapes
+    setOverlays(prev => [
+      ...prev.filter(o => o.kind !== "text"),
+      ...newOverlays,
+    ]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storyboard.length, segments]);
+  }, [storyboard.length, segments, voiceoverDurations, clipDurations]);
 
   // Auto-generate voiceovers on mount
   const voiceoverGenerated = useRef(false);
