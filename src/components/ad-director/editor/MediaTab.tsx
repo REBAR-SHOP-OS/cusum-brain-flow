@@ -164,47 +164,11 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
 
   return (
     <div className="space-y-4">
-      <h4 className="text-sm font-semibold">Chapters</h4>
+      <h4 className="text-sm font-semibold">Media</h4>
       <input ref={fileInputRef} type="file" accept="video/*,image/*" className="hidden" onChange={handleFileChange} />
 
-      {/* Chapter thumbnails */}
-      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-        {storyboard.map((s, idx) => {
-          const c = clips.find(cl => cl.sceneId === s.id);
-          const seg = segments.find(sg => sg.id === s.segmentId);
-          const isSelected = idx === selectedSceneIndex;
-          return (
-            <button
-              key={s.id}
-              onClick={() => { onSelectScene(idx); setShowProperties(true); }}
-              className={`w-full flex items-center gap-3 p-2 rounded-lg border transition-all text-left ${
-                isSelected ? "border-primary bg-primary/5" : "border-border/30 hover:border-border/60 hover:bg-muted/20"
-              }`}
-            >
-              <div className="w-20 h-12 rounded-md bg-muted/50 flex items-center justify-center text-muted-foreground flex-shrink-0 relative overflow-hidden">
-                {c?.videoUrl ? (
-                  <video src={c.videoUrl} className="w-full h-full object-cover" muted />
-                ) : (
-                  <Image className="w-4 h-4" />
-                )}
-                <Badge variant="secondary" className="absolute bottom-0.5 right-0.5 text-[8px] px-1 py-0 h-3.5">
-                  {seg ? `${(seg.endTime - seg.startTime).toFixed(0)}s` : "--"}
-                </Badge>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs font-medium truncate">{s.objective || `Scene ${idx + 1}`}</div>
-                <div className="text-[10px] text-muted-foreground truncate">{seg?.text?.slice(0, 50)}</div>
-              </div>
-              <Badge variant={c?.status === "completed" ? "default" : "secondary"} className="text-[9px] flex-shrink-0 whitespace-nowrap">
-                {c?.status === "completed" ? "done" : c?.status === "generating" ? "gen…" : c?.status || "idle"}
-              </Badge>
-            </button>
-          );
-        })}
-      </div>
-
       {/* Replace media */}
-      <div className="space-y-2 pt-2 border-t border-border/30">
+      <div className="space-y-2">
         <Label className="text-xs text-muted-foreground">Replace media</Label>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="text-xs h-7 gap-1 flex-1" onClick={handleUpload}>
