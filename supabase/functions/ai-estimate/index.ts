@@ -409,6 +409,10 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
     let calculatedItems: EstimationItemResult[] = [];
 
     for (const input of extractedItems) {
+      // Null-safe defaults for required fields
+      input.quantity = input.quantity ?? 1;
+      input.cut_length_mm = input.cut_length_mm ?? 0;
+
       const std = standardsMap.get(input.bar_size);
       if (!std) {
         calculatedItems.push({
