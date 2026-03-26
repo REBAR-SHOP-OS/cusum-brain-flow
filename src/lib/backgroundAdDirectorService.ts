@@ -228,7 +228,36 @@ class BackgroundAdDirectorService {
         modelOverrides,
       }, { timeoutMs: 90_000 }));
 
-      const { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
+      let { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
+
+      // ── Enforce scene count based on duration ──────────────────────
+      const expectedSceneCount = videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15);
+      const segmentDuration = videoParams.duration / expectedSceneCount;
+
+      if (rawStoryboard.length > expectedSceneCount) {
+        rawStoryboard = rawStoryboard.slice(0, expectedSceneCount);
+        newSegments = newSegments.slice(0, expectedSceneCount);
+      } else if (rawStoryboard.length < expectedSceneCount) {
+        while (rawStoryboard.length < expectedSceneCount) {
+          const last = rawStoryboard[rawStoryboard.length - 1];
+          const lastSeg = newSegments[newSegments.length - 1];
+          rawStoryboard.push({ ...last, id: `${last.id}-pad-${rawStoryboard.length}` });
+          newSegments.push({ ...lastSeg, id: `${lastSeg.id}-pad-${newSegments.length}`, label: `Scene ${newSegments.length + 1}` });
+        }
+      }
+
+      // Force-recalculate segment timings to exact intervals
+      newSegments = newSegments.map((seg, i) => ({
+        ...seg,
+        startTime: Math.round(i * segmentDuration),
+        endTime: Math.round((i + 1) * segmentDuration),
+      }));
+      // Sync storyboard segmentIds
+      rawStoryboard = rawStoryboard.map((scene, i) => ({
+        ...scene,
+        segmentId: newSegments[i].id,
+      }));
+      // ──────────────────────────────────────────────────────────────
 
       if (this.cancelFlag) return;
 
