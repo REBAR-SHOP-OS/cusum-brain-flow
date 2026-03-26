@@ -59,7 +59,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   const queryClient = useQueryClient();
   const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
-  const [convertingQuoteId, setConvertingQuoteId] = useState<string | null>(null);
+  
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [draftEditorId, setDraftEditorId] = useState<string | null>(null);
   const { companyId } = useCompanyId();
