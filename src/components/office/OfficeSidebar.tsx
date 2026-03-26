@@ -21,7 +21,8 @@ export type OfficeSection =
   | "optimization"
   | "tags-export"
   | "packing-slips"
-  | "payroll";
+  | "payroll"
+  | "order-calc";
 
 interface OfficeSidebarProps {
   active: OfficeSection;
