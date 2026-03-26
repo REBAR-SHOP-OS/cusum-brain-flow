@@ -506,10 +506,43 @@ const WRITE_PROMPT_TOOLS = [{
   },
 }];
 
+// ─── Product & Style Mappings ────────────────────────────────────
+const PRODUCT_DESCRIPTIONS: Record<string, string> = {
+  fiberglass: "Fiberglass GFRP (Glass Fiber Reinforced Polymer) reinforcement bars — lightweight, corrosion-resistant, non-conductive composite rebar used in concrete structures",
+  stirrups: "Steel stirrups — closed-loop bent reinforcement bars used to hold longitudinal rebar in position and resist shear forces in beams and columns",
+  cages: "Rebar cages — pre-assembled cylindrical or rectangular frameworks of welded reinforcement bars used in foundations, columns, and piles",
+  hooks: "Rebar hooks — steel reinforcing bars with bent ends (90° or 180° hooks) for anchorage in concrete connections",
+  dowels: "Dowel bars — smooth or deformed steel bars used at construction joints in slabs and pavements to transfer loads",
+  "wire-mesh": "Welded wire mesh (WWM) — factory-welded steel grid panels used for slab-on-grade reinforcement, crack control, and temperature reinforcement",
+  "straight-rebar": "Straight rebar — standard deformed steel reinforcing bars in various sizes used as primary tensile reinforcement in concrete structures",
+};
+
+const STYLE_DESCRIPTIONS: Record<string, string> = {
+  realism: "Photorealistic — real-world professional photography/cinematography look with natural lighting, real textures, and lifelike environments",
+  cinematic: "Cinematic — dramatic Hollywood-grade visuals with depth of field, lens flares, color grading, and epic scale compositions",
+  "3d-render": "3D Rendered — clean CGI visualization with polished materials, studio lighting, and technical precision",
+  minimal: "Minimalist — clean, simple compositions with negative space, muted palette, and elegant typography",
+  industrial: "Industrial — raw, powerful factory/construction-site aesthetic with heavy machinery, steel textures, and gritty authenticity",
+  technical: "Technical — engineering-focused with blueprints, cross-sections, detailed specs, and precise measurements visible",
+};
+
+function buildProductStyleDirective(selectedProducts?: string[], selectedStyles?: string[]): string {
+  const parts: string[] = [];
+  if (selectedProducts?.length) {
+    const descriptions = selectedProducts.map(p => PRODUCT_DESCRIPTIONS[p] || p).join("; ");
+    parts.push(`\n\n═══ MANDATORY PRODUCT DIRECTIVE ═══\nThe video MUST prominently feature and focus on: ${descriptions}.\nEvery scene must showcase this product in use, being installed, manufactured, or demonstrated. The product must be the visual centerpiece — never generic or absent.`);
+  }
+  if (selectedStyles?.length) {
+    const descriptions = selectedStyles.map(s => STYLE_DESCRIPTIONS[s] || s).join("; ");
+    parts.push(`\n\n═══ MANDATORY VISUAL STYLE DIRECTIVE ═══\nThe video MUST be produced in this visual style: ${descriptions}.\nApply this aesthetic consistently to every scene — lighting, color grading, composition, and post-processing must all reflect this style.`);
+  }
+  return parts.join("");
+}
+
 // ─── Action Handlers ────────────────────────────────────────────
 
 async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: string) {
-  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl, sceneCount } = body;
+  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl, sceneCount, selectedProducts, selectedStyles } = body;
   if (!script) throw new Error("Script is required");
 
   const characterBlock = characterImageUrl
@@ -529,8 +562,10 @@ async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: st
     ? `\n\nOUTRO REFERENCE IMAGE: A reference image has been provided for the closing visual scene. The LAST visual scene (before any end-card) MUST visually match and be inspired by this image — same composition, color palette, and visual style. Set generationMode to "image-to-video" for that scene.`
     : "";
 
+  const productStyleDirective = buildProductStyleDirective(selectedProducts, selectedStyles);
+
   const userPrompt = `Brand: ${brand?.name || "Rebar.Shop"} | Website: ${brand?.website || "Rebar.Shop"} | CTA: ${brand?.cta || "Upload your drawings and get fast rebar shop drawings delivered."} | Tagline: ${brand?.tagline || "Fast, precise rebar detailing when time matters."} | Audience: ${brand?.targetAudience || "Construction contractors and engineers"} | Colors: ${brand?.primaryColor || "#ef4444"} / ${brand?.secondaryColor || "#1e293b"} | Aesthetic: ${brand?.referenceAesthetic || "Premium cinematic industrial B2B"}
-${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}${introBlock}${outroBlock}
+${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}${introBlock}${outroBlock}${productStyleDirective}
 
 Script:
 ${script}
