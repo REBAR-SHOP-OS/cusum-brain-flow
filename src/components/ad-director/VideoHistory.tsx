@@ -30,7 +30,7 @@ export function VideoHistory({ projects, onSelect, onDelete }: VideoHistoryProps
   );
 }
 
-function VideoCard({ project, onSelect }: { project: AdProjectRow; onSelect?: (url: string) => void }) {
+function VideoCard({ project, onSelect, onDelete }: { project: AdProjectRow; onSelect?: (url: string) => void; onDelete?: (id: string) => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [hovering, setHovering] = useState(false);
   const [hasError, setHasError] = useState(false);
