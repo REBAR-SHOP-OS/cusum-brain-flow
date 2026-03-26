@@ -91,8 +91,8 @@ export function VideoParameters({ params, onChange }: VideoParametersProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Slider min={2} max={15} step={1} value={[params.duration]} onValueChange={([v]) => set("duration", v)} className="flex-1" />
-          <Input type="number" min={2} max={15} value={params.duration} onChange={(e) => set("duration", Math.min(15, Math.max(2, Number(e.target.value) || 2)))} className="w-12 h-6 text-[11px] text-center bg-muted/20 border-border/20" />
+          <Slider min={15} max={60} step={15} value={[params.duration]} onValueChange={([v]) => set("duration", v)} className="flex-1" />
+          <Input type="number" min={15} max={60} value={params.duration} onChange={(e) => set("duration", Math.min(60, Math.max(15, Number(e.target.value) || 15)))} className="w-12 h-6 text-[11px] text-center bg-muted/20 border-border/20" />
         </div>
       </div>
 
