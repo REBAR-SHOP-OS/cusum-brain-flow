@@ -431,11 +431,26 @@ export async function stitchClips(
   }
 
   // Dynamic ducking: lower music when voice is playing, restore when silent
-  const updateMusicDucking = () => {
+    const updateMusicDucking = () => {
     if (!musicGainNode || !audioCtx || !voiceElement) return;
     const voicePlaying = !voiceElement.paused && !voiceElement.ended && voiceElement.currentTime > 0;
     const targetVol = voicePlaying ? duckedMusicVol : baseMusicVol;
     musicGainNode.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.1);
+  };
+
+  // Professional fade-out helper
+  const fadeOutAudio = (durationSec = 0.5): Promise<void> => {
+    if (!audioCtx) return Promise.resolve();
+    const now = audioCtx.currentTime;
+    if (voiceGainNode) {
+      voiceGainNode.gain.setValueAtTime(voiceGainNode.gain.value, now);
+      voiceGainNode.gain.linearRampToValueAtTime(0, now + durationSec);
+    }
+    if (musicGainNode) {
+      musicGainNode.gain.setValueAtTime(musicGainNode.gain.value, now);
+      musicGainNode.gain.linearRampToValueAtTime(0, now + durationSec);
+    }
+    return new Promise(res => setTimeout(res, durationSec * 1000));
   };
 
   const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
