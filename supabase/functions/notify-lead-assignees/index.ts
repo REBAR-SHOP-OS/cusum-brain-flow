@@ -207,14 +207,14 @@ serve((req) =>
     }
 
     // Handle token rotation
-    if (tokenData.refresh_token && aiProfile?.id) {
+    if (tokenData.refresh_token && senderUserId) {
       try {
         const { encryptToken } = await import("../_shared/tokenEncryption.ts");
         const encNew = await encryptToken(tokenData.refresh_token);
         await serviceClient
           .from("user_gmail_tokens")
           .update({ refresh_token: encNew, is_encrypted: true, token_rotated_at: new Date().toISOString() })
-          .eq("user_id", aiProfile.id);
+          .eq("user_id", senderUserId);
       } catch (e) {
         log.error("Token rotation save failed", e);
       }
