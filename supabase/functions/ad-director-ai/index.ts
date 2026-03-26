@@ -569,7 +569,8 @@ Original Prompt: ${scene.prompt}
 
 Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
 ${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the FIRST scene — establish the visual identity that ALL subsequent scenes must follow."}
-${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}`;
+${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}
+${characterImageUrl ? `\nCHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person. Ensure the person's appearance matches across all scenes.` : ""}`;
 
   return await callAIAndExtract(
     apiKey,
