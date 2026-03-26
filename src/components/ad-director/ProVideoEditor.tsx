@@ -8,7 +8,7 @@ import {
   Play, Pause, Volume2, VolumeX, Maximize2,
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Music, FileText, Loader2,
-  SkipBack, SkipForward, ChevronRight, ChevronLeft,
+  SkipBack, SkipForward,
   FolderOpen, Type, Palette, SquarePen,
 } from "lucide-react";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
@@ -91,7 +91,7 @@ export function ProVideoEditor({
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
   const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
@@ -591,14 +591,12 @@ export function ProVideoEditor({
   const handleEditPrompt = useCallback((index: number) => {
     setSelectedSceneIndex(index);
     setActiveTab("media");
-    if (sidebarCollapsed) setSidebarCollapsed(false);
-  }, [sidebarCollapsed]);
+  }, []);
 
   const handleEditVoiceover = useCallback((index: number) => {
     setSelectedSceneIndex(index);
     setActiveTab("script");
-    if (sidebarCollapsed) setSidebarCollapsed(false);
-  }, [sidebarCollapsed]);
+  }, []);
 
   const handleMuteScene = useCallback((index: number) => {
     const sceneId = storyboard[index]?.id;
@@ -674,9 +672,8 @@ export function ProVideoEditor({
     if (sceneIdx >= 0) {
       setSelectedSceneIndex(sceneIdx);
       setActiveTab("script");
-      if (sidebarCollapsed) setSidebarCollapsed(false);
     }
-  }, [storyboard, sidebarCollapsed]);
+  }, [storyboard]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
@@ -1048,32 +1045,10 @@ export function ProVideoEditor({
       {/* ─── Main 3-Panel Area ─── */}
       <div className="flex flex-1 min-h-0">
         {/* ─── Left Sidebar ─── */}
-        <div className={`flex shrink-0 border-r border-border/30 bg-card/60 transition-all ${sidebarCollapsed ? "w-12" : "w-72"}`}>
-          {/* Icon strip */}
-          <div className="w-12 shrink-0 flex flex-col items-center py-2 gap-1 border-r border-border/20">
-            {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => { handleSetActiveTab(tab.id); if (sidebarCollapsed) setSidebarCollapsed(false); }}
-                className={`w-9 h-9 rounded-lg flex items-center justify-center transition-colors
-                  ${activeTab === tab.id ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"}`}
-                title={tab.label}
-              >
-                {tab.icon}
-              </button>
-            ))}
-            <div className="flex-1" />
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/30"
-            >
-              {sidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-            </button>
-          </div>
-
+        <div className={`flex shrink-0 border-r border-border/30 bg-card/60 transition-all ${activeTab ? "w-60" : "w-0"} overflow-hidden`}>
           {/* Tab content */}
-          {!sidebarCollapsed && (
-            <div className="flex-1 overflow-y-auto p-3 min-w-0">
+          {activeTab && (
+            <div className="w-60 overflow-y-auto p-3 min-w-0">
               <h3 className="text-xs font-semibold mb-3 text-muted-foreground uppercase tracking-wider">
                 {TABS.find(t => t.id === activeTab)?.label}
               </h3>
@@ -1276,6 +1251,9 @@ export function ProVideoEditor({
 
       {/* ─── Bottom Timeline ─── */}
       <TimelineBar
+        sidebarTabs={TABS}
+        activeSidebarTab={activeTab}
+        onSidebarTabSelect={handleSetActiveTab}
         clips={clips}
         storyboard={storyboard}
         segments={segments}
