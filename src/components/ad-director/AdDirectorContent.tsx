@@ -463,6 +463,16 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         <>
         <div className="fixed inset-0 z-[5] bg-black" />
         <div className="w-full max-w-2xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative z-10">
+          {/* Home button — top */}
+          <div className="flex justify-start">
+            <button
+              onClick={() => service.patchState({ flowState: "idle" })}
+              className="w-14 h-14 rounded-full bg-primary hover:bg-primary/90 flex items-center justify-center transition-colors shadow-lg ring-2 ring-primary/30"
+              title="Back to AI Video Director"
+            >
+              <Home className="w-7 h-7 text-primary-foreground" />
+            </button>
+          </div>
           {/* Main Preview */}
           <div className="rounded-2xl border border-border/20 bg-card/40 overflow-hidden">
             {(selectedPreviewUrl || finalVideoUrl) ? (
@@ -578,16 +588,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                 </Button>
               </>
             )}
-          </div>
-          {/* Home button */}
-          <div className="flex justify-center pt-2">
-            <button
-              onClick={() => service.patchState({ flowState: "idle" })}
-              className="w-12 h-12 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
-              title="Back to AI Video Director"
-            >
-              <Home className="w-5 h-5 text-primary" />
-            </button>
           </div>
         </div>
         </>
