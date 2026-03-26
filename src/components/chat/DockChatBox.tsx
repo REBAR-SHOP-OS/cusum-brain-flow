@@ -700,17 +700,23 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
             {forwardMsg.original_text.slice(0, 60)}
           </div>
           <ScrollArea className="flex-1">
-            {forwardChannels.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-4">No channels found</p>
+            {forwardMembers.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">No team members found</p>
             ) : (
               <div className="flex flex-col gap-0.5">
-                {forwardChannels.map((ch) => (
+                {forwardMembers.map((p) => (
                   <button
-                    key={ch.id}
-                    onClick={() => handleForwardSend(ch.id)}
-                    className="text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted transition-colors truncate"
+                    key={p.id}
+                    onClick={() => handleForwardToMember(p.id)}
+                    className="w-full flex items-center gap-2 text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
                   >
-                    # {ch.name}
+                    <Avatar className="w-5 h-5 flex-shrink-0">
+                      <AvatarImage src={p.avatar_url || undefined} />
+                      <AvatarFallback className={`text-[8px] text-white ${getAvatarColor(p.full_name || "?")}`}>
+                        {getInitials(p.full_name || "?")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="truncate">{p.full_name}</span>
                   </button>
                 ))}
               </div>
