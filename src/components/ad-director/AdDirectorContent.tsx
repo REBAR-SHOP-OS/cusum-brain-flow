@@ -134,6 +134,7 @@ export function AdDirectorContent() {
               action: "write-cinematic-prompt",
               scene, brand, continuityProfile,
               previousScene: idx > 0 ? rawStoryboard[idx - 1] : null,
+              characterImageUrl,
               modelOverrides,
             }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
