@@ -545,3 +545,9 @@ verify_jwt = false
 
 [functions.vizzy-call-receptionist]
 verify_jwt = false
+
+[functions.quote-public-view]
+verify_jwt = false
+
+[functions.send-quote-email]
+verify_jwt = false
