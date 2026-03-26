@@ -532,62 +532,10 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
               </Button>
             ) : (
               <>
-                <Button onClick={handleDownload} disabled={!finalVideoUrl} className="gap-2">
-                  <Download className="w-4 h-4" />
-                  Download
-                </Button>
                 <Button variant="outline" onClick={() => service.patchState({ flowState: "editing" })} className="gap-2">
                   <Pencil className="w-4 h-4" />
                   Edit Video
                 </Button>
-                <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" disabled={!finalVideoUrl} className="gap-2">
-                      <CalendarDays className="w-4 h-4" />
-                      Schedule
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-3" align="center" side="top">
-                    <div className="space-y-3">
-                      <p className="text-sm font-medium text-foreground">Schedule to Social Calendar</p>
-                      <Calendar
-                        mode="single"
-                        selected={scheduleDate}
-                        onSelect={setScheduleDate}
-                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                        className={cn("p-3 pointer-events-auto")}
-                      />
-                      <div className="flex items-center gap-2">
-                        <Select value={scheduleHour} onValueChange={setScheduleHour}>
-                          <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {hours.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <span className="text-muted-foreground font-bold">:</span>
-                        <Select value={scheduleMinute} onValueChange={setScheduleMinute}>
-                          <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {minutes.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {scheduleDate && (
-                        <p className="text-xs text-muted-foreground">
-                          📅 {format(scheduleDate, "PPP")} at {scheduleHour}:{scheduleMinute}
-                        </p>
-                      )}
-                      <Button
-                        className="w-full gap-2"
-                        disabled={!scheduleDate || scheduling}
-                        onClick={handleScheduleToSocial}
-                      >
-                        {scheduling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        Confirm Schedule
-                      </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
               </>
             )}
           </div>
