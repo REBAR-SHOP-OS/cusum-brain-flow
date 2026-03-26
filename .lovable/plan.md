@@ -1,29 +1,36 @@
 
 
-# Fix: Email Sending from ERP — ai@rebar.shop Token Missing
+# Send Emails From the Logged-In Actor's Gmail Account
 
 ## Problem
-The `notify-lead-assignees` function looks up `ai@rebar.shop` in `user_gmail_tokens` to send emails, but this account has never gone through the Google OAuth flow in the app, so no token exists. The env var fallback (`GMAIL_REFRESH_TOKEN`) is also expired → `invalid_grant`.
+Currently, `notify-lead-assignees` always sends emails from `ai@rebar.shop` (or an admin fallback). The user wants emails to come **from the person who performed the action** — e.g., if `sattar@rebar.shop` logs a note, the email should be sent from `sattar@rebar.shop`'s Gmail account using their own OAuth token.
 
-## Root Cause
-The Google OAuth flow in the app (Integrations page → Connect Gmail) saves tokens keyed by the logged-in user's `user_id`. The `ai@rebar.shop` account needs to sign into the ERP and connect Gmail on the Integrations page to store a valid refresh token.
+## Solution
+Change the token lookup priority in `notify-lead-assignees`:
 
-## Solution — Two-Part Fix
+1. **First**: Look up the **actor's** Gmail token in `user_gmail_tokens` using `actor_id`
+2. **Fallback**: If the actor has no token, try `ai@rebar.shop`
+3. **Fallback 2**: Try any admin with a valid token
+4. **Fallback 3**: Env var `GMAIL_REFRESH_TOKEN`
 
-### Part 1: Immediate — Make the function resilient (code change)
-Update `notify-lead-assignees` to fall back to **any admin user** who has a valid Gmail token if `ai@rebar.shop` has no token. This matches how `comms-alerts` and `email-activity-report` work.
+Also fetch the actor's email from `profiles` to use as the `From:` header instead of hardcoded `ai@rebar.shop`.
 
-**File:** `supabase/functions/notify-lead-assignees/index.ts`
-- After failing to find `ai@rebar.shop` token, query `user_gmail_tokens` joined with `user_roles` for any admin user with a valid token
-- Use that token to send emails (the email still appears "from" that Google account)
-- This means `sattar@rebar.shop`'s token will be used immediately since it's the connected admin
+## Changes
 
-### Part 2: Long-term — Connect ai@rebar.shop
-You should sign into the ERP as `ai@rebar.shop` and go to **Integrations** → **Connect Gmail**. This will store a proper refresh token for the service account. Once done, the function will automatically prefer `ai@rebar.shop`'s token.
+### `supabase/functions/notify-lead-assignees/index.ts`
+
+1. **Token lookup order** — Replace the current "ai@rebar.shop first" logic with:
+   - Query `user_gmail_tokens` for `actor_id` first
+   - If found, use actor's token and fetch actor's email from `profiles` for the `From:` header
+   - If not found, fall through to existing ai@rebar.shop → admin → env var chain
+
+2. **Dynamic `From:` header** — Replace hardcoded `From: ai@rebar.shop` (line 230) with the resolved sender email (actor's email when using their token, otherwise `ai@rebar.shop`)
+
+3. **Token rotation** — Already handled; just ensure `senderUserId` is set to the correct user whose token was used
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `supabase/functions/notify-lead-assignees/index.ts` | Add admin fallback token lookup when ai@rebar.shop has no token |
+| `supabase/functions/notify-lead-assignees/index.ts` | Actor-first token lookup + dynamic From header |
 
