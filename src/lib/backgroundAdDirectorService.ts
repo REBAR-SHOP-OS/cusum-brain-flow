@@ -228,6 +228,8 @@ class BackgroundAdDirectorService {
         introImageUrl,
         outroImageUrl,
         modelOverrides,
+        selectedProducts,
+        selectedStyles,
       }, { timeoutMs: 90_000 }));
 
       let { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
