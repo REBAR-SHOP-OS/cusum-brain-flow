@@ -581,6 +581,30 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
           {/* Action buttons */}
           <div className="flex items-center justify-center gap-3">
+            <Button
+              variant="outline"
+              className="gap-2"
+              disabled={saveProject.isPending}
+              onClick={async () => {
+                try {
+                  await saveProject.mutateAsync({
+                    name: brand.name || "Untitled",
+                    brandName: brand.name,
+                    segments,
+                    storyboard,
+                    clips,
+                    continuity,
+                    status: "draft",
+                  });
+                  toast({ title: "پیش‌نویس ذخیره شد", description: "پروژه در بخش ویدئوهای قبلی نمایش داده می‌شود." });
+                } catch {
+                  toast({ title: "خطا در ذخیره", variant: "destructive" });
+                }
+              }}
+            >
+              <BookmarkCheck className="w-4 h-4" />
+              ذخیره پیش‌نویس
+            </Button>
             {!approved ? (
               <Button onClick={() => setApproved(true)} className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400">
                 <Check className="w-4 h-4" />
