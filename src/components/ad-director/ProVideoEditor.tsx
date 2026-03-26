@@ -1246,31 +1246,6 @@ export function ProVideoEditor({
       <div className="flex flex-1 min-h-0">
         {/* ─── Center Canvas ─── */}
         <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative items-center justify-center">
-          {/* AI Command Bar — floating at top */}
-          <div className="absolute top-3 left-3 right-3 z-30 flex gap-2 items-center p-1.5 rounded-xl bg-black/40 backdrop-blur-xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-            {aiProcessing ? (
-              <Loader2 className="w-4 h-4 text-primary shrink-0 animate-spin ml-1.5" />
-            ) : (
-              <Sparkles className="w-4 h-4 text-primary shrink-0 ml-1.5" />
-            )}
-            <Input
-              value={aiCommand}
-              onChange={e => setAiCommand(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleAiSubmit()}
-              placeholder="AI: Edit this scene…"
-              className="border-0 bg-transparent h-7 text-xs text-white placeholder:text-white/40 focus-visible:ring-0 shadow-none"
-              disabled={aiProcessing}
-            />
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 w-7 p-0 text-white/70 hover:text-white"
-              onClick={handleAiSubmit}
-              disabled={!aiCommand.trim() || aiProcessing}
-            >
-              <Send className="w-3.5 h-3.5" />
-            </Button>
-          </div>
 
           {/* Video / Static Card */}
           <div className="flex-1 flex items-center justify-center relative overflow-hidden aspect-square max-h-[60vh]">
