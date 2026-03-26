@@ -23,6 +23,10 @@ interface Props {
   currentUserName?: string;
   currentUserId?: string;
   assignees?: { profile_id: string; full_name: string }[];
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  leadTitle?: string;
+  onComposeEmail?: () => void;
 }
 
 type TabMode = "note" | "activity" | null;
