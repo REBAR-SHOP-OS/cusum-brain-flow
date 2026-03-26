@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, FileOutput, Sparkles, ChevronDown } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, Sparkles, ChevronDown } from "lucide-react";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
@@ -59,7 +59,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   const queryClient = useQueryClient();
   const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
-  const [convertingQuoteId, setConvertingQuoteId] = useState<string | null>(null);
+  
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [draftEditorId, setDraftEditorId] = useState<string | null>(null);
   const { companyId } = useCompanyId();
@@ -247,21 +247,6 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
 
   const docTabs: { id: DocType; label: string; icon: typeof Package; count: number }[] = [];
 
-  const handleCreateInvoiceFromQuote = async (quoteId: string) => {
-    setConvertingQuoteId(quoteId);
-    try {
-      const { data: result, error } = await supabase.functions.invoke("qb-sync-engine", {
-        body: { action: "convert-estimate-to-invoice", estimate_id: quoteId },
-      });
-      if (error) throw error;
-      toast({ title: "Invoice created", description: "Quotation converted to invoice successfully." });
-      data.loadAll?.();
-    } catch (err: any) {
-      toast({ title: "Conversion failed", description: err?.message || "Could not convert quotation to invoice.", variant: "destructive" });
-    } finally {
-      setConvertingQuoteId(null);
-    }
-  };
 
   return (
     <div className="space-y-4">
@@ -415,19 +400,6 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
                     )}
                     {isSale && (
                       <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5 text-xs"
-                          disabled={convertingQuoteId === q.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCreateInvoiceFromQuote(q.id);
-                          }}
-                        >
-                          {convertingQuoteId === q.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileOutput className="w-3.5 h-3.5" />}
-                          → Create Invoice
-                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
