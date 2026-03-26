@@ -218,17 +218,33 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
         onSuccess: async () => {
           setText(""); setPendingFiles([]); setActiveTab(null); setUploading(false);
 
-          // Auto-add @mentioned users as assignees
+          // Auto-add @mentioned users as assignees (supports both @name and @email@rebar.shop)
           if (onAddAssignee && allProfiles) {
-            const mentionRegex = /@([A-Za-z\u0600-\u06FF\s]+?)(?=\s@|\s*$)/g;
-            const matches = [...body.matchAll(mentionRegex)];
             const assignedIds = new Set(assignees.map(a => a.profile_id));
-            matches.forEach(match => {
+
+            // 1. Match email-style mentions: @user@rebar.shop
+            const emailMentionRegex = /@([a-zA-Z0-9._%+-]+@rebar\.shop)/gi;
+            const emailMatches = [...body.matchAll(emailMentionRegex)];
+            emailMatches.forEach(match => {
+              const email = match[1].toLowerCase();
+              const profile = allProfiles.find(p => (p as any).email?.toLowerCase() === email);
+              if (profile && !assignedIds.has(profile.id)) {
+                onAddAssignee(profile.id);
+                assignedIds.add(profile.id);
+              }
+            });
+
+            // 2. Match name-style mentions: @Full Name
+            const nameMentionRegex = /@([A-Za-z\u0600-\u06FF\s]+?)(?=\s@|\s*$)/g;
+            const nameMatches = [...body.matchAll(nameMentionRegex)];
+            nameMatches.forEach(match => {
               const name = match[1].trim().toLowerCase();
+              // Skip if it looks like an email fragment
+              if (name.includes("@")) return;
               const profile = allProfiles.find(p => p.full_name?.toLowerCase().trim() === name);
               if (profile && !assignedIds.has(profile.id)) {
                 onAddAssignee(profile.id);
-                assignedIds.add(profile.id); // prevent duplicates within same note
+                assignedIds.add(profile.id);
               }
             });
           }
