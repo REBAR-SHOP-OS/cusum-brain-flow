@@ -372,6 +372,11 @@ class BackgroundAdDirectorService {
           clips: initialClips, continuity: continuityProfile, status: "analyzed",
         });
         this.update({ projectId: savedId });
+
+        // Generate thumbnail in background (fire-and-forget)
+        if (prompt && savedId) {
+          this.generateThumbnail(savedId, prompt).catch(e => console.warn("Thumbnail generation failed:", e));
+        }
       } catch (e) { console.warn("Auto-save failed:", e); }
 
       if (this.cancelFlag) return;

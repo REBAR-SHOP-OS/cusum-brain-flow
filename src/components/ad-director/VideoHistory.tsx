@@ -158,7 +158,14 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
       {/* Video thumbnail */}
       <div className="aspect-video bg-muted/30 relative">
         {!previewUrl || hasError ? (
-          isDraft ? (
+          project.thumbnail_url ? (
+            <img
+              src={project.thumbnail_url}
+              alt={project.name || "Project thumbnail"}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : isDraft ? (
             <div className="absolute inset-0 flex items-end bg-gradient-to-t from-background/80 to-muted/20 p-3">
               <p className="text-[11px] leading-relaxed text-muted-foreground italic line-clamp-3">
                 {resolvePreviewText(project) || "Draft project"}
