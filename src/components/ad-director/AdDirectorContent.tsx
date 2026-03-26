@@ -276,8 +276,7 @@ export function AdDirectorContent() {
           <VideoHistory
             projects={projects.data ?? []}
             onSelect={(url) => {
-              setFinalVideoUrl(url);
-              setFlowState("result");
+              service.patchState({ finalVideoUrl: url, flowState: "result" });
             }}
           />
         </>
