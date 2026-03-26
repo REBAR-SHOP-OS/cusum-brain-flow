@@ -890,6 +890,13 @@ export function MessageThread({
                 handleSubmit();
               }
             }}
+            onPaste={(e) => {
+              const files = e.clipboardData?.files;
+              if (files && files.length > 0) {
+                e.preventDefault();
+                processFiles(files);
+              }
+            }}
           />
 
           {/* Bottom bar */}
