@@ -1,45 +1,29 @@
 
 
-# Fix: @Mentioned Users Must Receive Email Even If Not Assignees
+# Group Ratio & Duration into Popover Categories
 
-## Problem
+## What
+Move the RATIO and DURATION controls from inline toggle buttons into popover dropdowns, matching the same pattern as the existing Style and Products popovers. This creates a cleaner, more consistent bottom bar.
 
-The `notify-lead-assignees` edge function only queries the `sales_lead_assignees` table for recipients. If you @mention a team member who is NOT assigned to the lead, they are never included in the recipient list and receive no email.
+## Change in `src/components/ad-director/ChatPromptBar.tsx`
 
-Current flow:
+**Replace** the inline Ratio buttons (lines 210-227) with a Popover that shows the ratio options on click, displaying a button like `📐 Ratio 16:9 ▾`.
+
+**Replace** the inline Duration buttons (lines 232-249) with a Popover that shows the duration options on click, displaying a button like `⏱ Duration 15s ▾`.
+
+Both will use the same visual pattern as Style/Products popovers:
+- Rounded pill button with icon + label + selected value
+- Active state highlights when non-default
+- Popover opens on click with the options grid
+
+### Layout after change
 ```text
-1. Fetch assignees from sales_lead_assignees
-2. For each assignee: if internal → include, if external → only if @mentioned
-3. Send emails to filtered list
+[ 📐 16:9 ▾ ] [ ⏱ 15s ▾ ] [ 🎨 Style ▾ ] [ # Products ▾ ]  [Send]
 ```
 
-Missing: anyone @mentioned in the note who is NOT an assignee is completely invisible to the function.
-
-## Fix
-
-In `supabase/functions/notify-lead-assignees/index.ts`, after building the assignee-based recipient list, extract all `@Name` mentions from the note text and look up matching profiles. Add any matched profiles that aren't already in the recipient list (and aren't the actor).
-
-### Logic
-```text
-1. Build assignee recipient list (existing logic — unchanged)
-2. Extract all @mentions from note_text using regex
-3. Query profiles table for matching full_name values
-4. For each matched profile:
-   - Skip if already in recipients
-   - Skip if they are the actor
-   - Add to recipients
-5. Send emails to combined list
-```
-
-### Implementation detail
-
-- Parse mentions: `note_text.match(/@([A-Za-z\s]+?)(?=\s@|\s*$|[.,!?])/g)` to extract names after `@`
-- Query `profiles` with `.in('full_name', mentionedNames)` filtered to the same company
-- Only internal (`@rebar.shop`) mentioned users get auto-included; external mentioned users who are assignees already work via existing logic
-
-## Files Changed
+Each popover shows its options in a small grid when clicked, keeping the bottom bar compact and consistent.
 
 | File | Change |
 |---|---|
-| `supabase/functions/notify-lead-assignees/index.ts` | After assignee loop, extract @mentions from note_text, query matching profiles, add to recipients if not already present |
+| `src/components/ad-director/ChatPromptBar.tsx` | Convert Ratio and Duration inline buttons to Popover dropdowns matching Style/Products pattern |
 
