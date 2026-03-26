@@ -192,25 +192,19 @@ export function ProVideoEditor({
   // Auto-seed mandatory logo overlays for intro/outro scenes
   useEffect(() => {
     if (!brand.logoUrl || storyboard.length === 0 || segments.length === 0) return;
-    const introOutroScenes = storyboard.filter(scene => {
-      const seg = segments.find(s => s.id === scene.segmentId);
-      if (!seg) return false;
-      const lbl = seg.label.toLowerCase();
-      return lbl.includes("intro") || lbl.includes("hook") || lbl.includes("end card") || lbl.includes("closing") || lbl.includes("outro");
-    });
     const newOverlays: VideoOverlay[] = [];
-    for (const scene of introOutroScenes) {
+    for (const scene of storyboard) {
       const hasLogo = overlays.some(o => o.sceneId === scene.id && o.kind === "logo");
       if (!hasLogo) {
         newOverlays.push({
           id: crypto.randomUUID(),
           kind: "logo",
-          position: { x: 35, y: 40 },
-          size: { w: 30, h: 20 },
+          position: { x: 82, y: 85 },
+          size: { w: 12, h: 10 },
           content: brand.logoUrl,
           opacity: 0.9,
           sceneId: scene.id,
-          animated: true,
+          animated: false,
         });
       }
     }
