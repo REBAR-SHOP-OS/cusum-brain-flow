@@ -301,7 +301,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                     "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
                     duration !== "15"
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
                   )}
                 >
                   <Timer className="w-3.5 h-3.5" />
@@ -339,7 +339,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                     "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
                     selectedStyles.length > 0
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
                   )}
                 >
                   <Paintbrush className="w-3.5 h-3.5" />
@@ -397,7 +397,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                     "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
                     selectedProducts.length > 0
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
                   )}
                 >
                   <Hash className="w-3.5 h-3.5" />
@@ -456,7 +456,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                     "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
                     selectedVideoModel.key !== "wan2.6-t2v"
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
                   )}
                 >
                   <Clapperboard className="w-3.5 h-3.5" />
