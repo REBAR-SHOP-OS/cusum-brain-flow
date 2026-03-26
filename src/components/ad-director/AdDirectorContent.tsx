@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExportDialog } from "./ExportDialog";
+// ExportDialog removed — scheduling now handled inside ProVideoEditor
 import { ChatPromptBar } from "./ChatPromptBar";
 import {
   type BrandProfile, type ScriptSegment, type StoryboardScene,
