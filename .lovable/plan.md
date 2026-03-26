@@ -1,35 +1,37 @@
 
 
-# Fix Bottom Toolbar Button Contrast
+# Add Voiceover Script to Auto-Generated Prompt
 
 ## Problem
-The bottom toolbar buttons (Duration 15s, Style, Products, Video Model) use `bg-muted/40 border-border text-muted-foreground` which is nearly invisible against the dark background.
+The auto-generate button creates a visual prompt but does not include a Voiceover section. Per previous changes, the storyboard pipeline now supports voiceover — the auto-generated prompt should always include one.
 
 ## Changes
 
-### `src/components/ad-director/ChatPromptBar.tsx`
+### `src/components/ad-director/ChatPromptBar.tsx` — `handleAutoGenerate` (lines 96-107)
 
-Update the default (inactive) state styling for these 4 buttons to match the Ratio button which already uses the correct style:
+Update the system prompt and instructions to always produce both a visual prompt AND a voiceover script, separated by a clear marker:
 
-**Lines 304, 342, 400, 459** — Change:
+**System prompt update (line 99):**
 ```
-"bg-muted/40 border-border text-muted-foreground hover:bg-muted"
-```
-To:
-```
-"bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
+"You are a cinematic video ad prompt writer for a construction/rebar company.
+Write a single concise, vivid video prompt (2-3 sentences) for the given parameters.
+Then on a new line, write '---VOICEOVER---' followed by a professional voiceover narration script (2-4 sentences) matching the video content.
+The voiceover should be persuasive advertising copy suitable for text-to-speech.
+Return ONLY the prompt text and voiceover, no quotes or extra formatting."
 ```
 
-Also update the auto-generate sparkles button (line 502):
+**Result parsing (lines 105-107):**
+Parse the response to split at `---VOICEOVER---` and format the output as:
 ```
-"bg-muted/40 border-border text-muted-foreground opacity-40 cursor-not-allowed"
+[Visual Prompt]
+
+🎙️ Voiceover:
+[Voiceover Script]
 ```
-To:
-```
-"bg-white/5 border-white/10 text-white/40 cursor-not-allowed"
-```
+
+This way the voiceover is always visible in the prompt textarea and gets passed along with the prompt to the storyboard generation pipeline.
 
 | File | Change |
 |---|---|
-| `ChatPromptBar.tsx` | Update 5 button default styles from muted to white/translucent for visibility |
+| `ChatPromptBar.tsx` | Update system prompt to require voiceover + parse/format output |
 
