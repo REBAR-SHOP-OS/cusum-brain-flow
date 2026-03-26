@@ -474,12 +474,19 @@ export function TimelineBar({
               );
             })}
 
-            {/* Playhead */}
+            {/* Playhead — draggable for scrubbing */}
             <div
-              className="absolute top-0 bottom-0 w-0.5 bg-white z-20 pointer-events-none"
-              style={{ left: `${playheadPct}%` }}
+              className={`absolute top-0 bottom-0 z-20 ${scrubbing ? 'cursor-grabbing' : 'cursor-grab'}`}
+              style={{ left: `${playheadPct}%`, width: '14px', transform: 'translateX(-6px)' }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                scrubbingRef.current = true;
+                setScrubbing(true);
+              }}
             >
-              <div className="w-2 h-2 bg-white rounded-full -translate-x-[3px] -translate-y-0.5" />
+              <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white -translate-x-1/2" />
+              <div className={`absolute left-1/2 -translate-x-1/2 -translate-y-0.5 rounded-full bg-white transition-transform ${scrubbing ? 'w-3 h-3' : 'w-2 h-2'}`} />
             </div>
           </div>
         </div>
