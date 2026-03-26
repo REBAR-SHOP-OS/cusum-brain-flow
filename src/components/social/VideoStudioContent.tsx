@@ -536,8 +536,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         setProgressLabel(`Generating ${data.totalScenes} scenes (${data.clipDuration}s each)...`);
         pollTimerRef.current = setTimeout(pollMultiScene, 3000);
       } else {
+        const noTextSuffix2 = " No text, no words, no letters, no titles, no typography, no written content anywhere in the video.";
         const data = await invokeEdgeFunction("generate-video", {
-          action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt,
+          action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt + noTextSuffix2,
           duration: requestedDuration,
           model: selectedModel,
           ...wanExtras,

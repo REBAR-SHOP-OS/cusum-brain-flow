@@ -301,7 +301,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       }>("generate-video", {
         action: "generate", prompt: motionPrompt, duration: sceneDuration,
         aspectRatio: wanRatio, provider: "wan", model: "wan2.6-t2v",
-        negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
+        negativePrompt: "static image, zoom only, no motion, blurry, text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind",
       }, { timeoutMs: EDGE_TIMEOUT_MS });
       const videoUrl = result.url || result.videoUrl;
       const genId = result.jobId;
