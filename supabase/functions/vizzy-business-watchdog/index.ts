@@ -78,10 +78,17 @@ Deno.serve((req) =>
 
     console.log(`[watchdog] Scanned: ${alerts.length} anomalies found, ${newAlerts.length} new alerts created`);
 
-    return new Response(
-      JSON.stringify({ timestamp: now.toISOString(), total_anomalies: alerts.length, new_alerts: newAlerts.length }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+      return new Response(
+        JSON.stringify({ timestamp: now.toISOString(), total_anomalies: alerts.length, new_alerts: newAlerts.length }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (err) {
+      console.error("[watchdog] Error:", err);
+      return new Response(
+        JSON.stringify({ error: String(err) }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
   }, { functionName: "vizzy-business-watchdog", authMode: "none", requireCompany: false, wrapResult: false })
 );
 
