@@ -607,7 +607,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                   });
                   toast({ title: "Draft saved", description: "Project will appear in your video history." });
                 } catch {
-                  toast({ title: "خطا در ذخیره", variant: "destructive" });
+                  toast({ title: "Failed to save", variant: "destructive" });
                 }
               }}
             >
