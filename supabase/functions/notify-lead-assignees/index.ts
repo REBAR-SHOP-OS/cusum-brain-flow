@@ -129,6 +129,7 @@ serve((req) =>
       throw new Error("Gmail OAuth credentials not configured");
     }
 
+    // Try ai@rebar.shop first
     const { data: aiProfile } = await serviceClient
       .from("profiles")
       .select("id")
@@ -136,6 +137,7 @@ serve((req) =>
       .maybeSingle();
 
     let refreshToken: string | null = null;
+    let senderUserId: string | null = aiProfile?.id || null;
 
     if (aiProfile?.id) {
       const { data: tokenRow } = await serviceClient
@@ -151,12 +153,41 @@ serve((req) =>
       }
     }
 
+    // Fallback: find any admin user with a valid Gmail token
+    if (!refreshToken) {
+      log.info("No token for ai@rebar.shop, trying admin fallback");
+      const { data: adminTokens } = await serviceClient
+        .from("user_gmail_tokens")
+        .select("user_id, refresh_token, is_encrypted")
+        .not("refresh_token", "is", null);
+
+      if (adminTokens && adminTokens.length > 0) {
+        for (const candidate of adminTokens) {
+          const { data: roleRow } = await serviceClient
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", candidate.user_id)
+            .eq("role", "admin")
+            .maybeSingle();
+
+          if (roleRow) {
+            refreshToken = candidate.is_encrypted
+              ? await decryptToken(candidate.refresh_token)
+              : candidate.refresh_token;
+            senderUserId = candidate.user_id;
+            log.info(`Using admin fallback token from user ${candidate.user_id}`);
+            break;
+          }
+        }
+      }
+    }
+
     if (!refreshToken) {
       refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN") || null;
     }
 
     if (!refreshToken) {
-      throw new Error("No Gmail refresh token found for ai@rebar.shop");
+      throw new Error("No Gmail refresh token found — no ai@rebar.shop token and no admin fallback available");
     }
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
