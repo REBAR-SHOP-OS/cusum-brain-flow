@@ -399,6 +399,23 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
               console.log(`Fallback extracted ${extractedItems.length} summary items`);
             }
           }
+
+          // ─── USELESS DATA FALLBACK: AI returned items but all have zero weight/length ───
+          if (extractedItems.length > 0) {
+            const hasUsefulData = extractedItems.some(item =>
+              (item.cut_length_mm && item.cut_length_mm > 0) ||
+              (item.weight_kg && item.weight_kg > 0) ||
+              (item.quantity && item.quantity > 1)
+            );
+            if (!hasUsefulData) {
+              console.log("AI returned items but all have zero weight/length — falling back to deterministic parser");
+              const fallbackItems = parseWeightSummaryFallback(content);
+              if (fallbackItems.length > 0) {
+                console.log(`Fallback replaced useless items with ${fallbackItems.length} summary items`);
+                extractedItems = fallbackItems;
+              }
+            }
+          }
         }
       } catch (e) {
         console.error("AI vision extraction error:", e);
