@@ -42,8 +42,8 @@ Deno.serve((req) =>
     const notes = meta.notes || "";
     const totalAmount = quote.total_amount || 0;
     const taxRate = meta.tax_rate ?? 13;
-    const subtotal = totalAmount / (1 + taxRate / 100);
-    const taxAmount = totalAmount - subtotal;
+    const subtotal = Math.round((totalAmount / (1 + taxRate / 100)) * 100) / 100;
+    const taxAmount = Math.round((totalAmount - subtotal) * 100) / 100;
 
     // Build line items HTML
     const lineItemsHtml = lineItems.length > 0
