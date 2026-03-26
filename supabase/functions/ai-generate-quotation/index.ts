@@ -182,7 +182,16 @@ Deno.serve((req) =>
     const truckCap = Number(pricingConfig.truck_capacity_tons ?? pricingConfig.default_truck_capacity_tons ?? 7);
 
     const fabRate = getFabricationRate(nonCageTonnes > 0 ? nonCageTonnes : totalTonnes, fabTable);
-    
+
+    console.log("Pricing resolved:", { fabRate, cageRate, shippingPerKm, truckCap, scrapPct, totalTonnes, nonCageTonnes, cageTonnes });
+
+    if (!fabRate.price_per_ton || isNaN(fabRate.price_per_ton)) {
+      console.error("FATAL: price_per_ton is invalid after config resolution", fabRate);
+      return new Response(JSON.stringify({ error: "Pricing configuration error: invalid fabrication rate", failure_reason: "pricing_config_error" }), {
+        status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const lineItems: any[] = [];
     
     // Line 1: Non-cage rebar fabrication & supply
