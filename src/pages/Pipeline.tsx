@@ -677,6 +677,15 @@ export default function Pipeline() {
     }
   };
 
+  // Auto-sync on every page open
+  const hasAutoSynced = useRef(false);
+  useEffect(() => {
+    if (!hasAutoSynced.current && !isSyncingOdoo) {
+      hasAutoSynced.current = true;
+      handleOdooSync();
+    }
+  }, []);
+
   const handleSyncOverdueTasks = async () => {
     setIsSyncingOverdue(true);
     try {
