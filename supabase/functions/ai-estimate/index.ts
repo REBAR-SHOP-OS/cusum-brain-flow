@@ -409,6 +409,10 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
     let calculatedItems: EstimationItemResult[] = [];
 
     for (const input of extractedItems) {
+      // Null-safe defaults for required fields
+      input.quantity = input.quantity ?? 1;
+      input.cut_length_mm = input.cut_length_mm ?? 0;
+
       const std = standardsMap.get(input.bar_size);
       if (!std) {
         calculatedItems.push({
@@ -495,16 +499,16 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
         bar_size: item.bar_size,
         grade: item.grade ?? "400W",
         shape_code: item.shape_code,
-        quantity: item.quantity,
-        cut_length_mm: item.cut_length_mm,
-        total_length_mm: item.total_length_mm,
-        hook_allowance_mm: item.hook_allowance_mm,
-        lap_allowance_mm: item.lap_allowance_mm,
-        weight_kg: item.weight_kg,
+        quantity: item.quantity ?? 1,
+        cut_length_mm: item.cut_length_mm ?? 0,
+        total_length_mm: item.total_length_mm ?? 0,
+        hook_allowance_mm: item.hook_allowance_mm ?? 0,
+        lap_allowance_mm: item.lap_allowance_mm ?? 0,
+        weight_kg: item.weight_kg ?? 0,
         spacing_mm: item.spacing_mm,
         dimensions: item.dimensions,
-        unit_cost: item.unit_cost,
-        line_cost: item.line_cost,
+        unit_cost: item.unit_cost ?? 0,
+        line_cost: item.line_cost ?? 0,
         source: "ai_extracted",
         warnings: item.warnings,
         bbox: (item as any).bbox ?? null,
