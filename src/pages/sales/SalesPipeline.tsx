@@ -86,6 +86,7 @@ const PIPELINE_STAGES = SALES_STAGES.map((s) => ({
 }));
 
 export default function SalesPipeline() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const userEmail = user?.email?.toLowerCase() || "";
   const externalEstimatorStages = ACCESS_POLICIES.externalEstimators[userEmail];
