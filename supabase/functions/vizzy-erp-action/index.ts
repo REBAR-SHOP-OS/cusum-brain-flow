@@ -864,4 +864,5 @@ Deno.serve((req) =>
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+  }, { functionName: "vizzy-erp-action", wrapResult: false })
+);
