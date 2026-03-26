@@ -1,47 +1,38 @@
 
 
-# Fix: Profile Lookup Bug in notify-lead-assignees
+# Fix: Stop Sending Internal Notes/Logs to Customers
 
-## Investigation Summary
+## Problem
+The `notify-lead-assignees` function (lines 77-84) unconditionally adds the lead's `contact_email` to the recipient list. This means customers receive emails about every note and stage change — including internal discussions. Only @mentioned external parties should receive emails.
 
-**Good news**: The latest deployment IS working. At 13:01 UTC, sattar logged "@Neel Mahajan hi yoyo" and emails were successfully sent to neel@rebar.shop, ben@rebar.shop, and ali@epcdesignbuild.ca.
-
-**The failed request at 12:59** was neel logging a note — this ran against the OLD code (before the actor-token-lookup fix was deployed), which fell to the expired admin fallback token → `invalid_grant`. No emails were sent for that request.
-
-## Remaining Bug
-
-There is a `profiles` table lookup bug. The table has two ID columns:
-- `profiles.id` — internal profile ID (e.g., `ee659c5c` for sattar)
-- `profiles.user_id` — auth user ID (e.g., `c9b3adc2` for sattar)
-
-The function receives `actor_id` = auth user ID, but queries `profiles` using `.eq("id", actor_id)` instead of `.eq("user_id", actor_id)`. This causes:
-
-1. **Actor email never resolves** → actor is never excluded from recipients (they get emails about their own actions)
-2. **Sender email defaults to "ai@rebar.shop"** in logs even when using actor's token
-
-## Fix
+## Changes
 
 ### `supabase/functions/notify-lead-assignees/index.ts`
+- **Remove** the automatic `contact_email` addition block (lines 77-84)
+- Customers should only receive emails if they are explicitly assigned to the lead AND @mentioned (already handled by the external assignee logic on lines 67-74)
+- Internal `@rebar.shop` assignees continue to receive all notifications as before
 
-Two lines need changing:
-
-**Line 47**: Actor email lookup
-```
-// FROM:  .eq("id", actor_id)
-// TO:    .eq("user_id", actor_id)
-```
-
-**Line 168**: Sender email lookup  
-```
-// FROM:  .eq("id", actor_id)
-// TO:    .eq("user_id", actor_id)
+### Before (lines 77-84):
+```typescript
+// Add customer (contact_email) as recipient if available
+const customerEmail = lead.contact_email?.trim().toLowerCase() || "";
+if (customerEmail) {
+  const alreadyIncluded = recipients.some(r => r.email.toLowerCase() === customerEmail);
+  if (!alreadyIncluded) {
+    recipients.push({ email: lead.contact_email, full_name: lead.contact_name || lead.contact_email });
+  }
+}
 ```
 
-This ensures:
-- Actor is correctly excluded from recipients (no self-notifications)
-- Email "From" header shows the correct sender email in logs
+### After:
+Remove this entire block. No replacement needed — external recipients are already handled by the @mention logic above.
+
+## Result
+- Internal `@rebar.shop` assignees: always notified (unchanged)
+- External assignees: notified only when @mentioned (unchanged)
+- Customers (`contact_email`): no longer auto-notified — they only get emails if explicitly assigned AND @mentioned
 
 | File | Change |
 |---|---|
-| `supabase/functions/notify-lead-assignees/index.ts` | Fix two `profiles` queries to use `user_id` instead of `id` |
+| `supabase/functions/notify-lead-assignees/index.ts` | Remove auto-add of contact_email to recipients |
 
