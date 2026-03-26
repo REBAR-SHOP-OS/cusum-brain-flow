@@ -431,7 +431,7 @@ class BackgroundAdDirectorService {
             aspectRatio: wanRatio, provider: chosenProvider,
             model: chosenModel,
             ...(isI2V ? { imageUrl: referenceImage } : {}),
-            negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
+            negativePrompt: "static image, zoom only, no motion, blurry, text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind",
           }, { timeoutMs: EDGE_TIMEOUT_MS });
 
           const videoUrl = result.url || result.videoUrl;

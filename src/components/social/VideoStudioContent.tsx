@@ -439,7 +439,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     const wanExtras: Record<string, unknown> = {};
     if (refImageStorageUrl) wanExtras.imageUrl = refImageStorageUrl;
     if (audioStorageUrl) wanExtras.audioUrl = audioStorageUrl;
-    if (negativePrompt.trim()) wanExtras.negativePrompt = negativePrompt.trim();
+    const baseNegative = "text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind";
+    const userNeg = negativePrompt.trim();
+    wanExtras.negativePrompt = userNeg ? `${baseNegative}, ${userNeg}` : baseNegative;
     wanExtras.aspectRatio = "16:9";
 
     // Upload first/last frame images for Veo I2V and convert to base64
@@ -510,8 +512,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
       if (isMultiScene) {
         const sceneCount = Math.ceil(requestedDuration / effectiveMaxClip);
         setProgressLabel(`Generating ${sceneCount} scenes...`);
+        const noTextSuffix = " No text, no words, no letters, no titles, no typography, no written content anywhere in the video.";
         const data = await invokeEdgeFunction("generate-video", {
-          action: "generate-multi", provider: effectiveVideoProvider, prompt: finalPrompt,
+          action: "generate-multi", provider: effectiveVideoProvider, prompt: finalPrompt + noTextSuffix,
           duration: requestedDuration,
           model: selectedModel,
           ...wanExtras,
@@ -533,8 +536,9 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         setProgressLabel(`Generating ${data.totalScenes} scenes (${data.clipDuration}s each)...`);
         pollTimerRef.current = setTimeout(pollMultiScene, 3000);
       } else {
+        const noTextSuffix2 = " No text, no words, no letters, no titles, no typography, no written content anywhere in the video.";
         const data = await invokeEdgeFunction("generate-video", {
-          action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt,
+          action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt + noTextSuffix2,
           duration: requestedDuration,
           model: selectedModel,
           ...wanExtras,

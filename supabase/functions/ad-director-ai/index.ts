@@ -379,12 +379,13 @@ Return: subjectDescriptions, wardrobe, environment, timeOfDay, cameraStyle, moti
 - Specific camera specs (lens mm, f-stop), lighting angles, material textures
 - NO camera brand names (ARRI, RED, Sony) — describe characteristics instead
 - NO text/titles/brand names in video prompts — overlays handled by editor
+- CRITICAL: NEVER describe any text, words, letters, typography, titles, captions, subtitles, or any written content in the video prompt. The video must be purely visual with zero text rendered in any frame.
 - After scene 1: "Continue seamlessly from previous clip, preserving location, subject, lighting, pacing"
 - Each prompt MUST embed the continuity profile details (environment, lighting, color mood, subject) directly into the description
 - Example lighting: "golden hour backlight, tungsten fill 45° left, volumetric haze"
 - Example materials: "weathered steel rebar with rust patina, fresh concrete with moisture sheen"`;
 
-const WRITE_CINEMATIC_PROMPT_SYSTEM = `Rewrite scene prompts into 80-150 word cinematic video generation prompts. Be specific: lens mm, f-stop, lighting angles, material textures, movement speed. NO camera brand names, NO text/titles in prompts.
+const WRITE_CINEMATIC_PROMPT_SYSTEM = `Rewrite scene prompts into 80-150 word cinematic video generation prompts. Be specific: lens mm, f-stop, lighting angles, material textures, movement speed. NO camera brand names, NO text/titles in prompts. CRITICAL: NEVER include any text, words, letters, typography, titles, captions, subtitles, brand names, or written content of any kind in the prompt. The generated video must contain zero text in any frame.
 
 CRITICAL COHERENCE REQUIREMENT:
 - Every prompt after scene 1 MUST begin with a visual continuity statement that references the exact same environment, lighting, color palette, and subject appearance from the continuity profile.

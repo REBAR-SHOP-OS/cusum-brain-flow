@@ -58,6 +58,7 @@ RULES:
 6. Keep the prompt under 200 words
 7. Write as a single flowing paragraph — NO bullet points, NO labels
 8. The output should read like a film director's shot description
+9. CRITICAL: NEVER include any text, words, letters, typography, titles, captions, subtitles, brand names, or written content in the prompt. The video must be purely visual — zero text rendered in any frame.
 
 RESPOND WITH ONLY A JSON OBJECT in this exact format:
 {
