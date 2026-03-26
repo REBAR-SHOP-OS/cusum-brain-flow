@@ -427,7 +427,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
               />
             </div>
            ) : (
-            <div className="w-full max-w-2xl mx-auto rounded-3xl bg-black/60 backdrop-blur-md border border-white/10 p-8 space-y-6">
+            <div className="w-full max-w-4xl mx-auto rounded-3xl bg-black/60 backdrop-blur-md border border-white/10 p-8 space-y-6">
               <div className="text-center space-y-3 animate-in fade-in duration-500">
                 <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center mx-auto">
                   <Film className="w-8 h-8 text-white" />
