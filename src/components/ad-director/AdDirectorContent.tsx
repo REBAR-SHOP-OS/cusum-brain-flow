@@ -612,7 +612,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
               }}
             >
               <BookmarkCheck className="w-4 h-4" />
-              ذخیره پیش‌نویس
+              Save Draft
             </Button>
             {!approved ? (
               <Button onClick={() => setApproved(true)} className="gap-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400">

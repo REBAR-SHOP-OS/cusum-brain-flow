@@ -142,7 +142,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(project.id); }}
               className="shrink-0 p-1.5 rounded-lg hover:bg-destructive/10 transition-colors"
-              title="حذف"
+              title="Delete"
             >
               <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
             </button>
