@@ -1217,6 +1217,23 @@ export function ProVideoEditor({
 
         <Badge variant="secondary" className="text-[9px]">Edit</Badge>
 
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-[10px] gap-1"
+          disabled={!finalVideoUrl}
+          onClick={() => {
+            if (!finalVideoUrl) return;
+            const a = document.createElement("a");
+            a.href = finalVideoUrl;
+            a.download = `${brand.name || "video"}-ad.mp4`;
+            a.click();
+          }}
+        >
+          <Download className="w-3 h-3" />
+          Download
+        </Button>
+
         <ScheduleToSocialPopover
           finalVideoUrl={finalVideoUrl}
           brandName={brand.name}
