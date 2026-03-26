@@ -1360,7 +1360,7 @@ export function ProVideoEditor({
 
       {/* ─── Bottom Timeline ─── */}
       <TimelineBar
-        sidebarTabs={TABS}
+        sidebarTabs={[]}
         activeSidebarTab={activeTab}
         onSidebarTabSelect={handleSetActiveTab}
         clips={clips}
