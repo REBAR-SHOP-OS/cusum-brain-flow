@@ -266,7 +266,7 @@ serve((req) =>
         const htmlBody = isCustomer ? customerEmailHtml : internalEmail;
 
         const rawEmail = [
-          `From: ai@rebar.shop`,
+          `From: ${senderEmail}`,
           `To: ${recipient.email}`,
           `Subject: ${subject}`,
           `MIME-Version: 1.0`,
