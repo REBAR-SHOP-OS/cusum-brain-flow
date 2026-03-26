@@ -115,7 +115,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
         .order("name" as any, { ascending: true });
       return (data as any[]) || [];
     },
-    enabled: open && !!companyId && tab === "upload",
+    enabled: open && !!companyId,
   });
 
   const { data: leads } = useQuery({
