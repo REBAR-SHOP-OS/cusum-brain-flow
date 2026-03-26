@@ -407,10 +407,10 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                 }}
                 onDelete={(id) => deleteProject.mutate(id)}
               />
-            </>
-          )}
-        </>
-      )}
+            </div>
+           )}
+         </>
+       )}
 
       {/* Analyzing / Generating */}
       {(flowState === "analyzing" || flowState === "generating") && (
