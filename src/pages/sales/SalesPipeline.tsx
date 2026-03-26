@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useSalesLeads, SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
 import { useAuth } from "@/lib/auth";

@@ -37,7 +37,18 @@ serve((req) =>
       return { sent: 0 };
     }
 
-    // 3. Build recipient list
+    // 3. Fetch actor email to exclude from recipients
+    let actorEmail = "";
+    if (actor_id) {
+      const { data: actorProfile } = await serviceClient
+        .from("profiles")
+        .select("email")
+        .eq("id", actor_id)
+        .maybeSingle();
+      actorEmail = actorProfile?.email?.toLowerCase() || "";
+    }
+
+    // 4. Build recipient list (exclude actor — don't email yourself)
     const recipients: { email: string; full_name: string }[] = [];
     for (const a of assignees as any[]) {
       const profile = a.profiles;
@@ -45,6 +56,10 @@ serve((req) =>
 
       const email: string = profile.email;
       const fullName: string = profile.full_name || email;
+
+      // Skip the actor — they already know what they did
+      if (actorEmail && email.toLowerCase() === actorEmail) continue;
+
       const isInternal = email.toLowerCase().endsWith("@rebar.shop");
 
       if (isInternal) {
