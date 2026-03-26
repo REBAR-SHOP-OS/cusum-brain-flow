@@ -692,7 +692,9 @@ Deno.serve((req) =>
           straight: "Rebar Straight — standard straight steel reinforcement bars in various sizes",
         };
 
-        for (const slot of slotsToGenerate) {
+        // Parallelize slot generation to avoid edge function timeout on multi-slot requests
+        const slotResults = await Promise.allSettled(
+          slotsToGenerate.map(async (slot) => {
           // Override slot product with user selection so caption/slogan match user's choice
           const effectiveSlotProduct = userSelectedProductsForSlots?.length
             ? userSelectedProductsForSlots.map(k => PRODUCT_PROMPT_MAP_EARLY[k] || k).join(" & ")
@@ -893,7 +895,7 @@ Deno.serve((req) =>
 
           const displayProduct = effectiveSlotProduct || slot.product;
           if (imgResult.imageUrl) {
-            results.push(
+            return (
               `### Slot ${slot.slot} — ${displayProduct}\n\n` +
               `![${displayProduct}](${imgResult.imageUrl})\n\n` +
               `**Caption:**\n${dynContent.caption}` +
@@ -902,7 +904,7 @@ Deno.serve((req) =>
               persianBlock
             );
           } else {
-            results.push(
+            return (
               `### Slot ${slot.slot} — ${displayProduct}\n\n` +
               `⚠️ Image generation failed: ${imgResult.error || "Unknown error"}\n\n` +
               `**Caption:**\n${dynContent.caption}` +
@@ -910,6 +912,17 @@ Deno.serve((req) =>
               `\n\n${dynContent.hashtags}` +
               persianBlock
             );
+          }
+          })
+        );
+
+        // Collect results preserving slot order
+        for (const result of slotResults) {
+          if (result.status === "fulfilled") {
+            results.push(result.value);
+          } else {
+            console.error("Slot generation failed:", result.reason);
+            results.push(`### Slot — Generation Error\n\n⚠️ ${result.reason?.message || "Unknown error"}`);
           }
         }
 
