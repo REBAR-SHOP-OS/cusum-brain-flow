@@ -1,41 +1,21 @@
 
 
-# Show Error Details + Retry Button on Email Failure
+# Move Home Icon Down in Ad Director Sidebar
 
 ## Problem
-When email notification fails, the UI just shows "Email failed to send" with no reason or way to retry. User wants to see the error message and have an autofix/retry option.
+The Home icon in the Ad Director sidebar is too close to the top, making it hard for users to see — it sits right under the collapse toggle with minimal spacing.
 
-## Changes
+## Change
 
-### `src/components/sales/SalesLeadChatter.tsx`
+### `src/components/ad-director/AdDirectorSidebar.tsx`
+Change the nav's top padding from `pt-1` to `pt-3` (line 56) to give more breathing room above the Home item.
 
-1. **Store error details alongside outcome**: Change `emailOutcomes` state from `Record<string, string>` to `Record<string, { status: string; error?: string; noteBody?: string }>` so we capture the error message from the edge function response.
-
-2. **Capture error message from response**: In the notification invoke block, extract `notifyError?.message` or `notifyResult?.error` and store it in the outcome object.
-
-3. **Add retry function**: Create a `retryEmail` handler that re-invokes `notify-lead-assignees` with the stored note data and updates the outcome on success/failure.
-
-4. **Update the failed indicator UI**: Replace the static "Email failed to send" text with:
-   - Error reason text (e.g., "Gmail token expired", "No assignees found")
-   - A "Retry" button that calls the retry handler
-   - On retry success, update the indicator to green
-
-### Implementation detail
-
-```text
-Current:  ✗ Email failed to send
-
-New:      ✗ Email failed: Gmail token expired — re-authorize Gmail
-          [🔄 Retry]
-          
-          OR if error is unknown:
-          ✗ Email failed to send
-          [🔄 Retry]
 ```
-
-The retry button re-fires the same `notify-lead-assignees` call. On success it flips the indicator to green.
+Before: <nav className="flex-1 overflow-y-auto px-1.5 space-y-0.5 pt-1">
+After:  <nav className="flex-1 overflow-y-auto px-1.5 space-y-0.5 pt-3">
+```
 
 | File | Change |
 |---|---|
-| `SalesLeadChatter.tsx` | Store error details in emailOutcomes, show error reason, add retry button |
+| `AdDirectorSidebar.tsx` | Increase nav top padding from `pt-1` to `pt-3` |
 
