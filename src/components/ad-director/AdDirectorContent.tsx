@@ -249,7 +249,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       if (pid) {
         saveProject.mutate({
           id: pid,
-          name: service.getState().brand.name || "Untitled",
+          name: (() => { const p = service.getState().userPrompt; return p ? (p.length > 50 ? p.substring(0, 50).replace(/\s+\S*$/, "…") : p) : (service.getState().brand.name || "Untitled"); })(),
           finalVideoUrl: permanentUrl,
           status: "completed",
         });
