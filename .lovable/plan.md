@@ -1,72 +1,53 @@
 
-## Goal
-Make internal email mentions like `@name@rebar.shop` automatically add that person to the lead’s Assignee list instead of ignoring them.
 
-## Root cause
-The current implementation was built around `@Full Name`, not `@email@rebar.shop`:
+# Scene-Based Auto-Generate Prompt with Per-Scene Voiceover
 
-1. `SalesLeadChatter.tsx` only parses mentions with a regex that allows letters/spaces, so email-style mentions are ignored.
-2. The mention input logic uses `@\w*$`, which does not properly support email fragments.
-3. The backend notification function also extracts mentions as names only, so internal email mentions are not resolved there either.
+## Problem
+The auto-generate (Sparkles) button currently produces a single flat prompt + one voiceover block. The user wants it to produce **structured scene-by-scene output** based on the selected duration, with each scene having its own visual prompt and voiceover — matching the project's 15-second-per-scene standard.
 
-## Plan
+## Duration → Scene Mapping
+- **15s** → 1 scene (0–15s)
+- **30s** → 2 scenes (0–15s, 15–30s)
+- **60s** → 4 scenes (0–15s, 15–30s, 30–45s, 45–60s)
 
-### 1) Support internal email mentions in the sales note composer
-Update `src/components/sales/SalesLeadChatter.tsx` so mention parsing accepts both:
-- `@Full Name`
-- `@user@rebar.shop`
+## Output Format Example (30s)
+```
+Scene 1 – 0 to 15 sec
+Dark cinematic background, slow reveal of complex structural project.
+Voiceover:
+"In modern construction, precision is not optional — it is fundamental."
 
-This includes:
-- replacing the current narrow regex with a parser that can detect email-style internal mentions
-- resolving mentions against `allProfiles` by either:
-  - exact internal email match, or
-  - fallback full name match
-- calling `onAddAssignee(profile.id)` for any matched internal profile not already assigned
-
-### 2) Make the mention typing/select flow compatible with email mentions
-Still in `SalesLeadChatter.tsx`:
-- update the active mention detection so typing after `@` can include `.` and `@`
-- update mention insertion logic so selected internal users can be inserted in a format that is reliably parseable
-- keep existing name mention support working
-
-### 3) Fix backend mention resolution for notifications
-Update `supabase/functions/notify-lead-assignees/index.ts` so the backend also recognizes internal email mentions:
-- parse `@...@rebar.shop` mentions from `note_text`
-- resolve those directly by `profiles.email`
-- keep the existing name-based resolution as fallback
-- continue auto-adding matched internal users to `sales_lead_assignees` server-side as a safety net
-
-### 4) Keep assignee behavior deterministic
-Use this rule:
-- if mention matches an internal `@rebar.shop` email, add to assignees
-- if mention matches a full name, add to assignees
-- ignore unmatched text safely
-- avoid duplicate assignee inserts
-
-## Files to update
-- `src/components/sales/SalesLeadChatter.tsx`
-- `supabase/functions/notify-lead-assignees/index.ts`
-
-## Technical details
-```text
-Current bug:
-@neel@rebar.shop
-  -> front-end regex rejects it
-  -> assignee auto-add never runs for that user
-  -> backend name-only regex also misses it
-
-Target behavior:
-User writes note with @someone@rebar.shop
-  -> note saves
-  -> email mention resolves to internal profile
-  -> assignee is added if missing
-  -> notification flow uses same resolution path
+Scene 2 – 15 to 30 sec
+Close-up of rebar cages being lifted by crane at golden hour.
+Voiceover:
+"With every bar placed, we build strength that lasts generations."
 ```
 
-## Validation
-After implementation, verify these cases:
-1. Mention `@full name` → assignee added
-2. Mention `@user@rebar.shop` → assignee added
-3. Mention same person twice → only one assignee chip
-4. Unknown email mention → no crash, no duplicate/bad insert
-5. Existing notification email flow still works
+## Changes
+
+### `src/components/ad-director/ChatPromptBar.tsx`
+
+Update the `handleAutoGenerate` function:
+
+1. **Calculate scene count** from duration: `Math.max(1, parseInt(duration) / 15)`
+2. **Update system prompt** to instruct the AI to write exactly N scenes, each with a visual prompt and voiceover, in the structured format above
+3. **Update context lines** to include scene count
+4. **Remove the old `---VOICEOVER---` split logic** — the new format is directly human-readable and will be set into the prompt textarea as-is
+5. Keep all existing image context (Intro → Scene 1, Character → all scenes, Outro → last scene)
+
+### System Prompt Update (key part)
+```
+"Write exactly {N} scenes for a {duration} video ad."
+"Each scene is exactly 15 seconds."
+"Format each scene as:"
+"Scene X – Ys to Zs"
+"[Visual prompt: 1-2 sentences, cinematic, specific]"
+"Voiceover:"
+"\"[Persuasive ad copy, 1-2 sentences]\""
+"Separate scenes with a blank line."
+```
+
+| File | Change |
+|---|---|
+| `src/components/ad-director/ChatPromptBar.tsx` | Update `handleAutoGenerate` to produce scene-structured prompts with per-scene voiceover based on selected duration |
+
