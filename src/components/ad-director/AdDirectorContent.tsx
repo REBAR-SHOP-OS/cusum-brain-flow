@@ -602,6 +602,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
             </button>
           </div>
         </div>
+        </>
       )}
       </div>
     </div>
