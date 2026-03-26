@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -44,6 +46,9 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const { companyId } = useCompanyId();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [quoteNumber, setQuoteNumber] = useState("");
   const [quoteDate, setQuoteDate] = useState(new Date().toISOString().slice(0, 10));
   const [expirationDate, setExpirationDate] = useState("");
@@ -247,6 +252,26 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     }
   };
 
+  const handleSendEmail = async () => {
+    if (!customerEmail.trim()) return;
+    setSendingEmail(true);
+    try {
+      // Save first to ensure latest data
+      await handleSave();
+      const { data, error } = await supabase.functions.invoke("send-quote-email", {
+        body: { quote_id: quoteId, customer_email: customerEmail.trim(), action: "send_quote" },
+      });
+      if (error) throw new Error(error.message || "Failed to send");
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Email sent", description: data?.message || `Quotation sent to ${customerEmail}` });
+      setEmailDialogOpen(false);
+    } catch (err: any) {
+      toast({ title: "Send failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const handlePrint = () => window.print();
 
   if (loading) {
@@ -259,10 +284,46 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-8">
+      {/* Email dialog */}
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Quotation to Customer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="customer-email" className="text-sm">Customer Email</Label>
+              <Input
+                id="customer-email"
+                type="email"
+                placeholder="customer@example.com"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                className="mt-1"
+                autoFocus
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This will save the current draft and send a branded quotation email to the customer.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={sendingEmail}>Cancel</Button>
+            <Button onClick={handleSendEmail} disabled={sendingEmail || !customerEmail.trim()} className="gap-2">
+              {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+              {sendingEmail ? "Sending…" : "Send Email"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Action buttons */}
       <div className="fixed top-4 right-4 flex gap-2 print:hidden z-50">
         <Button size="sm" onClick={handleSave} disabled={saving} className="gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Draft
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setEmailDialogOpen(true)} className="gap-2">
+          <Mail className="w-4 h-4" /> Send Email
         </Button>
         <Button size="sm" variant="outline" onClick={handlePrint} className="gap-2">
           <Printer className="w-4 h-4" /> Print / PDF

@@ -6,9 +6,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Trash2, Plus, Copy, Send, CheckCircle, XCircle, AlertTriangle,
-  Clock, FileText, Eye, RotateCcw, Ban, ChevronDown, History,
+  Clock, FileText, Eye, RotateCcw, Ban, ChevronDown, History, Mail, Loader2,
 } from "lucide-react";
 import { SalesQuotation, getStatusInfo, getAvailableTransitions, canTransitionTo } from "@/hooks/useSalesQuotations";
 import { useState, useEffect, useMemo } from "react";
@@ -78,12 +79,18 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
   const [notes, setNotes] = useState("");
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [showAudit, setShowAudit] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailDialogAction, setEmailDialogAction] = useState<"send_quote" | "convert_to_invoice">("send_quote");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     if (quotation) {
       setNotes(quotation.notes || "");
       loadItems(quotation.id);
-      setShowAudit(false);
+    setShowAudit(false);
+    setEmailDialogOpen(false);
+    setCustomerEmail((quotation as any).customer_email || "");
     }
   }, [quotation?.id]);
 
@@ -132,6 +139,48 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
   };
 
   const itemsTotal = items.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
+
+  const handleEmailAction = async () => {
+    if (!customerEmail.trim() || !quotation) return;
+    setSendingEmail(true);
+    try {
+      const quoteId = (quotation as any).quote_id || quotation.id;
+      const { data, error } = await supabase.functions.invoke("send-quote-email", {
+        body: { quote_id: quoteId, customer_email: customerEmail.trim(), action: emailDialogAction },
+      });
+      if (error) throw new Error(error.message || "Failed");
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(data?.message || "Done");
+      setEmailDialogOpen(false);
+
+      // Refresh quotation data
+      if (emailDialogAction === "send_quote") {
+        onUpdate({ id: quotation.id, status: "sent_to_customer" });
+      } else {
+        onUpdate({ id: quotation.id, status: "customer_approved" });
+      }
+      qc.invalidateQueries({ queryKey: ["sales-quotations"] });
+    } catch (err: any) {
+      toast.error(err.message || "Operation failed");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  const handleTransitionClick = (targetStatus: string) => {
+    if (targetStatus === "sent_to_customer") {
+      setEmailDialogAction("send_quote");
+      setEmailDialogOpen(true);
+      return;
+    }
+    if (targetStatus === "customer_approved") {
+      setEmailDialogAction("convert_to_invoice");
+      setEmailDialogOpen(true);
+      return;
+    }
+    onUpdate({ id: quotation.id, status: targetStatus });
+  };
 
   if (!quotation) return null;
 
@@ -204,7 +253,7 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
                         key={targetStatus}
                         size="sm"
                         variant={btn.variant || "default"}
-                        onClick={() => onUpdate({ id: quotation.id, status: targetStatus })}
+                        onClick={() => handleTransitionClick(targetStatus)}
                         className="text-xs h-8"
                       >
                         <Icon className="w-3.5 h-3.5 mr-1" />{btn.label}
@@ -448,6 +497,43 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
           </div>
         </ScrollArea>
       </SheetContent>
+
+      {/* Email dialog for send_to_customer and customer_approved */}
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {emailDialogAction === "send_quote" ? "Send Quotation to Customer" : "Convert to Invoice & Send Payment Link"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label htmlFor="sq-customer-email" className="text-sm">Customer Email</Label>
+              <Input
+                id="sq-customer-email"
+                type="email"
+                placeholder="customer@example.com"
+                value={customerEmail}
+                onChange={(e) => setCustomerEmail(e.target.value)}
+                className="mt-1"
+                autoFocus
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {emailDialogAction === "send_quote"
+                ? "A branded quotation email will be sent to the customer."
+                : "This will create an invoice, generate a Stripe payment link, and email the invoice to the customer."}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={sendingEmail}>Cancel</Button>
+            <Button onClick={handleEmailAction} disabled={sendingEmail || !customerEmail.trim()} className="gap-2">
+              {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : (emailDialogAction === "send_quote" ? <Mail className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />)}
+              {sendingEmail ? "Processing…" : emailDialogAction === "send_quote" ? "Send Email" : "Create Invoice & Send"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }
