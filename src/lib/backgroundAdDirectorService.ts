@@ -145,6 +145,8 @@ class BackgroundAdDirectorService {
     saveProject: (data: any) => Promise<string>,
     videoModel?: string,
     videoProvider?: string,
+    selectedProducts?: string[],
+    selectedStyles?: string[],
   ) {
     this.cancelFlag = false;
     this.running = true;
@@ -226,6 +228,8 @@ class BackgroundAdDirectorService {
         introImageUrl,
         outroImageUrl,
         modelOverrides,
+        selectedProducts,
+        selectedStyles,
       }, { timeoutMs: 90_000 }));
 
       let { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
@@ -275,6 +279,8 @@ class BackgroundAdDirectorService {
               characterImageUrl, introImageUrl, outroImageUrl,
               sceneIndex: idx, totalScenes: rawStoryboard.length,
               modelOverrides,
+              selectedProducts,
+              selectedStyles,
             }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
           } catch { return { prompt: scene.prompt, modelUsed: "original" }; }

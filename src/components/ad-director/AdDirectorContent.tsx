@@ -143,17 +143,12 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     selectedProducts?: string[], selectedStyles?: string[],
     videoModel?: string, videoProvider?: string,
   ) => {
-    // Enrich prompt with product/style context
-    const prefixParts: string[] = [];
-    if (selectedProducts?.length) prefixParts.push(`Product: ${selectedProducts.join(", ")}`);
-    if (selectedStyles?.length) prefixParts.push(`Style: ${selectedStyles.join(", ")}`);
-    const enrichedPrompt = prefixParts.length > 0 ? `${prefixParts.join(". ")}. ${prompt}` : prompt;
     const currentBrand = service.getState().brand?.name ? service.getState().brand : (savedBrand || DEFAULT_BRAND);
     const currentVideoParams = service.getState().videoParams?.ratio ? service.getState().videoParams : DEFAULT_VIDEO_PARAMS;
 
     try {
       await service.startPipeline(
-        enrichedPrompt, ratio, images, introImage, outroImage, duration, characterImage,
+        prompt, ratio, images, introImage, outroImage, duration, characterImage,
         currentBrand, { ...currentVideoParams, ratio, duration: parseInt(duration) || 15 } as VideoParams,
         modelOverrides,
         async (data) => {
@@ -161,6 +156,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           return savedId;
         },
         videoModel, videoProvider,
+        selectedProducts, selectedStyles,
       );
     } catch (err: any) {
       toast({ title: "Failed", description: err.message, variant: "destructive" });
