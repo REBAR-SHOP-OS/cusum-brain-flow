@@ -79,6 +79,10 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
   const [notes, setNotes] = useState("");
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
   const [showAudit, setShowAudit] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailDialogAction, setEmailDialogAction] = useState<"send_quote" | "convert_to_invoice">("send_quote");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   useEffect(() => {
     if (quotation) {
