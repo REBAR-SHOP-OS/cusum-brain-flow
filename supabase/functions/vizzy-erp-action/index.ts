@@ -313,7 +313,7 @@ Deno.serve((req) =>
               source: "system",
               metadata: { primary_id, duplicate_id: dupId, relinked_counts: relinked, merge_reason: reason },
             });
-          } catch { /* ignore */ }
+          } catch (_e) { /* ignore */ }
 
           allResults.push({ duplicate_id: dupId, duplicate_name: dup.name, relinked_counts: relinked, archived: true });
         }
@@ -358,7 +358,7 @@ Deno.serve((req) =>
                   priority: "high",
                   created_by: userId,
                 });
-              } catch { /* ignore */ }
+              } catch (_e) { /* ignore */ }
               actions.push({ id: fr.id, action_taken: "human_task_created" });
             } else {
               // Unknown area — create human task
@@ -371,7 +371,7 @@ Deno.serve((req) =>
                   priority: "medium",
                   created_by: userId,
                 });
-              } catch { /* ignore */ }
+              } catch (_e) { /* ignore */ }
               actions.push({ id: fr.id, action_taken: "human_task_created" });
             }
 
@@ -803,7 +803,7 @@ Deno.serve((req) =>
                   emailData.full_body = gmailData.messages[0].body;
                 }
               }
-            } catch {
+            } catch (_e) {
               // Silent fail — body_preview is still available
             }
           }
@@ -851,7 +851,7 @@ Deno.serve((req) =>
         source: "system",
         dedupe_key: `vizzy_action:${action}:${params?.id || ""}:${new Date().toISOString().slice(0, 13)}`,
       });
-    } catch { /* ignore */ }
+    } catch (_e) { /* ignore */ }
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
