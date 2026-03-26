@@ -1,45 +1,33 @@
 
 
-# Enforce Product & Style Selections in Video Generation Pipeline
+# Auto-Sync Pipeline on Every Page Open
 
 ## Problem
-When a user selects a product (e.g. Fiberglass) and a style (e.g. Realism), these are weakly prepended as plain text to the prompt (`Product: fiberglass. Style: realism. <user text>`). The AI storyboard generator and cinematic prompt writer have no structured awareness of these selections, so they may ignore them.
+Users must manually click the Sync button when opening the Pipeline. The user wants an automatic Odoo sync to fire every time the pipeline page is opened.
 
 ## Solution
-Pass `selectedProducts` and `selectedStyles` as structured data through the entire pipeline and inject them as mandatory directives in the AI system prompts.
+Add a `useEffect` that triggers `handleOdooSync()` once on component mount. Use a `useRef` flag to ensure it only fires once per mount (not on re-renders), and skip if a sync is already in progress.
 
-### Changes
+## Changes
 
-#### 1. `src/components/ad-director/AdDirectorContent.tsx`
-- Pass `selectedProducts` and `selectedStyles` as separate parameters to `service.startPipeline()` instead of just prepending text
-
-#### 2. `src/lib/backgroundAdDirectorService.ts`
-- Add `selectedProducts` and `selectedStyles` parameters to `startPipeline()`
-- Forward them to the `ad-director-ai` edge function in both `analyze-script` and `write-cinematic-prompt` calls
-
-#### 3. `supabase/functions/ad-director-ai/index.ts`
-- In `handleAnalyzeScript`: inject a `PRODUCT & STYLE DIRECTIVE` block into the user prompt with human-readable product descriptions and style requirements
-- In `handleWriteCinematicPrompt`: inject the same product/style context so cinematic prompts reflect the selections
-- Add product description mapping (fiberglass → "Fiberglass GFRP reinforcement bars — lightweight, corrosion-resistant") and style description mapping (realism → "Photorealistic, real-world professional photography look")
-- Mark these as **MANDATORY** in the system prompt so the AI cannot ignore them
+### `src/pages/Pipeline.tsx`
+- Add a `useEffect` after `handleOdooSync` is defined (~line 678) that calls it on mount
+- Use a `hasAutoSynced` ref to prevent double-firing in StrictMode
+- Guard: skip if `isSyncingOdoo` is already true
 
 ```text
-Pipeline flow:
-  ChatPromptBar → selectedProducts=["fiberglass"], selectedStyles=["realism"]
-  ↓
-  AdDirectorContent → passes structured data to service
-  ↓
-  backgroundAdDirectorService → forwards to edge function
-  ↓
-  ad-director-ai (analyze-script) → "MANDATORY PRODUCT FOCUS: Fiberglass GFRP bars..."
-                                    "MANDATORY VISUAL STYLE: Photorealistic..."
-  ↓
-  ad-director-ai (write-cinematic-prompt) → same directives injected
+const hasAutoSynced = useRef(false);
+useEffect(() => {
+  if (!hasAutoSynced.current && !isSyncingOdoo) {
+    hasAutoSynced.current = true;
+    handleOdooSync();
+  }
+}, []);
 ```
+
+This ensures every time a user navigates to `/pipeline`, a fresh Odoo sync starts immediately — no cooldown, no manual button press needed.
 
 | File | Change |
 |---|---|
-| `AdDirectorContent.tsx` | Pass products/styles as structured params to `startPipeline` |
-| `backgroundAdDirectorService.ts` | Accept + forward `selectedProducts`/`selectedStyles` to edge functions |
-| `ad-director-ai/index.ts` | Add product/style mappings and inject as mandatory directives in AI prompts |
+| `Pipeline.tsx` | Add mount-triggered auto-sync via useEffect + ref guard |
 
