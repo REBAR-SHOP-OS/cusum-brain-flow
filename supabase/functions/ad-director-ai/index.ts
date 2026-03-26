@@ -439,8 +439,9 @@ const ANALYZE_SCRIPT_TOOLS = [{
               generationMode: { type: "string", enum: ["text-to-video", "image-to-video", "reference-continuation", "static-card", "motion-graphics"] },
               continuityRequirements: { type: "string" },
               prompt: { type: "string" },
+              voiceover: { type: "string", description: "Voiceover narration script for this scene — natural, punchy advertising copy to be read aloud by a narrator" },
             },
-            required: ["id", "segmentId", "objective", "visualStyle", "shotType", "cameraMovement", "environment", "subjectAction", "emotionalTone", "transitionNote", "generationMode", "continuityRequirements", "prompt"],
+            required: ["id", "segmentId", "objective", "visualStyle", "shotType", "cameraMovement", "environment", "subjectAction", "emotionalTone", "transitionNote", "generationMode", "continuityRequirements", "prompt", "voiceover"],
           },
         },
         continuityProfile: {
