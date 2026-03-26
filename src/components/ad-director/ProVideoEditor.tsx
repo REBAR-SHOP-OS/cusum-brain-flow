@@ -7,10 +7,15 @@ import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import {
   Play, Pause, Volume2, VolumeX, Maximize2,
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
-  Music, FileText, Loader2,
+  Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
   FolderOpen, Type, Palette, SquarePen,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
 import { DEFAULT_CARD_SETTINGS } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
