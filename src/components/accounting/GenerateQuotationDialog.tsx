@@ -55,6 +55,8 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
       setSelectedCustomerId("");
       setSelectedLeadId(leadId || "");
       setAddToPipeline(false);
+      setDeliveryDistance("");
+      setIncludeShopDrawings(true);
       setTab("project");
     }
   }, [open, leadCustomerName, leadId]);
