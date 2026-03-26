@@ -7,4 +7,6 @@ export interface VideoOverlay {
   opacity: number; // 0-1
   sceneId: string;
   animated?: boolean; // true = apply fade-in + scale animation
+  startTime?: number; // seconds within the scene (for timed subtitles)
+  endTime?: number;   // seconds within the scene (for timed subtitles)
 }
