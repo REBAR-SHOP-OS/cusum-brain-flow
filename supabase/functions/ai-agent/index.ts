@@ -1076,8 +1076,10 @@ Deno.serve((req) =>
     if (empireForceTools) console.log("🔧 Empire: forcing toolChoice=required for diagnostic request");
     if (socialForceTools) console.log("🎨 Pixel: forcing toolChoice=required for creation request");
 
-    // AI Call
-    let aiResult = await callAI({
+    // AI Call — wrapped in try-catch to surface descriptive errors
+    let aiResult;
+    try {
+      aiResult = await callAI({
       provider: modelConfig.provider,
       model: modelConfig.model,
       agentName: agent,
