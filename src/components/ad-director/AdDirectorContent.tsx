@@ -420,7 +420,9 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
       {/* Result */}
       {flowState === "result" && (
-        <div className="w-full max-w-2xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <>
+        <div className="fixed inset-0 z-[5] bg-black" />
+        <div className="w-full max-w-2xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative z-10">
           {/* Main Preview */}
           <div className="rounded-2xl border border-border/20 bg-card/40 overflow-hidden">
             {(selectedPreviewUrl || finalVideoUrl) ? (
