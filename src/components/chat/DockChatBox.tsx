@@ -595,7 +595,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                           ];
                           const seen = new Set<string>();
                           const uniqueAttachments = allAttachments.filter((a) => { if (seen.has(a.url)) return false; seen.add(a.url); return true; });
-                          const hasText = !!cleanText && cleanText !== "📎" && cleanText !== "🎤";
+                          const hasText = cleanText.length > 0 && cleanText !== "📎" && cleanText !== "🎤";
 
                           return (
                             <>
