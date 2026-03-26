@@ -67,13 +67,43 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
     queryFn: async () => {
       const { data } = await supabase
         .from("estimation_projects")
-        .select("id, name, status, total_weight_kg, total_cost, lead_id")
+        .select("id, name, status, total_weight_kg, total_cost, lead_id, customer_id")
         .eq("company_id", companyId!)
         .order("created_at", { ascending: false });
       return data || [];
     },
     enabled: open && !!companyId,
   });
+
+  // Auto-populate customer/lead from selected estimation project
+  useEffect(() => {
+    if (!selectedProject || !projects?.length) return;
+    const proj = projects.find((p) => p.id === selectedProject);
+    if (!proj) return;
+
+    // Auto-fill lead if empty
+    if (!selectedLeadId && proj.lead_id) {
+      setSelectedLeadId(proj.lead_id);
+    }
+
+    // Auto-fill customer name from lead or customer record
+    if (!customerName) {
+      // Try to get customer name from the lead
+      if (proj.lead_id && leads?.length) {
+        const lead = leads.find((l) => l.id === proj.lead_id);
+        if (lead) {
+          setCustomerName(lead.contact_company || lead.contact_name || "");
+        }
+      }
+      // Try to get customer name from customer_id
+      if (proj.customer_id && customers?.length) {
+        const cust = (customers as any[]).find((c: any) => c.customer_id === proj.customer_id);
+        if (cust) {
+          setCustomerName(cust.display_name || cust.company_name || cust.normalized_name || "");
+        }
+      }
+    }
+  }, [selectedProject, projects, leads, customers, customerName, selectedLeadId]);
 
   const { data: customers } = useQuery({
     queryKey: ["customers_for_quote", companyId],
