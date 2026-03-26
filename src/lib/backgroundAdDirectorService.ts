@@ -308,7 +308,7 @@ class BackgroundAdDirectorService {
       this.update({ flowState: "generating", progressValue: 0 });
 
       const effectiveRatio = ratio === "Smart" ? "16:9" : ratio;
-      const wanRatio = ["16:9", "9:16", "1:1"].includes(effectiveRatio) ? effectiveRatio : "16:9";
+      const wanRatio = ["16:9", "9:16", "1:1", "4:3"].includes(effectiveRatio) ? effectiveRatio : "16:9";
 
       for (let i = 0; i < storyboardWithDefaults.length; i++) {
         if (this.cancelFlag) break;
