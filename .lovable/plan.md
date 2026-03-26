@@ -1,36 +1,41 @@
 
-# Rebar Shop OS — Project Plan
 
-## Architecture Reference
-Full system architecture documented in [`docs/REBAR_SHOP_OS_Architecture.md`](../docs/REBAR_SHOP_OS_Architecture.md).
+# Fix: Stale Cut Plan Status for Completed STAIRS Plans
 
----
+## Problem
+STAIRS#21, #23, #25 show in Active Production Hub (plan status = `queued`) but not in the Station View (all items fully cut). The `auto_complete_cut_plan` trigger didn't transition these plans to `completed`.
 
-## handleRequest Migration — COMPLETED ✅
+## Root Cause
+The plans' items are 100% complete (every `completed_pieces == total_pieces`), but `cut_plans.status` is still `queued`. Two issues:
+1. **Immediate**: These 3 plans need a data fix
+2. **Systemic**: The auto-complete trigger may have a gap — it might only fire on phase changes, not when completed_pieces reaches total_pieces during the approval/import flow
 
-| Metric | Value |
+## Plan
+
+### Step 1 — Data fix (migration)
+Update the 3 orphaned plans to `completed` status:
+```sql
+UPDATE cut_plans 
+SET status = 'completed', updated_at = now()
+WHERE id IN (
+  '5d80d272-11dc-4ff3-afab-02a32cb9e766',
+  '01d2c010-cd64-4f65-aeef-0e5a4ac0cdd2',
+  'e9db7412-5c4f-420f-9498-03edf919c1a1'
+)
+AND status = 'queued';
+```
+
+### Step 2 — Audit the auto_complete trigger
+Inspect the `auto_complete_cut_plan` trigger to verify it covers all completion paths (phase transitions AND bulk completed_pieces updates during import). If a gap exists, patch the trigger condition.
+
+### Step 3 — Add safety net in ActiveProductionHub
+Filter out plans from the Production Hub where **all items are 100% complete** to prevent future ghost entries, regardless of plan status lag.
+
+### Files Changed
+
+| File | Change |
 |---|---|
-| Total functions | 193 |
-| Migrated | 192 (99.5%) |
-| Excluded | 1 (`mcp-server` — Hono framework, incompatible) |
+| Migration SQL | Data fix for 3 stale plans |
+| `auto_complete_cut_plan` trigger | Audit + patch if gap found |
+| `src/components/shopfloor/ActiveProductionHub.tsx` | Filter out fully-completed plans from display |
 
-### Auth breakdown across 192 functions:
-| authMode | Count |
-|---|---|
-| `"required"` (default) | ~124 |
-| `"none"` | 50 |
-| `"optional"` | 17 |
-
-### Other patterns:
-- `parseBody: false` — 10 functions (FormData endpoints)
-- `wrapResult: false` — 165 functions (legacy response shape preservation)
-- `rawResponse: true` — 18 functions (streaming/custom responses)
-
----
-
-## Next Steps (optional)
-- [ ] Clean up leftover CORS boilerplate in `website-agent`
-- [ ] Standardize std library version in `extract-manifest`
-- [ ] Add integration tests for auth modes
-- [ ] Migrate email-based `AdminRoute` to role-based checks
-- [ ] Consider consolidating `wrapResult: false` functions to standard wrapping
