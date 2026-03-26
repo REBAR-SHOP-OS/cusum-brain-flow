@@ -567,7 +567,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   );
 }
 
-function ActivityItem({ activity, onMarkDone, emailStatus }: { activity: SalesLeadActivity; onMarkDone: () => void; emailStatus?: "success" | "failed" | "partial" }) {
+function ActivityItem({ activity, onMarkDone, emailOutcome, onRetry }: { activity: SalesLeadActivity; onMarkDone: () => void; emailOutcome?: { status: "success" | "failed" | "partial"; error?: string; noteBody?: string; retrying?: boolean }; onRetry?: () => void }) {
   const Icon = activityIcons[activity.activity_type] || MessageSquare;
   const isScheduled = !!activity.scheduled_date && !activity.completed_at;
   const initials = activity.user_name ? getInitials(activity.user_name) : "??";
@@ -616,23 +616,37 @@ function ActivityItem({ activity, onMarkDone, emailStatus }: { activity: SalesLe
             Completed {format(new Date(activity.completed_at), "MMM d")}
           </span>
         )}
-        {emailStatus === "success" && (
+        {emailOutcome?.status === "success" && (
           <span className="text-[10px] text-green-600 flex items-center gap-1 mt-1 font-medium">
             <CheckCircle2 className="w-3 h-3" />
             Email sent successfully
           </span>
         )}
-        {emailStatus === "partial" && (
+        {emailOutcome?.status === "partial" && (
           <span className="text-[10px] text-amber-500 flex items-center gap-1 mt-1 font-medium">
             <CheckCircle2 className="w-3 h-3" />
             Email partially sent
           </span>
         )}
-        {emailStatus === "failed" && (
-          <span className="text-[10px] text-red-500 flex items-center gap-1 mt-1 font-medium">
-            <XCircle className="w-3 h-3" />
-            Email failed to send
-          </span>
+        {emailOutcome?.status === "failed" && (
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-[10px] text-destructive flex items-center gap-1 font-medium">
+              <XCircle className="w-3 h-3" />
+              Email failed{emailOutcome.error ? `: ${emailOutcome.error}` : " to send"}
+            </span>
+            {onRetry && emailOutcome.noteBody && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 text-[10px] px-1.5 gap-1 text-primary hover:bg-primary/10"
+                onClick={onRetry}
+                disabled={emailOutcome.retrying}
+              >
+                {emailOutcome.retrying ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                Retry
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </div>
