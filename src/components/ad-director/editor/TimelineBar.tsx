@@ -179,7 +179,7 @@ export function TimelineBar({
     itemDragRef.current = { type, id, startX: e.clientX, origLeftPct: leftPct, origWidthPct: widthPct };
     setItemDragOffsetPx(0);
     setItemDragging(true);
-    setDraggedItemId(id);
+    setDraggedItemId(type === "audio" ? `audio-${id}` : id);
   }, []);
 
   useEffect(() => {
