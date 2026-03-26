@@ -29,8 +29,10 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   const [duration, setDuration] = useState<string>("15");
   const [introImage, setIntroImage] = useState<File | null>(null);
   const [outroImage, setOutroImage] = useState<File | null>(null);
+  const [characterImage, setCharacterImage] = useState<File | null>(null);
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
+  const characterRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
