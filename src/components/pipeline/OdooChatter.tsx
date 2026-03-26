@@ -988,9 +988,9 @@ const ActivityThreadItem = React.memo(
               )}
             </div>
           ) : activity.description && !hasTracking ? (
-            <p className="text-[13px] text-foreground/80 whitespace-pre-wrap mt-0.5 leading-relaxed">
-              {activity.description}
-            </p>
+            <div className="text-[13px] text-foreground/80 whitespace-pre-wrap mt-0.5 leading-relaxed">
+              {renderDescriptionWithFiles(activity.description)}
+            </div>
           ) : (
             !isStageChange && !hasTracking && (
               <p className="text-[13px] text-foreground/80 mt-0.5">{activity.title}</p>

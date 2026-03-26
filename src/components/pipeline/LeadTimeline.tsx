@@ -482,9 +482,9 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                       <p className="text-sm mt-1">{activity.title}</p>
                     )}
                     {activity.description && (
-                      <p className="text-sm text-foreground/80 whitespace-pre-wrap mt-1 leading-relaxed">
-                        {activity.description}
-                      </p>
+                      <div className="text-sm text-foreground/80 whitespace-pre-wrap mt-1 leading-relaxed">
+                        {renderDescriptionWithFiles(activity.description)}
+                      </div>
                     )}
                     {activity.activity_type !== "stage_change" && !activity.description && (
                       <p className="text-sm text-foreground/80 mt-0.5">{activity.title}</p>
