@@ -245,8 +245,6 @@ Deno.serve((req) =>
 
       const brandedInvoiceHtml = buildBrandedEmail({
         bodyHtml: invoiceBodyHtml,
-        signatureHtml: sigHtml || undefined,
-        actorName: meta.actor_name,
       });
 
       // 6. Send invoice email
