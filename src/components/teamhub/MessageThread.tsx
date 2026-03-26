@@ -319,10 +319,8 @@ export function MessageThread({
     textareaRef.current?.focus();
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
+  const processFiles = async (files: FileList) => {
+    if (!files.length) return;
     setIsUploading(true);
     const newAttachments: ChatAttachment[] = [];
 
@@ -360,6 +358,12 @@ export function MessageThread({
 
     setPendingFiles((prev) => [...prev, ...newAttachments]);
     setIsUploading(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await processFiles(files);
     e.target.value = "";
   };
 
@@ -884,6 +888,13 @@ export function MessageThread({
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 handleSubmit();
+              }
+            }}
+            onPaste={(e) => {
+              const files = e.clipboardData?.files;
+              if (files && files.length > 0) {
+                e.preventDefault();
+                processFiles(files);
               }
             }}
           />
