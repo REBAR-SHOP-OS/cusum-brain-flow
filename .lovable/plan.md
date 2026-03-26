@@ -1,36 +1,48 @@
 
 
-# Show Original Filename Instead of UUID in File Cards
+# Fix Attachment Button in Email Composer
 
 ## Problem
-File cards in the timeline show UUID-based names like `acd3553b-6a66-4287-a645-8d...` because `extractFileName` extracts the last path segment from the storage URL, which is a UUID when the file was uploaded via Supabase storage (the object path includes a UUID).
+The Paperclip (attachment) button in `ComposeEmailDialog.tsx` (line 392-394) is a dummy button with no `onClick` handler. Additionally, the `gmail-send` Edge Function uses a simple `text/html` content type and does not support MIME multipart messages with attachments.
 
-## Solution
-Update `extractFileName` in `InlineFileLink.tsx` to strip the timestamp prefix pattern from the filename. The storage path format is `lead-attachments/{id}/{timestamp}-{safeName}`, so after extracting the last segment, strip the leading `{digits}-` prefix to recover the original filename.
+## Solution — Two-part fix
 
-## Changes
+### 1. Add file selection and state to `ComposeEmailDialog.tsx`
 
-### `src/components/pipeline/InlineFileLink.tsx` — `extractFileName` function
+- Add a hidden `<input type="file" multiple>` ref
+- Wire the Paperclip button's `onClick` to trigger the file input
+- Store selected files in state as `{ file: File; name: string; size: number }[]`
+- Show attached files as removable chips below the body textarea
+- Convert files to base64 before sending and include in the `gmail-send` body as an `attachments` array
+- Limit: max 5 files, max 10MB each
 
-Update the function to:
-1. Extract the last path segment as before
-2. Strip a leading numeric timestamp prefix (pattern: `\d+-`) to recover the original safe name
-3. Replace underscores back to spaces for readability (since upload replaces non-alphanumeric chars with `_`)
+### 2. Update `gmail-send` Edge Function to support MIME multipart
 
-```typescript
-function extractFileName(url: string): string {
-  try {
-    const path = new URL(url).pathname;
-    const segments = path.split("/").filter(Boolean);
-    let last = decodeURIComponent(segments[segments.length - 1] || "file");
-    // Strip leading timestamp prefix (e.g., "1711234567890-")
-    last = last.replace(/^\d+-/, "");
-    return last || "file";
-  } catch {
-    return "file";
-  }
-}
+- Update the `createRawEmail` function to generate a `multipart/mixed` MIME message when attachments are present
+- Each attachment encoded as a base64 MIME part with proper `Content-Disposition: attachment` headers
+- Update the Zod schema to accept an optional `attachments` array: `{ filename: string; contentType: string; base64: string }[]`
+- When no attachments, keep the current simple `text/html` format (backward compatible)
+
+## Technical Details
+
+```text
+ComposeEmailDialog.tsx changes:
+├── Add: fileInputRef, attachments state
+├── Wire: Paperclip onClick → fileInputRef.click()
+├── Display: attachment chips with X to remove
+├── Convert: files to base64 on send
+└── Pass: attachments array to gmail-send
+
+gmail-send/index.ts changes:
+├── Update Zod schema: add optional attachments[]
+├── Update createRawEmail: multipart/mixed when attachments present
+│   ├── boundary-based MIME structure
+│   ├── text/html part for body
+│   └── base64 parts for each attachment
+└── Backward compatible: no attachments = same behavior
 ```
 
-Single function change, no other files affected.
+## Files Changed
+- `src/components/inbox/ComposeEmailDialog.tsx` — add file input, state, UI chips, base64 conversion
+- `supabase/functions/gmail-send/index.ts` — support multipart MIME attachments
 
