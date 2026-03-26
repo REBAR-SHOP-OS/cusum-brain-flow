@@ -265,6 +265,8 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
               contactPhone={lead.contact_phone}
               leadTitle={lead.title}
               onComposeEmail={() => setComposeOpen(true)}
+              onAddAssignee={onAddAssignee}
+              allProfiles={profiles}
             />
           )}
 
