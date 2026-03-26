@@ -294,7 +294,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
       if (data.status === "failed") { setError(data.error || "Video generation failed."); setStatus("failed"); return; }
       if (data.progress != null) setProgress(data.progress);
       else setProgress(prev => Math.min(prev + 3, 90));
-      pollTimerRef.current = setTimeout(pollForResult, 5000);
+      pollTimerRef.current = setTimeout(pollForResult, 3000);
     } catch (err: any) { setError(err?.message || "Failed to check video status."); setStatus("failed"); }
   }, [brandKit]);
 
