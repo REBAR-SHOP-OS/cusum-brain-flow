@@ -12,6 +12,7 @@ Deno.serve((req) =>
 
     let result: any;
 
+    try {
     switch (action) {
       case "update_cut_plan_status": {
         const { id, status } = params;
