@@ -43,6 +43,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
   // Local UI-only state
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [showIntro, setShowIntro] = useState(() => !sessionStorage.getItem("ad-director-intro-seen"));
   const [modelOverrides] = useState<ModelOverrides>({});
   const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
   const [scenePrompts, setScenePrompts] = useState<Record<string, string>>({});
