@@ -220,6 +220,7 @@ class BackgroundAdDirectorService {
         script: prompt,
         brand,
         targetDuration: videoParams.duration,
+        sceneCount: videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15),
         assetDescriptions: images.length > 0 ? images.map(f => f.name).join(", ") : undefined,
         characterImageUrl,
         introImageUrl,
@@ -362,9 +363,7 @@ class BackgroundAdDirectorService {
           continue;
         }
 
-        const userTotalDuration = videoParams.duration > 0 ? videoParams.duration : 15;
-        const perSceneDur = Math.ceil(userTotalDuration / storyboardWithDefaults.length);
-        const sceneDuration = Math.min(Math.max(perSceneDur, 2), 15);
+        const sceneDuration = 15; // Always generate 15-second clips
         // Inject continuity profile into every scene prompt for cross-clip coherence
         const cp = continuityProfile;
         const continuityPrefix = cp

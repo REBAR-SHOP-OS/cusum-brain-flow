@@ -353,9 +353,9 @@ const ANALYZE_SCRIPT_PROMPT = `You are a cinematic ad director for premium B2B v
 Never use generic "cut" — specify type + reasoning.
 
 ## PACING
-- Intro/Hook: 2-3s | Problem/Urgency: 2-3s | Solution/Service: 3-5s | CTA: 3-4s | End Card: 3-4s
-- Scene count: 30s ad = 6-8 scenes, 15s = 4-5, 60s = 10-14
-- No scene < 1.5s or > 6s
+- Each scene MUST be exactly 15 seconds long. No exceptions.
+- Scene count: 15s ad = 1 scene, 30s ad = 2 scenes, 60s ad = 4 scenes
+- Do NOT create more scenes than specified. Each scene = one 15-second video clip.
 - Voiceover constraint: minDuration = ceil(wordCount / 2.5). Never compress narration.
 
 ## SCENE OUTPUT (for each scene)
@@ -507,7 +507,7 @@ const WRITE_PROMPT_TOOLS = [{
 // ─── Action Handlers ────────────────────────────────────────────
 
 async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: string) {
-  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl } = body;
+  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl, sceneCount } = body;
   if (!script) throw new Error("Script is required");
 
   const characterBlock = characterImageUrl
@@ -531,7 +531,8 @@ async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: st
 ${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}${introBlock}${outroBlock}
 
 Script:
-${script}`;
+${script}
+${sceneCount ? `\nCRITICAL: You MUST create exactly ${sceneCount} scene(s), each exactly 15 seconds long. Do NOT create more or fewer scenes.` : ""}`;
 
   return await callAIAndExtract(
     apiKey,
