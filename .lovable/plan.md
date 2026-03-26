@@ -1,33 +1,32 @@
 
 
-# Move Chapters from Sidebar to Timeline Video Track
+# Resize Video Preview, Fix Logo Position & Apply Logo to All Scenes
 
 ## What
-The user wants the chapter thumbnails (currently in MediaTab sidebar under "Chapters") to be displayed inside the timeline's video track area instead. The video track currently shows colored blocks — it should show the scene thumbnails with labels directly in the timeline.
-
-## Current State
-- **MediaTab** (left sidebar): Shows chapter list with thumbnails, status badges, scene labels, and duration
-- **TimelineBar video track**: Shows colored blocks with tiny labels (`S1`, `S2`...) and extracted thumbnails — but appears empty when no clips are generated yet
-
-## Problem
-The chapter previews are hidden in the sidebar while the timeline video track (the main visual area) looks empty. The user wants the visual chapter cards to live in the timeline.
+1. The video preview canvas area in the editor is too large — reduce its size to a medium proportion
+2. The logo watermark overlay is centered (position x:35, y:40) for intro/outro scenes — move it to bottom-right corner
+3. Logo should be applied to ALL scenes automatically, not just intro/outro scenes
 
 ## Changes
 
-### `src/components/ad-director/editor/TimelineBar.tsx`
-**Enhance the video track scene blocks** to show richer content similar to MediaTab chapters:
-- Increase video track height from `h-12` to `h-20` to fit more info
-- Show scene thumbnail (already implemented via `useVideoThumbnails`)
-- Show scene objective/label text (truncated)
-- Show segment text preview (first ~30 chars)
-- Show status badge (done/generating/idle) 
-- Show duration badge
+### 1. Reduce video preview size — `ProVideoEditor.tsx`
+The center canvas area (`flex-1`) fills all remaining space. Constrain the video preview with a max-height so it doesn't dominate the viewport:
+- Add `max-h-[50vh]` to the video container div (line 1131) so it takes roughly half the viewport height
+- This leaves more room for the timeline below
 
-### `src/components/ad-director/editor/MediaTab.tsx`
-**Remove the "Chapters" section** (the scrollable list of scene cards). Keep only the "Replace media" buttons (Upload/Stock/Generate) since those are still useful actions.
+### 2. Fix logo overlay position — `ProVideoEditor.tsx`
+In the auto-seed logo overlay effect (lines 205-209), change the position from center `{ x: 35, y: 40 }` to bottom-right `{ x: 82, y: 85 }` and reduce size from `{ w: 30, h: 20 }` to `{ w: 12, h: 10 }`.
+
+### 3. Apply logo to ALL scenes — `ProVideoEditor.tsx`
+Change the auto-seed logic (lines 195-200) to apply to **all** scenes instead of filtering only intro/outro/hook/closing scenes. Remove the `introOutroScenes` filter — iterate over all `storyboard` scenes and seed a logo overlay for any scene that doesn't already have one.
+
+### 4. Keep stitch logo position consistent — `videoStitch.ts`
+The `drawLogo` function already draws at bottom-right (line 185). No change needed there — it's correct.
+
+### 5. Keep `videoWatermark.ts` consistent
+Already draws at bottom-right. No change needed.
 
 | File | Change |
 |---|---|
-| `TimelineBar.tsx` | Increase video track height, add scene objective, segment text preview, status & duration badges to each scene block |
-| `MediaTab.tsx` | Remove chapter thumbnail list, keep only "Replace media" action buttons |
+| `src/components/ad-director/ProVideoEditor.tsx` | Constrain video preview height; change auto-seed logo to all scenes with bottom-right position and smaller size |
 
