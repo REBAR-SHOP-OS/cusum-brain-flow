@@ -287,7 +287,7 @@ serve((req) =>
             const { data: adminProfile } = await serviceClient
               .from("profiles")
               .select("email")
-              .eq("id", candidate.user_id)
+              .eq("user_id", candidate.user_id)
               .maybeSingle();
             if (adminProfile?.email) senderEmail = adminProfile.email;
             log.info(`Using admin fallback token from ${senderEmail}`);
