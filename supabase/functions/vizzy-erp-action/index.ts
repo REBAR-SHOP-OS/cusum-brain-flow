@@ -803,7 +803,7 @@ Deno.serve((req) =>
                   emailData.full_body = gmailData.messages[0].body;
                 }
               }
-            } catch {
+            } catch (_e) {
               // Silent fail — body_preview is still available
             }
           }
