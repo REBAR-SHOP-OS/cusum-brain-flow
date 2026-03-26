@@ -33,6 +33,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
   const [tab, setTab] = useState<string>("project");
   const [deliveryDistance, setDeliveryDistance] = useState<string>("");
   const [includeShopDrawings, setIncludeShopDrawings] = useState(true);
+  const [scrapPercent, setScrapPercent] = useState<string>("15");
 
   // Tab 1 — existing project
   const [selectedProject, setSelectedProject] = useState<string>("");
