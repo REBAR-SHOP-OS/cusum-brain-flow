@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
 import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
+import { useSalesLeadActivities } from "@/hooks/useSalesLeadActivities";
+import { supabase } from "@/integrations/supabase/client";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { SalesLeadChatter } from "./SalesLeadChatter";
