@@ -297,6 +297,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     const motionPrompt = basePrompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
     service.patchState({
       clips: currentState.clips.map(c => c.sceneId === sceneId ? { ...c, status: "generating" as const, progress: 10 } : c),
+      finalVideoUrl: null,
     });
     try {
       const result = await invokeEdgeFunction<{
