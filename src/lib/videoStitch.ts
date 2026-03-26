@@ -518,7 +518,12 @@ export async function stitchClips(
         if (overlays?.endCard?.enabled) {
           renderEndCard();
         } else {
-          setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 100);
+          // Fade out all audio professionally, then stop recorder
+          fadeOutAudio(0.5).then(() => {
+            if (voiceElement) voiceElement.pause();
+            if (musicElement) musicElement.pause();
+            if (recorder.state === "recording") recorder.stop();
+          });
         }
         return;
       }
