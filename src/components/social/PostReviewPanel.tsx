@@ -530,7 +530,7 @@ export function PostReviewPanel({
   return (
     <>
       <Sheet open={!!post} onOpenChange={(open) => { if (!open) { flushRef.current(); setSubPanel(null); onClose(); } }}>
-        <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col">
+        <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col" onPointerDownOutside={(e) => { if (subPanel) e.preventDefault(); }} onInteractOutside={(e) => { if (subPanel) e.preventDefault(); }}>
 
           {/* ── Sub-panel views ── */}
           {subPanel === "content_type" && (
