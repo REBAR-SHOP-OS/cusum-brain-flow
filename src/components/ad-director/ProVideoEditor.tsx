@@ -1281,7 +1281,7 @@ export function ProVideoEditor({
         onSeek={handleGlobalSeek}
         onSelectScene={setSelectedSceneIndex}
         onAddText={() => setTextDialogOpen(true)}
-        onAddAudio={generateAllVoiceovers}
+        onAddAudio={handleUploadAudio}
         textOverlays={textOverlays}
         audioTracks={audioTracks}
         videoVolume={videoVolume}

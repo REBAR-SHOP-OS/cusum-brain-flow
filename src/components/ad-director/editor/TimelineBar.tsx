@@ -598,8 +598,8 @@ export function TimelineBar({
                 className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors mx-auto"
               >
                 <Plus className="w-2.5 h-2.5" />
-                <Music className="w-2.5 h-2.5" />
-                Add audio
+                <Mic className="w-2.5 h-2.5" />
+                Upload audio
               </button>
             )}
           </div>
