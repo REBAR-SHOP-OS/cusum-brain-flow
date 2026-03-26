@@ -6,13 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
-import { CustomerSelectDialog } from "./CustomerSelectDialog";
-import { CreateTransactionDialog } from "@/components/customers/CreateTransactionDialog";
+import { DraftInvoiceEditor } from "./documents/DraftInvoiceEditor";
 import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2, Package } from "lucide-react";
 import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
+import { useSalesInvoices } from "@/hooks/useSalesInvoices";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
 type SortField = "DocNumber" | "Customer" | "TxnDate" | "DueDate" | "TotalAmt" | "Balance" | "Status";
@@ -50,6 +51,8 @@ type StatusFilter = "all" | "open" | "overdue" | "paid";
 
 export function AccountingInvoices({ data, initialSearch }: Props) {
   const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items, payments, qbAction, loadAll } = data;
+  const { companyId } = useCompanyId();
+  const { generateNumber } = useSalesInvoices();
   const [search, setSearch] = useState(initialSearch || "");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
@@ -58,8 +61,7 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
   const [previewInvoice, setPreviewInvoice] = useState<QBInvoice | null>(null);
   const [sortField, setSortField] = useState<SortField>("DocNumber");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [customerSelectOpen, setCustomerSelectOpen] = useState(false);
-  const [txnCustomer, setTxnCustomer] = useState<{ qbId: string; name: string } | null>(null);
+  const [editorInvoiceId, setEditorInvoiceId] = useState<string | null>(null);
   const [packingSlipInvoice, setPackingSlipInvoice] = useState<QBInvoice | null>(null);
 
   const getPackingSlipData = (inv: QBInvoice) => ({
@@ -180,7 +182,16 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         <Button variant="outline" size="sm" className="h-12 gap-2" onClick={exportCsv}>
           <Download className="w-4 h-4" /> Export CSV
         </Button>
-        <Button size="sm" className="h-12 gap-2" onClick={() => setCustomerSelectOpen(true)}>
+        <Button size="sm" className="h-12 gap-2" onClick={async () => {
+          if (!companyId) return;
+          const num = await generateNumber();
+          const { data: newInv, error } = await supabase
+            .from("sales_invoices")
+            .insert({ invoice_number: num, company_id: companyId, status: "draft", issued_date: new Date().toISOString().slice(0, 10) })
+            .select("id").single();
+          if (error) { toast({ title: error.message, variant: "destructive" }); return; }
+          setEditorInvoiceId(newInv.id);
+        }}>
           <Plus className="w-4 h-4" /> Create Invoice
         </Button>
       </div>
@@ -349,25 +360,10 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         />
       )}
 
-      <CustomerSelectDialog
-        open={customerSelectOpen}
-        onOpenChange={setCustomerSelectOpen}
-        customers={customers.map((c: any) => ({
-          Id: c.qb_customer_id || c.Id,
-          DisplayName: c.display_name || c.DisplayName,
-          CompanyName: c.CompanyName,
-        }))}
-        onSelect={(qbId, name) => setTxnCustomer({ qbId, name })}
-      />
-
-      {txnCustomer && (
-        <CreateTransactionDialog
-          open={!!txnCustomer}
-          onOpenChange={(open) => { if (!open) setTxnCustomer(null); }}
-          type="Invoice"
-          customerQbId={txnCustomer.qbId}
-          customerName={txnCustomer.name}
-          onCreated={() => { setTxnCustomer(null); loadAll(); }}
+      {editorInvoiceId && (
+        <DraftInvoiceEditor
+          invoiceId={editorInvoiceId}
+          onClose={() => setEditorInvoiceId(null)}
         />
       )}
 
