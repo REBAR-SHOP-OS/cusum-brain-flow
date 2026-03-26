@@ -538,7 +538,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs">
-                {canAutoGenerate ? "تولید خودکار پرامپت" : "ابتدا استایل و محصول را انتخاب کنید"}
+                {canAutoGenerate ? "تولید خودکار پرامپت" : "استایل و محصول انتخاب کنید یا تصویر آپلود کنید"}
               </TooltipContent>
             </Tooltip>
 
