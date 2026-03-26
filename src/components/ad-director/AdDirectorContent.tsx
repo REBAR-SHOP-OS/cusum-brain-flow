@@ -28,7 +28,7 @@ import {
 
 const EDGE_TIMEOUT_MS = 180_000;
 
-export function AdDirectorContent() {
+export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (editing: boolean) => void }) {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
   const { projects, saveProject } = useAdProjectHistory();
@@ -64,6 +64,11 @@ export function AdDirectorContent() {
     segments, storyboard, continuity, clips, finalVideoUrl,
     exporting, musicTrackUrl, brand, videoParams, projectId,
   } = pipelineState;
+
+  // Notify parent when editing state changes
+  useEffect(() => {
+    onEditingChange?.(flowState === "editing");
+  }, [flowState, onEditingChange]);
 
   // ─── Submit handler → delegates to service ───
   const handleSubmit = useCallback(async (
