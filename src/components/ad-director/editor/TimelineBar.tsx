@@ -136,11 +136,12 @@ export function TimelineBar({
   onTrimScene, onStretchScene, onSplitScene, onDuplicateScene,
   onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
-  onReRecordVoiceover, onEditVoiceoverText,
+  onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
   onMoveOverlay, onMoveAudioTrack,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [textTrackMuted, setTextTrackMuted] = useState(false);
+  const [voiceoverTexts, setVoiceoverTexts] = useState<Record<string, string>>({});
   const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const thumbnails = useVideoThumbnails(clips);
