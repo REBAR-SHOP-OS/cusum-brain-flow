@@ -1033,7 +1033,7 @@ export function ProVideoEditor({
       {/* ─── Main 3-Panel Area ─── */}
       <div className="flex flex-1 min-h-0">
         {/* ─── Left Sidebar ─── */}
-        <div className={`flex shrink-0 border-r border-border/30 bg-card/60 transition-all ${<div className={`flex shrink-0 border-r border-border/30 bg-card/60 transition-all ${sidebarCollapsed ? "w-12" : "w-72"}`}>}`}>
+        <div className={`flex shrink-0 border-r border-border/30 bg-card/60 transition-all ${sidebarCollapsed ? "w-12" : "w-72"}`}>
           {/* Icon strip */}
           <div className="w-12 shrink-0 flex flex-col items-center py-2 gap-1 border-r border-border/20">
             {TABS.map(tab => (
