@@ -486,7 +486,24 @@ class BackgroundAdDirectorService {
         musicVolume: 0.15,
       });
 
-      this.update({ finalVideoUrl: finalUrl.blobUrl });
+      // Upload to storage for permanent URL
+      let permanentUrl = finalUrl.blobUrl;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const blob = await fetch(finalUrl.blobUrl).then(r => r.blob());
+          const path = `${user.id}/${crypto.randomUUID()}.webm`;
+          const { error: upErr } = await supabase.storage
+            .from("generated-videos")
+            .upload(path, blob, { contentType: "video/webm", upsert: false });
+          if (!upErr) {
+            const { data: pubData } = supabase.storage.from("generated-videos").getPublicUrl(path);
+            if (pubData?.publicUrl) permanentUrl = pubData.publicUrl;
+          }
+        }
+      } catch (e) { console.warn("[bgService] Upload to storage failed:", e); }
+
+      this.update({ finalVideoUrl: permanentUrl });
     } catch (err: any) {
       console.warn("Export failed:", err);
     } finally {
