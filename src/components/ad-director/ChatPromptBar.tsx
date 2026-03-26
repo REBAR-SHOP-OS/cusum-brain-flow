@@ -83,7 +83,8 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   const characterRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const canAutoGenerate = selectedStyles.length > 0 && selectedProducts.length > 0;
+  const hasImages = !!(introImage || outroImage || characterImage);
+  const canAutoGenerate = (selectedStyles.length > 0 && selectedProducts.length > 0) || hasImages;
 
   const handleAutoGenerate = async () => {
     if (!canAutoGenerate || isAutoGenerating) return;
