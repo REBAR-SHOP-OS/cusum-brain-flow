@@ -156,6 +156,30 @@ export function TimelineBar({
   const [itemDragging, setItemDragging] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
 
+  // ─── Playhead scrub state ───
+  const scrubbingRef = useRef(false);
+  const [scrubbing, setScrubbing] = useState(false);
+
+  useEffect(() => {
+    if (!scrubbing) return;
+    const onMove = (e: MouseEvent) => {
+      if (!scrubbingRef.current || !trackRef.current) return;
+      const rect = trackRef.current.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      onSeek(pct * totalDuration);
+    };
+    const onUp = () => {
+      scrubbingRef.current = false;
+      setScrubbing(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [scrubbing, totalDuration, onSeek]);
+
   // Find which scene a percentage position falls into
   const findSceneAtPct = useCallback((pct: number) => {
     for (let i = 0; i < storyboard.length; i++) {
