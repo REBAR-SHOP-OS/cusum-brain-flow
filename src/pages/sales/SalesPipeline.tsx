@@ -139,6 +139,20 @@ export default function SalesPipeline() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  // Auto-open drawer from ?lead= query param (e.g. from email "View Record" link)
+  useEffect(() => {
+    const leadId = searchParams.get("lead");
+    if (leadId && leads.length > 0) {
+      const target = leads.find(l => l.id === leadId);
+      if (target) {
+        setDrawerLead(target);
+        // Clean up the URL param so it doesn't re-trigger
+        searchParams.delete("lead");
+        setSearchParams(searchParams, { replace: true });
+      }
+    }
+  }, [searchParams, leads, setSearchParams]);
+
   // For external estimators: filter leads to only those assigned to them
   const effectiveLeads = useMemo(() => {
     if (!isExternalEstimator || !myProfileId) return leads;
