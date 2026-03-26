@@ -523,6 +523,14 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                                 <Play className="w-4 h-4 text-foreground ml-0.5" />
                               </div>
                             </div>
+                            <button
+                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-50"
+                              disabled={clip.status === "generating"}
+                              onClick={(e) => { e.stopPropagation(); handleRegenerateScene(clip.sceneId); }}
+                              title="Regenerate scene"
+                            >
+                              <RefreshCw className={`w-3.5 h-3.5 text-white ${clip.status === "generating" ? "animate-spin" : ""}`} />
+                            </button>
                           </>
                         ) : clip.status === "generating" || clip.status === "queued" ? (
                           <Skeleton className="w-full aspect-video flex items-center justify-center">
