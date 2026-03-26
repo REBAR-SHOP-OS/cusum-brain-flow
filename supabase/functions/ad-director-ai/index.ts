@@ -379,6 +379,7 @@ Return: subjectDescriptions, wardrobe, environment, timeOfDay, cameraStyle, moti
 - Specific camera specs (lens mm, f-stop), lighting angles, material textures
 - NO camera brand names (ARRI, RED, Sony) — describe characteristics instead
 - NO text/titles/brand names in video prompts — overlays handled by editor
+- CRITICAL: NEVER describe any text, words, letters, typography, titles, captions, subtitles, or any written content in the video prompt. The video must be purely visual with zero text rendered in any frame.
 - After scene 1: "Continue seamlessly from previous clip, preserving location, subject, lighting, pacing"
 - Each prompt MUST embed the continuity profile details (environment, lighting, color mood, subject) directly into the description
 - Example lighting: "golden hour backlight, tungsten fill 45° left, volumetric haze"
