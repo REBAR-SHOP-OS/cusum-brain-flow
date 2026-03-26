@@ -1,19 +1,29 @@
 
 
-# Move Home Button to Top-Left Corner & Make It Purple
+# Fix: Editor Shows Old Videos After Scene Regeneration
 
 ## Problem
-The Home button is currently centered at the top of the result section. User wants it pinned to the top-left corner and colored purple.
+When the user regenerates scenes on the result page and then clicks "Edit Video", the editor still shows the old stitched video. This happens because `finalVideoUrl` (the old stitched video) takes priority over updated individual clip URLs in `ProVideoEditor` (line 534: `finalVideoUrl || selectedClip?.videoUrl`).
 
-## Changes
+## Root Cause
+In `handleRegenerateScene`, when a scene is regenerated, `clips` are updated but `finalVideoUrl` is never cleared. Since the editor prioritizes `finalVideoUrl`, it keeps showing the stale stitched video.
+
+## Fix
 
 ### `src/components/ad-director/AdDirectorContent.tsx`
 
-1. **Position**: Change the Home button container from inside the content flow to `fixed top-4 left-4` so it sits in the absolute top-left corner of the screen
-2. **Color**: Change `bg-primary` to `bg-purple-600 hover:bg-purple-700` and ring to `ring-purple-400/30`
-3. **Icon color**: Keep `text-white` for contrast on purple background
+**Line 298-299** — When regenerating a scene, also clear `finalVideoUrl`:
 
-| Line | Change |
+```typescript
+service.patchState({
+  clips: currentState.clips.map(c => c.sceneId === sceneId ? { ...c, status: "generating" as const, progress: 10 } : c),
+  finalVideoUrl: null,  // ← ADD THIS: clear stale stitched video
+});
+```
+
+This single-line addition ensures that after any scene regeneration, the editor will use the individual clip URLs (which reflect the latest generated videos) instead of the old stitched video.
+
+| File | Change |
 |---|---|
-| 467-474 | Replace flex container with fixed-position button, purple styling |
+| `AdDirectorContent.tsx` | Add `finalVideoUrl: null` when regenerating a scene to clear stale video |
 
