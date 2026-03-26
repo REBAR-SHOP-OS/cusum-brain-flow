@@ -9,6 +9,8 @@ const sendSchema = z.object({
   action: z.enum(["send_quote", "convert_to_invoice", "accept_and_convert"]),
 });
 
+const APP_URL = "https://cusum-brain-flow.lovable.app";
+
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: svc, body: rawBody } = ctx;
