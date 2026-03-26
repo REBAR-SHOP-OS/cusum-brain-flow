@@ -115,7 +115,14 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         }
       }
 
-      if (custRes.data) setCustomers(custRes.data as CustomerOption[]);
+      if (custRes.data) {
+        const normalized = (custRes.data as any[]).map((c) => ({
+          ...c,
+          id: c.id || c.customer_id || c.Id || "",
+          name: c.name || c.display_name || c.company_name || "Unknown",
+        }));
+        setCustomers(normalized as CustomerOption[]);
+      }
       if (prodRes.data) setProducts(prodRes.data as ProductOption[]);
 
       setLoading(false);
@@ -126,7 +133,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const filteredCustomers = useMemo(
     () =>
       customers.filter((c) =>
-        c.name.toLowerCase().includes(customerSearch.toLowerCase())
+        (c.name || "").toLowerCase().includes(customerSearch.toLowerCase())
       ),
     [customers, customerSearch]
   );
