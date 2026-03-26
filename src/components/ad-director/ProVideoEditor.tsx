@@ -95,6 +95,22 @@ export function ProVideoEditor({
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
+  const audioUploadRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadAudio = useCallback(() => {
+    audioUploadRef.current?.click();
+  }, []);
+
+  const handleAudioFileSelected = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setAudioTracks(prev => [
+      ...prev,
+      { kind: "music" as const, audioUrl: url, label: file.name, volume: 0.7, sceneId: `upload-${Date.now()}` },
+    ]);
+    e.target.value = "";
+  }, []);
   const [videoVolume, setVideoVolume] = useState(1);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
@@ -1265,7 +1281,7 @@ export function ProVideoEditor({
         onSeek={handleGlobalSeek}
         onSelectScene={setSelectedSceneIndex}
         onAddText={() => setTextDialogOpen(true)}
-        onAddAudio={generateAllVoiceovers}
+        onAddAudio={handleUploadAudio}
         textOverlays={textOverlays}
         audioTracks={audioTracks}
         videoVolume={videoVolume}
@@ -1304,6 +1320,15 @@ export function ProVideoEditor({
         segments={segments}
         selectedSceneIndex={selectedSceneIndex}
         onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
+      />
+
+      {/* Hidden audio file input */}
+      <input
+        ref={audioUploadRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={handleAudioFileSelected}
       />
     </div>
   );
