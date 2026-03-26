@@ -140,6 +140,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
+      if (data?.failure_reason) throw new Error(data.error || `Quote generation failed: ${data.failure_reason}`);
 
       toast({ title: "Quotation generated!", description: `Quote ${data.quote?.quote_number} created successfully.` });
 
@@ -151,7 +152,8 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
       queryClient.invalidateQueries({ queryKey: ["estimation_projects_for_quote"] });
       onOpenChange(false);
     } catch (err: any) {
-      toast({ title: "Generation failed", description: err?.message || "Could not generate quotation.", variant: "destructive" });
+      const msg = err?.message || "Could not generate quotation.";
+      toast({ title: "Generation failed", description: msg, variant: "destructive" });
     } finally {
       setGenerating(false);
     }
