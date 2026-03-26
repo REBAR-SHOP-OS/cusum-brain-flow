@@ -165,6 +165,7 @@ interface SendEmailRequest {
   references?: string;
   sent_by_agent?: boolean;
   custom_headers?: Record<string, string>;
+  attachments?: EmailAttachment[];
 }
 
 Deno.serve((req) =>
