@@ -330,7 +330,12 @@ class BackgroundAdDirectorService {
         const userTotalDuration = videoParams.duration > 0 ? videoParams.duration : 15;
         const perSceneDur = Math.ceil(userTotalDuration / storyboardWithDefaults.length);
         const sceneDuration = Math.min(Math.max(perSceneDur, 2), 15);
-        const motionPrompt = scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+        // Inject continuity profile into every scene prompt for cross-clip coherence
+        const cp = continuityProfile;
+        const continuityPrefix = cp
+          ? `[Visual continuity: ${cp.environment || ""}, ${cp.lightingType || ""}, ${cp.colorMood || ""}, subject: ${cp.subjectDescriptions || ""}, wardrobe: ${cp.wardrobe || ""}] `
+          : "";
+        const motionPrompt = continuityPrefix + scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
 
         this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "generating" as const, progress: 10 } : c));
 

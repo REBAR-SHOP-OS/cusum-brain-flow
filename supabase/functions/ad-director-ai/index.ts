@@ -531,7 +531,20 @@ async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverri
   const { scene, brand, continuityProfile, previousScene } = body;
   if (!scene) throw new Error("Scene data is required");
 
+  const continuityBlock = continuityProfile ? `
+## MANDATORY CONTINUITY PROFILE (embed these details into the prompt):
+- Subject: ${continuityProfile.subjectDescriptions || "N/A"}
+- Wardrobe: ${continuityProfile.wardrobe || "N/A"}
+- Environment: ${continuityProfile.environment || "N/A"}
+- Time of Day: ${continuityProfile.timeOfDay || "N/A"}
+- Lighting: ${continuityProfile.lightingType || "N/A"}
+- Color Mood: ${continuityProfile.colorMood || "N/A"}
+- Camera Style: ${continuityProfile.cameraStyle || "N/A"}
+- Motion Rhythm: ${continuityProfile.motionRhythm || "N/A"}
+You MUST weave ALL of these visual anchors into the rewritten prompt so the video model generates visuals consistent with all other scenes.` : "";
+
   const userPrompt = `Rewrite this scene's prompt into a premium cinematic video generation prompt.
+${continuityBlock}
 
 Scene Objective: ${scene.objective}
 Visual Style: ${scene.visualStyle}
@@ -546,8 +559,8 @@ Continuity Requirements: ${scene.continuityRequirements}
 Original Prompt: ${scene.prompt}
 
 Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
-${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the first scene."}
-${continuityProfile ? `Continuity: ${JSON.stringify(continuityProfile)}` : ""}`;
+${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the FIRST scene — establish the visual identity that ALL subsequent scenes must follow."}
+${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}`;
 
   return await callAIAndExtract(
     apiKey,
