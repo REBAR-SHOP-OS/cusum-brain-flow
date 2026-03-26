@@ -264,7 +264,7 @@ export function ProVideoEditor({
     const newOverlays: VideoOverlay[] = [];
     for (const scene of storyboard) {
       const seg = segments.find(s => s.id === scene.segmentId);
-      const voText = seg?.voiceover || seg?.text;
+      const voText = seg?.text;
       if (!voText?.trim()) continue;
       const voDur = voiceoverDurations[scene.id] || clipDurations[scene.id] || (seg ? seg.endTime - seg.startTime : 4);
       newOverlays.push(...buildTimedOverlays(scene.id, voText, voDur));
