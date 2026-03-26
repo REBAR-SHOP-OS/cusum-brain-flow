@@ -18,7 +18,8 @@ import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
-import { getPublicFileUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks } from "@/lib/chatFileUtils";
+import { getPublicFileUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks, resolveMessageContent } from "@/lib/chatFileUtils";
+import { InlineFileLink } from "@/components/pipeline/InlineFileLink";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { EmojiPicker } from "@/components/chat/EmojiPicker";
@@ -252,19 +253,17 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     setInputText("");
 
     try {
-      let attachments: Array<{ name: string; url: string; type: string; size: number }> | undefined;
+      let uploadedAttachments: Array<{ name: string; url: string; type: string; size: number }> = [];
       if (pendingFiles.length > 0) {
         setUploading(true);
-        attachments = await uploadFiles();
+        uploadedAttachments = await uploadFiles();
         setPendingFiles([]);
         setUploading(false);
       }
 
-      const msgText = attachments?.length
-        ? [text, ...attachments.map((a) => `📎 [${a.name}](${a.url})`)].filter(Boolean).join("\n")
-        : text;
-
-      if (!msgText) return;
+      // Send clean text only — attachments go through the structured field
+      const msgText = text || (uploadedAttachments.length > 0 ? "📎" : "");
+      if (!msgText && uploadedAttachments.length === 0) return;
 
       await sendMutation.mutateAsync({
         channelId,
@@ -272,6 +271,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
         text: msgText,
         senderLang: myLang,
         targetLangs,
+        attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
         replyToId: replyTo?.id || null,
       });
       setReplyTo(null);
@@ -407,17 +407,30 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   };
 
   const renderMentionText = (text: string) => {
-    const parts = text.split(/(@\S+)/g);
+    // Safer mention regex: only match @Name patterns where Name is a known profile
     const profileNames = new Set(profiles.map(p => p.full_name));
-    return parts.map((part, i) => {
-      if (part.startsWith("@")) {
-        const name = part.slice(1);
-        if (profileNames.has(name)) {
-          return <span key={i} className="inline px-0.5 rounded bg-primary/15 text-primary text-[10px] font-medium">{part}</span>;
+    const mentionPattern = /@([\w\s]+?)(?=\s@|\s*$|[.,!?;:])/g;
+    const result: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    while ((match = mentionPattern.exec(text)) !== null) {
+      const name = match[1].trim();
+      if (profileNames.has(name)) {
+        if (match.index > lastIndex) {
+          result.push(<span key={`t-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>);
         }
+        result.push(
+          <span key={`m-${match.index}`} className="inline px-0.5 rounded bg-primary/15 text-primary text-[10px] font-medium">
+            @{name}
+          </span>
+        );
+        lastIndex = match.index + match[0].length;
       }
-      return <span key={i}>{part}</span>;
-    });
+    }
+    if (lastIndex < text.length) {
+      result.push(<span key={`t-${lastIndex}`}>{text.slice(lastIndex)}</span>);
+    }
+    return result.length > 0 ? result : [<span key="full">{text}</span>];
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -588,14 +601,14 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
 
                         {/* Bubble */}
                         {(() => {
-                          const { cleanText, parsedAttachments } = parseAttachmentLinks(displayText);
-                          const allAttachments = [
-                            ...parsedAttachments,
-                            ...(msg.attachments || []).map((a: any) => ({ name: a.name, url: fixChatFileUrl(a.url) })),
-                          ];
-                          const seen = new Set<string>();
-                          const uniqueAttachments = allAttachments.filter((a) => { if (seen.has(a.url)) return false; seen.add(a.url); return true; });
-                          const hasText = cleanText.length > 0 && cleanText !== "📎" && cleanText !== "🎤";
+                          // Always resolve attachments from original_text + structured attachments
+                          // Never from translated text to avoid translation breaking file links
+                          const { cleanText: originalClean, allAttachments: uniqueAttachments } = resolveMessageContent(msg.original_text, msg.attachments);
+                          
+                          // For display text, strip attachment markdown from the translated/display version too
+                          const { cleanText: displayClean } = parseAttachmentLinks(displayText);
+                          const visibleText = displayClean.trim();
+                          const hasText = visibleText.length > 0 && visibleText !== "📎" && visibleText !== "🎤";
 
                           return (
                             <>
@@ -604,11 +617,11 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                   className={cn(
                                     "px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit",
                                     isMe ? "bg-primary text-primary-foreground rounded-2xl rounded-br-sm" : "bg-muted text-foreground rounded-2xl rounded-bl-sm",
-                                    detectRtl(cleanText) && "text-right"
+                                    detectRtl(visibleText) && "text-right"
                                   )}
-                                  dir={detectRtl(cleanText) ? "rtl" : "ltr"}
+                                  dir="auto"
                                 >
-                                  {renderMentionText(cleanText)}
+                                  {renderMentionText(visibleText)}
                                 </div>
                               )}
 
@@ -630,13 +643,11 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                 </div>
                               ))}
 
-                              {/* Non-image, non-audio file links */}
+                              {/* Non-image, non-audio file cards */}
                               {uniqueAttachments.filter((a) => !isImageUrl(a.url) && !isAudioUrl(a.url)).map((att, ai) => (
-                                <button key={ai} onClick={() => downloadFile(att.url, att.name)} className="inline-flex items-center gap-1 mt-1 px-2 py-1 rounded-md border border-border bg-muted/30 text-[10px] text-foreground/80 hover:bg-muted/60 transition-colors cursor-pointer">
-                                  <FileIcon className="w-3 h-3 text-primary" />
-                                  <span className="truncate max-w-[120px]">{att.name}</span>
-                                  <Download className="w-3 h-3 ml-1 text-muted-foreground" />
-                                </button>
+                                <div key={ai} className="mt-1 max-w-full">
+                                  <InlineFileLink url={att.url} fileName={att.name} />
+                                </div>
                               ))}
 
                               {/* Translation toggle */}
@@ -660,7 +671,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                                 </button>
                                 <button
                                   className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
-                                  onClick={async () => { try { await navigator.clipboard.writeText(msg.original_text); toast.success("Copied!"); } catch { toast.error("Failed to copy"); } }}
+                                  onClick={async () => { try { await navigator.clipboard.writeText(originalClean || msg.original_text); toast.success("Copied!"); } catch { toast.error("Failed to copy"); } }}
                                   title="Copy"
                                 >
                                   <Copy className="w-3 h-3" />

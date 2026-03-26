@@ -59,3 +59,37 @@ export function parseAttachmentLinks(text: string): { cleanText: string; parsedA
   const cleanText = text.replace(regex, "").trim();
   return { cleanText, parsedAttachments };
 }
+
+/**
+ * Unified message content resolver.
+ * Extracts attachments from BOTH the structured `attachments` array AND
+ * legacy markdown links embedded in `original_text`.
+ * Returns deduplicated attachments and clean visible text.
+ * IMPORTANT: Always parses from original_text, never from translated text.
+ */
+export function resolveMessageContent(
+  originalText: string,
+  structuredAttachments?: Array<{ name: string; url: string; type?: string; size?: number }> | null,
+): {
+  cleanText: string;
+  allAttachments: Array<{ name: string; url: string }>;
+} {
+  // 1. Parse legacy markdown attachments from original_text
+  const { cleanText, parsedAttachments } = parseAttachmentLinks(originalText);
+
+  // 2. Merge with structured attachments
+  const merged = [
+    ...parsedAttachments,
+    ...(structuredAttachments || []).map((a) => ({ name: a.name, url: fixChatFileUrl(a.url) })),
+  ];
+
+  // 3. Deduplicate by URL
+  const seen = new Set<string>();
+  const allAttachments = merged.filter((a) => {
+    if (seen.has(a.url)) return false;
+    seen.add(a.url);
+    return true;
+  });
+
+  return { cleanText, allAttachments };
+}
