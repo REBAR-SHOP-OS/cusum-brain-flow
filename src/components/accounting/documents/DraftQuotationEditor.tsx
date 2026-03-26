@@ -125,6 +125,9 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
           resolvedNotes = parts.join("\n");
         }
         setNotes(resolvedNotes);
+        if (Array.isArray(meta.terms)) {
+          setTerms(meta.terms);
+        }
         if (Array.isArray(meta.line_items) && meta.line_items.length > 0) {
           setItems(meta.line_items.map((li: any) => ({
             description: li.description || "",

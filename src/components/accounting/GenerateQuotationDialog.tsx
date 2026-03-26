@@ -450,8 +450,8 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           </TabsContent>
         </Tabs>
 
-        {/* Delivery & Shop Drawing options */}
-        <div className="grid grid-cols-2 gap-3 pt-1">
+        {/* Delivery, Scrap & Shop Drawing options */}
+        <div className="grid grid-cols-3 gap-3 pt-1">
           <div className="space-y-1">
             <Label htmlFor="delivery-km" className="text-sm">Delivery Distance (km)</Label>
             <Input
@@ -461,6 +461,18 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
               placeholder="0 = no delivery"
               value={deliveryDistance}
               onChange={(e) => setDeliveryDistance(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="scrap-pct" className="text-sm">Scrap %</Label>
+            <Input
+              id="scrap-pct"
+              type="number"
+              min={0}
+              max={50}
+              placeholder="15"
+              value={scrapPercent}
+              onChange={(e) => setScrapPercent(e.target.value)}
             />
           </div>
           <div className="flex items-end pb-2">
