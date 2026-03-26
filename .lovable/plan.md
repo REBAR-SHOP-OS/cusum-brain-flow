@@ -1,95 +1,46 @@
 
-Goal: make AI Auto quotations use the proven old quotation/invoice pricing flow with your new pricing list, and prevent any new $0 quotations from being created.
 
-What I found
-- The immediate failure is upstream, not just in the quote template.
-- Recent estimation projects created from your PDF have `total_weight_kg = 0`, `total_cost = 0`, status `draft`.
-- The `ai-estimate` logs show: `Extracted 0 items (direct parse)`.
-- Because the estimation project has no extracted items, `ai-generate-quotation` creates a quote with:
-  - `metadata.line_items = []`
-  - `total_amount = 0`
-  - customer defaults like “Valued Customer”
-- The old deterministic pricing approach already exists and works when real weights/items exist. The broken part is that the new AI import path is still handing it an empty project.
+# Add Delivery & Shop Drawing Options to AI Quotation Generator
 
-Implementation plan
+## Problem
+The AI quotation currently hardcodes shipping to $0 ("distance TBD") and always includes shop drawings. The user wants explicit controls for delivery distance and shop drawing inclusion so these line items appear correctly on generated quotes.
 
-1. Fix summary-PDF extraction so weights are actually captured
-- File: `supabase/functions/ai-estimate/index.ts`
-- Strengthen the summary-document branch so “Weight Summary Report / Grand Total / Element wise Summary” PDFs produce extracted items even when there are no individual bar marks.
-- Add a deterministic fallback parser for summary tables if the AI returns zero items:
-  - detect per-bar-size totals like `10M / 15M / 20M`
-  - detect grand total kg/tons
-  - create synthetic `SUM-*` items with preserved `weight_kg`
-- Result: uploaded summary PDFs create a non-zero estimation project instead of a blank draft.
+## Changes
 
-2. Preserve exact imported weights through calculation
-- File: `supabase/functions/ai-estimate/index.ts`
-- Keep the current `SUM-` weight preservation, but correct the costing behavior so summary rows retain:
-  - exact `weight_kg`
-  - valid `line_cost`
-  - useful `element_type` / `element_ref`
-- Add a guard so if extraction still yields zero weight, the function returns a clear error instead of silently saving an empty project.
+### 1. `src/components/accounting/GenerateQuotationDialog.tsx`
+Add two new input fields (visible in both tabs):
+- **Delivery Distance (km)** — number input, optional, default empty (0 = no shipping line)
+- **Include Shop Drawings** — checkbox, default checked
 
-3. Replace AI arithmetic in quotation generation with deterministic pricing
-- File: `supabase/functions/ai-generate-quotation/index.ts`
-- Rework this function to use the old reliable method for totals:
-  - read estimation items / total weight
-  - apply your pricing config brackets
-  - apply scrap %
-  - separate cage pricing if applicable
-  - add shop drawings using the configured bracket rule
-  - add shipping only when distance exists
-- Keep AI only for optional wording/notes if needed, not for math.
-- This ensures the new price list is applied exactly and totals cannot drift to zero from a weak AI response.
+Pass both values to `ai-generate-quotation` via the body:
+```ts
+body: {
+  estimation_project_id: ...,
+  delivery_distance_km: deliveryDistance || 0,
+  include_shop_drawings: includeShopDrawings,
+  ...
+}
+```
 
-4. Reuse the existing pricing-engine pattern instead of inventing another one
-- Files:
-  - `supabase/functions/ai-generate-quotation/index.ts`
-  - possibly shared logic from `supabase/functions/_shared/quoteCalcEngine.ts`
-- Align the AI Auto path with the proven quote-engine style:
-  - deterministic line items
-  - deterministic subtotal/tax/total
-  - assumptions/exclusions stored in metadata
-- This is the “learn from old method, apply new price list” part: reuse the old structure, swap in your current pricing config.
+### 2. `supabase/functions/ai-generate-quotation/index.ts`
+Read `delivery_distance_km` and `include_shop_drawings` from the request body.
 
-5. Block saving $0 quotations
-- File: `supabase/functions/ai-generate-quotation/index.ts`
-- Before inserting into `quotes`, add hard validation:
-  - if no estimation items
-  - or total weight is 0
-  - or generated line items sum to 0
-  → return a clear error like “No measurable rebar was extracted from this file, so no quotation was created.”
-- This avoids fake-success messages and bad records like `QAI-2590`.
+**Delivery line item** — if distance > 0:
+- Calculate trips: `Math.ceil(totalTonnes / truckCap)`
+- Shipping cost: `trips * distance * shippingPerKm * 2` (round trip)
+- Add line item: "Delivery — {distance} km × {trips} trip(s)"
 
-6. Improve the UI error path so you know why generation failed
-- File: `src/components/accounting/GenerateQuotationDialog.tsx`
-- Surface backend failure reasons directly in the toast/dialog:
-  - “summary PDF could not be parsed”
-  - “0 weight extracted”
-  - “pricing config missing”
-- Optional: show extracted total weight before quote creation when generated from upload.
+**Shop drawings** — only add the existing shop drawing line item when `include_shop_drawings !== false` (defaults to true for backward compatibility).
 
-Technical details
-- Root cause chain:
-  `PDF summary -> ai-estimate extracts 0 items -> estimation_project saved with 0 weight -> ai-generate-quotation prices empty BOM -> quote saved with 0 total`
-- Existing evidence:
-  - `ai-estimate` log: `Extracted 0 items`
-  - latest project `20`: `total_weight_kg = 0`
-  - latest quote `QAI-2590`: `line_items = []`, `total_amount = 0`
-- Safest architecture:
-  - AI for extraction only
-  - deterministic code for pricing math
-  - hard guard against zero-value quote creation
+Store both values in quote metadata for reference.
 
-Files to change
-- `supabase/functions/ai-estimate/index.ts`
-- `supabase/functions/ai-generate-quotation/index.ts`
-- `supabase/functions/_shared/quoteCalcEngine.ts` (if shared pricing helper extraction is needed)
-- `src/components/accounting/GenerateQuotationDialog.tsx`
+## Result
+- User can enter delivery distance (e.g. 50 km) and the quote will include a shipping line item calculated from the pricing config ($3/km)
+- User can toggle shop drawings on/off
+- Both appear as separate line items on the generated quotation
+- Backward compatible: existing calls without these fields behave as before
 
-Validation after implementation
-1. Upload the same PDF again
-2. Confirm a new estimation project is created with non-zero `total_weight_kg`
-3. Confirm the generated quotation contains non-empty line items
-4. Confirm total uses your latest pricing brackets and shop drawing rules
-5. Confirm no quote is created at all if extracted weight is zero
+## Files Changed
+- `src/components/accounting/GenerateQuotationDialog.tsx` — add distance + shop drawing inputs
+- `supabase/functions/ai-generate-quotation/index.ts` — compute delivery line item, conditionally include shop drawings
+
