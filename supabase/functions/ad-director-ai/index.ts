@@ -360,7 +360,8 @@ Never use generic "cut" — specify type + reasoning.
 
 ## SCENE OUTPUT (for each scene)
 - segment: type, label, text, startTime, endTime
-- storyboard: objective, visualStyle, shotType, cameraMovement, environment, subjectAction, emotionalTone, transitionNote, generationMode, continuityRequirements, prompt
+- storyboard: objective, visualStyle, shotType, cameraMovement, environment, subjectAction, emotionalTone, transitionNote, generationMode, continuityRequirements, prompt, voiceover
+- voiceover: The exact narration/voiceover script for this scene. Natural, conversational, punchy advertising copy. This text will be read aloud by a narrator over the video. Must match the scene's emotional tone and duration.
 
 ## CONTINUITY PROFILE
 Return: subjectDescriptions, wardrobe, environment, timeOfDay, cameraStyle, motionRhythm, colorMood, lightingType, objectPlacement, lastFrameSummary, nextSceneBridge
