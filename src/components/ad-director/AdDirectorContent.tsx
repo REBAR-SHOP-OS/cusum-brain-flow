@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
+import { CameraLoader } from "./CameraLoader";
 import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle, Home, RefreshCw, CalendarDays } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
