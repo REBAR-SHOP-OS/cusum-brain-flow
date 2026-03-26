@@ -109,7 +109,21 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         setCustomerAddress(meta.customer_address || "");
         setProjectName(meta.project_name || "");
         setTaxRate(meta.tax_rate ?? 13);
-        setNotes(meta.notes || "");
+        let resolvedNotes = meta.notes || "";
+        if (!resolvedNotes && (meta.inclusions || meta.exclusions || meta.assumptions)) {
+          const parts: string[] = [];
+          if (meta.inclusions?.length) {
+            parts.push("INCLUSIONS:", ...meta.inclusions.map((i: string) => `✅ ${i}`), "");
+          }
+          if (meta.exclusions?.length) {
+            parts.push("EXCLUSIONS:", ...meta.exclusions.map((e: string) => `➖ ${e}`), "");
+          }
+          if (meta.assumptions?.length) {
+            parts.push("NOTES:", ...meta.assumptions.map((a: string) => `• ${a}`));
+          }
+          resolvedNotes = parts.join("\n");
+        }
+        setNotes(resolvedNotes);
         if (Array.isArray(meta.line_items) && meta.line_items.length > 0) {
           setItems(meta.line_items.map((li: any) => ({
             description: li.description || "",

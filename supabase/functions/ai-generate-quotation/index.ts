@@ -344,6 +344,8 @@ Deno.serve((req) =>
           delivery_distance_km: deliveryDistanceKm,
           shop_drawing_cost: shopDrawingCost,
           include_shop_drawings: shouldIncludeShopDrawings,
+          inclusions,
+          exclusions,
           assumptions,
           customer_name: customerName,
           lead_id: effectiveLeadId || null,
