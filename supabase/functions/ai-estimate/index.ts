@@ -574,9 +574,11 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
         bbox: (item as any).bbox ?? null,
         page_index: (item as any).page_index ?? 0,
       }));
+      // Pre-filter: drop rows with invalid required fields
+      const safeRows = itemRows.filter(r => r.quantity != null && r.quantity > 0 && r.bar_size);
 
-      for (let i = 0; i < itemRows.length; i += 25) {
-        const batch = itemRows.slice(i, i + 25);
+      for (let i = 0; i < safeRows.length; i += 25) {
+        const batch = safeRows.slice(i, i + 25);
         const { error: itemsErr } = await supabaseAdmin
           .from("estimation_items")
           .insert(batch);
