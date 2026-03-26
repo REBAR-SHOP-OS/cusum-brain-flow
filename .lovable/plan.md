@@ -1,53 +1,26 @@
 
-Goal: make customer contacts like Swapzero reliably appear in the Sales Pipeline “New Sales Lead” contact picker and auto-fill their info.
 
-What I found:
-- Swapzero does exist in the backend in `v_customers_clean` for the same company.
-- The picker UI is driven by `useSalesContacts()` and rendered in `src/pages/sales/SalesPipeline.tsx`.
-- Your screenshot and session replay show the search is running, but the dropdown returns “No contact found.”
-- The live network request still shows `v_customers_clean?select=*&company_id=eq...` without the expected sorting/limit safeguards, which means the runtime path is still effectively truncating the large customer list before Swapzero is reached.
+# Add Product and Style Selectors to Ad Director Chat Bar
 
-Plan:
-1. Fix the customer fetch in `src/hooks/useSalesContacts.ts`
-   - Keep `v_customers_clean` in the merged source list.
-   - Make the customer query deterministic and safe for large datasets:
-     - explicit descending sort on `created_at`
-     - explicit high limit
-   - Ensure the mapped customer row uses the best display field for search and selection:
-     - `display_name`
-     - fallback to `company_name`
-     - fallback to `normalized_name`
+## What
+Add the same product icons (Fiberglass, Stirrups, Cages, etc.) and style selectors (Realism, Construction, Cartoon, etc.) from the Pixel agent's chat input to the Ad Director's `ChatPromptBar`. The selected product and style will be injected into the video generation prompt so the AI creates videos tailored to the chosen product and visual style.
 
-2. Harden deduplication so customer-only companies are not dropped accidentally
-   - Preserve manual > system > customer priority.
-   - Also record customer names in the dedupe set after adding them, so behavior stays consistent.
-   - Avoid collisions where blank/placeholder names like `—` can suppress valid customer entries.
+## How
 
-3. Improve the picker search behavior in `src/pages/sales/SalesPipeline.tsx`
-   - Keep using the command palette, but make the searchable value richer and normalized:
-     - contact name
-     - company name
-     - email
-     - lowercase/trim-safe matching
-   - This ensures typing `swapzero` matches even when the visible name/company differs slightly.
+### 1. Update `ChatPromptBar.tsx`
+- Import the same `PRODUCT_ICONS` and `IMAGE_STYLES` arrays (and their icon components) used in `ChatInput.tsx`
+- Add state for `selectedProducts` and `selectedStyles`
+- Render two popover buttons ("Products" and "Style") in the bottom toolbar bar, between Duration and Send — using the same grid/icon pattern as Pixel
+- Pass selected product/style keys into `onSubmit` so the parent can inject them into the AI prompt
 
-4. Validate the contact autofill path
-   - When selecting Swapzero from the dropdown, confirm these fields populate:
-     - `contact_name`
-     - `contact_company`
-     - `contact_email`
-     - `contact_phone`
-   - If the customer has no phone, leave it blank without blocking selection.
+### 2. Update `AdDirectorContent.tsx`
+- Accept `selectedProducts` and `selectedStyles` from `ChatPromptBar`
+- Prepend product and style context to the user prompt before sending to the pipeline (e.g., `"Product: Fiberglass, Cages. Style: Construction, Realism. [user prompt]"`)
 
-5. Verify end-to-end in the Sales Pipeline
-   - Open New Sales Lead
-   - Search `swapzero`
-   - Select it from the picker
-   - Confirm the form is populated and the contact remains selectable on repeat opens
+## Files Changed
 
-Technical notes:
-- Files involved:
-  - `src/hooks/useSalesContacts.ts`
-  - `src/pages/sales/SalesPipeline.tsx`
-- Root cause is not that Swapzero is missing from the database; it’s that the picker’s live data path is still incomplete/truncated for large customer datasets.
-- No backend schema change should be needed for this fix.
+| File | Change |
+|---|---|
+| `src/components/ad-director/ChatPromptBar.tsx` | Add product/style popover selectors with icons, pass selections via onSubmit |
+| `src/components/ad-director/AdDirectorContent.tsx` | Receive product/style from ChatPromptBar, prepend to AI prompt |
+
