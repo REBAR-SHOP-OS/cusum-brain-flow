@@ -189,7 +189,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   };
 
   // ─── Regenerate scene (from editor) ─────────────
-  const handleRegenerateScene = useCallback(async (sceneId: string) => {
+  const handleRegenerateScene = useCallback(async (sceneId: string, customPrompt?: string) => {
     const currentState = service.getState();
     const scene = currentState.storyboard.find(s => s.id === sceneId);
     if (!scene) return;
@@ -198,7 +198,8 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     const wanRatio = ["16:9", "9:16", "1:1"].includes(effectiveRatio) ? effectiveRatio : "16:9";
     const rawDur = currentState.videoParams.duration > 0 ? currentState.videoParams.duration : (segment ? segment.endTime - segment.startTime : 5);
     const sceneDuration = Math.min(Math.max(rawDur, 2), 15);
-    const motionPrompt = scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+    const basePrompt = customPrompt?.trim() ? customPrompt.trim() : scene.prompt;
+    const motionPrompt = basePrompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
     service.patchState({
       clips: currentState.clips.map(c => c.sceneId === sceneId ? { ...c, status: "generating" as const, progress: 10 } : c),
     });
