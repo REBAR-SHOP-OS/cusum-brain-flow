@@ -179,7 +179,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-4">
+    <div className="w-full max-w-4xl mx-auto space-y-4">
       {/* Intro / Character / Outro upload boxes */}
       <div className="flex gap-4 justify-center">
         {/* Intro */}
