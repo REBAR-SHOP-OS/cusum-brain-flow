@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, X, ImagePlus } from "lucide-react";
+import { Send, X, ImagePlus, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const RATIOS = ["16:9", "9:16", "1:1", "4:3"] as const;
