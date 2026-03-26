@@ -409,8 +409,31 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write your email..."
-            className="min-h-[160px] max-h-[280px] bg-card/50 border-border/50 resize-none text-sm"
+           className="min-h-[160px] max-h-[280px] bg-card/50 border-border/50 resize-none text-sm"
           />
+
+          {/* Attachment chips */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {attachments.map((att, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded-md text-xs"
+                >
+                  <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+                  <span className="truncate max-w-[140px]">{att.name}</span>
+                  <span className="text-muted-foreground shrink-0">({formatFileSize(att.size)})</span>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(i)}
+                    className="ml-0.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Tone Adjuster + Polish */}
