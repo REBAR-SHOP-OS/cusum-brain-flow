@@ -537,7 +537,7 @@ ${script}`;
 }
 
 async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverride?: string) {
-  const { scene, brand, continuityProfile, previousScene } = body;
+  const { scene, brand, continuityProfile, previousScene, characterImageUrl } = body;
   if (!scene) throw new Error("Scene data is required");
 
   const continuityBlock = continuityProfile ? `
