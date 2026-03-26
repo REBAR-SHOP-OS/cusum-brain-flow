@@ -143,6 +143,8 @@ class BackgroundAdDirectorService {
     videoParams: VideoParams,
     modelOverrides: ModelOverrides,
     saveProject: (data: any) => Promise<string>,
+    videoModel?: string,
+    videoProvider?: string,
   ) {
     this.cancelFlag = false;
     this.running = true;
