@@ -362,6 +362,7 @@ export async function stitchClips(
   let musicElement: HTMLAudioElement | null = null;
   let audioCtx: AudioContext | null = null;
   let musicGainNode: GainNode | null = null;
+  let voiceGainNode: GainNode | null = null;
 
   const hasVoice = !!overlays?.audioUrl;
   const hasMusic = !!overlays?.musicUrl;
@@ -394,10 +395,10 @@ export async function stitchClips(
           setTimeout(() => res(), 5000);
         });
         const voiceSource = audioCtx.createMediaElementSource(voiceElement);
-        const voiceGain = audioCtx.createGain();
-        voiceGain.gain.value = 1.4;
-        voiceSource.connect(voiceGain);
-        voiceGain.connect(compressor);
+        voiceGainNode = audioCtx.createGain();
+        voiceGainNode.gain.value = 1.4;
+        voiceSource.connect(voiceGainNode);
+        voiceGainNode.connect(compressor);
       }
 
       // Music track with ducking support
@@ -430,11 +431,26 @@ export async function stitchClips(
   }
 
   // Dynamic ducking: lower music when voice is playing, restore when silent
-  const updateMusicDucking = () => {
+    const updateMusicDucking = () => {
     if (!musicGainNode || !audioCtx || !voiceElement) return;
     const voicePlaying = !voiceElement.paused && !voiceElement.ended && voiceElement.currentTime > 0;
     const targetVol = voicePlaying ? duckedMusicVol : baseMusicVol;
     musicGainNode.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.1);
+  };
+
+  // Professional fade-out helper
+  const fadeOutAudio = (durationSec = 0.5): Promise<void> => {
+    if (!audioCtx) return Promise.resolve();
+    const now = audioCtx.currentTime;
+    if (voiceGainNode) {
+      voiceGainNode.gain.setValueAtTime(voiceGainNode.gain.value, now);
+      voiceGainNode.gain.linearRampToValueAtTime(0, now + durationSec);
+    }
+    if (musicGainNode) {
+      musicGainNode.gain.setValueAtTime(musicGainNode.gain.value, now);
+      musicGainNode.gain.linearRampToValueAtTime(0, now + durationSec);
+    }
+    return new Promise(res => setTimeout(res, durationSec * 1000));
   };
 
   const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
@@ -502,7 +518,12 @@ export async function stitchClips(
         if (overlays?.endCard?.enabled) {
           renderEndCard();
         } else {
-          setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 100);
+          // Fade out all audio professionally, then stop recorder
+          fadeOutAudio(0.5).then(() => {
+            if (voiceElement) voiceElement.pause();
+            if (musicElement) musicElement.pause();
+            if (recorder.state === "recording") recorder.stop();
+          });
         }
         return;
       }
@@ -652,8 +673,17 @@ export async function stitchClips(
       const totalFrames = endCardDuration * fps;
       const fadeInFrames = Math.round(0.5 * fps);
 
+      // Stop voice immediately, fade music over 2s during end card
+      if (voiceElement) voiceElement.pause();
+      if (musicGainNode && audioCtx) {
+        const now = audioCtx.currentTime;
+        musicGainNode.gain.setValueAtTime(musicGainNode.gain.value, now);
+        musicGainNode.gain.linearRampToValueAtTime(0, now + 2);
+      }
+
       const drawEndFrame = () => {
         if (frame >= totalFrames) {
+          if (musicElement) musicElement.pause();
           setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 100);
           return;
         }
