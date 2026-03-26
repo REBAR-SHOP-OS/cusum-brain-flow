@@ -471,14 +471,24 @@ export function PostReviewPanel({
       p.platform === post.platform &&
       (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
     );
-    const existingPageMap = new Map(siblings.map(s => [s.page_name || "", s]));
     const selectedSet = new Set(values);
+
+    // Also query fresh from DB to avoid stale-cache duplicates
+    const { data: freshSiblings } = await supabase
+      .from("social_posts")
+      .select("id, page_name")
+      .eq("platform", post.platform)
+      .eq("title", post.title)
+      .gte("scheduled_date", `${day}T00:00:00`)
+      .lte("scheduled_date", `${day}T23:59:59`);
+    const freshPageSet = new Set((freshSiblings || []).map(s => s.page_name || ""));
+    // Merge cached + fresh siblings for deletion check
+    const allSiblingPages = new Set([...siblings.map(s => s.page_name || ""), ...freshPageSet]);
 
     // Delete siblings whose page is no longer selected
     const toDelete = siblings.filter(s => !selectedSet.has(s.page_name || ""));
-    // Create new rows for newly selected pages
-    const existingPages = new Set(siblings.map(s => s.page_name || ""));
-    const toAdd = values.filter(p => !existingPages.has(p));
+    // Create new rows only for pages that don't exist in DB
+    const toAdd = values.filter(p => !allSiblingPages.has(p));
 
     const promises: PromiseLike<any>[] = [];
     for (const sib of toDelete) {
