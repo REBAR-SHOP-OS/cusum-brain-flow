@@ -6,9 +6,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Trash2, Plus, Copy, Send, CheckCircle, XCircle, AlertTriangle,
-  Clock, FileText, Eye, RotateCcw, Ban, ChevronDown, History,
+  Clock, FileText, Eye, RotateCcw, Ban, ChevronDown, History, Mail, Loader2,
 } from "lucide-react";
 import { SalesQuotation, getStatusInfo, getAvailableTransitions, canTransitionTo } from "@/hooks/useSalesQuotations";
 import { useState, useEffect, useMemo } from "react";
