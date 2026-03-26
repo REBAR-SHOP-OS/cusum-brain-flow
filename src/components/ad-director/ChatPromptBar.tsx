@@ -499,7 +499,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                     "h-8 w-8 rounded-xl flex items-center justify-center transition-all border",
                     canAutoGenerate && !isAutoGenerating
                       ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 hover:scale-105"
-                      : "bg-muted/40 border-border text-muted-foreground opacity-40 cursor-not-allowed"
+                      : "bg-white/5 border-white/10 text-white/40 cursor-not-allowed"
                   )}
                 >
                   {isAutoGenerating ? (
