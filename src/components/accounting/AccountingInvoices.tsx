@@ -182,7 +182,16 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         <Button variant="outline" size="sm" className="h-12 gap-2" onClick={exportCsv}>
           <Download className="w-4 h-4" /> Export CSV
         </Button>
-        <Button size="sm" className="h-12 gap-2" onClick={() => setCustomerSelectOpen(true)}>
+        <Button size="sm" className="h-12 gap-2" onClick={async () => {
+          if (!companyId) return;
+          const num = await generateNumber();
+          const { data: newInv, error } = await supabase
+            .from("sales_invoices")
+            .insert({ invoice_number: num, company_id: companyId, status: "draft", issued_date: new Date().toISOString().slice(0, 10) })
+            .select("id").single();
+          if (error) { toast({ title: error.message, variant: "destructive" }); return; }
+          setEditorInvoiceId(newInv.id);
+        }}>
           <Plus className="w-4 h-4" /> Create Invoice
         </Button>
       </div>
