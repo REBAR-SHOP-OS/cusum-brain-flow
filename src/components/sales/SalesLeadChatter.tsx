@@ -520,20 +520,44 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
           {filtered.map((activity) => {
             // Find the closest email outcome for this activity (match by timestamp proximity)
             const activityTime = new Date(activity.created_at).getTime();
-            let emailStatus: "success" | "failed" | "partial" | undefined;
-            for (const [ts, status] of Object.entries(emailOutcomes)) {
+            let emailOutcome: { status: "success" | "failed" | "partial"; error?: string; noteBody?: string; retrying?: boolean } | undefined;
+            let emailOutcomeKey: string | undefined;
+            for (const [ts, outcome] of Object.entries(emailOutcomes)) {
               const diff = Math.abs(new Date(ts).getTime() - activityTime);
-              if (diff < 10000) { // within 10 seconds
-                emailStatus = status;
+              if (diff < 10000) {
+                emailOutcome = outcome;
+                emailOutcomeKey = ts;
                 break;
               }
             }
+
+            const handleRetry = async () => {
+              if (!emailOutcomeKey || !emailOutcome?.noteBody) return;
+              setEmailOutcomes(prev => ({ ...prev, [emailOutcomeKey!]: { ...prev[emailOutcomeKey!], retrying: true } }));
+              try {
+                const { data: retryResult, error: retryError } = await supabase.functions.invoke("notify-lead-assignees", {
+                  body: JSON.parse(emailOutcome.noteBody),
+                });
+                if (retryError || retryResult?.error) {
+                  setEmailOutcomes(prev => ({ ...prev, [emailOutcomeKey!]: { status: "failed", error: retryError?.message || retryResult?.error || "Retry failed", noteBody: emailOutcome!.noteBody, retrying: false } }));
+                  toast.error("Retry failed: " + (retryError?.message || retryResult?.error));
+                } else {
+                  setEmailOutcomes(prev => ({ ...prev, [emailOutcomeKey!]: { status: "success", retrying: false } }));
+                  toast.success("Email sent successfully on retry");
+                }
+              } catch (err: any) {
+                setEmailOutcomes(prev => ({ ...prev, [emailOutcomeKey!]: { status: "failed", error: err?.message || "Network error", noteBody: emailOutcome!.noteBody, retrying: false } }));
+                toast.error("Retry failed");
+              }
+            };
+
             return (
               <ActivityItem
                 key={activity.id}
                 activity={activity}
                 onMarkDone={() => markDone.mutate(activity.id)}
-                emailStatus={activity.activity_type === "note" && activity.body?.includes("@") ? emailStatus : undefined}
+                emailOutcome={activity.activity_type === "note" && activity.body?.includes("@") ? emailOutcome : undefined}
+                onRetry={handleRetry}
               />
             );
           })}
