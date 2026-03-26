@@ -15,6 +15,7 @@ import {
 } from "@/types/adDirector";
 import { usePromptHistory } from "@/hooks/usePromptHistory";
 import { stitchClips } from "@/lib/videoStitch";
+import { VideoHistory } from "./VideoHistory";
 import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
 import { useAdProjectHistory } from "@/hooks/useAdProjectHistory";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,7 +31,7 @@ const EDGE_TIMEOUT_MS = 180_000;
 export function AdDirectorContent() {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
-  const { saveProject } = useAdProjectHistory();
+  const { projects, saveProject } = useAdProjectHistory();
   const promptHistory = usePromptHistory();
   const service = backgroundAdDirectorService;
 
@@ -272,6 +273,12 @@ export function AdDirectorContent() {
             </p>
           </div>
           <ChatPromptBar onSubmit={handleSubmit} />
+          <VideoHistory
+            projects={projects.data ?? []}
+            onSelect={(url) => {
+              service.patchState({ finalVideoUrl: url, flowState: "result" });
+            }}
+          />
         </>
       )}
 
