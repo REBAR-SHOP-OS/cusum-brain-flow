@@ -178,6 +178,7 @@ const WAN_SIZE_MAP: Record<string, string> = {
   "16:9": "1920*1080",
   "9:16": "1080*1920",
   "1:1": "1440*1440",
+  "4:3": "1440*1080",
 };
 
 async function wanGenerate(
