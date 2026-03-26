@@ -605,7 +605,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                     continuity,
                     status: "draft",
                   });
-                  toast({ title: "پیش‌نویس ذخیره شد", description: "پروژه در بخش ویدئوهای قبلی نمایش داده می‌شود." });
+                  toast({ title: "Draft saved", description: "Project will appear in your video history." });
                 } catch {
                   toast({ title: "خطا در ذخیره", variant: "destructive" });
                 }
