@@ -6,7 +6,7 @@ import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 const sendSchema = z.object({
   quote_id: z.string().uuid(),
   customer_email: z.string().email(),
-  action: z.enum(["send_quote", "convert_to_invoice"]),
+  action: z.enum(["send_quote", "convert_to_invoice", "accept_and_convert"]),
 });
 
 Deno.serve((req) =>
