@@ -465,15 +465,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
 
   const containerStyle: React.CSSProperties = { ...style, transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)` };
 
-  // --- Forward channels list (simple: use existing open chats context isn't enough, load channels) ---
-  const [forwardChannels, setForwardChannels] = useState<{ id: string; name: string }[]>([]);
-  useEffect(() => {
-    if (!forwardMsg) return;
-    (async () => {
-      const { data } = await (supabase as any).from("team_channels").select("id, name").limit(20);
-      if (data) setForwardChannels(data.filter((c: any) => c.id !== channelId));
-    })();
-  }, [forwardMsg, channelId]);
+  // Forward members list is computed via forwardMembers memo above
 
   // --- Minimized state ---
   if (minimized) {
