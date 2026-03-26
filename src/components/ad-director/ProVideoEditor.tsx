@@ -68,6 +68,7 @@ function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: 
   const [minute, setMinute] = useState("00");
   const [scheduling, setScheduling] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
   const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
