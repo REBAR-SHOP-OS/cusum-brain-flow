@@ -180,11 +180,17 @@ export function ProVideoEditor({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeTab, setActiveTab] = useState<EditorTab>("media");
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
-    setActiveTab(tab);
+    if (activeTab === tab) {
+      setPanelOpen(prev => !prev);
+    } else {
+      setActiveTab(tab);
+      setPanelOpen(true);
+    }
     onActiveTabChanged?.(tab);
-  }, [onActiveTabChanged]);
+  }, [onActiveTabChanged, activeTab]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
