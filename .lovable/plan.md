@@ -1,59 +1,36 @@
 
 
-# Show Visual Preview on Draft Cards Instead of Icon
+# Fix Chat Message Overflow in DockChatBox
 
 ## Problem
-All draft cards show a generic "Draft" document icon because their clips have `status: "idle"` with no `videoUrl`. There are no actual video frames to display for these drafts.
+Messages (especially forwarded ones) overflow outside the chat bubble and card boundaries. The red-circled area in the screenshot shows text and UI elements escaping the chat container.
 
 ## Root Cause
-The database confirms all recent draft clips are in `idle` status with null videoUrls — videos were never generated. The storyboard scenes exist with rich prompt descriptions but no thumbnail images.
-
-## Solution
-Since there are no video frames available for idle drafts, we'll extract a short visual description from the storyboard's first scene prompt and display it as a styled text preview on the card. This replaces the generic icon with meaningful context about each project.
-
-Additionally, for any draft that DOES have a completed clip with a video URL, we'll ensure the video thumbnail works as intended.
+1. The bubble container at line 570 (`max-w-[75%]`) lacks `overflow-hidden`, so child elements (hover actions, attachments) can escape
+2. The text bubble uses `break-words` but the rendered text from `renderMentionText` wraps each part in `<span>` without `whitespace-pre-wrap`, so forwarded messages with `\n` newlines don't wrap properly
+3. The hover action bar (line 651) and attachment elements are not constrained to parent width
 
 ## Changes
 
-### `src/components/ad-director/VideoHistory.tsx`
+### `src/components/chat/DockChatBox.tsx`
 
-1. **Add a `resolvePreviewText` helper** that extracts a short description from the first storyboard scene's `prompt` or `voiceover` field (first ~80 chars), falling back to the project name.
-
-2. **Update the fallback UI** in `VideoCard`: instead of showing `<FileText>` icon + "Draft" text, show:
-   - A styled text snippet from the storyboard prompt
-   - Semi-transparent gradient overlay for readability
-   - Keep the "Draft" badge in the corner
-
-3. **Pass storyboard data** through `VideoCard` props (already available on `AdProjectRow`).
-
-### Visual Result
-```text
-┌─────────────────────────┐
-│ [Draft]  │
-│                         │
-│  "A slow, sweeping       │
-│   drone shot over a      │
-│   construction site..."  │
-│                         │
-├─────────────────────────┤
-│ Rebar.Shop Ad    ✏️ 🗑️  │
-│ Mar 26, 2026            │
-└─────────────────────────┘
+**Line 570** — Add `overflow-hidden` to the message column container:
+```
+"flex flex-col max-w-[75%] overflow-hidden"
 ```
 
-Instead of the current:
-```text
-┌─────────────────────────┐
-│ [Draft]  │
-│      📄                  │
-│    Draft                 │
-│                         │
-├─────────────────────────┤
-│ Untitled Ad        🗑️   │
-│ Mar 26, 2026            │
-└─────────────────────────┘
+**Line 605** — Add `whitespace-pre-wrap` to the text bubble so forwarded messages with newlines render correctly, and ensure `break-words` works:
 ```
+"px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden"
+```
+
+**Line 651** — Constrain hover action bar width:
+```
+"opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0 mt-0.5 flex-wrap"
+```
+
+These 3 small changes ensure all message content stays within the bubble boundary.
 
 ## Files Changed
-- `src/components/ad-director/VideoHistory.tsx` — update fallback rendering for drafts without video URLs
+- `src/components/chat/DockChatBox.tsx` — 3 lines modified
 
