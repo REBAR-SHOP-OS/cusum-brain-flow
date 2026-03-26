@@ -146,11 +146,9 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
     setSendingEmail(true);
     try {
       const quoteId = (quotation as any).quote_id || quotation.id;
-      const { data, error } = await supabase.functions.invoke("send-quote-email", {
-        body: { quote_id: quoteId, customer_email: customerEmail.trim(), action: emailDialogAction },
+      const data = await invokeEdgeFunction("send-quote-email", {
+        quote_id: quoteId, customer_email: customerEmail.trim(), action: emailDialogAction,
       });
-      if (error) throw new Error(error.message || "Failed");
-      if (data?.error) throw new Error(data.error);
 
       toast.success(data?.message || "Done");
       setEmailDialogOpen(false);

@@ -259,11 +259,9 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     try {
       // Save first to ensure latest data
       await handleSave();
-      const { data, error } = await supabase.functions.invoke("send-quote-email", {
-        body: { quote_id: quoteId, customer_email: customerEmail.trim(), action: "send_quote" },
+      const data = await invokeEdgeFunction("send-quote-email", {
+        quote_id: quoteId, customer_email: customerEmail.trim(), action: "send_quote",
       });
-      if (error) throw new Error(error.message || "Failed to send");
-      if (data?.error) throw new Error(data.error);
       toast({ title: "Email sent", description: data?.message || `Quotation sent to ${customerEmail}` });
       setEmailDialogOpen(false);
     } catch (err: any) {

@@ -254,7 +254,7 @@ Deno.serve((req) =>
       // 6. Send invoice email
       const emailRes = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: authHeader },
+        headers: { "Content-Type": "application/json", Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY") || "" },
         body: JSON.stringify({
           to: customer_email,
           subject: `Invoice ${invoiceNumber} — REBAR.SHOP`,
