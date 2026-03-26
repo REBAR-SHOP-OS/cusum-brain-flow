@@ -388,14 +388,14 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                 onEnded={() => setShowIntro(false)}
               />
             </div>
-          ) : (
-            <>
+           ) : (
+            <div className="w-full max-w-2xl mx-auto rounded-3xl bg-black/60 backdrop-blur-md border border-white/10 p-8 space-y-6">
               <div className="text-center space-y-3 animate-in fade-in duration-500">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-                  <Film className="w-8 h-8 text-primary" />
+                <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center mx-auto">
+                  <Film className="w-8 h-8 text-white" />
                 </div>
-                <h2 className="text-xl font-semibold">What video do you want to create?</h2>
-                <p className="text-sm text-muted-foreground max-w-md">
+                <h2 className="text-xl font-semibold text-white">What video do you want to create?</h2>
+                <p className="text-sm text-white/70 max-w-md mx-auto">
                   Describe your idea and we'll generate a professional video ad for you.
                 </p>
               </div>
@@ -407,10 +407,10 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                 }}
                 onDelete={(id) => deleteProject.mutate(id)}
               />
-            </>
-          )}
-        </>
-      )}
+            </div>
+           )}
+         </>
+       )}
 
       {/* Analyzing / Generating */}
       {(flowState === "analyzing" || flowState === "generating") && (

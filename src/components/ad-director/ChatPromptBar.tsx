@@ -158,7 +158,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
           className={cn(
             "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
             "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            introImage ? "border-primary/40 bg-primary/5" : "border-border/40 bg-muted/10",
+            introImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
             "disabled:opacity-40 disabled:cursor-not-allowed"
           )}
         >
@@ -173,8 +173,8 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
             </>
           ) : (
             <>
-              <ImagePlus className="w-7 h-7 text-muted-foreground/60" />
-              <span className="text-[10px] font-medium text-muted-foreground">Intro Image</span>
+              <ImagePlus className="w-7 h-7 text-white/70" />
+              <span className="text-[10px] font-medium text-white/80">Intro Image</span>
             </>
           )}
         </button>
@@ -187,7 +187,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
           className={cn(
             "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
             "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            characterImage ? "border-primary/40 bg-primary/5" : "border-border/40 bg-muted/10",
+            characterImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
             "disabled:opacity-40 disabled:cursor-not-allowed"
           )}
         >
@@ -202,8 +202,8 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
             </>
           ) : (
             <>
-              <UserRound className="w-7 h-7 text-muted-foreground/60" />
-              <span className="text-[10px] font-medium text-muted-foreground">Character 👤</span>
+              <UserRound className="w-7 h-7 text-white/70" />
+              <span className="text-[10px] font-medium text-white/80">Character 👤</span>
             </>
           )}
         </button>
@@ -216,7 +216,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
           className={cn(
             "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
             "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            outroImage ? "border-primary/40 bg-primary/5" : "border-border/40 bg-muted/10",
+            outroImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
             "disabled:opacity-40 disabled:cursor-not-allowed"
           )}
         >
@@ -231,15 +231,15 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
             </>
           ) : (
             <>
-              <ImagePlus className="w-7 h-7 text-muted-foreground/60" />
-              <span className="text-[10px] font-medium text-muted-foreground">Outro Image</span>
+              <ImagePlus className="w-7 h-7 text-white/70" />
+              <span className="text-[10px] font-medium text-white/80">Outro Image</span>
             </>
           )}
         </button>
       </div>
 
       {/* Main input area */}
-      <div className="rounded-2xl border border-border/30 bg-card/60 backdrop-blur-sm shadow-lg overflow-hidden transition-shadow focus-within:shadow-xl focus-within:border-border/50">
+      <div className="rounded-2xl border border-white/20 bg-black/50 backdrop-blur-md shadow-lg overflow-hidden transition-shadow focus-within:shadow-xl focus-within:border-white/40">
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -247,7 +247,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
           placeholder="Describe your video idea..."
           disabled={disabled}
           rows={2}
-          className="w-full resize-none bg-transparent px-4 pt-4 pb-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-50"
+          className="w-full resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-white placeholder:text-white/40 focus:outline-none disabled:opacity-50"
         />
 
         {/* Bottom bar */}
@@ -263,7 +263,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                     "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
                     ratio !== "16:9"
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
                   )}
                 >
                   <RatioIcon className="w-3.5 h-3.5" />
