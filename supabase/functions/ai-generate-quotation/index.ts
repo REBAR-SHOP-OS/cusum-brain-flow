@@ -302,6 +302,12 @@ Deno.serve((req) =>
       "Subject to material availability",
     ];
 
+    const terms = [
+      "Prices valid for 30 days from quote date.",
+      "Payment terms: Net 30.",
+      "Full Terms & Conditions: https://www.crm.rebar.shop/terms",
+    ];
+
     const notesText = [
       `Prices valid for 30 days. All weights include ${scrapPct}% scrap.`,
       "",
@@ -310,6 +316,9 @@ Deno.serve((req) =>
       "",
       "EXCLUSIONS:",
       ...exclusions.map(e => `➖ ${e}`),
+      "",
+      "TERMS & CONDITIONS:",
+      ...terms.map(t => `• ${t}`),
     ].join("\n");
 
     // Generate quote number
