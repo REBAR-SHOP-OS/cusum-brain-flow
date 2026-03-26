@@ -523,14 +523,28 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                                 <Play className="w-4 h-4 text-foreground ml-0.5" />
                               </div>
                             </div>
+                            <button
+                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => { e.stopPropagation(); handleRegenerateScene(clip.sceneId); }}
+                              title="Regenerate scene"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 text-white" />
+                            </button>
                           </>
                         ) : clip.status === "generating" || clip.status === "queued" ? (
                           <Skeleton className="w-full aspect-video flex items-center justify-center">
                             <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                           </Skeleton>
                         ) : clip.status === "failed" ? (
-                          <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center">
+                          <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center relative">
                             <AlertCircle className="w-5 h-5 text-destructive" />
+                            <button
+                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-opacity"
+                              onClick={(e) => { e.stopPropagation(); handleRegenerateScene(clip.sceneId); }}
+                              title="Retry scene"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5 text-white" />
+                            </button>
                           </div>
                         ) : (
                           <div className="w-full aspect-video bg-muted/20 flex items-center justify-center">
