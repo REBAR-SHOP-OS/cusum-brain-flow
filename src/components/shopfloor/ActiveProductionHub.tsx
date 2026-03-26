@@ -92,8 +92,25 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
     return hasPlans || hasProgress;
   });
 
+  // Filter out plans that are 100% complete (safety net for trigger lag)
+  const trulyActivePlans = activePlans.filter(p => {
+    if (!itemAggregates) return true;
+    const planItems = itemAggregates.filter(i => i.cut_plan_id === p.id);
+    if (planItems.length === 0) return true;
+    const allDone = planItems.every(i => (i.completed_pieces || 0) >= (i.total_pieces || 1));
+    return !allDone;
+  });
+
+  const trulyUnassigned = unassignedPlans.filter(p => {
+    if (!itemAggregates) return true;
+    const planItems = itemAggregates.filter(i => i.cut_plan_id === p.id);
+    if (planItems.length === 0) return true;
+    const allDone = planItems.every(i => (i.completed_pieces || 0) >= (i.total_pieces || 1));
+    return !allDone;
+  });
+
   // Hide entirely when nothing is actively producing
-  if (allWorkingMachines.length === 0 && unassignedPlans.length === 0) return null;
+  if (allWorkingMachines.length === 0 && trulyUnassigned.length === 0) return null;
 
   return (
     <div className="space-y-4">
@@ -198,7 +215,7 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
         })}
 
         {/* Unassigned plans card */}
-        {unassignedPlans.length > 0 && (
+        {trulyUnassigned.length > 0 && (
           <div className="rounded-xl border-2 border-dashed border-warning/50 bg-card p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -208,11 +225,11 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
                 </span>
               </div>
               <Badge className="bg-warning/20 text-warning border-warning/30 text-[10px]">
-                {unassignedPlans.length} PLAN{unassignedPlans.length !== 1 ? "S" : ""}
+                {trulyUnassigned.length} PLAN{trulyUnassigned.length !== 1 ? "S" : ""}
               </Badge>
             </div>
             <div className="space-y-3">
-              {unassignedPlans.map(plan => (
+              {trulyUnassigned.map(plan => (
                 <div key={plan.id} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-muted/20">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${plan.status === "running" ? "bg-success animate-pulse" : "bg-muted-foreground/30"}`} />
                   <span className="text-xs font-bold text-foreground truncate flex-1">{plan.name}</span>
