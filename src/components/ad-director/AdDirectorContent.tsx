@@ -363,23 +363,55 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       {/* Idle state */}
       {flowState === "idle" && (
         <>
-          <div className="text-center space-y-3 animate-in fade-in duration-500">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-              <Film className="w-8 h-8 text-primary" />
+          {showIntro ? (
+            <div className="w-full max-w-2xl animate-in fade-in duration-500 relative">
+              <div className="rounded-2xl overflow-hidden border border-border/20 bg-card/40 shadow-lg">
+                <video
+                  src="/videos/ad-director-intro.mp4"
+                  autoPlay
+                  muted
+                  playsInline
+                  controls
+                  className="w-full"
+                  onEnded={() => {
+                    setShowIntro(false);
+                    sessionStorage.setItem("ad-director-intro-seen", "1");
+                  }}
+                />
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="absolute top-3 right-3 opacity-90 hover:opacity-100"
+                onClick={() => {
+                  setShowIntro(false);
+                  sessionStorage.setItem("ad-director-intro-seen", "1");
+                }}
+              >
+                رد شدن ▸
+              </Button>
             </div>
-            <h2 className="text-xl font-semibold">What video do you want to create?</h2>
-            <p className="text-sm text-muted-foreground max-w-md">
-              Describe your idea and we'll generate a professional video ad for you.
-            </p>
-          </div>
-          <ChatPromptBar onSubmit={handleSubmit} />
-          <VideoHistory
-            projects={projects.data ?? []}
-            onSelect={(url) => {
-              service.patchState({ finalVideoUrl: url, flowState: "result" });
-            }}
-            onDelete={(id) => deleteProject.mutate(id)}
-          />
+          ) : (
+            <>
+              <div className="text-center space-y-3 animate-in fade-in duration-500">
+                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
+                  <Film className="w-8 h-8 text-primary" />
+                </div>
+                <h2 className="text-xl font-semibold">What video do you want to create?</h2>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Describe your idea and we'll generate a professional video ad for you.
+                </p>
+              </div>
+              <ChatPromptBar onSubmit={handleSubmit} />
+              <VideoHistory
+                projects={projects.data ?? []}
+                onSelect={(url) => {
+                  service.patchState({ finalVideoUrl: url, flowState: "result" });
+                }}
+                onDelete={(id) => deleteProject.mutate(id)}
+              />
+            </>
+          )}
         </>
       )}
 
