@@ -36,8 +36,17 @@ const FALLBACK_PRICING_CONFIG = {
 
 function getFabricationRate(tonnage: number, table: any[]): { price_per_ton: number; shop_drawing_price: number } {
   for (const row of table) {
-    if (tonnage >= (row.min ?? 0) && tonnage < (row.max ?? 999999)) {
-      return { price_per_ton: row.price_per_ton, shop_drawing_price: row.shop_drawing_price };
+    const min = row.min ?? row.min_ton ?? 0;
+    const max = row.max ?? row.max_ton ?? 999999;
+    if (tonnage >= min && tonnage < max) {
+      const ppt = Number(row.price_per_ton ?? row.price_per_ton_cad) || 1500;
+      let sdp = Number(row.shop_drawing_price ?? row.shop_drawing_cad) || 0;
+      if (!sdp && row.shop_drawing_cad_formula) {
+        const f = row.shop_drawing_cad_formula;
+        sdp = Number(f.base || 0) + tonnage * Number(f.per_ton || 0);
+      }
+      if (!sdp) sdp = 2500;
+      return { price_per_ton: ppt, shop_drawing_price: sdp };
     }
   }
   return { price_per_ton: 1500, shop_drawing_price: 4500 };
@@ -147,7 +156,7 @@ Deno.serve((req) =>
     }
 
     const totalWeightKg = bomItems.reduce((s, i) => s + Number(i.weight_kg || 0), 0);
-    const scrapPct = pricingConfig.scrap_percentage ?? 15;
+    const scrapPct = pricingConfig.scrap_percentage ?? pricingConfig.default_scrap_percent ?? 15;
     const totalWithScrap = totalWeightKg * (1 + scrapPct / 100);
     const totalTonnes = totalWithScrap / 1000;
     const cageTonnes = (cageWeightKg * (1 + scrapPct / 100)) / 1000;
@@ -168,12 +177,21 @@ Deno.serve((req) =>
 
     // ─── DETERMINISTIC PRICING (no AI arithmetic) ───
     const fabTable = pricingConfig.fabrication_pricing?.price_table || FALLBACK_PRICING_CONFIG.fabrication_pricing.price_table;
-    const cageRate = pricingConfig.cage_pricing_rule?.rate_per_ton_cad ?? 5500;
-    const shippingPerKm = pricingConfig.shipping_per_km ?? 3;
-    const truckCap = pricingConfig.truck_capacity_tons ?? 7;
+    const cageRate = Number(pricingConfig.cage_pricing_rule?.rate_per_ton_cad ?? pricingConfig.cage_price_per_ton_cad ?? 5500);
+    const shippingPerKm = Number(pricingConfig.shipping_per_km ?? pricingConfig.shipping_per_km_cad ?? 3);
+    const truckCap = Number(pricingConfig.truck_capacity_tons ?? pricingConfig.default_truck_capacity_tons ?? 7);
 
     const fabRate = getFabricationRate(nonCageTonnes > 0 ? nonCageTonnes : totalTonnes, fabTable);
-    
+
+    console.log("Pricing resolved:", { fabRate, cageRate, shippingPerKm, truckCap, scrapPct, totalTonnes, nonCageTonnes, cageTonnes });
+
+    if (!fabRate.price_per_ton || isNaN(fabRate.price_per_ton)) {
+      console.error("FATAL: price_per_ton is invalid after config resolution", fabRate);
+      return new Response(JSON.stringify({ error: "Pricing configuration error: invalid fabrication rate", failure_reason: "pricing_config_error" }), {
+        status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const lineItems: any[] = [];
     
     // Line 1: Non-cage rebar fabrication & supply
