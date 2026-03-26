@@ -371,7 +371,7 @@ Deno.serve((req) =>
                   priority: "medium",
                   created_by: userId,
                 });
-              } catch { /* ignore */ }
+              } catch (_e) { /* ignore */ }
               actions.push({ id: fr.id, action_taken: "human_task_created" });
             }
 
