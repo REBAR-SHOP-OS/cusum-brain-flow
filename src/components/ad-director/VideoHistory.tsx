@@ -47,7 +47,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
   const isDraft = !project.final_video_url;
   // For drafts, use the first completed clip's videoUrl as thumbnail
   const url = isDraft
-    ? (Array.isArray(project.clips) ? (project.clips as any[]).find((c) => c.videoUrl)?.videoUrl : null)
+    ? (Array.isArray(project.clips) ? (project.clips as any[]).find((c) => c.videoUrl || c.video_url || c.url)?.videoUrl || (project.clips as any[]).find((c) => c.video_url)?.video_url || (project.clips as any[]).find((c) => c.url)?.url : null)
     : project.final_video_url!;
 
   const handleMouseEnter = () => {
