@@ -616,7 +616,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
               expirationDate: viewQuote.valid_until
                 ? new Date(viewQuote.valid_until).toLocaleDateString()
                 : "—",
-              customerName: (meta?.odoo_customer as string) || viewQuote.salesperson || "Unknown",
+              customerName: (meta?.odoo_customer as string) || (meta?.customer_name as string) || viewQuote.salesperson || "Unknown",
               customerAddress,
               projectName,
               items,
