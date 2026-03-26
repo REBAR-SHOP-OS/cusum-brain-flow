@@ -207,9 +207,9 @@ export function TimelineBar({
             volume={videoVolume}
             onVolumeChange={onVideoVolumeChange}
           />
-          <div
+           <div
             ref={trackRef}
-            className="flex-1 flex gap-px h-12 relative cursor-pointer rounded overflow-hidden"
+            className="flex-1 flex gap-px h-20 relative cursor-pointer rounded overflow-hidden"
             onClick={handleTrackClick}
           >
             {storyboard.map((scene, i) => {
@@ -219,13 +219,14 @@ export function TimelineBar({
               const isSelected = i === selectedSceneIndex;
               const isCompleted = clip?.status === "completed";
               const isGenerating = clip?.status === "generating";
+              const durSec = seg ? (seg.endTime - seg.startTime).toFixed(0) : "--";
 
               return (
                 <Popover key={scene.id}>
                   <PopoverTrigger asChild>
                     <div
                       onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
-                      className={`relative h-full flex items-center justify-center transition-all cursor-pointer overflow-hidden
+                      className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden
                         ${isSelected ? "ring-2 ring-primary ring-inset z-10" : ""}
                         ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
                       `}
@@ -247,14 +248,34 @@ export function TimelineBar({
                             alt=""
                             className="absolute inset-0 w-full h-full object-cover"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                         </>
                       ) : clip?.videoUrl ? (
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
                       ) : null}
-                      <span className="text-[8px] text-white font-medium z-10 truncate px-1 drop-shadow-sm">
-                        {seg?.label || `S${i + 1}`}
-                      </span>
+                      {/* Status badge */}
+                      <div className="absolute top-0.5 right-0.5 z-10">
+                        <span className={`text-[7px] px-1 py-px rounded-full font-medium ${
+                          isCompleted ? "bg-emerald-500/80 text-white" : isGenerating ? "bg-blue-500/80 text-white" : "bg-muted/60 text-muted-foreground"
+                        }`}>
+                          {isCompleted ? "done" : isGenerating ? "gen…" : clip?.status || "idle"}
+                        </span>
+                      </div>
+                      {/* Duration badge */}
+                      <div className="absolute top-0.5 left-0.5 z-10">
+                        <span className="text-[7px] px-1 py-px rounded-full bg-black/50 text-white font-mono">{durSec}s</span>
+                      </div>
+                      {/* Scene info */}
+                      <div className="relative z-10 px-1 pb-0.5 w-full">
+                        <div className="text-[8px] text-white font-semibold truncate drop-shadow-sm">
+                          {scene.objective || seg?.label || `Scene ${i + 1}`}
+                        </div>
+                        {seg?.text && (
+                          <div className="text-[7px] text-white/70 truncate drop-shadow-sm">
+                            {seg.text.slice(0, 40)}
+                          </div>
+                        )}
+                      </div>
                       {isSelected && (
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
                       )}
