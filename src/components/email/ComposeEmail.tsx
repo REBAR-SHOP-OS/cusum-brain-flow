@@ -91,6 +91,8 @@ Email body: ${replyTo.originalBody.substring(0, 1000)}`,
     try {
       await sendGmailMessage({
         to,
+        cc: cc || undefined,
+        bcc: bcc || undefined,
         subject,
         body: body.replace(/\n/g, "<br>"),
         threadId: replyTo?.threadId,
