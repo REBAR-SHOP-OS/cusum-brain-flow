@@ -236,20 +236,62 @@ serve((req) =>
       throw new Error("No Gmail refresh token found — no actor, ai@rebar.shop, or admin fallback available");
     }
 
-    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: gmailClientId,
-        client_secret: gmailClientSecret,
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-      }),
-    });
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      log.error("Gmail token refresh failed:", JSON.stringify(tokenData));
-      throw new Error("Failed to get Gmail access token: " + (tokenData.error || "unknown"));
+    // Try to exchange refresh token; on invalid_grant, try next fallback
+    async function tryGetAccessToken(token: string): Promise<{ access_token: string; refresh_token?: string } | null> {
+      const res = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: gmailClientId,
+          client_secret: gmailClientSecret,
+          refresh_token: token,
+          grant_type: "refresh_token",
+        }),
+      });
+      const data = await res.json();
+      if (data.access_token) return data;
+      log.error("Token refresh failed:", JSON.stringify(data));
+      return null;
+    }
+
+    let tokenData = await tryGetAccessToken(refreshToken);
+
+    // If actor token failed, try ai@rebar.shop (if not already tried)
+    if (!tokenData && senderUserId && senderUserId === actor_id) {
+      log.info("Actor token invalid_grant, trying ai@rebar.shop fallback");
+      const { data: aiProfile } = await serviceClient.from("profiles").select("id").eq("email", "ai@rebar.shop").maybeSingle();
+      if (aiProfile?.id) {
+        const { data: aiToken } = await serviceClient.from("user_gmail_tokens").select("refresh_token, is_encrypted").eq("user_id", aiProfile.id).maybeSingle();
+        if (aiToken?.refresh_token) {
+          const aiRefresh = aiToken.is_encrypted ? await decryptToken(aiToken.refresh_token) : aiToken.refresh_token;
+          tokenData = await tryGetAccessToken(aiRefresh);
+          if (tokenData) { senderUserId = aiProfile.id; senderEmail = "ai@rebar.shop"; }
+        }
+      }
+    }
+
+    // If still failed, try any admin token
+    if (!tokenData) {
+      log.info("Trying admin fallback after invalid_grant");
+      const { data: allTokens } = await serviceClient.from("user_gmail_tokens").select("user_id, refresh_token, is_encrypted").not("refresh_token", "is", null);
+      for (const candidate of (allTokens || [])) {
+        if (candidate.user_id === senderUserId) continue; // already tried
+        const { data: roleRow } = await serviceClient.from("user_roles").select("role").eq("user_id", candidate.user_id).eq("role", "admin").maybeSingle();
+        if (!roleRow) continue;
+        const candidateRefresh = candidate.is_encrypted ? await decryptToken(candidate.refresh_token) : candidate.refresh_token;
+        tokenData = await tryGetAccessToken(candidateRefresh);
+        if (tokenData) {
+          senderUserId = candidate.user_id;
+          const { data: p } = await serviceClient.from("profiles").select("email").eq("user_id", candidate.user_id).maybeSingle();
+          if (p?.email) senderEmail = p.email;
+          log.info(`Admin fallback succeeded: ${senderEmail}`);
+          break;
+        }
+      }
+    }
+
+    if (!tokenData) {
+      throw new Error("All Gmail tokens failed (invalid_grant) — re-authorize Gmail in Integrations");
     }
 
     // Handle token rotation
