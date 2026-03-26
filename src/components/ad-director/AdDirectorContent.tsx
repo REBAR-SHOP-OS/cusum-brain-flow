@@ -361,7 +361,19 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+    <div className="relative flex flex-col items-center justify-center min-h-[60vh] gap-6">
+      {/* Background video — always looping, muted */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="fixed inset-0 z-0 w-full h-full object-cover pointer-events-none"
+        src="/videos/ad-director-bg.mp4"
+      />
+      <div className="fixed inset-0 z-[1] bg-black/50 pointer-events-none" />
+      {/* All content above the background */}
+      <div className="relative z-10 flex flex-col items-center justify-center w-full gap-6">
       {/* Idle state */}
       {flowState === "idle" && (
         <>
@@ -603,6 +615,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
