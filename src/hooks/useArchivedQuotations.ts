@@ -22,8 +22,7 @@ export function useArchivedQuotations({
 
       let query = supabase
         .from("quotes")
-        .select("*", { count: "exact" })
-        .eq("source", "odoo_sync");
+        .select("*", { count: "exact" });
 
       if (search.trim()) {
         const s = search.trim();
