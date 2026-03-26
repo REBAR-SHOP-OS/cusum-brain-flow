@@ -300,6 +300,16 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
               console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
             }
           }
+
+          // ─── DETERMINISTIC FALLBACK: If AI returned 0 items, parse response text for weight summary data ───
+          if (extractedItems.length === 0 && content.length > 0) {
+            console.log("AI returned 0 items — attempting deterministic weight summary fallback");
+            const fallbackItems = parseWeightSummaryFallback(content);
+            if (fallbackItems.length > 0) {
+              extractedItems = fallbackItems;
+              console.log(`Fallback extracted ${extractedItems.length} summary items`);
+            }
+          }
         }
       } catch (e) {
         console.error("AI vision extraction error:", e);
