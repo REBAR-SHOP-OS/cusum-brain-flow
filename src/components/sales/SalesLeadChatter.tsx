@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { MentionMenu } from "@/components/chat/MentionMenu";
+import { InlineFileLink } from "@/components/pipeline/InlineFileLink";
 
 interface Props {
   salesLeadId: string;
@@ -69,6 +70,10 @@ function renderBodyWithMedia(text: string | null) {
         return (
           <video key={i} src={part} controls className="max-w-full max-h-48 rounded-md border border-border my-1" />
         );
+      }
+      // File URLs (storage links) → show as file card with download & copy
+      if (part.includes("/storage/v1/object/")) {
+        return <InlineFileLink key={i} url={part} />;
       }
       return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">{part}</a>;
     }
