@@ -91,7 +91,7 @@ export function ProVideoEditor({
   const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
   const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
-  const [_sidebarCollapsed, _setSidebarCollapsed] = useState(false); // deprecated, kept for compat
+  
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
