@@ -1,63 +1,39 @@
 
 
-# Show File Name with Download & Copy Instead of Raw URLs
+# Fix Messages Not Displaying in DockChatBox
 
 ## Problem
-When a file is attached via a note in the timeline, the storage URL is stored as the activity description and rendered as a raw link. Users see long `https://...storage/...` URLs instead of a clean file card.
+Messages sent in the DockChatBox appear to be submitted but are not visually displayed in the chat area. The screenshot shows a date separator ("March 26, 2026") but no message bubbles below it, suggesting messages exist in the data but aren't rendering visually.
 
-## Solution
-Create a shared helper component `InlineFileLink` that:
-1. Detects storage/Supabase URLs in activity descriptions
-2. Extracts the file name from the URL path
-3. Renders a styled card with: file icon + file name + Download button + Copy button
-4. Non-URL text in the description is rendered normally alongside
+## Root Cause Analysis
+Two likely causes identified after code review:
+
+1. **`overflow-hidden` clipping bubbles**: The recent fix (line 570) added `overflow-hidden` to the message column container. Combined with `max-w-[75%]` and `flex flex-col`, this can cause the bubble children to collapse to zero visible height when the content (especially RTL Farsi text) doesn't establish a proper intrinsic width.
+
+2. **`renderMentionText` regex breaking RTL text**: The `(@\S+)` regex at line 410 uses `\S+` which aggressively matches non-whitespace Unicode characters (like Farsi). If Farsi text starts with `@`-like characters or the split produces unexpected empty parts, the text could silently disappear.
+
+3. **Scroll position issue**: The `ScrollArea` with `h-[300px]` may not be scrolling to the latest messages properly, or the `bottomRef` isn't in the visible viewport.
 
 ## Changes
 
-### 1. New component: `src/components/pipeline/InlineFileLink.tsx`
-- Accepts a `url` string and optional `fileName`
-- Extracts filename from URL path (last segment, decoded)
-- Shows appropriate file icon based on extension (PDF, DWG, XLS, image, etc.)
-- Download button: fetches signed URL if it's a storage path, or opens directly
-- Copy button: copies the URL to clipboard with toast feedback
-- Compact card design matching existing file attachment styling
+### `src/components/chat/DockChatBox.tsx`
 
-### 2. New utility: `renderDescriptionWithFiles` helper
-- Parses activity description text
-- Splits on URL patterns (regex for `https://...storage/...` or any `https://` link)
-- Returns mixed JSX: plain text spans + `InlineFileLink` components for each URL
-
-### 3. `src/components/pipeline/LeadTimeline.tsx` (line 484-488)
-Replace plain text rendering of `activity.description`:
+**Line 570** — Replace `overflow-hidden` with `overflow-x-hidden` to prevent horizontal overflow while allowing vertical content to remain visible:
 ```
-- <p className="...">{activity.description}</p>
-+ <div className="...">{renderDescriptionWithFiles(activity.description)}</div>
+"flex flex-col max-w-[75%] overflow-x-hidden"
 ```
 
-### 4. `src/components/pipeline/OdooChatter.tsx` (line 990-993)
-Same replacement for the description fallback in `ActivityThreadItem`:
+**Line 605** — Add `min-w-0 w-fit` to the message bubble to ensure it has a proper intrinsic size and doesn't collapse:
 ```
-- <p className="...">{activity.description}</p>
-+ <div className="...">{renderDescriptionWithFiles(activity.description)}</div>
+"px-3 py-1.5 text-xs leading-relaxed whitespace-pre-wrap break-words overflow-hidden min-w-0 w-fit"
 ```
 
-## Visual Result
-```text
-Before:
-┌──────────────────────────────────────────────────┐
-│ https://uavzziigfnqpfdkczbdo.supabase.co/storage│
-│ /v1/object/public/estimation-files/sales-activit │
-│ ies/0c28b52e-59db-49e0-9-62e-561f99727c6c/fd54d5 │
-│ 54-d3b4-486e-9f66-60e4836f1a56.pdf               │
-└──────────────────────────────────────────────────┘
-
-After:
-┌──────────────────────────────────────┐
-│ 📄 fd54d554...1a56.pdf  ⬇️ 📋      │
-└──────────────────────────────────────┘
+**Line 598** — Add a fallback: if `cleanText` is whitespace-only but not truly empty, still render it. Change the `hasText` check:
+```typescript
+const hasText = cleanText.length > 0 && cleanText !== "📎" && cleanText !== "🎤";
 ```
+(The current `!!cleanText` is equivalent but the whitespace-trimmed text from `parseAttachmentLinks` could produce edge cases with Farsi text.)
 
 ## Files Changed
-- `src/components/pipeline/InlineFileLink.tsx` — new component
-- `src/components/pipeline/LeadTimeline.tsx` — use `renderDescriptionWithFiles`
-- `src/components/pipeline/OdooChatter.tsx` — use `renderDescriptionWithFiles`
+- `src/components/chat/DockChatBox.tsx` — 3 lines modified
+
