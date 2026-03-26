@@ -204,7 +204,14 @@ export function PostReviewPanel({
    // Sync local state when post changes (navigation, refresh, or platform/content_type update)
   useEffect(() => {
     if (!post) return;
-    setLocalPlatforms([post.platform]);
+    // Init from all sibling platforms (same title + day) to avoid re-creating existing rows
+    const day0 = post.scheduled_date?.substring(0, 10);
+    const siblingPlatforms = [...new Set(
+      allPosts
+        .filter(p => p.title === post.title && (day0 ? p.scheduled_date?.substring(0, 10) === day0 : p.id === post.id))
+        .map(p => p.platform)
+    )];
+    setLocalPlatforms(siblingPlatforms.length > 0 ? siblingPlatforms : [post.platform]);
     if (groupPages && groupPages.length > 0) {
       setLocalPages(groupPages);
     } else {
