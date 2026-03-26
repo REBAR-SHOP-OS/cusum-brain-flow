@@ -641,7 +641,8 @@ export function ProVideoEditor({
     const scene = storyboard.find(s => s.id === sceneId);
     if (!scene) return;
     const seg = segments.find(s => s.id === scene.segmentId);
-    if (!seg?.text?.trim()) return;
+    const voiceoverText = scene.voiceover?.trim() || seg?.text?.trim();
+    if (!voiceoverText) return;
     toast({ title: "Re-recording voiceover…" });
     try {
       const response = await fetch(
@@ -653,7 +654,7 @@ export function ProVideoEditor({
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ text: seg.text }),
+          body: JSON.stringify({ text: voiceoverText }),
         }
       );
       if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
@@ -823,6 +824,10 @@ export function ProVideoEditor({
         const scene = storyboard.find(s => s.segmentId === seg.id);
         if (!scene) continue;
 
+        // Prefer dedicated voiceover text from AI over generic segment text
+        const voiceoverText = scene.voiceover?.trim() || seg.text.trim();
+        if (!voiceoverText) continue;
+
         // Ensure we have clip duration — measure from URL if not cached
         let clipDur = clipDurations[scene.id];
         if (!clipDur) {
@@ -846,7 +851,7 @@ export function ProVideoEditor({
               apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
               Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
-            body: JSON.stringify({ text: seg.text }),
+            body: JSON.stringify({ text: voiceoverText }),
           }
         );
         if (!response.ok) throw new Error(`TTS failed for ${seg.label}`);

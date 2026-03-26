@@ -136,6 +136,7 @@ export interface StoryboardScene {
   generationMode: GenerationMode;
   continuityRequirements: string;
   prompt: string;
+  voiceover?: string;
   referenceAssetUrl?: string | null;
   continuityLock: boolean;
   locked: boolean;
