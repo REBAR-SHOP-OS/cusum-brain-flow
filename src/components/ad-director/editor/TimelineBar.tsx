@@ -502,14 +502,21 @@ export function TimelineBar({
                   const dur = getSceneDur(sceneIdx);
                   const leftPct = totalDuration > 0 ? (start / totalDuration) * 100 : 0;
                   const widthPct = totalDuration > 0 ? (dur / totalDuration) * 100 : 0;
+                  const isDragTarget = draggedItemId === ov.id;
                   return (
                     <Popover key={ov.id}>
                       <PopoverTrigger asChild>
                         <div
-                          className="absolute h-5 top-1 rounded bg-amber-600/50 border border-amber-500/40 flex items-center px-1 cursor-pointer hover:bg-amber-600/70 transition-colors"
-                          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                          onMouseDown={(e) => handleItemDragStart(e, "text", ov.id, leftPct, widthPct)}
+                          className={`absolute h-5 top-1 rounded bg-amber-600/50 border flex items-center px-1 cursor-grab active:cursor-grabbing transition-colors ${isDragTarget ? "border-primary ring-1 ring-primary/50 z-30" : "border-amber-500/40 hover:bg-amber-600/70"}`}
+                          style={{
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                            transform: isDragTarget ? `translateX(${itemDragOffsetPx}px)` : undefined,
+                          }}
                           title={ov.content}
                         >
+                          <Move className="w-2 h-2 text-amber-300 mr-0.5 shrink-0" />
                           <span className="text-[7px] text-white truncate">{ov.content}</span>
                         </div>
                       </PopoverTrigger>
