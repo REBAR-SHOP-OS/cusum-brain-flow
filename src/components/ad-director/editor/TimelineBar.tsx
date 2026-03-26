@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
@@ -11,6 +11,53 @@ import {
 } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
+
+// ─── Thumbnail extraction helper ───────────────────────────
+function useVideoThumbnails(clips: ClipOutput[]) {
+  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const extractedRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    clips.forEach((clip) => {
+      if (clip.status !== "completed" || !clip.videoUrl || extractedRef.current.has(clip.sceneId)) return;
+      extractedRef.current.add(clip.sceneId);
+
+      const video = document.createElement("video");
+      video.crossOrigin = "anonymous";
+      video.preload = "auto";
+      video.muted = true;
+      video.playsInline = true;
+
+      video.onloadeddata = () => {
+        video.currentTime = Math.min(0.5, video.duration / 2);
+      };
+
+      video.onseeked = () => {
+        try {
+          const c = document.createElement("canvas");
+          c.width = 160;
+          c.height = 90;
+          const cx = c.getContext("2d");
+          if (cx) {
+            cx.drawImage(video, 0, 0, 160, 90);
+            const dataUrl = c.toDataURL("image/jpeg", 0.6);
+            setThumbnails(prev => ({ ...prev, [clip.sceneId]: dataUrl }));
+          }
+        } catch { /* CORS or other — ignore */ }
+        video.src = "";
+        video.load();
+      };
+
+      video.onerror = () => {
+        extractedRef.current.delete(clip.sceneId);
+      };
+
+      video.src = clip.videoUrl;
+    });
+  }, [clips]);
+
+  return thumbnails;
+}
 
 export interface AudioTrackItem {
   sceneId: string;
