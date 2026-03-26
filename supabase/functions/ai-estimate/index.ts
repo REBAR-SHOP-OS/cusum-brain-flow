@@ -137,6 +137,7 @@ function rescueAIItems(items: any[]): EstimationItemInput[] {
 }
 
 
+Deno.serve((req) =>
   handleRequest(req, async ({ userId, companyId, serviceClient: supabaseAdmin, body }) => {
     const {
       name,
