@@ -252,6 +252,26 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     }
   };
 
+  const handleSendEmail = async () => {
+    if (!customerEmail.trim()) return;
+    setSendingEmail(true);
+    try {
+      // Save first to ensure latest data
+      await handleSave();
+      const { data, error } = await supabase.functions.invoke("send-quote-email", {
+        body: { quote_id: quoteId, customer_email: customerEmail.trim(), action: "send_quote" },
+      });
+      if (error) throw new Error(error.message || "Failed to send");
+      if (data?.error) throw new Error(data.error);
+      toast({ title: "Email sent", description: data?.message || `Quotation sent to ${customerEmail}` });
+      setEmailDialogOpen(false);
+    } catch (err: any) {
+      toast({ title: "Send failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   const handlePrint = () => window.print();
 
   if (loading) {
