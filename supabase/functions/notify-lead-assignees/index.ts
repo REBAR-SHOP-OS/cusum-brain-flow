@@ -91,7 +91,7 @@ serve((req) =>
     // 5. Fetch actor signature
     const signatureHtml = actor_id ? await fetchActorSignature(serviceClient, actor_id) : null;
 
-    // 5. Build email content
+    // 6. Build email content
     const recordLink = `https://cusum-brain-flow.lovable.app/sales/pipeline?lead=${sales_lead_id}`;
     const subject = `ERP | Rebar.shop | ${lead.title}`;
 
