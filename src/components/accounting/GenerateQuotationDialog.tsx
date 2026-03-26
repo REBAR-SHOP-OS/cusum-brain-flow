@@ -190,6 +190,12 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
       const newProjectId = estData?.project?.id || estData?.project_id;
       if (!newProjectId) throw new Error("Estimation did not return a project ID");
 
+      // Check if estimation produced meaningful data
+      const estWeight = estData?.summary?.total_weight_kg ?? 0;
+      if (estWeight <= 0) {
+        throw new Error("No rebar data could be extracted from the uploaded file(s). Please ensure you're uploading a rebar schedule, shop drawing, or weight summary report.");
+      }
+
       // 3. Generate quotation from the new project
       const { data: quoteData, error: quoteError } = await supabase.functions.invoke("ai-generate-quotation", {
         body: {
@@ -200,6 +206,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
       });
       if (quoteError) throw quoteError;
       if (quoteData?.error) throw new Error(quoteData.error);
+      if (quoteData?.failure_reason) throw new Error(quoteData.error || `Quote generation failed: ${quoteData.failure_reason}`);
 
       toast({ title: "Quotation generated!", description: `Quote ${quoteData.quote?.quote_number} created from uploaded files.` });
 
