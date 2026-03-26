@@ -1194,55 +1194,10 @@ export function ProVideoEditor({
         />
       </div>
 
-      {/* ─── Main 3-Panel Area ─── */}
+      {/* ─── Main Area ─── */}
       <div className="flex flex-1 min-h-0">
-        {/* ─── Left Sidebar ─── */}
-        <div className={`flex shrink-0 border-r border-border/30 bg-card/60 transition-all ${activeTab ? "w-60" : "w-0"} overflow-hidden`}>
-          {/* Tab content */}
-          {activeTab && (
-            <div className="w-60 overflow-y-auto p-3 min-w-0">
-              <h3 className="text-xs font-semibold mb-3 text-muted-foreground uppercase tracking-wider">
-                {TABS.find(t => t.id === activeTab)?.label}
-              </h3>
-              {activeTab === "media" && (
-                <MediaTab
-                  storyboard={storyboard}
-                  clips={clips}
-                  segments={segments}
-                  selectedSceneIndex={selectedSceneIndex}
-                  onSelectScene={setSelectedSceneIndex}
-                  onRegenerateScene={onRegenerateScene}
-                  onUpdateClipUrl={onUpdateClipUrl}
-                />
-              )}
-              {activeTab === "text" && <TextTab onAddText={() => setTextDialogOpen(true)} />}
-              {activeTab === "music" && (
-                <MusicTab onTrackSelect={(track) => handleMusicSelect(track?.url ?? null)} />
-              )}
-              {activeTab === "brand-kit" && (
-                <BrandKitTab
-                  brand={brand}
-                  logo={logoSettings}
-                  onLogoChange={setLogoSettings}
-                  onDeleteLogo={handleDeleteLogo}
-                  onReplaceLogo={handleReplaceLogo}
-                />
-              )}
-              {activeTab === "script" && <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />}
-              {activeTab === "card-editor" && currentCardSettings && (
-                <IntroOutroEditor
-                  settings={currentCardSettings}
-                  brand={brand}
-                  onChange={handleCardSettingsChange}
-                  onApply={handleApplyCard}
-                />
-              )}
-            </div>
-          )}
-        </div>
-
         {/* ─── Center Canvas ─── */}
-        <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative">
+        <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative items-center justify-center">
           {/* AI Command Bar — floating at top */}
           <div className="absolute top-3 left-3 right-3 z-30 flex gap-2 items-center p-1.5 rounded-xl bg-black/40 backdrop-blur-xl border border-white/[0.08] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
             {aiProcessing ? (
