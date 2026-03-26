@@ -226,16 +226,35 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
             });
           }
 
-          // Fire notification email to assignees (fire-and-forget)
-          supabase.functions.invoke("notify-lead-assignees", {
-            body: {
-              sales_lead_id: salesLeadId,
-              event_type: "note",
-              note_text: noteTextForEmail,
-              actor_name: currentUserName || "Someone",
-              actor_id: currentUserId,
-            },
-          }).catch((err) => console.error("notify-lead-assignees error:", err));
+          // Fire notification email to assignees and track outcome
+          const noteTimestamp = new Date().toISOString();
+          try {
+            const { data: notifyResult, error: notifyError } = await supabase.functions.invoke("notify-lead-assignees", {
+              body: {
+                sales_lead_id: salesLeadId,
+                event_type: "note",
+                note_text: noteTextForEmail,
+                actor_name: currentUserName || "Someone",
+                actor_id: currentUserId,
+              },
+            });
+            if (notifyError) {
+              setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+            } else {
+              const sent = notifyResult?.sent ?? 0;
+              const total = notifyResult?.total ?? 0;
+              if (sent > 0 && sent >= total) {
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "success" }));
+              } else if (sent > 0) {
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "partial" }));
+              } else {
+                setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+              }
+            }
+          } catch (err) {
+            console.error("notify-lead-assignees error:", err);
+            setEmailOutcomes(prev => ({ ...prev, [noteTimestamp]: "failed" }));
+          }
         },
         onError: () => setUploading(false),
       });
