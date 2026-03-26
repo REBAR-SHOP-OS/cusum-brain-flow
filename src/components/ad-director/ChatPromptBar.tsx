@@ -239,7 +239,7 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
       </div>
 
       {/* Main input area */}
-      <div className="rounded-2xl border border-border/30 bg-card/60 backdrop-blur-sm shadow-lg overflow-hidden transition-shadow focus-within:shadow-xl focus-within:border-border/50">
+      <div className="rounded-2xl border border-white/20 bg-black/50 backdrop-blur-md shadow-lg overflow-hidden transition-shadow focus-within:shadow-xl focus-within:border-white/40">
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
