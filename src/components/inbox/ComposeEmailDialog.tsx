@@ -71,6 +71,7 @@ interface ComposeEmailDialogProps {
   onOpenChange: (open: boolean) => void;
   initialTo?: string;
   initialSubject?: string;
+  onSent?: (info: { to: string; subject: string; body: string; threadId?: string; messageId?: string }) => void;
 }
 
 export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubject }: ComposeEmailDialogProps) {
