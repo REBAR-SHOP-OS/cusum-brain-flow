@@ -218,10 +218,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           website: currentBrand.website, primaryColor: currentBrand.primaryColor,
           bgColor: currentBrand.secondaryColor, logoUrl: currentBrand.logoUrl,
         },
-        subtitles: {
-          enabled: true,
-          segments: currentSegments.map(s => ({ text: s.text, startTime: s.startTime, endTime: s.endTime })),
-        },
+        subtitles: { enabled: false, segments: [] },
         audioUrl,
         musicUrl: service.getState().musicTrackUrl || undefined,
         musicVolume: 0.15,
