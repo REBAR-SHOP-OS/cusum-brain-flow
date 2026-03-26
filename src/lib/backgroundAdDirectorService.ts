@@ -279,6 +279,8 @@ class BackgroundAdDirectorService {
               characterImageUrl, introImageUrl, outroImageUrl,
               sceneIndex: idx, totalScenes: rawStoryboard.length,
               modelOverrides,
+              selectedProducts,
+              selectedStyles,
             }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
           } catch { return { prompt: scene.prompt, modelUsed: "original" }; }
