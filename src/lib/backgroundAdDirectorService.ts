@@ -220,6 +220,8 @@ class BackgroundAdDirectorService {
         targetDuration: videoParams.duration,
         assetDescriptions: images.length > 0 ? images.map(f => f.name).join(", ") : undefined,
         characterImageUrl,
+        introImageUrl,
+        outroImageUrl,
         modelOverrides,
       }, { timeoutMs: 90_000 }));
 
