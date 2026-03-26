@@ -415,7 +415,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
       {/* Analyzing / Generating */}
       {(flowState === "analyzing" || flowState === "generating") && (
-        <CameraLoader statusText={statusText} progressValue={progressValue} onCancel={handleCancel} />
+        <CameraLoader statusText={statusText} progressValue={progressValue} sceneCount={storyboard.length} onCancel={handleCancel} />
       )}
 
       {/* Result */}
