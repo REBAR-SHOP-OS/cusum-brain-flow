@@ -476,8 +476,5 @@ Rules:
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
     }
-  } catch (error) {
-    console.error("Extract manifest error:", error);
-    // Attempt to mark the session as errored so the UI doesn't show a blank screen
   }, { functionName: "extract-manifest", requireCompany: false, wrapResult: false })
 );
