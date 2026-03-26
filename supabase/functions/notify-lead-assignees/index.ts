@@ -239,22 +239,22 @@ serve((req) =>
     if (!refreshToken) {
       const { data: aiProfile } = await serviceClient
         .from("profiles")
-        .select("id")
+        .select("id, user_id")
         .eq("email", "ai@rebar.shop")
         .maybeSingle();
 
-      if (aiProfile?.id) {
+      if (aiProfile?.user_id) {
         const { data: tokenRow } = await serviceClient
           .from("user_gmail_tokens")
           .select("refresh_token, is_encrypted")
-          .eq("user_id", aiProfile.id)
+          .eq("user_id", aiProfile.user_id)
           .maybeSingle();
 
         if (tokenRow?.refresh_token) {
           refreshToken = tokenRow.is_encrypted
             ? await decryptToken(tokenRow.refresh_token)
             : tokenRow.refresh_token;
-          senderUserId = aiProfile.id;
+          senderUserId = aiProfile.user_id;
           senderEmail = "ai@rebar.shop";
           log.info("Using ai@rebar.shop token");
         }
