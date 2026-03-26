@@ -88,7 +88,7 @@ serve((req) =>
       return { sent: 0 };
     }
 
-    // 4. Fetch actor signature
+    // 5. Fetch actor signature
     const signatureHtml = actor_id ? await fetchActorSignature(serviceClient, actor_id) : null;
 
     // 5. Build email content
