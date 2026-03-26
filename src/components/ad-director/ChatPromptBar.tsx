@@ -66,9 +66,43 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   const [characterImage, setCharacterImage] = useState<File | null>(null);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
+  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
   const characterRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  const canAutoGenerate = selectedStyles.length > 0 && selectedProducts.length > 0;
+
+  const handleAutoGenerate = async () => {
+    if (!canAutoGenerate || isAutoGenerating) return;
+    setIsAutoGenerating(true);
+    try {
+      const productLabels = selectedProducts.map(k => PRODUCT_ICONS.find(p => p.key === k)?.label || k).join(", ");
+      const styleLabels = selectedStyles.map(k => IMAGE_STYLES.find(s => s.key === k)?.label || k).join(", ");
+      const dur = DURATIONS.find(d => d.value === duration)?.label || duration + "s";
+
+      const { data, error } = await supabase.functions.invoke("ai-generic", {
+        body: {
+          prompt: `Products: ${productLabels}\nStyles: ${styleLabels}\nDuration: ${dur}\nAspect Ratio: ${ratio}`,
+          systemPrompt: "You are a cinematic video ad prompt writer for a construction/rebar company. Write a single concise, vivid video prompt (2-3 sentences) for the given parameters. Return ONLY the prompt text, no quotes or extra formatting.",
+          model: "google/gemini-2.5-flash",
+        },
+      });
+
+      if (error) throw error;
+      const result = data?.result || data?.text || "";
+      if (result) {
+        setPrompt(result.trim());
+        toast({ title: "✨ پرامپت آماده شد", description: "بررسی کنید و در صورت نیاز ویرایش کنید." });
+      }
+    } catch (err: any) {
+      console.error("Auto-generate prompt error:", err);
+      toast({ title: "خطا در تولید پرامپت", description: err.message || "لطفاً دوباره تلاش کنید", variant: "destructive" });
+    } finally {
+      setIsAutoGenerating(false);
+    }
+  };
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
