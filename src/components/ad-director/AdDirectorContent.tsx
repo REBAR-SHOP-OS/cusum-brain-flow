@@ -4,7 +4,12 @@ import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle, Home, RefreshCw } from "lucide-react";
+import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle, Home, RefreshCw, CalendarDays } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExportDialog } from "./ExportDialog";
@@ -42,6 +47,61 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
   const [scenePrompts, setScenePrompts] = useState<Record<string, string>>({});
   const [approved, setApproved] = useState(false);
+
+  // Schedule-to-social state
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
+  const [scheduleHour, setScheduleHour] = useState("09");
+  const [scheduleMinute, setScheduleMinute] = useState("00");
+  const [scheduling, setScheduling] = useState(false);
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+
+  const handleScheduleToSocial = async () => {
+    if (!scheduleDate || !finalVideoUrl) return;
+    const scheduledDateTime = new Date(scheduleDate);
+    scheduledDateTime.setHours(parseInt(scheduleHour), parseInt(scheduleMinute), 0, 0);
+
+    if (scheduledDateTime <= new Date()) {
+      toast({ title: "Invalid Time", description: "Cannot schedule in the past.", variant: "destructive" });
+      return;
+    }
+
+    setScheduling(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast({ title: "Authentication required", variant: "destructive" });
+        return;
+      }
+
+      const { error } = await supabase.from("social_posts").insert({
+        platform: "instagram",
+        status: "scheduled",
+        qa_status: "scheduled",
+        content_type: "reel",
+        image_url: finalVideoUrl,
+        scheduled_date: scheduledDateTime.toISOString(),
+        title: pipelineState.brand?.name || "AI Video",
+        content: pipelineState.userPrompt || "",
+        user_id: user.id,
+        neel_approved: false,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Scheduled ✅",
+        description: `Video scheduled for ${format(scheduledDateTime, "PPP")} at ${scheduleHour}:${scheduleMinute}`,
+      });
+      setScheduleOpen(false);
+    } catch (err: any) {
+      toast({ title: "Scheduling failed", description: err.message, variant: "destructive" });
+    } finally {
+      setScheduling(false);
+    }
+  };
 
   // Pipeline state — driven by singleton service
   const [pipelineState, setPipelineState] = useState<AdDirectorPipelineState>(service.getState());
@@ -461,6 +521,54 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                   <Pencil className="w-4 h-4" />
                   Edit Video
                 </Button>
+                <Popover open={scheduleOpen} onOpenChange={setScheduleOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" disabled={!finalVideoUrl} className="gap-2">
+                      <CalendarDays className="w-4 h-4" />
+                      Schedule
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-3" align="center" side="top">
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-foreground">Schedule to Social Calendar</p>
+                      <Calendar
+                        mode="single"
+                        selected={scheduleDate}
+                        onSelect={setScheduleDate}
+                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                      <div className="flex items-center gap-2">
+                        <Select value={scheduleHour} onValueChange={setScheduleHour}>
+                          <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {hours.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <span className="text-muted-foreground font-bold">:</span>
+                        <Select value={scheduleMinute} onValueChange={setScheduleMinute}>
+                          <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {minutes.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {scheduleDate && (
+                        <p className="text-xs text-muted-foreground">
+                          📅 {format(scheduleDate, "PPP")} at {scheduleHour}:{scheduleMinute}
+                        </p>
+                      )}
+                      <Button
+                        className="w-full gap-2"
+                        disabled={!scheduleDate || scheduling}
+                        onClick={handleScheduleToSocial}
+                      >
+                        {scheduling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        Confirm Schedule
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </>
             )}
           </div>
