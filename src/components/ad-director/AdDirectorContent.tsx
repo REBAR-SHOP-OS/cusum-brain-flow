@@ -273,6 +273,13 @@ export function AdDirectorContent() {
             </p>
           </div>
           <ChatPromptBar onSubmit={handleSubmit} />
+          <VideoHistory
+            projects={projects.data ?? []}
+            onSelect={(url) => {
+              setFinalVideoUrl(url);
+              setFlowState("result");
+            }}
+          />
         </>
       )}
 
