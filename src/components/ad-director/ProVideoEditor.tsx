@@ -1201,7 +1201,7 @@ export function ProVideoEditor({
                 {sceneOverlays.map(ov => (
                   <div
                     key={ov.id}
-                    className={`absolute pointer-events-none z-20 ${ov.animated ? "animate-logo-reveal" : ""}`}
+                    className={`absolute pointer-events-none z-20 ${ov.animated ? "animate-logo-reveal" : ""} ${ov.kind === "text" ? "animate-in fade-in duration-300" : ""}`}
                     style={{
                       left: `${ov.position.x}%`,
                       top: `${ov.position.y}%`,
@@ -1212,9 +1212,11 @@ export function ProVideoEditor({
                     {ov.kind === "logo" ? (
                       <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain" />
                     ) : (
-                      <span className="text-white font-semibold text-sm drop-shadow-lg bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-white/[0.08]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-                        {ov.content}
-                      </span>
+                      <div className="flex justify-center">
+                        <span className="text-white font-semibold text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] bg-black/50 backdrop-blur-md px-4 py-2 rounded-md text-center leading-relaxed" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                          {ov.content}
+                        </span>
+                      </div>
                     )}
                   </div>
                 ))}
