@@ -340,12 +340,15 @@ class BackgroundAdDirectorService {
         this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "generating" as const, progress: 10 } : c));
 
         try {
+          const isI2V = characterImageUrl && scene.generationMode === "image-to-video";
           const result = await invokeEdgeFunction<{
             url?: string; videoUrl?: string; generationId?: string; jobId?: string;
             provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
           }>("generate-video", {
             action: "generate", prompt: motionPrompt, duration: sceneDuration,
-            aspectRatio: wanRatio, provider: "wan", model: "wan2.6-t2v",
+            aspectRatio: wanRatio, provider: "wan",
+            model: isI2V ? "wan2.6-i2v" : "wan2.6-t2v",
+            ...(isI2V ? { imageUrl: characterImageUrl } : {}),
             negativePrompt: "static image, zoom only, no motion, blurry, text overlay, watermark",
           }, { timeoutMs: EDGE_TIMEOUT_MS });
 

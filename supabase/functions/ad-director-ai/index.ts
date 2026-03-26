@@ -507,11 +507,20 @@ const WRITE_PROMPT_TOOLS = [{
 // ─── Action Handlers ────────────────────────────────────────────
 
 async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: string) {
-  const { script, brand, assetDescriptions } = body;
+  const { script, brand, assetDescriptions, characterImageUrl } = body;
   if (!script) throw new Error("Script is required");
 
+  const characterBlock = characterImageUrl
+    ? `\n\nIMPORTANT — CHARACTER/NARRATOR REFERENCE: A reference photo of a real spokesperson/narrator has been provided. This person MUST appear in EVERY scene (except closing/end-card) as the primary subject presenting or demonstrating the product/service. Rules:
+- Describe this person consistently across ALL scenes (same appearance, clothing, features).
+- Set generationMode to "image-to-video" for every scene featuring this person.
+- Include this person's description in continuityProfile.subjectDescriptions.
+- The narrator should be performing contextual actions relevant to each scene (speaking, demonstrating, gesturing, walking through the environment).
+- Never replace them with a generic or different person.`
+    : "";
+
   const userPrompt = `Brand: ${brand?.name || "Rebar.Shop"} | Website: ${brand?.website || "Rebar.Shop"} | CTA: ${brand?.cta || "Upload your drawings and get fast rebar shop drawings delivered."} | Tagline: ${brand?.tagline || "Fast, precise rebar detailing when time matters."} | Audience: ${brand?.targetAudience || "Construction contractors and engineers"} | Colors: ${brand?.primaryColor || "#ef4444"} / ${brand?.secondaryColor || "#1e293b"} | Aesthetic: ${brand?.referenceAesthetic || "Premium cinematic industrial B2B"}
-${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}
+${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}
 
 Script:
 ${script}`;
@@ -528,7 +537,7 @@ ${script}`;
 }
 
 async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverride?: string) {
-  const { scene, brand, continuityProfile, previousScene } = body;
+  const { scene, brand, continuityProfile, previousScene, characterImageUrl } = body;
   if (!scene) throw new Error("Scene data is required");
 
   const continuityBlock = continuityProfile ? `
@@ -560,7 +569,8 @@ Original Prompt: ${scene.prompt}
 
 Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
 ${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the FIRST scene — establish the visual identity that ALL subsequent scenes must follow."}
-${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}`;
+${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}
+${characterImageUrl ? `\nCHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person. Ensure the person's appearance matches across all scenes.` : ""}`;
 
   return await callAIAndExtract(
     apiKey,
