@@ -195,8 +195,8 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
                 <div className="text-xs font-medium truncate">{s.objective || `Scene ${idx + 1}`}</div>
                 <div className="text-[10px] text-muted-foreground truncate">{seg?.text?.slice(0, 50)}</div>
               </div>
-              <Badge variant={c?.status === "completed" ? "default" : "secondary"} className="text-[9px] flex-shrink-0">
-                {c?.status || "idle"}
+              <Badge variant={c?.status === "completed" ? "default" : "secondary"} className="text-[9px] flex-shrink-0 whitespace-nowrap">
+                {c?.status === "completed" ? "done" : c?.status === "generating" ? "gen…" : c?.status || "idle"}
               </Badge>
             </button>
           );
