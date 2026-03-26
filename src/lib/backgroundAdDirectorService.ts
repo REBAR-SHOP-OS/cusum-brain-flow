@@ -240,7 +240,9 @@ class BackgroundAdDirectorService {
               action: "write-cinematic-prompt",
               scene, brand, continuityProfile,
               previousScene: idx > 0 ? rawStoryboard[idx - 1] : null,
-              characterImageUrl, modelOverrides,
+              characterImageUrl, introImageUrl, outroImageUrl,
+              sceneIndex: idx, totalScenes: rawStoryboard.length,
+              modelOverrides,
             }, { timeoutMs: EDGE_TIMEOUT_MS }));
             return { prompt: res.result.prompt, modelUsed: res.modelUsed };
           } catch { return { prompt: scene.prompt, modelUsed: "original" }; }
