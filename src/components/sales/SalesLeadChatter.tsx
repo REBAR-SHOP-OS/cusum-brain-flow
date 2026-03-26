@@ -517,7 +517,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   );
 }
 
-function ActivityItem({ activity, onMarkDone }: { activity: SalesLeadActivity; onMarkDone: () => void }) {
+function ActivityItem({ activity, onMarkDone, emailStatus }: { activity: SalesLeadActivity; onMarkDone: () => void; emailStatus?: "success" | "failed" | "partial" }) {
   const Icon = activityIcons[activity.activity_type] || MessageSquare;
   const isScheduled = !!activity.scheduled_date && !activity.completed_at;
   const initials = activity.user_name ? getInitials(activity.user_name) : "??";
