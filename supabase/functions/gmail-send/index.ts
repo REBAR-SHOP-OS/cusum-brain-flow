@@ -183,6 +183,11 @@ Deno.serve((req) =>
       references: z.string().max(2000).optional(),
       sent_by_agent: z.boolean().optional(),
       custom_headers: z.record(z.string()).optional(),
+      attachments: z.array(z.object({
+        filename: z.string().max(255),
+        contentType: z.string().max(255),
+        base64: z.string(),
+      })).max(5).optional(),
     });
     const parsed = sendSchema.safeParse(rawBody);
     if (!parsed.success) {
@@ -191,7 +196,7 @@ Deno.serve((req) =>
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { to, cc, bcc, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers } = parsed.data;
+    const { to, cc, bcc, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers, attachments: emailAttachments } = parsed.data;
 
     // --- Comms Engine: no_act_global + email routing ---
     if (sent_by_agent) {
