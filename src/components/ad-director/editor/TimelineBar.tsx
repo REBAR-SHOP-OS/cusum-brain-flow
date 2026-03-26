@@ -67,6 +67,12 @@ export interface AudioTrackItem {
   volume?: number; // 0-1, default 1
 }
 
+interface SidebarTab {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+}
+
 interface TimelineBarProps {
   clips: ClipOutput[];
   storyboard: StoryboardScene[];
@@ -81,6 +87,10 @@ interface TimelineBarProps {
   onAddAudio?: () => void;
   textOverlays?: VideoOverlay[];
   audioTracks?: AudioTrackItem[];
+  // Sidebar tab icons
+  sidebarTabs?: SidebarTab[];
+  activeSidebarTab?: string;
+  onSidebarTabSelect?: (tabId: string) => void;
   // Volume controls
   videoVolume?: number;
   onVideoVolumeChange?: (v: number) => void;
