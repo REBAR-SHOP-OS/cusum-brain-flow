@@ -36,10 +36,11 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
-    onSubmit(prompt.trim(), ratio, [], introImage, outroImage, duration);
+    onSubmit(prompt.trim(), ratio, [], introImage, outroImage, duration, characterImage);
     setPrompt("");
     setIntroImage(null);
     setOutroImage(null);
+    setCharacterImage(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
