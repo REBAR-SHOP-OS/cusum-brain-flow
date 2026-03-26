@@ -229,7 +229,7 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
               </Badge>
             </div>
             <div className="space-y-3">
-              {unassignedPlans.map(plan => (
+              {trulyUnassigned.map(plan => (
                 <div key={plan.id} className="flex items-center gap-3 p-2 rounded-lg border border-border bg-muted/20">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${plan.status === "running" ? "bg-success animate-pulse" : "bg-muted-foreground/30"}`} />
                   <span className="text-xs font-bold text-foreground truncate flex-1">{plan.name}</span>
