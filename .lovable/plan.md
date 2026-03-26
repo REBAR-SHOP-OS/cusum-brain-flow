@@ -1,52 +1,47 @@
 
 
-# Fix Quotation Cards: Customer Name, Total, Click-to-Edit, Delete
+# Make Invoice Editor Match Quotation Format
 
-## Changes — `src/components/accounting/AccountingDocuments.tsx`
+## Problem
+The invoice creation/editing uses a basic dialog + side drawer, while quotations use a professional branded document editor (DraftQuotationEditor). The user wants invoices to have the same format.
 
-### A. Fix customer name (line 368)
-Replace single-field lookup with multi-field fallback:
-```ts
-const meta = q.metadata as Record<string, unknown> | null;
-const customer = (meta?.odoo_customer as string)
-  || (meta?.customer_name as string)
-  || q.salesperson
-  || "Unknown";
-```
+## Approach
+Create a new `DraftInvoiceEditor.tsx` component modeled after `DraftQuotationEditor.tsx`, then wire it into `SalesInvoices.tsx` so clicking a row or "New Invoice" opens the full document editor instead of the dialog/drawer.
 
-### B. Fix total display (line 380)
-Add fallback total from metadata line_items:
-```ts
-const lineItems = (meta?.line_items as Array<Record<string, unknown>>) || [];
-const metaTotal = lineItems.reduce((s: number, li: any) => s + (Number(li.amount) || 0), 0);
-const displayTotal = Number(q.total_amount) || metaTotal;
-// Use displayTotal in the fmt() call
-```
+## Changes
 
-### C. Make card clickable (line 371)
-Add `onClick` + `cursor-pointer` to open draft editor for manual/AI quotes, or view overlay for others:
-```tsx
-<Card key={q.id}
-  className="hover:ring-2 hover:ring-primary/20 transition-all cursor-pointer"
-  onClick={() => {
-    if (q.source === "manual" || q.source === "ai_estimation") {
-      setDraftEditorId(q.id);
-    } else {
-      setViewQuote(q);
-    }
-  }}
->
-```
+### 1. New file: `src/components/accounting/documents/DraftInvoiceEditor.tsx`
+A full-page document editor matching the quotation format:
+- Same branded header (Rebar.Shop Inc logo + address)
+- Title: "Invoice #INV-XXXX" (instead of "Quotation #...")
+- Invoice Date + Due Date (instead of Quote Date + Due Date)
+- Bill To section with customer dropdown (same Popover pattern from quotation editor)
+- Shipping Address section
+- Line items table with product dropdown (same as quotation)
+- Add Line button
+- Subtotal / HST / Total / Amount Due
+- Purchase Order # and Sales Representative fields
+- Memo/Notes section
+- Save / Print / Close buttons
+- Saves to `sales_invoices` table + `sales_invoice_items` for line items
+- On create: auto-generates invoice number, inserts into `sales_invoices`, then opens editor
+- On edit: loads existing invoice + its line items
 
-### D. Add delete button
-Add a Trash2 delete button in the actions area that removes the quote from the `quotes` table and refreshes the list.
+### 2. Modify: `src/pages/sales/SalesInvoices.tsx`
+- Import `DraftInvoiceEditor`
+- Replace the `Dialog` for "New Invoice" with: create a draft record in `sales_invoices`, then open `DraftInvoiceEditor` with its ID
+- Replace table row `onClick` to open `DraftInvoiceEditor` instead of the drawer
+- Remove the `SalesInvoiceDrawer` usage (or keep for view-only on paid/cancelled)
+- Remove the create dialog state and form
 
-### E. Fix QuotationTemplate customer name (line 588)
-Add `meta?.customer_name` fallback:
-```ts
-customerName: (meta?.odoo_customer as string) || (meta?.customer_name as string) || viewQuote.salesperson || "Unknown",
-```
+### Key differences from quotation editor
+- Uses `sales_invoices` + `sales_invoice_items` tables (not `quotes`)
+- Has "Invoice Date" and "Due Date" (not "Quote Date" and "Expiration Date")  
+- Includes Purchase Order # and Sales Representative fields
+- Shows "Svc Date" column in line items (per the uploaded screenshot)
+- Status transitions remain accessible from the editor
 
 ## Files Changed
-- `src/components/accounting/AccountingDocuments.tsx`
+- `src/components/accounting/documents/DraftInvoiceEditor.tsx` — new file
+- `src/pages/sales/SalesInvoices.tsx` — use DraftInvoiceEditor instead of dialog + drawer
 
