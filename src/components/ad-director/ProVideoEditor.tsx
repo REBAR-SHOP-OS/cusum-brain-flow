@@ -9,7 +9,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
-  Palette,
+  Palette, Film, Type, LayoutGrid,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -1376,7 +1376,14 @@ export function ProVideoEditor({
 
       {/* ─── Bottom Timeline ─── */}
       <TimelineBar
-        sidebarTabs={[]}
+        sidebarTabs={[
+          { id: "media", label: "Media", icon: <Film className="w-3.5 h-3.5" /> },
+          { id: "text", label: "Text", icon: <Type className="w-3.5 h-3.5" /> },
+          { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
+          { id: "script", label: "Script", icon: <FileText className="w-3.5 h-3.5" /> },
+          { id: "brand-kit", label: "Brand Kit", icon: <Palette className="w-3.5 h-3.5" /> },
+          { id: "card-editor", label: "Card", icon: <LayoutGrid className="w-3.5 h-3.5" /> },
+        ]}
         activeSidebarTab={activeTab}
         onSidebarTabSelect={handleSetActiveTab}
         clips={clips}
