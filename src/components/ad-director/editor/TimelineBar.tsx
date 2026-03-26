@@ -703,7 +703,7 @@ export function TimelineBar({
                           <span className="text-[7px] text-sky-300/60 ml-1">{Math.round((at.volume ?? 1) * 100)}%</span>
                         </div>
                       </PopoverTrigger>
-                      <PopoverContent className="w-44 p-2" side="top" align="center">
+                      <PopoverContent className="w-56 p-2" side="top" align="center">
                           <div className="space-y-2">
                             <p className="text-[10px] font-medium text-foreground">{at.label} Volume</p>
                             <Slider
