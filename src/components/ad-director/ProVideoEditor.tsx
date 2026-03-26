@@ -9,7 +9,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
-  Palette, Film, Type, LayoutGrid,
+  Palette, Film, Type, LayoutGrid, X,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { DEFAULT_CARD_SETTINGS } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
 import { type LogoSettings, DEFAULT_LOGO_SETTINGS } from "@/types/editorSettings";
@@ -178,11 +179,17 @@ export function ProVideoEditor({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeTab, setActiveTab] = useState<EditorTab>("media");
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
-    setActiveTab(tab);
+    if (activeTab === tab) {
+      setPanelOpen(prev => !prev);
+    } else {
+      setActiveTab(tab);
+      setPanelOpen(true);
+    }
     onActiveTabChanged?.(tab);
-  }, [onActiveTabChanged]);
+  }, [onActiveTabChanged, activeTab]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -1371,6 +1378,66 @@ export function ProVideoEditor({
             </div>
           )}
         </div>
+
+        {/* ─── Right Sidebar Panel ─── */}
+        {panelOpen && (
+          <div className="w-[300px] shrink-0 border-l border-white/10 bg-black/60 backdrop-blur-md flex flex-col animate-in slide-in-from-right-5 duration-200">
+            {/* Panel Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+              <span className="text-xs font-semibold text-white capitalize">
+                {activeTab === "brand-kit" ? "Brand Kit" : activeTab === "card-editor" ? "Card Editor" : activeTab}
+              </span>
+              <button onClick={() => setPanelOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Panel Content */}
+            <ScrollArea className="flex-1 p-3">
+              {activeTab === "media" && (
+                <MediaTab
+                  storyboard={storyboard}
+                  clips={clips}
+                  segments={segments}
+                  selectedSceneIndex={selectedSceneIndex}
+                  onSelectScene={setSelectedSceneIndex}
+                  onRegenerateScene={onRegenerateScene}
+                  onUpdateClipUrl={onUpdateClipUrl}
+                />
+              )}
+              {activeTab === "text" && (
+                <TextTab onAddText={() => setTextDialogOpen(true)} />
+              )}
+              {activeTab === "music" && (
+                <MusicTab onTrackSelect={(track) => handleMusicSelect(track?.url || null)} />
+              )}
+              {activeTab === "script" && (
+                <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />
+              )}
+              {activeTab === "brand-kit" && (
+                <BrandKitTab
+                  brand={brand}
+                  logo={logoSettings}
+                  onLogoChange={setLogoSettings}
+                  onDeleteLogo={handleDeleteLogo}
+                  onReplaceLogo={handleReplaceLogo}
+                />
+              )}
+              {activeTab === "card-editor" && currentCardSettings && (
+                <IntroOutroEditor
+                  settings={currentCardSettings}
+                  brand={brand}
+                  onChange={handleCardSettingsChange}
+                  onApply={handleApplyCard}
+                />
+              )}
+              {activeTab === "card-editor" && !currentCardSettings && (
+                <div className="text-xs text-muted-foreground text-center py-8">
+                  Select a static card scene to edit
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+        )}
 
       </div>
 
