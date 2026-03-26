@@ -531,7 +531,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         multiJobsRef.current = data.jobs;
         setStatus("processing"); setProgress(5);
         setProgressLabel(`Generating ${data.totalScenes} scenes (${data.clipDuration}s each)...`);
-        pollTimerRef.current = setTimeout(pollMultiScene, 5000);
+        pollTimerRef.current = setTimeout(pollMultiScene, 3000);
       } else {
         const data = await invokeEdgeFunction("generate-video", {
           action: "generate", provider: effectiveVideoProvider, prompt: finalPrompt,
