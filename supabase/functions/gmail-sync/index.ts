@@ -707,6 +707,33 @@ Deno.serve((req) =>
             metadata: { from: msg.from, to: msg.to, subject: msg.subject, threadId: msg.threadId },
           }, { onConflict: "dedupe_key", ignoreDuplicates: true });
         if (evtErr) console.error("Failed to write activity event:", evtErr);
+
+        // Match inbound email to sales leads by contact_email or email_thread_id
+        try {
+          const fromEmail = (msg.from || "").replace(/.*<([^>]+)>.*/, "$1").toLowerCase().trim();
+          const { data: matchedLeads } = await supabaseAdmin
+            .from("sales_leads")
+            .select("id, company_id")
+            .eq("company_id", companyId)
+            .or(`contact_email.ilike.%${fromEmail}%,email_thread_id.eq.${msg.threadId}`)
+            .limit(5);
+
+          if (matchedLeads?.length) {
+            for (const sl of matchedLeads) {
+              const { error: actErr } = await supabaseAdmin.from("sales_lead_activities").insert({
+                sales_lead_id: sl.id,
+                company_id: sl.company_id,
+                activity_type: "email",
+                subject: msg.subject || "(no subject)",
+                body: `[Inbound] From: ${msg.from}\n\n${(msg.snippet || "").slice(0, 500)}`,
+                user_name: msg.from,
+              });
+              if (actErr) console.warn("Failed to insert sales_lead_activity:", actErr.message);
+            }
+          }
+        } catch (matchErr) {
+          console.warn("Lead matching error:", matchErr);
+        }
       }
     }
 
