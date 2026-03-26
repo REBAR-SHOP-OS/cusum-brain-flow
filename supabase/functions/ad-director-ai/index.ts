@@ -545,7 +545,7 @@ ${script}`;
 }
 
 async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverride?: string) {
-  const { scene, brand, continuityProfile, previousScene, characterImageUrl } = body;
+  const { scene, brand, continuityProfile, previousScene, characterImageUrl, introImageUrl, outroImageUrl, sceneIndex, totalScenes } = body;
   if (!scene) throw new Error("Scene data is required");
 
   const continuityBlock = continuityProfile ? `
@@ -559,6 +559,17 @@ async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverri
 - Camera Style: ${continuityProfile.cameraStyle || "N/A"}
 - Motion Rhythm: ${continuityProfile.motionRhythm || "N/A"}
 You MUST weave ALL of these visual anchors into the rewritten prompt so the video model generates visuals consistent with all other scenes.` : "";
+
+  const isFirstScene = sceneIndex === 0;
+  const isLastVisualScene = sceneIndex === (totalScenes != null ? totalScenes - 1 : -1);
+
+  const introRefBlock = (isFirstScene && introImageUrl)
+    ? `\nINTRO REFERENCE: A reference image is provided for this opening scene. The prompt MUST describe visuals that closely match the composition, colors, subjects, and style of this reference image. This scene should feel like the image has come alive.`
+    : "";
+
+  const outroRefBlock = (isLastVisualScene && outroImageUrl)
+    ? `\nOUTRO REFERENCE: A reference image is provided for this closing visual scene. The prompt MUST describe visuals that closely match the composition, colors, subjects, and style of this reference image. This scene should feel like the image has come alive.`
+    : "";
 
   const userPrompt = `Rewrite this scene's prompt into a premium cinematic video generation prompt.
 ${continuityBlock}
@@ -578,7 +589,7 @@ Original Prompt: ${scene.prompt}
 Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
 ${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the FIRST scene — establish the visual identity that ALL subsequent scenes must follow."}
 ${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}
-${characterImageUrl ? `\nCHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person. Ensure the person's appearance matches across all scenes.` : ""}`;
+${characterImageUrl ? `\nCHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person. Ensure the person's appearance matches across all scenes.` : ""}${introRefBlock}${outroRefBlock}`;
 
   return await callAIAndExtract(
     apiKey,
