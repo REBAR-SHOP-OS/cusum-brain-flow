@@ -468,7 +468,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         <div className="w-full max-w-2xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 relative z-10">
           {/* Home button — top */}
            <button
-              onClick={() => service.patchState({ flowState: "idle" })}
+              onClick={() => { setShowIntro(false); service.patchState({ flowState: "idle" }); }}
               className="fixed top-16 left-4 z-50 w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-700 flex items-center justify-center transition-colors shadow-lg ring-2 ring-purple-400/30"
               title="Back to AI Video Director"
             >
