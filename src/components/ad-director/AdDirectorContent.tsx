@@ -40,6 +40,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [modelOverrides] = useState<ModelOverrides>({});
   const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
+  const [scenePrompts, setScenePrompts] = useState<Record<string, string>>({});
 
   // Pipeline state — driven by singleton service
   const [pipelineState, setPipelineState] = useState<AdDirectorPipelineState>(service.getState());
