@@ -445,6 +445,46 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                 </div>
               </PopoverContent>
             </Popover>
+
+            {/* Video Model Popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    selectedVideoModel.key !== "wan2.6-t2v"
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-muted/40 border-border text-muted-foreground hover:bg-muted"
+                  )}
+                >
+                  <Clapperboard className="w-3.5 h-3.5" />
+                  {selectedVideoModel.label}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-56 p-2">
+                <div className="space-y-1">
+                  {VIDEO_MODELS.map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setSelectedVideoModel(m)}
+                      className={cn(
+                        "w-full flex flex-col items-start px-3 py-2 rounded-lg text-xs transition-all",
+                        selectedVideoModel.key === m.key
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      )}
+                    >
+                      <span className="font-medium">{m.label}</span>
+                      <span className={cn("text-[10px]", selectedVideoModel.key === m.key ? "text-primary-foreground/70" : "opacity-60")}>{m.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <div className="flex items-center gap-1.5">
