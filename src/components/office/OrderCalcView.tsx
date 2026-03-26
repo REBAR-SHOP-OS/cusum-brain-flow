@@ -145,11 +145,11 @@ export function OrderCalcView() {
   useEffect(() => {
     supabase
       .from("rebar_sizes")
-      .select("bar_code, weight_per_meter")
+      .select("bar_code, mass_kg_per_m")
       .then(({ data }) => {
         if (data?.length) {
           const map: Record<string, number> = {};
-          for (const r of data) map[r.bar_code] = r.weight_per_meter;
+          for (const r of data) map[r.bar_code] = r.mass_kg_per_m;
           setWpm(prev => ({ ...prev, ...map }));
         }
       });
