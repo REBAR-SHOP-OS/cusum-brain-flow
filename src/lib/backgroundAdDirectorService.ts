@@ -130,6 +130,15 @@ class BackgroundAdDirectorService {
     this.listener?.(this.state);
   }
 
+  /** Fire-and-forget: generate an AI thumbnail for the project */
+  private async generateThumbnail(projectId: string, prompt: string): Promise<void> {
+    try {
+      await invokeEdgeFunction("generate-thumbnail", { prompt, projectId }, { timeoutMs: 60_000 });
+    } catch (e) {
+      console.warn("Thumbnail generation failed (non-blocking):", e);
+    }
+  }
+
   // ─── Full Pipeline ────────────────────────────────────────
   async startPipeline(
     prompt: string,
@@ -372,6 +381,11 @@ class BackgroundAdDirectorService {
           clips: initialClips, continuity: continuityProfile, status: "analyzed",
         });
         this.update({ projectId: savedId });
+
+        // Generate thumbnail in background (fire-and-forget)
+        if (prompt && savedId) {
+          this.generateThumbnail(savedId, prompt).catch(e => console.warn("Thumbnail generation failed:", e));
+        }
       } catch (e) { console.warn("Auto-save failed:", e); }
 
       if (this.cancelFlag) return;

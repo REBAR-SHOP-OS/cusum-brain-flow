@@ -185,6 +185,7 @@ export type Database = {
           segments: Json | null
           status: string
           storyboard: Json | null
+          thumbnail_url: string | null
           updated_at: string
           user_id: string
         }
@@ -200,6 +201,7 @@ export type Database = {
           segments?: Json | null
           status?: string
           storyboard?: Json | null
+          thumbnail_url?: string | null
           updated_at?: string
           user_id: string
         }
@@ -215,6 +217,7 @@ export type Database = {
           segments?: Json | null
           status?: string
           storyboard?: Json | null
+          thumbnail_url?: string | null
           updated_at?: string
           user_id?: string
         }

@@ -51,7 +51,8 @@ export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete, onRe
   const visible = projects.filter((p) => {
     const hasVideo = p.final_video_url && !p.final_video_url.startsWith("blob:");
     const hasDraftClips = !p.final_video_url && Array.isArray(p.clips) && p.clips.length > 0;
-    return hasVideo || hasDraftClips;
+    const hasThumbnail = !!p.thumbnail_url;
+    return hasVideo || hasDraftClips || hasThumbnail;
   });
   if (visible.length === 0) return null;
 
@@ -157,7 +158,14 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
       {/* Video thumbnail */}
       <div className="aspect-video bg-muted/30 relative">
         {!previewUrl || hasError ? (
-          isDraft ? (
+          project.thumbnail_url ? (
+            <img
+              src={project.thumbnail_url}
+              alt={project.name || "Project thumbnail"}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : isDraft ? (
             <div className="absolute inset-0 flex items-end bg-gradient-to-t from-background/80 to-muted/20 p-3">
               <p className="text-[11px] leading-relaxed text-muted-foreground italic line-clamp-3">
                 {resolvePreviewText(project) || "Draft project"}
