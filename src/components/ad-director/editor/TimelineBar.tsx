@@ -650,14 +650,21 @@ export function TimelineBar({
                   const dur = getSceneDur(sceneIdx);
                   const leftPct = totalDuration > 0 ? (start / totalDuration) * 100 : 0;
                   const widthPct = totalDuration > 0 ? (dur / totalDuration) * 100 : 0;
+                  const isAudioDragTarget = draggedItemId === `audio-${idx}`;
                   return (
                     <Popover key={`vo-${idx}`}>
                       <PopoverTrigger asChild>
                         <div
-                          className="absolute h-5 top-1 rounded bg-sky-600/50 border border-sky-500/40 flex items-center px-1 cursor-pointer hover:bg-sky-600/70 transition-colors"
-                          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                          onMouseDown={(e) => handleItemDragStart(e, "audio", String(idx), leftPct, widthPct)}
+                          className={`absolute h-5 top-1 rounded bg-sky-600/50 border flex items-center px-1 cursor-grab active:cursor-grabbing transition-colors ${isAudioDragTarget ? "border-primary ring-1 ring-primary/50 z-30" : "border-sky-500/40 hover:bg-sky-600/70"}`}
+                          style={{
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                            transform: isAudioDragTarget ? `translateX(${itemDragOffsetPx}px)` : undefined,
+                          }}
                           title={at.label}
                         >
+                          <Move className="w-2 h-2 text-sky-300 mr-0.5 shrink-0" />
                           <Mic className="w-2 h-2 text-sky-300 mr-0.5" />
                           <span className="text-[7px] text-sky-200 truncate">{at.label}</span>
                           <span className="text-[7px] text-sky-300/60 ml-1">{Math.round((at.volume ?? 1) * 100)}%</span>
