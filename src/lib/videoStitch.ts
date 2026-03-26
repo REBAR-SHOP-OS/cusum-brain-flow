@@ -673,8 +673,17 @@ export async function stitchClips(
       const totalFrames = endCardDuration * fps;
       const fadeInFrames = Math.round(0.5 * fps);
 
+      // Stop voice immediately, fade music over 2s during end card
+      if (voiceElement) voiceElement.pause();
+      if (musicGainNode && audioCtx) {
+        const now = audioCtx.currentTime;
+        musicGainNode.gain.setValueAtTime(musicGainNode.gain.value, now);
+        musicGainNode.gain.linearRampToValueAtTime(0, now + 2);
+      }
+
       const drawEndFrame = () => {
         if (frame >= totalFrames) {
+          if (musicElement) musicElement.pause();
           setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 100);
           return;
         }
