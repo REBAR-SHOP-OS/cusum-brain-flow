@@ -261,6 +261,7 @@ const App = () => (
                     <Route path="/install" element={<Install />} />
                     <Route path="/knowledge-base" element={<KnowledgeBasePublic />} />
                     <Route path="/unsubscribe" element={<Unsubscribe />} />
+                    <Route path="/accept-quote/:quoteId" element={<AcceptQuote />} />
 
                     {/* Redirect broken notification paths */}
                     <Route path="/hr" element={<Navigate to="/timeclock" replace />} />
