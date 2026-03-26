@@ -31,6 +31,8 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
   const [generating, setGenerating] = useState(false);
   const [addToPipeline, setAddToPipeline] = useState(false);
   const [tab, setTab] = useState<string>("project");
+  const [deliveryDistance, setDeliveryDistance] = useState<string>("");
+  const [includeShopDrawings, setIncludeShopDrawings] = useState(true);
 
   // Tab 1 — existing project
   const [selectedProject, setSelectedProject] = useState<string>("");
@@ -53,6 +55,8 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
       setSelectedCustomerId("");
       setSelectedLeadId(leadId || "");
       setAddToPipeline(false);
+      setDeliveryDistance("");
+      setIncludeShopDrawings(true);
       setTab("project");
     }
   }, [open, leadCustomerName, leadId]);
@@ -136,6 +140,8 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           estimation_project_id: selectedProject,
           lead_id: leadId || selectedLeadId || null,
           customer_name_override: customerName || null,
+          delivery_distance_km: Number(deliveryDistance) || 0,
+          include_shop_drawings: includeShopDrawings,
         },
       });
       if (error) throw error;
@@ -202,6 +208,8 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           estimation_project_id: newProjectId,
           lead_id: selectedLeadId || leadId || null,
           customer_name_override: customerName || null,
+          delivery_distance_km: Number(deliveryDistance) || 0,
+          include_shop_drawings: includeShopDrawings,
         },
       });
       if (quoteError) throw quoteError;
@@ -405,8 +413,35 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           </TabsContent>
         </Tabs>
 
+        {/* Delivery & Shop Drawing options */}
+        <div className="grid grid-cols-2 gap-3 pt-1">
+          <div className="space-y-1">
+            <Label htmlFor="delivery-km" className="text-sm">Delivery Distance (km)</Label>
+            <Input
+              id="delivery-km"
+              type="number"
+              min={0}
+              placeholder="0 = no delivery"
+              value={deliveryDistance}
+              onChange={(e) => setDeliveryDistance(e.target.value)}
+            />
+          </div>
+          <div className="flex items-end pb-2">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="include-shop-drawings"
+                checked={includeShopDrawings}
+                onCheckedChange={(v) => setIncludeShopDrawings(!!v)}
+              />
+              <Label htmlFor="include-shop-drawings" className="text-sm cursor-pointer">
+                Include Shop Drawings
+              </Label>
+            </div>
+          </div>
+        </div>
+
         {/* Pipeline checkbox */}
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2">
           <Checkbox
             id="add-pipeline"
             checked={addToPipeline}

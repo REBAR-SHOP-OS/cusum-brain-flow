@@ -45,7 +45,9 @@ function getFabricationRate(tonnage: number, table: any[]): { price_per_ton: num
 
 Deno.serve((req) =>
   handleRequest(req, async ({ userId, companyId, serviceClient, body }) => {
-    const { estimation_project_id, lead_id, customer_name_override } = body;
+    const { estimation_project_id, lead_id, customer_name_override, delivery_distance_km, include_shop_drawings } = body;
+    const deliveryDistanceKm = Number(delivery_distance_km) || 0;
+    const shouldIncludeShopDrawings = include_shop_drawings !== false;
 
     if (!estimation_project_id) {
       return new Response(JSON.stringify({ error: "estimation_project_id is required" }), {
@@ -208,15 +210,32 @@ Deno.serve((req) =>
       });
     }
 
-    // Line 3: Shop drawings
-    const shopDrawingCost = typeof fabRate.shop_drawing_price === 'number' ? fabRate.shop_drawing_price : 2500;
-    if (shopDrawingCost > 0) {
+    // Line 3: Shop drawings (conditional)
+    let shopDrawingCost = 0;
+    if (shouldIncludeShopDrawings) {
+      shopDrawingCost = typeof fabRate.shop_drawing_price === 'number' ? fabRate.shop_drawing_price : 2500;
+      if (shopDrawingCost > 0) {
+        lineItems.push({
+          description: "Shop Drawings",
+          quantity: 1,
+          unit: "ea",
+          unit_price: shopDrawingCost,
+          amount: shopDrawingCost,
+        });
+      }
+    }
+
+    // Line 4: Delivery (conditional)
+    let shippingCost = 0;
+    if (deliveryDistanceKm > 0) {
+      const trips = Math.max(1, Math.ceil(totalTonnes / truckCap));
+      shippingCost = Number((trips * deliveryDistanceKm * shippingPerKm * 2).toFixed(2));
       lineItems.push({
-        description: "Shop Drawings",
-        quantity: 1,
-        unit: "ea",
-        unit_price: shopDrawingCost,
-        amount: shopDrawingCost,
+        description: `Delivery — ${deliveryDistanceKm} km × ${trips} trip(s) (round trip)`,
+        quantity: trips,
+        unit: "trips",
+        unit_price: Number((deliveryDistanceKm * shippingPerKm * 2).toFixed(2)),
+        amount: shippingCost,
       });
     }
 
@@ -243,7 +262,7 @@ Deno.serve((req) =>
     const assumptions = [
       "Quote based on customer-provided sizes and quantities",
       "Design by others",
-      "Shipping distance TBD — not included in this quote",
+      deliveryDistanceKm > 0 ? `Delivery included: ${deliveryDistanceKm} km round trip` : "Shipping distance TBD — not included in this quote",
       "Black rebar unless otherwise specified",
       `${scrapPct}% scrap factor applied`,
       "Prices valid for 30 days from quote date",
@@ -278,8 +297,10 @@ Deno.serve((req) =>
           total_weight_kg: totalWeightKg,
           total_weight_with_scrap_kg: totalWithScrap,
           scrap_percentage: scrapPct,
-          shipping_cost: 0,
+          shipping_cost: shippingCost,
+          delivery_distance_km: deliveryDistanceKm,
           shop_drawing_cost: shopDrawingCost,
+          include_shop_drawings: shouldIncludeShopDrawings,
           assumptions,
           customer_name: customerName,
           lead_id: effectiveLeadId || null,
