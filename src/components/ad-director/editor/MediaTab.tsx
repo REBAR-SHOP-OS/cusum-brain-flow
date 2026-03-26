@@ -181,7 +181,7 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
                 isSelected ? "border-primary bg-primary/5" : "border-border/30 hover:border-border/60 hover:bg-muted/20"
               }`}
             >
-              <div className="w-16 h-10 rounded-md bg-muted/50 flex items-center justify-center text-muted-foreground flex-shrink-0 relative overflow-hidden">
+              <div className="w-20 h-12 rounded-md bg-muted/50 flex items-center justify-center text-muted-foreground flex-shrink-0 relative overflow-hidden">
                 {c?.videoUrl ? (
                   <video src={c.videoUrl} className="w-full h-full object-cover" muted />
                 ) : (
