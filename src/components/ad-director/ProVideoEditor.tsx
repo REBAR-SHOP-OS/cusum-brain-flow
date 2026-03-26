@@ -1321,6 +1321,15 @@ export function ProVideoEditor({
         selectedSceneIndex={selectedSceneIndex}
         onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
       />
+
+      {/* Hidden audio file input */}
+      <input
+        ref={audioUploadRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={handleAudioFileSelected}
+      />
     </div>
   );
 }
