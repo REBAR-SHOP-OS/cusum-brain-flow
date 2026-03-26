@@ -440,6 +440,15 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                 onSelect={(url) => {
                   service.patchState({ finalVideoUrl: url, flowState: "result" });
                 }}
+                onSelectDraft={(project) => {
+                  service.patchState({
+                    segments: project.segments ?? [],
+                    storyboard: project.storyboard ?? [],
+                    clips: project.clips ?? [],
+                    continuity: project.continuity ?? null,
+                    flowState: "result",
+                  });
+                }}
                 onDelete={(id) => deleteProject.mutate(id)}
               />
             </div>
