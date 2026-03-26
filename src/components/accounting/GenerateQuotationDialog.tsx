@@ -208,6 +208,8 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           estimation_project_id: newProjectId,
           lead_id: selectedLeadId || leadId || null,
           customer_name_override: customerName || null,
+          delivery_distance_km: Number(deliveryDistance) || 0,
+          include_shop_drawings: includeShopDrawings,
         },
       });
       if (quoteError) throw quoteError;
