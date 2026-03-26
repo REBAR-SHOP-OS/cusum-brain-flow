@@ -365,11 +365,21 @@ Never use generic "cut" — specify type + reasoning.
 ## CONTINUITY PROFILE
 Return: subjectDescriptions, wardrobe, environment, timeOfDay, cameraStyle, motionRhythm, colorMood, lightingType, objectPlacement, lastFrameSummary, nextSceneBridge
 
+## CROSS-SCENE COHERENCE RULES (CRITICAL)
+- ALL scenes MUST share the same color palette, lighting style, and environment type unless the script explicitly changes location
+- Subject descriptions MUST be identical across all scenes — same person, same clothing, same props, same physical appearance
+- Every scene prompt after scene 1 MUST begin with a "continuity anchor": "Continuing in the same [environment], same [lighting], same [subject appearance] as previous scenes —"
+- The viewer MUST feel all clips are from the SAME film shoot, same location, same day, same camera setup
+- Color grading, contrast level, and saturation MUST remain consistent across all scenes
+- If scene 1 establishes warm golden lighting, ALL subsequent scenes must maintain warm golden lighting
+- Camera lens characteristics (focal length, depth of field) should remain consistent unless creatively motivated
+
 ## PROMPT RULES (80-150 words each)
 - Specific camera specs (lens mm, f-stop), lighting angles, material textures
 - NO camera brand names (ARRI, RED, Sony) — describe characteristics instead
 - NO text/titles/brand names in video prompts — overlays handled by editor
 - After scene 1: "Continue seamlessly from previous clip, preserving location, subject, lighting, pacing"
+- Each prompt MUST embed the continuity profile details (environment, lighting, color mood, subject) directly into the description
 - Example lighting: "golden hour backlight, tungsten fill 45° left, volumetric haze"
 - Example materials: "weathered steel rebar with rust patina, fresh concrete with moisture sheen"`;
 
