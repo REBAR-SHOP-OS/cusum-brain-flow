@@ -1,48 +1,27 @@
 
 
-# Change Flow: Approve First, Then Edit
+# Hide User Prompt Bubble in Result View
 
 ## What
-Currently both "Approve & Download" and "Edit Video" buttons are available simultaneously. The user wants a two-step flow:
-1. First, user must **approve** the scene composition (without downloading)
-2. Only after approval, the user can enter the edit page
+The user prompt bubble (showing "Product: wire_mesh. Style: inspirational. یک ویدیو بساز") is displayed in the result view. The user wants it hidden — the prompt should not be visible to the user in this section.
 
 ## Change
 
 ### `src/components/ad-director/AdDirectorContent.tsx`
 
-**1. Add `approved` state** — `useState<boolean>(false)`, reset to `false` when `flowState` changes away from `"result"`
-
-**2. Change button layout:**
-- **Before approval**: Show a single "Approve Composition" button (with `Check` icon). Clicking sets `approved = true`.
-- **After approval**: Show "Download" button and "Edit Video" button side by side. "Edit Video" navigates to editing as before.
-
+Remove the user prompt bubble from the **result** section (lines 326-330):
 ```tsx
-{/* Action buttons */}
-<div className="flex items-center justify-center gap-3">
-  {!approved ? (
-    <Button onClick={() => setApproved(true)} className="gap-2">
-      <Check className="w-4 h-4" />
-      Approve Composition
-    </Button>
-  ) : (
-    <>
-      <Button onClick={handleDownload} disabled={!finalVideoUrl} className="gap-2">
-        <Download className="w-4 h-4" />
-        Download
-      </Button>
-      <Button variant="outline" onClick={() => service.patchState({ flowState: "editing" })} className="gap-2">
-        <Pencil className="w-4 h-4" />
-        Edit Video
-      </Button>
-    </>
-  )}
+{/* User message */}
+<div className="flex justify-end">
+  <div className="max-w-[80%] rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-3 text-sm">
+    {userPrompt}
+  </div>
 </div>
 ```
 
-**3. Reset `approved` to `false`** when scenes are regenerated (in `handleRegenerateScene`), so user must re-approve after changes.
+Also remove the same bubble from the **analyzing/generating** section (lines 299-303) for consistency.
 
 | File | Change |
 |---|---|
-| `src/components/ad-director/AdDirectorContent.tsx` | Add `approved` state, split buttons into approve-first then edit/download flow |
+| `src/components/ad-director/AdDirectorContent.tsx` | Remove `userPrompt` bubble divs from both "analyzing/generating" and "result" sections |
 
