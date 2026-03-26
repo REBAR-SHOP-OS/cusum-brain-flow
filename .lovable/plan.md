@@ -1,29 +1,31 @@
 
 
-# Add Auto-Generate Prompt Button to Ad Director Chat Bar
+# Fix Toast Pointer-Events Passthrough
 
-## What
-Add a sparkle/wand icon button between the Products selector and the Send button. It calls the `ai-generic` edge function to auto-generate a video prompt based on the selected duration, style(s), and product(s). The button is disabled until at least one style AND one product are selected.
+## Problem
+Both the shadcn `Toaster` (radix) and `Sonner` toaster are rendered in `App.tsx`. The Sonner container uses `pointer-events: none` on its wrapper so it doesn't block the page, but individual toast elements don't reliably get `pointer-events: auto`, causing visible toasts to be click-through "ghosts" that let users accidentally trigger buttons behind them.
 
-## Changes
+## Fix
 
-### `src/components/ad-director/ChatPromptBar.tsx`
+### `src/components/ui/sonner.tsx`
+Add `pointer-events: auto` to the individual toast className so each toast element is always interactive:
 
-1. **Import** `Sparkles` and `Loader2` from lucide-react
-2. **Add state**: `isGenerating` boolean
-3. **Add** `canAutoGenerate` computed: `selectedStyles.length > 0 && selectedProducts.length > 0`
-4. **Add** `handleAutoGenerate` async function:
-   - Calls `supabase.functions.invoke("ai-generic", { body: { prompt, systemPrompt } })` where the prompt includes selected products, styles, duration, and ratio
-   - System prompt instructs: "You are a video ad prompt writer for a construction/rebar company. Write a single concise, cinematic video prompt (2-3 sentences) for the given parameters. Return ONLY the prompt text."
-   - On success, sets the textarea value via `setPrompt(result)`
-   - Shows toast on error
-5. **Render** the button between Products popover and Send button:
-   - `Sparkles` icon (or `Loader2` spinning when generating)
-   - Disabled when `!canAutoGenerate || isGenerating || disabled`
-   - Tooltip: "Auto-generate prompt"
-   - Styled as a rounded-full pill matching other toolbar buttons
+```tsx
+toast:
+  "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg group-[.toaster]:pointer-events-auto",
+```
+
+### `src/components/ui/toast.tsx`
+Add `pointer-events-auto` to the `toastVariants` base class so the radix-based toasts are also always interactive:
+
+Current base: `"group pointer-events-auto relative flex ..."`
+This already has it — verify it's present. If not, add it.
+
+### Validation
+Both toaster systems will have `pointer-events: auto` on each toast element, ensuring they block clicks to elements behind them while visible.
 
 | File | Change |
 |---|---|
-| `ChatPromptBar.tsx` | Add auto-generate prompt button with AI call, enabled only when style + product selected |
+| `src/components/ui/sonner.tsx` | Add `pointer-events-auto` to toast classNames |
+| `src/components/ui/toast.tsx` | Verify `pointer-events-auto` is present in `toastVariants` base |
 
