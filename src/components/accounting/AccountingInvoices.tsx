@@ -360,25 +360,10 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         />
       )}
 
-      <CustomerSelectDialog
-        open={customerSelectOpen}
-        onOpenChange={setCustomerSelectOpen}
-        customers={customers.map((c: any) => ({
-          Id: c.qb_customer_id || c.Id,
-          DisplayName: c.display_name || c.DisplayName,
-          CompanyName: c.CompanyName,
-        }))}
-        onSelect={(qbId, name) => setTxnCustomer({ qbId, name })}
-      />
-
-      {txnCustomer && (
-        <CreateTransactionDialog
-          open={!!txnCustomer}
-          onOpenChange={(open) => { if (!open) setTxnCustomer(null); }}
-          type="Invoice"
-          customerQbId={txnCustomer.qbId}
-          customerName={txnCustomer.name}
-          onCreated={() => { setTxnCustomer(null); loadAll(); }}
+      {editorInvoiceId && (
+        <DraftInvoiceEditor
+          invoiceId={editorInvoiceId}
+          onClose={() => setEditorInvoiceId(null)}
         />
       )}
 
