@@ -156,7 +156,7 @@ Deno.serve((req) =>
     }
 
     const totalWeightKg = bomItems.reduce((s, i) => s + Number(i.weight_kg || 0), 0);
-    const scrapPct = pricingConfig.scrap_percentage ?? 15;
+    const scrapPct = pricingConfig.scrap_percentage ?? pricingConfig.default_scrap_percent ?? 15;
     const totalWithScrap = totalWeightKg * (1 + scrapPct / 100);
     const totalTonnes = totalWithScrap / 1000;
     const cageTonnes = (cageWeightKg * (1 + scrapPct / 100)) / 1000;
@@ -177,9 +177,9 @@ Deno.serve((req) =>
 
     // ─── DETERMINISTIC PRICING (no AI arithmetic) ───
     const fabTable = pricingConfig.fabrication_pricing?.price_table || FALLBACK_PRICING_CONFIG.fabrication_pricing.price_table;
-    const cageRate = pricingConfig.cage_pricing_rule?.rate_per_ton_cad ?? 5500;
-    const shippingPerKm = pricingConfig.shipping_per_km ?? 3;
-    const truckCap = pricingConfig.truck_capacity_tons ?? 7;
+    const cageRate = Number(pricingConfig.cage_pricing_rule?.rate_per_ton_cad ?? pricingConfig.cage_price_per_ton_cad ?? 5500);
+    const shippingPerKm = Number(pricingConfig.shipping_per_km ?? pricingConfig.shipping_per_km_cad ?? 3);
+    const truckCap = Number(pricingConfig.truck_capacity_tons ?? pricingConfig.default_truck_capacity_tons ?? 7);
 
     const fabRate = getFabricationRate(nonCageTonnes > 0 ? nonCageTonnes : totalTonnes, fabTable);
     
