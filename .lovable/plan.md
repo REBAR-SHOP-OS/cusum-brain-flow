@@ -1,46 +1,36 @@
 
 
-# Display Generated Scene Clips as Thumbnail Cards in Ad Director
+# Fix: User-Selected Duration and Ratio Must Be Enforced in Video Generation
 
-## What
-In the "result" view of the Ad Director, replace the single large video preview (or "not available" message) with a horizontal scrollable row of scene thumbnail cards — one card per generated clip. Each card shows the video thumbnail with hover-to-play, scene number, and status. The final stitched video (if available) shows separately below or as a "Full Video" card.
+## Problem
+When the user selects a duration (15s, 30s, 1min) and ratio (16:9, 9:16, 1:1, 4:3) in the chat bar, these values are **not properly passed** to the video generation pipeline:
 
-## How
+1. The `duration` string from ChatPromptBar is received by `startPipeline` but **never stored or used** — line 329 uses `videoParams.duration` which defaults to `5`
+2. The `videoParams` object constructed on line 85 of `AdDirectorContent.tsx` only overrides `ratio`, keeping `duration: 5` from defaults
+3. For 30s/60s videos, scene durations must be **distributed across scenes** (Wan API max is 15s/clip), but currently each scene gets 5s
 
-### Update `AdDirectorContent.tsx` — Result section (lines 313-326)
+## Fix
 
-Replace the single video preview block with a **scene clips gallery**:
+### 1. Store user-selected duration in pipeline state (`backgroundAdDirectorService.ts`)
 
-- Render a horizontal scrollable row of cards from the `clips` array (joined with `storyboard` for scene labels)
-- Each card:
-  - Shows a `<video>` element with `preload="metadata"`, hover-to-play behavior
-  - Displays scene number/label overlay (e.g. "Scene 1 — Hook")
-  - Shows status indicator (spinner for generating, checkmark for completed, error for failed)
-  - Completed clips: clickable to play in a larger preview area above
-- Below the scene cards row, keep the existing final video player for the stitched result
-- If no final video but clips exist, clicking a scene card plays it in the main preview area
+- Add `userDuration: number` to `AdDirectorPipelineState` (parsed from the "15"/"30"/"60" string)
+- In `startPipeline`, parse `duration` string → number and store it
+- In scene generation (line 329), calculate per-scene duration:
+  - `perSceneDuration = Math.min(15, Math.ceil(userDuration / numberOfScenes))`
+  - This ensures total video ≈ user-selected duration, with each clip ≤ 15s (Wan limit)
 
-### Visual Layout (matching user's drawing)
-```text
-┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-│ Scene 1│ │ Scene 2│ │ Scene 3│ │ Scene 4│  ← horizontal scroll
-│  video │ │  video │ │  video │ │  video │
-│  thumb │ │  thumb │ │  thumb │ │  thumb │
-└────────┘ └────────┘ └────────┘ └────────┘
+### 2. Pass duration properly from `AdDirectorContent.tsx`
 
-      [ Approve & Download ]  [ Edit Video ]
-```
+- Update line 85 to include parsed duration: `{ ...currentVideoParams, ratio, duration: parseInt(duration) || 15 }`
 
-### Implementation Details
-- Add `selectedPreviewUrl` state to track which clip is shown in the main player
-- Scene cards use the same hover-play pattern from `VideoLibrary.tsx`
-- Cards grid: `flex overflow-x-auto gap-3` with `min-w-[200px] aspect-video` per card
-- Generating scenes show a pulsing skeleton with spinner
-- Failed scenes show retry indicator
+### 3. Pass duration to analyze-script for correct scene planning
+
+- Include `targetDuration` in the analyze-script call so the AI plans the right number of scenes for the total duration (e.g., 4 scenes for 60s, 2 for 30s, 1-2 for 15s)
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/ad-director/AdDirectorContent.tsx` | Replace single video preview with scene clips gallery in result view |
+| `src/lib/backgroundAdDirectorService.ts` | Add `userDuration` to state, parse duration param, use it for per-scene duration calculation, pass to analyze-script |
+| `src/components/ad-director/AdDirectorContent.tsx` | Pass parsed duration into videoParams |
 
