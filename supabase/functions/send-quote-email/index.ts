@@ -42,8 +42,8 @@ Deno.serve((req) =>
     const notes = meta.notes || "";
     const totalAmount = quote.total_amount || 0;
     const taxRate = meta.tax_rate ?? 13;
-    const subtotal = totalAmount / (1 + taxRate / 100);
-    const taxAmount = totalAmount - subtotal;
+    const subtotal = Math.round((totalAmount / (1 + taxRate / 100)) * 100) / 100;
+    const taxAmount = Math.round((totalAmount - subtotal) * 100) / 100;
 
     // Build line items HTML
     const lineItemsHtml = lineItems.length > 0
@@ -94,7 +94,7 @@ Deno.serve((req) =>
           <table style="width:100%;">
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Quotation #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${quoteNumber}</td></tr>
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Total Amount</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:20px;">$${totalAmount.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
-            ${quote.valid_until ? `<tr><td style="color:#888;font-size:13px;padding:4px 0;">Valid Until</td><td style="text-align:right;color:#1a1a2e;">${quote.valid_until}</td></tr>` : ""}
+            ${quote.valid_until ? `<tr><td style="color:#888;font-size:13px;padding:4px 0;">Valid Until</td><td style="text-align:right;color:#1a1a2e;">${new Date(quote.valid_until).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}</td></tr>` : ""}
           </table>
         </div>
         ${lineItemsTable}
@@ -104,8 +104,6 @@ Deno.serve((req) =>
 
       const brandedHtml = buildBrandedEmail({
         bodyHtml,
-        signatureHtml: sigHtml || undefined,
-        actorName: meta.actor_name,
       });
 
       // Send via gmail-send
@@ -114,7 +112,7 @@ Deno.serve((req) =>
         headers: { "Content-Type": "application/json", Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY") || "" },
         body: JSON.stringify({
           to: customer_email,
-          subject: `Quotation ${quoteNumber} — REBAR.SHOP`,
+          subject: `Quotation ${quoteNumber} - REBAR.SHOP`,
           body: brandedHtml,
         }),
       });
@@ -247,8 +245,6 @@ Deno.serve((req) =>
 
       const brandedInvoiceHtml = buildBrandedEmail({
         bodyHtml: invoiceBodyHtml,
-        signatureHtml: sigHtml || undefined,
-        actorName: meta.actor_name,
       });
 
       // 6. Send invoice email
@@ -257,7 +253,7 @@ Deno.serve((req) =>
         headers: { "Content-Type": "application/json", Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY") || "" },
         body: JSON.stringify({
           to: customer_email,
-          subject: `Invoice ${invoiceNumber} — REBAR.SHOP`,
+          subject: `Invoice ${invoiceNumber} - REBAR.SHOP`,
           body: brandedInvoiceHtml,
         }),
       });
