@@ -1,7 +1,13 @@
-import React from "react";
+import React, { useState } from "react";
 import { Download, Copy, FileText, Image, FileSpreadsheet, File } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function getFileIcon(filename: string) {
   const ext = filename.split(".").pop()?.toLowerCase() || "";
@@ -30,6 +36,10 @@ interface Props {
 
 export function InlineFileLink({ url, fileName }: Props) {
   const name = fileName || extractFileName(url);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(name);
+  const isPdf = /\.pdf(\?|$)/i.test(name);
 
   const handleDownload = () => {
     window.open(url, "_blank");
@@ -45,16 +55,49 @@ export function InlineFileLink({ url, fileName }: Props) {
   };
 
   return (
-    <div className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 my-1 max-w-full">
-      {getFileIcon(name)}
-      <span className="text-xs font-medium truncate min-w-0 max-w-[200px]">{name}</span>
-      <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={handleDownload} title="Download">
-        <Download className="w-3.5 h-3.5" />
-      </Button>
-      <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={handleCopy} title="Copy link">
-        <Copy className="w-3.5 h-3.5" />
-      </Button>
-    </div>
+    <>
+      <div className="inline-flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-1.5 my-1 max-w-full">
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 min-w-0 hover:opacity-70 transition-opacity cursor-pointer bg-transparent border-none p-0"
+          onClick={() => setPreviewOpen(true)}
+        >
+          {getFileIcon(name)}
+          <span className="text-xs font-medium truncate min-w-0 max-w-[200px]">{name}</span>
+        </button>
+        <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={handleDownload} title="Download">
+          <Download className="w-3.5 h-3.5" />
+        </Button>
+        <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={handleCopy} title="Copy link">
+          <Copy className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="truncate text-sm">{name}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 flex items-center justify-center overflow-auto">
+            {isImage && (
+              <img src={url} alt={name} className="max-w-full max-h-[75vh] object-contain rounded" />
+            )}
+            {isPdf && (
+              <iframe src={url} title={name} className="w-full h-[75vh] rounded border-0" />
+            )}
+            {!isImage && !isPdf && (
+              <div className="flex flex-col items-center gap-4 py-12 text-center">
+                <File className="w-12 h-12 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Preview not available for this file type.</p>
+                <Button variant="outline" onClick={handleDownload} className="gap-2">
+                  <Download className="w-4 h-4" /> Download
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
