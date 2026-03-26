@@ -30,7 +30,7 @@ const EDGE_TIMEOUT_MS = 180_000;
 export function AdDirectorContent() {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
-  const { saveProject } = useAdProjectHistory();
+  const { projects, saveProject } = useAdProjectHistory();
   const promptHistory = usePromptHistory();
   const service = backgroundAdDirectorService;
 
