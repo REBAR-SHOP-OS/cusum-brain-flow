@@ -512,6 +512,15 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
     // ─── 4. Compute summary ───
     const summary = computeProjectSummary(calculatedItems);
 
+    // ─── ZERO-WEIGHT GUARD: Don't persist useless projects ───
+    if (summary.total_weight_kg <= 0 && extractedItems.length > 0) {
+      console.error("Extraction produced items but total weight is 0 — aborting project creation");
+      return new Response(JSON.stringify({
+        error: "Could not extract usable rebar weights from the uploaded document. The file may be a summary format that could not be parsed. Please try uploading a detailed bar schedule or shop drawing.",
+        extraction_failed: true,
+      }), { status: 422, headers: { "Content-Type": "application/json" } });
+    }
+
     const totalLaborHours = pricing.length > 0
       ? calculatedItems.reduce((sum, item) => {
           const p = pricingMap.get(item.bar_size);
