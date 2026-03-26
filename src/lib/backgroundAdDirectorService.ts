@@ -188,6 +188,7 @@ class BackgroundAdDirectorService {
         action: "analyze-script",
         script: prompt,
         brand,
+        targetDuration: videoParams.duration,
         assetDescriptions: images.length > 0 ? images.map(f => f.name).join(", ") : undefined,
         characterImageUrl,
         modelOverrides,
