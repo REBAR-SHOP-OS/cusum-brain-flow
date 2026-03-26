@@ -104,16 +104,26 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
       if (characterImage) contextLines.push("Character Image: YES — maintain this person as the consistent narrator/subject across ALL scenes");
       if (outroImage) contextLines.push("Outro Image: YES — use as closing reference frame, end the video transitioning to match this image");
 
+      const sceneCount = Math.max(1, Math.floor(parseInt(duration) / 15));
+      contextLines.push(`Scene count: ${sceneCount} (each scene is exactly 15 seconds)`);
+
       const systemLines = [
         "You are a cinematic video ad prompt writer for a construction/rebar company.",
-        "Write a single concise, vivid video prompt (2-3 sentences) for the given parameters.",
-        "Then on a new line, write '---VOICEOVER---' followed by a professional voiceover narration script (2-4 sentences) matching the video content.",
-        "The voiceover should be persuasive advertising copy suitable for text-to-speech.",
-        "Return ONLY the prompt text and voiceover, no quotes or extra formatting.",
+        `Write exactly ${sceneCount} scene(s) for a ${dur} video ad.`,
+        "Each scene is exactly 15 seconds.",
+        "Format each scene EXACTLY as follows:",
+        "",
+        "Scene X – Ys to Zs",
+        "[Visual prompt: 1-2 sentences, cinematic, vivid, specific camera/lighting details]",
+        "Voiceover:",
+        "\"[Persuasive advertising copy, 1-2 sentences, suitable for text-to-speech]\"",
+        "",
+        "Separate scenes with a blank line.",
+        "Return ONLY the formatted scenes. No extra text, no markdown, no explanations.",
       ];
-      if (introImage) systemLines.push("An Intro Image is provided — start the video with a scene that visually matches and continues from the uploaded reference image.");
-      if (characterImage) systemLines.push("A Character Image is provided — feature that person consistently as the narrator and main subject throughout all scenes. Describe their appearance for continuity.");
-      if (outroImage) systemLines.push("An Outro Image is provided — end the video with a scene that visually transitions into and matches the uploaded closing reference image.");
+      if (introImage) systemLines.push("An Intro Image is provided — Scene 1 must visually match and continue from the uploaded reference image.");
+      if (characterImage) systemLines.push("A Character Image is provided — feature that person consistently as the narrator and main subject across ALL scenes. Describe their appearance for continuity.");
+      if (outroImage) systemLines.push(`An Outro Image is provided — Scene ${sceneCount} must visually transition into and match the uploaded closing reference image.`);
 
       const { data, error } = await supabase.functions.invoke("ai-generic", {
         body: {
@@ -126,14 +136,8 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
       if (error) throw error;
       const rawResult = data?.result || data?.text || "";
       if (rawResult) {
-        const parts = rawResult.split("---VOICEOVER---");
-        const visualPrompt = (parts[0] || "").trim();
-        const voiceover = (parts[1] || "").trim();
-        const formatted = voiceover
-          ? `${visualPrompt}\n\n🎙️ Voiceover:\n${voiceover}`
-          : visualPrompt;
-        setPrompt(formatted);
-        toast({ title: "✨ پرامپت آماده شد", description: "بررسی کنید و در صورت نیاز ویرایش کنید." });
+        setPrompt(rawResult.trim());
+        toast({ title: "✨ پرامپت آماده شد", description: `${sceneCount} سکانس با Voiceover تولید شد. بررسی و ویرایش کنید.` });
       }
     } catch (err: any) {
       console.error("Auto-generate prompt error:", err);
