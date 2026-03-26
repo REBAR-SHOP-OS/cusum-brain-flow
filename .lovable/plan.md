@@ -1,59 +1,41 @@
 
-Goal: make each video-history card show an actual video preview when possible, and let the user rename each card directly from the card UI.
 
-What I found:
-- `VideoHistory.tsx` already tries to use a draft clip URL, but it only checks a few flat keys and falls back to the Draft placeholder when the saved clip shape differs.
-- Draft selection is restored from `AdDirectorContent.tsx`, but card names are currently read-only.
-- `useAdProjectHistory.ts` already supports updating an existing project when `saveProject.mutateAsync` receives an `id`, so renaming can reuse the current persistence flow without backend changes.
+# Name Cards Based on Prompt
 
-Implementation plan
+## Problem
+All cards show "Untitled Ad" or "{brand} Ad" because the project name is derived from the brand name, not the user's prompt.
 
-1. Strengthen preview URL resolution in `VideoHistory.tsx`
-- Add a small helper to resolve the best preview URL for each card.
-- Prefer `final_video_url` for completed videos.
-- For drafts, scan `project.clips` more defensively:
-  - only prefer completed clips first
-  - read `videoUrl`, `video_url`, `url`, and common nested URL shapes if present
-- Keep the current card click behavior intact:
-  - final video → open result view
-  - draft → restore draft state
+## Changes
 
-2. Improve card preview behavior
-- Keep the `<video>` thumbnail approach, but make it more reliable for visible previews.
-- Show the video element whenever a resolved preview URL exists.
-- Keep the existing fallback only when no playable URL is found or the media errors.
-- Preserve hover-to-play behavior and non-hover play icon overlay.
+### 1. `src/lib/backgroundAdDirectorService.ts` (line 369)
+Generate a short name from the user's prompt (first ~50 chars, trimmed to last word boundary):
 
-3. Add inline rename UI to each history card
-- Add a small edit action/icon beside the card title area.
-- Clicking it switches the title into an input field on that card only.
-- Support:
-  - save on Enter / check action / blur
-  - cancel on Escape
-  - prevent card-open click while editing
+```typescript
+// Replace: name: brand.name ? `${brand.name} Ad` : "Untitled Ad",
+const promptName = prompt.length > 50 ? prompt.substring(0, 50).replace(/\s+\S*$/, "…") : prompt;
+name: promptName || (brand.name ? `${brand.name} Ad` : "Untitled Ad"),
+```
 
-4. Persist renamed titles through the existing hook
-- Extend `VideoHistory` props with an optional rename callback like `onRename(projectId, newName)`.
-- In `AdDirectorContent.tsx`, pass a rename handler that calls `saveProject.mutateAsync` with:
-  - `id`
-  - updated `name`
-  - existing project data (`brandName`, `script`, `segments`, `storyboard`, `clips`, `continuity`, `finalVideoUrl`, `status`)
-- Show success/error toast feedback for rename.
+### 2. `src/components/ad-director/AdDirectorContent.tsx` (line 620)
+Use the user prompt for draft saves too. The `script` field in state holds the prompt:
 
-5. Keep the change surgical and safe
-- No database migration needed.
-- No change to the overall Ad Director flow, draft restore logic, delete logic, or editor flow.
-- Only touch:
-  - `src/components/ad-director/VideoHistory.tsx`
-  - `src/components/ad-director/AdDirectorContent.tsx`
+```typescript
+// Replace: name: brand.name || "Untitled",
+const promptName = service.getState().userPrompt;
+name: promptName
+  ? (promptName.length > 50 ? promptName.substring(0, 50).replace(/\s+\S*$/, "…") : promptName)
+  : (brand.name || "Untitled"),
+```
 
-Technical notes
-- `ClipOutput` officially contains `videoUrl`, but saved project JSON may contain alternative shapes, so preview resolution should be tolerant rather than strict.
-- Renaming must use the existing update path in `useAdProjectHistory.ts` by supplying `id`; this avoids adding new hooks or backend code.
-- The input should stop event propagation so clicking inside rename mode does not reopen the project card.
+### 3. `src/components/ad-director/AdDirectorContent.tsx` (line 252)
+Same for the completed-video save:
 
-Validation after implementation
-- Draft cards show a real preview if any saved clip has a playable URL.
-- Final video cards still preview and download normally.
-- Renaming a card updates the title immediately and remains correct after refresh.
-- Editing the title does not accidentally open the card.
+```typescript
+name: service.getState().userPrompt
+  ? (service.getState().userPrompt!.length > 50 ? service.getState().userPrompt!.substring(0, 50).replace(/\s+\S*$/, "…") : service.getState().userPrompt!)
+  : (service.getState().brand.name || "Untitled"),
+```
+
+## Result
+Card names will show the first ~50 characters of the user's prompt (e.g., "A modern kitchen with sleek design and warm lighti…") instead of "Untitled Ad". Users can still rename via inline edit.
+
