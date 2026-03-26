@@ -204,6 +204,24 @@ If the document is a spreadsheet, table-format bar schedule, or estimation bid d
 - If bar sizes use imperial (#4, #5, #6...), convert: #3=10M, #4=15M, #5=15M, #6=20M, #7=25M, #8=25M, #9=30M, #10=30M, #11=35M
 - If lengths are in feet-inches, convert to mm
 
+## WEIGHT SUMMARY / ESTIMATE SUMMARY DOCUMENTS
+If the document is a weight summary report or estimate summary (contains tables like "Weight Summary Report", "Element wise Summary", "Grand Total (Kgs/Tons)", or overall bar-size weight totals WITHOUT individual bar marks/cut-lengths):
+- This is NOT a detailed bar schedule — it contains aggregated weights only
+- Create ONE item per element per bar size combination found in the document
+- For each element row (e.g. "RAFT SLAB: 27201.09 kg"), create items distributing the weight proportionally across bar sizes based on the bar size weight table in the document
+- If only total weights per bar size are given (no per-element breakdown by size), create one item per bar size with the total weight
+- Set mark to "SUM-{element_abbrev}-{bar_size}" (e.g. "SUM-RS-15M", "SUM-WALL-20M", "SUM-GB-15M")
+  Element abbreviations: RAFT SLAB→RS, WALL→WALL, GRADE BEAMS→GB, PIERS→PIER, COLUMN→COL, SLAB→SL, FOOTING→FT, STAIR→ST
+- Set quantity to 1
+- Set shape_code to "straight"
+- Calculate cut_length_mm from weight: weight_kg / mass_kg_per_m * 1000
+  Use approximate mass per meter: 10M=0.785, 15M=1.570, 20M=2.355, 25M=3.925, 30M=5.495, 35M=7.850 kg/m
+- Set element_type from the element name (RAFT SLAB→"slab", WALL→"wall", GRADE BEAMS→"grade_beam", PIERS→"pier", COLUMN→"column", FOOTING→"footing", STAIR→"stair")
+- Set element_ref from the element name as shown in document
+- Set weight_kg directly from the document's stated weight for that row
+- CRITICAL: Preserve the exact weights from the document — do not recalculate them
+- hook_type_near: "none", hook_type_far: "none", lap_type: "none", num_laps: 0, spacing_mm: null, bend_type: null, position: null, drawing_ref: null
+
 ## EXTRACTION INSTRUCTIONS
 
 For each rebar callout found on the drawings, extract:
@@ -224,6 +242,7 @@ For each rebar callout found on the drawings, extract:
 - drawing_ref: the drawing sheet reference (e.g. SD29, SD31, SD03)
 - page_index: which uploaded file/page this item was found on (0-based index)
 - bbox: bounding box of the rebar callout as {"x": float, "y": float, "w": float, "h": float} with normalized 0.0-1.0 coordinates relative to full page. x,y = top-left corner. Be precise — these will be used for colored overlays.
+- weight_kg: if the document provides a weight value for this item, include it here. Otherwise omit or set to null.
 
 ## CRITICAL RULES
 1. Convert ALL imperial dimensions to millimeters: 1 foot = 304.8mm, 1 inch = 25.4mm
@@ -311,6 +330,16 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
 
       const p = pricingMap.get(input.bar_size);
       const result = calculateItem(input, std, p);
+
+      // For summary items with AI-provided weight, preserve the exact weight
+      const aiWeight = (input as any).weight_kg;
+      if (aiWeight && aiWeight > 0 && input.mark?.startsWith("SUM-")) {
+        result.weight_kg = Math.round(aiWeight * 1000) / 1000;
+        const materialCost = p?.material_cost_per_kg ?? 0;
+        result.unit_cost = Math.round(result.weight_kg * materialCost * 100) / 100;
+        result.line_cost = Math.round(result.weight_kg * materialCost * 100) / 100;
+      }
+
       result.warnings = validateItem(result, rules);
       calculatedItems.push(result);
     }
