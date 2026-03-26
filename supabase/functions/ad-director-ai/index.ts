@@ -507,7 +507,7 @@ const WRITE_PROMPT_TOOLS = [{
 // ─── Action Handlers ────────────────────────────────────────────
 
 async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: string) {
-  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl } = body;
+  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl, sceneCount } = body;
   if (!script) throw new Error("Script is required");
 
   const characterBlock = characterImageUrl
