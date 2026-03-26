@@ -95,6 +95,22 @@ export function ProVideoEditor({
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
+  const audioUploadRef = useRef<HTMLInputElement>(null);
+
+  const handleUploadAudio = useCallback(() => {
+    audioUploadRef.current?.click();
+  }, []);
+
+  const handleAudioFileSelected = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setAudioTracks(prev => [
+      ...prev,
+      { kind: "music", audioUrl: url, label: file.name, volume: 0.7 },
+    ]);
+    e.target.value = "";
+  }, []);
   const [videoVolume, setVideoVolume] = useState(1);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
