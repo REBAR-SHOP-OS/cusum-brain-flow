@@ -923,13 +923,18 @@ export function ProVideoEditor({
       else break;
     }
     const offset = globalTimeSec - cumulativeStarts[targetScene];
-    setSelectedSceneIndex(targetScene);
-    // Defer seek until video loads the new source
-    setTimeout(() => {
+    if (targetScene !== selectedSceneIndex) {
+      setSelectedSceneIndex(targetScene);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.currentTime = Math.min(offset, videoRef.current.duration || offset);
+        }
+      }, 100);
+    } else {
       if (videoRef.current) {
         videoRef.current.currentTime = Math.min(offset, videoRef.current.duration || offset);
       }
-    }, 100);
+    }
   };
 
   const seekTo = (pct: number) => {
