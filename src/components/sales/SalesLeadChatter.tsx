@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { MentionMenu } from "@/components/chat/MentionMenu";
+import { InlineFileLink } from "@/components/pipeline/InlineFileLink";
 
 interface Props {
   salesLeadId: string;
