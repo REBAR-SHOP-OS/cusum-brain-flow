@@ -672,9 +672,8 @@ export function ProVideoEditor({
     if (sceneIdx >= 0) {
       setSelectedSceneIndex(sceneIdx);
       setActiveTab("script");
-      if (sidebarCollapsed) setSidebarCollapsed(false);
     }
-  }, [storyboard, sidebarCollapsed]);
+  }, [storyboard]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);
