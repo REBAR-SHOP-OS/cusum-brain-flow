@@ -60,7 +60,7 @@ export function RebarTagCard({
   return (
     <div
       className="rebar-tag border-2 border-black bg-white text-black overflow-hidden font-mono flex flex-col print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
-      style={{ width: "4in", height: "6in", boxSizing: "border-box" }}
+      style={{ width: "4in", minHeight: "auto", boxSizing: "border-box" }}
     >
       {/* === TIMESTAMP === */}
       <div className="px-2 py-0.5 text-[9px] font-bold border-b border-black flex justify-between shrink-0">
