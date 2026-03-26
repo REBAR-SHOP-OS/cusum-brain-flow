@@ -88,7 +88,9 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
     if (quotation) {
       setNotes(quotation.notes || "");
       loadItems(quotation.id);
-      setShowAudit(false);
+    setShowAudit(false);
+    setEmailDialogOpen(false);
+    setCustomerEmail(quotation.customer_email || "");
     }
   }, [quotation?.id]);
 
