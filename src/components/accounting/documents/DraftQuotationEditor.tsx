@@ -133,7 +133,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const filteredCustomers = useMemo(
     () =>
       customers.filter((c) =>
-        c.name.toLowerCase().includes(customerSearch.toLowerCase())
+        (c.name || "").toLowerCase().includes(customerSearch.toLowerCase())
       ),
     [customers, customerSearch]
   );
