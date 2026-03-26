@@ -277,6 +277,21 @@ Deno.serve((req) =>
     const validUntil = new Date();
     validUntil.setDate(validUntil.getDate() + 30);
 
+    const inclusions = [
+      "Material supply (cut & bent rebar)",
+      shouldIncludeShopDrawings ? "Shop drawing preparation included" : null,
+      deliveryDistanceKm > 0 ? `Delivery within ${deliveryDistanceKm} km` : null,
+      "Tagging and bundling per schedule",
+    ].filter(Boolean) as string[];
+
+    const exclusions = [
+      "Installation labour",
+      "Engineering stamps / sealed drawings",
+      deliveryDistanceKm <= 0 ? "Delivery / shipping (distance TBD)" : null,
+      "Crane / unloading at site",
+      "Permits and inspections",
+    ].filter(Boolean) as string[];
+
     const assumptions = [
       "Quote based on customer-provided sizes and quantities",
       "Design by others",
@@ -286,6 +301,16 @@ Deno.serve((req) =>
       "Prices valid for 30 days from quote date",
       "Subject to material availability",
     ];
+
+    const notesText = [
+      `Prices valid for 30 days. All weights include ${scrapPct}% scrap.`,
+      "",
+      "INCLUSIONS:",
+      ...inclusions.map(i => `✅ ${i}`),
+      "",
+      "EXCLUSIONS:",
+      ...exclusions.map(e => `➖ ${e}`),
+    ].join("\n");
 
     // Generate quote number
     const { count } = await serviceClient
