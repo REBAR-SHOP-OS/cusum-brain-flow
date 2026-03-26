@@ -111,7 +111,7 @@ Deno.serve((req) =>
       // Send via gmail-send
       const emailRes = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: authHeader },
+        headers: { "Content-Type": "application/json", Authorization: authHeader, apikey: Deno.env.get("SUPABASE_ANON_KEY") || "" },
         body: JSON.stringify({
           to: customer_email,
           subject: `Quotation ${quoteNumber} — REBAR.SHOP`,
