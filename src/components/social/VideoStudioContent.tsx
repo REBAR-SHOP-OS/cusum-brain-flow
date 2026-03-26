@@ -264,7 +264,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
       const totalScenes = data.totalScenes || multiJobsRef.current.length;
       setProgress(data.progress || Math.round((uploaded / totalScenes) * 100));
       setProgressLabel(`Scene ${completed}/${totalScenes} generated, ${uploaded} uploaded`);
-      pollTimerRef.current = setTimeout(pollMultiScene, 5000);
+      pollTimerRef.current = setTimeout(pollMultiScene, 3000);
     } catch (err: any) { setError(err?.message || "Failed to check multi-scene status."); setStatus("failed"); }
   }, [brandKit]);
 
