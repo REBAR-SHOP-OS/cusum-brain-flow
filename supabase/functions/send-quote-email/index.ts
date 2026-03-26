@@ -94,7 +94,7 @@ Deno.serve((req) =>
           <table style="width:100%;">
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Quotation #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${quoteNumber}</td></tr>
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Total Amount</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:20px;">$${totalAmount.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
-            ${quote.valid_until ? `<tr><td style="color:#888;font-size:13px;padding:4px 0;">Valid Until</td><td style="text-align:right;color:#1a1a2e;">${quote.valid_until}</td></tr>` : ""}
+            ${quote.valid_until ? `<tr><td style="color:#888;font-size:13px;padding:4px 0;">Valid Until</td><td style="text-align:right;color:#1a1a2e;">${new Date(quote.valid_until).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}</td></tr>` : ""}
           </table>
         </div>
         ${lineItemsTable}
