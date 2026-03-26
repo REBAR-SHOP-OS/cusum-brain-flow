@@ -244,7 +244,8 @@ export default function SalesPipeline() {
             sales_lead_id: leadId,
             event_type: "stage_change",
             new_stage: newStage,
-            actor_name: "System",
+            actor_name: user?.user_metadata?.full_name || "System",
+            actor_id: user?.id,
           },
         }).catch((err) => console.error("notify-lead-assignees error:", err));
       },

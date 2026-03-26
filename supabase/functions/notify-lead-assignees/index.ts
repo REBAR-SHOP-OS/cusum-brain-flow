@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
+import { buildBrandedEmail, textToHtml, fetchActorSignature } from "../_shared/brandedEmail.ts";
 
 serve((req) =>
   handleRequest(req, async (ctx) => {
@@ -11,6 +12,7 @@ serve((req) =>
       note_text,    // plain text of the log note (no attachment URLs)
       new_stage,    // stage label (for stage_change)
       actor_name,   // who performed the action
+      actor_id,     // user ID of actor (for signature lookup)
     } = body;
 
     if (!sales_lead_id) throw new Error("sales_lead_id is required");
@@ -46,17 +48,14 @@ serve((req) =>
       const isInternal = email.toLowerCase().endsWith("@rebar.shop");
 
       if (isInternal) {
-        // Internal always gets notified
         recipients.push({ email, full_name: fullName });
       } else {
-        // Vendor: only if @mentioned in note text
         if (event_type === "note" && note_text) {
           const mentionPattern = new RegExp(`@${fullName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i');
           if (mentionPattern.test(note_text)) {
             recipients.push({ email, full_name: fullName });
           }
         }
-        // Vendors do NOT get stage_change notifications
       }
     }
 
@@ -74,18 +73,21 @@ serve((req) =>
       return { sent: 0 };
     }
 
-    // 4. Build email content
+    // 4. Fetch actor signature
+    const signatureHtml = actor_id ? await fetchActorSignature(serviceClient, actor_id) : null;
+
+    // 5. Build email content
     const recordLink = `https://cusum-brain-flow.lovable.app/sales/pipeline?lead=${sales_lead_id}`;
     const subject = `ERP | Rebar.shop | ${lead.title}`;
 
     let actionDesc = "";
     if (event_type === "stage_change") {
-      actionDesc = `${actor_name || "Someone"} changed the stage to "${new_stage || "unknown"}".`;
+      actionDesc = `${actor_name || "Someone"} changed the stage to "<strong>${new_stage || "unknown"}</strong>".`;
     } else {
       actionDesc = `${actor_name || "Someone"} added a note.`;
     }
 
-    // Strip attachment URLs from note text (lines starting with http)
+    // Strip attachment URLs from note text
     let cleanNote = "";
     if (note_text) {
       cleanNote = note_text
@@ -95,20 +97,31 @@ serve((req) =>
         .trim();
     }
 
-    // Internal email body (with record link)
-    const internalEmailBody = [
-      actionDesc,
-      cleanNote ? `\n${cleanNote}` : "",
-      `\nView record: ${recordLink}`,
-    ].join("\n").trim();
+    // Build branded HTML for internal recipients
+    const internalBodyHtml = `
+      <p style="margin:0 0 12px;font-size:14px;color:#555;">${actionDesc}</p>
+      ${cleanNote ? `<div style="background:#f8f9fa;border-left:3px solid #1a1a2e;padding:12px 16px;border-radius:4px;margin:12px 0;">${textToHtml(cleanNote)}</div>` : ""}
+    `;
 
-    // Customer email body (professional, no internal links)
-    const customerEmailBody = [
-      cleanNote || actionDesc,
-      `\nBest regards,\nRebar.shop Team`,
-    ].join("\n").trim();
+    const internalEmail = buildBrandedEmail({
+      bodyHtml: internalBodyHtml,
+      signatureHtml: signatureHtml || undefined,
+      actorName: actor_name || undefined,
+      recordLink,
+    });
 
-    // 5. Get Gmail access token for ai@rebar.shop from DB
+    // Build branded HTML for customer recipients (no internal links)
+    const customerBodyHtml = cleanNote
+      ? `<div style="font-size:14px;color:#333;line-height:1.7;">${textToHtml(cleanNote)}</div>`
+      : `<p style="margin:0 0 12px;font-size:14px;color:#333;">${actionDesc}</p>`;
+
+    const customerEmailHtml = buildBrandedEmail({
+      bodyHtml: customerBodyHtml,
+      signatureHtml: signatureHtml || undefined,
+      actorName: actor_name || "Rebar.shop Team",
+    });
+
+    // 6. Get Gmail access token for ai@rebar.shop from DB
     const gmailClientId = Deno.env.get("GMAIL_CLIENT_ID");
     const gmailClientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
 
@@ -116,7 +129,6 @@ serve((req) =>
       throw new Error("Gmail OAuth credentials not configured");
     }
 
-    // Look up ai@rebar.shop profile → get user_id → fetch token from DB
     const { data: aiProfile } = await serviceClient
       .from("profiles")
       .select("id")
@@ -139,7 +151,6 @@ serve((req) =>
       }
     }
 
-    // Fallback to env var
     if (!refreshToken) {
       refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN") || null;
     }
@@ -182,16 +193,16 @@ serve((req) =>
     for (const recipient of recipients) {
       try {
         const isCustomer = customerEmail && recipient.email.toLowerCase() === customerEmail;
-        const body = isCustomer ? customerEmailBody : internalEmailBody;
+        const htmlBody = isCustomer ? customerEmailHtml : internalEmail;
 
-        // Build RFC 2822 email
         const rawEmail = [
           `From: ai@rebar.shop`,
           `To: ${recipient.email}`,
           `Subject: ${subject}`,
-          `Content-Type: text/plain; charset=UTF-8`,
+          `MIME-Version: 1.0`,
+          `Content-Type: text/html; charset=UTF-8`,
           "",
-          body,
+          htmlBody,
         ].join("\r\n");
 
         const encodedMessage = btoa(unescape(encodeURIComponent(rawEmail)))
