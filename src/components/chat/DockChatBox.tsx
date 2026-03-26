@@ -351,18 +351,28 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   }, [playingMsgId]);
 
   // --- Forward ---
-  const handleForwardSend = async (targetChannelId: string) => {
+  const openDMMutation = useOpenDM();
+  const forwardMembers = useMemo(() =>
+    profiles.filter(p => p.email?.endsWith("@rebar.shop") && p.id !== myProfile?.id),
+    [profiles, myProfile]
+  );
+
+  const handleForwardToMember = async (profileId: string) => {
     if (!forwardMsg || !myProfile) return;
     try {
-      await sendMutation.mutateAsync({
-        channelId: targetChannelId,
-        senderProfileId: myProfile.id,
-        text: `↪️ Forwarded from ${forwardMsg.sender?.full_name || "Unknown"}:\n${forwardMsg.original_text}`,
-        senderLang: myLang,
-        targetLangs,
-      });
-      toast.success("Message forwarded");
-      setForwardMsg(null);
+      const result = await openDMMutation.mutateAsync({ targetProfileId: profileId });
+      if (result?.id) {
+        await sendMutation.mutateAsync({
+          channelId: result.id,
+          senderProfileId: myProfile.id,
+          text: `↪️ Forwarded from ${forwardMsg.sender?.full_name || "Unknown"}:\n${forwardMsg.original_text}`,
+          senderLang: myLang,
+          targetLangs,
+          attachments: forwardMsg.attachments || [],
+        });
+        toast.success("Message forwarded");
+        setForwardMsg(null);
+      }
     } catch {
       toast.error("Failed to forward");
     }
