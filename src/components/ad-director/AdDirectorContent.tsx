@@ -43,7 +43,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const service = backgroundAdDirectorService;
 
   // Local UI-only state
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  // exportDialogOpen removed — scheduling is handled inside ProVideoEditor
   const [showIntro, setShowIntro] = useState(true);
   const [modelOverrides] = useState<ModelOverrides>({});
   const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
