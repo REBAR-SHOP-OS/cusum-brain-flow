@@ -1,14 +1,20 @@
 
 
-# Remove AI Edit Scene Bar from Video Editor
+# Remove "Create Invoice" Button from Quotation Cards
 
 ## Problem
-The user wants the "AI: Edit this scene..." command bar (floating at the top of the video editor canvas) removed.
+The "→ Create Invoice" button on quotation cards (in AccountingDocuments) calls a `qb-sync-engine` edge function that is not functional. The user wants it removed.
 
 ## Fix
-**File: `src/components/ad-director/ProVideoEditor.tsx`** (lines 1249-1273)
+**File: `src/components/accounting/AccountingDocuments.tsx`** (lines 418-430)
 
-Remove the entire `{/* AI Command Bar — floating at top */}` block — the `div` containing the Sparkles icon, Input, and Send button.
+Remove the "→ Create Invoice" `Button` block inside the `{isSale && ( ... )}` section. Keep the "Convert to Order" button and all other elements.
 
-No other files affected. The `aiCommand`, `aiProcessing`, `handleAiSubmit` state/handlers can remain (unused code cleanup is optional and low-risk).
+Also remove the now-unused state and handler:
+- `convertingQuoteId` state (search for its declaration)
+- `handleCreateInvoiceFromQuote` function (lines 250-264)
+- `FileOutput` from lucide imports if no longer used elsewhere
+
+## Files Changed
+- `src/components/accounting/AccountingDocuments.tsx` — remove Create Invoice button, handler, and related state
 
