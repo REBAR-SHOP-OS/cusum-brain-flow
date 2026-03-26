@@ -598,7 +598,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                           disabled={clip.status === "generating"}
                           onClick={() => handleRegenerateScene(clip.sceneId, scenePrompts[clip.sceneId])}
                         >
-                          <RefreshCw className="w-3.5 h-3.5" />
+                          <Send className="w-3.5 h-3.5" />
                         </Button>
                       </div>
                     </div>
