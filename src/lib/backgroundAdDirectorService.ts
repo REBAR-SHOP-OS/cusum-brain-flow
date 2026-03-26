@@ -179,6 +179,35 @@ class BackgroundAdDirectorService {
       }
     }
 
+    // Upload intro/outro reference images
+    let introImageUrl: string | undefined;
+    let outroImageUrl: string | undefined;
+    const { uploadToStorage: uploadFn } = await import("@/lib/storageUpload");
+    if (introImage) {
+      try {
+        const path = `intro-refs/${Date.now()}-${introImage.name}`;
+        const { error: upErr } = await uploadFn("ad-assets", path, introImage);
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from("ad-assets").getPublicUrl(path);
+          introImageUrl = urlData?.publicUrl;
+        }
+      } catch (e) {
+        console.warn("Intro image upload failed, continuing without it", e);
+      }
+    }
+    if (outroImage) {
+      try {
+        const path = `outro-refs/${Date.now()}-${outroImage.name}`;
+        const { error: upErr } = await uploadFn("ad-assets", path, outroImage);
+        if (!upErr) {
+          const { data: urlData } = supabase.storage.from("ad-assets").getPublicUrl(path);
+          outroImageUrl = urlData?.publicUrl;
+        }
+      } catch (e) {
+        console.warn("Outro image upload failed, continuing without it", e);
+      }
+    }
+
     try {
       // Phase 1: Analyze
       const analyzeResult = await withTimeout(invokeEdgeFunction<{
