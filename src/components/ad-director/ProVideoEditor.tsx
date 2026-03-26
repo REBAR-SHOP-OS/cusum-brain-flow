@@ -9,7 +9,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
-  Palette,
+  Palette, Film, Type, LayoutGrid,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
