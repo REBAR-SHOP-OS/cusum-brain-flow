@@ -454,7 +454,7 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/*,video/*"
+                accept="*/*"
                 multiple
                 className="hidden"
                 onChange={handleFilePick}
