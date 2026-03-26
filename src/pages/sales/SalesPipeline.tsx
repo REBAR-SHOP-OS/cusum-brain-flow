@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useSalesLeads, SALES_STAGES, SalesLead } from "@/hooks/useSalesLeads";
 import { useAuth } from "@/lib/auth";
@@ -85,6 +86,7 @@ const PIPELINE_STAGES = SALES_STAGES.map((s) => ({
 }));
 
 export default function SalesPipeline() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const userEmail = user?.email?.toLowerCase() || "";
   const externalEstimatorStages = ACCESS_POLICIES.externalEstimators[userEmail];
@@ -136,6 +138,20 @@ export default function SalesPipeline() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  // Auto-open drawer from ?lead= query param (e.g. from email "View Record" link)
+  useEffect(() => {
+    const leadId = searchParams.get("lead");
+    if (leadId && leads.length > 0) {
+      const target = leads.find(l => l.id === leadId);
+      if (target) {
+        setDrawerLead(target);
+        // Clean up the URL param so it doesn't re-trigger
+        searchParams.delete("lead");
+        setSearchParams(searchParams, { replace: true });
+      }
+    }
+  }, [searchParams, leads, setSearchParams]);
 
   // For external estimators: filter leads to only those assigned to them
   const effectiveLeads = useMemo(() => {
