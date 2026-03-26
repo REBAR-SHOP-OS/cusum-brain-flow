@@ -67,6 +67,7 @@ import AccountingWorkspace from "./pages/AccountingWorkspace";
 import AccountingHealth from "./pages/AccountingHealth";
 import CustomerAction from "./pages/CustomerAction";
 import CustomerPortal from "./pages/CustomerPortal";
+import AcceptQuote from "./pages/AcceptQuote";
 import CEOPortal from "./pages/CEOPortal";
 import LiveMonitor from "./pages/LiveMonitor";
 import VendorPortal from "./pages/VendorPortal";
