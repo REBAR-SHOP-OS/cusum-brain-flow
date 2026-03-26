@@ -382,7 +382,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
               <video
                 src="/videos/ad-director-intro.mp4"
                 autoPlay
-                muted
+                
                 playsInline
                 className="w-full h-full object-cover"
                 onEnded={() => setShowIntro(false)}
