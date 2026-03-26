@@ -37,7 +37,7 @@ const EDGE_TIMEOUT_MS = 180_000;
 export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (editing: boolean) => void }) {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
-  const { projects, saveProject } = useAdProjectHistory();
+  const { projects, saveProject, deleteProject } = useAdProjectHistory();
   const promptHistory = usePromptHistory();
   const service = backgroundAdDirectorService;
 
@@ -377,6 +377,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
             onSelect={(url) => {
               service.patchState({ finalVideoUrl: url, flowState: "result" });
             }}
+            onDelete={(id) => deleteProject.mutate(id)}
           />
         </>
       )}
