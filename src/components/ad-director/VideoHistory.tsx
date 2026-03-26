@@ -24,7 +24,7 @@ export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete }: Vi
 
   return (
     <div className="w-full max-w-4xl mx-auto mt-8 animate-in fade-in duration-500">
-      <h3 className="text-sm font-medium text-muted-foreground mb-3">ویدئوهای قبلی شما</h3>
+      <h3 className="text-sm font-medium text-muted-foreground mb-3">Your Previous Videos</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {visible.map((p) => (
           <VideoCard key={p.id} project={p} onSelect={onSelect} onSelectDraft={onSelectDraft} onDelete={onDelete} />
