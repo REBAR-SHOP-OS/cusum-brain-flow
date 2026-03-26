@@ -1,50 +1,48 @@
 
 
-# Strengthen Cross-Scene Coherence in AI Video Director
+# Integrate Character Image as Video Narrator/Spokesperson
 
 ## Problem
-When a user writes a prompt, the AI correctly breaks it into scenes with continuity metadata. However, each video clip is generated **independently** — the video model only sees its own scene prompt. This causes disconnected visuals (different colors, subjects, environments) across clips that should form one cohesive film.
-
-## Current Architecture
-The system already has good continuity infrastructure:
-- `continuityProfile` with subject descriptions, wardrobe, environment, lighting, color mood
-- `previousScene` context passed to `write-cinematic-prompt`
-- `continuityRequirements` field per scene
-
-**Gap**: These continuity details are used for prompt *writing* but not strongly enough enforced. The `motionPrompt` sent to the video generator is just `scene.prompt + "Cinematic camera movement..."` — it doesn't embed the continuity profile.
+The Character photo upload (👤) works — the image is uploaded and its URL is sent to the edge functions. However:
+1. `ad-director-ai` ignores `characterImageUrl` in both `handleAnalyzeScript` and `handleWriteCinematicPrompt`
+2. `backgroundAdDirectorService` always uses text-to-video (`wan2.6-t2v`) — never switches to image-to-video (`wan2.6-i2v`) even when a character reference is available
 
 ## Solution
-Strengthen coherence at two levels: prompt generation and video generation.
+Wire character image through the entire pipeline so the person appears as narrator/spokesperson in all scenes.
 
-### 1. `supabase/functions/ad-director-ai/index.ts` — Enhance ANALYZE_SCRIPT_PROMPT
-Add explicit rules requiring scene-to-scene visual consistency:
-- Add a new section `## COHERENCE RULES` requiring:
-  - All scenes must share the same color palette, lighting style, and environment type unless the script explicitly changes location
-  - Each scene prompt must begin with a "continuity anchor" referencing the global visual identity
-  - Subject descriptions must be identical across scenes (same person, same clothing, same props)
-- Strengthen the prompt template: "Every scene prompt MUST start with: 'Continuing the same [environment/subject/lighting] from previous scenes...'" for scenes after the first
+## Changes
 
-### 2. `supabase/functions/ad-director-ai/index.ts` — Enhance WRITE_CINEMATIC_PROMPT_SYSTEM
-Update the cinematic prompt writer to:
-- Mandate that every prompt after scene 1 begins with a visual continuity statement referencing the continuity profile
-- Include the full continuity profile (subject, wardrobe, environment, lighting, color mood) as a required prefix block in every generated prompt
-- Instruct: "The viewer must feel all clips are from the same film shoot, same location, same day, same camera setup"
+### 1. `supabase/functions/ad-director-ai/index.ts`
 
-### 3. `src/lib/backgroundAdDirectorService.ts` — Inject continuity context into video generation prompt
-In Phase 2 (line ~333), instead of just appending "Cinematic camera movement...", prepend the continuity profile to every scene prompt:
-```
-const continuityPrefix = `[Visual continuity: ${continuityProfile.environment}, ${continuityProfile.lightingType}, ${continuityProfile.colorMood}, subject: ${continuityProfile.subjectDescriptions}] `;
-const motionPrompt = continuityPrefix + scene.prompt + " Cinematic camera movement...";
-```
-This ensures the video model receives the same visual anchors for every clip.
+**`handleAnalyzeScript` (line ~509)**:
+- Destructure `characterImageUrl` from body
+- When present, add to the user prompt: "IMPORTANT: A reference photo of the spokesperson/narrator has been provided. This person MUST appear in EVERY scene as the primary subject presenting/demonstrating the product. Describe this person consistently across all scenes. Use generationMode: 'image-to-video' for scenes featuring this person."
+- Add to `ANALYZE_SCRIPT_PROMPT`: a new section about CHARACTER/NARRATOR rules — when a character reference exists, the storyboard must feature that person in every non-end-card scene, set `generationMode: "image-to-video"`, and include the character in continuityProfile
 
-### 4. `supabase/functions/ad-director-ai/index.ts` — Add `handleWriteCinematicPrompt` continuity enforcement
-In the user prompt for `write-cinematic-prompt` (line ~517), add the full continuity profile as a mandatory inclusion block, not just an optional reference. The AI must weave these details into every prompt it writes.
+**`handleWriteCinematicPrompt` (line ~530)**:
+- Destructure `characterImageUrl` from body
+- When present, append to the user prompt: "CHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person."
 
-## Summary of Changes
+### 2. `src/lib/backgroundAdDirectorService.ts`
+
+**Phase 2 video generation (line ~340)**:
+- Check if `characterImageUrl` exists AND scene's `generationMode === "image-to-video"`
+- If yes: call `generate-video` with `model: "wan2.6-i2v"` and pass `imageUrl: characterImageUrl` so the Wan I2V model uses the person's photo as the starting frame
+- If no: continue with existing text-to-video flow
+
+**Specifically** (around line 343-350), change the `invokeEdgeFunction("generate-video", {...})` call:
+- Add `imageUrl: characterImageUrl` when character image exists
+- Change `model` from `"wan2.6-t2v"` to `"wan2.6-i2v"` when using character image
+
+### 3. `supabase/functions/generate-video/index.ts`
+
+**In the generate action handler**: When `imageUrl` is provided in the body alongside `provider: "wan"`, route to `wanI2vGenerate` instead of `wanGenerate`. The `wanI2vGenerate` function already exists (line 234) and accepts `imageUrl`.
+
+## Summary
 
 | File | Change |
 |---|---|
-| `ad-director-ai/index.ts` | Add COHERENCE RULES to ANALYZE_SCRIPT_PROMPT; strengthen WRITE_CINEMATIC_PROMPT_SYSTEM with mandatory continuity anchors; enhance handleWriteCinematicPrompt to inject full continuity context |
-| `backgroundAdDirectorService.ts` | Prepend continuity profile summary to every video generation prompt |
+| `ad-director-ai/index.ts` | Use `characterImageUrl` in analyze-script and write-cinematic-prompt to instruct AI to feature the person as narrator |
+| `backgroundAdDirectorService.ts` | Switch to image-to-video model when character image exists |
+| `generate-video/index.ts` | Route to `wanI2vGenerate` when `imageUrl` is provided with Wan provider |
 
