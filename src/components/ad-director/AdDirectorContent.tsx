@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Check, Download, Pencil, Sparkles, Film } from "lucide-react";
+import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ExportDialog } from "./ExportDialog";
 import { ChatPromptBar } from "./ChatPromptBar";
 import {
