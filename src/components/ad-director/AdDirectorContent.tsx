@@ -460,7 +460,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           {/* Home button — top */}
            <button
               onClick={() => service.patchState({ flowState: "idle" })}
-              className="fixed top-4 left-4 z-50 w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-700 flex items-center justify-center transition-colors shadow-lg ring-2 ring-purple-400/30"
+              className="fixed top-16 left-4 z-50 w-14 h-14 rounded-full bg-purple-600 hover:bg-purple-700 flex items-center justify-center transition-colors shadow-lg ring-2 ring-purple-400/30"
               title="Back to AI Video Director"
             >
               <Home className="w-7 h-7 text-white" />
