@@ -115,7 +115,7 @@ function VideoCard({ project, onSelect, onSelectDraft, onDelete }: {
         {/* Draft badge */}
         {isDraft && (
           <div className="absolute top-1.5 right-1.5">
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0">پیش‌نویس</Badge>
+            <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Draft</Badge>
           </div>
         )}
       </div>
