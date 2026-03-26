@@ -28,7 +28,7 @@ import {
 
 const EDGE_TIMEOUT_MS = 180_000;
 
-export function AdDirectorContent() {
+export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (editing: boolean) => void }) {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
   const { projects, saveProject } = useAdProjectHistory();
