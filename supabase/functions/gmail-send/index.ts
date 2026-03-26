@@ -112,6 +112,8 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
 
 interface SendEmailRequest {
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   body: string;
   threadId?: string;

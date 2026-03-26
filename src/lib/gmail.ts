@@ -40,6 +40,8 @@ export async function fetchGmailMessages(options?: {
 
 export async function sendGmailMessage(options: {
   to: string;
+  cc?: string;
+  bcc?: string;
   subject: string;
   body: string;
   threadId?: string;
