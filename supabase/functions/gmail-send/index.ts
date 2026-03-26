@@ -77,14 +77,20 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
   return data.access_token;
 }
 
-function createRawEmail(to: string, subject: string, body: string, fromEmail: string, replyTo?: { messageId: string; references: string }, customHeaders?: Record<string, string>): string {
+function createRawEmail(to: string, subject: string, body: string, fromEmail: string, replyTo?: { messageId: string; references: string }, customHeaders?: Record<string, string>, cc?: string, bcc?: string): string {
   const emailLines = [
     `From: ${fromEmail}`,
     `To: ${to}`,
+  ];
+
+  if (cc) emailLines.push(`Cc: ${cc}`);
+  if (bcc) emailLines.push(`Bcc: ${bcc}`);
+
+  emailLines.push(
     `Subject: ${subject}`,
     "MIME-Version: 1.0",
     "Content-Type: text/html; charset=utf-8",
-  ];
+  );
 
   if (replyTo) {
     emailLines.push(`In-Reply-To: ${replyTo.messageId}`);
