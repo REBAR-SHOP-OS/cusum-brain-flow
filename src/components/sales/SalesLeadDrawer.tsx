@@ -261,6 +261,10 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
               companyId={lead.company_id}
               isExternalEstimator={isExternalEstimator}
               assignees={assignees}
+              contactEmail={lead.contact_email}
+              contactPhone={lead.contact_phone}
+              leadTitle={lead.title}
+              onComposeEmail={() => setComposeOpen(true)}
             />
           )}
 

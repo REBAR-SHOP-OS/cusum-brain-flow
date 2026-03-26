@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   MessageSquare, Phone, Mail, Calendar, Clock, Send,
   CheckCircle2, Loader2, ArrowRight, Zap, Paperclip, X, Image, Video,
+  MessageCircle,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,10 @@ interface Props {
   currentUserName?: string;
   currentUserId?: string;
   assignees?: { profile_id: string; full_name: string }[];
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  leadTitle?: string;
+  onComposeEmail?: () => void;
 }
 
 type TabMode = "note" | "activity" | null;
@@ -69,7 +74,7 @@ function renderBodyWithMedia(text: string | null) {
   });
 }
 
-export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, currentUserName: propUserName, currentUserId: propUserId, assignees = [] }: Props) {
+export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, currentUserName: propUserName, currentUserId: propUserId, assignees = [], contactEmail, contactPhone, leadTitle, onComposeEmail }: Props) {
   const { activities, isLoading, create, markDone } = useSalesLeadActivities(salesLeadId);
 
   // Resolve current user if not passed
@@ -255,7 +260,18 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   return (
     <div className="px-4 py-3 space-y-3">
       {/* Action buttons */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-wrap">
+        {!isExternalEstimator && onComposeEmail && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px] gap-1"
+            onClick={onComposeEmail}
+          >
+            <Mail className="w-3 h-3" />
+            Send Message
+          </Button>
+        )}
         {(isExternalEstimator ? ["note"] as const : ["note", "activity"] as const).map((tab) => (
           <Button
             key={tab}
@@ -268,6 +284,20 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
             {tab === "note" ? "Log note" : "Schedule activity"}
           </Button>
         ))}
+        {!isExternalEstimator && contactPhone && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[11px] gap-1 text-green-600 border-green-600/30 hover:bg-green-600/10"
+            onClick={() => {
+              const cleaned = contactPhone.replace(/[^\d+]/g, "");
+              window.open(`https://wa.me/${cleaned}`, "_blank");
+            }}
+          >
+            <MessageCircle className="w-3 h-3" />
+            WhatsApp
+          </Button>
+        )}
       </div>
 
       {/* Composer */}
