@@ -107,7 +107,7 @@ export function ProVideoEditor({
     const url = URL.createObjectURL(file);
     setAudioTracks(prev => [
       ...prev,
-      { kind: "music", audioUrl: url, label: file.name, volume: 0.7 },
+      { kind: "music" as const, audioUrl: url, label: file.name, volume: 0.7, sceneId: `upload-${Date.now()}` },
     ]);
     e.target.value = "";
   }, []);
