@@ -1,32 +1,21 @@
 
 
-# Black Background for Result/Storyboard View
+# Remove Download and Schedule Buttons from Result View
 
 ## Problem
-In the "result" state (where generated scenes and video preview are shown), the video background bleeds through, creating visual clutter. The user wants a solid black background in this section.
+The user wants to remove the "Download" and "Schedule" buttons from the result/storyboard view (circled in red in the screenshot). Only "Edit Video" should remain.
 
 ## Change
 
-### `src/components/ad-director/AdDirectorContent.tsx` — Line 422-423
+### `src/components/ad-director/AdDirectorContent.tsx` (lines 535-538, 543-582)
 
-Wrap the result section with a full-screen black background overlay so the video background is hidden when viewing results.
+Remove:
+1. The `Download` button (lines 535-538)
+2. The `Schedule` Popover and its entire content (lines 543 to end of popover)
 
-Change line 422-423 from:
-```tsx
-{flowState === "result" && (
-  <div className="w-full max-w-2xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-```
-To:
-```tsx
-{flowState === "result" && (
-  <>
-    <div className="fixed inset-0 z-[5] bg-black" />
-    <div className="w-full max-w-2xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-```
-
-And close the fragment at the end of the result block (after the closing `</div>` and before the `)}` on the result section end).
+Keep only the "Edit Video" button in the approved state.
 
 | File | Change |
 |---|---|
-| `AdDirectorContent.tsx` | Add fixed black overlay behind result view, close fragment |
+| `AdDirectorContent.tsx` | Remove Download button and Schedule popover from result view |
 
