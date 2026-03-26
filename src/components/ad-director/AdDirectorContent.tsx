@@ -372,6 +372,8 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         src="/videos/ad-director-bg.mp4"
       />
       <div className="fixed inset-0 z-[1] bg-black/50 pointer-events-none" />
+      {/* All content above the background */}
+      <div className="relative z-10 flex flex-col items-center justify-center w-full gap-6">
       {/* Idle state */}
       {flowState === "idle" && (
         <>
