@@ -36,8 +36,17 @@ const FALLBACK_PRICING_CONFIG = {
 
 function getFabricationRate(tonnage: number, table: any[]): { price_per_ton: number; shop_drawing_price: number } {
   for (const row of table) {
-    if (tonnage >= (row.min ?? 0) && tonnage < (row.max ?? 999999)) {
-      return { price_per_ton: row.price_per_ton, shop_drawing_price: row.shop_drawing_price };
+    const min = row.min ?? row.min_ton ?? 0;
+    const max = row.max ?? row.max_ton ?? 999999;
+    if (tonnage >= min && tonnage < max) {
+      const ppt = Number(row.price_per_ton ?? row.price_per_ton_cad) || 1500;
+      let sdp = Number(row.shop_drawing_price ?? row.shop_drawing_cad) || 0;
+      if (!sdp && row.shop_drawing_cad_formula) {
+        const f = row.shop_drawing_cad_formula;
+        sdp = Number(f.base || 0) + tonnage * Number(f.per_ton || 0);
+      }
+      if (!sdp) sdp = 2500;
+      return { price_per_ton: ppt, shop_drawing_price: sdp };
     }
   }
   return { price_per_ton: 1500, shop_drawing_price: 4500 };
