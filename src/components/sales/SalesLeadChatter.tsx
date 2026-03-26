@@ -118,7 +118,8 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
 
   const handleTextChange = useCallback((val: string) => {
     setText(val);
-    const match = val.match(/@(\w*)$/);
+    // Support both @name and @email@rebar.shop style mentions
+    const match = val.match(/@([\w.@]*)$/);
     if (match) {
       setMentionFilter(match[1]);
       setMentionOpen(true);
@@ -128,10 +129,16 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
     }
   }, []);
 
-  const handleMentionSelect = useCallback((item: { id: string; label: string }) => {
-    setText(prev => prev.replace(/@\w*$/, `@${item.label} `));
+  const handleMentionSelect = useCallback((item: { id: string; label: string; subtitle?: string }) => {
+    // Find the profile to check if they have a @rebar.shop email
+    const profile = allProfiles?.find(p => p.id === item.id);
+    const profileWithEmail = profile as any;
+    const email = profileWithEmail?.email as string | undefined;
+    // If internal user, insert as @email format for reliable parsing; otherwise use name
+    const insertText = email?.endsWith("@rebar.shop") ? `@${email} ` : `@${item.label} `;
+    setText(prev => prev.replace(/@[\w.@]*$/, insertText));
     setMentionOpen(false);
-  }, []);
+  }, [allProfiles]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (!mentionOpen) return;
