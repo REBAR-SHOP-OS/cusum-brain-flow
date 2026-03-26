@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle, Home } from "lucide-react";
+import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle, Home, RefreshCw } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ExportDialog } from "./ExportDialog";
 import { ChatPromptBar } from "./ChatPromptBar";
@@ -39,6 +40,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [modelOverrides] = useState<ModelOverrides>({});
   const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
+  const [scenePrompts, setScenePrompts] = useState<Record<string, string>>({});
 
   // Pipeline state — driven by singleton service
   const [pipelineState, setPipelineState] = useState<AdDirectorPipelineState>(service.getState());
@@ -187,7 +189,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   };
 
   // ─── Regenerate scene (from editor) ─────────────
-  const handleRegenerateScene = useCallback(async (sceneId: string) => {
+  const handleRegenerateScene = useCallback(async (sceneId: string, customPrompt?: string) => {
     const currentState = service.getState();
     const scene = currentState.storyboard.find(s => s.id === sceneId);
     if (!scene) return;
@@ -196,7 +198,8 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     const wanRatio = ["16:9", "9:16", "1:1"].includes(effectiveRatio) ? effectiveRatio : "16:9";
     const rawDur = currentState.videoParams.duration > 0 ? currentState.videoParams.duration : (segment ? segment.endTime - segment.startTime : 5);
     const sceneDuration = Math.min(Math.max(rawDur, 2), 15);
-    const motionPrompt = scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+    const basePrompt = customPrompt?.trim() ? customPrompt.trim() : scene.prompt;
+    const motionPrompt = basePrompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
     service.patchState({
       clips: currentState.clips.map(c => c.sceneId === sceneId ? { ...c, status: "generating" as const, progress: 10 } : c),
     });
@@ -353,48 +356,69 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                   const isSelected = clip.videoUrl === selectedPreviewUrl;
 
                   return (
-                    <div
-                      key={clip.sceneId}
-                      className={`relative flex-shrink-0 w-[280px] rounded-xl border overflow-hidden cursor-pointer transition-all group ${
-                        isSelected ? "ring-2 ring-primary border-primary" : "border-border/30 hover:border-primary/50"
-                      }`}
-                      onClick={() => clip.videoUrl && setSelectedPreviewUrl(clip.videoUrl)}
-                    >
-                      {clip.status === "completed" && clip.videoUrl ? (
-                        <>
-                          <video
-                            src={clip.videoUrl}
-                            className="w-full aspect-video object-cover"
-                            muted
-                            preload="metadata"
-                            onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
-                            onMouseLeave={(e) => { const el = e.target as HTMLVideoElement; el.pause(); el.currentTime = 0; }}
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
-                            <div className="w-8 h-8 rounded-full bg-background/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Play className="w-4 h-4 text-foreground ml-0.5" />
+                    <div key={clip.sceneId} className="flex-shrink-0 w-[280px] space-y-1.5">
+                      <div
+                        className={`relative rounded-xl border overflow-hidden cursor-pointer transition-all group ${
+                          isSelected ? "ring-2 ring-primary border-primary" : "border-border/30 hover:border-primary/50"
+                        }`}
+                        onClick={() => clip.videoUrl && setSelectedPreviewUrl(clip.videoUrl)}
+                      >
+                        {clip.status === "completed" && clip.videoUrl ? (
+                          <>
+                            <video
+                              src={clip.videoUrl}
+                              className="w-full aspect-video object-cover"
+                              muted
+                              preload="metadata"
+                              onMouseEnter={(e) => (e.target as HTMLVideoElement).play().catch(() => {})}
+                              onMouseLeave={(e) => { const el = e.target as HTMLVideoElement; el.pause(); el.currentTime = 0; }}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
+                              <div className="w-8 h-8 rounded-full bg-background/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Play className="w-4 h-4 text-foreground ml-0.5" />
+                              </div>
                             </div>
+                          </>
+                        ) : clip.status === "generating" || clip.status === "queued" ? (
+                          <Skeleton className="w-full aspect-video flex items-center justify-center">
+                            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                          </Skeleton>
+                        ) : clip.status === "failed" ? (
+                          <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center">
+                            <AlertCircle className="w-5 h-5 text-destructive" />
                           </div>
-                        </>
-                      ) : clip.status === "generating" || clip.status === "queued" ? (
-                        <Skeleton className="w-full aspect-video flex items-center justify-center">
-                          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                        </Skeleton>
-                      ) : clip.status === "failed" ? (
-                        <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center">
-                          <AlertCircle className="w-5 h-5 text-destructive" />
-                        </div>
-                      ) : (
-                        <div className="w-full aspect-video bg-muted/20 flex items-center justify-center">
-                          <Film className="w-5 h-5 text-muted-foreground/40" />
-                        </div>
-                      )}
+                        ) : (
+                          <div className="w-full aspect-video bg-muted/20 flex items-center justify-center">
+                            <Film className="w-5 h-5 text-muted-foreground/40" />
+                          </div>
+                        )}
 
-                      {/* Label overlay */}
-                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5">
-                        <p className="text-[10px] font-medium text-white truncate">
-                          {i + 1}. {segType ? segType.charAt(0).toUpperCase() + segType.slice(1) : label}
-                        </p>
+                        {/* Label overlay */}
+                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5">
+                          <p className="text-[10px] font-medium text-white truncate">
+                            {i + 1}. {segType ? segType.charAt(0).toUpperCase() + segType.slice(1) : label}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Custom prompt input + regenerate */}
+                      <div className="flex gap-1">
+                        <Input
+                          value={scenePrompts[clip.sceneId] || ""}
+                          onChange={e => setScenePrompts(p => ({ ...p, [clip.sceneId]: e.target.value }))}
+                          placeholder="Custom prompt..."
+                          className="h-7 text-xs flex-1"
+                          onClick={e => e.stopPropagation()}
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          disabled={clip.status === "generating"}
+                          onClick={() => handleRegenerateScene(clip.sceneId, scenePrompts[clip.sceneId])}
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
                     </div>
                   );
