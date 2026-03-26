@@ -53,7 +53,7 @@ export function AdDirectorSidebar({ onLoadProject, onNavigateTab, activeTab }: A
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-1.5 space-y-0.5 pt-1">
+      <nav className="flex-1 overflow-y-auto px-1.5 space-y-0.5 pt-3">
         <SidebarItem icon={Home} label="Home" collapsed={collapsed} onClick={() => navigate("/ad-director")} />
         <SidebarItem icon={Image} label="My Media" collapsed={collapsed} active={activeTab === "media"} onClick={() => onNavigateTab?.("media")} />
         <SidebarItem icon={Camera} label="Record" collapsed={collapsed} active={activeTab === "record"} onClick={() => onNavigateTab?.("record")} />
