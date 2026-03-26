@@ -1,61 +1,29 @@
 
 
-# Background Video Generation for Ad Director
+# Fix: Email Sending from ERP — ai@rebar.shop Token Missing
 
 ## Problem
-The entire Ad Director pipeline (analyze → generate scenes → stitch) runs inside `AdDirectorContent` React state. When the user navigates away, the component unmounts — all state setters become no-ops, progress is lost, and the generation silently dies. The user must stay on the page for potentially 5–10 minutes.
+The `notify-lead-assignees` function looks up `ai@rebar.shop` in `user_gmail_tokens` to send emails, but this account has never gone through the Google OAuth flow in the app, so no token exists. The env var fallback (`GMAIL_REFRESH_TOKEN`) is also expired → `invalid_grant`.
 
-## Solution
-Create a **singleton service** (`BackgroundAdDirectorService`) — similar to the existing `BackgroundAgentService` pattern — that holds pipeline state outside React and survives navigation.
+## Root Cause
+The Google OAuth flow in the app (Integrations page → Connect Gmail) saves tokens keyed by the logged-in user's `user_id`. The `ai@rebar.shop` account needs to sign into the ERP and connect Gmail on the Integrations page to store a valid refresh token.
 
-## Architecture
+## Solution — Two-Part Fix
 
-```text
-┌──────────────────────┐
-│  AdDirectorContent   │  ← subscribes on mount, unsubscribes on unmount
-│  (React component)   │     reads state from singleton, renders UI
-└──────────┬───────────┘
-           │ subscribe / unsubscribe
-┌──────────▼───────────┐
-│ BackgroundAdDirector  │  ← singleton, survives navigation
-│      Service          │     holds: flowState, clips, progress, storyboard
-│                       │     runs: the full async pipeline
-│                       │     notifies: listeners on every state change
-└───────────────────────┘
-```
+### Part 1: Immediate — Make the function resilient (code change)
+Update `notify-lead-assignees` to fall back to **any admin user** who has a valid Gmail token if `ai@rebar.shop` has no token. This matches how `comms-alerts` and `email-activity-report` work.
 
-## Changes
+**File:** `supabase/functions/notify-lead-assignees/index.ts`
+- After failing to find `ai@rebar.shop` token, query `user_gmail_tokens` joined with `user_roles` for any admin user with a valid token
+- Use that token to send emails (the email still appears "from" that Google account)
+- This means `sattar@rebar.shop`'s token will be used immediately since it's the connected admin
 
-### 1. New: `src/lib/backgroundAdDirectorService.ts`
-- Singleton class holding all pipeline state: `flowState`, `clips`, `storyboard`, `segments`, `continuity`, `progressValue`, `statusText`, `finalVideoUrl`, `userPrompt`
-- `startPipeline(...)` method — moves the entire `handleSubmit` logic from the component into the service
-- `subscribe(cb)` / `unsubscribe()` — component registers a listener; every state change calls `cb(state)` so React re-renders
-- `getState()` — returns current snapshot (for initial hydration on mount)
-- `cancel()` — sets abort flag
-- `reset()` — clears state for a new project
-- State changes use an internal `setState()` that updates the singleton's state object AND notifies the listener
-
-### 2. Refactor: `src/components/ad-director/AdDirectorContent.tsx`
-- Remove all pipeline state (`flowState`, `clips`, `storyboard`, etc.) from `useState`
-- On mount: call `service.subscribe(setState)` and hydrate from `service.getState()`
-- On unmount: call `service.unsubscribe()`
-- `handleSubmit` → calls `service.startPipeline(...)` instead of running inline
-- `handleCancel` → calls `service.cancel()`
-- All rendering logic remains the same, just reads from the subscribed state
-- Edge function calls, polling, stitching — all moved to the service
-
-### 3. No database changes needed
-The existing `ad_project_history` auto-save already persists project data. The singleton just keeps in-memory state alive during navigation.
+### Part 2: Long-term — Connect ai@rebar.shop
+You should sign into the ERP as `ai@rebar.shop` and go to **Integrations** → **Connect Gmail**. This will store a proper refresh token for the service account. Once done, the function will automatically prefer `ai@rebar.shop`'s token.
 
 ## Files Changed
 
 | File | Change |
 |---|---|
-| `src/lib/backgroundAdDirectorService.ts` | New — singleton service holding pipeline state + execution |
-| `src/components/ad-director/AdDirectorContent.tsx` | Refactor to subscribe to singleton instead of local state |
-
-## Behavior
-- User starts generation → navigates to Dashboard → comes back → sees current progress continuing
-- Toast notification when generation completes while user is away
-- Cancel still works from the UI when the component is mounted
+| `supabase/functions/notify-lead-assignees/index.ts` | Add admin fallback token lookup when ai@rebar.shop has no token |
 
