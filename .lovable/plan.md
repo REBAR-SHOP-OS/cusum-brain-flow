@@ -1,33 +1,50 @@
 
 
-# Add Circular Home Button to Result View
+# Sync Audio/Text/Video & Add Live Thumbnails to Timeline
 
-## What
-Add a circular home icon button below the "Approve & Download" and "Edit Video" buttons in the result view, allowing users to navigate back to the idle/initial state of AI Video Director.
+## Problem
+1. Audio, text, and video can desync — no enforcement mechanism ensures they stay aligned
+2. Timeline video track shows only colored blocks with text labels — no visual preview of what each scene contains
 
-## Change
+## Changes
 
-### `src/components/ad-director/AdDirectorContent.tsx`
-- After the action buttons `div` (line 416), add a new centered row with a circular `Home` icon button
-- On click, reset the service state back to idle: `service.patchState({ flowState: "idle" })`
-- Style: circular button (`rounded-full w-12 h-12`), subtle background, with a `Home` icon from lucide-react
+### 1. Live Thumbnail Previews in Timeline — `TimelineBar.tsx`
 
-```tsx
-{/* Home button */}
-<div className="flex justify-center pt-2">
-  <button
-    onClick={() => service.patchState({ flowState: "idle" })}
-    className="w-12 h-12 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-colors"
-    title="Back to AI Video Director"
-  >
-    <Home className="w-5 h-5 text-primary" />
-  </button>
-</div>
+**What**: When a clip has `videoUrl`, extract a thumbnail frame and display it as the background of that timeline segment instead of a plain colored block.
+
+**How**:
+- Create a helper component `SceneThumbnail` that loads a `<video>` element offscreen, seeks to 0.5s, draws a frame to a tiny canvas, and caches the result as a data URL
+- Use `useMemo` + `useEffect` to generate thumbnails only when `clip.videoUrl` changes
+- Display the thumbnail as `backgroundImage` on the timeline segment div (with `object-fit: cover` via `bg-cover bg-center`)
+- Keep the existing label overlay on top with a subtle dark gradient for readability
+
+**Visual result**: Each completed scene shows a small frame from its video in the timeline bar, giving a true "live preview" feel.
+
+### 2. Audio/Text/Video Sync Enforcement — `videoStitch.ts`
+
+**What**: Ensure subtitle text appears/disappears precisely aligned with voiceover timing, and both stay in sync with the video frames.
+
+**How**:
+- In the `drawSubtitle` function, use `elapsed` time (which is already derived from the same clock as video playback) to determine which subtitle segment to show — this is already the mechanism in place
+- Add a guard: if voiceover audio (`voiceElement`) has drifted more than 0.3s from the video's elapsed time, resync it by setting `voiceElement.currentTime`
+- Add the same drift check for music element
+- This ensures that even if audio buffers or lags, it snaps back to match the video timeline
+
+**Key code addition** in the render loop (`drawFrame` or equivalent):
+```typescript
+// Drift correction: keep voice & music in sync with video elapsed time
+if (voiceElement && Math.abs(voiceElement.currentTime - elapsed) > 0.3) {
+  voiceElement.currentTime = elapsed;
+}
+if (musicElement && Math.abs(musicElement.currentTime - elapsed) > 0.3) {
+  musicElement.currentTime = elapsed;
+}
 ```
 
-- Ensure `Home` is imported from `lucide-react` at the top of the file
+## Files Changed
 
 | File | Change |
 |---|---|
-| `src/components/ad-director/AdDirectorContent.tsx` | Add circular Home button after action buttons, import `Home` icon |
+| `src/components/ad-director/editor/TimelineBar.tsx` | Add `SceneThumbnail` component that extracts video frame; use as background for each timeline scene segment |
+| `src/lib/videoStitch.ts` | Add audio drift correction in render loop to keep voice/music synced with video elapsed time |
 
