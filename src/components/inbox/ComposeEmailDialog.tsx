@@ -25,7 +25,37 @@ import {
   Mic,
   MicOff,
   Wand2,
+  X,
+  FileText,
 } from "lucide-react";
+
+interface AttachmentFile {
+  file: File;
+  name: string;
+  size: number;
+}
+
+const MAX_ATTACHMENTS = 5;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove data URL prefix (e.g. "data:application/pdf;base64,")
+      resolve(result.split(",")[1] || "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 const TONES = [
   { key: "formal", label: "Formal" },
@@ -61,7 +91,9 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
   const [polishing, setPolishing] = useState(false);
   const [hasDrafted, setHasDrafted] = useState(false);
   const [adjustingTone, setAdjustingTone] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<AttachmentFile[]>([]);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const speech = useSpeechRecognition({
@@ -81,7 +113,31 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
     setSending(false);
     setPolishing(false);
     setAdjustingTone(null);
+    setAttachments([]);
     speech.reset();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newFiles: AttachmentFile[] = [];
+    for (const file of Array.from(files)) {
+      if (attachments.length + newFiles.length >= MAX_ATTACHMENTS) {
+        toast({ title: "Max attachments", description: `Maximum ${MAX_ATTACHMENTS} files allowed.`, variant: "destructive" });
+        break;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        toast({ title: "File too large", description: `${file.name} exceeds 10MB limit.`, variant: "destructive" });
+        continue;
+      }
+      newFiles.push({ file, name: file.name, size: file.size });
+    }
+    if (newFiles.length) setAttachments((prev) => [...prev, ...newFiles]);
+    e.target.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handlePromptGenerate = async () => {
@@ -227,11 +283,21 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
 
     undoTimerRef.current = setTimeout(async () => {
       try {
+        // Convert attachments to base64
+        const attachmentPayloads = await Promise.all(
+          attachments.map(async (att) => ({
+            filename: att.name,
+            contentType: att.file.type || "application/octet-stream",
+            base64: await fileToBase64(att.file),
+          }))
+        );
+
         const { data, error } = await supabase.functions.invoke("gmail-send", {
           body: {
             to,
             subject: subject || "(no subject)",
             body: body.replace(/\n/g, "<br>"),
+            ...(attachmentPayloads.length > 0 && { attachments: attachmentPayloads }),
           },
         });
         if (error) throw error;
@@ -343,8 +409,31 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
             value={body}
             onChange={(e) => setBody(e.target.value)}
             placeholder="Write your email..."
-            className="min-h-[160px] max-h-[280px] bg-card/50 border-border/50 resize-none text-sm"
+           className="min-h-[160px] max-h-[280px] bg-card/50 border-border/50 resize-none text-sm"
           />
+
+          {/* Attachment chips */}
+          {attachments.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {attachments.map((att, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-1.5 px-2 py-1 bg-muted rounded-md text-xs"
+                >
+                  <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+                  <span className="truncate max-w-[140px]">{att.name}</span>
+                  <span className="text-muted-foreground shrink-0">({formatFileSize(att.size)})</span>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(i)}
+                    className="ml-0.5 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Tone Adjuster + Polish */}
@@ -389,7 +478,20 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
             <Button variant="ghost" size="icon" className="h-7 w-7">
               <List className="w-3.5 h-3.5 text-muted-foreground" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7">
+            <input
+              type="file"
+              multiple
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={attachments.length >= MAX_ATTACHMENTS}
+            >
               <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
             </Button>
 

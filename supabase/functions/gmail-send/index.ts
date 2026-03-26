@@ -77,7 +77,26 @@ async function getAccessTokenForUser(userId: string, clientIp: string): Promise<
   return data.access_token;
 }
 
-function createRawEmail(to: string, subject: string, body: string, fromEmail: string, replyTo?: { messageId: string; references: string }, customHeaders?: Record<string, string>, cc?: string, bcc?: string): string {
+interface EmailAttachment {
+  filename: string;
+  contentType: string;
+  base64: string;
+}
+
+function createRawEmail(
+  to: string,
+  subject: string,
+  body: string,
+  fromEmail: string,
+  replyTo?: { messageId: string; references: string },
+  customHeaders?: Record<string, string>,
+  cc?: string,
+  bcc?: string,
+  attachments?: EmailAttachment[]
+): string {
+  const boundary = `boundary_${crypto.randomUUID().replace(/-/g, "")}`;
+  const hasAttachments = attachments && attachments.length > 0;
+
   const emailLines = [
     `From: ${fromEmail}`,
     `To: ${to}`,
@@ -89,8 +108,13 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
   emailLines.push(
     `Subject: ${subject}`,
     "MIME-Version: 1.0",
-    "Content-Type: text/html; charset=utf-8",
   );
+
+  if (hasAttachments) {
+    emailLines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+  } else {
+    emailLines.push("Content-Type: text/html; charset=utf-8");
+  }
 
   if (replyTo) {
     emailLines.push(`In-Reply-To: ${replyTo.messageId}`);
@@ -103,7 +127,27 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
     }
   }
 
-  emailLines.push("", body);
+  if (hasAttachments) {
+    emailLines.push("");
+    emailLines.push(`--${boundary}`);
+    emailLines.push("Content-Type: text/html; charset=utf-8");
+    emailLines.push("");
+    emailLines.push(body);
+
+    for (const att of attachments!) {
+      emailLines.push(`--${boundary}`);
+      emailLines.push(`Content-Type: ${att.contentType}; name="${att.filename}"`);
+      emailLines.push("Content-Transfer-Encoding: base64");
+      emailLines.push(`Content-Disposition: attachment; filename="${att.filename}"`);
+      emailLines.push("");
+      // Gmail API expects standard base64 in the MIME part
+      emailLines.push(att.base64);
+    }
+
+    emailLines.push(`--${boundary}--`);
+  } else {
+    emailLines.push("", body);
+  }
 
   const email = emailLines.join("\r\n");
   const base64 = btoa(unescape(encodeURIComponent(email)));
@@ -121,6 +165,7 @@ interface SendEmailRequest {
   references?: string;
   sent_by_agent?: boolean;
   custom_headers?: Record<string, string>;
+  attachments?: EmailAttachment[];
 }
 
 Deno.serve((req) =>
@@ -138,6 +183,11 @@ Deno.serve((req) =>
       references: z.string().max(2000).optional(),
       sent_by_agent: z.boolean().optional(),
       custom_headers: z.record(z.string()).optional(),
+      attachments: z.array(z.object({
+        filename: z.string().max(255),
+        contentType: z.string().max(255),
+        base64: z.string(),
+      })).max(5).optional(),
     });
     const parsed = sendSchema.safeParse(rawBody);
     if (!parsed.success) {
@@ -146,7 +196,7 @@ Deno.serve((req) =>
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    const { to, cc, bcc, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers } = parsed.data;
+    const { to, cc, bcc, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers, attachments: emailAttachments } = parsed.data;
 
     // --- Comms Engine: no_act_global + email routing ---
     if (sent_by_agent) {
@@ -212,7 +262,8 @@ Deno.serve((req) =>
       replyToMessageId ? { messageId: replyToMessageId, references: references || "" } : undefined,
       custom_headers,
       cc,
-      bcc
+      bcc,
+      emailAttachments
     );
 
     let sendResponse = await fetch(
