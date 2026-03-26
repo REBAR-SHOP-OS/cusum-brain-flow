@@ -6,13 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
-import { CustomerSelectDialog } from "./CustomerSelectDialog";
-import { CreateTransactionDialog } from "@/components/customers/CreateTransactionDialog";
+import { DraftInvoiceEditor } from "./documents/DraftInvoiceEditor";
 import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2, Package } from "lucide-react";
 import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
+import { useSalesInvoices } from "@/hooks/useSalesInvoices";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
 
 type SortField = "DocNumber" | "Customer" | "TxnDate" | "DueDate" | "TotalAmt" | "Balance" | "Status";
