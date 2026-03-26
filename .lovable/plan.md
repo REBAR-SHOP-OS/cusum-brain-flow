@@ -1,37 +1,33 @@
 
 
-# Make Music Tab Prompt-Driven with AI Generation
+# Add Schedule-to-Social-Calendar Button in Ad Director
 
 ## What
-Redesign the Music tab so the **primary interface is a text prompt** for AI music generation. The stock track list becomes secondary. The existing ElevenLabs music generation backend already works — this is a UI restructuring.
-
-Note: Gemini models don't generate audio files. The existing ElevenLabs music API (`elevenlabs-music` edge function) is already configured and is the correct backend for this. The change is purely in MusicTab UI layout.
+Add a calendar icon button next to Download/Edit Video in the Ad Director final preview. Clicking it opens a date+time picker popover, and on confirm creates a new social media post card with the video URL and scheduled date/time.
 
 ## Changes
 
-### `src/components/ad-director/editor/MusicTab.tsx`
-Restructure the layout:
+### `src/components/ad-director/AdDirectorContent.tsx`
 
-1. **Top section — AI Music Generator (always visible)**:
-   - Large text input/textarea with placeholder like "توصیف موسیقی مورد نظر..." / "Describe your music..."
-   - Duration selector (15s, 30s, 60s) as small chips
-   - Type selector chips: "Music" / "Sound Effect"
-   - Generate button (full-width, prominent)
-   - Loading state with spinner during generation
-
-2. **Bottom section — Generated & Uploaded tracks**:
-   - Show AI-generated and uploaded tracks (remove the 12 fake stock tracks that have no actual audio URLs)
-   - Keep upload button (+) for user audio files
-   - Keep play/pause, waveform visualization, and "Use" button
-   - Keep volume slider and search
-
-3. **Remove**:
-   - The sparkles toggle button (prompt is now always visible)
-   - The `showPromptInput` state toggle
-   - The 12 `STOCK_TRACKS` entries (they have no real audio and just show "Generate or upload a track to play it")
-   - The filter dropdown (All audio / Music / Sound effects) — replaced by type chips in the generator
+1. **Add state**: `scheduleOpen`, `scheduleDate`, `scheduleHour`, `scheduleMinute`
+2. **Add calendar button** next to Download and Edit Video (line ~459), wrapped in a `Popover` with:
+   - Calendar date picker
+   - Hour/minute selectors (same pattern as `SchedulePopover`)
+   - Confirm button
+3. **On confirm**: Insert a new row into `social_posts` table with:
+   - `platform: "instagram"` (default)
+   - `status: "scheduled"`
+   - `qa_status: "scheduled"`
+   - `content_type: "reel"`
+   - `image_url`: the `finalVideoUrl` (permanent storage URL)
+   - `scheduled_date`: selected date+time ISO string
+   - `title`: brand name or prompt text
+   - `content`: prompt used for generation
+   - `user_id`: current authenticated user
+4. **Toast** success with link indication, or error on failure
+5. **Import** `CalendarDays` icon, `Popover`, `Calendar`, `Select` components
 
 | File | Change |
 |---|---|
-| `MusicTab.tsx` | Restructure: prompt-first UI, remove fake stock tracks, add duration/type selectors |
+| `AdDirectorContent.tsx` | Add schedule popover button with date/time picker, insert social_posts row on confirm |
 
