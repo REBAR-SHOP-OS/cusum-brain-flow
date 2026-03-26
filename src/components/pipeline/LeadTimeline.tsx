@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { renderDescriptionWithFiles } from "@/components/pipeline/InlineFileLink";
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -482,9 +483,9 @@ export function LeadTimeline({ lead }: LeadTimelineProps) {
                       <p className="text-sm mt-1">{activity.title}</p>
                     )}
                     {activity.description && (
-                      <p className="text-sm text-foreground/80 whitespace-pre-wrap mt-1 leading-relaxed">
-                        {activity.description}
-                      </p>
+                      <div className="text-sm text-foreground/80 whitespace-pre-wrap mt-1 leading-relaxed">
+                        {renderDescriptionWithFiles(activity.description)}
+                      </div>
                     )}
                     {activity.activity_type !== "stage_change" && !activity.description && (
                       <p className="text-sm text-foreground/80 mt-0.5">{activity.title}</p>
