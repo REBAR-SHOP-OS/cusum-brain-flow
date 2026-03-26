@@ -38,9 +38,9 @@ export function InlineFileLink({ url, fileName }: Props) {
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(url);
-      toast.success("لینک کپی شد");
+      toast.success("Link copied");
     } catch {
-      toast.error("خطا در کپی لینک");
+      toast.error("Failed to copy link");
     }
   };
 
