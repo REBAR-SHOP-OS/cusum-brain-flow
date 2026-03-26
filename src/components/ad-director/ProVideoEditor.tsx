@@ -1402,10 +1402,7 @@ export function ProVideoEditor({
         onEditVoiceoverText={handleEditVoiceoverText}
         onMoveOverlay={handleMoveOverlay}
         onMoveAudioTrack={handleMoveAudioTrack}
-        onEditOverlay={(ov) => {
-          const newText = prompt("Edit overlay text:", ov.content);
-          if (newText !== null) setOverlays(prev => prev.map(o => o.id === ov.id ? { ...o, content: newText } : o));
-        }}
+        onEditOverlay={(ov) => setEditingOverlay(ov)}
       />
 
       {/* Text Overlay Dialog */}
