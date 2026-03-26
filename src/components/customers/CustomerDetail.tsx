@@ -314,8 +314,8 @@ export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailPro
 
   // ── Extract ALL QB data ──
   const qbJson = qbCustomer?.raw_json as Record<string, any> | null;
-  const email = qbJson?.PrimaryEmailAddr?.Address || primaryContact?.email || null;
-  const phone = qbJson?.PrimaryPhone?.FreeFormNumber || primaryContact?.phone || null;
+  const email = qbJson?.PrimaryEmailAddr?.Address || primaryContact?.email || customer.email || null;
+  const phone = qbJson?.PrimaryPhone?.FreeFormNumber || primaryContact?.phone || customer.phone || null;
   const mobile = qbJson?.Mobile?.FreeFormNumber || null;
   const altPhone = qbJson?.AlternatePhone?.FreeFormNumber || null;
   const fax = qbJson?.Fax?.FreeFormNumber || null;
