@@ -144,7 +144,7 @@ export default function SalesQuotationDrawer({ quotation, open, onClose, onUpdat
     if (!customerEmail.trim() || !quotation) return;
     setSendingEmail(true);
     try {
-      const quoteId = quotation.quote_id || quotation.id;
+      const quoteId = (quotation as any).quote_id || quotation.id;
       const { data, error } = await supabase.functions.invoke("send-quote-email", {
         body: { quote_id: quoteId, customer_email: customerEmail.trim(), action: emailDialogAction },
       });
