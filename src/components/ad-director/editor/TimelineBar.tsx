@@ -295,8 +295,8 @@ export function TimelineBar({
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
-    const clickedTime = pct * totalDuration;
-    onSeek(Math.max(0, Math.min(totalDuration, clickedTime)));
+    const snappedTime = Math.round(pct * totalDuration);
+    onSeek(Math.max(0, Math.min(totalDuration, snappedTime)));
   };
 
   const getSceneDur = (i: number) => {
