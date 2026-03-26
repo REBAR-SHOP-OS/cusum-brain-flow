@@ -113,7 +113,31 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
     setSending(false);
     setPolishing(false);
     setAdjustingTone(null);
+    setAttachments([]);
     speech.reset();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newFiles: AttachmentFile[] = [];
+    for (const file of Array.from(files)) {
+      if (attachments.length + newFiles.length >= MAX_ATTACHMENTS) {
+        toast({ title: "Max attachments", description: `Maximum ${MAX_ATTACHMENTS} files allowed.`, variant: "destructive" });
+        break;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        toast({ title: "File too large", description: `${file.name} exceeds 10MB limit.`, variant: "destructive" });
+        continue;
+      }
+      newFiles.push({ file, name: file.name, size: file.size });
+    }
+    if (newFiles.length) setAttachments((prev) => [...prev, ...newFiles]);
+    e.target.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handlePromptGenerate = async () => {
