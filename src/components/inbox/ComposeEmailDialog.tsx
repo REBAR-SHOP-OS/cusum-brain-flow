@@ -478,7 +478,20 @@ export function ComposeEmailDialog({ open, onOpenChange, initialTo, initialSubje
             <Button variant="ghost" size="icon" className="h-7 w-7">
               <List className="w-3.5 h-3.5 text-muted-foreground" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7">
+            <input
+              type="file"
+              multiple
+              ref={fileInputRef}
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={attachments.length >= MAX_ATTACHMENTS}
+            >
               <Paperclip className="w-3.5 h-3.5 text-muted-foreground" />
             </Button>
 
