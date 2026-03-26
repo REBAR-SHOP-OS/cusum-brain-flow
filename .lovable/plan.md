@@ -1,44 +1,39 @@
 
 
-# Inline File Preview on Click
+# Deduplicate Video History Cards
 
 ## Problem
-Clicking a file in the timeline (InlineFileLink) opens it in a new browser tab. The user wants an inline preview within the same page.
+Multiple project cards with similar/identical names appear in "Your Previous Videos" because each pipeline run creates a new database row instead of updating the existing one. The user wants only one card per prompt.
 
-## Solution
-Add an `onClick` handler to the file card that opens a modal/dialog overlay showing the file preview. Support:
-- **PDFs**: render in an `<iframe>` 
-- **Images** (jpg, png, etc.): render in an `<img>` tag
-- **Other files** (DWG, XLS, etc.): show a message "Preview not available" with download button
+## Root Cause
+In `backgroundAdDirectorService.ts` line 377, `saveProject` is called with `id: this.state.projectId ?? undefined`. When `projectId` is null/undefined (e.g., on a fresh generation), a new row is inserted. Repeated generations with the same or similar prompts create duplicate rows.
 
-## Changes
+## Solution — Two-part fix
 
-### `src/components/pipeline/InlineFileLink.tsx`
+### 1. Deduplicate display in `VideoHistory.tsx`
+Group visible projects by their `script` (original prompt text) or `name`, keeping only the most recent one per group. This handles existing duplicates immediately.
 
-1. Add state `previewOpen` to toggle a preview dialog
-2. Make the file name/icon area clickable to open preview
-3. Add a `Dialog` overlay that renders:
-   - For images: `<img>` full-size preview
-   - For PDFs: `<iframe src={url}>` embedded viewer
-   - For others: fallback message + download button
-4. Keep existing Download and Copy buttons unchanged
-
-```tsx
-// Pseudocode for the preview logic
-const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(name);
-const isPdf = /\.pdf(\?|$)/i.test(name);
-
-<Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-  <DialogContent className="max-w-4xl max-h-[90vh]">
-    {isImage && <img src={url} className="max-w-full max-h-[80vh] object-contain" />}
-    {isPdf && <iframe src={url} className="w-full h-[80vh]" />}
-    {!isImage && !isPdf && <p>Preview not available. <a>Download</a></p>}
-  </DialogContent>
-</Dialog>
+```typescript
+// After filtering visible projects, deduplicate by script/name
+const deduped = Object.values(
+  visible.reduce((acc, p) => {
+    const key = p.script || p.name || p.id;
+    if (!acc[key] || new Date(p.updated_at) > new Date(acc[key].updated_at)) {
+      acc[key] = p;
+    }
+    return acc;
+  }, {} as Record<string, AdProjectRow>)
+);
 ```
 
-## Files Changed
-- `src/components/pipeline/InlineFileLink.tsx` — add Dialog-based inline preview
+### 2. Prevent future duplicates at the source in `backgroundAdDirectorService.ts`
+Before creating a new project, check if a project with the same prompt already exists and reuse its ID for an update instead of an insert.
 
-All consumers (LeadTimeline, OdooChatter, SalesLeadChatter, DockChatBox) will automatically get the preview behavior since they use the same component.
+In `startPipeline` (around line 376), before calling `saveProject`, query for an existing project with matching `script`:
+- If found, set `this.state.projectId = existingProject.id` so the save becomes an update
+- If not found, proceed as normal (insert)
+
+## Files Changed
+- `src/components/ad-director/VideoHistory.tsx` — deduplicate visible projects by script/name
+- `src/lib/backgroundAdDirectorService.ts` — reuse existing project ID when prompt matches
 
