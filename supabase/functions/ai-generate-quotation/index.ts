@@ -54,7 +54,7 @@ function getFabricationRate(tonnage: number, table: any[]): { price_per_ton: num
 
 Deno.serve((req) =>
   handleRequest(req, async ({ userId, companyId, serviceClient, body }) => {
-    const { estimation_project_id, lead_id, customer_name_override, delivery_distance_km, include_shop_drawings } = body;
+    const { estimation_project_id, lead_id, customer_name_override, delivery_distance_km, include_shop_drawings, scrap_percent } = body;
     const deliveryDistanceKm = Number(delivery_distance_km) || 0;
     const shouldIncludeShopDrawings = include_shop_drawings !== false;
 
@@ -156,7 +156,7 @@ Deno.serve((req) =>
     }
 
     const totalWeightKg = bomItems.reduce((s, i) => s + Number(i.weight_kg || 0), 0);
-    const scrapPct = pricingConfig.scrap_percentage ?? pricingConfig.default_scrap_percent ?? 15;
+    const scrapPct = Number(scrap_percent ?? pricingConfig.scrap_percentage ?? pricingConfig.default_scrap_percent ?? 15);
     const totalWithScrap = totalWeightKg * (1 + scrapPct / 100);
     const totalTonnes = totalWithScrap / 1000;
     const cageTonnes = (cageWeightKg * (1 + scrapPct / 100)) / 1000;
@@ -302,6 +302,12 @@ Deno.serve((req) =>
       "Subject to material availability",
     ];
 
+    const terms = [
+      "Prices valid for 30 days from quote date.",
+      "Payment terms: Net 30.",
+      "Full Terms & Conditions: https://www.crm.rebar.shop/terms",
+    ];
+
     const notesText = [
       `Prices valid for 30 days. All weights include ${scrapPct}% scrap.`,
       "",
@@ -310,6 +316,9 @@ Deno.serve((req) =>
       "",
       "EXCLUSIONS:",
       ...exclusions.map(e => `➖ ${e}`),
+      "",
+      "TERMS & CONDITIONS:",
+      ...terms.map(t => `• ${t}`),
     ].join("\n");
 
     // Generate quote number
@@ -336,6 +345,7 @@ Deno.serve((req) =>
           line_items: lineItems,
           estimation_project_id,
           estimation_project_name: project.name,
+          project_name: project.name,
           delivery_terms: null,
           total_weight_kg: totalWeightKg,
           total_weight_with_scrap_kg: totalWithScrap,
@@ -347,6 +357,7 @@ Deno.serve((req) =>
           inclusions,
           exclusions,
           assumptions,
+          terms,
           customer_name: customerName,
           lead_id: effectiveLeadId || null,
           pricing_method: "deterministic",

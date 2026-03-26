@@ -33,6 +33,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
   const [tab, setTab] = useState<string>("project");
   const [deliveryDistance, setDeliveryDistance] = useState<string>("");
   const [includeShopDrawings, setIncludeShopDrawings] = useState(true);
+  const [scrapPercent, setScrapPercent] = useState<string>("15");
 
   // Tab 1 — existing project
   const [selectedProject, setSelectedProject] = useState<string>("");
@@ -57,6 +58,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
       setAddToPipeline(false);
       setDeliveryDistance("");
       setIncludeShopDrawings(true);
+      setScrapPercent("15");
       setTab("project");
     }
   }, [open, leadCustomerName, leadId]);
@@ -170,6 +172,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           customer_name_override: customerName || null,
           delivery_distance_km: Number(deliveryDistance) || 0,
           include_shop_drawings: includeShopDrawings,
+          scrap_percent: Number(scrapPercent) || 15,
         },
       });
       if (error) throw error;
@@ -243,6 +246,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           customer_name_override: customerName || null,
           delivery_distance_km: Number(deliveryDistance) || 0,
           include_shop_drawings: includeShopDrawings,
+          scrap_percent: Number(scrapPercent) || 15,
         },
       });
       if (quoteError) throw quoteError;
@@ -446,8 +450,8 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           </TabsContent>
         </Tabs>
 
-        {/* Delivery & Shop Drawing options */}
-        <div className="grid grid-cols-2 gap-3 pt-1">
+        {/* Delivery, Scrap & Shop Drawing options */}
+        <div className="grid grid-cols-3 gap-3 pt-1">
           <div className="space-y-1">
             <Label htmlFor="delivery-km" className="text-sm">Delivery Distance (km)</Label>
             <Input
@@ -457,6 +461,18 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
               placeholder="0 = no delivery"
               value={deliveryDistance}
               onChange={(e) => setDeliveryDistance(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="scrap-pct" className="text-sm">Scrap %</Label>
+            <Input
+              id="scrap-pct"
+              type="number"
+              min={0}
+              max={50}
+              placeholder="15"
+              value={scrapPercent}
+              onChange={(e) => setScrapPercent(e.target.value)}
             />
           </div>
           <div className="flex items-end pb-2">
