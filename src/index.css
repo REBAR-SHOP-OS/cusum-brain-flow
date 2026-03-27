@@ -239,27 +239,12 @@
    Zebra Label Print Styles — 4x6 Continuous Roll
    ============================================ */
 @media print {
-  @page {
-    size: 4in 6in;
-    margin: 0;
-  }
-
   @page a4 {
     size: A4;
     margin: 15mm;
   }
 
-  /* Document reset for label printing */
-  html, body, #root {
-    display: block !important;
-    width: 4in !important;
-    height: auto !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    overflow: visible !important;
-  }
-
-  /* Hide app chrome & non-print elements */
+  /* Hide app chrome */
   body > *:not(#root) { display: none !important; }
   nav, header, aside,
   [data-sidebar], [role="navigation"],
@@ -268,58 +253,14 @@
     display: none !important;
   }
 
-  /* Kill ALL layout wrappers */
-  .flex, .grid, .overflow-auto, .overflow-hidden,
-  [data-radix-scroll-area-viewport],
-  [class*="ScrollArea"], [class*="scroll-area"] {
-    display: block !important;
-    overflow: visible !important;
-    width: auto !important;
-    height: auto !important;
-  }
-
-  * {
-    overflow: visible !important;
-  }
-
-  ::-webkit-scrollbar {
+  /* Print utility classes */
+  .print\:hidden {
     display: none !important;
   }
-
-  /* ── Zebra rebar tag labels ── */
-  .rebar-tag {
-    position: static !important;
-    float: none !important;
+  .print-only {
     display: block !important;
-    width: 4in !important;
-    height: 6in !important;
-    margin: 0 auto !important;
-    padding: 0 !important;
-    border: 1px solid #000 !important;
-    border-radius: 0 !important;
-    background: #fff !important;
-    color: #000 !important;
-    box-shadow: none !important;
-    overflow: hidden !important;
-    page-break-after: always;
-    break-after: page;
-    page-break-inside: avoid;
-  }
-
-  .rebar-tag,
-  .rebar-tag * {
     visibility: visible !important;
   }
-
-  .rebar-tag * {
-    color: #000 !important;
-    border-color: #000 !important;
-    background: transparent !important;
-  }
-
-  .rebar-tag .bg-black { background: #000 !important; }
-  .rebar-tag .bg-white { background: #fff !important; }
-  .rebar-tag img { image-rendering: pixelated; }
 
   /* ── Driver dropoff / delivery packing slip ── */
   .driver-dropoff-print {
