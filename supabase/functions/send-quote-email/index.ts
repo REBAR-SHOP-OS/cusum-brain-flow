@@ -131,8 +131,11 @@ Deno.serve((req) =>
         throw new Error(`Email send failed: ${errText}`);
       }
 
-      // Update quote status
-      await svc.from("quotes").update({ status: "sent" } as any).eq("id", quote_id);
+      // Update quote status and persist customer_email in metadata
+      await svc.from("quotes").update({
+        status: "sent",
+        metadata: { ...meta, customer_email: customer_email },
+      } as any).eq("id", quote_id);
 
       // Also update sales_quotations if linked
       const { data: sq } = await svc

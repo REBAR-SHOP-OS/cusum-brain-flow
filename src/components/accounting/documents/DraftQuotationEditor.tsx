@@ -25,6 +25,7 @@ interface Props {
 interface CustomerOption {
   id: string;
   name: string;
+  email?: string | null;
   billing_street1?: string | null;
   billing_city?: string | null;
   billing_province?: string | null;
@@ -69,6 +70,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const [customerSearch, setCustomerSearch] = useState("");
   const [addingNewCustomer, setAddingNewCustomer] = useState(false);
   const [newCustName, setNewCustName] = useState("");
+  const [newCustEmail, setNewCustEmail] = useState("");
   const [newCustAddress, setNewCustAddress] = useState("");
 
   // Product dropdown state
@@ -84,7 +86,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         companyId
           ? supabase
               .from("v_customers_clean" as any)
-              .select("customer_id, display_name, company_name")
+              .select("customer_id, display_name, company_name, email")
               .eq("company_id", companyId)
               .order("display_name")
           : Promise.resolve({ data: [], error: null }),
@@ -116,6 +118,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         setCustomerAddress(meta.customer_address || "");
         setProjectName(meta.project_name || "");
         setTaxRate(meta.tax_rate ?? 13);
+        if (meta.customer_email) setCustomerEmail(meta.customer_email);
         let resolvedNotes = meta.notes || "";
         if (!resolvedNotes && (meta.inclusions || meta.exclusions || meta.assumptions)) {
           const parts: string[] = [];
@@ -178,6 +181,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     setCustomerName(c.name);
     const addrParts = [c.billing_street1, c.billing_city, c.billing_province, c.billing_postal_code].filter(Boolean);
     if (addrParts.length) setCustomerAddress(addrParts.join(", "));
+    if (c.email) setCustomerEmail(c.email);
     setCustomerOpen(false);
     setCustomerSearch("");
   };
@@ -186,8 +190,8 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     if (!newCustName.trim() || !companyId) return;
     const { data, error } = await supabase
       .from("customers")
-      .insert({ name: newCustName.trim(), company_id: companyId, billing_street1: newCustAddress || null } as any)
-      .select("id, name, billing_street1, billing_city, billing_province, billing_postal_code")
+      .insert({ name: newCustName.trim(), company_id: companyId, email: newCustEmail || null, billing_street1: newCustAddress || null } as any)
+      .select("id, name, email, billing_street1, billing_city, billing_province, billing_postal_code")
       .single();
     if (error) {
       toast({ title: "Failed to create customer", description: error.message, variant: "destructive" });
@@ -198,6 +202,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     selectCustomer(newCust);
     setAddingNewCustomer(false);
     setNewCustName("");
+    setNewCustEmail("");
     setNewCustAddress("");
     toast({ title: "Customer created" });
   };
@@ -236,6 +241,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
           salesperson: customerName || null,
           metadata: {
             customer_name: customerName,
+            customer_email: customerEmail || undefined,
             customer_address: customerAddress,
             project_name: projectName,
             tax_rate: taxRate,
@@ -402,10 +408,11 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
                 ) : (
                   <div className="p-2 border-b border-gray-100 space-y-1.5">
                     <Input placeholder="Customer name" value={newCustName} onChange={(e) => setNewCustName(e.target.value)} className={`h-7 text-xs ${inputCls}`} autoFocus />
+                    <Input placeholder="Email" type="email" value={newCustEmail} onChange={(e) => setNewCustEmail(e.target.value)} className={`h-7 text-xs ${inputCls}`} />
                     <Input placeholder="Address (optional)" value={newCustAddress} onChange={(e) => setNewCustAddress(e.target.value)} className={`h-7 text-xs ${inputCls}`} />
                     <div className="flex gap-1">
                       <Button size="sm" className="h-6 text-xs" onClick={handleAddNewCustomer} disabled={!newCustName.trim()}>Create</Button>
-                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setAddingNewCustomer(false); setNewCustName(""); setNewCustAddress(""); }}>Cancel</Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setAddingNewCustomer(false); setNewCustName(""); setNewCustEmail(""); setNewCustAddress(""); }}>Cancel</Button>
                     </div>
                   </div>
                 )}
