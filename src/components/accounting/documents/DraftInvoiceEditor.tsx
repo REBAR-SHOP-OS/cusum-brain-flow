@@ -213,11 +213,20 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           if (sourceQuote?.metadata) {
             const metaItems = (sourceQuote.metadata as any).line_items as any[] | undefined;
             if (metaItems && metaItems.length > 0) {
-              const mapped = metaItems.map((mi: any) => ({
-                description: mi.description || mi.name || "",
-                quantity: Number(mi.quantity) || Number(mi.qty) || 1,
-                unitPrice: Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0,
-              }));
+              const mapped = metaItems.map((mi: any) => {
+                // Use clean description only (strip project-specific detail for QB matching)
+                let desc = mi.description || mi.name || "";
+                // If description still contains " – " project suffix from legacy data, strip it
+                const dashIdx = desc.indexOf(" – ");
+                if (dashIdx > 0) desc = desc.substring(0, dashIdx).trim();
+                const emDashIdx = desc.indexOf(" — ");
+                if (emDashIdx > 0) desc = desc.substring(0, emDashIdx).trim();
+                return {
+                  description: desc,
+                  quantity: Number(mi.quantity) || Number(mi.qty) || 1,
+                  unitPrice: Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0,
+                };
+              });
               setItems(mapped);
               resolved = true;
               // Persist to sales_invoice_items

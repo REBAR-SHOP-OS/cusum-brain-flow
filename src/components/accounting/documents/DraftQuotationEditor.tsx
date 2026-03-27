@@ -488,11 +488,16 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
                   >
                     <PopoverTrigger asChild>
                       <button
-                        className={`flex items-center justify-between w-full h-8 px-2 text-xs rounded-md border bg-white text-gray-900 border-gray-300 hover:border-gray-400 transition-colors text-left print:border-none print:p-0`}
+                        className={`flex items-center justify-between w-full min-h-[2rem] px-2 text-xs rounded-md border bg-white text-gray-900 border-gray-300 hover:border-gray-400 transition-colors text-left print:border-none print:p-0`}
                       >
-                        <span className={item.description ? "text-gray-900" : "text-gray-400"}>
-                          {item.description || "Select product…"}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className={item.description ? "text-gray-900" : "text-gray-400"}>
+                            {item.description || "Select product…"}
+                          </span>
+                          {item.detail && (
+                            <span className="text-[10px] text-gray-400 leading-tight">{item.detail}</span>
+                          )}
+                        </div>
                         <ChevronDown className="w-3 h-3 text-gray-400 shrink-0 print:hidden" />
                       </button>
                     </PopoverTrigger>

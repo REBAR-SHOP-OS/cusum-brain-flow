@@ -251,7 +251,8 @@ Deno.serve((req) =>
       const trips = Math.max(1, Math.ceil(totalTonnes / truckCap));
       shippingCost = Number((trips * deliveryDistanceKm * shippingPerKm * 2).toFixed(2));
       lineItems.push({
-        description: `Delivery — ${deliveryDistanceKm} km × ${trips} trip(s) (round trip)`,
+        description: `Delivery`,
+        detail: `${deliveryDistanceKm} km × ${trips} trip(s) (round trip)`,
         quantity: trips,
         unit: "trips",
         unit_price: Number((deliveryDistanceKm * shippingPerKm * 2).toFixed(2)),
