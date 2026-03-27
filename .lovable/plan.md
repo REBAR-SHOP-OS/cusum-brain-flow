@@ -1,34 +1,39 @@
 
 
-# Smooth Playhead Movement (0.1s Granularity)
+# Always-Enabled Download Button
 
 ## Problem
-The timeline playhead currently snaps to whole-second intervals during scrubbing and moves without animation during playback, resulting in jerky movement.
+The Download button in the ProVideoEditor toolbar is disabled (`disabled={!finalVideoUrl}`) when there's no stitched final video. The user wants to download the current video (even a single scene clip) at any time.
 
 ## Solution
-Two changes in `src/components/ad-director/editor/TimelineBar.tsx`:
+In `src/components/ad-director/ProVideoEditor.tsx` (~line 1422-1437):
 
-### 1. Smooth CSS transition on playhead
-Add `transition: left 0.1s linear` to the playhead container so it glides smoothly between positions during playback. Disable the transition while scrubbing (dragging) to keep it responsive.
+1. **Remove `disabled={!finalVideoUrl}`** — button is always clickable
+2. **Use `videoSrc` as fallback** — download `finalVideoUrl` if available, otherwise download the current scene's video (`videoSrc` which is `selectedClip?.videoUrl`)
+3. **Use `downloadFile` utility** for robust downloading (handles CORS, proxy fallback) instead of raw `<a>` click
 
 ```tsx
-// Line 525 — playhead style
-style={{
-  left: `${playheadPct}%`,
-  width: '14px',
-  transform: 'translateX(-6px)',
-  transition: scrubbing ? 'none' : 'left 0.1s linear',
+// Change from:
+disabled={!finalVideoUrl}
+onClick={() => {
+  if (!finalVideoUrl) return;
+  const a = document.createElement("a");
+  a.href = finalVideoUrl;
+  a.download = `${brand.name || "video"}-ad.mp4`;
+  a.click();
+}}
+
+// Change to:
+onClick={() => {
+  const url = finalVideoUrl || videoSrc;
+  if (!url) return;
+  const fname = `${brand.name || "video"}-ad.mp4`;
+  downloadFile(url, fname, { provider: "wan" });
 }}
 ```
 
-### 2. 0.1s scrub granularity
-Change `Math.round(...)` to round to 0.1s precision so the playhead can land between whole seconds during drag:
-
-```tsx
-// Line 184
-const snappedTime = Math.round(pct * totalDuration * 10) / 10;
-```
+If neither `finalVideoUrl` nor `videoSrc` exists, the button shows but does nothing (edge case: no video generated yet). A toast could optionally warn the user.
 
 ## Files changed
-- `src/components/ad-director/editor/TimelineBar.tsx` — smooth transition + finer scrub granularity
+- `src/components/ad-director/ProVideoEditor.tsx` — remove disabled prop, use videoSrc fallback in download handler
 
