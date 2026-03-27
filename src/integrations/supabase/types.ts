@@ -11846,11 +11846,13 @@ export type Database = {
           company_id: string
           created_at: string
           customer_company: string | null
+          customer_email: string | null
           customer_name: string | null
           due_date: string | null
           id: string
           invoice_number: string
           issued_date: string | null
+          metadata: Json | null
           notes: string | null
           paid_date: string | null
           payment_method: string | null
@@ -11863,11 +11865,13 @@ export type Database = {
           company_id: string
           created_at?: string
           customer_company?: string | null
+          customer_email?: string | null
           customer_name?: string | null
           due_date?: string | null
           id?: string
           invoice_number: string
           issued_date?: string | null
+          metadata?: Json | null
           notes?: string | null
           paid_date?: string | null
           payment_method?: string | null
@@ -11880,11 +11884,13 @@ export type Database = {
           company_id?: string
           created_at?: string
           customer_company?: string | null
+          customer_email?: string | null
           customer_name?: string | null
           due_date?: string | null
           id?: string
           invoice_number?: string
           issued_date?: string | null
+          metadata?: Json | null
           notes?: string | null
           paid_date?: string | null
           payment_method?: string | null
@@ -12155,6 +12161,7 @@ export type Database = {
           customer_approved_at: string | null
           customer_approved_by: string | null
           customer_company: string | null
+          customer_email: string | null
           customer_name: string | null
           estimate_request: Json | null
           expiry_date: string | null
@@ -12195,6 +12202,7 @@ export type Database = {
           customer_approved_at?: string | null
           customer_approved_by?: string | null
           customer_company?: string | null
+          customer_email?: string | null
           customer_name?: string | null
           estimate_request?: Json | null
           expiry_date?: string | null
@@ -12235,6 +12243,7 @@ export type Database = {
           customer_approved_at?: string | null
           customer_approved_by?: string | null
           customer_company?: string | null
+          customer_email?: string | null
           customer_name?: string | null
           estimate_request?: Json | null
           expiry_date?: string | null
