@@ -289,7 +289,7 @@ export default function AcceptQuote() {
                     Please review our terms and conditions before accepting this quotation.
                   </p>
                   <a
-                    href="https://www.crm.rebar.shop/terms"
+                    href="https://www.erp.rebar.shop/terms"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 mt-2 font-medium"
