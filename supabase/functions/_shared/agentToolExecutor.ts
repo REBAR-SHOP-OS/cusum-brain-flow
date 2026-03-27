@@ -1577,13 +1577,73 @@ export async function executeToolCall(
       if (qErr) {
         result.result = { error: qErr.message };
       } else {
+        // Insert structured line items into sales_quotation_items
+        if (args.line_items?.length && newQuote?.id) {
+          const itemRows = args.line_items.map((li: any, idx: number) => ({
+            quotation_id: newQuote.id,
+            description: li.description || "Item",
+            quantity: li.quantity || 1,
+            unit: li.unit || "pcs",
+            unit_price: li.unit_price || 0,
+            total: li.total || (li.quantity || 1) * (li.unit_price || 0),
+            sort_order: idx,
+          }));
+          const { error: itemsErr } = await svcClient
+            .from("sales_quotation_items")
+            .insert(itemRows);
+          if (itemsErr) {
+            console.warn("Failed to insert quotation line items:", itemsErr.message);
+          }
+        }
+
+        // Create a linked quotes row so send-quote-email and accept portal work
+        const quoteMetadata: Record<string, any> = {
+          customer_name: args.customer_name || null,
+          customer_email: args.customer_email || null,
+          notes: notesText,
+          line_items: (args.line_items || []).map((li: any) => ({
+            description: li.description || "Item",
+            quantity: li.quantity || 1,
+            unit: li.unit || "pcs",
+            unitPrice: li.unit_price || 0,
+            total: li.total || (li.quantity || 1) * (li.unit_price || 0),
+          })),
+          source: "blitz_agent",
+        };
+
+        const { data: linkedQuote, error: lqErr } = await svcClient
+          .from("quotes")
+          .insert({
+            company_id: companyId,
+            quote_number: quotationNumber,
+            total_amount: args.amount || 0,
+            status: "draft",
+            source: "agent",
+            metadata: quoteMetadata,
+            valid_until: expiryDate,
+            created_by: user?.id || null,
+          } as any)
+          .select("id")
+          .single();
+
+        if (lqErr) {
+          console.warn("Failed to create linked quotes row:", lqErr.message);
+        } else if (linkedQuote) {
+          // Link sales_quotation to quotes row
+          await svcClient
+            .from("sales_quotations")
+            .update({ quote_result: { quote_id: linkedQuote.id } } as any)
+            .eq("id", newQuote.id);
+        }
+
         result.result = {
           success: true,
           quotation_id: newQuote.id,
           quotation_number: quotationNumber,
           amount: args.amount,
           expiry_date: expiryDate,
-          message: `Quotation ${quotationNumber} saved ($${args.amount?.toFixed(2)} CAD, valid until ${expiryDate})`,
+          customer_email: args.customer_email || null,
+          message: `Quotation ${quotationNumber} saved ($${args.amount?.toFixed(2)} CAD, valid until ${expiryDate})${args.customer_email ? ` — customer email: ${args.customer_email}` : ""}`,
         };
       }
     }
@@ -1606,21 +1666,76 @@ export async function executeToolCall(
       if (fetchErr || !quote) {
         result.result = { error: fetchErr?.message || "Quotation not found" };
       } else {
-        // Build professional HTML email
-        const senderName = context?.currentUser?.name || "Sales Team";
-        const senderEmail = context?.currentUser?.email || "sales@rebar.shop";
-        const subject = args.subject || `Quotation ${quote.quotation_number} — REBAR.SHOP`;
+        // Find linked quotes row via quote_result.quote_id
+        const quoteResult = (quote as any).quote_result as Record<string, any> | null;
+        const linkedQuoteId = quoteResult?.quote_id;
 
-        const lineItemsHtml = quote.notes?.includes("--- Line Items ---")
-          ? quote.notes.split("--- Line Items ---")[1]
-              .trim()
-              .split("\n")
-              .filter((l: string) => l.startsWith("•"))
-              .map((l: string) => `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${l.replace("• ", "")}</td></tr>`)
-              .join("")
-          : "";
+        if (linkedQuoteId) {
+          // Use the unified send-quote-email edge function for branded emails with Accept button
+          try {
+            const sendQuoteRes = await fetch(
+              `${supabaseUrl}/functions/v1/send-quote-email`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": authHeader,
+                  "apikey": Deno.env.get("SUPABASE_ANON_KEY") || "",
+                },
+                body: JSON.stringify({
+                  quote_id: linkedQuoteId,
+                  customer_email: toEmail,
+                  action: "send_quote",
+                }),
+              }
+            );
 
-        const htmlBody = `
+            if (sendQuoteRes.ok) {
+              result.result = {
+                success: true,
+                message: `Quotation ${quote.quotation_number} emailed to ${toEmail} with Accept Quote portal link`,
+                quotation_number: quote.quotation_number,
+                to: toEmail,
+              };
+              result.sideEffects.emails = [{ to: toEmail }];
+            } else {
+              const errText = await sendQuoteRes.text();
+              console.warn("send-quote-email failed:", errText);
+              throw new Error(errText);
+            }
+          } catch (e) {
+            console.warn("send-quote-email failed, falling back to direct Gmail:", e);
+            // Fallback below
+            await sendViaGmailFallback();
+          }
+        } else {
+          // No linked quotes row — use direct Gmail fallback
+          await sendViaGmailFallback();
+        }
+
+        async function sendViaGmailFallback() {
+          const senderName = context?.currentUser?.name || "Sales Team";
+          const subject = args.subject || `Quotation ${quote.quotation_number} — REBAR.SHOP`;
+          
+          // Fetch structured line items
+          const { data: qItems } = await svcClient
+            .from("sales_quotation_items")
+            .select("description, quantity, unit_price, total")
+            .eq("quotation_id", quotationId)
+            .order("sort_order", { ascending: true });
+
+          const lineItemRows = (qItems || []).map((li: any) =>
+            `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;">${li.description}</td>
+             <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${li.quantity}</td>
+             <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">$${(li.unit_price || 0).toFixed(2)}</td>
+             <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">$${(li.total || 0).toFixed(2)}</td></tr>`
+          ).join("");
+
+          const subtotal = quote.amount || 0;
+          const hst = Math.round(subtotal * 0.13 * 100) / 100;
+          const total = Math.round((subtotal + hst) * 100) / 100;
+
+          const htmlBody = `
 <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:680px;margin:0 auto;background:#ffffff;">
   <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:32px;text-align:center;">
     <h1 style="color:#e94560;font-size:28px;margin:0;letter-spacing:2px;">REBAR.SHOP</h1>
@@ -1628,67 +1743,49 @@ export async function executeToolCall(
   </div>
   <div style="padding:32px;">
     <p style="font-size:16px;color:#333;">Dear ${customerName},</p>
-    <p style="font-size:15px;color:#555;line-height:1.6;">Thank you for your inquiry. Please find below our quotation for your review.</p>
-    
+    <p style="font-size:15px;color:#555;line-height:1.6;">Please find below our quotation for your review.</p>
     <div style="background:#f8f9fc;border-radius:8px;padding:20px;margin:24px 0;border-left:4px solid #e94560;">
-      <table style="width:100%;">
-        <tr><td style="color:#888;font-size:13px;">Quotation #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${quote.quotation_number}</td></tr>
-        <tr><td style="color:#888;font-size:13px;">Amount</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:20px;">$${(quote.amount || 0).toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
-        <tr><td style="color:#888;font-size:13px;">Valid Until</td><td style="text-align:right;color:#1a1a2e;">${quote.expiry_date || "30 days"}</td></tr>
-      </table>
+      <table style="width:100%;"><tr><td style="color:#888;font-size:13px;">Quotation #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${quote.quotation_number}</td></tr>
+      <tr><td style="color:#888;font-size:13px;">Subtotal</td><td style="text-align:right;font-weight:700;color:#1a1a2e;">$${subtotal.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+      <tr><td style="color:#888;font-size:13px;">HST (13%)</td><td style="text-align:right;color:#555;">$${hst.toLocaleString("en-CA", { minimumFractionDigits: 2 })}</td></tr>
+      <tr><td style="color:#888;font-size:13px;font-weight:700;">Total</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:20px;">$${total.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+      <tr><td style="color:#888;font-size:13px;">Valid Until</td><td style="text-align:right;color:#1a1a2e;">${quote.expiry_date || "30 days"}</td></tr></table>
     </div>
-
-    ${lineItemsHtml ? `
-    <h3 style="color:#1a1a2e;font-size:16px;margin:24px 0 12px;">Quotation Details</h3>
+    ${lineItemRows ? `<h3 style="color:#1a1a2e;font-size:16px;margin:24px 0 12px;">Quotation Details</h3>
     <table style="width:100%;border-collapse:collapse;font-size:14px;">
-      <thead><tr><th style="text-align:left;padding:8px 12px;background:#f1f3f9;color:#555;border-bottom:2px solid #e5e7eb;">Item</th></tr></thead>
-      <tbody>${lineItemsHtml}</tbody>
+      <thead><tr><th style="text-align:left;padding:8px 12px;background:#f1f3f9;color:#555;">Description</th><th style="text-align:right;padding:8px 12px;background:#f1f3f9;color:#555;">Qty</th><th style="text-align:right;padding:8px 12px;background:#f1f3f9;color:#555;">Unit Price</th><th style="text-align:right;padding:8px 12px;background:#f1f3f9;color:#555;">Amount</th></tr></thead>
+      <tbody>${lineItemRows}</tbody>
     </table>` : ""}
-
-    <p style="font-size:14px;color:#555;line-height:1.6;margin-top:24px;">
-      This quotation is valid for 30 days from the date of issue. Prices are in Canadian Dollars (CAD) and do not include applicable taxes (13% HST).
-    </p>
-    <p style="font-size:14px;color:#555;">Please feel free to reach out if you have any questions or would like to proceed with this order.</p>
-    
+    <p style="font-size:14px;color:#555;line-height:1.6;margin-top:24px;">Prices in CAD. HST (13%) applies.</p>
     <div style="margin-top:32px;padding-top:20px;border-top:1px solid #e5e7eb;">
       <p style="margin:0;font-weight:600;color:#1a1a2e;">${senderName}</p>
-      <p style="margin:2px 0;color:#e94560;font-size:13px;">Sales Representative</p>
       <p style="margin:2px 0;color:#888;font-size:13px;">REBAR.SHOP — Premium Steel Reinforcement</p>
-      <p style="margin:2px 0;color:#888;font-size:13px;">📞 (905) 761-1311 &nbsp;|&nbsp; ✉️ ${senderEmail}</p>
-      <p style="margin:2px 0;color:#888;font-size:13px;">🌐 www.rebar.shop &nbsp;|&nbsp; 📍 Vaughan, Ontario</p>
+      <p style="margin:2px 0;color:#888;font-size:13px;">📞 (905) 761-1311 | 🌐 www.rebar.shop</p>
     </div>
-  </div>
-  <div style="background:#1a1a2e;padding:16px;text-align:center;">
-    <p style="color:#a8b2d1;font-size:11px;margin:0;">© ${new Date().getFullYear()} REBAR.SHOP — All rights reserved</p>
   </div>
 </div>`;
 
-        // Send via Gmail
-        const emailRes = await fetch(
-          `${supabaseUrl}/functions/v1/gmail-send`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": authHeader },
-            body: JSON.stringify({ to: toEmail, subject, body: htmlBody }),
+          const emailRes = await fetch(
+            `${supabaseUrl}/functions/v1/gmail-send`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": authHeader, "apikey": Deno.env.get("SUPABASE_ANON_KEY") || "" },
+              body: JSON.stringify({ to: toEmail, subject, body: htmlBody }),
+            }
+          );
+
+          if (emailRes.ok) {
+            await svcClient.from("sales_quotations").update({ status: "sent" } as any).eq("id", quotationId);
+            result.result = {
+              success: true,
+              message: `Quotation ${quote.quotation_number} emailed to ${toEmail}`,
+              quotation_number: quote.quotation_number,
+              to: toEmail,
+            };
+            result.sideEffects.emails = [{ to: toEmail }];
+          } else {
+            result.result = { success: false, error: await emailRes.text() };
           }
-        );
-
-        if (emailRes.ok) {
-          // Update quotation status to "sent"
-          await svcClient
-            .from("sales_quotations")
-            .update({ status: "sent" })
-            .eq("id", quotationId);
-
-          result.result = {
-            success: true,
-            message: `Quotation ${quote.quotation_number} emailed to ${toEmail}`,
-            quotation_number: quote.quotation_number,
-            to: toEmail,
-          };
-          result.sideEffects.emails = [{ to: toEmail }];
-        } else {
-          result.result = { success: false, error: await emailRes.text() };
         }
       }
     }
@@ -1751,6 +1848,28 @@ export async function executeToolCall(
         if (invErr) {
           result.result = { error: `Invoice creation failed: ${invErr.message}` };
         } else {
+          // Copy line items from quotation to invoice
+          const { data: quoteItems } = await svcClient
+            .from("sales_quotation_items")
+            .select("description, quantity, unit, unit_price, total, sort_order")
+            .eq("quotation_id", quotationId)
+            .order("sort_order", { ascending: true });
+
+          if (quoteItems?.length) {
+            const invoiceItems = quoteItems.map((qi: any) => ({
+              invoice_id: newInvoice.id,
+              description: qi.description,
+              quantity: qi.quantity,
+              unit_price: qi.unit_price,
+              total: qi.total,
+              sort_order: qi.sort_order,
+            }));
+            const { error: iiErr } = await svcClient
+              .from("sales_invoice_items")
+              .insert(invoiceItems);
+            if (iiErr) console.warn("Failed to copy invoice line items:", iiErr.message);
+          }
+
           // 4. Generate Stripe payment link
           let stripePaymentUrl = "";
           let stripeError = "";
