@@ -159,7 +159,6 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
                 description: qi.description || "",
                 quantity: qi.quantity || 1,
                 unit_price: qi.unit_price || 0,
-                total: qi.total || (qi.quantity || 1) * (qi.unit_price || 0),
                 sort_order: qi.sort_order ?? idx,
               }));
               supabase.from("sales_invoice_items" as any).insert(rows as any).then(() => {});
