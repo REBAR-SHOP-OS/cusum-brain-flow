@@ -181,6 +181,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     setCustomerName(c.name);
     const addrParts = [c.billing_street1, c.billing_city, c.billing_province, c.billing_postal_code].filter(Boolean);
     if (addrParts.length) setCustomerAddress(addrParts.join(", "));
+    if (c.email) setCustomerEmail(c.email);
     setCustomerOpen(false);
     setCustomerSearch("");
   };
