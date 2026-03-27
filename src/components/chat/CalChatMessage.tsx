@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { User, FileIcon, Download, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { User, FileIcon, Download, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { ContentActions } from "@/components/shared/ContentActions";
 import { Message } from "./ChatMessage";
 import { CalStepCard, CHANGY_STEPS, detectStepFromMessage } from "./CalStepProgress";
 import ReactMarkdown from "react-markdown";
+import { toast } from "sonner";
+import { getSignedFileUrl } from "@/lib/storageUtils";
+import { downloadFile } from "@/lib/downloadUtils";
 
 interface CalChatMessageProps {
   message: Message;
