@@ -445,6 +445,12 @@ export function ProVideoEditor({
   const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
   const [textVoiceDialogOpen, setTextVoiceDialogOpen] = useState(false);
   const [generatingTextVoice, setGeneratingTextVoice] = useState(false);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+
+  // ─── Drag overlay state ───
+  const [draggingOverlayId, setDraggingOverlayId] = useState<string | null>(null);
+  const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   const handleUploadAudio = useCallback(() => {
     audioUploadRef.current?.click();
