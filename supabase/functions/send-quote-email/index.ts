@@ -491,8 +491,35 @@ Deno.serve((req) =>
         invoiceId = newInvoice.id;
 
         // Copy line items from quotation to invoice
+        // PRIMARY SOURCE: quotes.metadata.line_items (always populated by DraftQuotationEditor & AI)
+        // SECONDARY SOURCE: sales_quotation_items table (rarely populated)
         try {
-          if (sqCheck?.id) {
+          let itemsCopied = false;
+
+          // 1. Primary: quotes.metadata.line_items
+          const metaItems = (meta.line_items || meta.items || []) as any[];
+          if (metaItems.length > 0) {
+            const invoiceItems = metaItems.map((mi: any, idx: number) => {
+              const qty = Number(mi.quantity) || Number(mi.qty) || 1;
+              const price = Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0;
+              return {
+                invoice_id: invoiceId,
+                company_id: companyId,
+                description: mi.description || mi.name || "Item",
+                quantity: qty,
+                unit: mi.unit || null,
+                unit_price: price,
+                total: qty * price,
+                sort_order: idx,
+              };
+            });
+            await svc.from("sales_invoice_items").insert(invoiceItems);
+            console.log(`[accept_and_convert] Copied ${invoiceItems.length} line items from quotes.metadata`);
+            itemsCopied = true;
+          }
+
+          // 2. Secondary: sales_quotation_items (if metadata was empty)
+          if (!itemsCopied && sqCheck?.id) {
             const { data: quoteItems } = await svc
               .from("sales_quotation_items")
               .select("description, quantity, unit, unit_price, total, sort_order, company_id")
@@ -510,26 +537,13 @@ Deno.serve((req) =>
                 sort_order: qi.sort_order,
               }));
               await svc.from("sales_invoice_items").insert(invoiceItems);
-              console.log(`[accept_and_convert] Copied ${invoiceItems.length} line items to invoice ${invoiceNumber}`);
+              console.log(`[accept_and_convert] Copied ${invoiceItems.length} line items from sales_quotation_items`);
+              itemsCopied = true;
             }
           }
-          // Fallback: if no quotation items, parse from quote metadata
-          if (!sqCheck?.id || !(await svc.from("sales_invoice_items").select("id").eq("invoice_id", invoiceId).limit(1)).data?.length) {
-            const metaItems = (meta.line_items || meta.items || []) as any[];
-            if (metaItems.length > 0) {
-              const fallbackItems = metaItems.map((mi: any, idx: number) => ({
-                invoice_id: invoiceId,
-                company_id: companyId,
-                description: mi.description || mi.name || "Item",
-                quantity: mi.quantity || mi.qty || 1,
-                unit: mi.unit || null,
-                unit_price: mi.unit_price || mi.unitPrice || mi.price || 0,
-                total: (mi.quantity || mi.qty || 1) * (mi.unit_price || mi.unitPrice || mi.price || 0),
-                sort_order: idx,
-              }));
-              await svc.from("sales_invoice_items").insert(fallbackItems);
-              console.log(`[accept_and_convert] Copied ${fallbackItems.length} line items from metadata`);
-            }
+
+          if (!itemsCopied) {
+            console.warn("[accept_and_convert] No line items found to copy — invoice will have header amount only");
           }
         } catch (itemErr) {
           console.warn("[accept_and_convert] Failed to copy line items:", itemErr);
