@@ -786,6 +786,7 @@ export function AIExtractView() {
 
   // ─── Inline Editing Helpers ──────────────────────────────
   const startEditing = useCallback(() => {
+    console.log("startEditing called", activeRows.length);
     const edits: Record<string, Record<string, any>> = {};
     activeRows.forEach((row) => {
       edits[row.id] = {
@@ -2064,11 +2065,11 @@ export function AIExtractView() {
             <CardContent className="p-0">
               {/* Edit toolbar */}
               {activeSession && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
-                <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30 relative z-20">
                   <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
                     {activeRows.length} Line Items{mergedRows.length > 0 ? ` (${mergedRows.length} merged)` : ""}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {/* Unit toggle */}
                     <div className="flex gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border">
                       {(["mm", "in", "ft", "imperial"] as const).map(u => (
