@@ -314,6 +314,12 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: supabase, body, req: rawReq } = ctx;
 
+    // Support x-qb-user-id header for cross-function calls (e.g. public acceptance)
+    const qbUserIdOverride = rawReq.headers.get("x-qb-user-id");
+    if (qbUserIdOverride) {
+      body._qbUserId = qbUserIdOverride;
+    }
+
     const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID");
     const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET");
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -332,7 +338,8 @@ Deno.serve((req) =>
     }
 
     // ─── All other actions require authentication ────────────────
-    if (!userId) {
+    // Allow service-role calls with x-qb-user-id to pass through
+    if (!userId && !qbUserIdOverride) {
       return jsonRes({ error: "Unauthorized" }, 401);
     }
 
