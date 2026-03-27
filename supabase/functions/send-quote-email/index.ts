@@ -576,28 +576,60 @@ Deno.serve((req) =>
 
         // Auto-push invoice to QuickBooks to get InvoiceLink
         try {
-          // Build QB line items from the copied invoice items
+          // Build QB line items with unitPrice (not pre-multiplied amount)
           const qbLineItems = (metaItems.length > 0 ? metaItems : []).map((mi: any) => ({
             description: mi.description || mi.name || "Item",
-            amount: (Number(mi.quantity) || 1) * (Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0),
+            unitPrice: Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0,
             quantity: Number(mi.quantity) || Number(mi.qty) || 1,
           }));
 
-          const qbRes = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-              apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
-            },
-            body: JSON.stringify({
-              action: "create-invoice",
-              customerName: sqCheck?.customer_name || customerName,
-              items: qbLineItems.length > 0 ? qbLineItems : [{ description: "Invoice " + invoiceNumber, amount: rawTotalWithTax, quantity: 1 }],
-              dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
-              memo: `ERP Invoice ${invoiceNumber}`,
-            }),
-          });
+          // Use company-scoped QB creation: find QB connection by company_id directly
+          // instead of relying on user-based auth (public acceptance has no logged-in user)
+          const { data: qbConnections } = await svc
+            .from("integration_connections")
+            .select("id, user_id, config")
+            .eq("integration_id", "quickbooks")
+            .eq("status", "connected");
+
+          let qbUserId = "";
+          if (qbConnections) {
+            for (const conn of qbConnections) {
+              const cfg = conn.config as Record<string, unknown> | null;
+              if (cfg?.company_id === companyId) {
+                qbUserId = conn.user_id;
+                break;
+              }
+              // Fallback: check profile
+              const { data: prof } = await svc
+                .from("profiles")
+                .select("company_id")
+                .eq("user_id", conn.user_id)
+                .maybeSingle();
+              if (prof?.company_id === companyId) {
+                qbUserId = conn.user_id;
+                break;
+              }
+            }
+          }
+
+          if (qbUserId) {
+            // Call quickbooks-oauth with the resolved QB user's auth context
+            const qbRes = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+                "x-qb-user-id": qbUserId, // Pass the QB connection owner's user ID
+              },
+              body: JSON.stringify({
+                action: "create-invoice",
+                customerName: sqCheck?.customer_name || customerName,
+                items: qbLineItems.length > 0 ? qbLineItems : [{ description: "Invoice " + invoiceNumber, unitPrice: rawTotalWithTax, quantity: 1 }],
+                dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+                memo: `ERP Invoice ${invoiceNumber}`,
+              }),
+            });
           if (qbRes.ok) {
             const qbData = await qbRes.json();
             qbInvoiceLink = qbData.invoiceLink || qbData.invoice?.InvoiceLink || "";
