@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Loader2, Upload, X, FileText } from "lucide-react";
@@ -78,18 +82,29 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
     enabled: open && !!companyId,
   });
 
-  const { data: customers } = useQuery({
-    queryKey: ["customers_for_quote", companyId],
-    queryFn: async () => {
-      const { data } = await supabase
+  // Searchable customer combobox state
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [customerOptions, setCustomerOptions] = useState<any[]>([]);
+  const [customerLabel, setCustomerLabel] = useState("");
+  const customerDebounce = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (!open || !companyId) return;
+    if (customerDebounce.current) clearTimeout(customerDebounce.current);
+    customerDebounce.current = setTimeout(async () => {
+      const q = supabase
         .from("v_customers_clean" as any)
         .select("*")
-        .eq("company_id", companyId!)
-        .order("name" as any, { ascending: true });
-      return (data as any[]) || [];
-    },
-    enabled: open && !!companyId,
-  });
+        .eq("company_id", companyId);
+      if (customerSearch.trim()) {
+        q.or(`display_name.ilike.%${customerSearch}%,company_name.ilike.%${customerSearch}%`);
+      }
+      const { data } = await q.order("display_name" as any, { ascending: true }).limit(50);
+      setCustomerOptions((data as any[]) || []);
+    }, 300);
+    return () => { if (customerDebounce.current) clearTimeout(customerDebounce.current); };
+  }, [customerSearch, open, companyId]);
 
   const { data: leads } = useQuery({
     queryKey: ["sales_leads_for_quote", companyId],
@@ -124,14 +139,14 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           setCustomerName(lead.contact_company || lead.contact_name || "");
         }
       }
-      if (proj.customer_id && customers?.length) {
-        const cust = (customers as any[]).find((c: any) => c.customer_id === proj.customer_id);
+      if (proj.customer_id && customerOptions?.length) {
+        const cust = customerOptions.find((c: any) => c.customer_id === proj.customer_id);
         if (cust) {
           setCustomerName(cust.display_name || cust.company_name || cust.normalized_name || "");
         }
       }
     }
-  }, [selectedProject, projects, leads, customers, customerName, selectedLeadId]);
+  }, [selectedProject, projects, leads, customerOptions, customerName, selectedLeadId]);
 
   // File handlers
   const addFiles = useCallback((files: FileList | File[]) => {
@@ -409,18 +424,41 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Customer</Label>
-                <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(customers || []).map((c: any) => (
-                      <SelectItem key={c.customer_id} value={c.customer_id}>
-                        {c.display_name || c.company_name || c.normalized_name || "Unknown"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" aria-expanded={customerOpen} className="w-full justify-between font-normal">
+                      {customerLabel || "Search customer..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput placeholder="Type to search..." value={customerSearch} onValueChange={setCustomerSearch} />
+                      <CommandList>
+                        <CommandEmpty>No customers found.</CommandEmpty>
+                        <CommandGroup>
+                          {customerOptions.map((c: any) => {
+                            const label = c.display_name || c.company_name || c.normalized_name || "Unknown";
+                            return (
+                              <CommandItem
+                                key={c.customer_id}
+                                value={c.customer_id}
+                                onSelect={() => {
+                                  setSelectedCustomerId(c.customer_id);
+                                  setCustomerLabel(label);
+                                  setCustomerOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", selectedCustomerId === c.customer_id ? "opacity-100" : "opacity-0")} />
+                                {label}
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label>Sales Lead</Label>
