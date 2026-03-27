@@ -126,11 +126,21 @@ export function TagsExportView() {
   };
 
   // Print tags — open dedicated print route in new window
-  const handlePrint = () => {
+  const handlePrint = useCallback(() => {
     const us = (selectedSession as any)?.unit_system || "metric";
     const url = `/print-tags?sessionId=${selectedSessionId}&unit=${us}&sort=${sortMode}`;
     window.open(url, "_blank");
-  };
+  }, [selectedSession, selectedSessionId, sortMode]);
+
+  // Intercept Ctrl+P on the tags page → redirect to clean print route
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      handlePrint();
+    };
+    window.addEventListener("beforeprint", handler);
+    return () => window.removeEventListener("beforeprint", handler);
+  }, [handlePrint]);
 
   // Zebra ZPL export
   const handleZebraZPL = () => {
