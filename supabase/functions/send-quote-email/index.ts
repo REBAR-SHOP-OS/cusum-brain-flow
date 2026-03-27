@@ -317,9 +317,9 @@ Deno.serve((req) =>
       if (invErr) throw new Error(`Invoice creation failed: ${invErr.message}`);
 
       // 3b. Copy line items to sales_invoice_items
+      const metaItems = (meta.line_items || meta.items || []) as any[];
       try {
         let itemsCopied = false;
-        const metaItems = (meta.line_items || meta.items || []) as any[];
         if (metaItems.length > 0) {
           const invoiceItems = metaItems.map((mi: any, idx: number) => {
             const qty = Number(mi.quantity) || Number(mi.qty) || 1;
