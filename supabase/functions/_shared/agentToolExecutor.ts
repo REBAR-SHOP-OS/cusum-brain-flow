@@ -1768,6 +1768,28 @@ export async function executeToolCall(
         if (invErr) {
           result.result = { error: `Invoice creation failed: ${invErr.message}` };
         } else {
+          // Copy line items from quotation to invoice
+          const { data: quoteItems } = await svcClient
+            .from("sales_quotation_items")
+            .select("description, quantity, unit, unit_price, total, sort_order")
+            .eq("quotation_id", quotationId)
+            .order("sort_order", { ascending: true });
+
+          if (quoteItems?.length) {
+            const invoiceItems = quoteItems.map((qi: any) => ({
+              invoice_id: newInvoice.id,
+              description: qi.description,
+              quantity: qi.quantity,
+              unit_price: qi.unit_price,
+              total: qi.total,
+              sort_order: qi.sort_order,
+            }));
+            const { error: iiErr } = await svcClient
+              .from("sales_invoice_items")
+              .insert(invoiceItems);
+            if (iiErr) console.warn("Failed to copy invoice line items:", iiErr.message);
+          }
+
           // 4. Generate Stripe payment link
           let stripePaymentUrl = "";
           let stripeError = "";

@@ -554,6 +554,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
               notes: { type: "string", description: "Quotation details and line items summary" },
               expiry_date: { type: "string", description: "Quotation expiry date YYYY-MM-DD (default: 30 days from now)" },
               lead_id: { type: "string", description: "Optional linked lead ID" },
+              customer_email: { type: "string", description: "Customer email address — required for the Accept Quote portal and automated invoice emails" },
               line_items: {
                 type: "array",
                 items: {
