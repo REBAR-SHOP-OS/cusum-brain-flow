@@ -48,6 +48,7 @@ import WasteBankAdmin from "./pages/WasteBankAdmin";
 import BendQueueAdmin from "./pages/BendQueueAdmin";
 import BundleAdmin from "./pages/BundleAdmin";
 import ProductionAudit from "./pages/ProductionAudit";
+const PrintTags = React.lazy(() => import("./pages/PrintTags"));
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import CleanupReport from "./pages/CleanupReport";
@@ -145,6 +146,8 @@ const App = () => (
                     <Route path="/" element={<Landing />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
+                    {/* Print-only route — zero app layout */}
+                    <Route path="/print-tags" element={<ProtectedRoute><Suspense fallback={<div>Loading...</div>}><PrintTags /></Suspense></ProtectedRoute>} />
 
                     {/* Core */}
                     <Route path="/home" element={<P><Home /></P>} />

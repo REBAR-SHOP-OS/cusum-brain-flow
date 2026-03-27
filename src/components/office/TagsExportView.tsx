@@ -125,8 +125,12 @@ export function TagsExportView() {
     URL.revokeObjectURL(url);
   };
 
-  // Print tags — let printer driver handle label size
-  const handlePrint = () => window.print();
+  // Print tags — open dedicated print route in new window
+  const handlePrint = () => {
+    const us = (selectedSession as any)?.unit_system || "metric";
+    const url = `/print-tags?sessionId=${selectedSessionId}&unit=${us}&sort=${sortMode}`;
+    window.open(url, "_blank");
+  };
 
   // Zebra ZPL export
   const handleZebraZPL = () => {
