@@ -1,27 +1,25 @@
 
 
-# Remove Auto-Enrollment from Kiosk Registration
+# Remove Dashboard Access for ai@rebar.shop
 
 ## Problem
-The `kiosk-register` edge function (lines 49-73) still saves face photos to `face_enrollments` when a new person registers at the kiosk. Per your directive: **the kiosk's job is ONLY identification. All enrollment must happen through the Face Memory panel.**
-
-The previous fix removed auto-enrollment from `kiosk-punch`, but `kiosk-register` still has it.
+The `ai@rebar.shop` device account currently has access to `/home` (dashboard) via the `RoleGuard` allowed routes list and can see the full dashboard UI. This account is a shared shopfloor kiosk device — it should only access kiosk and shop floor routes.
 
 ## Changes
 
-### 1. `supabase/functions/kiosk-register/index.ts`
-- Remove lines 49-73 (the entire face photo upload + enrollment block)
-- Keep `faceBase64` in the destructured body — it's harmless but unused; OR remove it for cleanliness
-- The function will only: create/find profile → clock in → return
+### 1. `src/components/auth/RoleGuard.tsx`
+- Line 137: Remove `/home` from the `DEVICE_ALLOWED` array
+- Change: `["/shopfloor", "/shop-floor", "/home", "/timeclock", ...]` → `["/shopfloor", "/shop-floor", "/timeclock", "/team-hub", "/settings", "/tasks", "/deliveries"]`
+- When `ai@rebar.shop` tries to access `/home`, it will be redirected to `/shopfloor`
 
-### 2. `src/components/timeclock/FirstTimeRegistration.tsx`
-- Line 64: Remove `const faceBase64 = captureFrame();`
-- Line 66: Change `body: { name: trimmedName, faceBase64 }` → `body: { name: trimmedName }`
-- Line 84: Remove `const faceBase64 = captureFrame();`
-- Line 86: Change `body: { name: candidate.full_name, faceBase64, existingProfileId: candidate.id }` → `body: { name: candidate.full_name, existingProfileId: candidate.id }`
+### 2. `src/components/layout/AppSidebar.tsx`
+- Already correct — the sidebar for `ai@rebar.shop` only shows "Kiosk" and "Shop Floor" (no Dashboard link). No change needed here.
 
 ## Result
-- Kiosk scan = identification only (no writes to face_enrollments)
-- Face Memory panel = the single source of truth for enrollment photos
-- Zero risk of wrong photos contaminating enrollment data
+- `ai@rebar.shop` is blocked from `/home` dashboard
+- Attempting to visit `/home` redirects to `/shopfloor`
+- Sidebar remains unchanged (already has no Dashboard link)
+
+## Files Changed
+- `src/components/auth/RoleGuard.tsx` — remove `/home` from device-allowed routes
 
