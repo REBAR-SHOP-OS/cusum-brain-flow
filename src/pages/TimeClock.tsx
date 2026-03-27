@@ -282,9 +282,15 @@ export default function TimeClock() {
     return (
       <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-6">
         <canvas ref={face.canvasRef} className="hidden" />
-        <Button variant="ghost" size="sm" className="absolute top-4 right-4 text-muted-foreground" onClick={exitKioskMode}>
-          Exit Kiosk
-        </Button>
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={() => setShowMemoryPanel(true)}>
+            <Brain className="w-4 h-4" /> Memory
+          </Button>
+          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={exitKioskMode}>
+            Exit Kiosk
+          </Button>
+        </div>
+        <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
         <div className="flex items-center gap-3 mb-6">
           <ScanFace className="w-8 h-8 text-primary" />
           <h1 className="text-3xl font-black italic tracking-tight">FACE ID KIOSK</h1>
