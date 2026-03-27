@@ -1,37 +1,27 @@
 
 
-# Fix: Auto-Enrollment Saves Wrong Person's Photo Under Matched Profile
+# Remove Auto-Enrollment from Kiosk Registration
 
-## Root Cause
+## Problem
+The `kiosk-register` edge function (lines 49-73) still saves face photos to `face_enrollments` when a new person registers at the kiosk. Per your directive: **the kiosk's job is ONLY identification. All enrollment must happen through the Face Memory panel.**
 
-In `kiosk-punch/index.ts` (lines 65-89), there is an **auto-enroll** feature: every time someone punches in/out, their current face photo is automatically saved under the **matched profile's** enrollment folder.
+The previous fix removed auto-enrollment from `kiosk-punch`, but `kiosk-register` still has it.
 
-**The problem:** If the AI misidentifies Zahra as Radin (even once), Zahra's photo gets saved under Radin's `face_enrollments`. This:
-1. Pollutes Radin's enrollment data with Zahra's face
-2. Makes future recognition worse (Radin's folder now contains Zahra's photos)
-3. Creates a cascading error — more wrong matches in the future
+## Changes
 
-## Solution: Remove Auto-Enrollment From Punch
+### 1. `supabase/functions/kiosk-register/index.ts`
+- Remove lines 49-73 (the entire face photo upload + enrollment block)
+- Keep `faceBase64` in the destructured body — it's harmless but unused; OR remove it for cleanliness
+- The function will only: create/find profile → clock in → return
 
-**Completely disable auto-enrollment in `kiosk-punch`.** Enrollment should ONLY happen through the Face Memory panel where an admin manually controls whose photos are saved.
+### 2. `src/components/timeclock/FirstTimeRegistration.tsx`
+- Line 64: Remove `const faceBase64 = captureFrame();`
+- Line 66: Change `body: { name: trimmedName, faceBase64 }` → `body: { name: trimmedName }`
+- Line 84: Remove `const faceBase64 = captureFrame();`
+- Line 86: Change `body: { name: candidate.full_name, faceBase64, existingProfileId: candidate.id }` → `body: { name: candidate.full_name, existingProfileId: candidate.id }`
 
-### Changes
-
-**File: `supabase/functions/kiosk-punch/index.ts`**
-- Remove lines 65-89 (the entire auto-enroll block)
-- Remove `faceBase64` from the destructured body (line 6) since it's no longer needed
-
-**File: `src/pages/TimeClock.tsx`**
-- Line 162: Stop capturing `faceBase64` in `handleConfirmPunch` — no longer sent to the edge function
-- Change `body: { profileId, faceBase64 }` → `body: { profileId }`
-
-### Cleanup: Delete Zahra's Misplaced Photo
-- The wrongly-enrolled photo under Radin's profile (visible in the screenshot with red circle) should be manually deleted via the Face Memory panel's delete button.
-
-## Why This Is the Right Fix
-Auto-enrollment is inherently dangerous: a single misidentification poisons the training data. Manual enrollment via the Face Memory panel (controlled by admins) is the only safe path.
-
-## Files Changed
-- `supabase/functions/kiosk-punch/index.ts` — remove auto-enroll block
-- `src/pages/TimeClock.tsx` — stop sending `faceBase64` to kiosk-punch
+## Result
+- Kiosk scan = identification only (no writes to face_enrollments)
+- Face Memory panel = the single source of truth for enrollment photos
+- Zero risk of wrong photos contaminating enrollment data
 
