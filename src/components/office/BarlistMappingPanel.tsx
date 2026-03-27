@@ -148,11 +148,11 @@ function checkDataCoverage(rows: ExtractRow[], mapping: Record<string, string>) 
 }
 
 // ── Build dimensions JSON from row (with unit conversion) ────
-function buildDimensionsJson(row: ExtractRow, factor: number): Record<string, number> {
+function buildDimensionsJson(row: ExtractRow): Record<string, number> {
   const dims: Record<string, number> = {};
   for (const d of DIM_FIELDS) {
     const val = (row as any)[`dim_${d.toLowerCase()}`];
-    if (val != null && val !== 0) dims[d] = Math.round(Number(val) * factor);
+    if (val != null && val !== 0) dims[d] = Math.round(Number(val));
   }
   return dims;
 }
@@ -213,9 +213,9 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
       mark: String((row as any)[mapping.mark] ?? ""),
       size: String((row as any)[mapping.size] ?? ""),
       shape: String((row as any)[mapping.shape] ?? ""),
-      length: Math.round(Number((row as any)[mapping.length] ?? 0) * lengthFactor),
+      length: Math.round(Number((row as any)[mapping.length] ?? 0)),
       quantity: Number((row as any)[mapping.quantity] ?? 0),
-      dimensions_json: buildDimensionsJson(row, lengthFactor),
+      dimensions_json: buildDimensionsJson(row),
       dwg: String((row as any)[mapping.dwg] ?? ""),
       grade: String((row as any)[mapping.grade] ?? ""),
     }));
@@ -229,9 +229,9 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
       mark: String((row as any)[mapping.mark] ?? ""),
       size: String((row as any)[mapping.size] ?? ""),
       shape: String((row as any)[mapping.shape] ?? ""),
-      length: Math.round(Number((row as any)[mapping.length] ?? 0) * lengthFactor),
+      length: Math.round(Number((row as any)[mapping.length] ?? 0)),
       quantity: Number((row as any)[mapping.quantity] ?? 0),
-      dimensions_json: buildDimensionsJson(row, lengthFactor),
+      dimensions_json: buildDimensionsJson(row),
       dwg: String((row as any)[mapping.dwg] ?? ""),
       grade: String((row as any)[mapping.grade] ?? ""),
     }));
