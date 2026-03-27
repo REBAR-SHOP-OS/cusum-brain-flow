@@ -160,6 +160,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         if (Array.isArray(meta.line_items) && meta.line_items.length > 0) {
           setItems(meta.line_items.map((li: any) => ({
             description: li.description || "",
+            detail: li.detail || "",
             quantity: Number(li.quantity) || 1,
             unitPrice: Number(li.unitPrice ?? li.unit_price) || 0,
           })));
