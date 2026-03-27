@@ -14,7 +14,7 @@ import type { VideoOverlay } from "@/types/videoOverlay";
 
 // ─── Thumbnail extraction helper ───────────────────────────
 function useVideoThumbnails(clips: ClipOutput[]) {
-  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const [thumbnails, setThumbnails] = useState<Record<string, string[]>>({});
   const extractedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -28,24 +28,37 @@ function useVideoThumbnails(clips: ClipOutput[]) {
       video.muted = true;
       video.playsInline = true;
 
+      const FRAME_COUNT = 6;
+      const frames: string[] = [];
+      let frameIndex = 0;
+      let timePoints: number[] = [];
+
       video.onloadeddata = () => {
-        video.currentTime = Math.min(0.5, video.duration / 2);
+        const dur = video.duration || 1;
+        timePoints = Array.from({ length: FRAME_COUNT }, (_, i) => (i / FRAME_COUNT) * dur + 0.1);
+        video.currentTime = timePoints[0];
       };
 
       video.onseeked = () => {
         try {
           const c = document.createElement("canvas");
-          c.width = 160;
-          c.height = 90;
+          c.width = 320;
+          c.height = 180;
           const cx = c.getContext("2d");
           if (cx) {
-            cx.drawImage(video, 0, 0, 160, 90);
-            const dataUrl = c.toDataURL("image/jpeg", 0.6);
-            setThumbnails(prev => ({ ...prev, [clip.sceneId]: dataUrl }));
+            cx.drawImage(video, 0, 0, 320, 180);
+            frames.push(c.toDataURL("image/jpeg", 0.85));
           }
-        } catch { /* CORS or other — ignore */ }
-        video.src = "";
-        video.load();
+        } catch { /* CORS — ignore */ }
+
+        frameIndex++;
+        if (frameIndex < FRAME_COUNT && frameIndex < timePoints.length) {
+          video.currentTime = timePoints[frameIndex];
+        } else {
+          setThumbnails(prev => ({ ...prev, [clip.sceneId]: frames }));
+          video.src = "";
+          video.load();
+        }
       };
 
       video.onerror = () => {
