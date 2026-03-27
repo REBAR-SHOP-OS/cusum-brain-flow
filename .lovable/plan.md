@@ -1,37 +1,55 @@
 
 
-# Fix Inaccurate OCR Total Weight in Quotation Pipeline
+# Add Aspect Ratio Selector to Video Editor
 
-## Problem
-The AI extraction pipeline (`ai-estimate`) does not sanitize numeric values from OCR/AI output. Values like `"1,234.56"`, `"261.74 kg"`, or `"18,657.43"` fail with `Number()` or `parseFloat()`, producing `NaN` → `0`, which corrupts the total weight and consequently the quotation tonnage (Qty field shows wrong value like 5.237).
+## Summary
+Add an aspect ratio icon/button in the editor's playback controls bar. When the user selects a ratio, the video preview container resizes accordingly (e.g., 16:9 → widescreen, 9:16 → portrait, 1:1 → square). The CSS `aspect-ratio` and container constraints update in real-time.
 
-## Root Cause
-Three places in `ai-estimate/index.ts` parse AI-extracted numbers without handling commas, units, or locale artifacts:
-- **Line 617-618**: `Number(input.quantity)` / `Number(input.cut_length_mm)` — no comma stripping
-- **Line 642**: `(input as any).weight_kg` — AI may return `"1,234.56 kg"` as a string
-- **Line 210**: `parseFloat(String(row[colMap.weight]))` — spreadsheet weights with commas
+## Changes
 
-## Fix
+### `src/components/ad-director/ProVideoEditor.tsx`
 
-### 1. Add `toNum()` sanitizer in `ai-estimate/index.ts`
+1. **Add state**: `aspectRatio` with default `"16:9"` and a popover toggle
+2. **Add Aspect Ratio Popover** in the playback controls bar (line ~1584), next to fullscreen button:
+   - Icon: `RectangleHorizontal` or `Ratio` from lucide-react
+   - Popover with ratio buttons: `16:9`, `9:16`, `1:1`, `4:3`, `4:5`, `21:9`
+3. **Apply ratio to video container** (line ~1497): Replace `aspect-square` with dynamic `style={{ aspectRatio }}` based on selected ratio
+4. **Apply to canvas** for static cards: Update `canvas.width` / `canvas.height` based on ratio
+5. **Pass ratio to video element**: The `object-contain` class already handles fitting — just the container shape changes
+
+### Ratio → CSS mapping
 ```typescript
-const toNum = (v: unknown) => Number(String(v ?? '').replace(/,/g, '.').replace(/[^\d.-]/g, '')) || 0;
+const ASPECT_RATIOS = {
+  "16:9": "16/9",
+  "9:16": "9/16", 
+  "1:1": "1/1",
+  "4:3": "4/3",
+  "4:5": "4/5",
+  "21:9": "21/9",
+};
 ```
-This strips commas, units (`kg`, `KG`), spaces, and other non-numeric characters.
 
-### 2. Apply `toNum()` at all numeric parsing points:
-- **Line 617**: `input.quantity = toNum(input.quantity) || 1;`
-- **Line 618**: `input.cut_length_mm = toNum(input.cut_length_mm) || 0;`
-- **Line 642**: `const aiWeight = toNum((input as any).weight_kg);`
-- **Line 210** (spreadsheet parser): `const weightRaw = colMap.weight >= 0 ? toNum(row[colMap.weight]) : 0;`
-- **Line 204**: `const quantity = colMap.qty >= 0 ? (toNum(row[colMap.qty]) || 0) : 1;`
-- **Line 207**: `const cutLengthRaw = colMap.length >= 0 ? toNum(row[colMap.length]) : 0;`
+### Video container change (line 1497)
+```tsx
+// Before:
+<div className="... aspect-square max-h-[60vh]">
 
-### 3. Defensive hardening in `ai-generate-quotation/index.ts`
-- **Line 136**: `const weightKg = toNum(i.weight_kg);` (same sanitizer, even though DB stores numeric — belt and suspenders)
-- **Line 148**: `barSizeGroups[barSize].count += toNum(i.quantity);`
+// After: 
+<div className="... max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] }}>
+```
 
-## Files Changed
-- `supabase/functions/ai-estimate/index.ts` — add `toNum()`, apply to all numeric parsing
-- `supabase/functions/ai-generate-quotation/index.ts` — add `toNum()` for defensive weight parsing
+### Canvas dimensions for static cards
+```typescript
+const ratioDims: Record<string, [number, number]> = {
+  "16:9": [1280, 720],
+  "9:16": [720, 1280],
+  "1:1": [1080, 1080],
+  "4:3": [1080, 810],
+  "4:5": [1080, 1350],
+  "21:9": [1260, 540],
+};
+```
+
+## File Changed
+- `src/components/ad-director/ProVideoEditor.tsx`
 
