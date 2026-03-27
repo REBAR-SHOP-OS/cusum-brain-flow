@@ -13,7 +13,7 @@ import {
   SkipBack, SkipForward,
   Palette, Film, LayoutGrid, X, Edit3,
   Mic, Captions, Gauge, MessageSquareText,
-  RectangleHorizontal,
+  RectangleHorizontal, ImagePlus,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -36,13 +36,14 @@ import { SubtitleDialog } from "./editor/SubtitleDialog";
 import { TextVoiceDialog, type TextVoiceResult } from "./editor/TextVoiceDialog";
 import { SpeedControlDialog } from "./editor/SpeedControlPopover";
 import { EditOverlayDialog } from "./editor/EditOverlayDialog";
+import { ImageOverlayDialog } from "./editor/ImageOverlayDialog";
 import { TextTab } from "./editor/TextTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
 import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 
-type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice";
+type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice" | "image";
 
 interface ProVideoEditorProps {
   clips: ClipOutput[];
@@ -232,6 +233,10 @@ export function ProVideoEditor({
     }
     if (tab === "text-voice") {
       setTextVoiceDialogOpen(true);
+      return;
+    }
+    if (tab === "image") {
+      setImageDialogOpen(true);
       return;
     }
     if (activeTab === tab) {
@@ -444,6 +449,12 @@ export function ProVideoEditor({
   const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
   const [textVoiceDialogOpen, setTextVoiceDialogOpen] = useState(false);
   const [generatingTextVoice, setGeneratingTextVoice] = useState(false);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+
+  // ─── Drag overlay state ───
+  const [draggingOverlayId, setDraggingOverlayId] = useState<string | null>(null);
+  const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   const handleUploadAudio = useCallback(() => {
     audioUploadRef.current?.click();
@@ -1514,7 +1525,17 @@ export function ProVideoEditor({
         <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative items-center justify-center">
 
           {/* Video / Static Card */}
-          <div className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9" }}>
+          <div ref={videoContainerRef} className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9" }}
+            onMouseMove={(e) => {
+              if (!draggingOverlayId || !videoContainerRef.current) return;
+              const rect = videoContainerRef.current.getBoundingClientRect();
+              const x = ((e.clientX - rect.left) / rect.width) * 100 - dragOffset.current.x;
+              const y = ((e.clientY - rect.top) / rect.height) * 100 - dragOffset.current.y;
+              setOverlays(prev => prev.map(o => o.id === draggingOverlayId ? { ...o, position: { x: Math.max(0, Math.min(90, x)), y: Math.max(0, Math.min(90, y)) } } : o));
+            }}
+            onMouseUp={() => setDraggingOverlayId(null)}
+            onMouseLeave={() => setDraggingOverlayId(null)}
+          >
             {videoSrc ? (
               <>
                 {isStaticCard ? (
@@ -1569,19 +1590,30 @@ export function ProVideoEditor({
                 {sceneOverlays.map(ov => (
                   <div
                     key={ov.id}
-                    className={`absolute pointer-events-none z-20 ${ov.animated ? "animate-logo-reveal" : ""} ${ov.kind === "text" ? "animate-in fade-in duration-300" : ""}`}
+                    className={`absolute z-20 ${ov.animated ? "animate-logo-reveal" : ""} ${ov.kind === "text" ? "animate-in fade-in duration-300" : ""}`}
                     style={{
                       left: `${ov.position.x}%`,
                       top: `${ov.position.y}%`,
                       width: `${ov.size.w}%`,
                       opacity: ov.opacity,
+                      cursor: draggingOverlayId === ov.id ? "grabbing" : "grab",
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!videoContainerRef.current) return;
+                      const rect = videoContainerRef.current.getBoundingClientRect();
+                      const mouseXPct = ((e.clientX - rect.left) / rect.width) * 100;
+                      const mouseYPct = ((e.clientY - rect.top) / rect.height) * 100;
+                      dragOffset.current = { x: mouseXPct - ov.position.x, y: mouseYPct - ov.position.y };
+                      setDraggingOverlayId(ov.id);
                     }}
                   >
-                    {ov.kind === "logo" ? (
-                      <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain" />
+                    {(ov.kind === "logo" || ov.kind === "image") ? (
+                      <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain pointer-events-none" />
                     ) : (
                       <div className="flex justify-center">
-                        <span className="text-white font-semibold text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] bg-black/50 backdrop-blur-md px-4 py-2 rounded-md text-center leading-relaxed" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        <span className="text-white font-semibold text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] bg-black/50 backdrop-blur-md px-4 py-2 rounded-md text-center leading-relaxed pointer-events-none" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                           {ov.content}
                         </span>
                       </div>
@@ -1739,6 +1771,7 @@ export function ProVideoEditor({
           { id: "media", label: "Media", icon: <Film className="w-3.5 h-3.5" /> },
           { id: "text", label: "Text", icon: <FileText className="w-3.5 h-3.5" /> },
           { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
+          { id: "image", label: "Image", icon: <ImagePlus className="w-3.5 h-3.5" /> },
           { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
           { id: "subtitle", label: "Subtitle", icon: <Captions className="w-3.5 h-3.5" /> },
           
@@ -1848,7 +1881,15 @@ export function ProVideoEditor({
         sceneId={storyboard[selectedSceneIndex]?.id || ""}
       />
 
-      {/* Hidden audio file input */}
+      {/* Image Overlay Dialog */}
+      <ImageOverlayDialog
+        open={imageDialogOpen}
+        onClose={() => setImageDialogOpen(false)}
+        storyboard={storyboard}
+        selectedSceneIndex={selectedSceneIndex}
+        onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
+      />
+
       <input
         ref={audioUploadRef}
         type="file"
