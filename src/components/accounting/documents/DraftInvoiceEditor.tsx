@@ -133,6 +133,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         })));
       } else {
         // Fallback: try to fetch line items from the source quotation
+        const meta = (inv as any).metadata || {};
         let resolved = false;
         const quotationId = (inv as any).quotation_id;
         if (quotationId) {
@@ -183,8 +184,8 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
       }
 
       // Store customer email and amount for email sending
-      const meta = (inv as any).metadata || {};
-      setCustomerEmail(meta.customer_email || (inv as any).customer_email || "");
+      const metaForEmail = (inv as any).metadata || {};
+      setCustomerEmail(metaForEmail.customer_email || (inv as any).customer_email || "");
       setInvoiceAmount(Number(inv.amount) || 0);
 
       if (custRes.data) {
