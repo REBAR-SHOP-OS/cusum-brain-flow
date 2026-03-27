@@ -36,7 +36,7 @@ export function FaceRecognitionResult({
   onNotMe,
   autoPunchCountdown,
 }: FaceRecognitionResultProps) {
-  if (state === "idle" || state === "scanning") return null;
+  if (state === "idle" || state === "scanning" || state === "low_confidence") return null;
 
   if (state === "no_match" || state === "error") {
     return (

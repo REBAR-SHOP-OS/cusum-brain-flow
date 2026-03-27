@@ -305,7 +305,7 @@ export default function TimeClock() {
               }}
               onCancel={() => { setShowRegistration(false); face.reset(); }}
             />
-          ) : (face.state === "no_match" || face.state === "error") ? (
+          ) : (face.state === "no_match" || face.state === "error" || face.state === "low_confidence") ? (
             <FirstTimeRegistration
               captureFrame={face.captureFrame}
               onComplete={() => {

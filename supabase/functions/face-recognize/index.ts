@@ -269,7 +269,7 @@ You MUST call the face_match_result function with your answer.`,
     const isMatched =
       resultData.matched_profile_id &&
       resultData.matched_profile_id !== "null" &&
-      resultData.confidence >= 50;
+      resultData.confidence >= 60;
 
     const matchedProfile = isMatched ? profileMap.get(resultData.matched_profile_id) : null;
     const enrollCount = isMatched ? (profileEnrollmentCounts.get(resultData.matched_profile_id) || 0) : 0;
