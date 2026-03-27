@@ -287,25 +287,65 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
                 <p className="font-semibold text-sm">Enroll New Person</p>
               </div>
 
-              {/* Step 1: Select profile */}
-              <Select value={selectedProfileId} onValueChange={setSelectedProfileId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a person..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableProfiles.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.full_name}
+              {/* Step 1: Select profile or create new */}
+              {!creatingNewPerson ? (
+                <Select
+                  value={selectedProfileId}
+                  onValueChange={(val) => {
+                    if (val === "__new__") {
+                      setCreatingNewPerson(true);
+                      setSelectedProfileId("");
+                    } else {
+                      setSelectedProfileId(val);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select a person..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__new__" className="font-semibold text-primary">
+                      + Add New Name
                     </SelectItem>
-                  ))}
-                  {/* Also allow re-enrolling existing people */}
-                  {profiles.filter((p) => p.is_active && enrolledProfileIds.has(p.id)).map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.full_name} (re-enroll)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    {availableProfiles.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.full_name}
+                      </SelectItem>
+                    ))}
+                    {profiles.filter((p) => p.is_active && enrolledProfileIds.has(p.id)).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.full_name} (re-enroll)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter full name..."
+                    value={newPersonName}
+                    onChange={(e) => setNewPersonName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && newPersonName.trim().length >= 2 && handleCreateNewPerson()}
+                    autoFocus
+                  />
+                  <Button
+                    size="icon"
+                    className="shrink-0 bg-green-600 hover:bg-green-700 text-white"
+                    disabled={newPersonName.trim().length < 2 || createProfile.isPending}
+                    onClick={handleCreateNewPerson}
+                  >
+                    {createProfile.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="shrink-0"
+                    onClick={() => { setCreatingNewPerson(false); setNewPersonName(""); }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
 
               {selectedProfileId && captureStep < 3 && (
                 <>
