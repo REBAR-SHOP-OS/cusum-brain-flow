@@ -919,6 +919,15 @@ export function ProVideoEditor({
     setOverlays(prev => prev.filter(o => o.id !== id));
   }, []);
 
+      {/* Image Overlay Dialog */}
+      <ImageOverlayDialog
+        open={imageDialogOpen}
+        onClose={() => setImageDialogOpen(false)}
+        storyboard={storyboard}
+        selectedSceneIndex={selectedSceneIndex}
+        onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
+      />
+
 
   const handleTrimScene = useCallback((index: number) => {
     const scene = storyboard[index];
