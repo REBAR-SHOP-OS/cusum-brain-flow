@@ -10,7 +10,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
-  Palette, Film, Type, LayoutGrid, X,
+  Palette, Film, LayoutGrid, X,
   Mic, Captions, Gauge,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1573,7 +1573,7 @@ export function ProVideoEditor({
       <TimelineBar
         sidebarTabs={[
           { id: "media", label: "Media", icon: <Film className="w-3.5 h-3.5" /> },
-          { id: "text", label: "Text", icon: <Type className="w-3.5 h-3.5" /> },
+          
           { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
           { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
           { id: "subtitle", label: "Subtitle", icon: <Captions className="w-3.5 h-3.5" /> },
