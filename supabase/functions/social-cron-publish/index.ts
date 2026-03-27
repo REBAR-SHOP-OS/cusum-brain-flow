@@ -49,6 +49,17 @@ Deno.serve((req) =>
     const now = new Date().toISOString();
     console.log(`[social-cron-publish] Querying scheduled posts. Current UTC: ${now}`);
 
+    // Recovery: reset posts stuck in "publishing" for >10 minutes back to "scheduled"
+    const { data: stalePublishing } = await supabase
+      .from("social_posts")
+      .update({ status: "scheduled" })
+      .eq("status", "publishing")
+      .lt("updated_at", new Date(Date.now() - 10 * 60 * 1000).toISOString())
+      .select("id");
+    if (stalePublishing && stalePublishing.length > 0) {
+      console.log(`[social-cron-publish] Recovered ${stalePublishing.length} stale publishing posts: ${stalePublishing.map(p => p.id).join(", ")}`);
+    }
+
     const { data: duePosts, error: fetchError } = await supabase
       .from("social_posts")
       .select("*")
