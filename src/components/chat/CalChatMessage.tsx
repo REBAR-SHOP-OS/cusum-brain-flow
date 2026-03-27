@@ -13,6 +13,21 @@ export function CalChatMessage({ message }: CalChatMessageProps) {
   const isUser = message.role === "user";
   const currentStep = !isUser ? detectStepFromMessage(message.content) : null;
   const stepInfo = currentStep ? CHANGY_STEPS.find(s => s.id === currentStep) : null;
+  const [downloadingFile, setDownloadingFile] = useState<string | null>(null);
+
+  const handleFileDownload = async (file: { name: string; url: string; path?: string }) => {
+    const path = file.path || file.url;
+    try {
+      setDownloadingFile(path);
+      const freshUrl = await getSignedFileUrl(path);
+      if (!freshUrl) throw new Error("empty");
+      await downloadFile(freshUrl, file.name);
+    } catch {
+      toast.error("Failed to get download link");
+    } finally {
+      setDownloadingFile(null);
+    }
+  };
 
   // Parse uncertainties (items with !) from the message
   const uncertainties = extractUncertainties(message.content);
