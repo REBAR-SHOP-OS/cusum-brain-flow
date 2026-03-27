@@ -534,6 +534,15 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
 
           let cleaned = content.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
 
+          // Repair truncated JSON arrays (salvage complete items)
+          if (cleaned.startsWith("[") && !cleaned.trimEnd().endsWith("]")) {
+            const lastBrace = cleaned.lastIndexOf("}");
+            if (lastBrace > 0) {
+              cleaned = cleaned.substring(0, lastBrace + 1) + "]";
+              console.log("Repaired truncated JSON array");
+            }
+          }
+
           try {
             const parsed = JSON.parse(cleaned);
             extractedItems = Array.isArray(parsed) ? parsed : [parsed];
