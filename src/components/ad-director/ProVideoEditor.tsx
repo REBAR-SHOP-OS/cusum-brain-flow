@@ -250,7 +250,7 @@ export function ProVideoEditor({
 
       // Step 2: Generate audio with ElevenLabs using enhanced prompt
       toast({ title: "🎵 در حال تولید صدا..." });
-      const functionName = result.type === "music" ? "elevenlabs-music" : "elevenlabs-tts";
+      const functionName = result.type === "music" ? "lyria-music" : "elevenlabs-tts";
       const body = result.type === "music"
         ? { prompt: finalPrompt, duration: result.duration, type: "music" }
         : { text: finalPrompt };
