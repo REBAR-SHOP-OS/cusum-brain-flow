@@ -1,31 +1,34 @@
 
 
-# Fix: Posts Stuck in "Publishing..." State
+# Fix: Approved Posts Still Showing "Pending Approval" in Calendar
 
-## Problem
-Posts that were published days ago still show "publishing" with a spinner. Two root causes:
+## Root Cause
 
-1. **Missing label**: `SocialCalendar.tsx` has no entry for `"publishing"` in `STATUS_LABELS` (line 25-31), so it renders the raw DB string
-2. **No stale recovery**: `social-cron-publish` sets `status: "publishing"` (line 160) before attempting to publish. If the edge function times out or crashes mid-flight, posts stay stuck forever — the catch block never fires
+In `PostReviewPanel.tsx` line 1097, the Neel approval button only sets `neel_approved: true` but does **not** update `status` from `"pending_approval"` to `"scheduled"`. The calendar renders status labels based on `post.status`, so posts remain displayed as "Pending Approval" even after Neel clicks approve.
 
-## Solution
+Compare with `useSocialApprovals.approvePost` (line 66-72), which correctly sets **both** `status: "scheduled"` and `neel_approved: true`.
 
-### 1. Add "publishing" label to calendar (SocialCalendar.tsx, line 25-31)
-Add `publishing: "Publishing 🔄"` to `STATUS_LABELS` so the calendar displays it cleanly instead of raw text.
+## Fix
 
-### 2. Add stale-publishing cleanup to cron (social-cron-publish, ~line 120)
-Before fetching due posts, run a cleanup query that resets any post stuck as `"publishing"` for more than 10 minutes back to `"scheduled"` so it gets retried on the next cron run:
+**File: `src/components/social/PostReviewPanel.tsx` — line 1097**
 
-```sql
-UPDATE social_posts
-SET status = 'scheduled'
-WHERE status = 'publishing'
-  AND updated_at < now() - interval '10 minutes'
+Change:
+```typescript
+await updatePost.mutateAsync({ id: p.id, neel_approved: true } as any);
 ```
 
-This handles edge function timeouts, crashes, and any other failure mode that bypasses the catch block.
+To:
+```typescript
+await updatePost.mutateAsync({
+  id: p.id,
+  neel_approved: true,
+  status: "scheduled",
+  qa_status: "approved",
+} as any);
+```
 
-## Files Changed
-- `src/components/social/SocialCalendar.tsx` — add `publishing` to `STATUS_LABELS`
-- `supabase/functions/social-cron-publish/index.ts` — add stale-publishing recovery query before main fetch
+This mirrors the behavior of `useSocialApprovals.approvePost` and ensures the calendar immediately shows "Scheduled · Approved" after Neel approves.
+
+## File Changed
+- `src/components/social/PostReviewPanel.tsx` — line 1097: include `status` and `qa_status` in approval mutation
 
