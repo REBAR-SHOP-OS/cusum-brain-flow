@@ -257,7 +257,7 @@ async function qbFetch(
   if (!res.ok) {
     const errorText = await res.text();
     logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: _retries, error_message: errorText.slice(0, 500) });
-    throw new Error(`QuickBooks API error (${res.status}): ${path}`);
+    throw new Error(`QuickBooks API error (${res.status}): ${path} — ${errorText.slice(0, 500)}`);
   }
 
   logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: _retries });
