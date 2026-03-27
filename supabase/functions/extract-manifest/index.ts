@@ -81,17 +81,28 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
       if (c == null) return;
       const letter = normalizeDimHeader(String(c));
       if (letter) colMap[letter] = i;
+      // Also detect length column headers
+      const normalized = String(c).trim().toUpperCase()
+        .replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+      if (["CUT LENGTH", "TOTAL LENGTH", "LENGTH", "CUTLENGTH", "CUT LEN", "TOT LENGTH"].includes(normalized)) {
+        colMap["__LENGTH__"] = i;
+      }
     });
     if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return items; }
-    console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} dim columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
+    console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
     return items.map((it, n) => {
       const row = rows[hIdx + 1 + n] || [];
       for (const d of DIMS) {
         if (colMap[d] != null) {
           const raw = row[colMap[d]];
-          // Parse cell value — handles ft-in strings, plain numbers, etc.
           it[d] = raw != null ? (parseDimension(raw) ?? null) : null;
         }
+      }
+      // Overlay total_length from spreadsheet if found
+      if (colMap["__LENGTH__"] != null) {
+        const raw = row[colMap["__LENGTH__"]];
+        const parsed = raw != null ? parseDimension(raw) : null;
+        if (parsed != null) it.total_length = parsed;
       }
       it.I = null;
       return it;
