@@ -389,7 +389,7 @@ export function TagsExportView() {
                 ) : (
                   sortedRows.map((row) => {
                     const size = row.bar_size_mapped || row.bar_size || "";
-                    const shapeType = row.shape_code_mapped || row.shape_type || "";
+                     const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
                     const weight = getWeight(size, row.total_length_mm, row.quantity);
                     const us = (selectedSession as any)?.unit_system || "metric";
                     const unit = dimUnit(us);
