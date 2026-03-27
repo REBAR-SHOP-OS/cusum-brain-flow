@@ -653,9 +653,13 @@ Deno.serve((req) =>
                 sort_order: idx,
               };
             });
-            await svc.from("sales_invoice_items").insert(invoiceItems);
-            console.log(`[accept_and_convert] Copied ${invoiceItems.length} line items from quotes.metadata`);
-            itemsCopied = true;
+            const { error: itemInsertErr } = await svc.from("sales_invoice_items").insert(invoiceItems);
+            if (itemInsertErr) {
+              console.error(`[accept_and_convert] Failed to insert invoice items:`, itemInsertErr.message);
+            } else {
+              console.log(`[accept_and_convert] Copied ${invoiceItems.length} line items from quotes.metadata`);
+              itemsCopied = true;
+            }
           }
 
           // 2. Secondary: sales_quotation_items (if metadata was empty)
