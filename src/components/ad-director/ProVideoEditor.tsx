@@ -11,7 +11,7 @@ import {
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
   Palette, Film, Type, LayoutGrid, X,
-  Mic, Captions,
+  Mic, Captions, Gauge,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
