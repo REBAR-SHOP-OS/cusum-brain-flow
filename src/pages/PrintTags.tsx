@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useExtractRows } from "@/hooks/useExtractSessions";
 import { useShapeSchematics } from "@/hooks/useShapeSchematics";
+import logoCoin from "@/assets/logo-coin.png";
 
 /* ── Weight calc ── */
 const MASS_KG_PER_M: Record<string, number> = {
@@ -91,13 +92,10 @@ function PrintTag({
         </div>
       </div>
 
-      {/* Shape code + Dims */}
+      {/* Logo + Dims */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", borderBottom: "2px solid #000" }}>
         <div style={{ borderRight: "2px solid #000", padding: "8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ width: 40, height: 40, borderRadius: "50%", border: "2px solid #000", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
-            <span style={{ fontSize: 14, fontWeight: 900 }}>{shapeType || "S"}</span>
-          </div>
-          <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase" }}>Shape</span>
+          <img src={logoCoin} alt="Brand logo" style={{ width: 64, height: 64, objectFit: "contain" }} />
         </div>
         <div style={{ padding: "6px 8px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
           {DIM_LEFT.map((d) => (
@@ -115,33 +113,33 @@ function PrintTag({
         </div>
       </div>
 
-      {/* Shape image */}
-      <div style={{ flex: 1, minHeight: 0, borderBottom: "2px solid #000", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", background: "#fff" }}>
-        {shapeImageUrl ? (
-          <img src={shapeImageUrl} alt={`Shape ${shapeType}`} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", imageRendering: "pixelated" }} />
-        ) : shapeType ? (
-          <div style={{ textAlign: "center" }}>
-            <div style={{ width: 96, height: 56, borderBottom: "2px solid rgba(0,0,0,0.3)", margin: "0 auto" }} />
-            <span style={{ fontSize: 20, fontWeight: 900 }}>{shapeType}</span>
-          </div>
-        ) : (
-          <span style={{ fontSize: 11, color: "rgba(0,0,0,0.3)", fontStyle: "italic" }}>No shape</span>
-        )}
-      </div>
-
-      {/* Ref / Dwg / Item */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid #000", fontSize: 12 }}>
-        <div style={{ borderRight: "1px solid #000", padding: "6px 8px" }}>
-          <div style={{ display: "flex", gap: 4 }}>
-            <span style={{ fontWeight: 700 }}>Ref:</span>
-            <span style={{ fontWeight: 900, textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reference || customer || "—"}</span>
-          </div>
-          {address && <div style={{ fontSize: 9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{address}</div>}
+      {/* Shape image + Dwg/Item */}
+      <div style={{ flex: 1, minHeight: 0, borderBottom: "2px solid #000", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8px", background: "#fff" }}>
+        <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
+          {shapeImageUrl ? (
+            <img src={shapeImageUrl} alt={`Shape ${shapeType}`} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", imageRendering: "pixelated" }} />
+          ) : shapeType ? (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ width: 96, height: 56, borderBottom: "2px solid rgba(0,0,0,0.3)", margin: "0 auto" }} />
+              <span style={{ fontSize: 20, fontWeight: 900 }}>{shapeType}</span>
+            </div>
+          ) : (
+            <span style={{ fontSize: 11, color: "rgba(0,0,0,0.3)", fontStyle: "italic" }}>No shape</span>
+          )}
         </div>
-        <div style={{ padding: "6px 8px" }}>
+        <div style={{ display: "flex", gap: 16, fontSize: 12, marginTop: 4 }}>
           <div style={{ display: "flex", gap: 4 }}><span style={{ fontWeight: 700 }}>Dwg:</span><span style={{ fontWeight: 900 }}>{dwg || "—"}</span></div>
           <div style={{ display: "flex", gap: 4 }}><span style={{ fontWeight: 700 }}>Item:</span><span style={{ fontWeight: 900 }}>{item}</span></div>
         </div>
+      </div>
+
+      {/* Ref — full width */}
+      <div style={{ borderBottom: "1px solid #000", fontSize: 12, padding: "8px", minHeight: 56 }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          <span style={{ fontWeight: 700 }}>Ref:</span>
+          <span style={{ fontWeight: 900, textTransform: "uppercase" }}>{reference || customer || "—"}</span>
+        </div>
+        {address && <div style={{ fontSize: 9, lineHeight: 1.3, marginTop: 2 }}>{address}</div>}
       </div>
 
       {/* Footer */}
@@ -247,7 +245,7 @@ export default function PrintTags() {
       <div className="print-tags-page">
         {sortedRows.map((row) => {
           const size = row.bar_size_mapped || row.bar_size || "";
-          const shapeType = row.shape_code_mapped || row.shape_type || "";
+          const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
           const weight = getWeight(size, row.total_length_mm, row.quantity);
           const dims: Record<string, number | null> = {};
           DIM_COLS.forEach((d) => {
