@@ -3,7 +3,7 @@ import { corsHeaders } from "../_shared/auth.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { name, faceBase64, existingProfileId } = ctx.body;
+    const { name, existingProfileId } = ctx.body;
     if (!name || name.trim().length < 2) {
       return new Response(JSON.stringify({ error: "Name is required (min 2 chars)" }), {
         status: 400,
