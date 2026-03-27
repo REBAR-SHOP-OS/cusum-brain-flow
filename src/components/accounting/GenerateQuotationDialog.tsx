@@ -82,18 +82,29 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
     enabled: open && !!companyId,
   });
 
-  const { data: customers } = useQuery({
-    queryKey: ["customers_for_quote", companyId],
-    queryFn: async () => {
-      const { data } = await supabase
+  // Searchable customer combobox state
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerOpen, setCustomerOpen] = useState(false);
+  const [customerOptions, setCustomerOptions] = useState<any[]>([]);
+  const [customerLabel, setCustomerLabel] = useState("");
+  const customerDebounce = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (!open || !companyId) return;
+    if (customerDebounce.current) clearTimeout(customerDebounce.current);
+    customerDebounce.current = setTimeout(async () => {
+      const q = supabase
         .from("v_customers_clean" as any)
         .select("*")
-        .eq("company_id", companyId!)
-        .order("name" as any, { ascending: true });
-      return (data as any[]) || [];
-    },
-    enabled: open && !!companyId,
-  });
+        .eq("company_id", companyId);
+      if (customerSearch.trim()) {
+        q.or(`display_name.ilike.%${customerSearch}%,company_name.ilike.%${customerSearch}%`);
+      }
+      const { data } = await q.order("display_name" as any, { ascending: true }).limit(50);
+      setCustomerOptions((data as any[]) || []);
+    }, 300);
+    return () => { if (customerDebounce.current) clearTimeout(customerDebounce.current); };
+  }, [customerSearch, open, companyId]);
 
   const { data: leads } = useQuery({
     queryKey: ["sales_leads_for_quote", companyId],
