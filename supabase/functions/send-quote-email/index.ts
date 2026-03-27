@@ -577,7 +577,6 @@ Deno.serve((req) =>
         }
 
         // Auto-push invoice to QuickBooks to get InvoiceLink
-        let qbInvoiceLink = "";
         try {
           // Build QB line items from the copied invoice items
           const qbLineItems = (metaItems.length > 0 ? metaItems : []).map((mi: any) => ({
