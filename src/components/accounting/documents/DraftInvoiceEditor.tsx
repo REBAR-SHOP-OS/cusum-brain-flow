@@ -168,9 +168,6 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
 
         // 2. Try quotes.metadata.line_items (primary source for all quotations)
         if (!resolved && inv.invoice_number) {
-          // Find the quotes record by matching quotation number pattern
-          // The invoice_number is like INV-20260001, the quote_number is like Q-20260001
-          // We also try via the sales_quotations record which links to quotes
           let sourceQuote: any = null;
           if (quotationId) {
             // quotation_id points to sales_quotations — get quotation_number to find quotes record
@@ -186,6 +183,15 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
                 .eq("quote_number", sq.quotation_number)
                 .maybeSingle();
               sourceQuote = q;
+            }
+            // Fallback: try quotes by id directly (quotationId may actually be a quotes.id)
+            if (!sourceQuote) {
+              const { data: q } = await supabase
+                .from("quotes")
+                .select("metadata")
+                .eq("id", quotationId)
+                .maybeSingle();
+              if (q) sourceQuote = q;
             }
           }
           if (sourceQuote?.metadata) {
@@ -365,6 +371,8 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
     }
     setSendingEmail(true);
     try {
+      // Auto-save before sending to ensure DB matches what the email shows
+      await handleSave();
       // Try to get a Stripe payment link
       let paymentUrl = "";
       try {

@@ -1256,7 +1256,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     } else {
       // 2. Search QuickBooks by display name
       try {
-        const searchResult = await qbFetch(config, `query?query=select * from Customer where DisplayName = '${customerName.replace(/'/g, "\\'")}'`) as Record<string, any>;
+        const searchResult = await qbFetch(config, `query?query=select * from Customer where DisplayName = '${customerName.replace(/'/g, "''")}'`) as Record<string, any>;
         const qbCustomers = searchResult?.QueryResponse?.Customer as any[] | undefined;
         if (qbCustomers && qbCustomers.length > 0) {
           customerId = String(qbCustomers[0].Id);
