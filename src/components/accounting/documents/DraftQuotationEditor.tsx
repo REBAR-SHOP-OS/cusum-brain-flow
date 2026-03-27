@@ -408,10 +408,11 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
                 ) : (
                   <div className="p-2 border-b border-gray-100 space-y-1.5">
                     <Input placeholder="Customer name" value={newCustName} onChange={(e) => setNewCustName(e.target.value)} className={`h-7 text-xs ${inputCls}`} autoFocus />
+                    <Input placeholder="Email" type="email" value={newCustEmail} onChange={(e) => setNewCustEmail(e.target.value)} className={`h-7 text-xs ${inputCls}`} />
                     <Input placeholder="Address (optional)" value={newCustAddress} onChange={(e) => setNewCustAddress(e.target.value)} className={`h-7 text-xs ${inputCls}`} />
                     <div className="flex gap-1">
                       <Button size="sm" className="h-6 text-xs" onClick={handleAddNewCustomer} disabled={!newCustName.trim()}>Create</Button>
-                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setAddingNewCustomer(false); setNewCustName(""); setNewCustAddress(""); }}>Cancel</Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => { setAddingNewCustomer(false); setNewCustName(""); setNewCustEmail(""); setNewCustAddress(""); }}>Cancel</Button>
                     </div>
                   </div>
                 )}
