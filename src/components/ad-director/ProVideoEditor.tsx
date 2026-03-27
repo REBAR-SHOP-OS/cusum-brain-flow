@@ -13,6 +13,7 @@ import {
   SkipBack, SkipForward,
   Palette, Film, LayoutGrid, X, Edit3,
   Mic, Captions, Gauge, MessageSquareText,
+  RectangleHorizontal,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
