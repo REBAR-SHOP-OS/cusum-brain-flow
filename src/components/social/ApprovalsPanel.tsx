@@ -82,6 +82,12 @@ export function ApprovalsPanel() {
                         <Badge className={cn("text-[10px]", platformColors[post.platform])}>
                           {post.platform}
                         </Badge>
+                        {post.page_name && (
+                          <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                            {post.page_name}
+                          </span>
+                        )}
+                        </Badge>
                         {isOverdue && (
                           <Badge variant="destructive" className="text-[10px]">Overdue</Badge>
                         )}
