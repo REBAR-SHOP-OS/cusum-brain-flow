@@ -310,6 +310,73 @@ export function ProVideoEditor({
     toast({ title: "✅ زیرنویس اضافه شد" });
   }, [toast]);
 
+  const handleTextVoiceGenerate = useCallback(async (result: TextVoiceResult) => {
+    setGeneratingTextVoice(true);
+    try {
+      // 1. Update storyboard voiceover text
+      if (onUpdateStoryboard) {
+        const updated = storyboard.map(s =>
+          s.id === result.sceneId ? { ...s, voiceover: result.text } : s
+        );
+        onUpdateStoryboard(updated);
+      }
+
+      // 2. Generate TTS audio
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: result.text, voiceId: result.voiceId, speed: result.speed }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Text+Voice generation failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      // 3. Replace voiceover audio track for this scene
+      setAudioTracks(prev => {
+        const filtered = prev.filter(t => t.sceneId !== `tv-${result.sceneId}`);
+        return [...filtered, {
+          sceneId: `tv-${result.sceneId}`,
+          label: "🎙️ Text+Voice",
+          audioUrl,
+          kind: "voiceover" as const,
+        }];
+      });
+
+      // 4. Add/replace subtitle overlay for this scene
+      setOverlays(prev => {
+        const filtered = prev.filter(o => !(o.sceneId === result.sceneId && o.kind === "text" && o.position.y >= 80));
+        return [...filtered, {
+          id: crypto.randomUUID(),
+          kind: "text" as const,
+          position: { x: 5, y: 85 },
+          size: { w: 90, h: 10 },
+          content: result.text,
+          opacity: 0.95,
+          sceneId: result.sceneId,
+          animated: false,
+        }];
+      });
+
+      setTextVoiceDialogOpen(false);
+      toast({ title: "✅ متن و صدا با موفقیت تولید شد" });
+    } catch (err: any) {
+      console.error("TextVoice generation error:", err);
+      toast({ title: "خطا در تولید متن و صدا", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingTextVoice(false);
+    }
+  }, [toast, storyboard, onUpdateStoryboard]);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
