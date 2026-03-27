@@ -193,6 +193,14 @@ export function ProVideoEditor({
       setAudioPromptOpen(true);
       return;
     }
+    if (tab === "voiceover") {
+      setVoiceoverDialogOpen(true);
+      return;
+    }
+    if (tab === "subtitle") {
+      setSubtitleDialogOpen(true);
+      return;
+    }
     if (activeTab === tab) {
       setPanelOpen(prev => !prev);
     } else {
