@@ -113,33 +113,33 @@ function PrintTag({
         </div>
       </div>
 
-      {/* Shape image */}
-      <div style={{ flex: 1, minHeight: 0, borderBottom: "2px solid #000", display: "flex", alignItems: "center", justifyContent: "center", padding: "8px", background: "#fff" }}>
-        {shapeImageUrl ? (
-          <img src={shapeImageUrl} alt={`Shape ${shapeType}`} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", imageRendering: "pixelated" }} />
-        ) : shapeType ? (
-          <div style={{ textAlign: "center" }}>
-            <div style={{ width: 96, height: 56, borderBottom: "2px solid rgba(0,0,0,0.3)", margin: "0 auto" }} />
-            <span style={{ fontSize: 20, fontWeight: 900 }}>{shapeType}</span>
-          </div>
-        ) : (
-          <span style={{ fontSize: 11, color: "rgba(0,0,0,0.3)", fontStyle: "italic" }}>No shape</span>
-        )}
-      </div>
-
-      {/* Ref / Dwg / Item */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid #000", fontSize: 12 }}>
-        <div style={{ borderRight: "1px solid #000", padding: "6px 8px" }}>
-          <div style={{ display: "flex", gap: 4 }}>
-            <span style={{ fontWeight: 700 }}>Ref:</span>
-            <span style={{ fontWeight: 900, textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{reference || customer || "—"}</span>
-          </div>
-          {address && <div style={{ fontSize: 9, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{address}</div>}
+      {/* Shape image + Dwg/Item */}
+      <div style={{ flex: 1, minHeight: 0, borderBottom: "2px solid #000", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "8px", background: "#fff" }}>
+        <div style={{ flex: 1, minHeight: 0, display: "flex", alignItems: "center", justifyContent: "center", width: "100%" }}>
+          {shapeImageUrl ? (
+            <img src={shapeImageUrl} alt={`Shape ${shapeType}`} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain", imageRendering: "pixelated" }} />
+          ) : shapeType ? (
+            <div style={{ textAlign: "center" }}>
+              <div style={{ width: 96, height: 56, borderBottom: "2px solid rgba(0,0,0,0.3)", margin: "0 auto" }} />
+              <span style={{ fontSize: 20, fontWeight: 900 }}>{shapeType}</span>
+            </div>
+          ) : (
+            <span style={{ fontSize: 11, color: "rgba(0,0,0,0.3)", fontStyle: "italic" }}>No shape</span>
+          )}
         </div>
-        <div style={{ padding: "6px 8px" }}>
+        <div style={{ display: "flex", gap: 16, fontSize: 12, marginTop: 4 }}>
           <div style={{ display: "flex", gap: 4 }}><span style={{ fontWeight: 700 }}>Dwg:</span><span style={{ fontWeight: 900 }}>{dwg || "—"}</span></div>
           <div style={{ display: "flex", gap: 4 }}><span style={{ fontWeight: 700 }}>Item:</span><span style={{ fontWeight: 900 }}>{item}</span></div>
         </div>
+      </div>
+
+      {/* Ref — full width */}
+      <div style={{ borderBottom: "1px solid #000", fontSize: 12, padding: "8px", minHeight: 56 }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          <span style={{ fontWeight: 700 }}>Ref:</span>
+          <span style={{ fontWeight: 900, textTransform: "uppercase" }}>{reference || customer || "—"}</span>
+        </div>
+        {address && <div style={{ fontSize: 9, lineHeight: 1.3, marginTop: 2 }}>{address}</div>}
       </div>
 
       {/* Footer */}
