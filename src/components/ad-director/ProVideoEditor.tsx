@@ -31,6 +31,7 @@ import { TextOverlayDialog } from "./editor/TextOverlayDialog";
 import { AudioPromptDialog, type AudioPromptResult } from "./editor/AudioPromptDialog";
 import { VoiceoverDialog, type VoiceoverResult } from "./editor/VoiceoverDialog";
 import { SubtitleDialog } from "./editor/SubtitleDialog";
+import { SpeedControlPopover } from "./editor/SpeedControlPopover";
 import { EditOverlayDialog } from "./editor/EditOverlayDialog";
 import { TextTab } from "./editor/TextTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
