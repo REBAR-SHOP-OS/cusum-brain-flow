@@ -131,13 +131,55 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           unitPrice: it.unit_price || 0,
           serviceDate: it.service_date || "",
         })));
-      } else if (inv.amount && Number(inv.amount) > 0) {
-        // Fallback: no line items but invoice has amount (converted from quote)
-        setItems([{
-          description: "As per quotation",
-          quantity: 1,
-          unitPrice: Number(inv.amount),
-        }]);
+      } else {
+        // Fallback: try to fetch line items from the source quotation
+        let resolved = false;
+        const quotationId = (inv as any).quotation_id;
+        if (quotationId) {
+          const { data: qItems } = await supabase
+            .from("sales_quotation_items" as any)
+            .select("description, quantity, unit_price, total, sort_order")
+            .eq("quotation_id", quotationId)
+            .order("sort_order");
+          if (qItems && (qItems as any[]).length > 0) {
+            const mapped = (qItems as any[]).map((qi: any) => ({
+              description: qi.description || "",
+              quantity: qi.quantity || 1,
+              unitPrice: qi.unit_price || 0,
+            }));
+            setItems(mapped);
+            resolved = true;
+            // Also persist these items to sales_invoice_items for future loads
+            if (companyId) {
+              const rows = (qItems as any[]).map((qi: any, idx: number) => ({
+                invoice_id: invoiceId,
+                company_id: companyId,
+                description: qi.description || "",
+                quantity: qi.quantity || 1,
+                unit_price: qi.unit_price || 0,
+                total: qi.total || (qi.quantity || 1) * (qi.unit_price || 0),
+                sort_order: qi.sort_order ?? idx,
+              }));
+              supabase.from("sales_invoice_items" as any).insert(rows as any).then(() => {});
+            }
+          }
+        }
+        // Second fallback: parse metadata.line_items
+        if (!resolved) {
+          const metaItems = meta.line_items as any[] | undefined;
+          if (metaItems && metaItems.length > 0) {
+            setItems(metaItems.map((mi: any) => ({
+              description: mi.description || mi.name || "",
+              quantity: mi.quantity || mi.qty || 1,
+              unitPrice: mi.unit_price || mi.unitPrice || mi.price || 0,
+            })));
+            resolved = true;
+          }
+        }
+        // Last fallback: single line with total amount
+        if (!resolved && inv.amount && Number(inv.amount) > 0) {
+          setItems([{ description: "Invoice total", quantity: 1, unitPrice: Number(inv.amount) }]);
+        }
       }
 
       // Store customer email and amount for email sending
