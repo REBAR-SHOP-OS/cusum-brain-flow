@@ -181,7 +181,7 @@ export function TimelineBar({
       if (!scrubbingRef.current || !trackRef.current) return;
       const rect = trackRef.current.getBoundingClientRect();
       const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const snappedTime = Math.round(pct * totalDuration);
+      const snappedTime = Math.round(pct * totalDuration * 10) / 10;
       onSeek(Math.max(0, Math.min(totalDuration, snappedTime)));
     };
     const onUp = () => {
