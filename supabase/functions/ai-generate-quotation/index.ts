@@ -148,7 +148,7 @@ Deno.serve((req) =>
       if (!barSizeGroups[barSize]) {
         barSizeGroups[barSize] = { count: 0, total_weight_kg: 0, items: [] };
       }
-      barSizeGroups[barSize].count += Number(i.quantity || 0);
+      barSizeGroups[barSize].count += toNum(i.quantity);
       barSizeGroups[barSize].total_weight_kg += weightKg;
       barSizeGroups[barSize].items.push({
         element: i.element_ref || i.element_type,
