@@ -475,10 +475,30 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
             />
             <div className="flex items-center gap-2 mt-2">
               <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Ship Date:</span>
-              <Input
-                type="date"
-                className={`h-7 text-xs flex-1 ${inputCls} print:border-none print:p-0`}
-              />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "h-7 text-xs flex-1 justify-start text-left font-normal",
+                      !shipDate && "text-muted-foreground",
+                      "print:border-none print:p-0 print:bg-transparent"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-3 w-3" />
+                    {shipDate ? format(shipDate, "MMM d, yyyy") : "Pick date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={shipDate}
+                    onSelect={setShipDate}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
         </div>
