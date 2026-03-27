@@ -1,54 +1,33 @@
 
 
-# Fix: Face Memory Panel Empty + Recognition Intermittent Failures
+# Fix Face Memory Panel + Add Manual Enrollment
 
-## Root Causes Found
+## Problem
+The Face Memory panel shows "0 people enrolled" despite 20+ enrollments in the database across 6 profiles.
 
-### BUG 1: FaceMemoryPanel queries non-existent column `storage_path`
-**File:** `src/components/timeclock/FaceMemoryPanel.tsx` line 44
-**Impact:** Memory panel always shows "0 people enrolled, 0 photos total"
+## Root Cause
+**RLS policy on `face_enrollments`** only allows users to see their own enrollments. The kiosk user (`ai@rebar.shop`, user_id `b2b75b2e-...`) is NOT in the admin role, so the admin policy also fails. Result: 0 rows returned client-side.
 
-The panel selects `storage_path` but the actual column in `face_enrollments` is `photo_url`. The query silently fails or returns empty, so no enrolled faces are ever displayed.
-
-**Evidence:** Database has 20+ active enrollments across 6 profiles — but the panel shows zero.
-
-### BUG 2: Signed URLs break AI recognition ~50% of the time
-**File:** `supabase/functions/face-recognize/index.ts` lines 76-95
-**Impact:** "Cannot fetch content from the provided URL" error causes face scan to fail, showing "First Time Here?" even for enrolled users
-
-The edge function generates Supabase signed URLs for reference photos and passes them as `image_url` to Gemini. But Gemini's servers intermittently cannot fetch these URLs (network access, timing, or URL format issues). Logs show this error on 3 out of 5 recent scan attempts.
-
-**Evidence from logs:**
-- 12:55, 12:56, 12:59 → `"Cannot fetch content from the provided URL"` → recognition fails → shows "First Time Here?"
-- 12:54, 13:01 → works fine → matched Radin at 98% confidence
-
-### BUG 3: Signed URL generation also fails in FaceMemoryPanel thumbnails
-The panel uses `item.storage_path` (undefined due to BUG 1) to generate signed URLs for thumbnails — double failure.
+The database confirms 20 active enrollments across 6 people (Ai, Neel, Sattar, Zahra, Saurabh, Radin).
 
 ## Fixes
 
-### Fix 1: Correct column name in FaceMemoryPanel
-Change `storage_path` → `photo_url` in the select query and all references throughout the component.
+### 1. Database: Add kiosk user to admin role
+Insert the "Ai" kiosk user (`b2b75b2e-4ebb-4779-afc0-c04cbb010112`) into `user_roles` with `admin` role. This allows the kiosk account to see all enrollments via the existing "Admins can view all face enrollments" policy.
 
-### Fix 2: Convert reference photos to base64 instead of signed URLs
-In `face-recognize/index.ts`, download each reference photo from storage and convert to base64 data URLs (same format as the captured photo). This eliminates the external URL dependency entirely — Gemini receives all images as inline base64 data.
+### 2. Feature: Manual enrollment form in FaceMemoryPanel
+Add an "Add Person" button at the top of the panel that opens an inline form:
+- **Profile selector**: Dropdown of all company profiles (from `profiles` table)
+- **Camera capture**: Start camera, capture 3 photos (front, left, right) — reuse the same pattern from `FaceEnrollment.tsx`
+- **Upload + save**: Upload photos to `face-enrollments` storage bucket, insert into `face_enrollments` table
+- After save, refresh the panel data
 
-```
-Before: { type: "image_url", image_url: { url: signedUrl } }
-After:  { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }
-```
+### 3. UI layout
+- "Add Person" button in the panel header next to the stats
+- Inline capture form replaces the list temporarily while adding
+- 3-step capture flow with face guide overlay (same as existing enrollment)
 
-This is the same pattern already used for the captured photo (line 148) and is 100% reliable.
-
-### Fix 3: Fix thumbnail generation in FaceMemoryPanel
-Use the corrected `photo_url` field for signed URL generation in the memory panel thumbnails.
-
-## Files to Change
-- `src/components/timeclock/FaceMemoryPanel.tsx` — fix column name `storage_path` → `photo_url`
-- `supabase/functions/face-recognize/index.ts` — download + base64 encode reference photos instead of signed URLs
-
-## Expected Result
-- Memory panel shows all enrolled people with photo thumbnails
-- Face recognition works reliably every time (no more URL fetch failures)
-- "First Time Here?" only appears for genuinely unrecognized faces
+## Files Changed
+- **Database migration**: Insert admin role for kiosk user
+- **`src/components/timeclock/FaceMemoryPanel.tsx`**: Add manual enrollment form with camera capture, profile selector, and upload logic
 
