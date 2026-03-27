@@ -1,50 +1,70 @@
 
 
-# Add Audio Generation Prompt on Music Icon Click
+# Fix: Tags Clipped in Print Preview
 
-## What happens now
-Clicking the Music icon (♪) in the timeline toolbar opens the Music sidebar tab.
+## Problem
+The print preview screenshot shows the URL `https://erp.rebar.shop/office` — the user is printing directly from the office page (Ctrl+P), not using the dedicated `/print-tags` route. The office page's sidebar, ScrollArea, and flex wrappers are constraining the tags, causing right-side clipping.
 
-## What the user wants
-Clicking the Music icon should open a prompt dialog. The user types a prompt (e.g. "cinematic intro music"), confirms, and new audio is generated via ElevenLabs. The new audio replaces all existing audio tracks on the video.
+## Root Cause
+The `@media print` rules in `src/index.css` hide the sidebar but don't neutralize the layout wrappers (flex containers, scroll areas, overflow-hidden) that constrain the `.rebar-tag` cards in the office view.
 
-## Changes
+## Two Options
 
-### 1. Create `AudioPromptDialog.tsx`
-**File:** `src/components/ad-director/editor/AudioPromptDialog.tsx`
+### Option A: Force users through `/print-tags` (recommended)
+The dedicated print route already works correctly with full isolation. Instead of allowing Ctrl+P from the office page, auto-redirect print to the clean route:
 
-- Dialog with:
-  - Toggle: "Music" vs "Voiceover"
-  - Text input for the prompt
-  - Duration selector for music (15s / 30s / 60s)
-  - Generate button with loading state
-- On confirm: returns `{ type: "music"|"voiceover", prompt: string, duration: number }`
+**File: `src/components/office/TagsExportView.tsx`**
+- Add a `beforeprint` event listener that cancels native print and opens `/print-tags` instead
+- This ensures print always goes through the clean isolated route
 
-### 2. Add generation logic in `ProVideoEditor.tsx`
-**File:** `src/components/ad-director/ProVideoEditor.tsx`
+```tsx
+useEffect(() => {
+  const handler = (e: Event) => {
+    e.preventDefault();
+    handlePrint(); // opens /print-tags in new window
+  };
+  window.addEventListener("beforeprint", handler);
+  return () => window.removeEventListener("beforeprint", handler);
+}, [handlePrint]);
+```
 
-- Add state: `audioPromptOpen`, `generatingAudio`
-- Add `handleGenerateAudio` function:
-  - If type is "music": call `elevenlabs-music` edge function with `{ prompt, duration }`
-  - If type is "voiceover": call `elevenlabs-tts` edge function with `{ text: prompt }`
-  - On success: clear all existing `audioTracks`, add new track with blob URL
-  - Show toast on success/failure
-- Change the Music sidebar tab click: instead of `handleSetActiveTab("music")`, open the audio prompt dialog
+### Option B: Fix the global print CSS to also handle office page
+**File: `src/index.css`** — add wrapper-killing rules back to `@media print`:
 
-### 3. Update Music icon behavior in timeline
-**File:** `src/components/ad-director/ProVideoEditor.tsx` (lines ~1446-1453)
+```css
+@media print {
+  /* Kill layout wrappers for rebar tags */
+  .flex, .grid, .overflow-auto, .overflow-hidden,
+  [data-radix-scroll-area-viewport],
+  [class*="ScrollArea"] {
+    display: block !important;
+    overflow: visible !important;
+    width: auto !important;
+    height: auto !important;
+  }
 
-- Change the `onSidebarTabSelect` handler or the sidebarTabs config so clicking Music opens the prompt dialog instead of switching tabs
-- Alternatively, intercept the "music" tab click in `handleSetActiveTab` to open the dialog
+  html, body, #root {
+    width: 4in !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
 
-## Flow
-1. User clicks ♪ icon → `AudioPromptDialog` opens
-2. User types prompt, selects type/duration, clicks Generate
-3. Loading state shown while calling ElevenLabs API
-4. On success: existing audio tracks cleared, new track added
-5. Toast confirms success
+  .rebar-tag {
+    display: block !important;
+    width: 4in !important;
+    height: 6in !important;
+    page-break-after: always;
+    break-after: page;
+  }
+}
+```
 
-## Files changed
-- `src/components/ad-director/editor/AudioPromptDialog.tsx` — new
-- `src/components/ad-director/ProVideoEditor.tsx` — dialog state, generation handler, intercept music icon click
+**Problem with Option B**: These broad rules break printing for other pages (driver dropoff, documents, etc.).
+
+## Recommendation: Option A
+Intercept Ctrl+P on the office/tags page and redirect to `/print-tags`. This keeps print isolation clean without polluting global CSS.
+
+## Files Changed
+- `src/components/office/TagsExportView.tsx` — add `beforeprint` event listener
 
