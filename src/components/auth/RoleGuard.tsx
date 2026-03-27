@@ -134,7 +134,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
 
   // Shared shopfloor device accounts — lock to shop routes only (UX gate only)
   if (ACCESS_POLICIES.shopfloorDevices.includes(email.toLowerCase())) {
-    const DEVICE_ALLOWED = ["/shopfloor", "/shop-floor", "/home", "/timeclock", "/team-hub", "/settings", "/tasks", "/deliveries"];
+    const DEVICE_ALLOWED = ["/shopfloor", "/shop-floor", "/timeclock", "/team-hub", "/settings", "/tasks", "/deliveries"];
     const isAllowed = DEVICE_ALLOWED.some((p) => location.pathname.startsWith(p));
     if (!isAllowed) return <Navigate to="/shopfloor" replace />;
     return <>{children}</>;
