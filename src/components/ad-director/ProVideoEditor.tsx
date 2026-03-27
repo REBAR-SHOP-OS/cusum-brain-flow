@@ -1525,7 +1525,17 @@ export function ProVideoEditor({
         <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative items-center justify-center">
 
           {/* Video / Static Card */}
-          <div className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9" }}>
+          <div ref={videoContainerRef} className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9" }}
+            onMouseMove={(e) => {
+              if (!draggingOverlayId || !videoContainerRef.current) return;
+              const rect = videoContainerRef.current.getBoundingClientRect();
+              const x = ((e.clientX - rect.left) / rect.width) * 100 - dragOffset.current.x;
+              const y = ((e.clientY - rect.top) / rect.height) * 100 - dragOffset.current.y;
+              setOverlays(prev => prev.map(o => o.id === draggingOverlayId ? { ...o, position: { x: Math.max(0, Math.min(90, x)), y: Math.max(0, Math.min(90, y)) } } : o));
+            }}
+            onMouseUp={() => setDraggingOverlayId(null)}
+            onMouseLeave={() => setDraggingOverlayId(null)}
+          >
             {videoSrc ? (
               <>
                 {isStaticCard ? (
