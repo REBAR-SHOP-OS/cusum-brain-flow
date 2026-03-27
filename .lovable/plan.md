@@ -1,79 +1,62 @@
 
 
-# Fix Missing LENGTH and DIMS in Extract Line Items
+# Fix: AI Estimate Truncated JSON Parse Failure
 
 ## Problem
-After extracting an imperial (ft-in) XLSX file, **all LENGTH and DIMS columns show "—"** (empty). The mapping panel warning confirms: "Cut Length (mm): all values empty".
+The `ai-estimate` function fails when the AI returns a truncated JSON response (~13,719 chars). The current repair logic finds the last `}` and closes the array, but this fails when truncation happens mid-value (e.g., inside a string or number), producing invalid JSON. Result: 0 items extracted → "Zero-weight guard" error.
 
-Two root causes:
+The **same file succeeds on retry** (24,838 chars, 48 items) because the AI gives a complete response the second time.
 
-1. **`overlaySheetDims` ignores `total_length`** — it deterministically reads dimension columns A–R from the XLSX but does NOT read the "Cut Length" / "Total Length" column. When the AI fails to parse imperial values, there's no fallback.
-
-2. **AI returns null for imperial ft-in values** — the prompt says `"total_length": number in mm` but the source contains `3'-5"` style values. The AI either can't convert or returns nulls. Similarly for dimensions.
+## Root Cause
+The truncation repair at line 538-544 is too naive — it assumes the last `}` is a valid object boundary, but truncation can occur mid-field, leaving broken syntax before the last brace.
 
 ## Solution
 
-### File: `supabase/functions/extract-manifest/index.ts`
+### File: `supabase/functions/ai-estimate/index.ts`
 
-#### Change 1: Extend `overlaySheetDims` to also overlay `total_length`
-
-Add header matching for "Cut Length", "Total Length", "Length", "CutLength", "TOTAL LENGTH" etc. in the same header row scan. When found, read the column value for each item and assign it as `total_length` using `parseDimension()` (which already handles ft-in strings like `3'-5"`).
-
-```text
-Current overlaySheetDims flow:
-  Find header row → map dim columns (A-R) → overlay values
-
-New flow:
-  Find header row → map dim columns (A-R) AND length column → overlay all values
-```
-
-Specifically, in the `hRow.forEach` loop (~line 80-83), also check for length-related headers:
-```ts
-const normalized = String(c).trim().toUpperCase()
-  .replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
-if (["CUT LENGTH", "TOTAL LENGTH", "LENGTH", "CUTLENGTH"].includes(normalized)) {
-  colMap["__LENGTH__"] = i;
-}
-```
-
-Then in the items mapping loop (~line 87-97), add:
-```ts
-if (colMap["__LENGTH__"] != null) {
-  const raw = row[colMap["__LENGTH__"]];
-  const parsed = raw != null ? parseDimension(raw) : null;
-  if (parsed != null) it.total_length = parsed;
-}
-```
-
-#### Change 2: Fix AI prompt for imperial data
-
-When the session's `unit_system` is known to be imperial (from the upload step), adjust the prompt to say:
-```
-"total_length": number — keep the original value as-is from the document (do NOT convert units)
-```
-
-Instead of `"total_length": number in mm` which confuses the AI when the source is imperial.
-
-#### Change 3: Post-AI fallback parse for string values
-
-After AI returns items but before `overlaySheetDims`, add a pass that converts any string values in `total_length` and dimension fields using `parseDimension()`:
+#### Change 1: Progressive truncation repair (lines 537-544)
+Replace the simple "find last `}`" approach with a progressive strategy that tries successively shorter substrings until `JSON.parse` succeeds:
 
 ```ts
-// Ensure AI-returned string values are parsed
-items.forEach((item: any) => {
-  if (typeof item.total_length === "string") {
-    item.total_length = parseDimension(item.total_length);
-  }
-  for (const d of DIMS) {
-    if (typeof item[d] === "string") {
-      item[d] = parseDimension(item[d]);
+// Repair truncated JSON arrays — progressive approach
+if (cleaned.startsWith("[") && !cleaned.trimEnd().endsWith("]")) {
+  let repaired = false;
+  let searchFrom = cleaned.length;
+  for (let attempt = 0; attempt < 10 && !repaired; attempt++) {
+    const braceIdx = cleaned.lastIndexOf("}", searchFrom);
+    if (braceIdx <= 0) break;
+    const candidate = cleaned.substring(0, braceIdx + 1) + "]";
+    try {
+      JSON.parse(candidate);
+      cleaned = candidate;
+      repaired = true;
+      console.log(`Repaired truncated JSON (attempt ${attempt + 1}, salvaged ${candidate.length} chars)`);
+    } catch {
+      searchFrom = braceIdx - 1;
     }
   }
-});
+  if (!repaired) {
+    console.warn("Could not repair truncated JSON after 10 attempts");
+  }
+}
 ```
 
-This catches cases where the AI returns `"3'-5\""` as a string instead of a number.
+This iteratively walks backward through `}` positions until it finds one that produces valid JSON, guaranteeing only complete objects are kept.
+
+#### Change 2: Add auto-retry on zero extraction (after line 579)
+If the AI returned content but parsing failed (0 items), retry the AI call once with a shorter prompt hint requesting smaller output:
+
+```ts
+// After the usefulness check block (~line 579), before closing the AI try block
+if (extractedItems.length === 0 && !retried) {
+  console.log("Zero items after first attempt — retrying AI with compact prompt");
+  retried = true;
+  // [retry logic using same structure but adding "Return compact JSON, no bbox field" to prompt]
+}
+```
+
+This is a safety net — the progressive repair should handle most cases.
 
 ## Files changed
-- `supabase/functions/extract-manifest/index.ts` — extend `overlaySheetDims` to handle Cut Length column, add string-to-number parse pass, improve prompt for imperial sources
+- `supabase/functions/ai-estimate/index.ts` — progressive JSON repair + optional retry on zero extraction
 
