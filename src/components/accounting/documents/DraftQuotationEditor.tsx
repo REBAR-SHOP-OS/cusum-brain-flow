@@ -145,19 +145,46 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         if (meta.customer_email) {
           setCustomerEmail(meta.customer_email);
         } else {
-          // Fallback: look up email from customers table by name
+          // Fallback chain: customers → contacts → sales_contacts
           const resolvedName = meta.customer_name || data.salesperson || "";
           if (resolvedName && companyId) {
-            supabase
+            const { data: cust } = await supabase
               .from("customers")
-              .select("email")
+              .select("id, email")
               .eq("company_id", companyId)
               .ilike("name", resolvedName)
               .limit(1)
-              .single()
-              .then(({ data: cust }) => {
-                if (cust?.email) setCustomerEmail(cust.email);
-              });
+              .maybeSingle();
+            if (cust?.email) {
+              setCustomerEmail(cust.email);
+            } else {
+              // Fallback 1: contacts table
+              const custId = cust?.id;
+              if (custId) {
+                const { data: contact } = await supabase
+                  .from("contacts")
+                  .select("email")
+                  .eq("customer_id", custId)
+                  .not("email", "is", null)
+                  .limit(1)
+                  .maybeSingle();
+                if (contact?.email) {
+                  setCustomerEmail(contact.email);
+                }
+              }
+              if (!cust?.email) {
+                // Fallback 2: sales_contacts
+                const { data: sc } = await supabase
+                  .from("sales_contacts")
+                  .select("email")
+                  .eq("company_id", companyId)
+                  .or(`name.ilike.%${resolvedName}%,company_name.ilike.%${resolvedName}%`)
+                  .not("email", "is", null)
+                  .limit(1)
+                  .maybeSingle();
+                if (sc?.email) setCustomerEmail(sc.email);
+              }
+            }
           }
         }
         let resolvedNotes = meta.notes || "";
