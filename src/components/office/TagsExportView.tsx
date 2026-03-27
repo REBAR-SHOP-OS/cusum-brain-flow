@@ -101,7 +101,7 @@ export function TagsExportView() {
       ...DIM_COLS, "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD"];
     const csvRows = sortedRows.map((r) => {
       const size = r.bar_size_mapped || r.bar_size || "";
-      const shapeType = r.shape_code_mapped || r.shape_type || "";
+      const shapeType = r.shape_code_mapped || r.shape_type || "STRAIGHT";
       const weight = getWeight(size, r.total_length_mm, r.quantity);
       const picture = shapeType ? (getShapeImageUrl(shapeType) || `TYPE-${shapeType}.PNG`) : "";
       const formattedLength = r.total_length_mm ? formatDim(r.total_length_mm, us) : "";
