@@ -167,10 +167,11 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         }
 
         // 2. Try quotes.metadata.line_items (primary source for all quotations)
-        if (!resolved && inv.invoice_number) {
+        if (!resolved) {
           let sourceQuote: any = null;
+          
+          // 2a. Try via quotation_id -> sales_quotations -> quotes
           if (quotationId) {
-            // quotation_id points to sales_quotations — get quotation_number to find quotes record
             const { data: sq } = await supabase
               .from("sales_quotations")
               .select("quotation_number")
@@ -194,6 +195,21 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
               if (q) sourceQuote = q;
             }
           }
+          
+          // 2b. Try via invoice metadata.source_quote_id (set during accept_and_convert)
+          if (!sourceQuote) {
+            const invMeta = (inv as any).metadata || {};
+            const sourceQuoteId = invMeta.source_quote_id;
+            if (sourceQuoteId) {
+              const { data: q } = await supabase
+                .from("quotes")
+                .select("metadata")
+                .eq("id", sourceQuoteId)
+                .maybeSingle();
+              if (q) sourceQuote = q;
+            }
+          }
+          
           if (sourceQuote?.metadata) {
             const metaItems = (sourceQuote.metadata as any).line_items as any[] | undefined;
             if (metaItems && metaItems.length > 0) {

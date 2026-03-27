@@ -295,7 +295,7 @@ Deno.serve((req) =>
       const issuedDate = new Date().toISOString().split("T")[0];
       const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
 
-      // 3. Create invoice
+      // 3. Create invoice — store source_quote_id in metadata for fallback item resolution
       const { data: newInvoice, error: invErr } = await svc
         .from("sales_invoices")
         .insert({
@@ -310,6 +310,7 @@ Deno.serve((req) =>
           due_date: dueDate,
           notes: sq?.notes || notes || null,
           sales_lead_id: sq?.lead_id || null,
+          metadata: { source_quote_id: quote_id, source_quote_number: quoteNumber, line_items: lineItems },
         })
         .select()
         .single();
@@ -334,9 +335,13 @@ Deno.serve((req) =>
               sort_order: idx,
             };
           });
-          await svc.from("sales_invoice_items").insert(invoiceItems);
-          console.log(`[convert_to_invoice] Copied ${invoiceItems.length} line items from quotes.metadata`);
-          itemsCopied = true;
+          const { error: itemInsertErr } = await svc.from("sales_invoice_items").insert(invoiceItems);
+          if (itemInsertErr) {
+            console.error(`[convert_to_invoice] Failed to insert invoice items:`, itemInsertErr.message);
+          } else {
+            console.log(`[convert_to_invoice] Copied ${invoiceItems.length} line items from quotes.metadata`);
+            itemsCopied = true;
+          }
         }
         if (!itemsCopied && sq?.id) {
           const { data: quoteItems } = await svc
@@ -618,6 +623,7 @@ Deno.serve((req) =>
             due_date: dueDate,
             notes: sqCheck?.notes || notes || null,
             sales_lead_id: sqCheck?.lead_id || null,
+            metadata: { source_quote_id: quote_id, source_quote_number: quoteNumber, line_items: lineItems },
           })
           .select()
           .single();
@@ -647,9 +653,13 @@ Deno.serve((req) =>
                 sort_order: idx,
               };
             });
-            await svc.from("sales_invoice_items").insert(invoiceItems);
-            console.log(`[accept_and_convert] Copied ${invoiceItems.length} line items from quotes.metadata`);
-            itemsCopied = true;
+            const { error: itemInsertErr } = await svc.from("sales_invoice_items").insert(invoiceItems);
+            if (itemInsertErr) {
+              console.error(`[accept_and_convert] Failed to insert invoice items:`, itemInsertErr.message);
+            } else {
+              console.log(`[accept_and_convert] Copied ${invoiceItems.length} line items from quotes.metadata`);
+              itemsCopied = true;
+            }
           }
 
           // 2. Secondary: sales_quotation_items (if metadata was empty)
