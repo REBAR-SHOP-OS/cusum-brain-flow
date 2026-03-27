@@ -1,62 +1,27 @@
 
-Root cause: this is most likely not a backend failure anymore — it is a live frontend deployment mismatch.
 
-What I verified
-- The public route exists in code: `src/App.tsx` includes `/accept-quote/:quoteId`.
-- The public page exists in code: `src/pages/AcceptQuote.tsx`.
-- The backend function exists: `supabase/functions/quote-public-view/index.ts`.
-- Public function config exists: `supabase/config.toml` includes `[functions.quote-public-view] verify_jwt = false`.
-- The published site is public and live.
-- Critical signal: there are no logs at all for `quote-public-view`, which means the live app is not reaching that page/function when the customer opens the link.
-- Your screenshot shows the published dialog still has an `Update` button, which usually means frontend route changes are in preview/test but not yet pushed live.
+# Fix: Accept Quote 404 on Published Site
 
-Most likely issue
-- The acceptance route was added in code, but the published frontend was not updated yet.
-- So the email link points to a valid domain, but the live app still serves an older bundle that does not know `/accept-quote/:quoteId`, causing the 404 before any backend call happens.
+## Root Cause (Confirmed via Browser)
+The published site at `erp.rebar.shop` is serving a stale JS bundle (`index-CKhfu_69.js`) that does NOT include the `/accept-quote/:quoteId` route. The console error confirms: `404 Error: User attempted to access non-existent route: /accept-quote/test-id`.
 
-Plan to fix
-1. Publish the latest frontend
-- Click the blue `Update` button in the Publish dialog.
-- This is required because route changes in `src/App.tsx` only go live after updating the published frontend.
+The route exists in the codebase (`src/App.tsx` line 264) and works in preview, but the published frontend was never updated after this route was added.
 
-2. Re-test the exact acceptance link
-- Open the same quote email link again after publish.
-- Expected result: the page should load, and then `quote-public-view` should start showing logs.
+## Fix
 
-3. If it still fails after publish, fix the secondary blocker in the acceptance action
-- `send-quote-email` currently validates `customer_email` as a required email for all actions, but `AcceptQuote.tsx` sends `customer_email: ""` for `accept_and_convert`.
-- That would not cause the 404, but it will likely cause the next failure after the page loads.
-- Update the validation so `accept_and_convert` does not require customer email in the request body and resolves it from stored quote metadata/backend records.
+### Step 1: Update the Published Frontend (Required — User Action)
+You must click the **"Update"** button in the Publish dialog (top-right of the editor). This rebuilds and deploys the frontend bundle with all current routes including `/accept-quote/:quoteId`.
 
-4. Harden the public acceptance flow
-- Return a clearer public error if the quote record lacks a stored customer email.
-- Add logging inside `quote-public-view` and `accept_and_convert` for quote id, resolved state, and failure reason so future debugging is immediate.
+No code changes are needed — the route, component, edge functions, and config are all correct. The only issue is the published build is outdated.
 
-Files involved if code changes are needed after publish
-- `supabase/functions/send-quote-email/index.ts` — relax schema for `accept_and_convert`
-- `src/pages/AcceptQuote.tsx` — optionally stop sending empty `customer_email`
-- Optional: add clearer runtime logs in `supabase/functions/quote-public-view/index.ts`
+### Step 2: Re-test
+After clicking Update, open the acceptance link from your customer's email again. It should load the quote acceptance page instead of showing 404.
 
-Technical detail
-```text
-Current evidence:
-Live 404 happens before function execution
-→ route not present on published frontend
-→ because `quote-public-view` has zero logs
+## Already Fixed in Previous Rounds (No Further Changes Needed)
+- `quote-public-view` in `config.toml` — `verify_jwt = false`
+- `send-quote-email` schema — accepts empty `customer_email` for `accept_and_convert`
+- `APP_URL` set to `https://cusum-brain-flow.lovable.app`
 
-Next likely issue after route works:
-AcceptQuote.tsx sends:
-{ quote_id, customer_email: "", action: "accept_and_convert" }
+## No Code Changes Required
+This is purely a deployment issue. Click **Update** in the Publish dialog to resolve it.
 
-But send-quote-email schema requires:
-customer_email: z.string().email()
-
-So the accept call may fail validation unless that schema is changed.
-```
-
-Validation sequence
-1. Click `Update` in Publish
-2. Reopen the accept link
-3. Check that `quote-public-view` now gets logs
-4. Then test the Accept button
-5. If accept fails, apply the schema fix above
