@@ -536,8 +536,9 @@ export function TimelineBar({
               <div className={`absolute left-1/2 -translate-x-1/2 -translate-y-0.5 rounded-full bg-white transition-transform ${scrubbing ? 'w-3 h-3' : 'w-2 h-2'}`} />
             </div>
           </div>
-        </div>
+      </div>
 
+      </div>
       </div>
     </div>
   );
