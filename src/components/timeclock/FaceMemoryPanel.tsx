@@ -41,7 +41,7 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
       // Fetch active enrollments
       const { data: enrollments, error: eErr } = await supabase
         .from("face_enrollments")
-        .select("id, profile_id, storage_path, is_active, created_at")
+        .select("id, profile_id, photo_url, is_active, created_at")
         .eq("is_active", true)
         .order("created_at", { ascending: false });
 
