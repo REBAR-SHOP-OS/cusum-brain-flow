@@ -146,6 +146,8 @@ const App = () => (
                     <Route path="/" element={<Landing />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
+                    {/* Print-only route — zero app layout */}
+                    <Route path="/print-tags" element={<ProtectedRoute><Suspense fallback={<div>Loading...</div>}><PrintTags /></Suspense></ProtectedRoute>} />
 
                     {/* Core */}
                     <Route path="/home" element={<P><Home /></P>} />
