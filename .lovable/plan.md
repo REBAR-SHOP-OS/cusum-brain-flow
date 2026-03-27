@@ -1,140 +1,77 @@
 
-Goal: fix the three recurring failures together so one accepted quote reliably becomes one correct invoice with the same items, sends the invoice email once, and includes a real QuickBooks link when QuickBooks returns one.
 
-What I found
-1. Invoice items are not being persisted
-- `sales_invoice_items.total` is a generated column in the database.
-- Current code still inserts `total` in:
-  - `supabase/functions/send-quote-email/index.ts`
-  - `src/components/accounting/documents/DraftInvoiceEditor.tsx`
-- Result: inserts fail or are skipped, and the invoice ends up with no stored line items.
-- Evidence: `sales_invoice_items` is currently empty.
+# Fix: Face ID Kiosk Matches Everyone as "Radin"
 
-2. The accepted invoice is not linked back to its source quotation
-- Latest invoice `INV-20260001` exists with `quotation_id = null`.
-- Latest quote `QAI-2587` has 2 line items in `quotes.metadata.line_items`.
-- Because the invoice is not linked, later fallback logic cannot reliably recover the original quote items.
+## Root Cause
 
-3. QuickBooks invoice creation is using the wrong item amount shape
-- The editor and acceptance flow send QuickBooks items like:
-  - `amount = quantity * unitPrice`
-  - plus `quantity`
-- But `quickbooks-oauth` multiplies again:
-  - `Amount = item.amount * quantity`
-  - `UnitPrice = item.amount`
-- Result: QuickBooks totals can be inflated and mismatch the quotation.
+Three compounding issues:
 
-4. Public quote acceptance cannot safely create QuickBooks invoices the same way as logged-in UI
-- `accept_and_convert` calls `quickbooks-oauth` using a service-role style internal request.
-- `quickbooks-oauth` resolves company context from a logged-in user profile.
-- That makes the public acceptance path unreliable for QuickBooks creation, even if the editor path works.
+1. **Radin has 15 enrolled photos** — 3x more than anyone else. The AI receives 5 reference photos for Radin vs 1-3 for others, creating strong visual bias.
+2. **No enrollment cap enforcement** — The `kiosk-punch` auto-enrollment and `kiosk-register` keep adding photos without checking if the person already has 5+.
+3. **Enrollments are not filtered by company** — `face-recognize` fetches ALL enrollments globally. Not an issue now (single company) but architecturally wrong.
 
-5. Email delivery failures are too silent
-- Public invoice send uses direct Gmail and returns success even when `emailOk` is false.
-- Manual send catches QuickBooks errors silently and still sends without clearly reporting what failed.
-- This is why the flow appears “done” even when the customer never receives the invoice or QB link.
+## Plan
 
-6. Real QuickBooks links are currently absent in mirrored data
-- `accounting_mirror` invoice rows currently show `InvoiceLink = null`.
-- So the system should not pretend a QB link exists.
-- The fix must focus on creating the QB invoice correctly and only showing the link when QuickBooks actually returns one.
+### 1. Clean up excess enrollments (database migration)
+- Delete Radin's oldest enrollments beyond 5 (remove 10 of 15)
+- This immediately rebalances the reference photo distribution
 
-Implementation plan
+### 2. Fix `face-recognize/index.ts` — balance reference photos
+- Limit to **max 3 photos per person** sent to the AI (not 5) — this keeps the prompt balanced and reduces token cost
+- Add company filtering if `companyId` is provided in the request
+- Strengthen the prompt: explicitly warn the AI that having more reference photos for one person does NOT mean a higher prior probability of match
 
-1. Fix invoice-item persistence first
-- Remove `total` from every insert into `sales_invoice_items`.
-- Let the database compute it automatically.
-- Update both:
-  - quote acceptance copy logic
-  - invoice editor fallback persistence
-  - invoice editor save logic
+### 3. Fix `kiosk-punch/index.ts` — enforce enrollment cap
+- Before auto-enrolling a new photo, check current count
+- Only enroll if count < 5 (currently the check exists but the threshold may not be enforced properly)
 
-2. Make quote-to-invoice linkage deterministic
-- In `send-quote-email/index.ts`, when converting from a quote:
-  - always persist enough source linkage to recover the original quote later
-  - if no `sales_quotations` row exists, resolve from the `quotes` row directly
-  - store the originating quote reference in invoice metadata so item recovery never depends on one missing join
-- Then make the invoice editor resolve items in this order:
-  1. `sales_invoice_items`
-  2. linked source `quotes.metadata.line_items`
-  3. `sales_quotation_items`
-  4. invoice metadata fallback
-  5. single-row amount fallback last
+### 4. Fix `kiosk-register/index.ts` — enforce enrollment cap
+- Before uploading a face photo, check if the profile already has 5+ enrollments
+- Skip upload if cap reached
 
-3. Fix QuickBooks line-item mapping
-- Standardize the payload so callers send unit price, not line total.
-- Update:
-  - `DraftInvoiceEditor.tsx`
-  - `send-quote-email/index.ts`
-- And harden `quickbooks-oauth/index.ts` so it accepts either:
-  - `unitPrice + quantity`
-  - or legacy `amount + quantity`
-- Internally normalize once before building QB lines.
+## Technical Details
 
-4. Split QuickBooks invoice creation into two safe paths
-- Logged-in manual send:
-  - keep using `quickbooks-oauth`
-  - create QB invoice before email
-  - use returned `InvoiceLink` immediately
-- Public quote acceptance:
-  - do not depend on logged-in user context
-  - use a company-scoped QuickBooks helper inside `send-quote-email` or a shared company-based QB utility instead of the user-based handler
-  - mirror the created QB invoice immediately
-
-5. Make email sending reliable and visible
-- In public acceptance flow:
-  - if invoice email send fails, return that failure clearly instead of silent success
-  - log the exact Gmail failure path
-- In manual editor:
-  - distinguish:
-    - invoice email sent
-    - Stripe link created
-    - QuickBooks invoice created
-    - QB link available / unavailable
-- Do not block sending the invoice email just because QB link is unavailable, but do surface that status clearly.
-
-6. Keep QuickBooks link logic truthful
-- Only show the QB payment button when a real `InvoiceLink` exists from:
-  1. the fresh QB create-invoice response
-  2. mirrored QB invoice data
-- No fake fallback URLs.
-- If QuickBooks does not return `InvoiceLink`, send the invoice with Stripe only.
-
-Technical details
-```text
-Primary breakage chain today:
-Quote accepted
-  -> invoice created with quotation_id null
-  -> sales_invoice_items insert includes generated column "total"
-  -> no invoice items stored
-  -> UI/email fall back inconsistently
-  -> QB payload sends line total as unit price
-  -> QB invoice total mismatches
-  -> public acceptance QB creation depends on user-based auth context
-  -> QB link missing
-  -> Gmail failure can be hidden
+### Database cleanup SQL
+```sql
+-- Delete oldest Radin enrollments beyond newest 5
+DELETE FROM face_enrollments
+WHERE id IN (
+  SELECT id FROM face_enrollments
+  WHERE profile_id = '5d948a66-619b-4ee1-b5e3-063194db7171'
+  AND is_active = true
+  ORDER BY created_at DESC
+  OFFSET 5
+);
 ```
 
-Files to update
-- `supabase/functions/send-quote-email/index.ts`
-  - remove `total` from inserts
-  - enforce source quote linkage
-  - normalize item copy
-  - use company-safe QB creation for public acceptance
-  - hard-fail or clearly report invoice email send failure
-- `src/components/accounting/documents/DraftInvoiceEditor.tsx`
-  - remove `total` from inserts
-  - fix item resolution order
-  - send normalized QB items
-  - improve send-status reporting
-- `supabase/functions/quickbooks-oauth/index.ts`
-  - normalize legacy/new item shapes
-  - build QB lines from unit price correctly
-  - keep mirroring full invoice response including `InvoiceLink`
+### face-recognize prompt addition
+Add to the system prompt:
+```
+- The number of reference photos per person varies. Do NOT let more reference photos bias you toward that person. Judge ONLY on facial feature similarity.
+- Each person's identity is equally likely a priori.
+```
 
-Expected result after fix
-- Accepted invoice shows the exact same items as the quote
-- Totals stay consistent without double-tax or double-multiplication
-- Invoice email actually reports success/failure correctly
-- Stripe link appears immediately
-- QuickBooks link appears immediately when QuickBooks returns a real `InvoiceLink`, otherwise it is omitted cleanly
+### Enrollment cap check (shared pattern)
+```typescript
+const { count } = await supabase
+  .from("face_enrollments")
+  .select("*", { count: "exact", head: true })
+  .eq("profile_id", profileId)
+  .eq("is_active", true);
+if ((count || 0) >= 5) {
+  // Skip enrollment, cap reached
+}
+```
+
+## Files Changed
+- **Database migration** — delete excess enrollments for Radin
+- `supabase/functions/face-recognize/index.ts` — cap to 3 photos per person in AI prompt, add anti-bias language
+- `supabase/functions/kiosk-punch/index.ts` — verify enrollment cap is enforced correctly
+- `supabase/functions/kiosk-register/index.ts` — add enrollment cap check before upload
+
+## Expected Result
+- AI receives equal number of reference photos per person (max 3)
+- No single person dominates the reference set
+- New enrollments stop at 5 per person
+- Recognition accuracy improves immediately after cleanup
+
