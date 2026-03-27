@@ -1,62 +1,72 @@
 
 
-# Fix: AI Estimate Truncated JSON Parse Failure
+# Wire Up Remaining Dead UI Elements in ProVideoEditor
 
-## Problem
-The `ai-estimate` function fails when the AI returns a truncated JSON response (~13,719 chars). The current repair logic finds the last `}` and closes the array, but this fails when truncation happens mid-value (e.g., inside a string or number), producing invalid JSON. Result: 0 items extracted → "Zero-weight guard" error.
+## Current State (Already Working)
+- Back, Undo, Redo, Auto Voiceover, Download, Schedule — all wired
+- Play/Pause, Mute, Fullscreen, Skip Scene, Seek bar — all wired
+- All 10 context menu items (Select, Edit Prompt, Edit Voiceover, Trim, Stretch, Split, Duplicate, Mute, Regenerate, Delete) — all wired with real handlers
+- Text overlay, Audio generation, Voiceover, Subtitle, Speed dialogs — all wired
+- Scene drag-to-resize, playhead scrubbing, volume controls — all wired
 
-The **same file succeeds on retry** (24,838 chars, 48 items) because the AI gives a complete response the second time.
+## Actual Gaps to Fix
 
-## Root Cause
-The truncation repair at line 538-544 is too naive — it assumes the last `}` is a valid object boundary, but truncation can occur mid-field, leaving broken syntax before the last brace.
+### 1. "Edit" Badge is Decorative (line 1421)
+The `<Badge variant="secondary">Edit</Badge>` is not clickable. Replace with a button that opens the right panel with project settings (brand-kit tab).
 
-## Solution
+### 2. Timeline Zoom Buttons Do Nothing (TimelineBar lines 344-346)
+`ZoomIn`, `ZoomOut`, `Maximize` buttons have no handlers. Add a `zoomLevel` state to TimelineBar that scales the track width.
 
-### File: `supabase/functions/ai-estimate/index.ts`
+### 3. Missing Sidebar Tabs in Timeline Toolbar
+Currently only shows: Media, Music, Voice, Subtitle, Text+Voice, Speed. Missing from user's request: **Text**, **Brand Kit**. Add these two tabs to the `sidebarTabs` array.
 
-#### Change 1: Progressive truncation repair (lines 537-544)
-Replace the simple "find last `}`" approach with a progressive strategy that tries successively shorter substrings until `JSON.parse` succeeds:
+### 4. No Keyboard Shortcuts
+Add `useEffect` with `keydown` listener for: Space (play/pause), Delete/Backspace (delete scene), Ctrl+Z (undo), Ctrl+Shift+Z (redo), S (split), D (duplicate).
 
-```ts
-// Repair truncated JSON arrays — progressive approach
-if (cleaned.startsWith("[") && !cleaned.trimEnd().endsWith("]")) {
-  let repaired = false;
-  let searchFrom = cleaned.length;
-  for (let attempt = 0; attempt < 10 && !repaired; attempt++) {
-    const braceIdx = cleaned.lastIndexOf("}", searchFrom);
-    if (braceIdx <= 0) break;
-    const candidate = cleaned.substring(0, braceIdx + 1) + "]";
-    try {
-      JSON.parse(candidate);
-      cleaned = candidate;
-      repaired = true;
-      console.log(`Repaired truncated JSON (attempt ${attempt + 1}, salvaged ${candidate.length} chars)`);
-    } catch {
-      searchFrom = braceIdx - 1;
-    }
-  }
-  if (!repaired) {
-    console.warn("Could not repair truncated JSON after 10 attempts");
-  }
-}
+### 5. No Contextual Empty State in Right Panel
+When panel is open but nothing meaningful is selected, show a helpful empty state instead of blank panel.
+
+## Implementation Plan
+
+### File 1: `src/components/ad-director/ProVideoEditor.tsx`
+
+**Change A — Replace Edit Badge with Button (line 1421)**
+```tsx
+<Button variant="outline" size="sm" className="h-7 text-[10px] gap-1"
+  onClick={() => handleSetActiveTab("brand-kit")}>
+  <Edit3 className="w-3 h-3" /> Edit
+</Button>
 ```
 
-This iteratively walks backward through `}` positions until it finds one that produces valid JSON, guaranteeing only complete objects are kept.
+**Change B — Add Text and Brand tabs to sidebarTabs (lines 1647-1655)**
+Add `{ id: "text", label: "Text", icon: <Type /> }` and `{ id: "brand-kit", label: "Brand", icon: <Palette /> }` to the sidebarTabs array.
 
-#### Change 2: Add auto-retry on zero extraction (after line 579)
-If the AI returned content but parsing failed (0 items), retry the AI call once with a shorter prompt hint requesting smaller output:
-
-```ts
-// After the usefulness check block (~line 579), before closing the AI try block
-if (extractedItems.length === 0 && !retried) {
-  console.log("Zero items after first attempt — retrying AI with compact prompt");
-  retried = true;
-  // [retry logic using same structure but adding "Return compact JSON, no bbox field" to prompt]
-}
+**Change C — Add keyboard shortcuts (after line 706)**
+```tsx
+useEffect(() => {
+  const handler = (e: KeyboardEvent) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+    if (e.key === "Delete" || e.key === "Backspace") handleDeleteScene(selectedSceneIndex);
+    if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); }
+    if (e.key === "s" && !e.metaKey) handleSplitScene(selectedSceneIndex);
+    if (e.key === "d" && !e.metaKey) handleDuplicateScene(selectedSceneIndex);
+  };
+  window.addEventListener("keydown", handler);
+  return () => window.removeEventListener("keydown", handler);
+}, [selectedSceneIndex, togglePlay, undo, redo]);
 ```
 
-This is a safety net — the progressive repair should handle most cases.
+### File 2: `src/components/ad-director/editor/TimelineBar.tsx`
 
-## Files changed
-- `supabase/functions/ai-estimate/index.ts` — progressive JSON repair + optional retry on zero extraction
+**Change A — Add zoom state and wire Zoom buttons (lines 344-346)**
+Add `const [zoomLevel, setZoomLevel] = useState(1)` state. Wire ZoomIn to `setZoomLevel(z => Math.min(z * 1.5, 5))`, ZoomOut to `setZoomLevel(z => Math.max(z / 1.5, 0.5))`, Maximize to `setZoomLevel(1)`. Apply `style={{ width: \`${100 * zoomLevel}%\` }}` to the track container and wrap it in a horizontally scrollable div.
+
+## Files Changed
+- `src/components/ad-director/ProVideoEditor.tsx` — Edit button, sidebar tabs, keyboard shortcuts
+- `src/components/ad-director/editor/TimelineBar.tsx` — zoom functionality
+
+## Scope Note
+The request lists ~13 categories of features. After code review, nearly all are already implemented. This plan addresses the 5 genuine gaps. No fake/dead actions remain after these fixes.
 
