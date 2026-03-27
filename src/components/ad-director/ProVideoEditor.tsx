@@ -733,6 +733,13 @@ export function ProVideoEditor({
     }
   }, [videoVolume, selectedSceneIndex, mutedScenes, storyboard]);
 
+  // Apply video playback speed
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = videoSpeed;
+    }
+  }, [videoSpeed, selectedSceneIndex]);
+
   // Apply per-track volume to voiceover audio (also handles mutedScenes)
   useEffect(() => {
     if (audioRef.current) {
