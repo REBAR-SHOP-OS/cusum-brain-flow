@@ -1590,19 +1590,30 @@ export function ProVideoEditor({
                 {sceneOverlays.map(ov => (
                   <div
                     key={ov.id}
-                    className={`absolute pointer-events-none z-20 ${ov.animated ? "animate-logo-reveal" : ""} ${ov.kind === "text" ? "animate-in fade-in duration-300" : ""}`}
+                    className={`absolute z-20 ${ov.animated ? "animate-logo-reveal" : ""} ${ov.kind === "text" ? "animate-in fade-in duration-300" : ""}`}
                     style={{
                       left: `${ov.position.x}%`,
                       top: `${ov.position.y}%`,
                       width: `${ov.size.w}%`,
                       opacity: ov.opacity,
+                      cursor: draggingOverlayId === ov.id ? "grabbing" : "grab",
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!videoContainerRef.current) return;
+                      const rect = videoContainerRef.current.getBoundingClientRect();
+                      const mouseXPct = ((e.clientX - rect.left) / rect.width) * 100;
+                      const mouseYPct = ((e.clientY - rect.top) / rect.height) * 100;
+                      dragOffset.current = { x: mouseXPct - ov.position.x, y: mouseYPct - ov.position.y };
+                      setDraggingOverlayId(ov.id);
                     }}
                   >
-                    {ov.kind === "logo" ? (
-                      <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain" />
+                    {(ov.kind === "logo" || ov.kind === "image") ? (
+                      <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain pointer-events-none" />
                     ) : (
                       <div className="flex justify-center">
-                        <span className="text-white font-semibold text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] bg-black/50 backdrop-blur-md px-4 py-2 rounded-md text-center leading-relaxed" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                        <span className="text-white font-semibold text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] bg-black/50 backdrop-blur-md px-4 py-2 rounded-md text-center leading-relaxed pointer-events-none" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
                           {ov.content}
                         </span>
                       </div>
