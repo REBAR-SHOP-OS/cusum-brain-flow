@@ -534,12 +534,25 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
 
           let cleaned = content.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
 
-          // Repair truncated JSON arrays (salvage complete items)
+          // Repair truncated JSON arrays — progressive approach
           if (cleaned.startsWith("[") && !cleaned.trimEnd().endsWith("]")) {
-            const lastBrace = cleaned.lastIndexOf("}");
-            if (lastBrace > 0) {
-              cleaned = cleaned.substring(0, lastBrace + 1) + "]";
-              console.log("Repaired truncated JSON array");
+            let repaired = false;
+            let searchFrom = cleaned.length;
+            for (let attempt = 0; attempt < 20 && !repaired; attempt++) {
+              const braceIdx = cleaned.lastIndexOf("}", searchFrom);
+              if (braceIdx <= 0) break;
+              const candidate = cleaned.substring(0, braceIdx + 1) + "]";
+              try {
+                JSON.parse(candidate);
+                cleaned = candidate;
+                repaired = true;
+                console.log(`Repaired truncated JSON (attempt ${attempt + 1}, salvaged ${candidate.length} chars)`);
+              } catch {
+                searchFrom = braceIdx - 1;
+              }
+            }
+            if (!repaired) {
+              console.warn("Could not repair truncated JSON after progressive attempts");
             }
           }
 
