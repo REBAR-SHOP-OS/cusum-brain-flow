@@ -11,7 +11,7 @@ import {
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
   Palette, Film, Type, LayoutGrid, X,
-  Mic, Captions,
+  Mic, Captions, Gauge,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -31,6 +31,7 @@ import { TextOverlayDialog } from "./editor/TextOverlayDialog";
 import { AudioPromptDialog, type AudioPromptResult } from "./editor/AudioPromptDialog";
 import { VoiceoverDialog, type VoiceoverResult } from "./editor/VoiceoverDialog";
 import { SubtitleDialog } from "./editor/SubtitleDialog";
+import { SpeedControlDialog } from "./editor/SpeedControlPopover";
 import { EditOverlayDialog } from "./editor/EditOverlayDialog";
 import { TextTab } from "./editor/TextTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
@@ -38,7 +39,7 @@ import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 
-type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle";
+type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed";
 
 interface ProVideoEditorProps {
   clips: ClipOutput[];
@@ -187,6 +188,8 @@ export function ProVideoEditor({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeTab, setActiveTab] = useState<EditorTab>("media");
   const [panelOpen, setPanelOpen] = useState(false);
+  const [videoSpeed, setVideoSpeed] = useState(1);
+  const [speedPopoverOpen, setSpeedPopoverOpen] = useState(false);
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
     if (tab === "music") {
@@ -199,6 +202,10 @@ export function ProVideoEditor({
     }
     if (tab === "subtitle") {
       setSubtitleDialogOpen(true);
+      return;
+    }
+    if (tab === "speed") {
+      setSpeedPopoverOpen(true);
       return;
     }
     if (activeTab === tab) {
@@ -725,6 +732,13 @@ export function ProVideoEditor({
       videoRef.current.volume = isMutedScene ? 0 : videoVolume;
     }
   }, [videoVolume, selectedSceneIndex, mutedScenes, storyboard]);
+
+  // Apply video playback speed
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = videoSpeed;
+    }
+  }, [videoSpeed, selectedSceneIndex]);
 
   // Apply per-track volume to voiceover audio (also handles mutedScenes)
   useEffect(() => {
@@ -1559,6 +1573,7 @@ export function ProVideoEditor({
           { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
           { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
           { id: "subtitle", label: "Subtitle", icon: <Captions className="w-3.5 h-3.5" /> },
+          { id: "speed", label: `${videoSpeed}×`, icon: <Gauge className="w-3.5 h-3.5" /> },
         ]}
         activeSidebarTab={activeTab}
         onSidebarTabSelect={handleSetActiveTab}
@@ -1643,6 +1658,14 @@ export function ProVideoEditor({
         onClose={() => setSubtitleDialogOpen(false)}
         sceneId={storyboard[selectedSceneIndex]?.id || ""}
         onAdd={handleAddSubtitle}
+      />
+
+      {/* Speed Control Dialog */}
+      <SpeedControlDialog
+        open={speedPopoverOpen}
+        onOpenChange={setSpeedPopoverOpen}
+        speed={videoSpeed}
+        onSpeedChange={setVideoSpeed}
       />
 
       {/* Hidden audio file input */}
