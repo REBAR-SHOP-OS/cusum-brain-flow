@@ -2065,7 +2065,7 @@ export function AIExtractView() {
             <CardContent className="p-0">
               {/* Edit toolbar */}
               {activeSession && activeSession.status !== "approved" && activeSession.status !== "rejected" && (
-                <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30 relative z-20">
                   <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
                     {activeRows.length} Line Items{mergedRows.length > 0 ? ` (${mergedRows.length} merged)` : ""}
                   </span>
