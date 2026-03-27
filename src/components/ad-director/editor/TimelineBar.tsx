@@ -135,9 +135,9 @@ interface TimelineBarProps {
   onReRecordVoiceover?: (sceneId: string, customText?: string) => void;
   onUpdateVoiceoverText?: (sceneId: string, text: string) => void;
   onEditVoiceoverText?: (sceneId: string) => void;
-  // Drag-to-reposition
-  onMoveOverlay?: (id: string, newSceneId: string) => void;
-  onMoveAudioTrack?: (index: number, newSceneId: string) => void;
+  // Drag-to-reposition (with optional startTime for free-positioning)
+  onMoveOverlay?: (id: string, newSceneId: string, startTime?: number) => void;
+  onMoveAudioTrack?: (index: number, newSceneId: string, startTime?: number) => void;
 }
 
 export function TimelineBar({
