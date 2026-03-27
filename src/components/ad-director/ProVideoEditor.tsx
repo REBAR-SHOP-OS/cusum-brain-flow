@@ -1747,6 +1747,16 @@ export function ProVideoEditor({
         onSpeedChange={setVideoSpeed}
       />
 
+      {/* Text+Voice Dialog */}
+      <TextVoiceDialog
+        open={textVoiceDialogOpen}
+        onClose={() => setTextVoiceDialogOpen(false)}
+        onGenerate={handleTextVoiceGenerate}
+        generating={generatingTextVoice}
+        initialText={storyboard[selectedSceneIndex]?.voiceover || segments[selectedSceneIndex]?.text || ""}
+        sceneId={storyboard[selectedSceneIndex]?.id || ""}
+      />
+
       {/* Hidden audio file input */}
       <input
         ref={audioUploadRef}
