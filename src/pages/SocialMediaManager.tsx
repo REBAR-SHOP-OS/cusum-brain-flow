@@ -137,8 +137,7 @@ export default function SocialMediaManager() {
     } else if (statusFilter === "pending_approval") {
       items = items.filter(
         (p) => !p.neel_approved
-          && p.status !== "published"
-          && p.status !== "declined"
+          && (p.status === "pending_approval" || p.status === "scheduled")
       );
     } else if (statusFilter !== "all") {
       items = items.filter((p) => p.status === statusFilter);
