@@ -1,28 +1,36 @@
 
 
-# Fix RebarTagCard: 3 Layout Adjustments
+# Move Dwg/Item to Shape Image Area — Give Full Width to Ref
 
-## Changes requested (from annotated screenshot)
+## Problem
+Dwg and Item currently share a 2-column row with Ref, taking half the width. The user needs Ref to have the full card width for longer references and addresses.
 
-1. **#1 — Replace shape circle with brand logo**: Replace the shape code circle + "SHAPE" label with the `logo-coin.png` brand logo image
-2. **#2 — Move G-R dims up, parallel with A-F**: Currently G-R dims render below A-F in the same column area. Fix the grid so A-F and G-R render side-by-side as two parallel columns
-3. **#3 — Move Dwg/Item up, give more space to Ref**: The Ref/Dwg/Item row needs Dwg+Item moved up (less padding) and Ref gets more vertical space for address display
+## Solution
+Move Dwg and Item into the shape image area (as a small overlay/caption below or beside the shape), and give the Ref row the entire card width.
 
-## File: `src/components/office/RebarTagCard.tsx`
+### File: `src/components/office/RebarTagCard.tsx`
 
-### Change 1: Replace shape circle with brand logo
-- Import `logoCoin from "@/assets/logo-coin.png"`
-- Replace the circle div (lines 103-108) with an `<img>` of the logo coin, sized ~40px
+**1. Shape image section (lines 125-142)** — Add Dwg/Item as small text inside this area, alongside the shape image:
+```
+┌─────────────────────────────┐
+│  (T3)   [shape image]      │
+│         Dwg: CAGE  Item: 2  │
+└─────────────────────────────┘
+```
+- Dwg and Item rendered as compact text below or to the side of the shape image
+- Uses `text-xs font-black` styling, positioned at the bottom of the flex container
 
-### Change 2: Fix dims grid alignment
-- The dims grid (lines 110-123) already uses `gridColumn: 1` and `gridColumn: 2`, but all items render sequentially. The issue is the grid has `grid-cols-2` but items are placed by `gridColumn` style — need to use CSS grid row placement so A-F occupy rows 1-6 col 1, and G-R occupy rows 1-6 col 2.
-- Change to explicit `gridRow` assignments so both columns render in parallel.
-
-### Change 3: Ref section gets more space, Dwg/Item compact
-- Increase Ref section padding/min-height
-- Make Dwg/Item section more compact (reduce py)
+**2. Ref row (lines 144-157)** — Remove the 2-column grid, make Ref full-width:
+```
+┌─────────────────────────────┐
+│ Ref: 2325                   │
+│ 123 Main St, City, Province │
+└─────────────────────────────┘
+```
+- Remove `grid grid-cols-2`, use single full-width div
+- Remove the Dwg/Item column from this section
+- Increase min-height for address display
 
 ### Technical detail
-
-Single file edit. The grid fix for dims uses `gridRow: i+1` on each dim item so the two columns align row-by-row.
+Single file edit. Dwg/Item move into the shape image `flex` container as a bottom-aligned row. Ref section becomes a single full-width block.
 
