@@ -1,65 +1,34 @@
 
 
-# Redesign RebarTagCard to Match ZPL Printed Tag
+# Replace Music Generation: ElevenLabs → Lyria 3 (Gemini API)
 
-## Physical Printed Tag Layout (from ZPL code)
+## Summary
+Replace the ElevenLabs music generation backend with Google's Lyria 3 model via the Gemini API (`generativelanguage.googleapis.com`). The existing `AudioPromptDialog` UI stays the same. When user submits a music prompt, it generates music via Lyria 3 and replaces the current audio track on the video.
 
-```text
-┌─────────────────────────────────────────────────┐
-│ REBAR.SHOP OS                    2026-03-27 01:22│  ← timestamp row
-├───────────────┬─────────────────┬────────────────┤
-│    MARK       │      SIZE       │     GRADE      │  ← 3-col header
-│    A1001      │      10M        │     400W       │
-├───────────────┴─────────────────┴────────────────┤
-│                                                   │
-│  QTY:                 LENGTH (mm):                │  ← qty + length row
-│   18                    1048                      │
-├──────────────────────────────────────────────────┤
-│  WEIGHT:                                          │  ← weight row
-│   14.81 kg                                        │
-├──────────────────────────────────────────────────┤
-│  DIMS:                                            │  ← dims section
-│   A:457  B:133  C:457                             │
-├──────────────────────────────────────────────────┤
-│          |||BARCODE|||                             │  ← barcode
-│            A1001                                  │
-├──────────────────────────────────────────────────┤
-│  DWG: SD01   ITEM: 1                             │  ← dwg/item row
-│  REF: 2277                                        │  ← ref row
-├──────────────────────────────────────────────────┤
-│  REBAR.SHOP OS                   2026-03-27 01:22│  ← footer
-└──────────────────────────────────────────────────┘
-```
+## API Details
+- **Endpoint**: `POST https://generativelanguage.googleapis.com/v1beta/models/lyria-3-clip-preview:generateContent`
+- **Auth**: `x-goog-api-key: GEMINI_API_KEY` (already configured)
+- **Request body**: `{ "contents": [{ "parts": [{ "text": "PROMPT" }] }] }`
+- **Response**: JSON with base64-encoded audio in `candidates[0].content.parts[0].inlineData.data` (MIME: `audio/mp3`)
 
-## Current Card vs Printed Tag — Key Differences
+## Changes
 
-| Current Card | Printed Tag (ZPL) |
-|---|---|
-| 5-col header (Mark/Size/Grade/Qty/Len) | 3-col header (Mark/Size/Grade) only |
-| Left sidebar with repeated specs | No sidebar — linear top-to-bottom |
-| Center shape circle + dims | Dims listed as flat text rows |
-| Right shape image | No shape image section |
-| Bottom 3-col info row | Separate Dwg/Item row + Ref row |
-| Barcode in footer | Barcode in middle, before Dwg/Item |
-| No timestamp | Timestamp header + footer |
+### 1. New Edge Function: `supabase/functions/lyria-music/index.ts`
+- Uses `handleRequest` pattern (per project standards)
+- Accepts `{ prompt, duration }` — sends prompt to Lyria 3 `generateContent` endpoint
+- Returns raw audio binary response (like current `elevenlabs-music`)
+- Uses `GEMINI_API_KEY` from env
+- `authMode: "none"`, `rawResponse: true`
 
-## Plan
+### 2. Update: `src/components/ad-director/ProVideoEditor.tsx`
+- In `handleAudioGenerate` (~line 253): change `elevenlabs-music` → `lyria-music` for music type
+- Keep voiceover path (`elevenlabs-tts`) unchanged
+- Keep the enhance-music-prompt step (Step 1) unchanged
 
-Rewrite `RebarTagCard.tsx` to match the ZPL vertical flow:
+### 3. No UI changes
+- `AudioPromptDialog` stays as-is (same prompt + duration + type selector)
 
-1. **Timestamp header**: "REBAR.SHOP OS" left, current date/time right
-2. **3-column header**: MARK / SIZE / GRADE with large values
-3. **QTY + LENGTH row**: Two columns, label above value
-4. **WEIGHT row**: Full width
-5. **DIMS section**: Label "DIMS:" then active dims listed in chunks of 4 per line (matching `buildDimLines` logic)
-6. **Barcode area**: Centered barcode placeholder + mark text
-7. **DWG/ITEM + REF rows**: "DWG: {dwg}   ITEM: {item}" then "REF: {reference}"
-8. **Footer**: "REBAR.SHOP OS" left, timestamp right
-
-Remove: left sidebar, shape circle, shape image section, 5-col header. The shape image and dims grid are replaced by the flat dims text matching the printed output.
-
-Keep: all existing props (shapeImageUrl can be ignored in rendering), format functions, imperial conversion.
-
-## File Changed
-- `src/components/office/RebarTagCard.tsx` — full rewrite to match ZPL printed layout
+## Files Changed
+- `supabase/functions/lyria-music/index.ts` — new edge function
+- `src/components/ad-director/ProVideoEditor.tsx` — swap function name
 
