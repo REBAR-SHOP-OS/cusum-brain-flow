@@ -70,26 +70,39 @@ Deno.serve((req) =>
       (profiles || []).map((p: any) => [p.id, { name: p.full_name, avatar: p.avatar_url }])
     );
 
-    // Generate signed URLs for enrolled photos
+    // Download reference photos and convert to base64 data URLs (avoids Gemini URL fetch failures)
     const enrolledFaces: { profile_id: string; name: string; photo_urls: string[] }[] = [];
 
     for (const [profileId, photoUrls] of profileEnrollments.entries()) {
-      const signedUrls: string[] = [];
+      const base64Urls: string[] = [];
       for (const url of photoUrls) {
-        const storagePath = url.replace(/^.*face-enrollments\//, "");
-        const { data: signedData } = await supabase.storage
-          .from("face-enrollments")
-          .createSignedUrl(storagePath, 300);
-        if (signedData?.signedUrl) {
-          signedUrls.push(signedData.signedUrl);
+        try {
+          const storagePath = url.replace(/^.*face-enrollments\//, "");
+          const { data: fileData, error: dlErr } = await supabase.storage
+            .from("face-enrollments")
+            .download(storagePath);
+          if (dlErr || !fileData) {
+            console.warn(`[face-recognize] Failed to download ${storagePath}:`, dlErr);
+            continue;
+          }
+          const arrayBuf = await fileData.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuf);
+          let binary = "";
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const b64 = btoa(binary);
+          base64Urls.push(`data:image/jpeg;base64,${b64}`);
+        } catch (e) {
+          console.warn(`[face-recognize] Error converting photo to base64:`, e);
         }
       }
-      if (signedUrls.length > 0) {
+      if (base64Urls.length > 0) {
         const info = profileMap.get(profileId);
         enrolledFaces.push({
           profile_id: profileId,
           name: info?.name || "Unknown",
-          photo_urls: signedUrls,
+          photo_urls: base64Urls,
         });
       }
     }

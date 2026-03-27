@@ -85,9 +85,10 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
 
         // Batch sign URLs
         for (const item of limited) {
+          const storagePath = item.photo_url.replace(/^.*face-enrollments\//, "");
           const { data } = await supabase.storage
             .from("face-enrollments")
-            .createSignedUrl(item.storage_path, 600);
+            .createSignedUrl(storagePath, 600);
           if (data?.signedUrl) {
             signedUrls.set(item.id, data.signedUrl);
           }
