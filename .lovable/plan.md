@@ -1,23 +1,20 @@
 
 
-# Remove Auto-Scan from Face ID Kiosk
+# Add Brain (Memory) Icon to TimeClock Non-Kiosk View
 
 ## Problem
-The kiosk automatically triggers `handleScan()` in three places without waiting for the user to press "Scan Face":
-1. On entering kiosk mode (line 106-110) — auto-scans after 2s delay
-2. After a successful punch (line 196-198) — auto-scans after 4s for "next person"
-3. After registration completes (lines 317, 326) — auto-scans after 5s
+The Brain icon that opens the Face Memory Panel (showing enrolled photos for all people) is only visible in Kiosk mode. The user wants it also visible in the regular TimeClock view for `radin@rebar.shop`.
 
 ## Fix
 
 **File:** `src/pages/TimeClock.tsx`
 
-Remove all three auto-scan triggers:
+Add a Brain icon button next to the "9 photos enrolled" badge (around line 380-385), visible only for authorized users (`radin@rebar.shop`, `sattar@rebar.shop`, `neel@rebar.shop` — same list as kiosk mode). Clicking it opens the same `FaceMemoryPanel` dialog that already exists.
 
-1. **Lines 105-110** — Delete the `setTimeout(() => handleScan(), 2000)` block inside `enterKioskMode`
-2. **Lines 194-199** — Delete the `if (kioskMode) { setTimeout(() => handleScan(), 4000) }` block inside `handleConfirmPunch`
-3. **Line 317** — Change `setTimeout(() => handleScan(), 5000)` to just `/* user must tap Scan Face */` (inside FirstTimeRegistration onComplete)
-4. **Line 326** — Same change for the second registration callback
+The `showMemoryPanel` state and `FaceMemoryPanel` component are already rendered inside the kiosk block. Move the `FaceMemoryPanel` render outside the kiosk conditional so it works in both views, and add a Brain button in the header/enrollment area.
 
-After these changes, scanning only happens when the user explicitly taps the "Scan Face" button.
+### Changes
+1. **Line ~377-386** — Add a Brain button next to the enrollment badges for authorized users
+2. **Line ~285-287** — Move `FaceMemoryPanel` render from inside kiosk-only block to a shared location (e.g., right before the closing `</>` of the fragment)
+3. No new components or state needed — `showMemoryPanel` state already exists
 
