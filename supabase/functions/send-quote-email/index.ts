@@ -335,9 +335,13 @@ Deno.serve((req) =>
               sort_order: idx,
             };
           });
-          await svc.from("sales_invoice_items").insert(invoiceItems);
-          console.log(`[convert_to_invoice] Copied ${invoiceItems.length} line items from quotes.metadata`);
-          itemsCopied = true;
+          const { error: itemInsertErr } = await svc.from("sales_invoice_items").insert(invoiceItems);
+          if (itemInsertErr) {
+            console.error(`[convert_to_invoice] Failed to insert invoice items:`, itemInsertErr.message);
+          } else {
+            console.log(`[convert_to_invoice] Copied ${invoiceItems.length} line items from quotes.metadata`);
+            itemsCopied = true;
+          }
         }
         if (!itemsCopied && sq?.id) {
           const { data: quoteItems } = await svc
