@@ -214,6 +214,15 @@ There is NO "I" dimension in rebar standards. The "I" field in the schema above 
 If the source document has a column labeled "I", IGNORE its values completely. Do NOT shift dimension values.
 Each dimension value MUST go into its EXACT matching letter field: the value under column "H" in the source goes into "H", the value under "J" goes into "J", etc. NEVER shift values from one letter to another.
 
+CRITICAL: When processing spreadsheet/CSV data, each column's data must map to its HEADER LABEL exactly.
+If the CSV has headers like: ..., A, B, C, D, E, F, G, H, I, J, K, ...
+- Column header "A" value → field "A"
+- Column header "B" value → field "B"
+- Column header "H" value → field "H"
+- Column header "I" → SKIP entirely (set "I": null)
+- Column header "J" value → field "J" (NOT shifted into "I" or "H")
+Match by HEADER NAME, not by column position index. DO NOT re-index or shift columns.
+
 Rules:
 - Extract ALL rows/items from the document
 - Keep ALL numerical values EXACTLY as they appear in the source document. Do NOT convert units. If the document shows inches, keep inches. If it shows millimeters, keep millimeters.
