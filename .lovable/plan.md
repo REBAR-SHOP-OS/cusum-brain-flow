@@ -1,45 +1,34 @@
 
 
-# Add "Edit Text & Voice" Button to Toolbar
+# Smooth Playhead Movement (0.1s Granularity)
 
-## What
-A new toolbar icon (e.g., `MessageSquareText`) that opens a dialog showing the current scene's voiceover/subtitle text. When the user edits the text and confirms, the system will:
-1. Update the subtitle overlays on the video with the new text
-2. Regenerate the voiceover audio via ElevenLabs TTS
-3. Both new text and new audio apply to the current scene
+## Problem
+The timeline playhead currently snaps to whole-second intervals during scrubbing and moves without animation during playback, resulting in jerky movement.
 
-## Changes
+## Solution
+Two changes in `src/components/ad-director/editor/TimelineBar.tsx`:
 
-### 1. New file: `src/components/ad-director/editor/TextVoiceDialog.tsx`
-- Dialog pre-filled with the current scene's voiceover text (from `storyboard[scene].voiceover` or segment text)
-- Voice selector dropdown (same voices as VoiceoverDialog)
-- Speed slider (0.7–1.2)
-- "Generate" button that returns `{ text, voiceId, speed, sceneId }`
-- Shows loading state during generation
+### 1. Smooth CSS transition on playhead
+Add `transition: left 0.1s linear` to the playhead container so it glides smoothly between positions during playback. Disable the transition while scrubbing (dragging) to keep it responsive.
 
-### 2. `src/components/ad-director/ProVideoEditor.tsx`
+```tsx
+// Line 525 — playhead style
+style={{
+  left: `${playheadPct}%`,
+  width: '14px',
+  transform: 'translateX(-6px)',
+  transition: scrubbing ? 'none' : 'left 0.1s linear',
+}}
+```
 
-**New state:**
-- `textVoiceDialogOpen` (boolean)
+### 2. 0.1s scrub granularity
+Change `Math.round(...)` to round to 0.1s precision so the playhead can land between whole seconds during drag:
 
-**New handler** `handleTextVoiceGenerate`:
-- Takes `{ text, voiceId, speed, sceneId }`
-- Updates `storyboard` scene's `.voiceover` field with new text (via `onUpdateStoryboard`)
-- Calls ElevenLabs TTS to generate audio from the new text
-- Updates `audioTracks` with the new voiceover audio for that scene
-- Rebuilds timed subtitle overlays for that scene using `buildTimedOverlays`
-- Shows toast on success/failure
-
-**Toolbar (sidebarTabs ~line 1574):**
-- Add new entry: `{ id: "text-voice", label: "Text+Voice", icon: <MessageSquareText className="w-3.5 h-3.5" /> }`
-
-**Tab handler (~line 194):**
-- When `"text-voice"` tab clicked, open the `TextVoiceDialog`
-
-**Dialog render (~line 1665):**
-- Add `<TextVoiceDialog>` with current scene's voiceover text as initial value
+```tsx
+// Line 184
+const snappedTime = Math.round(pct * totalDuration * 10) / 10;
+```
 
 ## Files changed
-- `src/components/ad-director/editor/TextVoiceDialog.tsx` — new
-- `src/components/ad-director/ProVideoEditor.tsx` — state, handler, toolbar icon, dialog
+- `src/components/ad-director/editor/TimelineBar.tsx` — smooth transition + finer scrub granularity
 
