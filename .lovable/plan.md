@@ -1,34 +1,32 @@
 
 
-# Sync PrintTag (Print Route) with RebarTagCard (Office View)
+# Unify Print and Office Tag — Single Component
 
 ## Problem
-The `PrintTag` component in `src/pages/PrintTags.tsx` (lines 46-153) was never updated to match the recent layout changes made to `RebarTagCard.tsx`. The print version still shows:
-- Shape code circle + "Shape" label instead of **brand logo**
-- Ref/Dwg/Item in a **2-column grid** instead of Dwg/Item in shape area + full-width Ref
+`RebarTagCard.tsx` (office) and `PrintTag` (in `PrintTags.tsx`) are duplicate components that drift apart whenever one is updated. Changes to the office card don't reflect in print and vice versa.
 
 ## Solution
-Update the `PrintTag` component in `PrintTags.tsx` to mirror the current `RebarTagCard` layout, using inline styles (since print route avoids Tailwind).
+Delete the `PrintTag` inline component from `PrintTags.tsx` and reuse the existing `RebarTagCard` component directly. The print route keeps its scoped CSS reset but renders `RebarTagCard` instead of `PrintTag`.
 
-### Changes in `src/pages/PrintTags.tsx` (lines 94-145)
+### Changes in `src/pages/PrintTags.tsx`
 
-**1. Replace shape circle with brand logo (lines 94-101):**
-- Remove the circle div with shape code text
-- Add `<img>` with `logo-coin.png` (import at top of file)
-- Style: `width: 64px, height: 64px, objectFit: contain`
+**1. Remove the entire `PrintTag` function** (lines 46-152) — it's now redundant.
 
-**2. Dims grid — ensure parallel A-F / G-R columns (lines 102-115):**
-- Already correct layout, no change needed
+**2. Remove duplicate helper functions** (lines 7-44) — `getWeight`, `fmtMmToFtIn`, `fmtVal`, `fmtDim`, `DIM_LEFT`, `DIM_RIGHT`, `DIM_COLS` are already in `RebarTagCard.tsx` or computed inline. Keep only `getWeight` and `DIM_COLS` (needed for row mapping).
 
-**3. Shape image area — add Dwg/Item caption (lines 118-130):**
-- Add Dwg and Item as a compact row below the shape image, inside the same flex container
-- Style: `fontSize: 12, fontWeight: 900, display: flex, gap: 16`
+**3. Import `RebarTagCard`** and render it instead of `PrintTag`:
+```tsx
+import { RebarTagCard } from "@/components/office/RebarTagCard";
+```
 
-**4. Ref section — make full width (lines 132-145):**
-- Remove `gridTemplateColumns: "1fr 1fr"` grid
-- Remove the Dwg/Item column
-- Make Ref + address span full width with more vertical space (`minHeight: 56px`)
+**4. Update the render loop** (lines 257-276) to use `<RebarTagCard>` with the same props.
 
-## File Changed
-- `src/pages/PrintTags.tsx` — sync PrintTag layout with RebarTagCard (logo, Dwg/Item in shape area, full-width Ref)
+**5. Update scoped CSS** — change `.print-tag` selector to `.rebar-tag` (the class used by `RebarTagCard`).
+
+### Export weight helper from RebarTagCard
+Move `MASS_KG_PER_M` and `getWeight` into `RebarTagCard.tsx` as a named export so `PrintTags.tsx` can reuse it. Also export `DIM_COLS` (the combined dim keys array).
+
+## Files Changed
+- `src/components/office/RebarTagCard.tsx` — export `getWeight` and `DIM_COLS`
+- `src/pages/PrintTags.tsx` — delete `PrintTag`, import and render `RebarTagCard`
 
