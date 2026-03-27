@@ -78,6 +78,8 @@ export interface AudioTrackItem {
   audioUrl: string;
   kind: "voiceover" | "music";
   volume?: number; // 0-1, default 1
+  startTime?: number; // seconds within the scene
+  endTime?: number;   // seconds within the scene
 }
 
 interface SidebarTab {
