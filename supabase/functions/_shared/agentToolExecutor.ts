@@ -1646,6 +1646,7 @@ export async function executeToolCall(
         const quoteMetadata: Record<string, any> = {
           customer_name: args.customer_name || null,
           customer_email: args.customer_email || null,
+          customer_id: args.customer_id || null,
           notes: notesText,
           line_items: (args.line_items || []).map((li: any) => ({
             description: li.description || "Item",
