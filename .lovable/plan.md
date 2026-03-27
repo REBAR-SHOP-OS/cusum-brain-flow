@@ -1,60 +1,79 @@
 
+Fix the missing QuickBooks payment link by addressing the real data gap, not just the email/button UI.
 
-# Fix: Invoice Line Items Not Matching Quotation After Conversion
+## What I found
+- The invoice email/editor already tries to show a QuickBooks payment link in both places:
+  - `src/components/accounting/documents/DraftInvoiceEditor.tsx`
+  - `supabase/functions/send-quote-email/index.ts`
+- Both lookups depend on `accounting_mirror.data.InvoiceLink`.
+- The backend currently has no such data:
+  - `accounting_mirror` has invoice rows, but `InvoiceLink` is null for all checked records.
+  - Query result shows `with_invoice_link = 0` for all mirrored invoices.
+- There is also no mirrored QuickBooks invoice matching `INV-20260001`, so even the fallback lookup by ERP invoice number cannot find one.
+- The mirror sync code is the root cause:
+  - `supabase/functions/quickbooks-oauth/index.ts` stores only a reduced invoice payload and does not include `InvoiceLink`
+  - even though the more general sync path in `supabase/functions/qb-sync-engine/index.ts` would preserve the full invoice object if it is used.
 
-## Root Cause
+## Root cause
+The app is not missing the button logic anymore. It is missing the QuickBooks customer-facing link data in the backend mirror, and likely the ERP invoice is not being created/synced into QuickBooks in time for lookup.
 
-The entire quotation system has a **data split** problem:
+## Plan
+### 1. Preserve QuickBooks payment link data in invoice sync
+Update the invoice mirroring path in `supabase/functions/quickbooks-oauth/index.ts` so invoice records written to `accounting_mirror` include:
+- `InvoiceLink`
+- `Id`
+- `CustomerRef`
+- any other customer-payment fields already returned by QuickBooks
 
-1. **DraftQuotationEditor** saves line items ONLY to `quotes.metadata.line_items` (JSON blob) — never to `sales_quotation_items` table
-2. **ai-generate-quotation** also saves ONLY to `quotes.metadata.line_items`
-3. **accept_and_convert** first checks `sales_quotation_items` (empty), falls back to `metadata.line_items` — but the metadata items use `unitPrice` (camelCase) while the fallback code looks for `unit_price` first
-4. When the metadata fallback insert silently fails or produces wrong values, the **DraftInvoiceEditor** falls to its last resort: a single "Invoice total" line from the header amount
+This makes the existing email/editor lookup actually work.
 
-The fix: ensure items are **always persisted** to `sales_quotation_items` when saving a quotation, so the conversion path reliably copies structured items.
+### 2. Make QB link lookup more reliable
+Update both:
+- `src/components/accounting/documents/DraftInvoiceEditor.tsx`
+- `supabase/functions/send-quote-email/index.ts`
 
-## Changes
+to resolve the QuickBooks invoice using a safer fallback chain:
+```text
+1. exact DocNumber match in accounting_mirror
+2. local invoice → stored QuickBooks id if available
+3. mirrored invoice by amount/customer/date proximity if needed
+4. only show QB button when a real customer-facing InvoiceLink exists
+```
 
-### 1. `src/components/accounting/documents/DraftQuotationEditor.tsx` — Persist items to `sales_quotation_items` on save
+Important change: do not generate the internal `customerbalance` fallback URL anymore when no real QuickBooks payment link exists. That URL is not the real customer payment link and is causing confusion.
 
-In `handleSave`, after updating the `quotes` record, also upsert line items into `sales_quotation_items`:
-- Delete existing items for this quote
-- Insert current items with proper `unit_price`, `quantity`, `total`, `sort_order`
-- This requires knowing the `sales_quotations` record linked to this quote, OR creating one if it doesn't exist
+### 3. Add a clear “not synced yet” behavior
+If Stripe exists but QuickBooks does not:
+- keep Stripe button visible
+- hide QuickBooks button
+- optionally show a small status message in the editor like “QuickBooks payment link not available yet”
 
-**Simpler approach**: Since `accept_and_convert` reads from `quotes.metadata.line_items`, fix the metadata field mapping in the fallback to handle both `unitPrice` and `unit_price` correctly — AND ensure the fallback actually inserts to `sales_invoice_items`.
+This avoids sending a broken/empty QB payment experience.
 
-### 2. `supabase/functions/send-quote-email/index.ts` — Fix metadata field mapping in accept_and_convert
+### 4. Ensure converted invoices can be matched to QuickBooks later
+Review the ERP invoice creation/conversion flow and store a durable link for future lookup when available, such as:
+- local invoice id ↔ QuickBooks invoice id
+- or metadata on the sales invoice row once synced
 
-The metadata fallback (lines 518-531) already handles `mi.unit_price || mi.unitPrice` but the issue is subtler: the DraftQuotationEditor saves items as `{ description, quantity, unitPrice }` (no `unit_price` key). The fallback code at line 527 does `mi.unit_price || mi.unitPrice` — this works. But the `total` calculation uses `(mi.quantity || 1) * (mi.unit_price || mi.unitPrice || 0)` which should also work.
+That removes dependence on fuzzy `DocNumber` matching alone.
 
-The REAL issue: when `sqCheck?.id` exists (a matching `sales_quotations` record), the code enters the `if (sqCheck?.id)` block at line 495, queries `sales_quotation_items`, finds 0 rows, and exits the if-block. Then line 517 checks if there are already invoice items — there aren't. So it falls through to the metadata fallback. But `meta` at this point is from the `quotes` table (line 141), which has `line_items`. This should work...
+## Files to update
+- `supabase/functions/quickbooks-oauth/index.ts`
+- `src/components/accounting/documents/DraftInvoiceEditor.tsx`
+- `supabase/functions/send-quote-email/index.ts`
 
-**Unless `sqCheck?.id` doesn't match** — if there's no `sales_quotations` record with the same `quotation_number`, then `sqCheck` is null, and the code skips the item copy entirely, going straight to the metadata fallback. Let me verify this.
+## Expected result
+After this change:
+- QuickBooks payment links will appear only when a real QuickBooks `InvoiceLink` exists
+- invoice emails can include both Stripe and QuickBooks links reliably
+- users will no longer see “missing QB link” caused by empty mirrored data
+- if QuickBooks has not produced a payment link yet, the UI will fail gracefully instead of pretending one exists
 
-Actually, the simplest fix: make the **DraftQuotationEditor save items to the `sales_quotation_items` table** in addition to metadata, by first ensuring a `sales_quotations` record exists for each `quotes` record.
-
-### Revised approach — Fix the conversion to always use `quotes.metadata.line_items`
-
-Since ALL quotations store items in `quotes.metadata.line_items`, the conversion should always use that as the primary source (not `sales_quotation_items`). The `sales_quotation_items` table is secondary.
-
-### File: `supabase/functions/send-quote-email/index.ts`
-
-In the `accept_and_convert` section (after invoice creation), change the item copy logic:
-1. **Primary source**: `quotes.metadata.line_items` (from the `quote` variable, already loaded)
-2. **Secondary source**: `sales_quotation_items` via `sqCheck?.id` (if exists)
-3. Always insert into `sales_invoice_items` from whichever source has items
-4. Handle both `unitPrice` and `unit_price` field naming
-
-### File: `src/components/accounting/documents/DraftInvoiceEditor.tsx`
-
-In the load logic, when falling back to metadata:
-- Also check the linked quotation's `quotes.metadata.line_items` via `quotation_id`
-- The current fallback only checks `sales_quotation_items` then `invoice.metadata` — but the invoice metadata doesn't have line items (they're in the `quotes` table)
-
-Add: if no `sales_invoice_items` and no `sales_quotation_items` found, fetch the source `quotes` record via the invoice's `quotation_id` and parse `metadata.line_items`.
-
-## Files Changed
-- `supabase/functions/send-quote-email/index.ts` — prioritize `quotes.metadata.line_items` as primary source for item copy during conversion
-- `src/components/accounting/documents/DraftInvoiceEditor.tsx` — add fallback to fetch items from source `quotes.metadata.line_items`
-
+## Technical note
+Current evidence strongly points to sync/data preservation, not rendering:
+```text
+accounting_mirror invoice rows exist
+InvoiceLink is null for all checked rows
+INV-20260001 has Stripe links, but no matching mirrored QuickBooks invoice/link
+```
+So the correct fix is to improve QuickBooks sync + lookup persistence, not just keep changing the email template.
