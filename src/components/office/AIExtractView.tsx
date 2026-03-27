@@ -786,6 +786,7 @@ export function AIExtractView() {
 
   // ─── Inline Editing Helpers ──────────────────────────────
   const startEditing = useCallback(() => {
+    console.log("startEditing called", activeRows.length);
     const edits: Record<string, Record<string, any>> = {};
     activeRows.forEach((row) => {
       edits[row.id] = {
