@@ -102,12 +102,7 @@ export default function TimeClock() {
     try {
       document.documentElement.requestFullscreen?.();
     } catch {}
-    // Auto-scan after camera is ready (for ai@rebar.shop kiosk)
-    setTimeout(() => {
-      if (!scanningRef.current) {
-        handleScan();
-      }
-    }, 2000);
+    // User must tap "Scan Face" to start scanning
   };
 
   const exitKioskMode = () => {
@@ -191,12 +186,7 @@ export default function TimeClock() {
     face.reset();
     setAutoPunchCountdown(0);
 
-    // Auto-reset kiosk for next person
-    if (kioskMode) {
-      setTimeout(() => {
-        handleScan();
-      }, 4000);
-    }
+    // Kiosk resets — user must tap "Scan Face" for next person
   };
 
   // Build status map
@@ -314,7 +304,6 @@ export default function TimeClock() {
               onComplete={() => {
                 setShowRegistration(false);
                 face.reset();
-                setTimeout(() => handleScan(), 5000);
               }}
               onCancel={() => { setShowRegistration(false); face.reset(); }}
             />
@@ -323,7 +312,6 @@ export default function TimeClock() {
               captureFrame={face.captureFrame}
               onComplete={() => {
                 face.reset();
-                setTimeout(() => handleScan(), 5000);
               }}
               onCancel={() => face.reset()}
             />
