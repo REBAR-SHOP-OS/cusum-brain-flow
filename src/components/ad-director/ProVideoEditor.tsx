@@ -205,7 +205,7 @@ export function ProVideoEditor({
       return;
     }
     if (tab === "speed") {
-      // Speed is handled by popover directly on the icon, no panel needed
+      setSpeedPopoverOpen(true);
       return;
     }
     if (activeTab === tab) {

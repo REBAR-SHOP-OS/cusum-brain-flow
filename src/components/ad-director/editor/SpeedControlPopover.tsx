@@ -1,16 +1,18 @@
 import { Gauge } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-interface SpeedControlPopoverProps {
+interface SpeedControlDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   speed: number;
   onSpeedChange: (speed: number) => void;
-  children: React.ReactNode;
 }
 
 const SPEED_OPTIONS = [
@@ -22,32 +24,32 @@ const SPEED_OPTIONS = [
   { value: 2, label: "2×" },
 ];
 
-export function SpeedControlPopover({ speed, onSpeedChange, children }: SpeedControlPopoverProps) {
+export function SpeedControlDialog({ open, onOpenChange, speed, onSpeedChange }: SpeedControlDialogProps) {
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        {children}
-      </PopoverTrigger>
-      <PopoverContent align="center" side="top" className="w-40 p-1.5">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1">
-          سرعت پخش
-        </p>
-        {SPEED_OPTIONS.map((option) => (
-          <Button
-            key={option.value}
-            variant={speed === option.value ? "secondary" : "ghost"}
-            size="sm"
-            className={cn(
-              "w-full justify-start gap-2 text-xs h-8",
-              speed === option.value && "font-bold"
-            )}
-            onClick={() => onSpeedChange(option.value)}
-          >
-            <Gauge className="w-3.5 h-3.5" />
-            {option.label}
-          </Button>
-        ))}
-      </PopoverContent>
-    </Popover>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xs">
+        <DialogHeader>
+          <DialogTitle className="text-sm flex items-center gap-2">
+            <Gauge className="w-4 h-4" /> سرعت پخش ویدئو
+          </DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-3 gap-2 py-2">
+          {SPEED_OPTIONS.map((option) => (
+            <Button
+              key={option.value}
+              variant={speed === option.value ? "default" : "outline"}
+              size="sm"
+              className={cn("text-xs h-9", speed === option.value && "font-bold")}
+              onClick={() => {
+                onSpeedChange(option.value);
+                onOpenChange(false);
+              }}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
