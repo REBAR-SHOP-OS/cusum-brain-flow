@@ -1,72 +1,41 @@
 
 
-# Fix: Double Tax on Converted Invoice + Missing Line Items + Add QB Link
+# Add Customer Lookup & Creation to Blitz Sales Agent
 
-## Problems Found
+## Problem
+Blitz currently accepts `customer_name` as a freeform string when saving quotations. It doesn't verify if the customer exists in the database or create new customers. This means quotations aren't linked to actual customer records, and new customers aren't added to the system.
 
-### 1. Double taxation
-The quotation total (`$107,194.20`) already includes 13% HST. When the `accept_and_convert` flow creates the invoice, it stores this tax-inclusive amount as `amount`. The invoice editor then treats line item unit prices as pre-tax and adds HST **again**, inflating the total.
+## Changes
 
-**Root cause in `send-quote-email/index.ts` (line 420):**
-```
-const amount = sqCheck?.amount || totalAmount;  // $107,194.20 (tax-inclusive)
-```
-This is stored as the invoice `amount`. The editor fallback (line 181-183) creates `unitPrice = inv.amount` ($107,194.20), then the editor adds 13% HST on top → $121,129.45.
+### 1. `supabase/functions/_shared/agentTools.ts` — Add two new tools for sales agent
 
-### 2. Line items missing — shows "Invoice total" instead of actual items
-The fallback chain fails to find quotation items (likely a table/data mismatch), falling through to the last resort: a single "Invoice total" row with the full amount.
+**`search_customers`** — Search the `v_customers_clean` view by name/company (debounced, limit 10). Returns matching customer IDs, names, emails, and companies so Blitz can confirm the right one.
 
-### 3. No QuickBooks payment link in email
-The Send Email flow only generates a Stripe payment link. User wants QB payment link included too.
+**`create_customer`** — Insert a new row into the `customers` table with name, company, email, phone. Returns the new customer ID. The existing normalization trigger will auto-split "Company, Person" into company + contact records.
 
-## Fix
+### 2. `supabase/functions/_shared/agentToolExecutor.ts` — Implement the two tools
 
-### A. `supabase/functions/send-quote-email/index.ts` — Store subtotal, not total
+**`search_customers`**: Query `v_customers_clean` with `ilike` on `display_name` and `company_name`, limit 10. Return results array.
 
-In `accept_and_convert` (line 420), **back-calculate the pre-tax subtotal** from the quotation total when creating the invoice. Store the subtotal as `amount` so the editor can correctly add HST:
+**`create_customer`**: Insert into `customers` table with the provided fields. Return the new customer record.
 
-```
-// Before: amount = sqCheck?.amount || totalAmount (tax-inclusive!)
-// After: store PRE-TAX subtotal
-const taxRate = (meta.tax_rate ?? 13) / 100;
-const rawAmount = sqCheck?.amount || totalAmount;
-const invoiceSubtotal = Math.round((rawAmount / (1 + taxRate)) * 100) / 100;
-```
+### 3. `supabase/functions/_shared/agents/sales.ts` — Update Blitz prompt
 
-Use `invoiceSubtotal` for the invoice `amount` field. Also use `invoiceSubtotal` for the Stripe payment link amount (Stripe should charge the full tax-inclusive total, so pass `rawAmount` to Stripe instead).
+Add instruction block:
 
-### B. `src/components/accounting/documents/DraftInvoiceEditor.tsx` — Fix line item loading
+- Before saving any quotation, Blitz MUST have a customer name
+- If the user hasn't mentioned a customer, ask: "Who is this quote for?"
+- Once Blitz has a name, call `search_customers` to check if they exist
+- If found, confirm with user and use the existing customer's details (name, email, company)
+- If NOT found, ask for email and company name, then call `create_customer` to add them
+- Use the customer's email from the search/create result as `customer_email` when saving the quotation
 
-**Problem**: When quotation items exist in `sales_quotation_items`, they have `unit_price` as pre-tax values. But the fallback "Invoice total" row uses the tax-inclusive total as `unitPrice`. 
+### 4. `supabase/functions/_shared/agentToolExecutor.ts` — Link customer to quotation
 
-**Fix the fallback** (line 181-183): When creating the "Invoice total" fallback line, back-calculate the pre-tax amount:
-```typescript
-const preTax = Number(inv.amount) / (1 + taxRate / 100);
-setItems([{ description: "Invoice total", quantity: 1, unitPrice: Math.round(preTax * 100) / 100 }]);
-```
-
-But better: ensure the quotation item fetch works. Check if the `quotation_id` is being matched correctly.
-
-### C. `src/components/accounting/documents/DraftInvoiceEditor.tsx` — Add QB payment link to email
-
-In `handleSendEmail`, after the Stripe payment link lookup, also check `stripe_payment_links` table for any QuickBooks-related link. If found, include a second "Pay via QuickBooks" button in the email HTML alongside the Stripe button.
-
-Alternatively — since there's no separate QB payment link system — include both payment options if available from the `stripe_payment_links` table (which stores the QB invoice ID mapping).
-
-## Technical Details
-
-### Invoice amount storage convention (going forward)
-- `sales_invoices.amount` = **pre-tax subtotal** (line items sum)
-- Editor adds HST on display
-- Stripe payment link = **total with tax**
-
-### Line item restoration priority
-1. `sales_invoice_items` (persisted)
-2. `sales_quotation_items` via `quotation_id` (copy + persist)
-3. `metadata.line_items` (parse + display)
-4. Single row from `amount` (back-calculate pre-tax) — last resort
+Update `save_sales_quotation` to accept an optional `customer_id` parameter and store it in the quotation metadata, enabling future lookups.
 
 ## Files Changed
-- `supabase/functions/send-quote-email/index.ts` — store pre-tax subtotal as invoice amount, pass full total to Stripe
-- `src/components/accounting/documents/DraftInvoiceEditor.tsx` — fix "Invoice total" fallback to use pre-tax amount; add QB payment link to email
+- `supabase/functions/_shared/agentTools.ts` — add `search_customers` and `create_customer` tool definitions
+- `supabase/functions/_shared/agentToolExecutor.ts` — implement both tools + add `customer_id` to quotation save
+- `supabase/functions/_shared/agents/sales.ts` — add customer lookup instructions to Blitz prompt
 
