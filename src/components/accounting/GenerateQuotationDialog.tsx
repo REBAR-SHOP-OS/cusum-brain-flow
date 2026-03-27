@@ -424,18 +424,41 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label>Customer</Label>
-                <Select value={selectedCustomerId} onValueChange={setSelectedCustomerId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(customers || []).map((c: any) => (
-                      <SelectItem key={c.customer_id} value={c.customer_id}>
-                        {c.display_name || c.company_name || c.normalized_name || "Unknown"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={customerOpen} onOpenChange={setCustomerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" aria-expanded={customerOpen} className="w-full justify-between font-normal">
+                      {customerLabel || "Search customer..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[280px] p-0" align="start">
+                    <Command shouldFilter={false}>
+                      <CommandInput placeholder="Type to search..." value={customerSearch} onValueChange={setCustomerSearch} />
+                      <CommandList>
+                        <CommandEmpty>No customers found.</CommandEmpty>
+                        <CommandGroup>
+                          {customerOptions.map((c: any) => {
+                            const label = c.display_name || c.company_name || c.normalized_name || "Unknown";
+                            return (
+                              <CommandItem
+                                key={c.customer_id}
+                                value={c.customer_id}
+                                onSelect={() => {
+                                  setSelectedCustomerId(c.customer_id);
+                                  setCustomerLabel(label);
+                                  setCustomerOpen(false);
+                                }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", selectedCustomerId === c.customer_id ? "opacity-100" : "opacity-0")} />
+                                {label}
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="space-y-2">
                 <Label>Sales Lead</Label>
