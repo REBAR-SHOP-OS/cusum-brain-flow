@@ -10,7 +10,7 @@ const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twit
 function groupByPlatform(posts: SocialPost[]) {
   const map = new Map<string, SocialPost[]>();
   for (const p of posts) {
-    const key = `${p.platform || "other"}_${p.title || p.id}`;
+    const key = `${p.platform || "other"}_${p.title || p.id}_${p.page_name || ""}`;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(p);
   }
@@ -171,7 +171,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                 const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
                 const { dominant: status, label: statusLabel } = statusSummary(posts);
                 const firstPost = posts[0];
-                const isApproved = posts.some(p => p.neel_approved);
+                const isApproved = posts.some(p => p.neel_approved || p.qa_status === "approved");
 
                 return (
                   <button

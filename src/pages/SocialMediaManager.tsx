@@ -137,8 +137,7 @@ export default function SocialMediaManager() {
     } else if (statusFilter === "pending_approval") {
       items = items.filter(
         (p) => !p.neel_approved
-          && p.status !== "published"
-          && p.status !== "declined"
+          && (p.status === "pending_approval" || p.status === "scheduled")
       );
     } else if (statusFilter !== "all") {
       items = items.filter((p) => p.status === statusFilter);
@@ -147,8 +146,6 @@ export default function SocialMediaManager() {
       const q = searchQuery.toLowerCase();
       items = items.filter(
         (p) =>
-          // Never hide scheduled/published posts even if they don't match search
-          p.status === "scheduled" || p.status === "published" ||
           p.title.toLowerCase().includes(q) ||
           p.content.toLowerCase().includes(q) ||
           p.hashtags.some((h) => h.toLowerCase().includes(q))
