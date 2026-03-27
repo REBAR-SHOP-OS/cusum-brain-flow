@@ -282,9 +282,7 @@ export default function TimeClock() {
             Exit Kiosk
           </Button>
         </div>
-        {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
-          <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
-        )}
+        {/* FaceMemoryPanel moved to shared scope below */}
         <div className="flex items-center gap-3 mb-6">
           <ScanFace className="w-8 h-8 text-primary" />
           <h1 className="text-3xl font-black italic tracking-tight">FACE ID KIOSK</h1>
