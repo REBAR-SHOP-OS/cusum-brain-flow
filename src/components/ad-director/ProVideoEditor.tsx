@@ -589,6 +589,7 @@ export function ProVideoEditor({
         a.volume = 0;
       }
       audioRef.current = a;
+      a.playbackRate = videoSpeed;
       currentVoUrlRef.current = vo.url;
 
       // For video scenes, sync VO start to video's actual playing event
