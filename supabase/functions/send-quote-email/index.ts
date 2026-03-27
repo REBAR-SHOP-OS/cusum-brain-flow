@@ -501,7 +501,7 @@ Deno.serve((req) =>
           const metaItems = (meta.line_items || meta.items || []) as any[];
           if (metaItems.length > 0) {
             const invoiceItems = metaItems.map((mi: any, idx: number) => {
-              const qty = Number(mi.quantity) || Number(mi.qty) || 1;
+               const qty = Number(mi.quantity) || Number(mi.qty) || 1;
               const price = Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0;
               return {
                 invoice_id: invoiceId,
@@ -510,7 +510,6 @@ Deno.serve((req) =>
                 quantity: qty,
                 unit: mi.unit || null,
                 unit_price: price,
-                total: qty * price,
                 sort_order: idx,
               };
             });
