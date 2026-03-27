@@ -756,21 +756,6 @@ export function ProVideoEditor({
     setOverlays(prev => prev.filter(o => o.id !== id));
   }, []);
 
-      {/* Voiceover Dialog */}
-      <VoiceoverDialog
-        open={voiceoverDialogOpen}
-        onClose={() => setVoiceoverDialogOpen(false)}
-        onGenerate={handleGenerateVoiceover}
-        generating={generatingVoiceover}
-      />
-
-      {/* Subtitle Dialog */}
-      <SubtitleDialog
-        open={subtitleDialogOpen}
-        onClose={() => setSubtitleDialogOpen(false)}
-        sceneId={storyboard[selectedSceneIndex]?.id || ""}
-        onAdd={handleAddSubtitle}
-      />
 
   const handleTrimScene = useCallback((index: number) => {
     const scene = storyboard[index];
