@@ -1529,6 +1529,52 @@ export async function executeToolCall(
     }
 
     // ═══════════════════════════════════════════════════
+    // Search Customers
+    // ═══════════════════════════════════════════════════
+    else if (name === "search_customers") {
+      const query = (args.query || "").trim();
+      if (!query) {
+        result.result = { error: "query is required" };
+      } else {
+        const { data: customers, error: searchErr } = await svcClient
+          .from("v_customers_clean")
+          .select("id, display_name, email, company_name")
+          .or(`display_name.ilike.%${query}%,company_name.ilike.%${query}%`)
+          .limit(10);
+
+        result.result = searchErr
+          ? { error: searchErr.message }
+          : { success: true, customers: customers || [], count: (customers || []).length };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // Create Customer
+    // ═══════════════════════════════════════════════════
+    else if (name === "create_customer") {
+      const customerName = (args.name || "").trim();
+      if (!customerName) {
+        result.result = { error: "name is required" };
+      } else {
+        const { data: newCust, error: custErr } = await svcClient
+          .from("customers")
+          .insert({
+            company_id: companyId,
+            name: customerName,
+            email: args.email || null,
+            phone: args.phone || null,
+            status: "active",
+          })
+          .select("id, name, email, phone")
+          .single();
+
+        result.result = custErr
+          ? { error: custErr.message }
+          : { success: true, customer: newCust, message: `Customer "${customerName}" created (ID: ${newCust.id})` };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
     // Save Sales Quotation
     // ═══════════════════════════════════════════════════
     else if (name === "save_sales_quotation") {
@@ -1600,6 +1646,7 @@ export async function executeToolCall(
         const quoteMetadata: Record<string, any> = {
           customer_name: args.customer_name || null,
           customer_email: args.customer_email || null,
+          customer_id: args.customer_id || null,
           notes: notesText,
           line_items: (args.line_items || []).map((li: any) => ({
             description: li.description || "Item",

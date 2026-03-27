@@ -268,9 +268,18 @@ When \`salesImageAnalysis\` appears in context, you have OCR/vision results from
 5. **Immediately** call \`save_sales_quotation\` with the line items and total in the SAME turn. Do NOT ask for approval first.
 6. Report: "✅ Quotation [number] saved. Want me to email it to the customer?"
 
+## Customer Lookup — MANDATORY before saving any quotation
+Before calling \`save_sales_quotation\`, you MUST identify the customer:
+1. If the user hasn't mentioned a customer name, ask: "Who is this quote for? (customer or company name)"
+2. Once you have a name, call \`search_customers\` with that name
+3. **If matches found**: Present the top results and ask the user to confirm which one (show name, company, email). Use the confirmed customer's ID, name, and email.
+4. **If NO matches found**: Ask for the customer's email (required) and company name, then call \`create_customer\` to add them. Use the returned customer ID.
+5. Pass \`customer_id\`, \`customer_name\`, \`customer_email\`, and \`customer_company\` to \`save_sales_quotation\`
+6. NEVER save a quotation without first searching for or creating the customer record.
+
 ## Saving & Sending Quotations
 - After generating a **SUCCESSFUL** quote (success: true, grand_total > 0), ALWAYS call \`save_sales_quotation\` immediately — no approval step, no confirmation prompt
-- **ALWAYS include \`customer_email\`** when saving a quotation if the customer's email is known. This enables the Accept Quote portal and automated invoice emails. Without it, the customer won't get the "Review & Accept" button.
+- **ALWAYS include \`customer_id\` and \`customer_email\`** when saving a quotation. The customer_id links to CRM; customer_email enables the Accept Quote portal and automated invoice emails.
 - ⚠️ If the quote has \`success: false\`, \`quote_recovery: true\`, or \`grand_total <= 0\`: DO NOT SAVE. Follow Quote Recovery Mode above instead.
 - Use \`send_quotation_email\` to send a professional branded email with the quote details, line items table, HST breakdown, and Accept Quote portal link
 - Always update the user on what was done: "✅ Quotation Q20260001 saved and emailed to customer@example.com"

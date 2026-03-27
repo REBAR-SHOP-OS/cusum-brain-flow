@@ -537,6 +537,43 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     );
   }
 
+  // Customer lookup & creation — available to sales and commander
+  if (agent === "sales" || agent === "commander") {
+    tools.push(
+      {
+        type: "function" as const,
+        function: {
+          name: "search_customers",
+          description: "Search existing customers by name or company. Returns up to 10 matches with IDs, names, emails, and companies. Use before saving a quotation to link to the correct customer record.",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string", description: "Name or company to search for" }
+            },
+            required: ["query"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "create_customer",
+          description: "Create a new customer record when search_customers returns no match. The normalization trigger will auto-split 'Company, Person' names into company + contact records.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Customer display name (e.g. 'Acme Corp' or 'Acme Corp, John Smith')" },
+              email: { type: "string", description: "Customer email address" },
+              phone: { type: "string", description: "Customer phone number" },
+              company_name: { type: "string", description: "Company name if separate from display name" }
+            },
+            required: ["name"]
+          }
+        }
+      }
+    );
+  }
+
   // Save sales quotation — available to sales and commander
   if (agent === "sales" || agent === "commander") {
     tools.push(
@@ -550,6 +587,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
             properties: {
               customer_name: { type: "string", description: "Customer contact name" },
               customer_company: { type: "string", description: "Customer company name" },
+              customer_id: { type: "string", description: "Customer UUID from search_customers or create_customer — links quotation to CRM record" },
               amount: { type: "number", description: "Total quotation amount in CAD" },
               notes: { type: "string", description: "Quotation details and line items summary" },
               expiry_date: { type: "string", description: "Quotation expiry date YYYY-MM-DD (default: 30 days from now)" },
