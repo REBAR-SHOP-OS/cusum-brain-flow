@@ -418,6 +418,24 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         loading={actionLoading}
       />
 
+      <ConfirmActionDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        title="Delete This Invoice?"
+        description={`This will permanently delete Invoice ${deleteTarget?.invoice_number}.`}
+        variant="destructive"
+        confirmLabel="Yes, Delete"
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          setActionLoading(true);
+          try { await remove.mutateAsync(deleteTarget.id); } finally {
+            setActionLoading(false);
+            setDeleteTarget(null);
+          }
+        }}
+        loading={actionLoading}
+      />
+
       {previewInvoice && (
         <InvoiceEditor
           invoice={previewInvoice}
@@ -447,6 +465,25 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         <PackingSlipTemplate
           data={getPackingSlipData(packingSlipInvoice)}
           onClose={() => setPackingSlipInvoice(null)}
+        />
+      )}
+
+      {erpPackingSlip && (
+        <PackingSlipTemplate
+          data={{
+            invoiceNumber: erpPackingSlip.invoice_number,
+            invoiceDate: erpPackingSlip.issued_date ? format(new Date(erpPackingSlip.issued_date), "MMM d, yyyy") : new Date().toLocaleDateString(),
+            customerName: erpPackingSlip.customer_name || erpPackingSlip.customer_company || "—",
+            deliveryNumber: "",
+            deliveryDate: "",
+            scope: erpPackingSlip.notes || "",
+            items: [{
+              quantity: 1,
+              size: "—",
+              type: "As per invoice",
+            }],
+          }}
+          onClose={() => setErpPackingSlip(null)}
         />
       )}
     </div>
