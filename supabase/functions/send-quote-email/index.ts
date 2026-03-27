@@ -443,12 +443,13 @@ Deno.serve((req) =>
         // Try to find existing Stripe payment link
         try {
           const { data: paymentLink } = await svc
-            .from("payment_links")
+            .from("stripe_payment_links")
             .select("stripe_url")
-            .eq("invoice_id", invoiceId)
+            .eq("qb_invoice_id", invoiceId)
+            .eq("status", "active")
             .maybeSingle();
           stripePaymentUrl = paymentLink?.stripe_url || "";
-        } catch (_e) { /* no payment_links table or no link */ }
+        } catch (_e) { /* no stripe_payment_links or no link */ }
       } else {
         // First acceptance: create invoice
         const year = new Date().getFullYear();
