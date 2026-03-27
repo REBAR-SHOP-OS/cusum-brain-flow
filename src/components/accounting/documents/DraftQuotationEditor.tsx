@@ -145,19 +145,46 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         if (meta.customer_email) {
           setCustomerEmail(meta.customer_email);
         } else {
-          // Fallback: look up email from customers table by name
+          // Fallback chain: customers → contacts → sales_contacts
           const resolvedName = meta.customer_name || data.salesperson || "";
           if (resolvedName && companyId) {
-            supabase
+            const { data: cust } = await supabase
               .from("customers")
-              .select("email")
+              .select("id, email")
               .eq("company_id", companyId)
               .ilike("name", resolvedName)
               .limit(1)
-              .single()
-              .then(({ data: cust }) => {
-                if (cust?.email) setCustomerEmail(cust.email);
-              });
+              .maybeSingle();
+            if (cust?.email) {
+              setCustomerEmail(cust.email);
+            } else {
+              // Fallback 1: contacts table
+              const custId = cust?.id;
+              if (custId) {
+                const { data: contact } = await supabase
+                  .from("contacts")
+                  .select("email")
+                  .eq("customer_id", custId)
+                  .not("email", "is", null)
+                  .limit(1)
+                  .maybeSingle();
+                if (contact?.email) {
+                  setCustomerEmail(contact.email);
+                }
+              }
+              if (!cust?.email) {
+                // Fallback 2: sales_contacts
+                const { data: sc } = await supabase
+                  .from("sales_contacts")
+                  .select("email")
+                  .eq("company_id", companyId)
+                  .or(`name.ilike.%${resolvedName}%,company_name.ilike.%${resolvedName}%`)
+                  .not("email", "is", null)
+                  .limit(1)
+                  .maybeSingle();
+                if (sc?.email) setCustomerEmail(sc.email);
+              }
+            }
           }
         }
         let resolvedNotes = meta.notes || "";
@@ -205,13 +232,43 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     [products, productSearch]
   );
 
-  const selectCustomer = (c: CustomerOption) => {
+  const selectCustomer = async (c: CustomerOption) => {
     setCustomerName(c.name);
     const addrParts = [c.billing_street1, c.billing_city, c.billing_province, c.billing_postal_code].filter(Boolean);
     if (addrParts.length) setCustomerAddress(addrParts.join(", "));
-    if (c.email) setCustomerEmail(c.email);
     setCustomerOpen(false);
     setCustomerSearch("");
+
+    if (c.email) {
+      setCustomerEmail(c.email);
+      return;
+    }
+
+    // Fallback 1: contacts table by customer_id
+    const { data: contact } = await supabase
+      .from("contacts")
+      .select("email")
+      .eq("customer_id", c.id)
+      .not("email", "is", null)
+      .limit(1)
+      .maybeSingle();
+    if (contact?.email) {
+      setCustomerEmail(contact.email);
+      return;
+    }
+
+    // Fallback 2: sales_contacts by name/company_name
+    if (companyId) {
+      const { data: sc } = await supabase
+        .from("sales_contacts")
+        .select("email")
+        .eq("company_id", companyId)
+        .or(`name.ilike.%${c.name}%,company_name.ilike.%${c.name}%`)
+        .not("email", "is", null)
+        .limit(1)
+        .maybeSingle();
+      if (sc?.email) setCustomerEmail(sc.email);
+    }
   };
 
   const handleAddNewCustomer = async () => {
