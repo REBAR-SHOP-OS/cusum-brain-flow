@@ -103,7 +103,7 @@ export function RebarTagCard({
       <div className="grid shrink-0 border-b-2 border-black" style={{ gridTemplateColumns: "1fr 1.4fr" }}>
         {/* Brand logo */}
         <div className="border-r-2 border-black p-2 flex flex-col items-center justify-center">
-          <img src={logoCoin} alt="Brand logo" className="w-10 h-10 object-contain" />
+          <img src={logoCoin} alt="Brand logo" className="w-16 h-16 object-contain" />
         </div>
         {/* Dims grid — parallel columns */}
         <div className="p-1.5" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gap: "0 0.75rem" }}>
