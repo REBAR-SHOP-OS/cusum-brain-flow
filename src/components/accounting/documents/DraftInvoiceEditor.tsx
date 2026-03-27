@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus } from "lucide-react";
+import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";

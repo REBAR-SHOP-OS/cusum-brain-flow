@@ -485,6 +485,51 @@ Deno.serve((req) =>
         if (invErr) throw new Error(`Invoice creation failed: ${invErr.message}`);
         invoiceId = newInvoice.id;
 
+        // Copy line items from quotation to invoice
+        try {
+          if (sqCheck?.id) {
+            const { data: quoteItems } = await svc
+              .from("sales_quotation_items")
+              .select("description, quantity, unit, unit_price, total, sort_order, company_id")
+              .eq("quotation_id", sqCheck.id)
+              .order("sort_order");
+            if (quoteItems && quoteItems.length > 0) {
+              const invoiceItems = quoteItems.map((qi: any) => ({
+                invoice_id: invoiceId,
+                company_id: qi.company_id || companyId,
+                description: qi.description,
+                quantity: qi.quantity,
+                unit: qi.unit,
+                unit_price: qi.unit_price,
+                total: qi.total,
+                sort_order: qi.sort_order,
+              }));
+              await svc.from("sales_invoice_items").insert(invoiceItems);
+              console.log(`[accept_and_convert] Copied ${invoiceItems.length} line items to invoice ${invoiceNumber}`);
+            }
+          }
+          // Fallback: if no quotation items, parse from quote metadata
+          if (!sqCheck?.id || !(await svc.from("sales_invoice_items").select("id").eq("invoice_id", invoiceId).limit(1)).data?.length) {
+            const metaItems = (meta.line_items || meta.items || []) as any[];
+            if (metaItems.length > 0) {
+              const fallbackItems = metaItems.map((mi: any, idx: number) => ({
+                invoice_id: invoiceId,
+                company_id: companyId,
+                description: mi.description || mi.name || "Item",
+                quantity: mi.quantity || mi.qty || 1,
+                unit: mi.unit || null,
+                unit_price: mi.unit_price || mi.unitPrice || mi.price || 0,
+                total: (mi.quantity || mi.qty || 1) * (mi.unit_price || mi.unitPrice || mi.price || 0),
+                sort_order: idx,
+              }));
+              await svc.from("sales_invoice_items").insert(fallbackItems);
+              console.log(`[accept_and_convert] Copied ${fallbackItems.length} line items from metadata`);
+            }
+          }
+        } catch (itemErr) {
+          console.warn("[accept_and_convert] Failed to copy line items:", itemErr);
+        }
+
         // Generate Stripe payment link
         try {
           const stripeRes = await fetch(`${supabaseUrl}/functions/v1/stripe-payment`, {
