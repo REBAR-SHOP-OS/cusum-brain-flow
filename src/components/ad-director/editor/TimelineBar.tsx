@@ -199,16 +199,24 @@ export function TimelineBar({
     };
   }, [scrubbing, totalDuration, onSeek]);
 
+  // Find which scene a global time (seconds) falls into
+  const findSceneAtTime = useCallback((timeSec: number): { sceneIdx: number; localTime: number } => {
+    for (let i = 0; i < storyboard.length; i++) {
+      const start = cumulativeStarts[i] || 0;
+      const dur = getSceneDur(i);
+      if (timeSec >= start && timeSec < start + dur) {
+        return { sceneIdx: i, localTime: timeSec - start };
+      }
+    }
+    const lastIdx = storyboard.length - 1;
+    return { sceneIdx: lastIdx, localTime: Math.max(0, timeSec - (cumulativeStarts[lastIdx] || 0)) };
+  }, [storyboard, cumulativeStarts]);
+
   // Find which scene a percentage position falls into
   const findSceneAtPct = useCallback((pct: number) => {
-    for (let i = 0; i < storyboard.length; i++) {
-      const start = (cumulativeStarts[i] || 0) / totalDuration * 100;
-      const dur = getSceneDur(i);
-      const end = start + (dur / totalDuration) * 100;
-      if (pct >= start && pct < end) return i;
-    }
-    return storyboard.length - 1;
-  }, [storyboard, cumulativeStarts, totalDuration]);
+    const timeSec = (pct / 100) * totalDuration;
+    return findSceneAtTime(timeSec).sceneIdx;
+  }, [totalDuration, findSceneAtTime]);
 
   const handleItemDragStart = useCallback((
     e: React.MouseEvent,
@@ -240,15 +248,17 @@ export function TimelineBar({
       const trackWidth = trackRef.current.getBoundingClientRect().width;
       const dx = e.clientX - itemDragRef.current.startX;
       const deltaPct = (dx / trackWidth) * 100;
-      const centerPct = itemDragRef.current.origLeftPct + itemDragRef.current.origWidthPct / 2 + deltaPct;
-      const targetIdx = findSceneAtPct(Math.max(0, Math.min(100, centerPct)));
-      const targetSceneId = storyboard[targetIdx]?.id;
+      // Calculate new center position in time
+      const newLeftPct = Math.max(0, Math.min(100, itemDragRef.current.origLeftPct + deltaPct));
+      const newTimeSec = (newLeftPct / 100) * totalDuration;
+      const { sceneIdx, localTime } = findSceneAtTime(newTimeSec);
+      const targetSceneId = storyboard[sceneIdx]?.id;
 
       if (targetSceneId) {
         if (itemDragRef.current.type === "text") {
-          onMoveOverlay?.(itemDragRef.current.id, targetSceneId);
+          onMoveOverlay?.(itemDragRef.current.id, targetSceneId, localTime);
         } else {
-          onMoveAudioTrack?.(parseInt(itemDragRef.current.id), targetSceneId);
+          onMoveAudioTrack?.(parseInt(itemDragRef.current.id), targetSceneId, localTime);
         }
       }
 
@@ -263,7 +273,7 @@ export function TimelineBar({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [itemDragging, storyboard, findSceneAtPct, onMoveOverlay, onMoveAudioTrack]);
+  }, [itemDragging, storyboard, totalDuration, findSceneAtTime, onMoveOverlay, onMoveAudioTrack]);
 
   // Drag-to-resize handlers
   const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
