@@ -186,6 +186,10 @@ export function ProVideoEditor({
   const [panelOpen, setPanelOpen] = useState(false);
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
+    if (tab === "music") {
+      setAudioPromptOpen(true);
+      return;
+    }
     if (activeTab === tab) {
       setPanelOpen(prev => !prev);
     } else {
@@ -194,6 +198,51 @@ export function ProVideoEditor({
     }
     onActiveTabChanged?.(tab);
   }, [onActiveTabChanged, activeTab]);
+
+  const handleGenerateAudio = useCallback(async (result: AudioPromptResult) => {
+    setGeneratingAudio(true);
+    try {
+      const functionName = result.type === "music" ? "elevenlabs-music" : "elevenlabs-tts";
+      const body = result.type === "music"
+        ? { prompt: result.prompt, duration: result.duration, type: "music" }
+        : { text: result.prompt };
+
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Audio generation failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      setAudioTracks([{
+        id: crypto.randomUUID(),
+        label: result.type === "music" ? "🎵 Generated Music" : "🎙️ Generated Voiceover",
+        url: audioUrl,
+        type: result.type === "music" ? "music" : "voiceover",
+        startTime: 0,
+      }]);
+
+      setAudioPromptOpen(false);
+      toast({ title: "✅ صدا با موفقیت تولید شد" });
+    } catch (err: any) {
+      console.error("Audio generation error:", err);
+      toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingAudio(false);
+    }
+  }, [toast]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
