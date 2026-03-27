@@ -637,10 +637,24 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
     const summary = computeProjectSummary(calculatedItems);
 
     // ─── ZERO-WEIGHT GUARD: Don't persist useless projects ───
-    if (summary.total_weight_kg <= 0 && extractedItems.length > 0) {
-      console.error("Extraction produced items but total weight is 0 — aborting project creation");
+    if (summary.total_weight_kg <= 0) {
+      const fileTypes = [];
+      if (hadSpreadsheetFiles) fileTypes.push("spreadsheet");
+      if (hadAIFiles) fileTypes.push("PDF/image");
+      const typeStr = fileTypes.join(" and ") || "uploaded";
+      
+      let errorMsg: string;
+      if (hadSpreadsheetFiles && !hadAIFiles && spreadsheetItems.length === 0) {
+        errorMsg = `Could not extract rebar data from the spreadsheet file. Ensure columns include Bar Size, Quantity, and Length/Weight. Supported formats: .xlsx, .xls, .csv.`;
+      } else if (extractedItems.length === 0) {
+        errorMsg = `No rebar data could be extracted from the ${typeStr} file(s). Please upload a rebar bar schedule, shop drawing, or weight summary report.`;
+      } else {
+        errorMsg = `Extracted ${extractedItems.length} items from ${typeStr} file(s) but computed total weight is zero. The file may not contain valid rebar data.`;
+      }
+      
+      console.error(`Zero-weight guard triggered: ${errorMsg}`);
       return new Response(JSON.stringify({
-        error: "Could not extract usable rebar weights from the uploaded document. The file may be a summary format that could not be parsed. Please try uploading a detailed bar schedule or shop drawing.",
+        error: errorMsg,
         extraction_failed: true,
       }), { status: 422, headers: { "Content-Type": "application/json" } });
     }
