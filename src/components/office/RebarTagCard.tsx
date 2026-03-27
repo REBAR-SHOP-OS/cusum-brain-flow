@@ -122,38 +122,38 @@ export function RebarTagCard({
         </div>
       </div>
 
-      {/* Shape image */}
-      <div className="flex-1 min-h-0 border-b-2 border-black flex items-center justify-center p-2 bg-white">
-        {shapeImageUrl ? (
-          <img
-            src={shapeImageUrl}
-            alt={`Shape ${shapeType}`}
-            className="max-w-full max-h-full object-contain"
-            style={{ imageRendering: "pixelated" }}
-          />
-        ) : shapeType ? (
-          <div className="text-center">
-            <div className="w-24 h-14 border-b-2 border-black/30 mx-auto" />
-            <span className="text-xl font-black">{shapeType}</span>
-          </div>
-        ) : (
-          <span className="text-[11px] text-black/30 italic">No shape</span>
-        )}
-      </div>
-
-      {/* Ref / Dwg / Item — compact Dwg/Item, more space for Ref */}
-      <div className="grid grid-cols-2 border-b border-black text-xs shrink-0">
-        <div className="border-r border-black px-2 py-2 min-h-[3rem]">
-          <div className="flex gap-1">
-            <span className="font-bold">Ref:</span>
-            <span className="font-black uppercase truncate">{reference || customer || "—"}</span>
-          </div>
-          {address && <div className="text-[9px] leading-tight mt-0.5">{address}</div>}
+      {/* Shape image + Dwg/Item */}
+      <div className="flex-1 min-h-0 border-b-2 border-black flex flex-col items-center justify-center p-2 bg-white">
+        <div className="flex-1 min-h-0 flex items-center justify-center w-full">
+          {shapeImageUrl ? (
+            <img
+              src={shapeImageUrl}
+              alt={`Shape ${shapeType}`}
+              className="max-w-full max-h-full object-contain"
+              style={{ imageRendering: "pixelated" }}
+            />
+          ) : shapeType ? (
+            <div className="text-center">
+              <div className="w-24 h-14 border-b-2 border-black/30 mx-auto" />
+              <span className="text-xl font-black">{shapeType}</span>
+            </div>
+          ) : (
+            <span className="text-[11px] text-black/30 italic">No shape</span>
+          )}
         </div>
-        <div className="px-2 py-1">
+        <div className="flex gap-4 text-xs shrink-0 mt-1">
           <div className="flex gap-1"><span className="font-bold">Dwg:</span><span className="font-black">{dwg || "—"}</span></div>
           <div className="flex gap-1"><span className="font-bold">Item:</span><span className="font-black">{item}</span></div>
         </div>
+      </div>
+
+      {/* Ref — full width */}
+      <div className="border-b border-black text-xs shrink-0 px-2 py-2 min-h-[3.5rem]">
+        <div className="flex gap-1">
+          <span className="font-bold">Ref:</span>
+          <span className="font-black uppercase">{reference || customer || "—"}</span>
+        </div>
+        {address && <div className="text-[9px] leading-tight mt-0.5">{address}</div>}
       </div>
 
       {/* Footer */}
