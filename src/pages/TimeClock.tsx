@@ -304,7 +304,6 @@ export default function TimeClock() {
               onComplete={() => {
                 setShowRegistration(false);
                 face.reset();
-                setTimeout(() => handleScan(), 5000);
               }}
               onCancel={() => { setShowRegistration(false); face.reset(); }}
             />
