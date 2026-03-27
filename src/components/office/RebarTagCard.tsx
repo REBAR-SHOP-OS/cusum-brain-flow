@@ -1,4 +1,5 @@
-const DIM_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
+const DIM_LEFT = ["A", "B", "C", "D", "E", "F"] as const;
+const DIM_RIGHT = ["G", "H", "J", "K", "O", "R"] as const;
 
 function formatMmToFtIn(mm: number): string {
   const totalInches = mm / 25.4;
@@ -21,6 +22,11 @@ function formatVal(val: number | null, unitSystem: string): string {
   const rounded = Math.round(val);
   if (unitSystem === "imperial") return formatMmToFtIn(rounded);
   return String(rounded);
+}
+
+function formatDim(val: number | null | undefined, unitSystem: string): string {
+  if (val == null || val === 0) return "";
+  return unitSystem === "imperial" ? formatMmToFtIn(Math.round(val)) : String(Math.round(val));
 }
 
 interface RebarTagCardProps {
@@ -46,111 +52,115 @@ interface RebarTagCardProps {
 export function RebarTagCard({
   mark, size, grade, qty, length, weight, shapeType,
   dwg, item, customer, reference, address, dims, shapeImageUrl,
-  unitSystem = "metric", bndl = "", job = "",
+  unitSystem = "metric",
 }: RebarTagCardProps) {
   const us = unitSystem;
   const now = new Date();
-  const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-
-  // Build active dims in chunks of 4
-  const activeDims = DIM_COLS.filter((d) => dims[d] != null && dims[d] !== 0);
-  const dimChunks: string[][] = [];
-  for (let i = 0; i < activeDims.length; i += 4) {
-    const chunk = activeDims.slice(i, i + 4);
-    dimChunks.push(chunk);
-  }
-
-  const lengthUnit = us === "imperial" ? "ft" : "mm";
-  const weightLabel = weight ? `${weight} kg` : "—";
+  const ts = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 
   return (
     <div
-      className="rebar-tag border-2 border-black bg-white text-black overflow-hidden font-mono flex flex-col justify-between print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
+      className="rebar-tag border-2 border-black bg-white text-black overflow-hidden font-mono flex flex-col print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
       style={{ width: "4in", height: "6in", boxSizing: "border-box" }}
     >
-      {/* === TIMESTAMP HEADER === */}
-      <div className="flex justify-between items-center px-2 py-1 border-b-2 border-black text-[9px] font-bold shrink-0">
-        <span>REBAR.SHOP OS</span>
-        <span>{timestamp}</span>
+      {/* Timestamp */}
+      <div className="flex justify-between items-center px-2 py-0.5 border-b border-black text-[9px] font-bold shrink-0">
+        <span>{ts}</span>
+        <span>REBAR SHOP OS</span>
       </div>
 
-      {/* === 3-COL HEADER: MARK / SIZE / GRADE === */}
+      {/* Mark / Size / Grade */}
       <div className="grid grid-cols-3 border-b-2 border-black shrink-0">
-        <div className="border-r-2 border-black px-2 py-1.5 text-center">
-          <div className="text-[9px] font-bold tracking-wider uppercase">MARK</div>
-          <div className="text-2xl font-black leading-tight truncate">{mark || "—"}</div>
+        {[["Mark", mark], ["Size", size], ["Grade", grade]].map(([label, val], i) => (
+          <div key={label} className={`text-center py-2 px-2 ${i < 2 ? "border-r-2 border-black" : ""}`}>
+            <div className="text-[9px] font-bold tracking-widest uppercase">{label}</div>
+            <div className="text-[22px] font-black leading-tight">{val || "—"}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Qty / Length / Weight */}
+      <div className="grid grid-cols-3 border-b-2 border-black shrink-0">
+        <div className="text-center py-2 px-2 border-r-2 border-black">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Qty</div>
+          <div className="text-[22px] font-black leading-tight">{qty ?? "—"}</div>
         </div>
-        <div className="border-r-2 border-black px-2 py-1.5 text-center">
-          <div className="text-[9px] font-bold tracking-wider uppercase">SIZE</div>
-          <div className="text-2xl font-black leading-tight">{size || "—"}</div>
+        <div className="text-center py-2 px-2 border-r-2 border-black">
+          <div className="text-[9px] font-bold tracking-widest uppercase">
+            Length {us === "imperial" ? "(ft-in)" : "(mm)"}
+          </div>
+          <div className="text-[22px] font-black leading-tight">{formatVal(length, us)}</div>
         </div>
-        <div className="px-2 py-1.5 text-center">
-          <div className="text-[9px] font-bold tracking-wider uppercase">GRADE</div>
-          <div className="text-2xl font-black leading-tight">{grade || "—"}</div>
+        <div className="text-center py-2 px-2">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Weight</div>
+          <div className="text-[18px] font-black leading-tight">{weight || "—"}</div>
         </div>
       </div>
 
-      {/* === QTY + LENGTH ROW === */}
-      <div className="grid grid-cols-2 border-b-2 border-black shrink-0">
-        <div className="border-r-2 border-black px-2 py-1.5">
-          <div className="text-[10px] font-bold uppercase">QTY:</div>
-          <div className="text-xl font-black leading-tight">{qty ?? "—"}</div>
+      {/* Shape code + Dims */}
+      <div className="grid shrink-0 border-b-2 border-black" style={{ gridTemplateColumns: "1fr 1.4fr" }}>
+        {/* Shape circle */}
+        <div className="border-r-2 border-black p-2 flex flex-col items-center justify-center">
+          <div className="w-10 h-10 rounded-full border-2 border-black flex items-center justify-center mb-1">
+            <span className="text-sm font-black">{shapeType || "S"}</span>
+          </div>
+          <span className="text-[9px] font-bold uppercase">Shape</span>
         </div>
-        <div className="px-2 py-1.5">
-          <div className="text-[10px] font-bold uppercase">LENGTH ({lengthUnit}):</div>
-          <div className="text-xl font-black leading-tight">{formatVal(length, us)}</div>
-        </div>
-      </div>
-
-      {/* === WEIGHT ROW === */}
-      <div className="border-b-2 border-black px-2 py-1.5 shrink-0">
-        <div className="text-[10px] font-bold uppercase">WEIGHT:</div>
-        <div className="text-xl font-black leading-tight">{weightLabel}</div>
-      </div>
-
-      {/* === DIMS SECTION === */}
-      <div className="border-b-2 border-black px-2 py-1.5 shrink-0">
-        <div className="text-[10px] font-bold uppercase mb-0.5">DIMS:</div>
-        {dimChunks.length > 0 ? (
-          dimChunks.map((chunk, idx) => (
-            <div key={idx} className="text-sm font-black leading-snug">
-              {chunk.map((d) => `${d}:${formatVal(dims[d] ?? null, us)}`).join("  ")}
+        {/* Dims grid */}
+        <div className="p-1.5 grid grid-cols-2 gap-x-3">
+          {DIM_LEFT.map((d) => (
+            <div key={d} className="text-xs flex gap-1" style={{ gridColumn: 1 }}>
+              <span className="font-bold w-3.5">{d}:</span>
+              <span className="font-black">{formatDim(dims[d], us)}</span>
             </div>
-          ))
+          ))}
+          {DIM_RIGHT.map((d) => (
+            <div key={d} className="text-xs flex gap-1" style={{ gridColumn: 2 }}>
+              <span className="font-bold w-3.5">{d}:</span>
+              <span className="font-black">{formatDim(dims[d], us)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Shape image */}
+      <div className="flex-1 min-h-0 border-b-2 border-black flex items-center justify-center p-2 bg-white">
+        {shapeImageUrl ? (
+          <img
+            src={shapeImageUrl}
+            alt={`Shape ${shapeType}`}
+            className="max-w-full max-h-full object-contain"
+            style={{ imageRendering: "pixelated" }}
+          />
+        ) : shapeType ? (
+          <div className="text-center">
+            <div className="w-24 h-14 border-b-2 border-black/30 mx-auto" />
+            <span className="text-xl font-black">{shapeType}</span>
+          </div>
         ) : (
-          <div className="text-sm text-black/40 italic">—</div>
+          <span className="text-[11px] text-black/30 italic">No shape</span>
         )}
       </div>
 
-      {/* === BARCODE AREA === */}
-      <div className="border-b-2 border-black py-2 flex flex-col items-center shrink-0">
-        <div
-          className="text-[8px] font-mono tracking-[0.25em] border border-black px-2 py-0.5"
-          style={{ fontStretch: "condensed" }}
-        >
-          {mark ? `|||${mark.replace(/./g, (c) => c + "|")}||` : "||||||"}
+      {/* Ref / Dwg / Item */}
+      <div className="grid grid-cols-2 border-b border-black text-xs shrink-0">
+        <div className="border-r border-black px-2 py-1.5">
+          <div className="flex gap-1">
+            <span className="font-bold">Ref:</span>
+            <span className="font-black uppercase truncate">{reference || customer || "—"}</span>
+          </div>
+          {address && <div className="text-[9px] truncate">{address}</div>}
         </div>
-        <span className="text-[9px] font-bold mt-0.5">{mark || ""}</span>
-      </div>
-
-      {/* === DWG / ITEM ROW === */}
-      <div className="border-b border-black px-2 py-1 shrink-0">
-        <div className="text-[11px] font-black">
-          DWG: {dwg || "—"} &nbsp;&nbsp; ITEM: {item}
+        <div className="px-2 py-1.5">
+          <div className="flex gap-1"><span className="font-bold">Dwg:</span><span className="font-black">{dwg || "—"}</span></div>
+          <div className="flex gap-1"><span className="font-bold">Item:</span><span className="font-black">{item}</span></div>
         </div>
       </div>
 
-      {/* === REF ROW === */}
-      <div className="border-b-2 border-black px-2 py-1 shrink-0">
-        <div className="text-[11px] font-black">
-          REF: {reference || customer || "—"}
-        </div>
-      </div>
-
-      {/* === FOOTER === */}
-      <div className="flex justify-between items-center px-2 py-1 text-[9px] font-bold shrink-0">
-        <span>REBAR.SHOP OS</span>
-        <span>{timestamp}</span>
+      {/* Footer */}
+      <div className="flex justify-between items-center px-2 py-1.5 shrink-0">
+        <span className="text-sm font-black tracking-widest">R.S</span>
+        <span className="text-[9px] font-bold tracking-[3px] uppercase">REBAR.SHOP</span>
       </div>
     </div>
   );
