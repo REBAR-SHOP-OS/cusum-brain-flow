@@ -417,7 +417,11 @@ Deno.serve((req) =>
       }
 
       const companyId = sqCheck?.company_id || quote.company_id || "a0000000-0000-0000-0000-000000000001";
-      const amount = sqCheck?.amount || totalAmount;
+      // The quotation amount is TAX-INCLUSIVE. Store the pre-tax subtotal as invoice amount
+      // so the invoice editor doesn't double-tax it.
+      const rawTotalWithTax = sqCheck?.amount || totalAmount;
+      const invoiceTaxRate = ((meta.tax_rate as number) ?? 13) / 100;
+      const amount = Math.round((rawTotalWithTax / (1 + invoiceTaxRate)) * 100) / 100;
 
       // Check if invoice already exists (re-acceptance scenario)
       const { data: existingInvoice } = await svc
@@ -541,7 +545,7 @@ Deno.serve((req) =>
             },
             body: JSON.stringify({
               action: "create-payment-link",
-              amount,
+              amount: rawTotalWithTax,
               currency: "cad",
               invoiceNumber,
               customerName: sqCheck?.customer_name || customerName,
