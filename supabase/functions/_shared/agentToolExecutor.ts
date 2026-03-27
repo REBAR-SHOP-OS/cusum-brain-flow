@@ -1666,66 +1666,126 @@ export async function executeToolCall(
       if (fetchErr || !quote) {
         result.result = { error: fetchErr?.message || "Quotation not found" };
       } else {
-        // Use the unified send-quote-email edge function for branded emails with Accept button
-        try {
-          const sendQuoteRes = await fetch(
-            `${supabaseUrl}/functions/v1/send-quote-email`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": authHeader,
-                "apikey": Deno.env.get("SUPABASE_ANON_KEY") || "",
-              },
-              body: JSON.stringify({
-                action: "send",
-                quotationId: quotationId,
-                customerEmail: toEmail,
-                customerName: customerName,
-              }),
-            }
-          );
+        // Find linked quotes row via quote_result.quote_id
+        const quoteResult = (quote as any).quote_result as Record<string, any> | null;
+        const linkedQuoteId = quoteResult?.quote_id;
 
-          if (sendQuoteRes.ok) {
-            result.result = {
-              success: true,
-              message: `Quotation ${quote.quotation_number} emailed to ${toEmail} with Accept Quote portal link`,
-              quotation_number: quote.quotation_number,
-              to: toEmail,
-            };
-            result.sideEffects.emails = [{ to: toEmail }];
-          } else {
-            const errText = await sendQuoteRes.text();
-            console.warn("send-quote-email failed, falling back to direct Gmail:", errText);
-            // Fallback to direct Gmail send (legacy approach)
-            const senderName = context?.currentUser?.name || "Sales Team";
-            const subject = args.subject || `Quotation ${quote.quotation_number} — REBAR.SHOP`;
-            const htmlBody = `<p>Dear ${customerName},</p><p>Please find attached quotation ${quote.quotation_number} for $${(quote.amount || 0).toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD.</p><p>Valid until ${quote.expiry_date || "30 days"}.</p><p>Best regards,<br/>${senderName}<br/>REBAR.SHOP</p>`;
-            
-            const emailRes = await fetch(
-              `${supabaseUrl}/functions/v1/gmail-send`,
+        if (linkedQuoteId) {
+          // Use the unified send-quote-email edge function for branded emails with Accept button
+          try {
+            const sendQuoteRes = await fetch(
+              `${supabaseUrl}/functions/v1/send-quote-email`,
               {
                 method: "POST",
-                headers: { "Content-Type": "application/json", "Authorization": authHeader, "apikey": Deno.env.get("SUPABASE_ANON_KEY") || "" },
-                body: JSON.stringify({ to: toEmail, subject, body: htmlBody }),
+                headers: {
+                  "Content-Type": "application/json",
+                  "Authorization": authHeader,
+                  "apikey": Deno.env.get("SUPABASE_ANON_KEY") || "",
+                },
+                body: JSON.stringify({
+                  quote_id: linkedQuoteId,
+                  customer_email: toEmail,
+                  action: "send_quote",
+                }),
               }
             );
 
-            if (emailRes.ok) {
-              await svcClient.from("sales_quotations").update({ status: "sent" }).eq("id", quotationId);
+            if (sendQuoteRes.ok) {
               result.result = {
                 success: true,
-                message: `Quotation ${quote.quotation_number} emailed to ${toEmail} (basic format)`,
+                message: `Quotation ${quote.quotation_number} emailed to ${toEmail} with Accept Quote portal link`,
                 quotation_number: quote.quotation_number,
                 to: toEmail,
               };
               result.sideEffects.emails = [{ to: toEmail }];
             } else {
-              result.result = { success: false, error: await emailRes.text() };
+              const errText = await sendQuoteRes.text();
+              console.warn("send-quote-email failed:", errText);
+              throw new Error(errText);
             }
+          } catch (e) {
+            console.warn("send-quote-email failed, falling back to direct Gmail:", e);
+            // Fallback below
+            await sendViaGmailFallback();
           }
-        } catch (e) {
-          result.result = { success: false, error: e instanceof Error ? e.message : String(e) };
+        } else {
+          // No linked quotes row — use direct Gmail fallback
+          await sendViaGmailFallback();
+        }
+
+        async function sendViaGmailFallback() {
+          const senderName = context?.currentUser?.name || "Sales Team";
+          const subject = args.subject || `Quotation ${quote.quotation_number} — REBAR.SHOP`;
+          
+          // Fetch structured line items
+          const { data: qItems } = await svcClient
+            .from("sales_quotation_items")
+            .select("description, quantity, unit_price, total")
+            .eq("quotation_id", quotationId)
+            .order("sort_order", { ascending: true });
+
+          const lineItemRows = (qItems || []).map((li: any) =>
+            `<tr><td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;">${li.description}</td>
+             <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">${li.quantity}</td>
+             <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;">$${(li.unit_price || 0).toFixed(2)}</td>
+             <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">$${(li.total || 0).toFixed(2)}</td></tr>`
+          ).join("");
+
+          const subtotal = quote.amount || 0;
+          const hst = Math.round(subtotal * 0.13 * 100) / 100;
+          const total = Math.round((subtotal + hst) * 100) / 100;
+
+          const htmlBody = `
+<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:680px;margin:0 auto;background:#ffffff;">
+  <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:32px;text-align:center;">
+    <h1 style="color:#e94560;font-size:28px;margin:0;letter-spacing:2px;">REBAR.SHOP</h1>
+    <p style="color:#a8b2d1;font-size:13px;margin:6px 0 0;">Premium Steel Reinforcement — Ontario, Canada</p>
+  </div>
+  <div style="padding:32px;">
+    <p style="font-size:16px;color:#333;">Dear ${customerName},</p>
+    <p style="font-size:15px;color:#555;line-height:1.6;">Please find below our quotation for your review.</p>
+    <div style="background:#f8f9fc;border-radius:8px;padding:20px;margin:24px 0;border-left:4px solid #e94560;">
+      <table style="width:100%;"><tr><td style="color:#888;font-size:13px;">Quotation #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${quote.quotation_number}</td></tr>
+      <tr><td style="color:#888;font-size:13px;">Subtotal</td><td style="text-align:right;font-weight:700;color:#1a1a2e;">$${subtotal.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+      <tr><td style="color:#888;font-size:13px;">HST (13%)</td><td style="text-align:right;color:#555;">$${hst.toLocaleString("en-CA", { minimumFractionDigits: 2 })}</td></tr>
+      <tr><td style="color:#888;font-size:13px;font-weight:700;">Total</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:20px;">$${total.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+      <tr><td style="color:#888;font-size:13px;">Valid Until</td><td style="text-align:right;color:#1a1a2e;">${quote.expiry_date || "30 days"}</td></tr></table>
+    </div>
+    ${lineItemRows ? `<h3 style="color:#1a1a2e;font-size:16px;margin:24px 0 12px;">Quotation Details</h3>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      <thead><tr><th style="text-align:left;padding:8px 12px;background:#f1f3f9;color:#555;">Description</th><th style="text-align:right;padding:8px 12px;background:#f1f3f9;color:#555;">Qty</th><th style="text-align:right;padding:8px 12px;background:#f1f3f9;color:#555;">Unit Price</th><th style="text-align:right;padding:8px 12px;background:#f1f3f9;color:#555;">Amount</th></tr></thead>
+      <tbody>${lineItemRows}</tbody>
+    </table>` : ""}
+    <p style="font-size:14px;color:#555;line-height:1.6;margin-top:24px;">Prices in CAD. HST (13%) applies.</p>
+    <div style="margin-top:32px;padding-top:20px;border-top:1px solid #e5e7eb;">
+      <p style="margin:0;font-weight:600;color:#1a1a2e;">${senderName}</p>
+      <p style="margin:2px 0;color:#888;font-size:13px;">REBAR.SHOP — Premium Steel Reinforcement</p>
+      <p style="margin:2px 0;color:#888;font-size:13px;">📞 (905) 761-1311 | 🌐 www.rebar.shop</p>
+    </div>
+  </div>
+</div>`;
+
+          const emailRes = await fetch(
+            `${supabaseUrl}/functions/v1/gmail-send`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": authHeader, "apikey": Deno.env.get("SUPABASE_ANON_KEY") || "" },
+              body: JSON.stringify({ to: toEmail, subject, body: htmlBody }),
+            }
+          );
+
+          if (emailRes.ok) {
+            await svcClient.from("sales_quotations").update({ status: "sent" } as any).eq("id", quotationId);
+            result.result = {
+              success: true,
+              message: `Quotation ${quote.quotation_number} emailed to ${toEmail}`,
+              quotation_number: quote.quotation_number,
+              to: toEmail,
+            };
+            result.sideEffects.emails = [{ to: toEmail }];
+          } else {
+            result.result = { success: false, error: await emailRes.text() };
+          }
         }
       }
     }
