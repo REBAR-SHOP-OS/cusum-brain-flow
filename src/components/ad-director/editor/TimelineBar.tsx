@@ -341,13 +341,14 @@ export function TimelineBar({
           </div>
         )}
         <div className="flex-1" />
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><ZoomOut className="w-3 h-3" /></Button>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><ZoomIn className="w-3 h-3" /></Button>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0"><Maximize className="w-3 h-3" /></Button>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.max(z / 1.5, 0.5))} title="Zoom Out"><ZoomOut className="w-3 h-3" /></Button>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.min(z * 1.5, 5))} title="Zoom In"><ZoomIn className="w-3 h-3" /></Button>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(1)} title="Fit"><Maximize className="w-3 h-3" /></Button>
       </div>
 
       {/* Tracks */}
-      <div className="px-3 py-2 space-y-1.5 relative">
+      <div className="px-3 py-2 space-y-1.5 relative overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+        <div style={{ width: `${100 * zoomLevel}%`, minWidth: "100%" }}>
         {/* ─── Video track ─── */}
         <div className="flex items-center gap-0.5">
           <VolumeControl
