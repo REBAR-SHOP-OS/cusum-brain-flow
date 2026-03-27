@@ -53,7 +53,7 @@ type StatusFilter = "all" | "open" | "overdue" | "paid";
 export function AccountingInvoices({ data, initialSearch }: Props) {
   const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items, payments, qbAction, loadAll } = data;
   const { companyId } = useCompanyId();
-  const { generateNumber } = useSalesInvoices();
+  const { invoices: localInvoices, isLoading: localLoading, generateNumber } = useSalesInvoices();
   const [search, setSearch] = useState(initialSearch || "");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
