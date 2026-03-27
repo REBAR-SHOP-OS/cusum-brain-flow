@@ -317,9 +317,9 @@ Deno.serve((req) =>
       if (invErr) throw new Error(`Invoice creation failed: ${invErr.message}`);
 
       // 3b. Copy line items to sales_invoice_items
+      const metaItems = (meta.line_items || meta.items || []) as any[];
       try {
         let itemsCopied = false;
-        const metaItems = (meta.line_items || meta.items || []) as any[];
         if (metaItems.length > 0) {
           const invoiceItems = metaItems.map((mi: any, idx: number) => {
             const qty = Number(mi.quantity) || Number(mi.qty) || 1;
@@ -393,7 +393,6 @@ Deno.serve((req) =>
       // 4b. Auto-push invoice to QuickBooks
       let qbInvoiceLink = "";
       try {
-        const metaItems = (meta.line_items || meta.items || []) as any[];
         const qbLineItems = (metaItems.length > 0 ? metaItems : []).map((mi: any) => ({
           description: mi.description || mi.name || "Item",
           unitPrice: Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0,
@@ -629,11 +628,11 @@ Deno.serve((req) =>
         // Copy line items from quotation to invoice
         // PRIMARY SOURCE: quotes.metadata.line_items (always populated by DraftQuotationEditor & AI)
         // SECONDARY SOURCE: sales_quotation_items table (rarely populated)
+        const metaItems = (meta.line_items || meta.items || []) as any[];
         try {
           let itemsCopied = false;
 
           // 1. Primary: quotes.metadata.line_items
-          const metaItems = (meta.line_items || meta.items || []) as any[];
           if (metaItems.length > 0) {
             const invoiceItems = metaItems.map((mi: any, idx: number) => {
                const qty = Number(mi.quantity) || Number(mi.qty) || 1;
