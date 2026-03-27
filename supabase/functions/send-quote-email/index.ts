@@ -6,7 +6,7 @@ import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 const sendSchema = z.object({
   quote_id: z.string().uuid(),
   customer_email: z.string().email().optional().or(z.literal("")),
-  action: z.enum(["send_quote", "convert_to_invoice", "accept_and_convert"]),
+  action: z.enum(["send_quote", "convert_to_invoice", "accept_and_convert", "send_quote_copy"]),
 });
 
 const APP_URL = "https://cusum-brain-flow.lovable.app";
@@ -444,6 +444,52 @@ Deno.serve((req) =>
         email_sent: emailOk,
         message: `Invoice ${invoiceNumber} created${emailOk ? ` and sent to ${resolvedEmail}` : " (email failed)"}${stripePaymentUrl ? " with payment link" : ""}`,
       };
+    }
+
+    if (action === "send_quote_copy") {
+      // ── Send read-only quote copy to customer (no accept button, no status change) ──
+      const targetEmail = customer_email;
+      if (!targetEmail) {
+        throw new Error("Email address is required to send a quote copy");
+      }
+
+      const bodyHtml = `
+        <p style="font-size:16px;color:#333;">Dear ${customerName},</p>
+        <p style="font-size:14px;color:#555;line-height:1.6;">Here is a copy of your quotation for your records.</p>
+        <div style="background:#f8f9fc;border-radius:8px;padding:16px;margin:20px 0;border-left:4px solid #e94560;">
+          <table style="width:100%;">
+            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Quotation #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${quoteNumber}</td></tr>
+            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Total Amount</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:20px;">$${totalAmount.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+            ${quote.valid_until ? `<tr><td style="color:#888;font-size:13px;padding:4px 0;">Valid Until</td><td style="text-align:right;color:#1a1a2e;">${new Date(quote.valid_until).toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}</td></tr>` : ""}
+          </table>
+        </div>
+        ${lineItemsTable}
+        ${notes ? `<div style="margin-top:20px;padding:16px;background:#fafafa;border-radius:6px;border:1px solid #e5e7eb;"><p style="font-size:12px;color:#888;margin:0 0 8px;font-weight:600;">Notes / Terms:</p><pre style="font-size:12px;color:#555;margin:0;white-space:pre-wrap;font-family:inherit;">${notes}</pre></div>` : ""}
+        <p style="font-size:14px;color:#555;margin-top:24px;">If you have any questions, please don't hesitate to reach out.</p>
+      `;
+
+      const brandedHtml = buildBrandedEmail({ bodyHtml });
+
+      const emailRes = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+        },
+        body: JSON.stringify({
+          to: targetEmail,
+          subject: `Quotation ${quoteNumber} - REBAR.SHOP (Copy)`,
+          body: brandedHtml,
+        }),
+      });
+
+      if (!emailRes.ok) {
+        const errText = await emailRes.text();
+        throw new Error(`Email send failed: ${errText}`);
+      }
+
+      return { success: true, message: `Quote copy sent to ${targetEmail}` };
     }
 
     throw new Error(`Unknown action: ${action}`);
