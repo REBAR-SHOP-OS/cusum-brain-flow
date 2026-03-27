@@ -580,8 +580,14 @@ export function TimelineBar({
             {textOverlays.map((ov) => {
               const idx = storyboard.findIndex(s => s.id === ov.sceneId);
               if (idx < 0) return null;
-              const leftPct = ((cumulativeStarts[idx] || 0) / totalDuration) * 100;
-              const widthPct = (getSceneDur(idx) / totalDuration) * 100;
+              const sceneStart = cumulativeStarts[idx] || 0;
+              const sceneDur = getSceneDur(idx);
+              const itemStart = ov.startTime ?? 0;
+              const itemEnd = ov.endTime ?? sceneDur;
+              const absStart = sceneStart + itemStart;
+              const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
+              const leftPct = (absStart / totalDuration) * 100;
+              const widthPct = ((absEnd - absStart) / totalDuration) * 100;
               const isBeingDragged = draggedItemId === ov.id;
               return (
                 <div
@@ -589,7 +595,7 @@ export function TimelineBar({
                   className="absolute top-0.5 bottom-0.5 rounded-sm bg-violet-500/70 cursor-grab hover:bg-violet-500/90 transition-colors flex items-center px-1 group"
                   style={{
                     left: `${leftPct}%`,
-                    width: `${Math.max(widthPct, 1)}%`,
+                    width: `${Math.max(widthPct, 0.8)}%`,
                     transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
                     zIndex: isBeingDragged ? 30 : 5,
                   }}
@@ -622,8 +628,14 @@ export function TimelineBar({
             {audioTracks.map((track, tIdx) => {
               const idx = storyboard.findIndex(s => s.id === track.sceneId);
               if (idx < 0) return null;
-              const leftPct = ((cumulativeStarts[idx] || 0) / totalDuration) * 100;
-              const widthPct = (getSceneDur(idx) / totalDuration) * 100;
+              const sceneStart = cumulativeStarts[idx] || 0;
+              const sceneDur = getSceneDur(idx);
+              const itemStart = track.startTime ?? 0;
+              const itemEnd = track.endTime ?? sceneDur;
+              const absStart = sceneStart + itemStart;
+              const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
+              const leftPct = (absStart / totalDuration) * 100;
+              const widthPct = ((absEnd - absStart) / totalDuration) * 100;
               const itemId = `audio-${tIdx}`;
               const isBeingDragged = draggedItemId === itemId;
               const barColor = track.kind === "voiceover" ? "bg-teal-500/70 hover:bg-teal-500/90" : "bg-amber-500/70 hover:bg-amber-500/90";
@@ -633,7 +645,7 @@ export function TimelineBar({
                   className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor}`}
                   style={{
                     left: `${leftPct}%`,
-                    width: `${Math.max(widthPct, 1)}%`,
+                    width: `${Math.max(widthPct, 0.8)}%`,
                     transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
                     zIndex: isBeingDragged ? 30 : 5,
                   }}
