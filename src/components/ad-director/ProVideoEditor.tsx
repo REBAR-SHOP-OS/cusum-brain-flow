@@ -13,6 +13,7 @@ import {
   SkipBack, SkipForward,
   Palette, Film, LayoutGrid, X, Edit3,
   Mic, Captions, Gauge, MessageSquareText,
+  RectangleHorizontal,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -192,6 +193,25 @@ export function ProVideoEditor({
   const [panelOpen, setPanelOpen] = useState(false);
   const [videoSpeed, setVideoSpeed] = useState(1);
   const [speedPopoverOpen, setSpeedPopoverOpen] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
+
+  const ASPECT_RATIOS: Record<string, string> = {
+    "16:9": "16/9",
+    "9:16": "9/16",
+    "1:1": "1/1",
+    "4:3": "4/3",
+    "4:5": "4/5",
+    "21:9": "21/9",
+  };
+
+  const RATIO_DIMS: Record<string, [number, number]> = {
+    "16:9": [1280, 720],
+    "9:16": [720, 1280],
+    "1:1": [1080, 1080],
+    "4:3": [1080, 810],
+    "4:5": [1080, 1350],
+    "21:9": [1260, 540],
+  };
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
     if (tab === "music") {
@@ -1494,7 +1514,7 @@ export function ProVideoEditor({
         <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative items-center justify-center">
 
           {/* Video / Static Card */}
-          <div className="flex-1 flex items-center justify-center relative overflow-hidden aspect-square max-h-[60vh]">
+          <div className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9" }}>
             {videoSrc ? (
               <>
                 {isStaticCard ? (
@@ -1502,8 +1522,8 @@ export function ProVideoEditor({
                     {currentCardSettings ? (
                       <canvas
                         ref={liveCanvasRef}
-                        width={1280}
-                        height={720}
+                        width={RATIO_DIMS[aspectRatio]?.[0] || 1280}
+                        height={RATIO_DIMS[aspectRatio]?.[1] || 720}
                         className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
                       />
                     ) : (
@@ -1615,6 +1635,32 @@ export function ProVideoEditor({
               <button onClick={toggleMute} className="text-white/60 hover:text-white">
                 {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="text-white/60 hover:text-white flex items-center gap-1">
+                    <RectangleHorizontal className="w-4 h-4" />
+                    <span className="text-[9px] font-mono">{aspectRatio}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-2" side="top" align="end">
+                  <div className="flex flex-wrap gap-1">
+                    {Object.keys(ASPECT_RATIOS).map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setAspectRatio(r)}
+                        className={cn(
+                          "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                          aspectRatio === r
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
               <button
                 onClick={() => videoRef.current?.requestFullscreen?.()}
                 className="text-white/60 hover:text-white"
