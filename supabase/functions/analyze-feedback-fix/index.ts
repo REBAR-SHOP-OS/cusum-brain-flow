@@ -117,7 +117,14 @@ Deno.serve((req) =>
         const imgResp = await fetch(screenshot_url);
         if (imgResp.ok) {
           const arrayBuffer = await imgResp.arrayBuffer();
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+          const bytes = new Uint8Array(arrayBuffer);
+          let base64 = "";
+          const chunkSize = 8192;
+          for (let i = 0; i < bytes.length; i += chunkSize) {
+            const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+            base64 += String.fromCharCode(...chunk);
+          }
+          base64 = btoa(base64);
           const contentType = imgResp.headers.get("content-type") || "image/png";
           imageBlocks.push({
             type: "image_url",

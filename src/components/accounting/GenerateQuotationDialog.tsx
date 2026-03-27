@@ -234,7 +234,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
         waste_factor_pct: 15,
         customer_id: selectedCustomerId || undefined,
         lead_id: selectedLeadId || leadId || undefined,
-      }, { timeoutMs: 120000 });
+      }, { timeoutMs: 180000, retries: 1 });
 
       const newProjectId = estData?.project?.id || estData?.project_id;
       if (!newProjectId) throw new Error("Estimation did not return a project ID");
