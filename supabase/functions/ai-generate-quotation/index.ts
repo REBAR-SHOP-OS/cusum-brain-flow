@@ -136,7 +136,7 @@ Deno.serve((req) =>
 
     for (const i of bomItems) {
       const barSize = i.bar_size || "unknown";
-      const weightKg = Number(i.weight_kg || 0);
+      const weightKg = toNum(i.weight_kg);
       const isCage = (i.element_type || "").toLowerCase().includes("cage");
 
       if (isCage) {
