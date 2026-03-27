@@ -245,7 +245,7 @@ export default function PrintTags() {
       <div className="print-tags-page">
         {sortedRows.map((row) => {
           const size = row.bar_size_mapped || row.bar_size || "";
-          const shapeType = row.shape_code_mapped || row.shape_type || "";
+          const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
           const weight = getWeight(size, row.total_length_mm, row.quantity);
           const dims: Record<string, number | null> = {};
           DIM_COLS.forEach((d) => {
