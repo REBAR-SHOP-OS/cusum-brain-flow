@@ -1096,6 +1096,9 @@ export function PostReviewPanel({
                           for (const p of batchPosts) {
                             await updatePost.mutateAsync({ id: p.id, neel_approved: true } as any);
                           }
+                          // Force immediate refetch so panel + calendar update without manual refresh
+                          await queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                          await queryClient.invalidateQueries({ queryKey: ["social_approvals"] });
                           toast({ title: "Approved", description: `${batchPosts.length} post(s) approved by Neel.` });
                         } finally {
                           setApprovingNeel(false);
