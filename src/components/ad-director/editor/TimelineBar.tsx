@@ -522,7 +522,7 @@ export function TimelineBar({
             {/* Playhead — draggable for scrubbing */}
             <div
               className={`absolute top-0 bottom-0 z-20 ${scrubbing ? 'cursor-grabbing' : 'cursor-grab'}`}
-              style={{ left: `${playheadPct}%`, width: '14px', transform: 'translateX(-6px)' }}
+              style={{ left: `${playheadPct}%`, width: '14px', transform: 'translateX(-6px)', transition: scrubbing ? 'none' : 'left 0.1s linear' }}
               onMouseDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
