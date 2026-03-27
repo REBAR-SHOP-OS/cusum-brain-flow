@@ -122,17 +122,28 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
       setStatus(inv.status || "draft");
 
       // Load line items from DB
-      if (itemsRes.data && (itemsRes.data as any[]).length > 0) {
-        setItems((itemsRes.data as any[]).map((it: any) => ({
+      const loadedItems = itemsRes.data as any[] || [];
+      if (loadedItems.length > 0) {
+        setItems(loadedItems.map((it: any) => ({
           id: it.id,
           description: it.description || "",
           quantity: it.quantity || 1,
           unitPrice: it.unit_price || 0,
           serviceDate: it.service_date || "",
         })));
+      } else if (inv.amount && Number(inv.amount) > 0) {
+        // Fallback: no line items but invoice has amount (converted from quote)
+        setItems([{
+          description: "As per quotation",
+          quantity: 1,
+          unitPrice: Number(inv.amount),
+        }]);
       }
 
-      if (custRes.data) {
+      // Store customer email and amount for email sending
+      const meta = (inv as any).metadata || {};
+      setCustomerEmail(meta.customer_email || inv.customer_email || "");
+      setInvoiceAmount(Number(inv.amount) || 0);
         const normalized = (custRes.data as any[]).map((c) => ({
           ...c,
           id: c.id || c.customer_id || c.Id || "",
