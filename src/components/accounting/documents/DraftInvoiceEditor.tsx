@@ -144,6 +144,8 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
       const meta = (inv as any).metadata || {};
       setCustomerEmail(meta.customer_email || inv.customer_email || "");
       setInvoiceAmount(Number(inv.amount) || 0);
+
+      if (custRes.data) {
         const normalized = (custRes.data as any[]).map((c) => ({
           ...c,
           id: c.id || c.customer_id || c.Id || "",
