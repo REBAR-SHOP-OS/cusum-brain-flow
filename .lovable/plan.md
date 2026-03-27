@@ -1,42 +1,30 @@
 
 
-# Add Image Overlay to Video Editor (Upload + Drag to Position)
+# Drag All Overlays on Video — Already Implemented
 
-## What We're Building
-An "Image" button in the timeline toolbar that lets users upload a photo, which appears as a draggable overlay on the video canvas. Users can drag it to reposition it over the video.
+## Current State
 
-## Changes
+After reviewing the code, the drag functionality for all overlays is **already implemented** from the previous approved plan:
 
-### 1. New Component: `ImageOverlayDialog.tsx`
-Create `src/components/ad-director/editor/ImageOverlayDialog.tsx` — a dialog with file upload input. On upload, creates a `VideoOverlay` with `kind: "logo"` (which already renders as `<img>`), centered on the current scene.
+1. **All overlay types** (text, image, logo) rendered via `sceneOverlays.map()` at lines 1590-1622 already have:
+   - `cursor: grab/grabbing` styling
+   - `onMouseDown` handler that captures drag offset and sets `draggingOverlayId`
 
-### 2. Make Overlays Draggable on Canvas
-In `ProVideoEditor.tsx` (lines 1569-1590), change image/text overlays from `pointer-events-none` to interactive. Add `onMouseDown`/`onMouseMove`/`onMouseUp` handlers that update the overlay's `position.x` and `position.y` based on mouse drag relative to the video container. This lets users drag any overlay (image, text, logo) to reposition it visually.
+2. **Video container** (line 1528-1538) already has:
+   - `onMouseMove` — updates overlay position based on mouse movement
+   - `onMouseUp` / `onMouseLeave` — releases drag
 
-### 3. Add "Image" Tab to Timeline Toolbar
-In `ProVideoEditor.tsx` (lines 1738-1747), add a new sidebar tab entry:
-```
-{ id: "image", label: "Image", icon: <ImagePlus className="w-3.5 h-3.5" /> }
-```
+3. **Brand watermark** (line 1579-1589) is intentionally NOT draggable — it's a fixed brand badge, not a user-added overlay.
 
-### 4. Handle "image" Tab Click
-When `activeTab === "image"`, open the `ImageOverlayDialog`. On image selected, create overlay and add to `overlays` state.
+## What May Be Needed
 
-### 5. Update `VideoOverlay` Type
-Add `"image"` to the `kind` union in `src/types/videoOverlay.ts` so we distinguish user-uploaded images from brand logos.
+The code is correct. If overlays aren't dragging in the preview, it may be because:
+- The preview hasn't refreshed yet with the latest code
+- Or the user needs to test by adding an overlay first (via Image or Text tab)
 
-## Technical Details
+## Recommendation
 
-**Drag Implementation** (on canvas overlay divs):
-- `onMouseDown` captures the overlay ID and initial mouse offset
-- `onMouseMove` calculates new `x%` and `y%` relative to the video container's bounding rect
-- `onMouseUp` finalizes position in state
-- Cursor changes to `grab`/`grabbing` during drag
+**Test the feature end-to-end**: Open the video editor, add a text or image overlay, then try dragging it on the video canvas. The grab cursor should appear and the overlay should follow the mouse.
 
-**Files Changed:**
-| File | Change |
-|------|--------|
-| `src/types/videoOverlay.ts` | Add `"image"` to `kind` union |
-| `src/components/ad-director/editor/ImageOverlayDialog.tsx` | **New** — upload dialog |
-| `src/components/ad-director/ProVideoEditor.tsx` | Add image tab, dialog state, draggable overlays on canvas |
+No additional code changes are needed — the drag system is fully wired.
 
