@@ -613,7 +613,7 @@ Deno.serve((req) =>
             quotation_id: sqCheck?.id || null,
             customer_name: sqCheck?.customer_name || customerName,
             customer_company: sqCheck?.customer_company || null,
-            amount,
+            amount: rawTotalWithTax,
             status: "sent",
             issued_date: issuedDate,
             due_date: dueDate,
