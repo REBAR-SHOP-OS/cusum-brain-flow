@@ -32,7 +32,7 @@ interface VoiceoverDialogProps {
 
 export function VoiceoverDialog({ open, onClose, onGenerate, generating }: VoiceoverDialogProps) {
   const [text, setText] = useState("");
-  const [voiceId, setVoiceId] = useState(VOICES[0].id);
+  const [voiceId, setVoiceId] = useState<string>(VOICES[0].id);
   const [speed, setSpeed] = useState(1.0);
 
   const handleGenerate = () => {
