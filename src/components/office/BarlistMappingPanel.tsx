@@ -363,7 +363,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                           <TableCell className="text-xs p-1.5">{row.size || "—"}</TableCell>
                           <TableCell className="text-xs p-1.5">{row.shape || "—"}</TableCell>
                           <TableCell className="text-xs p-1.5 text-right font-mono">
-                            {row.length ? formatLengthByMode(row.length, lengthUnit as LengthDisplayMode) || "—" : "—"}
+                            {row.length ? String(row.length) : "—"}
                           </TableCell>
                           <TableCell className="text-xs p-1.5 text-right font-mono">{row.quantity || "—"}</TableCell>
                           <TableCell className="text-[10px] p-1.5 text-muted-foreground max-w-[150px] truncate">
