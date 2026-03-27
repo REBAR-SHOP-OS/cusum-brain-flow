@@ -379,11 +379,34 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         } catch (_e) { /* stripe_payment_links not available */ }
       }
 
-      const payBtnHtml = paymentUrl
-        ? `<div style="text-align:center;margin:24px 0;">
-            <a href="${paymentUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:16px;font-weight:700;letter-spacing:0.5px;">💳 Pay Now - ${fmt(total)}</a>
-            <p style="text-align:center;font-size:12px;color:#888;margin-top:4px;">Secure payment via Stripe</p>
-           </div>`
+      // Look up QB payment link from accounting_mirror
+      let qbPayUrl = "";
+      try {
+        const { data: qbMirror } = await supabase
+          .from("accounting_mirror")
+          .select("data, quickbooks_id")
+          .eq("entity_type", "Invoice")
+          .ilike("data->>DocNumber", invoiceNumber)
+          .maybeSingle();
+        if (qbMirror) {
+          const mirrorData = qbMirror.data as Record<string, unknown>;
+          qbPayUrl = (mirrorData?.InvoiceLink as string) || 
+            `https://app.qbo.intuit.com/app/customerbalance?invoiceId=${qbMirror.quickbooks_id}`;
+        }
+      } catch (_e) { /* accounting_mirror not available */ }
+
+      // Build dual payment buttons
+      const payBtns: string[] = [];
+      if (paymentUrl) {
+        payBtns.push(`<a href="${paymentUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:16px;font-weight:700;letter-spacing:0.5px;width:80%;text-align:center;">💳 Pay via Stripe - ${fmt(total)}</a>
+          <p style="text-align:center;font-size:12px;color:#888;margin-top:4px;">Secure payment powered by Stripe</p>`);
+      }
+      if (qbPayUrl) {
+        payBtns.push(`<a href="${qbPayUrl}" style="display:inline-block;background:#2ca01c;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:16px;font-weight:700;letter-spacing:0.5px;width:80%;text-align:center;">📋 Pay via QuickBooks</a>
+          <p style="text-align:center;font-size:12px;color:#888;margin-top:4px;">Pay through QuickBooks Online</p>`);
+      }
+      const payBtnHtml = payBtns.length > 0
+        ? `<div style="text-align:center;margin:24px 0;">${payBtns.join('<div style="margin-top:12px;"></div>')}</div>`
         : "";
 
       const emailBody = `

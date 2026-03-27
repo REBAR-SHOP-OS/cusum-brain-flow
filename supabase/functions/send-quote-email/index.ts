@@ -635,11 +635,36 @@ Deno.serve((req) =>
         console.warn("[accept_and_convert] Failed to rebuild line items for email:", rebuildErr);
       }
 
-      const payNowButton = stripePaymentUrl
-        ? `<div style="text-align:center;margin:32px 0;">
-            <a href="${stripePaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#e94560 0%,#c23152 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(233,69,96,0.4);">💳 Pay Now</a>
-            <p style="color:#888;font-size:12px;margin-top:10px;">Secure payment powered by Stripe</p>
-           </div>`
+      // Look up QB payment link from accounting_mirror
+      let qbPaymentUrl = "";
+      try {
+        const { data: qbMirror } = await svc
+          .from("accounting_mirror")
+          .select("data, quickbooks_id")
+          .eq("entity_type", "Invoice")
+          .ilike("data->>DocNumber", invoiceNumber)
+          .maybeSingle();
+        if (qbMirror) {
+          const mirrorData = qbMirror.data as any;
+          qbPaymentUrl = mirrorData?.InvoiceLink || 
+            `https://app.qbo.intuit.com/app/customerbalance?invoiceId=${qbMirror.quickbooks_id}`;
+        }
+      } catch (_e) {
+        console.warn("QB mirror lookup error:", _e);
+      }
+
+      // Build dual payment buttons
+      const paymentButtons: string[] = [];
+      if (stripePaymentUrl) {
+        paymentButtons.push(`<a href="${stripePaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#e94560 0%,#c23152 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(233,69,96,0.4);width:80%;text-align:center;">💳 Pay via Stripe</a>
+          <p style="color:#888;font-size:12px;margin-top:6px;">Secure payment powered by Stripe</p>`);
+      }
+      if (qbPaymentUrl) {
+        paymentButtons.push(`<a href="${qbPaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#2ca01c 0%,#1a7a12 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(44,160,28,0.4);width:80%;text-align:center;">📋 Pay via QuickBooks</a>
+          <p style="color:#888;font-size:12px;margin-top:6px;">Pay through QuickBooks Online</p>`);
+      }
+      const payNowButton = paymentButtons.length > 0
+        ? `<div style="text-align:center;margin:32px 0;">${paymentButtons.join('<div style="margin-top:16px;"></div>')}</div>`
         : "";
 
       const invoiceBodyHtml = `
