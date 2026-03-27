@@ -273,7 +273,6 @@ export function ProVideoEditor({
   const [voiceoverDialogOpen, setVoiceoverDialogOpen] = useState(false);
   const [generatingVoiceover, setGeneratingVoiceover] = useState(false);
   const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
-  const [generatingAudio, setGeneratingAudio] = useState(false);
 
   const handleUploadAudio = useCallback(() => {
     audioUploadRef.current?.click();
