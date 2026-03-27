@@ -94,16 +94,20 @@ export function RebarTagCard({
       </div>
 
       {/* Qty / Length */}
-      <div className="grid grid-cols-2 border-b-2 border-black shrink-0">
+      <div className="grid grid-cols-3 border-b-2 border-black shrink-0">
         <div className="text-center py-2 px-2 border-r-2 border-black">
           <div className="text-[9px] font-bold tracking-widest uppercase">Qty</div>
           <div className="text-[22px] font-black leading-tight">{qty ?? "—"}</div>
         </div>
-        <div className="text-center py-2 px-2">
+        <div className="text-center py-2 px-2 border-r-2 border-black">
           <div className="text-[9px] font-bold tracking-widest uppercase">
             Length {us === "imperial" ? "(ft-in)" : "(mm)"}
           </div>
           <div className="text-[22px] font-black leading-tight">{formatVal(length, us)}</div>
+        </div>
+        <div className="text-center py-2 px-2">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Dwg</div>
+          <div className="text-[22px] font-black leading-tight">{dwg || "—"}</div>
         </div>
       </div>
 
@@ -150,7 +154,6 @@ export function RebarTagCard({
           )}
         </div>
         <div className="flex gap-4 text-xs shrink-0 mt-1">
-          <div className="flex gap-1"><span className="font-bold">Dwg:</span><span className="font-black">{dwg || "—"}</span></div>
           <div className="flex gap-1"><span className="font-bold">Item:</span><span className="font-black">{item}</span></div>
         </div>
       </div>
