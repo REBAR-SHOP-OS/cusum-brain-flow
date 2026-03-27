@@ -282,9 +282,7 @@ export default function TimeClock() {
             Exit Kiosk
           </Button>
         </div>
-        {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
-          <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
-        )}
+        {/* FaceMemoryPanel moved to shared scope below */}
         <div className="flex items-center gap-3 mb-6">
           <ScanFace className="w-8 h-8 text-primary" />
           <h1 className="text-3xl font-black italic tracking-tight">FACE ID KIOSK</h1>
@@ -377,11 +375,18 @@ export default function TimeClock() {
       <div className="relative z-10 w-full max-w-4xl px-6 pt-4">
         <div className="flex items-center justify-between">
           <FaceEnrollment existingCount={enrollmentCount} onComplete={fetchEnrollmentCount} />
-          {enrollmentCount > 0 && (
-            <Badge variant="secondary" className="text-xs">
-              {enrollmentCount} photo{enrollmentCount !== 1 ? "s" : ""} enrolled
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {enrollmentCount > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {enrollmentCount} photo{enrollmentCount !== 1 ? "s" : ""} enrolled
+              </Badge>
+            )}
+            {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
+              <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={() => setShowMemoryPanel(true)}>
+                <Brain className="w-4 h-4" /> Memory
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -640,6 +645,9 @@ export default function TimeClock() {
           }
         }}
       />
+      {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
+        <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
+      )}
     </>
   );
 }
