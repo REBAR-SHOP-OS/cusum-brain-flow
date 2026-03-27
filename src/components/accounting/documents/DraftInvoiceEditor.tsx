@@ -142,7 +142,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
 
       // Store customer email and amount for email sending
       const meta = (inv as any).metadata || {};
-      setCustomerEmail(meta.customer_email || inv.customer_email || "");
+      setCustomerEmail(meta.customer_email || (inv as any).customer_email || "");
       setInvoiceAmount(Number(inv.amount) || 0);
 
       if (custRes.data) {
