@@ -190,8 +190,8 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     if (!newCustName.trim() || !companyId) return;
     const { data, error } = await supabase
       .from("customers")
-      .insert({ name: newCustName.trim(), company_id: companyId, billing_street1: newCustAddress || null } as any)
-      .select("id, name, billing_street1, billing_city, billing_province, billing_postal_code")
+      .insert({ name: newCustName.trim(), company_id: companyId, email: newCustEmail || null, billing_street1: newCustAddress || null } as any)
+      .select("id, name, email, billing_street1, billing_city, billing_province, billing_postal_code")
       .single();
     if (error) {
       toast({ title: "Failed to create customer", description: error.message, variant: "destructive" });
@@ -202,6 +202,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     selectCustomer(newCust);
     setAddingNewCustomer(false);
     setNewCustName("");
+    setNewCustEmail("");
     setNewCustAddress("");
     toast({ title: "Customer created" });
   };
