@@ -1,7 +1,19 @@
 import logoCoin from "@/assets/logo-coin.png";
 
-const DIM_LEFT = ["A", "B", "C", "D", "E", "F"] as const;
-const DIM_RIGHT = ["G", "H", "J", "K", "O", "R"] as const;
+export const DIM_LEFT = ["A", "B", "C", "D", "E", "F"] as const;
+export const DIM_RIGHT = ["G", "H", "J", "K", "O", "R"] as const;
+export const DIM_COLS = [...DIM_LEFT, ...DIM_RIGHT] as const;
+
+export const MASS_KG_PER_M: Record<string, number> = {
+  "10M": 0.785, "15M": 1.570, "20M": 2.355, "25M": 3.925,
+  "30M": 5.495, "35M": 7.850, "45M": 11.775, "55M": 19.625,
+};
+export function getWeight(size: string | null, lengthMm: number | null, qty: number | null): string {
+  if (!size || !lengthMm) return "";
+  const mass = MASS_KG_PER_M[size.toUpperCase()] || 0;
+  if (!mass) return "";
+  return ((lengthMm / 1000) * mass * (qty || 1)).toFixed(2);
+}
 
 function formatMmToFtIn(mm: number): string {
   const totalInches = mm / 25.4;
