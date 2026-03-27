@@ -1635,13 +1635,38 @@ export function ProVideoEditor({
               <button onClick={toggleMute} className="text-white/60 hover:text-white">
                 {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
               </button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="text-white/60 hover:text-white flex items-center gap-1">
+                    <RectangleHorizontal className="w-4 h-4" />
+                    <span className="text-[9px] font-mono">{aspectRatio}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-2" side="top" align="end">
+                  <div className="flex flex-wrap gap-1">
+                    {Object.keys(ASPECT_RATIOS).map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setAspectRatio(r)}
+                        className={cn(
+                          "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                          aspectRatio === r
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
               <button
                 onClick={() => videoRef.current?.requestFullscreen?.()}
                 className="text-white/60 hover:text-white"
               >
                 <Maximize2 className="w-4 h-4" />
               </button>
-            </div>
           )}
         </div>
 
