@@ -138,7 +138,24 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         setCustomerAddress(meta.customer_address || "");
         setProjectName(meta.project_name || "");
         setTaxRate(meta.tax_rate ?? 13);
-        if (meta.customer_email) setCustomerEmail(meta.customer_email);
+        if (meta.customer_email) {
+          setCustomerEmail(meta.customer_email);
+        } else {
+          // Fallback: look up email from customers table by name
+          const resolvedName = meta.customer_name || data.salesperson || "";
+          if (resolvedName && companyId) {
+            supabase
+              .from("customers")
+              .select("email")
+              .eq("company_id", companyId)
+              .ilike("name", resolvedName)
+              .limit(1)
+              .single()
+              .then(({ data: cust }) => {
+                if (cust?.email) setCustomerEmail(cust.email);
+              });
+          }
+        }
         let resolvedNotes = meta.notes || "";
         if (!resolvedNotes && (meta.inclusions || meta.exclusions || meta.assumptions)) {
           const parts: string[] = [];
