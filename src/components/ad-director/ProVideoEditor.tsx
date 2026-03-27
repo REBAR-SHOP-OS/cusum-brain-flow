@@ -204,6 +204,10 @@ export function ProVideoEditor({
       setSubtitleDialogOpen(true);
       return;
     }
+    if (tab === "speed") {
+      // Speed is handled by popover directly on the icon, no panel needed
+      return;
+    }
     if (activeTab === tab) {
       setPanelOpen(prev => !prev);
     } else {
