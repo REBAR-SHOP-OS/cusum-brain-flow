@@ -237,7 +237,7 @@ export default function TimeClock() {
             <p className="font-medium text-sm truncate">{profile.full_name}</p>
             <p className="text-xs text-muted-foreground">
               {isClockedIn
-                ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}`
+                ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}${totalMins > elapsed! ? ` · Total: ${formatDuration(totalMins)}` : ""}`
                 : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
             </p>
           </div>
