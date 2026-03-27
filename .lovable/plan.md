@@ -1,34 +1,28 @@
 
 
-# Fix: Approved Posts Still Showing "Pending Approval" in Calendar
+# Fix: Status Filter Showing Wrong Posts in Published/Declined Tabs
 
-## Root Cause
+## Problem
 
-In `PostReviewPanel.tsx` line 1097, the Neel approval button only sets `neel_approved: true` but does **not** update `status` from `"pending_approval"` to `"scheduled"`. The calendar renders status labels based on `post.status`, so posts remain displayed as "Pending Approval" even after Neel clicks approve.
+In `SocialMediaManager.tsx` line 143-147, the catch-all `else if (statusFilter !== "all")` branch adds `|| p.status === "scheduled" || p.status === "published"` to every non-all filter. This means:
+- **Published tab** shows published + scheduled posts
+- **Declined tab** shows declined + scheduled + published posts
+- **Drafts tab** shows drafts + scheduled + published posts
 
-Compare with `useSocialApprovals.approvePost` (line 66-72), which correctly sets **both** `status: "scheduled"` and `neel_approved: true`.
+The comment says "Always keep scheduled + published visible" but that defeats the purpose of filtering by status.
 
 ## Fix
 
-**File: `src/components/social/PostReviewPanel.tsx` — line 1097**
+Replace the catch-all filter (lines 143-147) with strict equality — only show posts matching the selected status:
 
-Change:
 ```typescript
-await updatePost.mutateAsync({ id: p.id, neel_approved: true } as any);
+} else if (statusFilter !== "all") {
+  items = items.filter((p) => p.status === statusFilter);
+}
 ```
 
-To:
-```typescript
-await updatePost.mutateAsync({
-  id: p.id,
-  neel_approved: true,
-  status: "scheduled",
-  qa_status: "approved",
-} as any);
-```
-
-This mirrors the behavior of `useSocialApprovals.approvePost` and ensures the calendar immediately shows "Scheduled · Approved" after Neel approves.
+This one-line change ensures each status tab shows only its own posts.
 
 ## File Changed
-- `src/components/social/PostReviewPanel.tsx` — line 1097: include `status` and `qa_status` in approval mutation
+- `src/pages/SocialMediaManager.tsx` — line 145-146: remove `|| p.status === "scheduled" || p.status === "published"` from filter
 
