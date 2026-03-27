@@ -645,6 +645,9 @@ export default function TimeClock() {
           }
         }}
       />
+      {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
+        <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
+      )}
     </>
   );
 }
