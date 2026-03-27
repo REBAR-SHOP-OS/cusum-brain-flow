@@ -1316,31 +1316,35 @@ export function ProVideoEditor({
   };
 
   // ─── Drag-to-reposition handlers ───
-  const handleMoveOverlay = useCallback((id: string, newSceneId: string) => {
+  const handleMoveOverlay = useCallback((id: string, newSceneId: string, startTime?: number) => {
     setOverlays(prev => prev.map(o => {
-      if (o.id !== id || o.sceneId === newSceneId) return o;
-      // Recalculate timing for new scene
+      if (o.id !== id) return o;
       const newSceneIdx = storyboard.findIndex(s => s.id === newSceneId);
       const seg = newSceneIdx >= 0 ? segments.find(s => s.id === storyboard[newSceneIdx]?.segmentId) : null;
       const newDur = seg ? seg.endTime - seg.startTime : 4;
-      // If timed overlay, re-proportion to new scene duration
-      if (o.startTime != null && o.endTime != null) {
-        const oldSceneIdx = storyboard.findIndex(s => s.id === o.sceneId);
-        const oldSeg = oldSceneIdx >= 0 ? segments.find(s => s.id === storyboard[oldSceneIdx]?.segmentId) : null;
-        const oldDur = oldSeg ? oldSeg.endTime - oldSeg.startTime : 4;
-        const startRatio = o.startTime / oldDur;
-        const endRatio = o.endTime / oldDur;
-        return { ...o, sceneId: newSceneId, startTime: startRatio * newDur, endTime: endRatio * newDur };
+      if (startTime != null) {
+        const itemDuration = (o.endTime != null && o.startTime != null) ? (o.endTime - o.startTime) : 3;
+        const clampedStart = Math.max(0, Math.min(startTime, newDur - itemDuration));
+        return { ...o, sceneId: newSceneId, startTime: clampedStart, endTime: clampedStart + itemDuration };
       }
       return { ...o, sceneId: newSceneId };
     }));
   }, [storyboard, segments]);
 
-  const handleMoveAudioTrack = useCallback((index: number, newSceneId: string) => {
-    setAudioTracks(prev => prev.map((at, i) =>
-      i === index ? { ...at, sceneId: newSceneId } : at
-    ));
-  }, []);
+  const handleMoveAudioTrack = useCallback((index: number, newSceneId: string, startTime?: number) => {
+    setAudioTracks(prev => prev.map((at, i) => {
+      if (i !== index) return at;
+      const newSceneIdx = storyboard.findIndex(s => s.id === newSceneId);
+      const seg = newSceneIdx >= 0 ? segments.find(s => s.id === storyboard[newSceneIdx]?.segmentId) : null;
+      const newDur = seg ? seg.endTime - seg.startTime : 4;
+      if (startTime != null) {
+        const itemDuration = (at.endTime != null && at.startTime != null) ? (at.endTime - at.startTime) : newDur;
+        const clampedStart = Math.max(0, Math.min(startTime, newDur - Math.min(itemDuration, newDur)));
+        return { ...at, sceneId: newSceneId, startTime: clampedStart, endTime: clampedStart + Math.min(itemDuration, newDur) };
+      }
+      return { ...at, sceneId: newSceneId };
+    }));
+  }, [storyboard, segments]);
 
   // AI Command Bar
   const handleAiSubmit = async () => {

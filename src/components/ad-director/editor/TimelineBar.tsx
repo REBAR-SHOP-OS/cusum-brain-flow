@@ -78,6 +78,8 @@ export interface AudioTrackItem {
   audioUrl: string;
   kind: "voiceover" | "music";
   volume?: number; // 0-1, default 1
+  startTime?: number; // seconds within the scene
+  endTime?: number;   // seconds within the scene
 }
 
 interface SidebarTab {
@@ -133,9 +135,9 @@ interface TimelineBarProps {
   onReRecordVoiceover?: (sceneId: string, customText?: string) => void;
   onUpdateVoiceoverText?: (sceneId: string, text: string) => void;
   onEditVoiceoverText?: (sceneId: string) => void;
-  // Drag-to-reposition
-  onMoveOverlay?: (id: string, newSceneId: string) => void;
-  onMoveAudioTrack?: (index: number, newSceneId: string) => void;
+  // Drag-to-reposition (with optional startTime for free-positioning)
+  onMoveOverlay?: (id: string, newSceneId: string, startTime?: number) => void;
+  onMoveAudioTrack?: (index: number, newSceneId: string, startTime?: number) => void;
 }
 
 export function TimelineBar({
@@ -197,16 +199,24 @@ export function TimelineBar({
     };
   }, [scrubbing, totalDuration, onSeek]);
 
+  // Find which scene a global time (seconds) falls into
+  const findSceneAtTime = useCallback((timeSec: number): { sceneIdx: number; localTime: number } => {
+    for (let i = 0; i < storyboard.length; i++) {
+      const start = cumulativeStarts[i] || 0;
+      const dur = getSceneDur(i);
+      if (timeSec >= start && timeSec < start + dur) {
+        return { sceneIdx: i, localTime: timeSec - start };
+      }
+    }
+    const lastIdx = storyboard.length - 1;
+    return { sceneIdx: lastIdx, localTime: Math.max(0, timeSec - (cumulativeStarts[lastIdx] || 0)) };
+  }, [storyboard, cumulativeStarts]);
+
   // Find which scene a percentage position falls into
   const findSceneAtPct = useCallback((pct: number) => {
-    for (let i = 0; i < storyboard.length; i++) {
-      const start = (cumulativeStarts[i] || 0) / totalDuration * 100;
-      const dur = getSceneDur(i);
-      const end = start + (dur / totalDuration) * 100;
-      if (pct >= start && pct < end) return i;
-    }
-    return storyboard.length - 1;
-  }, [storyboard, cumulativeStarts, totalDuration]);
+    const timeSec = (pct / 100) * totalDuration;
+    return findSceneAtTime(timeSec).sceneIdx;
+  }, [totalDuration, findSceneAtTime]);
 
   const handleItemDragStart = useCallback((
     e: React.MouseEvent,
@@ -238,15 +248,17 @@ export function TimelineBar({
       const trackWidth = trackRef.current.getBoundingClientRect().width;
       const dx = e.clientX - itemDragRef.current.startX;
       const deltaPct = (dx / trackWidth) * 100;
-      const centerPct = itemDragRef.current.origLeftPct + itemDragRef.current.origWidthPct / 2 + deltaPct;
-      const targetIdx = findSceneAtPct(Math.max(0, Math.min(100, centerPct)));
-      const targetSceneId = storyboard[targetIdx]?.id;
+      // Calculate new center position in time
+      const newLeftPct = Math.max(0, Math.min(100, itemDragRef.current.origLeftPct + deltaPct));
+      const newTimeSec = (newLeftPct / 100) * totalDuration;
+      const { sceneIdx, localTime } = findSceneAtTime(newTimeSec);
+      const targetSceneId = storyboard[sceneIdx]?.id;
 
       if (targetSceneId) {
         if (itemDragRef.current.type === "text") {
-          onMoveOverlay?.(itemDragRef.current.id, targetSceneId);
+          onMoveOverlay?.(itemDragRef.current.id, targetSceneId, localTime);
         } else {
-          onMoveAudioTrack?.(parseInt(itemDragRef.current.id), targetSceneId);
+          onMoveAudioTrack?.(parseInt(itemDragRef.current.id), targetSceneId, localTime);
         }
       }
 
@@ -261,7 +273,7 @@ export function TimelineBar({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [itemDragging, storyboard, findSceneAtPct, onMoveOverlay, onMoveAudioTrack]);
+  }, [itemDragging, storyboard, totalDuration, findSceneAtTime, onMoveOverlay, onMoveAudioTrack]);
 
   // Drag-to-resize handlers
   const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
@@ -350,6 +362,26 @@ export function TimelineBar({
       {/* Tracks */}
       <div className="px-3 py-2 space-y-1.5 relative overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
         <div style={{ width: `${100 * zoomLevel}%`, minWidth: "100%" }}>
+        {/* ─── Time ruler ─── */}
+        <div className="flex items-center gap-0.5 mb-1">
+          <span className="w-14 shrink-0" />
+          <div className="flex-1 h-4 relative border-b border-border/30">
+            {Array.from({ length: Math.ceil(totalDuration) + 1 }, (_, sec) => {
+              const leftPct = (sec / totalDuration) * 100;
+              if (leftPct > 100) return null;
+              const isMajor = sec % 2 === 0;
+              return (
+                <div key={sec} className="absolute top-0 bottom-0" style={{ left: `${leftPct}%` }}>
+                  <div className={`absolute bottom-0 w-px ${isMajor ? 'h-3 bg-muted-foreground/50' : 'h-1.5 bg-muted-foreground/25'}`} />
+                  {isMajor && (
+                    <span className="absolute bottom-3.5 text-[7px] text-muted-foreground font-mono -translate-x-1/2 select-none">{sec}s</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* ─── Video track ─── */}
         <div className="flex items-center gap-0.5">
           <VolumeControl
@@ -548,8 +580,14 @@ export function TimelineBar({
             {textOverlays.map((ov) => {
               const idx = storyboard.findIndex(s => s.id === ov.sceneId);
               if (idx < 0) return null;
-              const leftPct = ((cumulativeStarts[idx] || 0) / totalDuration) * 100;
-              const widthPct = (getSceneDur(idx) / totalDuration) * 100;
+              const sceneStart = cumulativeStarts[idx] || 0;
+              const sceneDur = getSceneDur(idx);
+              const itemStart = ov.startTime ?? 0;
+              const itemEnd = ov.endTime ?? sceneDur;
+              const absStart = sceneStart + itemStart;
+              const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
+              const leftPct = (absStart / totalDuration) * 100;
+              const widthPct = ((absEnd - absStart) / totalDuration) * 100;
               const isBeingDragged = draggedItemId === ov.id;
               return (
                 <div
@@ -557,7 +595,7 @@ export function TimelineBar({
                   className="absolute top-0.5 bottom-0.5 rounded-sm bg-violet-500/70 cursor-grab hover:bg-violet-500/90 transition-colors flex items-center px-1 group"
                   style={{
                     left: `${leftPct}%`,
-                    width: `${Math.max(widthPct, 1)}%`,
+                    width: `${Math.max(widthPct, 0.8)}%`,
                     transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
                     zIndex: isBeingDragged ? 30 : 5,
                   }}
@@ -590,8 +628,14 @@ export function TimelineBar({
             {audioTracks.map((track, tIdx) => {
               const idx = storyboard.findIndex(s => s.id === track.sceneId);
               if (idx < 0) return null;
-              const leftPct = ((cumulativeStarts[idx] || 0) / totalDuration) * 100;
-              const widthPct = (getSceneDur(idx) / totalDuration) * 100;
+              const sceneStart = cumulativeStarts[idx] || 0;
+              const sceneDur = getSceneDur(idx);
+              const itemStart = track.startTime ?? 0;
+              const itemEnd = track.endTime ?? sceneDur;
+              const absStart = sceneStart + itemStart;
+              const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
+              const leftPct = (absStart / totalDuration) * 100;
+              const widthPct = ((absEnd - absStart) / totalDuration) * 100;
               const itemId = `audio-${tIdx}`;
               const isBeingDragged = draggedItemId === itemId;
               const barColor = track.kind === "voiceover" ? "bg-teal-500/70 hover:bg-teal-500/90" : "bg-amber-500/70 hover:bg-amber-500/90";
@@ -601,7 +645,7 @@ export function TimelineBar({
                   className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor}`}
                   style={{
                     left: `${leftPct}%`,
-                    width: `${Math.max(widthPct, 1)}%`,
+                    width: `${Math.max(widthPct, 0.8)}%`,
                     transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
                     zIndex: isBeingDragged ? 30 : 5,
                   }}
