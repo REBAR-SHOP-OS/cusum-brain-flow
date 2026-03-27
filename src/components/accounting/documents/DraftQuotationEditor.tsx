@@ -61,6 +61,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const [customerName, setCustomerName] = useState("");
   const [customerAddress, setCustomerAddress] = useState("");
   const [projectName, setProjectName] = useState("");
+  const [shipDate, setShipDate] = useState<Date | undefined>();
   const [taxRate, setTaxRate] = useState(13);
   const [notes, setNotes] = useState("");
   const [terms, setTerms] = useState<string[]>([]);
