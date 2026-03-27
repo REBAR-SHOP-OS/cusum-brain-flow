@@ -141,10 +141,7 @@ export default function SocialMediaManager() {
           && p.status !== "declined"
       );
     } else if (statusFilter !== "all") {
-      // Always keep scheduled + published visible, plus the selected status
-      items = items.filter(
-        (p) => p.status === statusFilter || p.status === "scheduled" || p.status === "published"
-      );
+      items = items.filter((p) => p.status === statusFilter);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
