@@ -1992,7 +1992,7 @@ export function AIExtractView() {
                                   {row.bar_size_mapped || row.bar_size || "—"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm != null ? (formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode) || "—") : "—"}</TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—"}</TableCell>
                               <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
                               <TableCell className="text-xs p-1.5">
                                 {survivorRow ? (
@@ -2189,7 +2189,7 @@ export function AIExtractView() {
                             <TableCell className="text-xs text-right font-mono p-1">
                               {edit ? (
                                 <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
-                              ) : (row.total_length_mm != null ? (formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode) || "—") : "—")}
+                              ) : (row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—")}
                             </TableCell>
                             {dimCols.map((d) => {
                               const key = `dim_${d.toLowerCase()}`;
@@ -2198,7 +2198,7 @@ export function AIExtractView() {
                                   {edit ? (
                                     <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
                                   ) : (
-                                    (row as any)[key] != null ? formatLengthByMode((row as any)[key], selectedUnitSystem as LengthDisplayMode) : ""
+                                    (row as any)[key] != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? formatLengthByMode((row as any)[key], selectedUnitSystem as LengthDisplayMode) : String((row as any)[key])) : ""
                                   )}
                                 </TableCell>
                               );

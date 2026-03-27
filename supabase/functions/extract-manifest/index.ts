@@ -472,10 +472,31 @@ Rules:
             if (item[key] != null) sampleValues.push(String(item[key]));
           }
         }
-        const imperialPattern = /\d+\s*['']\s*-?\s*\d+\s*["""]/;
+        // Match feet-inches (6'-4") OR standalone inches (54")
+        const imperialPattern = /\d+\s*['']\s*-?\s*\d+\s*["""]|\d+(?:\.\d+)?\s*["""]\s*$/;
         if (sampleValues.some((v) => imperialPattern.test(v))) {
           detectedUnitSystem = "imperial";
           console.log("Detected imperial unit system from AI response values");
+        }
+
+        // Secondary check: scan raw XLSX cells for standalone inch marks (e.g. 54")
+        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "metric") {
+          try {
+            const sheet = parsedWorkbook.Sheets[parsedWorkbook.SheetNames[0]];
+            const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+            const sampleCells: string[] = [];
+            for (const row of (rawRows as any[][]).slice(0, 15)) {
+              for (const cell of row) {
+                if (typeof cell === "string") sampleCells.push(cell);
+              }
+            }
+            if (sampleCells.some((c: string) => /^\d+(?:\.\d+)?\s*[""]\s*$/.test(c.trim()))) {
+              detectedUnitSystem = "in";
+              console.log("Detected inch unit system from raw XLSX cell values");
+            }
+          } catch (e) {
+            console.warn("Failed to scan raw XLSX cells for unit detection:", e);
+          }
         }
 
         await svcClient
