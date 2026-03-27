@@ -1545,6 +1545,14 @@ export function ProVideoEditor({
         onEditOverlay={(ov) => setEditingOverlay(ov)}
       />
 
+      {/* Audio Prompt Dialog */}
+      <AudioPromptDialog
+        open={audioPromptOpen}
+        onOpenChange={setAudioPromptOpen}
+        onGenerate={handleGenerateAudio}
+        loading={generatingAudio}
+      />
+
       {/* Text Overlay Dialog */}
       <TextOverlayDialog
         open={textDialogOpen}
