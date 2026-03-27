@@ -157,6 +157,7 @@ export function TimelineBar({
   const [voiceoverTexts, setVoiceoverTexts] = useState<Record<string, string>>({});
   const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [zoomLevel, setZoomLevel] = useState(1);
   const thumbnails = useVideoThumbnails(clips);
 
   // ─── Item drag-to-reposition state ───
