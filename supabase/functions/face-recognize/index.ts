@@ -73,30 +73,42 @@ Deno.serve((req) =>
     // Download reference photos and convert to base64 data URLs (avoids Gemini URL fetch failures)
     const enrolledFaces: { profile_id: string; name: string; photo_urls: string[] }[] = [];
 
-    for (const [profileId, photoUrls] of profileEnrollments.entries()) {
-      const base64Urls: string[] = [];
-      for (const url of photoUrls) {
-        try {
-          const storagePath = url.replace(/^.*face-enrollments\//, "");
-          const { data: fileData, error: dlErr } = await supabase.storage
-            .from("face-enrollments")
-            .download(storagePath);
-          if (dlErr || !fileData) {
-            console.warn(`[face-recognize] Failed to download ${storagePath}:`, dlErr);
-            continue;
-          }
-          const arrayBuf = await fileData.arrayBuffer();
-          const bytes = new Uint8Array(arrayBuf);
-          let binary = "";
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          const b64 = btoa(binary);
-          base64Urls.push(`data:image/jpeg;base64,${b64}`);
-        } catch (e) {
-          console.warn(`[face-recognize] Error converting photo to base64:`, e);
+    // Download all photos in parallel for speed
+    const downloadPhoto = async (url: string): Promise<string | null> => {
+      try {
+        const storagePath = url.replace(/^.*face-enrollments\//, "");
+        const { data: fileData, error: dlErr } = await supabase.storage
+          .from("face-enrollments")
+          .download(storagePath);
+        if (dlErr || !fileData) {
+          console.warn(`[face-recognize] Failed to download ${storagePath}:`, dlErr);
+          return null;
         }
+        const arrayBuf = await fileData.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuf);
+        // Convert to base64 in chunks to avoid stack overflow
+        const chunks: string[] = [];
+        for (let i = 0; i < bytes.length; i += 8192) {
+          chunks.push(String.fromCharCode(...bytes.subarray(i, i + 8192)));
+        }
+        const b64 = btoa(chunks.join(""));
+        return `data:image/jpeg;base64,${b64}`;
+      } catch (e) {
+        console.warn(`[face-recognize] Error converting photo to base64:`, e);
+        return null;
       }
+    };
+
+    // Build download tasks for all profiles in parallel
+    const profileEntries = Array.from(profileEnrollments.entries());
+    const downloadResults = await Promise.all(
+      profileEntries.map(async ([profileId, photoUrls]) => {
+        const results = await Promise.all(photoUrls.map(downloadPhoto));
+        return { profileId, base64Urls: results.filter((r): r is string => r !== null) };
+      })
+    );
+
+    for (const { profileId, base64Urls } of downloadResults) {
       if (base64Urls.length > 0) {
         const info = profileMap.get(profileId);
         enrolledFaces.push({
@@ -185,7 +197,7 @@ You MUST call the face_match_result function with your answer.`,
       console.log(`[face-recognize] Calling AI with ${enrolledFaces.length} enrolled faces`);
       aiResult = await callAI({
         provider: "gemini",
-        model: "gemini-2.5-pro",
+        model: "gemini-2.5-flash",
         agentName: "shopfloor",
         messages: [{ role: "user", content: contentParts }],
         tools: [toolDef],
@@ -234,7 +246,7 @@ You MUST call the face_match_result function with your answer.`,
       try {
         const retryResult = await callAI({
           provider: "gemini",
-          model: "gemini-2.5-pro",
+          model: "gemini-2.5-flash",
           messages: [{ role: "user", content: contentParts }],
           tools: [toolDef],
           toolChoice: { type: "function", function: { name: "face_match_result" } },
@@ -257,7 +269,7 @@ You MUST call the face_match_result function with your answer.`,
     const isMatched =
       resultData.matched_profile_id &&
       resultData.matched_profile_id !== "null" &&
-      resultData.confidence >= 50;
+      resultData.confidence >= 60;
 
     const matchedProfile = isMatched ? profileMap.get(resultData.matched_profile_id) : null;
     const enrollCount = isMatched ? (profileEnrollmentCounts.get(resultData.matched_profile_id) || 0) : 0;
