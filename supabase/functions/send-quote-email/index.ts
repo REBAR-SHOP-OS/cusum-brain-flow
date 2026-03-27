@@ -589,23 +589,10 @@ Deno.serve((req) =>
 
       const brandedHtml = buildBrandedEmail({ bodyHtml });
 
-      const emailRes = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
-        },
-        body: JSON.stringify({
-          to: targetEmail,
-          subject: `Quotation ${quoteNumber} - REBAR.SHOP (Copy)`,
-          body: brandedHtml,
-        }),
-      });
-
-      if (!emailRes.ok) {
-        const errText = await emailRes.text();
-        throw new Error(`Email send failed: ${errText}`);
+      // Send directly via Gmail API (no user auth context for public callers)
+      const emailOk = await sendEmailDirectViaGmail(svc, targetEmail, `Quotation ${quoteNumber} - REBAR.SHOP (Copy)`, brandedHtml);
+      if (!emailOk) {
+        throw new Error("Failed to send quote copy email. Please try again.");
       }
 
       return { success: true, message: `Quote copy sent to ${targetEmail}` };
