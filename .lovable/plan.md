@@ -1,20 +1,19 @@
 
 
-# Sync Speed Control for Both Video and Audio
+# Remove Text Icon from Timeline Toolbar
 
-## Problem
-Currently the speed control only sets `videoRef.current.playbackRate`. The voiceover audio (`audioRef.current`) is not affected, so audio and video go out of sync when speed is changed.
+## What
+Remove the "Text" tab (Type icon) from the timeline toolbar, as indicated by the red circle in the screenshot.
 
-## Solution
-Update the `useEffect` that applies `videoSpeed` to also set `audioRef.current.playbackRate`. Additionally, when creating new audio instances (in the voiceover setup logic), apply the current `videoSpeed` to the new audio element.
+## Change
 
-## Changes — single file
+### `src/components/ad-director/ProVideoEditor.tsx` (~line 1576)
+Remove this entry from the `sidebarTabs` array:
+```
+{ id: "text", label: "Text", icon: <Type className="w-3.5 h-3.5" /> },
+```
 
-### `src/components/ad-director/ProVideoEditor.tsx`
-
-1. **Existing speed effect (~line 737-741)**: Add `audioRef.current.playbackRate = videoSpeed` alongside the video playback rate assignment.
-
-2. **Voiceover audio creation (~line 591)**: After `audioRef.current = a;`, set `a.playbackRate = videoSpeed` so newly created audio elements inherit the current speed.
+Clean up the `Type` import from lucide-react if unused elsewhere.
 
 ## Files changed
 - `src/components/ad-director/ProVideoEditor.tsx`
