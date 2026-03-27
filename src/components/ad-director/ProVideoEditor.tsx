@@ -1557,9 +1557,6 @@ export function ProVideoEditor({
           { id: "media", label: "Media", icon: <Film className="w-3.5 h-3.5" /> },
           { id: "text", label: "Text", icon: <Type className="w-3.5 h-3.5" /> },
           { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
-          { id: "script", label: "Script", icon: <FileText className="w-3.5 h-3.5" /> },
-          { id: "brand-kit", label: "Brand Kit", icon: <Palette className="w-3.5 h-3.5" /> },
-          { id: "card-editor", label: "Card", icon: <LayoutGrid className="w-3.5 h-3.5" /> },
           { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
           { id: "subtitle", label: "Subtitle", icon: <Captions className="w-3.5 h-3.5" /> },
         ]}
