@@ -13,8 +13,9 @@ import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
-import { useSalesInvoices } from "@/hooks/useSalesInvoices";
+import { useSalesInvoices, SalesInvoice } from "@/hooks/useSalesInvoices";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
+import { isPast, format } from "date-fns";
 
 type SortField = "DocNumber" | "Customer" | "TxnDate" | "DueDate" | "TotalAmt" | "Balance" | "Status";
 type SortDir = "asc" | "desc";
@@ -52,7 +53,7 @@ type StatusFilter = "all" | "open" | "overdue" | "paid";
 export function AccountingInvoices({ data, initialSearch }: Props) {
   const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items, payments, qbAction, loadAll } = data;
   const { companyId } = useCompanyId();
-  const { generateNumber } = useSalesInvoices();
+  const { invoices: localInvoices, isLoading: localLoading, generateNumber } = useSalesInvoices();
   const [search, setSearch] = useState(initialSearch || "");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
@@ -310,6 +311,60 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                             </>
                           )}
                         </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Local / ERP Invoices */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            ERP Invoices ({localInvoices.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {localLoading ? (
+            <div className="p-8 text-center text-muted-foreground">Loading...</div>
+          ) : localInvoices.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">No ERP invoices yet</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-base">Invoice #</TableHead>
+                  <TableHead className="text-base">Customer</TableHead>
+                  <TableHead className="text-base">Issued</TableHead>
+                  <TableHead className="text-base">Due</TableHead>
+                  <TableHead className="text-base text-right">Amount</TableHead>
+                  <TableHead className="text-base">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {localInvoices.map((inv) => {
+                  const ds = inv.status === "sent" && inv.due_date && isPast(new Date(inv.due_date)) ? "overdue" : inv.status;
+                  const statusStyles: Record<string, string> = {
+                    draft: "bg-muted text-muted-foreground",
+                    sent: "bg-primary/10 text-primary",
+                    paid: "bg-success/10 text-success",
+                    overdue: "bg-destructive/10 text-destructive",
+                    cancelled: "bg-muted text-muted-foreground line-through",
+                  };
+                  return (
+                    <TableRow key={inv.id} className="text-base cursor-pointer" onClick={() => setEditorInvoiceId(inv.id)}>
+                      <TableCell className="font-mono font-semibold">{inv.invoice_number}</TableCell>
+                      <TableCell className="font-medium">{inv.customer_name || inv.customer_company || "—"}</TableCell>
+                      <TableCell>{inv.issued_date ? format(new Date(inv.issued_date), "MMM d, yyyy") : "—"}</TableCell>
+                      <TableCell>{inv.due_date ? format(new Date(inv.due_date), "MMM d, yyyy") : "—"}</TableCell>
+                      <TableCell className="text-right font-semibold">{inv.amount ? fmt(inv.amount) : "—"}</TableCell>
+                      <TableCell>
+                        <Badge className={`${statusStyles[ds] || ""} border-0 text-sm`}>{ds}</Badge>
                       </TableCell>
                     </TableRow>
                   );
