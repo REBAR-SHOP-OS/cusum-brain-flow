@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { User, FileIcon, Download, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { User, FileIcon, Download, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { ContentActions } from "@/components/shared/ContentActions";
 import { Message } from "./ChatMessage";
 import { CalStepCard, CHANGY_STEPS, detectStepFromMessage } from "./CalStepProgress";
 import ReactMarkdown from "react-markdown";
+import { toast } from "sonner";
+import { getSignedFileUrl } from "@/lib/storageUtils";
+import { downloadFile } from "@/lib/downloadUtils";
 
 interface CalChatMessageProps {
   message: Message;
@@ -13,6 +17,21 @@ export function CalChatMessage({ message }: CalChatMessageProps) {
   const isUser = message.role === "user";
   const currentStep = !isUser ? detectStepFromMessage(message.content) : null;
   const stepInfo = currentStep ? CHANGY_STEPS.find(s => s.id === currentStep) : null;
+  const [downloadingFile, setDownloadingFile] = useState<string | null>(null);
+
+  const handleFileDownload = async (file: { name: string; url: string; path?: string }) => {
+    const path = file.path || file.url;
+    try {
+      setDownloadingFile(path);
+      const freshUrl = await getSignedFileUrl(path);
+      if (!freshUrl) throw new Error("empty");
+      await downloadFile(freshUrl, file.name);
+    } catch {
+      toast.error("Failed to get download link");
+    } finally {
+      setDownloadingFile(null);
+    }
+  };
 
   // Parse uncertainties (items with !) from the message
   const uncertainties = extractUncertainties(message.content);
@@ -57,19 +76,23 @@ export function CalChatMessage({ message }: CalChatMessageProps) {
         {/* Files attached */}
         {message.files && message.files.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {message.files.map((file, index) => (
-              <a
-                key={index}
-                href={file.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 bg-secondary/70 hover:bg-secondary rounded-lg px-3 py-2 text-xs transition-colors"
-              >
-                <FileIcon className="w-4 h-4" />
-                <span className="max-w-[120px] truncate">{file.name}</span>
-                <Download className="w-3 h-3 opacity-60" />
-              </a>
-            ))}
+            {message.files.map((file, index) => {
+              const filePath = (file as any).path || file.url;
+              const isLoading = downloadingFile === filePath;
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => handleFileDownload({ ...file, path: filePath })}
+                  className="flex items-center gap-2 bg-secondary/70 hover:bg-secondary rounded-lg px-3 py-2 text-xs transition-colors disabled:opacity-50"
+                >
+                  <FileIcon className="w-4 h-4" />
+                  <span className="max-w-[120px] truncate">{file.name}</span>
+                  {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3 opacity-60" />}
+                </button>
+              );
+            })}
           </div>
         )}
 
