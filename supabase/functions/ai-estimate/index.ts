@@ -518,7 +518,7 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
           body: JSON.stringify({
             model: "google/gemini-2.5-pro",
             messages: [{ role: "user", content: contentParts }],
-            max_tokens: 16000,
+            max_tokens: 32000,
             temperature: 0.1,
           }),
         });
@@ -533,6 +533,15 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
           console.log("AI response preview:", content.substring(0, 500));
 
           let cleaned = content.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+
+          // Repair truncated JSON arrays (salvage complete items)
+          if (cleaned.startsWith("[") && !cleaned.trimEnd().endsWith("]")) {
+            const lastBrace = cleaned.lastIndexOf("}");
+            if (lastBrace > 0) {
+              cleaned = cleaned.substring(0, lastBrace + 1) + "]";
+              console.log("Repaired truncated JSON array");
+            }
+          }
 
           try {
             const parsed = JSON.parse(cleaned);
