@@ -1596,23 +1596,43 @@ export async function executeToolCall(
           }
         }
 
-        // Save customer_email in metadata for the accept flow
-        if (args.customer_email) {
+        // Create a linked quotes row so send-quote-email and accept portal work
+        const quoteMetadata: Record<string, any> = {
+          customer_name: args.customer_name || null,
+          customer_email: args.customer_email || null,
+          notes: notesText,
+          line_items: (args.line_items || []).map((li: any) => ({
+            description: li.description || "Item",
+            quantity: li.quantity || 1,
+            unit: li.unit || "pcs",
+            unitPrice: li.unit_price || 0,
+            total: li.total || (li.quantity || 1) * (li.unit_price || 0),
+          })),
+          source: "blitz_agent",
+        };
+
+        const { data: linkedQuote, error: lqErr } = await svcClient
+          .from("quotes")
+          .insert({
+            company_id: companyId,
+            quote_number: quotationNumber,
+            total_amount: args.amount || 0,
+            status: "draft",
+            source: "agent",
+            metadata: quoteMetadata,
+            valid_until: expiryDate,
+            created_by: user?.id || null,
+          } as any)
+          .select("id")
+          .single();
+
+        if (lqErr) {
+          console.warn("Failed to create linked quotes row:", lqErr.message);
+        } else if (linkedQuote) {
+          // Link sales_quotation to quotes row
           await svcClient
             .from("sales_quotations")
-            .update({ 
-              notes: notesText,
-              // Store customer_email in a way the accept flow can find it
-            })
-            .eq("id", newQuote.id);
-          // Also store in metadata via raw update since metadata column may exist
-          try {
-            await svcClient.rpc("execute_sql" as any); // won't work, use direct update
-          } catch (_e) { /* ignore */ }
-          // Use a simpler approach: update the quotation with customer info
-          await svcClient
-            .from("sales_quotations")
-            .update({ customer_name: args.customer_name || null } as any)
+            .update({ quote_result: { quote_id: linkedQuote.id } } as any)
             .eq("id", newQuote.id);
         }
 
