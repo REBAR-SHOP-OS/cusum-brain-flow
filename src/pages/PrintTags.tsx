@@ -92,13 +92,10 @@ function PrintTag({
         </div>
       </div>
 
-      {/* Shape code + Dims */}
+      {/* Logo + Dims */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", borderBottom: "2px solid #000" }}>
         <div style={{ borderRight: "2px solid #000", padding: "8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ width: 40, height: 40, borderRadius: "50%", border: "2px solid #000", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
-            <span style={{ fontSize: 14, fontWeight: 900 }}>{shapeType || "S"}</span>
-          </div>
-          <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase" }}>Shape</span>
+          <img src={logoCoin} alt="Brand logo" style={{ width: 64, height: 64, objectFit: "contain" }} />
         </div>
         <div style={{ padding: "6px 8px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 12px" }}>
           {DIM_LEFT.map((d) => (
