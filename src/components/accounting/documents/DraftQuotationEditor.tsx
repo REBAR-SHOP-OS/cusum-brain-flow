@@ -79,17 +79,36 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const [productSearch, setProductSearch] = useState("");
 
   // Load quote data + customers + products
+  // Dynamic customer search — query on type instead of loading all upfront
+  useEffect(() => {
+    if (!companyId || !customerOpen) return;
+    const timeout = setTimeout(async () => {
+      let q = supabase
+        .from("v_customers_clean" as any)
+        .select("customer_id, display_name, company_name, email")
+        .eq("company_id", companyId)
+        .order("display_name")
+        .limit(50);
+      if (customerSearch.trim()) {
+        q = q.or(`display_name.ilike.%${customerSearch.trim()}%,company_name.ilike.%${customerSearch.trim()}%`);
+      }
+      const { data } = await q;
+      if (data) {
+        const normalized = (data as any[]).map((c) => ({
+          ...c,
+          id: c.id || c.customer_id || c.Id || "",
+          name: c.name || c.display_name || c.company_name || "Unknown",
+        }));
+        setCustomers(normalized as CustomerOption[]);
+      }
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [companyId, customerSearch, customerOpen]);
+
   useEffect(() => {
     const loadAll = async () => {
-      const [quoteRes, custRes, prodRes] = await Promise.all([
+      const [quoteRes, prodRes] = await Promise.all([
         supabase.from("quotes").select("*").eq("id", quoteId).single(),
-        companyId
-          ? supabase
-              .from("v_customers_clean" as any)
-              .select("customer_id, display_name, company_name, email")
-              .eq("company_id", companyId)
-              .order("display_name")
-          : Promise.resolve({ data: [], error: null }),
         companyId
           ? supabase
               .from("qb_items")
@@ -146,14 +165,6 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         }
       }
 
-      if (custRes.data) {
-        const normalized = (custRes.data as any[]).map((c) => ({
-          ...c,
-          id: c.id || c.customer_id || c.Id || "",
-          name: c.name || c.display_name || c.company_name || "Unknown",
-        }));
-        setCustomers(normalized as CustomerOption[]);
-      }
       if (prodRes.data) setProducts(prodRes.data as ProductOption[]);
 
       setLoading(false);
@@ -161,13 +172,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     loadAll();
   }, [quoteId, onClose, companyId]);
 
-  const filteredCustomers = useMemo(
-    () =>
-      customers.filter((c) =>
-        (c.name || "").toLowerCase().includes(customerSearch.toLowerCase())
-      ),
-    [customers, customerSearch]
-  );
+  const filteredCustomers = customers;
 
   const filteredProducts = useMemo(
     () =>
