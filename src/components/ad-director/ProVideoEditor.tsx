@@ -226,10 +226,34 @@ export function ProVideoEditor({
   const handleGenerateAudio = useCallback(async (result: AudioPromptResult) => {
     setGeneratingAudio(true);
     try {
+      // Step 1: Enhance prompt with Gemini AI
+      toast({ title: "🧠 در حال بهینه‌سازی پرامپت با هوش مصنوعی..." });
+      const enhanceUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enhance-music-prompt`;
+      const enhanceRes = await fetch(enhanceUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ prompt: result.prompt, type: result.type, duration: result.duration }),
+      });
+
+      let finalPrompt = result.prompt;
+      if (enhanceRes.ok) {
+        const enhanceData = await enhanceRes.json();
+        finalPrompt = enhanceData.enhancedPrompt || result.prompt;
+        console.log("Enhanced prompt:", finalPrompt);
+      } else {
+        console.warn("Prompt enhancement failed, using original prompt");
+      }
+
+      // Step 2: Generate audio with ElevenLabs using enhanced prompt
+      toast({ title: "🎵 در حال تولید صدا..." });
       const functionName = result.type === "music" ? "elevenlabs-music" : "elevenlabs-tts";
       const body = result.type === "music"
-        ? { prompt: result.prompt, duration: result.duration, type: "music" }
-        : { text: result.prompt };
+        ? { prompt: finalPrompt, duration: result.duration, type: "music" }
+        : { text: finalPrompt };
 
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`;
       const response = await fetch(url, {
