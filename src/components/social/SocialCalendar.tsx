@@ -10,7 +10,7 @@ const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twit
 function groupByPlatform(posts: SocialPost[]) {
   const map = new Map<string, SocialPost[]>();
   for (const p of posts) {
-    const key = `${p.platform || "other"}_${p.title || p.id}`;
+    const key = `${p.platform || "other"}_${p.title || p.id}_${p.page_name || ""}`;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(p);
   }
