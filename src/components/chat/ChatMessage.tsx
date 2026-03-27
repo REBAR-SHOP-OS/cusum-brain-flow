@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { AgentBadge, AgentType } from "./AgentSelector";
-import { User, Bot, FileIcon, Download, X } from "lucide-react";
+import { User, Bot, FileIcon, Download, X, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { getSignedFileUrl } from "@/lib/storageUtils";
+import { downloadFile } from "@/lib/downloadUtils";
 import { UploadedFile } from "./ChatInput";
 import { MessageActions } from "./MessageActions";
 import { RichMarkdown } from "./RichMarkdown";
