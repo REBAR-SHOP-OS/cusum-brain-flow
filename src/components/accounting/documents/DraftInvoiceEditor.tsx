@@ -461,6 +461,18 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         ? `<div style="text-align:center;margin:24px 0;">${payBtns.join('<div style="margin-top:12px;"></div>')}</div>`
         : "";
 
+      // Build branded line items table
+      const itemRows = items.map(it =>
+        `<tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#333;">${it.description}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:13px;color:#333;">${it.quantity}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;color:#333;">${fmt(it.unitPrice)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;font-weight:600;color:#333;">${fmt(it.quantity * it.unitPrice)}</td>
+        </tr>`
+      ).join("");
+
+      const hstRate = taxRate;
+
       const emailBody = `
         <p style="font-size:15px;color:#333;margin:0 0 16px;">Dear ${customerName || "Customer"},</p>
         <p style="font-size:14px;color:#333;margin:0 0 20px;">Please find your invoice <strong>#${invoiceNumber}</strong> details below.</p>
