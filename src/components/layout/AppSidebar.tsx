@@ -172,6 +172,7 @@ export function AppSidebar() {
       label: "Production",
       items: [
         { name: "Shop Floor", href: "/shop-floor", icon: Factory, roles: ["admin", "workshop", "office"], lockReason: "Requires Workshop or Office role", tourId: "nav-shop-floor" },
+        { name: "Time Clock", href: "/timeclock", icon: Clock, roles: ["admin", "workshop", "office"], lockReason: "Requires Workshop or Office role" },
         { name: "Office Tools", href: "/office", icon: LayoutGrid, roles: ["admin", "office"], lockReason: "Requires Office role", tourId: "nav-office-portal" },
       ],
     },
