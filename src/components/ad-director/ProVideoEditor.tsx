@@ -36,6 +36,7 @@ import { SubtitleDialog } from "./editor/SubtitleDialog";
 import { TextVoiceDialog, type TextVoiceResult } from "./editor/TextVoiceDialog";
 import { SpeedControlDialog } from "./editor/SpeedControlPopover";
 import { EditOverlayDialog } from "./editor/EditOverlayDialog";
+import { ImageOverlayDialog } from "./editor/ImageOverlayDialog";
 import { TextTab } from "./editor/TextTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
 import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
