@@ -171,7 +171,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                 const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
                 const { dominant: status, label: statusLabel } = statusSummary(posts);
                 const firstPost = posts[0];
-                const isApproved = posts.some(p => p.neel_approved);
+                const isApproved = posts.some(p => p.neel_approved || p.qa_status === "approved");
 
                 return (
                   <button

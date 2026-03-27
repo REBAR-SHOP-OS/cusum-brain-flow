@@ -146,8 +146,6 @@ export default function SocialMediaManager() {
       const q = searchQuery.toLowerCase();
       items = items.filter(
         (p) =>
-          // Never hide scheduled/published posts even if they don't match search
-          p.status === "scheduled" || p.status === "published" ||
           p.title.toLowerCase().includes(q) ||
           p.content.toLowerCase().includes(q) ||
           p.hashtags.some((h) => h.toLowerCase().includes(q))
