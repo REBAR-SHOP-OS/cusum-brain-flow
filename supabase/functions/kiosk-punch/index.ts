@@ -3,7 +3,7 @@ import { corsHeaders } from "../_shared/auth.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { profileId, faceBase64 } = ctx.body;
+    const { profileId } = ctx.body;
     if (!profileId) {
       return new Response(JSON.stringify({ error: "profileId is required" }), {
         status: 400,

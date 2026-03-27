@@ -159,11 +159,9 @@ export default function TimeClock() {
   // Confirm punch (manual or auto) — uses edge function for service-role access
   const handleConfirmPunch = async (profileId: string) => {
     const employeeName = face.matchResult?.name || "Employee";
-    const faceBase64 = kioskMode ? face.captureFrame() : null;
-
     try {
       const { data, error } = await supabase.functions.invoke("kiosk-punch", {
-        body: { profileId, faceBase64 },
+        body: { profileId },
       });
 
       if (error) {
