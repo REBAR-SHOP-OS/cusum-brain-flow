@@ -5,7 +5,7 @@ import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 const sendSchema = z.object({
   quote_id: z.string().uuid(),
-  customer_email: z.string().email(),
+  customer_email: z.string().email().optional().or(z.literal("")),
   action: z.enum(["send_quote", "convert_to_invoice", "accept_and_convert"]),
 });
 
@@ -23,8 +23,11 @@ Deno.serve((req) =>
       );
     }
 
-    const { quote_id, customer_email, action } = parsed.data;
+    const { quote_id, customer_email: rawEmail, action } = parsed.data;
+    const customer_email = rawEmail || "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+
+    console.log(`[send-quote-email] action=${action}, quote_id=${quote_id}, hasEmail=${!!rawEmail}`);
 
     // Fetch quote data
     const { data: quote, error: qErr } = await svc
