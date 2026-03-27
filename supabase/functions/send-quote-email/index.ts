@@ -433,6 +433,7 @@ Deno.serve((req) =>
       let invoiceNumber: string;
       let invoiceId: string;
       let stripePaymentUrl = "";
+      let qbInvoiceLink = "";
 
       if (existingInvoice) {
         // Re-acceptance: invoice already exists, just re-send email
@@ -576,7 +577,6 @@ Deno.serve((req) =>
         }
 
         // Auto-push invoice to QuickBooks to get InvoiceLink
-        let qbInvoiceLink = "";
         try {
           // Build QB line items from the copied invoice items
           const qbLineItems = (metaItems.length > 0 ? metaItems : []).map((mi: any) => ({
