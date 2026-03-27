@@ -344,8 +344,9 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                   <TableHead className="text-base">Customer</TableHead>
                   <TableHead className="text-base">Issued</TableHead>
                   <TableHead className="text-base">Due</TableHead>
-                  <TableHead className="text-base text-right">Amount</TableHead>
+                   <TableHead className="text-base text-right">Amount</TableHead>
                   <TableHead className="text-base">Status</TableHead>
+                  <TableHead className="text-base text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
