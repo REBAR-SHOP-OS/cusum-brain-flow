@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Trash2, ImageOff, Brain, UserPlus, Camera, Check, X, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 const PHOTO_LABELS = ["Front", "Slight Left", "Slight Right"] as const;
