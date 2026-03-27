@@ -247,8 +247,8 @@ Match by HEADER NAME, not by column position index. DO NOT re-index or shift col
 
 Rules:
 - Extract ALL rows/items from the document
-- Keep ALL numerical values EXACTLY as they appear in the source document. Do NOT convert units. If the document shows inches, keep inches. If it shows millimeters, keep millimeters.
-- Dimensions (A,B,C,...) and total_length should be the exact numbers from the source, with no unit conversion
+- Keep ALL numerical values EXACTLY as they appear in the source document. Do NOT convert units. If the document shows inches, keep inches. If it shows millimeters, keep millimeters. If a value is "3'-5\"", return it as the string "3'-5\\"" or as the numeric equivalent in the document's native units.
+- Dimensions (A,B,C,...) and total_length should be the exact numbers from the source, with no unit conversion. For imperial ft-in values like 3'-5", return the raw string or the numeric inches value (e.g. 41).
 - If a dimension column is empty, use null
 - "type" is the ASA shape code (1-32, S1-S15, T1-T17, COIL, X, Y, etc.)
 - Items with no shape type are straight bars
