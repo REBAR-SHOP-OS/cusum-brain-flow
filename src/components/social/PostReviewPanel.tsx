@@ -1094,7 +1094,7 @@ export function PostReviewPanel({
                             ? allPosts.filter(p => p.image_url === post.image_url)
                             : [post];
                           for (const p of batchPosts) {
-                            await updatePost.mutateAsync({ id: p.id, neel_approved: true } as any);
+                            await updatePost.mutateAsync({ id: p.id, neel_approved: true, status: "scheduled", qa_status: "approved" } as any);
                           }
                           // Force immediate refetch so panel + calendar update without manual refresh
                           await queryClient.invalidateQueries({ queryKey: ["social_posts"] });
