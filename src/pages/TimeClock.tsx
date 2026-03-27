@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory, Trash2 } from "lucide-react";
+import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory, Trash2, Brain } from "lucide-react";
 import { useProfiles } from "@/hooks/useProfiles";
 import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
 import { Link, useSearchParams } from "react-router-dom";
@@ -26,6 +26,7 @@ import { FirstTimeRegistration } from "@/components/timeclock/FirstTimeRegistrat
 import { MyLeaveTab } from "@/components/timeclock/MyLeaveTab";
 import { TeamCalendarTab } from "@/components/timeclock/TeamCalendarTab";
 import { PayrollSummaryTab } from "@/components/timeclock/PayrollSummaryTab";
+import { FaceMemoryPanel } from "@/components/timeclock/FaceMemoryPanel";
 
 function getInitials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -53,6 +54,7 @@ export default function TimeClock() {
   const [enrollmentCount, setEnrollmentCount] = useState(0);
   const [autoPunchCountdown, setAutoPunchCountdown] = useState(0);
   const [showRegistration, setShowRegistration] = useState(false);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
 
   // Cache of profile IDs confirmed during this kiosk session
   const confirmedProfilesRef = useRef<Set<string>>(new Set());
@@ -280,9 +282,15 @@ export default function TimeClock() {
     return (
       <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-6">
         <canvas ref={face.canvasRef} className="hidden" />
-        <Button variant="ghost" size="sm" className="absolute top-4 right-4 text-muted-foreground" onClick={exitKioskMode}>
-          Exit Kiosk
-        </Button>
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={() => setShowMemoryPanel(true)}>
+            <Brain className="w-4 h-4" /> Memory
+          </Button>
+          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={exitKioskMode}>
+            Exit Kiosk
+          </Button>
+        </div>
+        <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
         <div className="flex items-center gap-3 mb-6">
           <ScanFace className="w-8 h-8 text-primary" />
           <h1 className="text-3xl font-black italic tracking-tight">FACE ID KIOSK</h1>
