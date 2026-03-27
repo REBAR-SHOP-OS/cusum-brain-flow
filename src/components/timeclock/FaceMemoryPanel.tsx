@@ -234,6 +234,15 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
     }
   };
 
+  const handleDeleteSingle = async (enrollmentId: string) => {
+    const { error } = await supabase
+      .from("face_enrollments")
+      .update({ is_active: false } as any)
+      .eq("id", enrollmentId);
+    if (error) toast.error("Failed to delete photo");
+    else { toast.success("Photo removed"); fetchData(); }
+  };
+
   const getInitials = (name: string) =>
     name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 
@@ -409,7 +418,7 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
                         <div
                           key={enrollment.id}
                           className={cn(
-                            "w-16 h-16 rounded-lg border border-border overflow-hidden flex-shrink-0 bg-muted/30",
+                            "relative group w-16 h-16 rounded-lg border border-border overflow-hidden flex-shrink-0 bg-muted/30",
                             "flex items-center justify-center"
                           )}
                         >
@@ -418,6 +427,12 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
                           ) : (
                             <ImageOff className="w-4 h-4 text-muted-foreground" />
                           )}
+                          <button
+                            onClick={() => handleDeleteSingle(enrollment.id)}
+                            className="absolute top-0 right-0 w-5 h-5 bg-destructive text-destructive-foreground rounded-bl-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
                         </div>
                       );
                     })}
