@@ -1514,7 +1514,7 @@ export function ProVideoEditor({
         <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative items-center justify-center">
 
           {/* Video / Static Card */}
-          <div className="flex-1 flex items-center justify-center relative overflow-hidden aspect-square max-h-[60vh]">
+          <div className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9" }}>
             {videoSrc ? (
               <>
                 {isStaticCard ? (
