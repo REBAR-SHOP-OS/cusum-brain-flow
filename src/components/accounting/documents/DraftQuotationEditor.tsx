@@ -25,6 +25,7 @@ interface Props {
 interface CustomerOption {
   id: string;
   name: string;
+  email?: string | null;
   billing_street1?: string | null;
   billing_city?: string | null;
   billing_province?: string | null;
