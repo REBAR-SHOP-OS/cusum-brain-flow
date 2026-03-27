@@ -362,6 +362,26 @@ export function TimelineBar({
       {/* Tracks */}
       <div className="px-3 py-2 space-y-1.5 relative overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
         <div style={{ width: `${100 * zoomLevel}%`, minWidth: "100%" }}>
+        {/* ─── Time ruler ─── */}
+        <div className="flex items-center gap-0.5 mb-1">
+          <span className="w-14 shrink-0" />
+          <div className="flex-1 h-4 relative border-b border-border/30">
+            {Array.from({ length: Math.ceil(totalDuration) + 1 }, (_, sec) => {
+              const leftPct = (sec / totalDuration) * 100;
+              if (leftPct > 100) return null;
+              const isMajor = sec % 2 === 0;
+              return (
+                <div key={sec} className="absolute top-0 bottom-0" style={{ left: `${leftPct}%` }}>
+                  <div className={`absolute bottom-0 w-px ${isMajor ? 'h-3 bg-muted-foreground/50' : 'h-1.5 bg-muted-foreground/25'}`} />
+                  {isMajor && (
+                    <span className="absolute bottom-3.5 text-[7px] text-muted-foreground font-mono -translate-x-1/2 select-none">{sec}s</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* ─── Video track ─── */}
         <div className="flex items-center gap-0.5">
           <VolumeControl
