@@ -369,6 +369,24 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                       <TableCell>
                         <Badge className={`${statusStyles[ds] || ""} border-0 text-sm`}>{ds}</Badge>
                       </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm" variant="ghost" className="h-9 w-9 p-0"
+                            title="Print Packing Slip"
+                            onClick={() => setErpPackingSlip(inv)}
+                          >
+                            <Package className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost" className="h-9 w-9 p-0 text-destructive hover:text-destructive"
+                            title="Delete Invoice"
+                            onClick={() => setDeleteTarget(inv)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
