@@ -1,39 +1,36 @@
 
 
-# Always-Enabled Download Button
+# Fix: AI Estimate Fails on Truncated JSON Response
 
 ## Problem
-The Download button in the ProVideoEditor toolbar is disabled (`disabled={!finalVideoUrl}`) when there's no stitched final video. The user wants to download the current video (even a single scene clip) at any time.
+The `ai-estimate` edge function fails when the AI model returns a large JSON array that gets truncated (13,995 chars, near the 16,000 token limit). The truncated response has no closing `]`, so:
+1. `JSON.parse(cleaned)` fails — incomplete JSON
+2. Regex `/\[[\s\S]*\]/` finds no match — missing closing bracket
+3. Falls through to "No JSON array found" → zero items → "Zero-weight guard" error
 
 ## Solution
-In `src/components/ad-director/ProVideoEditor.tsx` (~line 1422-1437):
+Two fixes in `supabase/functions/ai-estimate/index.ts`:
 
-1. **Remove `disabled={!finalVideoUrl}`** — button is always clickable
-2. **Use `videoSrc` as fallback** — download `finalVideoUrl` if available, otherwise download the current scene's video (`videoSrc` which is `selectedClip?.videoUrl`)
-3. **Use `downloadFile` utility** for robust downloading (handles CORS, proxy fallback) instead of raw `<a>` click
+### Fix 1: Repair truncated JSON before parsing (~line 535-552)
+After stripping markdown fences, add a truncation repair step:
+- If the cleaned string starts with `[` but doesn't end with `]`, find the last complete object (`}`) and close the array with `]`
+- This salvages all complete items from a truncated response
 
-```tsx
-// Change from:
-disabled={!finalVideoUrl}
-onClick={() => {
-  if (!finalVideoUrl) return;
-  const a = document.createElement("a");
-  a.href = finalVideoUrl;
-  a.download = `${brand.name || "video"}-ad.mp4`;
-  a.click();
-}}
-
-// Change to:
-onClick={() => {
-  const url = finalVideoUrl || videoSrc;
-  if (!url) return;
-  const fname = `${brand.name || "video"}-ad.mp4`;
-  downloadFile(url, fname, { provider: "wan" });
-}}
+```ts
+// After line 535 (let cleaned = ...)
+// Repair truncated JSON arrays
+if (cleaned.startsWith("[") && !cleaned.trimEnd().endsWith("]")) {
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (lastBrace > 0) {
+    cleaned = cleaned.substring(0, lastBrace + 1) + "]";
+    console.log("Repaired truncated JSON array");
+  }
+}
 ```
 
-If neither `finalVideoUrl` nor `videoSrc` exists, the button shows but does nothing (edge case: no video generated yet). A toast could optionally warn the user.
+### Fix 2: Increase max_tokens to reduce truncation (~line 521)
+Change `max_tokens: 16000` → `max_tokens: 32000` to give the model more room for large bar lists.
 
 ## Files changed
-- `src/components/ad-director/ProVideoEditor.tsx` — remove disabled prop, use videoSrc fallback in download handler
+- `supabase/functions/ai-estimate/index.ts` — add JSON truncation repair + increase max_tokens
 
