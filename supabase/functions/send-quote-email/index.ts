@@ -545,7 +545,7 @@ Deno.serve((req) =>
             },
             body: JSON.stringify({
               action: "create-payment-link",
-              amount,
+              amount: rawTotalWithTax,
               currency: "cad",
               invoiceNumber,
               customerName: sqCheck?.customer_name || customerName,
