@@ -49,7 +49,9 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const { profiles } = useProfiles();
+  const { profiles, createProfile } = useProfiles();
+  const [newPersonName, setNewPersonName] = useState("");
+  const [creatingNewPerson, setCreatingNewPerson] = useState(false);
 
   const videoCallbackRef = useCallback((video: HTMLVideoElement | null) => {
     videoRef.current = video;
