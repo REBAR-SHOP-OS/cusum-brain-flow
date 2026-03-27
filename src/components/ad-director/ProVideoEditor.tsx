@@ -27,6 +27,7 @@ import { MusicTab } from "./editor/MusicTab";
 import { ScriptTab } from "./editor/ScriptTab";
 import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
 import { TextOverlayDialog } from "./editor/TextOverlayDialog";
+import { AudioPromptDialog, type AudioPromptResult } from "./editor/AudioPromptDialog";
 import { EditOverlayDialog } from "./editor/EditOverlayDialog";
 import { TextTab } from "./editor/TextTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
@@ -185,6 +186,10 @@ export function ProVideoEditor({
   const [panelOpen, setPanelOpen] = useState(false);
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
+    if (tab === "music") {
+      setAudioPromptOpen(true);
+      return;
+    }
     if (activeTab === tab) {
       setPanelOpen(prev => !prev);
     } else {
@@ -193,6 +198,50 @@ export function ProVideoEditor({
     }
     onActiveTabChanged?.(tab);
   }, [onActiveTabChanged, activeTab]);
+
+  const handleGenerateAudio = useCallback(async (result: AudioPromptResult) => {
+    setGeneratingAudio(true);
+    try {
+      const functionName = result.type === "music" ? "elevenlabs-music" : "elevenlabs-tts";
+      const body = result.type === "music"
+        ? { prompt: result.prompt, duration: result.duration, type: "music" }
+        : { text: result.prompt };
+
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Audio generation failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      setAudioTracks([{
+        sceneId: "generated",
+        label: result.type === "music" ? "🎵 Generated Music" : "🎙️ Generated Voiceover",
+        audioUrl: audioUrl,
+        kind: result.type === "music" ? "music" : "voiceover",
+      }]);
+
+      setAudioPromptOpen(false);
+      toast({ title: "✅ صدا با موفقیت تولید شد" });
+    } catch (err: any) {
+      console.error("Audio generation error:", err);
+      toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingAudio(false);
+    }
+  }, [toast]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -208,6 +257,8 @@ export function ProVideoEditor({
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
   const audioUploadRef = useRef<HTMLInputElement>(null);
+  const [audioPromptOpen, setAudioPromptOpen] = useState(false);
+  const [generatingAudio, setGeneratingAudio] = useState(false);
 
   const handleUploadAudio = useCallback(() => {
     audioUploadRef.current?.click();
@@ -1492,6 +1543,14 @@ export function ProVideoEditor({
         onMoveOverlay={handleMoveOverlay}
         onMoveAudioTrack={handleMoveAudioTrack}
         onEditOverlay={(ov) => setEditingOverlay(ov)}
+      />
+
+      {/* Audio Prompt Dialog */}
+      <AudioPromptDialog
+        open={audioPromptOpen}
+        onOpenChange={setAudioPromptOpen}
+        onGenerate={handleGenerateAudio}
+        loading={generatingAudio}
       />
 
       {/* Text Overlay Dialog */}
