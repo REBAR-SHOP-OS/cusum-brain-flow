@@ -234,6 +234,15 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
     }
   };
 
+  const handleDeleteSingle = async (enrollmentId: string) => {
+    const { error } = await supabase
+      .from("face_enrollments")
+      .update({ is_active: false } as any)
+      .eq("id", enrollmentId);
+    if (error) toast.error("Failed to delete photo");
+    else { toast.success("Photo removed"); fetchData(); }
+  };
+
   const getInitials = (name: string) =>
     name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 
