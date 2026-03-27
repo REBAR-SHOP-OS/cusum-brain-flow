@@ -1,60 +1,54 @@
 
 
-# Fix: Invoice Line Items, QB Link, and Email Delivery
+# Fix: Face Memory Panel Empty + Recognition Intermittent Failures
 
-## Root Causes Found (from logs + code + DB)
+## Root Causes Found
 
-### CRITICAL 1: `sales_invoice_items` RLS policies use wrong column
-**Table:** `sales_invoice_items`
-**Bug:** SELECT/UPDATE/DELETE policies check `profiles.id = auth.uid()` instead of `profiles.user_id = auth.uid()`. Since `profiles.id` is the table's own UUID primary key (not the auth user ID), the condition NEVER matches. Result: the editor reads 0 items, falls back to "Invoice total" with qty=1.
+### BUG 1: FaceMemoryPanel queries non-existent column `storage_path`
+**File:** `src/components/timeclock/FaceMemoryPanel.tsx` line 44
+**Impact:** Memory panel always shows "0 people enrolled, 0 photos total"
 
-The edge function (service role) correctly inserts 2 items ("Copied 2 line items from quotes.metadata" confirmed in logs), but the **client-side editor can never read them back**.
+The panel selects `storage_path` but the actual column in `face_enrollments` is `photo_url`. The query silently fails or returns empty, so no enrolled faces are ever displayed.
 
-### CRITICAL 2: `metaItems` variable scoping error
-**File:** `send-quote-email/index.ts`
-**Bug:** `metaItems` is declared with `const` inside a `try` block (line 636), then referenced in a separate `try` block (line 715) for QB push. JavaScript block scoping makes it undefined there. Confirmed by runtime error: `ReferenceError: metaItems is not defined`.
+**Evidence:** Database has 20+ active enrollments across 6 profiles — but the panel shows zero.
 
-### CRITICAL 3: Gmail token expired
-**Log:** `invalid_grant: Bad Request` — The Gmail refresh token stored in `user_gmail_tokens` is revoked or expired. This is why the customer never receives the invoice email. This is a data/config issue, not a code bug — user needs to re-authenticate Gmail.
+### BUG 2: Signed URLs break AI recognition ~50% of the time
+**File:** `supabase/functions/face-recognize/index.ts` lines 76-95
+**Impact:** "Cannot fetch content from the provided URL" error causes face scan to fail, showing "First Time Here?" even for enrolled users
 
-### HIGH 4: `InvoiceLink` always null in `accounting_mirror`
-All mirrored QB invoices have `InvoiceLink: null`. QuickBooks only returns `InvoiceLink` for invoices created via the API when the company has QuickBooks Payments enabled. If QB Payments is not set up on the QuickBooks company, this field will always be null — no code fix possible.
+The edge function generates Supabase signed URLs for reference photos and passes them as `image_url` to Gemini. But Gemini's servers intermittently cannot fetch these URLs (network access, timing, or URL format issues). Logs show this error on 3 out of 5 recent scan attempts.
+
+**Evidence from logs:**
+- 12:55, 12:56, 12:59 → `"Cannot fetch content from the provided URL"` → recognition fails → shows "First Time Here?"
+- 12:54, 13:01 → works fine → matched Radin at 98% confidence
+
+### BUG 3: Signed URL generation also fails in FaceMemoryPanel thumbnails
+The panel uses `item.storage_path` (undefined due to BUG 1) to generate signed URLs for thumbnails — double failure.
 
 ## Fixes
 
-### Fix 1: RLS policy on `sales_invoice_items` (database migration)
-```sql
-DROP POLICY "Users can view own company invoice items" ON sales_invoice_items;
-CREATE POLICY "Users can view own company invoice items" ON sales_invoice_items
-  FOR SELECT TO authenticated
-  USING (company_id IN (SELECT company_id FROM profiles WHERE user_id = auth.uid()));
+### Fix 1: Correct column name in FaceMemoryPanel
+Change `storage_path` → `photo_url` in the select query and all references throughout the component.
 
-DROP POLICY "Users can update own company invoice items" ON sales_invoice_items;
-CREATE POLICY "Users can update own company invoice items" ON sales_invoice_items
-  FOR UPDATE TO authenticated
-  USING (company_id IN (SELECT company_id FROM profiles WHERE user_id = auth.uid()));
+### Fix 2: Convert reference photos to base64 instead of signed URLs
+In `face-recognize/index.ts`, download each reference photo from storage and convert to base64 data URLs (same format as the captured photo). This eliminates the external URL dependency entirely — Gemini receives all images as inline base64 data.
 
-DROP POLICY "Users can delete own company invoice items" ON sales_invoice_items;
-CREATE POLICY "Users can delete own company invoice items" ON sales_invoice_items
-  FOR DELETE TO authenticated
-  USING (company_id IN (SELECT company_id FROM profiles WHERE user_id = auth.uid()));
+```
+Before: { type: "image_url", image_url: { url: signedUrl } }
+After:  { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }
 ```
 
-### Fix 2: Move `metaItems` declaration outside try block
-**File:** `supabase/functions/send-quote-email/index.ts`
+This is the same pattern already used for the captured photo (line 148) and is 100% reliable.
 
-Move `const metaItems = (meta.line_items || meta.items || []) as any[];` from inside the line-item-copy try block to BEFORE it (alongside `invoiceId`, `invoiceNumber`). This makes it accessible to both the item copy block AND the QB push block.
+### Fix 3: Fix thumbnail generation in FaceMemoryPanel
+Use the corrected `photo_url` field for signed URL generation in the memory panel thumbnails.
 
-Same fix needed in the `convert_to_invoice` action where `metaItems` is redeclared at line 396 inside the QB try block — it should use the one declared at line 322.
-
-### Fix 3: Surface Gmail re-auth requirement
-The Gmail token is expired. Notify the user they need to re-authenticate their Gmail connection. No code change — operational action.
-
-## Files Changed
-- **Database migration** — fix 3 RLS policies on `sales_invoice_items` (`profiles.id` → `profiles.user_id`)
-- **`supabase/functions/send-quote-email/index.ts`** — move `metaItems` to shared scope in both `accept_and_convert` and `convert_to_invoice` actions
+## Files to Change
+- `src/components/timeclock/FaceMemoryPanel.tsx` — fix column name `storage_path` → `photo_url`
+- `supabase/functions/face-recognize/index.ts` — download + base64 encode reference photos instead of signed URLs
 
 ## Expected Result
-- Invoice editor loads the correct 2 line items (not "Invoice total")
-- QB invoice push succeeds (no more `metaItems is not defined`)
-- Email delivery requires Gmail re-authentication (user action)
+- Memory panel shows all enrolled people with photo thumbnails
+- Face recognition works reliably every time (no more URL fetch failures)
+- "First Time Here?" only appears for genuinely unrecognized faces
+
