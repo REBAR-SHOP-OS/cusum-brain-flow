@@ -1,43 +1,25 @@
 
 
-# Add "Create New Person" to Face Memory Enrollment
+# Add Time Clock to Internal Sidebar for Kourosh
 
 ## Problem
-The "Enroll New Person" dropdown in the Face Memory panel only lists existing profiles. If someone isn't in the system yet, there's no way to add them directly from this panel.
+The Time Clock page (`/timeclock`) is accessible via RoleGuard for workshop users, but the internal sidebar navigation (`navGroups` in `AppSidebar.tsx`) has no "Time Clock" link. Kourosh (`kourosh@rebar.shop`) — an internal workshop user — cannot navigate to Time Clock from the sidebar.
 
 ## Solution
-Add a "+ Add New Name" option at the top of the Select dropdown. When selected, show an inline text input for the new person's name. On confirmation, create a new profile in the `profiles` table, then proceed with the normal photo enrollment flow.
+Add a "Time Clock" nav item to the sidebar `navGroups` so internal users (especially workshop roles) can see and click it.
 
 ## Changes
 
-**File:** `src/components/timeclock/FaceMemoryPanel.tsx`
+**File:** `src/components/layout/AppSidebar.tsx`
 
-1. **New state**: Add `newPersonName` (string) and `creatingNewPerson` (boolean) state variables.
+Add `{ name: "Time Clock", href: "/timeclock", icon: Clock }` to the "Production" group (alongside Shop Floor), with no role restriction so all internal users can access it. This matches the mobile nav which already shows Time Clock for everyone.
 
-2. **Add "Create New" option in Select**: Add a special `SelectItem` with value `__new__` labeled "+ Add New Name" at the top of the dropdown list.
-
-3. **Handle selection**: When `__new__` is selected, show an inline Input field + confirm button instead of jumping to camera. When confirmed:
-   - Call `createProfile` from `useProfiles()` to insert a new profile with the entered name
-   - Set the newly created profile's ID as `selectedProfileId`
-   - Proceed to the camera/capture step
-
-4. **Reset**: Clear `newPersonName` and `creatingNewPerson` in `resetAddForm`.
-
-### UI Flow
 ```text
-Select a person...
-├── + Add New Name        ← new option
-├── Ai
-├── Amir AHD
-├── ...
-└── Saurabh Seghal (re-enroll)
+Production group (line ~172-177):
+  - Shop Floor  (existing)
+  - Time Clock  ← NEW
+  - Office Tools (existing)
 ```
 
-When "+ Add New Name" is clicked → input field appears → user types name → clicks ✓ → profile created → camera starts for enrollment photos.
-
-## Technical Details
-- Uses existing `createProfile` mutation from `useProfiles()` hook
-- New profile created with `is_active: true`, empty duties array, and the entered `full_name`
-- No new database changes needed — uses existing `profiles` table insert
-- The `useCompanyId` hook (used inside `useProfiles`) ensures `company_id` is set automatically
+Single line addition. No other files need changes — RoleGuard already allows `/timeclock` for workshop users, and `useTimeClock` already works for any user with a profile.
 
