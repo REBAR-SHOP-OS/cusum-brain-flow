@@ -248,6 +248,32 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
     else { toast.success("Photo removed"); fetchData(); }
   };
 
+  const handleCreateNewPerson = async () => {
+    const trimmed = newPersonName.trim();
+    if (trimmed.length < 2) return;
+    try {
+      const result = await createProfile.mutateAsync({
+        full_name: trimmed,
+        is_active: true,
+        duties: [],
+        user_id: null,
+        title: null,
+        department: null,
+        phone: null,
+        email: null,
+        avatar_url: null,
+        preferred_language: "en",
+        manager_id: null,
+      });
+      setSelectedProfileId(result.id);
+      setCreatingNewPerson(false);
+      setNewPersonName("");
+      toast.success(`Profile "${trimmed}" created!`);
+    } catch (err: any) {
+      console.error("Create profile error:", err);
+    }
+  };
+
   const getInitials = (name: string) =>
     name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 
