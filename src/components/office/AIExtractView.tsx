@@ -2078,7 +2078,6 @@ export function AIExtractView() {
                           type="button"
                           onClick={() => {
                             userSetUnitRef.current = true;
-                            confirmedUnitRef.current = u;
                             setSelectedUnitSystem(u);
                           }}
                           className={`px-2 py-1 rounded text-[10px] font-semibold transition-all ${
