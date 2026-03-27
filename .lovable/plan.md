@@ -1,56 +1,35 @@
 
 
-# Fix: Pending Approvals Showing Published/Declined Posts + Missing Page Name
+# Sync RebarTagCard with PrintTag Layout
 
-## Root Cause
+## Problem
 
-Two issues in `ApprovalsPanel.tsx`:
+The office page card (`RebarTagCard.tsx`) and the print preview (`PrintTag` in `PrintTags.tsx`) render completely different layouts for the same data:
 
-1. **Stale approvals**: `pendingApprovals` filters by `approval.status === "pending"` in the approvals table, but doesn't cross-check the linked post's actual status. A post can be published/declined while its approval record remains "pending" (race condition or manual status change). These ghost approvals clutter the queue.
-
-2. **Missing page/platform context**: Each card shows the platform badge but not `post.page_name`, which tells the manager *which specific page* the post targets (e.g., "REBAR Co. Facebook" vs "REBAR Instagram").
+| Section | RebarTagCard (office) | PrintTag (print preview) |
+|---------|----------------------|--------------------------|
+| Qty/Length/Weight | 2-col (Qty+Length) then separate Weight row | 3-col row (Qty, Length, Weight) |
+| Dims | Only active dims, chunked in 4s, flat text | All 12 dims in 2-column grid (A-F left, G-R right) with shape circle |
+| Shape | Not shown | Shape code circle + "SHAPE" label + shape image area |
+| Barcode | Fake text barcode | Not present |
+| Footer | Duplicate timestamp header/footer | "R.S" left + "REBAR.SHOP" right |
 
 ## Fix
 
-### `src/components/social/ApprovalsPanel.tsx`
+Rewrite `RebarTagCard.tsx` to match the `PrintTag` structure exactly:
 
-**1. Filter out approvals where the post is already resolved (line 60-62):**
+1. **Timestamp header**: Keep, but match PrintTag order (date left, "REBAR SHOP OS" right)
+2. **Mark/Size/Grade**: Already matches — keep as-is
+3. **Qty/Length/Weight**: Change from 2-col + separate weight row → single 3-col row
+4. **Shape + Dims**: Replace flat "DIMS:" section with 2-column layout: shape circle on left, all 12 dims (A-F / G-R) in 2-column grid on right — show empty dims too
+5. **Shape image**: Add flexible area showing `shapeImageUrl` or shape code placeholder
+6. **Remove barcode**: Delete the fake barcode section
+7. **Ref/Dwg/Item**: Change to 2-column grid (Ref+address left, Dwg+Item right)
+8. **Footer**: Change to "R.S" left + "REBAR.SHOP" right
 
-Add a post-status guard after the existing `if (!post) return null`:
+### Technical detail
 
-```tsx
-const post = getPost(approval.post_id);
-if (!post) return null;
-// Skip if post is already published, declined, or failed
-if (["published", "declined", "failed"].includes(post.status)) return null;
-```
+All changes in one file: `src/components/office/RebarTagCard.tsx`. The component will be rewritten to mirror the inline styles and structure of the `PrintTag` component in `PrintTags.tsx`, but using Tailwind classes for consistency with the rest of the codebase.
 
-**2. Show `page_name` on each card (after platform badge, ~line 78-79):**
-
-```tsx
-<Badge className={cn("text-[10px]", platformColors[post.platform])}>
-  {post.platform}
-</Badge>
-{post.page_name && (
-  <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
-    {post.page_name}
-  </span>
-)}
-```
-
-**3. Update pending count in header to reflect filtered list:**
-
-Move the filtering logic before the render so the count is accurate:
-
-```tsx
-const trulyPending = pendingApprovals.filter((a) => {
-  const post = getPost(a.post_id);
-  return post && !["published", "declined", "failed"].includes(post.status);
-});
-```
-
-Use `trulyPending` instead of `pendingApprovals` for the list render and count display.
-
-## Files Changed
-- `src/components/social/ApprovalsPanel.tsx` — filter out resolved posts + show page_name
+The `DIM_LEFT` / `DIM_RIGHT` split replaces the current `activeDims` chunking logic.
 
