@@ -432,7 +432,8 @@ async function generatePixelImage(
 
 // Main Handler
 Deno.serve((req) =>
-  handleRequest(req, async ({ body, userId, serviceClient, userClient }) => {
+  handleRequest(req, async ({ req: originalReq, body, userId, serviceClient, userClient }) => {
+    const authHeader = originalReq.headers.get("Authorization") || "";
     const { agent, message, history = [], context: userContext = {}, attachedFiles = [], pixelSlot, preferredModel } = body as AgentRequest;
 
     const supabase = userClient;
