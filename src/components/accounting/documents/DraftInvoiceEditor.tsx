@@ -132,11 +132,12 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           serviceDate: it.service_date || "",
         })));
       } else {
-        // Fallback: try to fetch line items from the source quotation
-        const meta = (inv as any).metadata || {};
+        // Fallback chain to resolve line items from various sources
         let resolved = false;
         const quotationId = (inv as any).quotation_id;
-        if (quotationId) {
+
+        // 1. Try sales_quotation_items table
+        if (!resolved && quotationId) {
           const { data: qItems } = await supabase
             .from("sales_quotation_items" as any)
             .select("description, quantity, unit_price, total, sort_order")
@@ -150,7 +151,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
             }));
             setItems(mapped);
             resolved = true;
-            // Also persist these items to sales_invoice_items for future loads
+            // Persist to sales_invoice_items for future loads
             if (companyId) {
               const rows = (qItems as any[]).map((qi: any, idx: number) => ({
                 invoice_id: invoiceId,
@@ -165,8 +166,59 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
             }
           }
         }
-        // Second fallback: parse metadata.line_items
+
+        // 2. Try quotes.metadata.line_items (primary source for all quotations)
+        if (!resolved && inv.invoice_number) {
+          // Find the quotes record by matching quotation number pattern
+          // The invoice_number is like INV-20260001, the quote_number is like Q-20260001
+          // We also try via the sales_quotations record which links to quotes
+          let sourceQuote: any = null;
+          if (quotationId) {
+            // quotation_id points to sales_quotations — get quotation_number to find quotes record
+            const { data: sq } = await supabase
+              .from("sales_quotations")
+              .select("quotation_number")
+              .eq("id", quotationId)
+              .maybeSingle();
+            if (sq?.quotation_number) {
+              const { data: q } = await supabase
+                .from("quotes")
+                .select("metadata")
+                .eq("quote_number", sq.quotation_number)
+                .maybeSingle();
+              sourceQuote = q;
+            }
+          }
+          if (sourceQuote?.metadata) {
+            const metaItems = (sourceQuote.metadata as any).line_items as any[] | undefined;
+            if (metaItems && metaItems.length > 0) {
+              const mapped = metaItems.map((mi: any) => ({
+                description: mi.description || mi.name || "",
+                quantity: Number(mi.quantity) || Number(mi.qty) || 1,
+                unitPrice: Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0,
+              }));
+              setItems(mapped);
+              resolved = true;
+              // Persist to sales_invoice_items
+              if (companyId) {
+                const rows = mapped.map((m, idx) => ({
+                  invoice_id: invoiceId,
+                  company_id: companyId,
+                  description: m.description,
+                  quantity: m.quantity,
+                  unit_price: m.unitPrice,
+                  total: m.quantity * m.unitPrice,
+                  sort_order: idx,
+                }));
+                supabase.from("sales_invoice_items" as any).insert(rows as any).then(() => {});
+              }
+            }
+          }
+        }
+
+        // 3. Parse invoice metadata.line_items (if present)
         if (!resolved) {
+          const meta = (inv as any).metadata || {};
           const metaItems = meta.line_items as any[] | undefined;
           if (metaItems && metaItems.length > 0) {
             setItems(metaItems.map((mi: any) => ({
@@ -177,26 +229,10 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
             resolved = true;
           }
         }
-        // Last fallback: single line with total amount (amount is already pre-tax subtotal)
+
+        // 4. Last fallback: single line with total amount
         if (!resolved && inv.amount && Number(inv.amount) > 0) {
           setItems([{ description: "Invoice total", quantity: 1, unitPrice: Number(inv.amount) }]);
-        }
-        // Safety: if amount looks like it already includes tax (legacy data),
-        // back-calculate. We detect this by checking if quotation_id exists and
-        // the amount matches the quotation total (which is tax-inclusive).
-        if (!resolved && inv.amount && inv.quotation_id) {
-          try {
-            const { data: sq } = await supabase
-              .from("sales_quotations")
-              .select("amount")
-              .eq("id", inv.quotation_id)
-              .maybeSingle();
-            if (sq?.amount && Math.abs(Number(sq.amount) - Number(inv.amount)) < 1) {
-              // Amount matches quotation total = it's tax-inclusive, back-calculate
-              const preTax = Math.round((Number(inv.amount) / (1 + taxRate / 100)) * 100) / 100;
-              setItems([{ description: "Invoice total", quantity: 1, unitPrice: preTax }]);
-            }
-          } catch (_e) { /* ignore */ }
         }
       }
 
