@@ -2198,7 +2198,7 @@ export function AIExtractView() {
                                   {edit ? (
                                     <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
                                   ) : (
-                                    (row as any)[key] != null ? formatLengthByMode((row as any)[key], selectedUnitSystem as LengthDisplayMode) : ""
+                                    (row as any)[key] != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? formatLengthByMode((row as any)[key], selectedUnitSystem as LengthDisplayMode) : String((row as any)[key])) : ""
                                   )}
                                 </TableCell>
                               );
