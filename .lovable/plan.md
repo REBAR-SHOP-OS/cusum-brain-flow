@@ -1,75 +1,45 @@
 
 
-# Fix Wrong Numbers in Bar List
+# Add "Edit Text & Voice" Button to Toolbar
 
-## Problem Summary
+## What
+A new toolbar icon (e.g., `MessageSquareText`) that opens a dialog showing the current scene's voiceover/subtitle text. When the user edits the text and confirms, the system will:
+1. Update the subtitle overlays on the video with the new text
+2. Regenerate the voiceover audio via ElevenLabs TTS
+3. Both new text and new audio apply to the current scene
 
-Two bugs causing incorrect dimension values in the extraction pipeline:
+## Changes
 
-### Bug 1: Mapping Preview Shows Inflated Values
-The mapping preview panel at the top of the page shows wildly incorrect numbers (e.g. `87'-4"` instead of `3'-5"` for the same bar).
+### 1. New file: `src/components/ad-director/editor/TextVoiceDialog.tsx`
+- Dialog pre-filled with the current scene's voiceover text (from `storyboard[scene].voiceover` or segment text)
+- Voice selector dropdown (same voices as VoiceoverDialog)
+- Speed slider (0.7–1.2)
+- "Generate" button that returns `{ text, voiceId, speed, sceneId }`
+- Shows loading state during generation
 
-**Root cause**: Double unit conversion. `buildDimensionsJson()` in `BarlistMappingPanel.tsx` multiplies raw dim values by `lengthFactor` (×25.4 for imperial), then `formatLengthByMode()` converts the already-converted mm value again. Result: values inflated by 25.4×.
+### 2. `src/components/ad-director/ProVideoEditor.tsx`
 
-**Fix**: Remove the `lengthFactor` multiplication from `buildDimensionsJson` and `previewRows` length calculation. The raw values in `extract_rows` are already in their source units. `formatLengthByMode` handles the display conversion — it should receive the raw mm values directly, not pre-converted ones.
+**New state:**
+- `textVoiceDialogOpen` (boolean)
 
-### Bug 2: AI Extraction Returns NULL Dimensions for Imperial XLSX
-For the "WINDOW WELL FOOTING AND WALLS - DMA" session, ALL dimension columns and total_length are NULL in the database. The AI failed to extract these values, and `overlaySheetDims` also failed to capture them.
+**New handler** `handleTextVoiceGenerate`:
+- Takes `{ text, voiceId, speed, sceneId }`
+- Updates `storyboard` scene's `.voiceover` field with new text (via `onUpdateStoryboard`)
+- Calls ElevenLabs TTS to generate audio from the new text
+- Updates `audioTracks` with the new voiceover audio for that scene
+- Rebuilds timed subtitle overlays for that scene using `buildTimedOverlays`
+- Shows toast on success/failure
 
-**Root cause**: The `overlaySheetDims` function in `extract-manifest/index.ts`:
-1. Only matches headers that are exact single uppercase letters (A, B, C...). If the XLSX has headers like "DIM A", "Dim. B", or combined headers, they won't match.
-2. Assigns raw cell values (`row[colMap[d]]`) directly without parsing — if cells contain ft-in strings like `0'-8"`, they stay as strings and `safeDim()` later gets `null` because the overlay already set the value as a string on the item.
+**Toolbar (sidebarTabs ~line 1574):**
+- Add new entry: `{ id: "text-voice", label: "Text+Voice", icon: <MessageSquareText className="w-3.5 h-3.5" /> }`
 
-**Fix** in `overlaySheetDims`:
-1. Broaden header matching: strip "DIM", "DIM.", spaces, and periods before matching against the DIMS array.
-2. Apply `parseDimension()` to each cell value so ft-in strings get converted to numeric inches.
-3. Add logging for what headers were found and what values were extracted.
+**Tab handler (~line 194):**
+- When `"text-voice"` tab clicked, open the `TextVoiceDialog`
 
-## Technical Details
+**Dialog render (~line 1665):**
+- Add `<TextVoiceDialog>` with current scene's voiceover text as initial value
 
-### File 1: `src/components/office/BarlistMappingPanel.tsx`
-
-**Lines ~151-157** (`buildDimensionsJson`):
-```tsx
-// BEFORE: applies factor (causes double conversion)
-if (val != null && val !== 0) dims[d] = Math.round(Number(val) * factor);
-
-// AFTER: pass through raw mm values, let formatLengthByMode handle display
-if (val != null && val !== 0) dims[d] = Math.round(Number(val));
-```
-
-**Lines ~209-221** (`previewRows`):
-```tsx
-// BEFORE: multiplies length by lengthFactor
-length: Math.round(Number((row as any)[mapping.length] ?? 0) * lengthFactor),
-dimensions_json: buildDimensionsJson(row, lengthFactor),
-
-// AFTER: raw values, no factor
-length: Math.round(Number((row as any)[mapping.length] ?? 0)),
-dimensions_json: buildDimensionsJson(row, 1),
-```
-
-Same fix at **lines ~226-234** (`handleConfirm` allMapped).
-
-### File 2: `supabase/functions/extract-manifest/index.ts`
-
-**Lines ~60-92** (`overlaySheetDims`):
-- Broaden header detection to strip "DIM", "DIM.", spaces, periods before letter matching
-- Apply `parseDimension()` to each cell value so ft-in strings become numeric
-- Keep existing fallback behavior
-
-```text
-Current flow:
-  Header "A" → exact match ✓
-  Header "DIM A" → no match ✗
-  Cell "0'-8\"" → assigned as string → safeDim gets string → may fail
-
-Fixed flow:
-  Header "DIM A" → normalize to "A" → match ✓
-  Cell "0'-8\"" → parseDimension → 8 (inches) → assigned as number
-```
-
-## Files Changed
-- `src/components/office/BarlistMappingPanel.tsx` — remove factor from preview data prep (3 locations)
-- `supabase/functions/extract-manifest/index.ts` — broaden header matching and parse cell values in overlaySheetDims
+## Files changed
+- `src/components/ad-director/editor/TextVoiceDialog.tsx` — new
+- `src/components/ad-director/ProVideoEditor.tsx` — state, handler, toolbar icon, dialog
 
