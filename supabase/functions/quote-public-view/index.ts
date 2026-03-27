@@ -8,6 +8,7 @@ Deno.serve(async (req) => {
 
   try {
     const { quote_id } = await req.json();
+    console.log(`[quote-public-view] quote_id=${quote_id}`);
     if (!quote_id) {
       return new Response(JSON.stringify({ error: "quote_id is required" }), {
         status: 400,

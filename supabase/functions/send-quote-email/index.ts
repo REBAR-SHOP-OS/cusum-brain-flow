@@ -23,8 +23,11 @@ Deno.serve((req) =>
       );
     }
 
-    const { quote_id, customer_email, action } = parsed.data;
+    const { quote_id, customer_email: rawEmail, action } = parsed.data;
+    const customer_email = rawEmail || "";
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+
+    console.log(`[send-quote-email] action=${action}, quote_id=${quote_id}, hasEmail=${!!rawEmail}`);
 
     // Fetch quote data
     const { data: quote, error: qErr } = await svc
