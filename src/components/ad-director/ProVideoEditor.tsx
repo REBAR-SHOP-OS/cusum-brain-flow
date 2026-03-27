@@ -589,6 +589,7 @@ export function ProVideoEditor({
         a.volume = 0;
       }
       audioRef.current = a;
+      a.playbackRate = videoSpeed;
       currentVoUrlRef.current = vo.url;
 
       // For video scenes, sync VO start to video's actual playing event
@@ -733,10 +734,13 @@ export function ProVideoEditor({
     }
   }, [videoVolume, selectedSceneIndex, mutedScenes, storyboard]);
 
-  // Apply video playback speed
+  // Apply video and audio playback speed
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.playbackRate = videoSpeed;
+    }
+    if (audioRef.current) {
+      audioRef.current.playbackRate = videoSpeed;
     }
   }, [videoSpeed, selectedSceneIndex]);
 
