@@ -388,17 +388,49 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         // Stripe not configured — continue without payment link
       }
 
-      // Build branded line items table
-      const itemRows = items.map(it =>
-        `<tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#333;">${it.description}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:13px;color:#333;">${it.quantity}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;color:#333;">${fmt(it.unitPrice)}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;font-weight:600;color:#333;">${fmt(it.quantity * it.unitPrice)}</td>
-        </tr>`
-      ).join("");
+      // Auto-push invoice to QuickBooks to get a real InvoiceLink
+      let qbPayUrl = "";
+      try {
+        const qbItems = items.map(it => ({
+          description: it.description,
+          amount: it.quantity * it.unitPrice,
+          quantity: it.quantity,
+        }));
 
-      const hstRate = taxRate;
+        const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
+          body: {
+            action: "create-invoice",
+            customerName: customerName || undefined,
+            items: qbItems.length > 0 ? qbItems : [{ description: `Invoice ${invoiceNumber}`, amount: total, quantity: 1 }],
+            dueDate: dueDate || undefined,
+            memo: `ERP Invoice ${invoiceNumber}`,
+          },
+        });
+        if (qbData?.invoiceLink) {
+          qbPayUrl = qbData.invoiceLink;
+        } else if (qbData?.invoice?.InvoiceLink) {
+          qbPayUrl = qbData.invoice.InvoiceLink;
+        }
+      } catch {
+        // QB not connected — continue without QB link
+      }
+
+      // Fallback: check accounting_mirror if QB push didn't return a link
+      if (!qbPayUrl) {
+        try {
+          const { data: qbMirror } = await supabase
+            .from("accounting_mirror")
+            .select("data, quickbooks_id")
+            .eq("entity_type", "Invoice")
+            .ilike("data->>DocNumber", invoiceNumber)
+            .maybeSingle();
+          if (qbMirror) {
+            const mirrorData = qbMirror.data as Record<string, unknown>;
+            const invoiceLink = mirrorData?.InvoiceLink as string | undefined;
+            if (invoiceLink) qbPayUrl = invoiceLink;
+          }
+        } catch (_e) { /* accounting_mirror not available */ }
+      }
 
       // Look up existing Stripe payment link
       if (!paymentUrl) {
@@ -415,23 +447,6 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         } catch (_e) { /* stripe_payment_links not available */ }
       }
 
-      // Look up QB payment link from accounting_mirror (only real customer-facing links)
-      let qbPayUrl = "";
-      try {
-        const { data: qbMirror } = await supabase
-          .from("accounting_mirror")
-          .select("data, quickbooks_id")
-          .eq("entity_type", "Invoice")
-          .ilike("data->>DocNumber", invoiceNumber)
-          .maybeSingle();
-        if (qbMirror) {
-          const mirrorData = qbMirror.data as Record<string, unknown>;
-          // Only use InvoiceLink — the customerbalance URL is an admin-only link, not for customers
-          const invoiceLink = mirrorData?.InvoiceLink as string | undefined;
-          if (invoiceLink) qbPayUrl = invoiceLink;
-        }
-      } catch (_e) { /* accounting_mirror not available */ }
-
       // Build dual payment buttons
       const payBtns: string[] = [];
       if (paymentUrl) {
@@ -445,6 +460,18 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
       const payBtnHtml = payBtns.length > 0
         ? `<div style="text-align:center;margin:24px 0;">${payBtns.join('<div style="margin-top:12px;"></div>')}</div>`
         : "";
+
+      // Build branded line items table
+      const itemRows = items.map(it =>
+        `<tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#333;">${it.description}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:13px;color:#333;">${it.quantity}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;color:#333;">${fmt(it.unitPrice)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;font-weight:600;color:#333;">${fmt(it.quantity * it.unitPrice)}</td>
+        </tr>`
+      ).join("");
+
+      const hstRate = taxRate;
 
       const emailBody = `
         <p style="font-size:15px;color:#333;margin:0 0 16px;">Dear ${customerName || "Customer"},</p>
