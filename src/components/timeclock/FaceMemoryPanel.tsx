@@ -103,6 +103,8 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
     setSelectedProfileId("");
     setCaptureStep(0);
     setPhotos([]);
+    setNewPersonName("");
+    setCreatingNewPerson(false);
     stopCamera();
   }, [stopCamera]);
 
