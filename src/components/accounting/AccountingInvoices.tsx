@@ -53,17 +53,19 @@ type StatusFilter = "all" | "open" | "overdue" | "paid";
 export function AccountingInvoices({ data, initialSearch }: Props) {
   const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items, payments, qbAction, loadAll } = data;
   const { companyId } = useCompanyId();
-  const { invoices: localInvoices, isLoading: localLoading, generateNumber } = useSalesInvoices();
+  const { invoices: localInvoices, isLoading: localLoading, generateNumber, remove } = useSalesInvoices();
   const [search, setSearch] = useState(initialSearch || "");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
   const [voidTarget, setVoidTarget] = useState<{ id: string; doc: string; syncToken: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SalesInvoice | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState<QBInvoice | null>(null);
   const [sortField, setSortField] = useState<SortField>("DocNumber");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [editorInvoiceId, setEditorInvoiceId] = useState<string | null>(null);
   const [packingSlipInvoice, setPackingSlipInvoice] = useState<QBInvoice | null>(null);
+  const [erpPackingSlip, setErpPackingSlip] = useState<SalesInvoice | null>(null);
 
   const getPackingSlipData = (inv: QBInvoice) => ({
     invoiceNumber: inv.DocNumber,
