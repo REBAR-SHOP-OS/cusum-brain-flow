@@ -1,63 +1,29 @@
 
 
-# Redesign RebarTagCard to Match Physical Printed Tag
+# Switch Music Generation from ElevenLabs to Google Lyria 3
 
 ## Problem
-The current digital card layout does not match the actual physical tag printed by the Zebra printer. Key structural differences exist in header layout, body arrangement, and footer content.
+The music generation button (🎵 icon) currently calls ElevenLabs API. User wants it to use Google's **Lyria 3** model via the Lovable AI gateway instead.
 
-## Physical Tag Layout (from photo)
+## Solution
 
-```text
-┌──────────────────────────────────────────────────┐
-│    Mark    │  Size  │ Grade │  Qty  │   Length    │
-│            │  15M   │ 400W  │  120  │   6000     │
-├────────┬───┴────────┴───────┴───────┴────────────┤
-│ Qty:120│                    │                     │
-│ Size:15M  Shape(S)          │  Shape Image        │
-│ Grd:400W  A:      G:        │  (drawing with      │
-│ Len:6000  B:6000  H:        │   dimension labels) │
-│ Mark:     C:      J:        │                     │
-│ Bndl:     D:      K:        │                     │
-│ KG:       E:      O:        │                     │
-│ Item: 1   F:      R:        │                     │
-├────────┬──────────┬─────────┬─────────────────────┤
-│ Ref:   │ STELLAR  │ Bndl:   │ Job:                │
-│ Job:   │          │ KG:     │ Dwg:                │
-│ Dwg:   │  2300    │ Item: 1 │                     │
-├────────┴──────────┴─────────┴─────────────────────┤
-│ R.S  │  REBAR.SHOP  │  |||||||||| BARCODE ||||||  │
-└──────────────────────────────────────────────────┘
-```
+### 1. New Edge Function: `supabase/functions/lyria-music/index.ts`
+Create a new edge function that calls the Lovable AI gateway with the music generation model (`google/lyria`). The gateway endpoint supports music generation similar to image generation — send a text prompt, receive audio back.
 
-## Changes to `src/components/office/RebarTagCard.tsx`
+However, Lyria 3 is **not** in the list of supported Lovable AI gateway models. The supported models are Gemini and GPT variants. Lyria 3 is a separate Google DeepMind model for music and is not available through the `ai.gateway.lovable.dev` endpoint.
 
-### 1. Top Header → 5 columns
-Change from 3-column (Mark/Size/Grade) to 5-column (Mark/Size/Grade/Qty/Length). Remove the separate Qty/Length/Weight row.
+**Alternative approach**: Use the **Gemini image generation model** pattern but for music — but Gemini models don't generate audio/music.
 
-### 2. Main Body → 3-column layout
-Replace current stacked sections with a horizontal 3-part layout:
-- **Left sidebar**: Vertical list — Qty, Size, Grd, Length, Mark, Bndl, KG, Item (compact text)
-- **Center**: Shape circle at top, Dims A–F / G–R below in two columns
-- **Right**: Shape image drawing (fills remaining space)
+### Revised Approach
+Since Lyria 3 is not available through the Lovable AI gateway, we have two options:
 
-### 3. Bottom Info Row → Match physical tag
-Show: Ref + address | Bndl/KG/Item | Job/Dwg — matching the physical tag's 3-column bottom section.
+1. **Keep ElevenLabs** for music generation (it works and is already connected)
+2. **Use Gemini to enhance the prompt**, then still use ElevenLabs for actual audio generation
 
-### 4. Footer → Add Barcode
-Add R.S logo left, REBAR.SHOP center, and a Code128 barcode (mark value) on the right using an inline SVG or a lightweight barcode library. If no barcode lib is available, render the mark text in a barcode-style monospace block as a placeholder.
+Let me verify: does the user specifically want Lyria 3, or do they want the music icon to work properly?
 
-### 5. Props Update
-Add optional `bndl` (bundle) and `job` props to the interface. These can default to empty strings.
+## Clarification Needed
+Lyria 3 is not available as a supported model in the Lovable AI gateway. The available models are text/image models (Gemini, GPT). Music generation requires either ElevenLabs (already connected) or a direct Google API key for Lyria 3.
 
-### 6. Remove Timestamp Header
-The physical tag doesn't have a timestamp row at the top — remove it to match.
-
-## Technical Notes
-- Card width stays at 4in for thermal printer compatibility
-- Font sizes adjusted to fit 5-column header
-- Weight moves from header to left sidebar (KG field)
-- The `shapeImageUrl` rendering stays the same but moves to the right column
-
-## Files changed
-- `src/components/office/RebarTagCard.tsx` — full layout restructure to match physical tag
+**I need to ask the user which path to take.**
 
