@@ -56,13 +56,13 @@ export function ApprovalsPanel() {
   return (
     <div className="space-y-4">
       {/* Pending approvals */}
-      {pendingApprovals.length > 0 && (
+      {trulyPending.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            Pending ({pendingApprovals.length})
+            Pending ({trulyPending.length})
           </h3>
           <div className="space-y-3">
-            {pendingApprovals.map((approval) => {
+            {trulyPending.map((approval) => {
               const post = getPost(approval.post_id);
               if (!post) return null;
               const isExpanded = expandedId === approval.id;
