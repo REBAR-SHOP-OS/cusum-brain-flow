@@ -118,6 +118,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         setCustomerAddress(meta.customer_address || "");
         setProjectName(meta.project_name || "");
         setTaxRate(meta.tax_rate ?? 13);
+        if (meta.customer_email) setCustomerEmail(meta.customer_email);
         let resolvedNotes = meta.notes || "";
         if (!resolvedNotes && (meta.inclusions || meta.exclusions || meta.assumptions)) {
           const parts: string[] = [];
