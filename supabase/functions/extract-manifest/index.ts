@@ -446,6 +446,18 @@ Rules:
         // Save rows to DB
         let items = extractedData.items || [];
 
+        // Post-AI pass: convert any string values in length/dims to numbers
+        items.forEach((item: any) => {
+          if (typeof item.total_length === "string") {
+            item.total_length = parseDimension(item.total_length);
+          }
+          for (const d of DIMS) {
+            if (typeof item[d] === "string") {
+              item[d] = parseDimension(item[d]);
+            }
+          }
+        });
+
         // Deterministic dimension overlay for spreadsheets — bypass AI for dim columns
         if (isSpreadsheet && parsedWorkbook && items.length > 0) {
           console.log(`[extract-manifest] Applying deterministic dim overlay for ${items.length} items`);
