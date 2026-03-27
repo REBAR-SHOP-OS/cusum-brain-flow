@@ -54,6 +54,43 @@ function parseDimension(val: any): number | null {
   return isNaN(n) ? null : n;
 }
 
+const DIMS = ["A","B","C","D","E","F","G","H","J","K","O","R"] as const;
+
+/** Extract dimension columns deterministically from XLSX sheet, bypassing AI */
+function overlaySheetDims(workbook: any, items: any[]): any[] {
+  try {
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+    // Find header row containing dimension letters
+    const hIdx = rows.findIndex((r) =>
+      r.some((c) => c != null && DIMS.includes(String(c).trim().toUpperCase() as any))
+    );
+    if (hIdx < 0) return items;
+    const hRow = rows[hIdx];
+    const colMap: Record<string, number> = {};
+    hRow.forEach((c: any, i: number) => {
+      if (c == null) return;
+      const letter = String(c).trim().toUpperCase();
+      if ((DIMS as readonly string[]).includes(letter)) colMap[letter] = i;
+    });
+    if (Object.keys(colMap).length < 2) return items; // not enough dim columns found
+    console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} dim columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
+    return items.map((it, n) => {
+      const row = rows[hIdx + 1 + n] || [];
+      for (const d of DIMS) {
+        if (colMap[d] != null) {
+          it[d] = row[colMap[d]] ?? null;
+        }
+      }
+      it.I = null;
+      return it;
+    });
+  } catch (e) {
+    console.warn("[overlaySheetDims] Failed, falling back to AI dims:", e);
+    return items;
+  }
+}
+
 /** Safe integer parse — rounds and guards against NaN */
 function safeInt(val: any, fallback: number = 0): number {
   const parsed = parseDimension(val);
@@ -177,6 +214,15 @@ There is NO "I" dimension in rebar standards. The "I" field in the schema above 
 If the source document has a column labeled "I", IGNORE its values completely. Do NOT shift dimension values.
 Each dimension value MUST go into its EXACT matching letter field: the value under column "H" in the source goes into "H", the value under "J" goes into "J", etc. NEVER shift values from one letter to another.
 
+CRITICAL: When processing spreadsheet/CSV data, each column's data must map to its HEADER LABEL exactly.
+If the CSV has headers like: ..., A, B, C, D, E, F, G, H, I, J, K, ...
+- Column header "A" value → field "A"
+- Column header "B" value → field "B"
+- Column header "H" value → field "H"
+- Column header "I" → SKIP entirely (set "I": null)
+- Column header "J" value → field "J" (NOT shifted into "I" or "H")
+Match by HEADER NAME, not by column position index. DO NOT re-index or shift columns.
+
 Rules:
 - Extract ALL rows/items from the document
 - Keep ALL numerical values EXACTLY as they appear in the source document. Do NOT convert units. If the document shows inches, keep inches. If it shows millimeters, keep millimeters.
@@ -204,12 +250,14 @@ Rules:
           .update({ progress: 20 })
           .eq("id", sessionId);
 
+        let parsedWorkbook: any = null;
         if (isSpreadsheet) {
           console.log(`Parsing spreadsheet: ${fileName}`);
           const fileResp = await fetch(fileUrl);
           if (!fileResp.ok) throw new Error(`Failed to fetch file: ${fileResp.status}`);
           const fileBytes = new Uint8Array(await fileResp.arrayBuffer());
-          const workbook = XLSX.read(fileBytes, { type: "array" });
+          parsedWorkbook = XLSX.read(fileBytes, { type: "array" });
+          const workbook = parsedWorkbook;
 
           const csvParts: string[] = [];
           for (const sheetName of workbook.SheetNames) {
@@ -374,7 +422,13 @@ Rules:
         }
 
         // Save rows to DB
-        const items = extractedData.items || [];
+        let items = extractedData.items || [];
+
+        // Deterministic dimension overlay for spreadsheets — bypass AI for dim columns
+        if (isSpreadsheet && parsedWorkbook && items.length > 0) {
+          console.log(`[extract-manifest] Applying deterministic dim overlay for ${items.length} items`);
+          items = overlaySheetDims(parsedWorkbook, items);
+        }
 
         // Detect unit system from AI response — check if values contain imperial patterns
         let detectedUnitSystem = "metric";
