@@ -101,7 +101,7 @@ export function TagsExportView() {
       ...DIM_COLS, "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD"];
     const csvRows = sortedRows.map((r) => {
       const size = r.bar_size_mapped || r.bar_size || "";
-      const shapeType = r.shape_code_mapped || r.shape_type || "";
+      const shapeType = r.shape_code_mapped || r.shape_type || "STRAIGHT";
       const weight = getWeight(size, r.total_length_mm, r.quantity);
       const picture = shapeType ? (getShapeImageUrl(shapeType) || `TYPE-${shapeType}.PNG`) : "";
       const formattedLength = r.total_length_mm ? formatDim(r.total_length_mm, us) : "";
@@ -389,7 +389,7 @@ export function TagsExportView() {
                 ) : (
                   sortedRows.map((row) => {
                     const size = row.bar_size_mapped || row.bar_size || "";
-                    const shapeType = row.shape_code_mapped || row.shape_type || "";
+                     const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
                     const weight = getWeight(size, row.total_length_mm, row.quantity);
                     const us = (selectedSession as any)?.unit_system || "metric";
                     const unit = dimUnit(us);
@@ -451,7 +451,7 @@ export function TagsExportView() {
             ) : (
               sortedRows.map((row) => {
                 const size = row.bar_size_mapped || row.bar_size || "";
-                const shapeType = row.shape_code_mapped || row.shape_type || "";
+                const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
                 const weight = getWeight(size, row.total_length_mm, row.quantity);
                 const dims: Record<string, number | null> = {};
                 DIM_COLS.forEach((d) => {
