@@ -198,7 +198,8 @@ Deno.serve((req) =>
     if (nonCageTonnes > 0) {
       const amount = Number((nonCageTonnes * fabRate.price_per_ton).toFixed(2));
       lineItems.push({
-        description: `Rebar Fabrication & Supply – ${project.name} (incl. ${scrapPct}% scrap)`,
+        description: `Rebar Fabrication & Supply`,
+        detail: `${project.name} (incl. ${scrapPct}% scrap)`,
         quantity: Number(nonCageTonnes.toFixed(3)),
         unit: "tonnes",
         unit_price: fabRate.price_per_ton,
@@ -208,7 +209,8 @@ Deno.serve((req) =>
       // All rebar, no cage distinction
       const amount = Number((totalTonnes * fabRate.price_per_ton).toFixed(2));
       lineItems.push({
-        description: `Rebar Supply & Fabrication – ${project.name} (incl. ${scrapPct}% scrap)`,
+        description: `Rebar Supply & Fabrication`,
+        detail: `${project.name} (incl. ${scrapPct}% scrap)`,
         quantity: Number(totalTonnes.toFixed(3)),
         unit: "tonnes",
         unit_price: fabRate.price_per_ton,
@@ -249,7 +251,8 @@ Deno.serve((req) =>
       const trips = Math.max(1, Math.ceil(totalTonnes / truckCap));
       shippingCost = Number((trips * deliveryDistanceKm * shippingPerKm * 2).toFixed(2));
       lineItems.push({
-        description: `Delivery — ${deliveryDistanceKm} km × ${trips} trip(s) (round trip)`,
+        description: `Delivery`,
+        detail: `${deliveryDistanceKm} km × ${trips} trip(s) (round trip)`,
         quantity: trips,
         unit: "trips",
         unit_price: Number((deliveryDistanceKm * shippingPerKm * 2).toFixed(2)),
