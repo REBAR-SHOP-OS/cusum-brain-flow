@@ -1881,7 +1881,15 @@ export function ProVideoEditor({
         sceneId={storyboard[selectedSceneIndex]?.id || ""}
       />
 
-      {/* Hidden audio file input */}
+      {/* Image Overlay Dialog */}
+      <ImageOverlayDialog
+        open={imageDialogOpen}
+        onClose={() => setImageDialogOpen(false)}
+        storyboard={storyboard}
+        selectedSceneIndex={selectedSceneIndex}
+        onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
+      />
+
       <input
         ref={audioUploadRef}
         type="file"
