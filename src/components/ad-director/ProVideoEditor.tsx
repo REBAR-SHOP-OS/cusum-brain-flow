@@ -193,6 +193,25 @@ export function ProVideoEditor({
   const [panelOpen, setPanelOpen] = useState(false);
   const [videoSpeed, setVideoSpeed] = useState(1);
   const [speedPopoverOpen, setSpeedPopoverOpen] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
+
+  const ASPECT_RATIOS: Record<string, string> = {
+    "16:9": "16/9",
+    "9:16": "9/16",
+    "1:1": "1/1",
+    "4:3": "4/3",
+    "4:5": "4/5",
+    "21:9": "21/9",
+  };
+
+  const RATIO_DIMS: Record<string, [number, number]> = {
+    "16:9": [1280, 720],
+    "9:16": [720, 1280],
+    "1:1": [1080, 1080],
+    "4:3": [1080, 810],
+    "4:5": [1080, 1350],
+    "21:9": [1260, 540],
+  };
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
     if (tab === "music") {
