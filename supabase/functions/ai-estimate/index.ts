@@ -10,6 +10,7 @@ import {
   type EstimationItemResult,
   type ValidationRule,
 } from "../_shared/rebarCalcEngine.ts";
+import * as XLSX from "npm:xlsx@0.18.5";
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
