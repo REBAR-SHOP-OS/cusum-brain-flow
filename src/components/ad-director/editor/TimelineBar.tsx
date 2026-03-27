@@ -181,7 +181,7 @@ export function TimelineBar({
       if (!scrubbingRef.current || !trackRef.current) return;
       const rect = trackRef.current.getBoundingClientRect();
       const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const snappedTime = Math.round(pct * totalDuration);
+      const snappedTime = Math.round(pct * totalDuration * 10) / 10;
       onSeek(Math.max(0, Math.min(totalDuration, snappedTime)));
     };
     const onUp = () => {
@@ -522,7 +522,7 @@ export function TimelineBar({
             {/* Playhead — draggable for scrubbing */}
             <div
               className={`absolute top-0 bottom-0 z-20 ${scrubbing ? 'cursor-grabbing' : 'cursor-grab'}`}
-              style={{ left: `${playheadPct}%`, width: '14px', transform: 'translateX(-6px)' }}
+              style={{ left: `${playheadPct}%`, width: '14px', transform: 'translateX(-6px)', transition: scrubbing ? 'none' : 'left 0.1s linear' }}
               onMouseDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
