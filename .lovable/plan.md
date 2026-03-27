@@ -1,27 +1,21 @@
 
 
-# Fix Blurry Timeline Video Strip
+# Sync Speed Control for Both Video and Audio
 
 ## Problem
-The timeline strip shows a single low-resolution thumbnail (160×90, JPEG quality 0.6) which appears blurry when stretched across the full timeline width.
+Currently the speed control only sets `videoRef.current.playbackRate`. The voiceover audio (`audioRef.current`) is not affected, so audio and video go out of sync when speed is changed.
 
 ## Solution
-Improve the `useVideoThumbnails` hook in `TimelineBar.tsx`:
+Update the `useEffect` that applies `videoSpeed` to also set `audioRef.current.playbackRate`. Additionally, when creating new audio instances (in the voiceover setup logic), apply the current `videoSpeed` to the new audio element.
 
-1. **Increase resolution**: Change canvas size from 160×90 to 480×270 (3x larger)
-2. **Increase quality**: Change JPEG quality from 0.6 to 0.9
-3. **Generate multiple frames**: Extract 5-6 frames spread across the video duration to create a filmstrip effect, rather than a single frame at the midpoint
-4. **Display as repeating filmstrip**: Show multiple thumbnails side-by-side in the timeline clip instead of one stretched image
+## Changes — single file
 
-### Technical details
+### `src/components/ad-director/ProVideoEditor.tsx`
 
-**`src/components/ad-director/editor/TimelineBar.tsx`**:
+1. **Existing speed effect (~line 737-741)**: Add `audioRef.current.playbackRate = videoSpeed` alongside the video playback rate assignment.
 
-- `useVideoThumbnails` will return `Record<string, string[]>` (array of frame URLs per scene) instead of `Record<string, string>`
-- Extract ~5 frames at evenly spaced intervals (0%, 20%, 40%, 60%, 80% of duration)
-- Canvas: 320×180, JPEG quality 0.85
-- In the timeline clip rendering (line ~379-390), display frames as a horizontal filmstrip using `display: flex` with multiple `<img>` elements instead of one stretched image
+2. **Voiceover audio creation (~line 591)**: After `audioRef.current = a;`, set `a.playbackRate = videoSpeed` so newly created audio elements inherit the current speed.
 
 ## Files changed
-- `src/components/ad-director/editor/TimelineBar.tsx` — update thumbnail extraction and rendering
+- `src/components/ad-director/ProVideoEditor.tsx`
 
