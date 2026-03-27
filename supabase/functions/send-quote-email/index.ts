@@ -575,6 +575,42 @@ Deno.serve((req) =>
           console.warn("Stripe error:", _e);
         }
 
+        // Auto-push invoice to QuickBooks to get InvoiceLink
+        let qbInvoiceLink = "";
+        try {
+          // Build QB line items from the copied invoice items
+          const qbLineItems = (metaItems.length > 0 ? metaItems : []).map((mi: any) => ({
+            description: mi.description || mi.name || "Item",
+            amount: (Number(mi.quantity) || 1) * (Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0),
+            quantity: Number(mi.quantity) || Number(mi.qty) || 1,
+          }));
+
+          const qbRes = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+            },
+            body: JSON.stringify({
+              action: "create-invoice",
+              customerName: sqCheck?.customer_name || customerName,
+              items: qbLineItems.length > 0 ? qbLineItems : [{ description: "Invoice " + invoiceNumber, amount: rawTotalWithTax, quantity: 1 }],
+              dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+              memo: `ERP Invoice ${invoiceNumber}`,
+            }),
+          });
+          if (qbRes.ok) {
+            const qbData = await qbRes.json();
+            qbInvoiceLink = qbData.invoiceLink || qbData.invoice?.InvoiceLink || "";
+            console.log(`[accept_and_convert] QB invoice created: ${qbData.docNumber}, link: ${qbInvoiceLink}`);
+          } else {
+            console.warn("[accept_and_convert] QB invoice creation failed:", await qbRes.text());
+          }
+        } catch (_e) {
+          console.warn("[accept_and_convert] QB push error:", _e);
+        }
+
         // Update statuses
         if (sqCheck) {
           await svc.from("sales_quotations").update({

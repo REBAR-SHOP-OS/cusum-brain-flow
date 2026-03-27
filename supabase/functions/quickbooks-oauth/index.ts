@@ -1278,15 +1278,47 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
 
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
 
-  await logAuditEvent(supabase, companyId, userId, "qb_invoice_created", "Invoice", data.Invoice?.Id || "", {
-    docNumber: data.Invoice?.DocNumber, customerId, totalAmount: data.Invoice?.TotalAmt, orderId, dedupKey,
+  const createdInvoice = data.Invoice;
+
+  // Mirror the created invoice to accounting_mirror so InvoiceLink is immediately available
+  if (createdInvoice?.Id) {
+    try {
+      // Build customer map for customer_id resolution
+      let mirrorCustomerId: string | null = null;
+      const custRefVal = createdInvoice.CustomerRef?.value;
+      if (custRefVal) {
+        const { data: custRow } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("quickbooks_id", custRefVal)
+          .maybeSingle();
+        mirrorCustomerId = custRow?.id || null;
+      }
+
+      await supabase.from("accounting_mirror").upsert({
+        quickbooks_id: String(createdInvoice.Id),
+        entity_type: "Invoice",
+        balance: createdInvoice.Balance || 0,
+        customer_id: mirrorCustomerId,
+        company_id: companyId,
+        data: createdInvoice, // Full object with InvoiceLink
+        last_synced_at: new Date().toISOString(),
+      }, { onConflict: "quickbooks_id" });
+    } catch (mirrorErr) {
+      console.warn("[create-invoice] Mirror upsert failed:", mirrorErr);
+    }
+  }
+
+  await logAuditEvent(supabase, companyId, userId, "qb_invoice_created", "Invoice", createdInvoice?.Id || "", {
+    docNumber: createdInvoice?.DocNumber, customerId, totalAmount: createdInvoice?.TotalAmt, orderId, dedupKey,
   });
 
   return jsonRes({
     success: true,
-    invoice: data.Invoice,
-    docNumber: data.Invoice?.DocNumber,
-    totalAmount: data.Invoice?.TotalAmt,
+    invoice: createdInvoice,
+    docNumber: createdInvoice?.DocNumber,
+    totalAmount: createdInvoice?.TotalAmt,
+    invoiceLink: createdInvoice?.InvoiceLink || null,
   });
 }
 
