@@ -1,20 +1,40 @@
 
 
-# Add Brain (Memory) Icon to TimeClock Non-Kiosk View
+# Add Individual Photo Deletion to Face Memory Panel
 
 ## Problem
-The Brain icon that opens the Face Memory Panel (showing enrolled photos for all people) is only visible in Kiosk mode. The user wants it also visible in the regular TimeClock view for `radin@rebar.shop`.
+Currently the Face Memory panel only allows deleting ALL photos for a person (the trash icon per profile). The user wants the ability to delete individual photos one at a time.
 
 ## Fix
 
-**File:** `src/pages/TimeClock.tsx`
+**File:** `src/components/timeclock/FaceMemoryPanel.tsx`
 
-Add a Brain icon button next to the "9 photos enrolled" badge (around line 380-385), visible only for authorized users (`radin@rebar.shop`, `sattar@rebar.shop`, `neel@rebar.shop` — same list as kiosk mode). Clicking it opens the same `FaceMemoryPanel` dialog that already exists.
+1. **Add `handleDeleteSingle` function** — soft-deletes a single enrollment by setting `is_active = false`, then re-fetches data.
 
-The `showMemoryPanel` state and `FaceMemoryPanel` component are already rendered inside the kiosk block. Move the `FaceMemoryPanel` render outside the kiosk conditional so it works in both views, and add a Brain button in the header/enrollment area.
+2. **Add delete overlay on each photo thumbnail** (lines 406-423) — show a small red X button on hover/tap over each photo. Clicking it calls `handleDeleteSingle(enrollment.id)`.
 
 ### Changes
-1. **Line ~377-386** — Add a Brain button next to the enrollment badges for authorized users
-2. **Line ~285-287** — Move `FaceMemoryPanel` render from inside kiosk-only block to a shared location (e.g., right before the closing `</>` of the fragment)
-3. No new components or state needed — `showMemoryPanel` state already exists
+
+**New function** (after `handleDeleteAll`, ~line 235):
+```typescript
+const handleDeleteSingle = async (enrollmentId: string) => {
+  const { error } = await supabase
+    .from("face_enrollments")
+    .update({ is_active: false })
+    .eq("id", enrollmentId);
+  if (error) toast.error("Failed to delete photo");
+  else { toast.success("Photo removed"); fetchData(); }
+};
+```
+
+**Photo thumbnail** (lines 408-422): Wrap each photo in a `relative group` div, add a small absolute-positioned delete button that appears on hover:
+```tsx
+<button onClick={() => handleDeleteSingle(enrollment.id)}
+  className="absolute top-0 right-0 ... opacity-0 group-hover:opacity-100">
+  <X className="w-3 h-3" />
+</button>
+```
+
+## Files Changed
+- `src/components/timeclock/FaceMemoryPanel.tsx` — add single-photo delete handler + overlay button on thumbnails
 
