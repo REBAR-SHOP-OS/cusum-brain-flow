@@ -389,13 +389,18 @@ export function TimelineBar({
                         />
                       )}
                       {/* Live thumbnail preview */}
-                      {thumbnails[scene.id] ? (
+                      {thumbnails[scene.id]?.length ? (
                         <>
-                          <img
-                            src={thumbnails[scene.id]}
-                            alt=""
-                            className="absolute inset-0 w-full h-full object-cover"
-                          />
+                          <div className="absolute inset-0 flex">
+                            {thumbnails[scene.id].map((frame, fi) => (
+                              <img
+                                key={fi}
+                                src={frame}
+                                alt=""
+                                className="h-full object-cover flex-1 min-w-0"
+                              />
+                            ))}
+                          </div>
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
                         </>
                       ) : clip?.videoUrl ? (
