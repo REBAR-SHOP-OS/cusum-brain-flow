@@ -209,6 +209,8 @@ export function ProVideoEditor({
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
   const audioUploadRef = useRef<HTMLInputElement>(null);
+  const [audioPromptOpen, setAudioPromptOpen] = useState(false);
+  const [generatingAudio, setGeneratingAudio] = useState(false);
 
   const handleUploadAudio = useCallback(() => {
     audioUploadRef.current?.click();
