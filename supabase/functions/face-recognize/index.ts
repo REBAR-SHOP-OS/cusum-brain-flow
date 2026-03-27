@@ -17,11 +17,24 @@ Deno.serve((req) =>
     }
     const { capturedImageBase64, companyId } = parsed.data;
 
-    // Fetch all active face enrollments
-    const { data: enrollments, error: enrollErr } = await supabase
+    // Fetch active face enrollments, filtered by company if provided
+    let enrollQuery = supabase
       .from("face_enrollments")
       .select("id, profile_id, photo_url")
       .eq("is_active", true);
+
+    if (companyId) {
+      // Get profile IDs for this company first
+      const { data: companyProfiles } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("company_id", companyId);
+      if (companyProfiles && companyProfiles.length > 0) {
+        enrollQuery = enrollQuery.in("profile_id", companyProfiles.map(p => p.id));
+      }
+    }
+
+    const { data: enrollments, error: enrollErr } = await enrollQuery;
 
     if (enrollErr) {
       console.error("Error fetching enrollments:", enrollErr);
@@ -34,13 +47,13 @@ Deno.serve((req) =>
       return { matched: false, reason: "No enrolled faces found" };
     }
 
-    // Group enrollments by profile_id, limit to 5 per person
+    // Group enrollments by profile_id, limit to 3 per person for balanced AI input
     const profileEnrollments = new Map<string, string[]>();
     const profileEnrollmentCounts = new Map<string, number>();
     for (const e of enrollments) {
       profileEnrollmentCounts.set(e.profile_id, (profileEnrollmentCounts.get(e.profile_id) || 0) + 1);
       const urls = profileEnrollments.get(e.profile_id) || [];
-      if (urls.length < 5) {
+      if (urls.length < 3) {
         urls.push(e.photo_url);
         profileEnrollments.set(e.profile_id, urls);
       }
@@ -100,7 +113,12 @@ ${employeeList}
 
 For each employee, I'm providing their reference photos followed by the captured photo to match.
 
-STRICT RULES:
+CRITICAL ANTI-BIAS RULES:
+- The number of reference photos per person varies. Do NOT let more reference photos bias you toward that person.
+- Each person's identity is equally likely a priori. Judge ONLY on facial feature similarity.
+- Having more photos does NOT make someone more likely to be the match.
+
+STRICT MATCHING RULES:
 - You must be CERTAIN it is the same person before returning a match. If in doubt, return NO match.
 - Pay close attention to UNIQUE facial features: nose shape, eye spacing, jawline, facial hair, eyebrow shape, face proportions, ear shape.
 - Carefully compare: glasses (present/absent, frame style), facial hair (beard, mustache, stubble vs clean-shaven), face shape (round, oval, square), hairline and forehead size.

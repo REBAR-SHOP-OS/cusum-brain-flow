@@ -62,13 +62,14 @@ Deno.serve((req) =>
       action = "clock_in";
     }
 
-    // Auto-enroll face if < 5 photos
+    // Auto-enroll face if < 5 active photos
     if (faceBase64) {
       try {
         const { count } = await ctx.serviceClient
           .from("face_enrollments")
           .select("*", { count: "exact", head: true })
-          .eq("profile_id", profileId);
+          .eq("profile_id", profileId)
+          .eq("is_active", true);
 
         if ((count || 0) < 5) {
           const filePath = `${profileId}/auto-${Date.now()}.jpg`;
