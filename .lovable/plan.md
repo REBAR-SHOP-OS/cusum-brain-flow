@@ -1,48 +1,56 @@
 
 
-# Fix: LINE ITEMS Unit Toggle Overwrites Confirmed Source Unit
+# Fix: Pending Approvals Showing Published/Declined Posts + Missing Page Name
 
-## Problem
+## Root Cause
 
-There are **two separate unit toggles** that both write to `confirmedUnitRef.current`:
+Two issues in `ApprovalsPanel.tsx`:
 
-1. **Mapping Panel** (SOURCE DATA UNITS) — correctly sets the source unit for conversion (e.g. "Inches" means raw values × 25.4 → mm)
-2. **LINE ITEMS** toggle (mm / in / ft / ft-in) — should be **display-only** but incorrectly also sets `confirmedUnitRef.current`
+1. **Stale approvals**: `pendingApprovals` filters by `approval.status === "pending"` in the approvals table, but doesn't cross-check the linked post's actual status. A post can be published/declined while its approval record remains "pending" (race condition or manual status change). These ghost approvals clutter the queue.
 
-When a user:
-1. Selects "Inches" in the mapping panel → `confirmedUnitRef = "in"` ✓
-2. Confirms + applies mapping → values correctly converted (54 in → 1372 mm) ✓
-3. Clicks "mm" in the LINE ITEMS display toggle → **`confirmedUnitRef = "mm"`** ✗ — source unit corrupted
-4. If they re-apply or the system references confirmedUnitRef, it now thinks source was "mm"
-
-This also causes confusion because the LINE ITEMS toggle changes the header label (LENGTH (mm) vs LENGTH (in)) but the stored values are always mm internally after mapping.
+2. **Missing page/platform context**: Each card shows the platform badge but not `post.page_name`, which tells the manager *which specific page* the post targets (e.g., "REBAR Co. Facebook" vs "REBAR Instagram").
 
 ## Fix
 
-### `src/components/office/AIExtractView.tsx` — line 2079-2082
+### `src/components/social/ApprovalsPanel.tsx`
 
-**Remove** `confirmedUnitRef.current = u` from the LINE ITEMS unit toggle. Keep only the display state change:
+**1. Filter out approvals where the post is already resolved (line 60-62):**
+
+Add a post-status guard after the existing `if (!post) return null`:
 
 ```tsx
-// Before (buggy):
-onClick={() => {
-  userSetUnitRef.current = true;
-  confirmedUnitRef.current = u;      // ← REMOVE THIS LINE
-  setSelectedUnitSystem(u);
-}}
-
-// After (fixed):
-onClick={() => {
-  userSetUnitRef.current = true;
-  setSelectedUnitSystem(u);
-}}
+const post = getPost(approval.post_id);
+if (!post) return null;
+// Skip if post is already published, declined, or failed
+if (["published", "declined", "failed"].includes(post.status)) return null;
 ```
 
-This ensures:
-- The mapping panel's SOURCE DATA UNITS is the **only** place that sets the confirmed source unit for conversion
-- The LINE ITEMS toggle is purely a **display format** selector (mm ↔ in ↔ ft ↔ ft-in) applied via `formatLengthByMode`
-- Re-applying mapping won't use a corrupted unit
+**2. Show `page_name` on each card (after platform badge, ~line 78-79):**
 
-## File Changed
-- `src/components/office/AIExtractView.tsx` — remove `confirmedUnitRef.current = u` from LINE ITEMS toggle (1 line)
+```tsx
+<Badge className={cn("text-[10px]", platformColors[post.platform])}>
+  {post.platform}
+</Badge>
+{post.page_name && (
+  <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+    {post.page_name}
+  </span>
+)}
+```
+
+**3. Update pending count in header to reflect filtered list:**
+
+Move the filtering logic before the render so the count is accurate:
+
+```tsx
+const trulyPending = pendingApprovals.filter((a) => {
+  const post = getPost(a.post_id);
+  return post && !["published", "declined", "failed"].includes(post.status);
+});
+```
+
+Use `trulyPending` instead of `pendingApprovals` for the list render and count display.
+
+## Files Changed
+- `src/components/social/ApprovalsPanel.tsx` — filter out resolved posts + show page_name
 
