@@ -87,19 +87,23 @@ export function ChatMessage({ message, onRegenerate, onRegenerateImage, onViewPo
         {/* Files attached */}
         {message.files && message.files.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2">
-            {message.files.map((file, index) => (
-              <a
-                key={index}
-                href={file.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 bg-secondary/70 hover:bg-secondary rounded-lg px-3 py-2 text-xs transition-colors"
-              >
-                <FileIcon className="w-4 h-4" />
-                <span className="max-w-[120px] truncate">{file.name}</span>
-                <Download className="w-3 h-3 opacity-60" />
-              </a>
-            ))}
+            {message.files.map((file, index) => {
+              const filePath = (file as any).path || file.url;
+              const isLoading = downloadingFile === filePath;
+              return (
+                <button
+                  key={index}
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => handleFileDownload(file)}
+                  className="flex items-center gap-2 bg-secondary/70 hover:bg-secondary rounded-lg px-3 py-2 text-xs transition-colors disabled:opacity-50"
+                >
+                  <FileIcon className="w-4 h-4" />
+                  <span className="max-w-[120px] truncate">{file.name}</span>
+                  {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3 opacity-60" />}
+                </button>
+              );
+            })}
           </div>
         )}
 
