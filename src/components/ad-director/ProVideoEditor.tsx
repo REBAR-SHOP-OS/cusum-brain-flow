@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { downloadFile } from "@/lib/downloadUtils";
 import {
   Play, Pause, Volume2, VolumeX, Maximize2,
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
@@ -1423,13 +1424,11 @@ export function ProVideoEditor({
           variant="outline"
           size="sm"
           className="h-7 text-[10px] gap-1"
-          disabled={!finalVideoUrl}
           onClick={() => {
-            if (!finalVideoUrl) return;
-            const a = document.createElement("a");
-            a.href = finalVideoUrl;
-            a.download = `${brand.name || "video"}-ad.mp4`;
-            a.click();
+            const url = finalVideoUrl || videoSrc;
+            if (!url) { toast({ title: "ویدئویی برای دانلود وجود ندارد" }); return; }
+            const fname = `${brand.name || "video"}-ad.mp4`;
+            downloadFile(url, fname, { provider: "wan" });
           }}
         >
           <Download className="w-3 h-3" />
