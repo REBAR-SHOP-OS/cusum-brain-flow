@@ -37,9 +37,14 @@ export function ApprovalsPanel() {
     setFeedbackText((prev) => ({ ...prev, [approvalId]: "" }));
   };
 
+  const trulyPending = pendingApprovals.filter((a) => {
+    const post = getPost(a.post_id);
+    return post && !["published", "declined", "failed"].includes(post.status);
+  });
+
   const decidedApprovals = approvals.filter((a) => a.status !== "pending");
 
-  if (pendingApprovals.length === 0 && decidedApprovals.length === 0) {
+  if (trulyPending.length === 0 && decidedApprovals.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <CheckCircle className="w-10 h-10 text-muted-foreground mb-3" />
@@ -51,13 +56,13 @@ export function ApprovalsPanel() {
   return (
     <div className="space-y-4">
       {/* Pending approvals */}
-      {pendingApprovals.length > 0 && (
+      {trulyPending.length > 0 && (
         <div>
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            Pending ({pendingApprovals.length})
+            Pending ({trulyPending.length})
           </h3>
           <div className="space-y-3">
-            {pendingApprovals.map((approval) => {
+            {trulyPending.map((approval) => {
               const post = getPost(approval.post_id);
               if (!post) return null;
               const isExpanded = expandedId === approval.id;
@@ -77,6 +82,11 @@ export function ApprovalsPanel() {
                         <Badge className={cn("text-[10px]", platformColors[post.platform])}>
                           {post.platform}
                         </Badge>
+                        {post.page_name && (
+                          <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                            {post.page_name}
+                          </span>
+                        )}
                         {isOverdue && (
                           <Badge variant="destructive" className="text-[10px]">Overdue</Badge>
                         )}
