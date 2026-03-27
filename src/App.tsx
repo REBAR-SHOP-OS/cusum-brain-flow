@@ -48,6 +48,7 @@ import WasteBankAdmin from "./pages/WasteBankAdmin";
 import BendQueueAdmin from "./pages/BendQueueAdmin";
 import BundleAdmin from "./pages/BundleAdmin";
 import ProductionAudit from "./pages/ProductionAudit";
+const PrintTags = React.lazy(() => import("./pages/PrintTags"));
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
 import CleanupReport from "./pages/CleanupReport";
