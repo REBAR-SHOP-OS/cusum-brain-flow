@@ -251,6 +251,7 @@
 
   /* Document reset for label printing */
   html, body, #root {
+    display: block !important;
     width: 4in !important;
     height: auto !important;
     margin: 0 !important;
