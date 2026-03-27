@@ -207,7 +207,7 @@ function parseSpreadsheetToItems(workbook: XLSX.WorkBook): EstimationItemInput[]
       const quantity = colMap.qty >= 0 ? (toNum(row[colMap.qty]) || 1) : 1;
       if (quantity <= 0) continue;
 
-      const cutLengthRaw = colMap.length >= 0 ? (parseFloat(String(row[colMap.length] ?? "0")) || 0) : 0;
+      const cutLengthRaw = colMap.length >= 0 ? toNum(row[colMap.length]) : 0;
       const cutLengthMm = cutLengthRaw > 100 ? cutLengthRaw : cutLengthRaw * 1000;
 
       const weightRaw = colMap.weight >= 0 ? (parseFloat(String(row[colMap.weight] ?? "0")) || 0) : 0;
