@@ -390,7 +390,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
       try {
         const qbItems = items.map(it => ({
           description: it.description,
-          amount: it.quantity * it.unitPrice,
+          unitPrice: it.unitPrice,
           quantity: it.quantity,
         }));
 
