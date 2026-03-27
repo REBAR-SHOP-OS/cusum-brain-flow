@@ -1,29 +1,43 @@
 
 
-# Switch Music Generation from ElevenLabs to Google Lyria 3
+# Fix Timeline: Real Drag Repositioning + Time Ruler
 
 ## Problem
-The music generation button (🎵 icon) currently calls ElevenLabs API. User wants it to use Google's **Lyria 3** model via the Lovable AI gateway instead.
+1. Text and Audio bars snap to scene boundaries only — no free-positioning within or across scenes
+2. No time ruler/markers on the video track
 
-## Solution
+## Current State
+- Drag logic exists but only moves items between scenes (`onMoveOverlay` changes `sceneId`)
+- Bars always span the full width of their assigned scene — no `startTime`/`endTime` offsets
+- `VideoOverlay` type already has `startTime` and `endTime` fields (optional)
+- `AudioTrackItem` has no `startTime`/`endTime`
 
-### 1. New Edge Function: `supabase/functions/lyria-music/index.ts`
-Create a new edge function that calls the Lovable AI gateway with the music generation model (`google/lyria`). The gateway endpoint supports music generation similar to image generation — send a text prompt, receive audio back.
+## Plan
 
-However, Lyria 3 is **not** in the list of supported Lovable AI gateway models. The supported models are Gemini and GPT variants. Lyria 3 is a separate Google DeepMind model for music and is not available through the `ai.gateway.lovable.dev` endpoint.
+### 1. Add time fields to AudioTrackItem
+In `TimelineBar.tsx` interface, add optional `startTime` and `endTime` to `AudioTrackItem`. Also add callback `onRepositionAudioTrack` for fine-grained time updates.
 
-**Alternative approach**: Use the **Gemini image generation model** pattern but for music — but Gemini models don't generate audio/music.
+### 2. Add time ruler above video track
+Render a row of tick marks with second labels (0s, 2s, 4s...) above the video track. Ticks are positioned using `(sec / totalDuration) * 100%`. Major ticks every 2s, minor every 1s. Scales with `zoomLevel`.
 
-### Revised Approach
-Since Lyria 3 is not available through the Lovable AI gateway, we have two options:
+### 3. Make bars freely draggable with pixel-accurate repositioning
+Currently bars snap to scene boundaries. Change the drag-end handler to:
+- Calculate the exact time position (in seconds) where the bar center lands
+- Determine which scene that time falls into
+- Calculate `startTime` relative to that scene's start
+- Call `onMoveOverlay(id, newSceneId, startTimeSec)` or `onRepositionAudioTrack(index, newSceneId, startTimeSec)`
 
-1. **Keep ElevenLabs** for music generation (it works and is already connected)
-2. **Use Gemini to enhance the prompt**, then still use ElevenLabs for actual audio generation
+### 4. Position bars by absolute time, not scene boundaries
+Change bar rendering from scene-based positioning to time-based:
+- If overlay has `startTime`, position = `(cumulativeStarts[sceneIdx] + startTime) / totalDuration * 100%`
+- Bar width = item duration (e.g. `endTime - startTime` or a default like 3s) rather than full scene width
+- This allows bars to be narrower than scenes and positioned anywhere within them
 
-Let me verify: does the user specifically want Lyria 3, or do they want the music icon to work properly?
+### 5. Update ProVideoEditor handlers
+- `handleMoveOverlay`: accept optional `startTime` parameter, update overlay's `startTime`
+- Add `handleRepositionAudioTrack`: update audio track's `sceneId` and `startTime`
 
-## Clarification Needed
-Lyria 3 is not available as a supported model in the Lovable AI gateway. The available models are text/image models (Gemini, GPT). Music generation requires either ElevenLabs (already connected) or a direct Google API key for Lyria 3.
-
-**I need to ask the user which path to take.**
+## Files Changed
+- `src/components/ad-director/editor/TimelineBar.tsx` — time ruler, free-position drag logic, time-based bar rendering
+- `src/components/ad-director/ProVideoEditor.tsx` — update handlers to accept/store `startTime`
 
