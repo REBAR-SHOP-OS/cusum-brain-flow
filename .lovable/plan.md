@@ -1,35 +1,28 @@
 
 
-# Sync RebarTagCard with PrintTag Layout
+# Fix RebarTagCard: 3 Layout Adjustments
 
-## Problem
+## Changes requested (from annotated screenshot)
 
-The office page card (`RebarTagCard.tsx`) and the print preview (`PrintTag` in `PrintTags.tsx`) render completely different layouts for the same data:
+1. **#1 — Replace shape circle with brand logo**: Replace the shape code circle + "SHAPE" label with the `logo-coin.png` brand logo image
+2. **#2 — Move G-R dims up, parallel with A-F**: Currently G-R dims render below A-F in the same column area. Fix the grid so A-F and G-R render side-by-side as two parallel columns
+3. **#3 — Move Dwg/Item up, give more space to Ref**: The Ref/Dwg/Item row needs Dwg+Item moved up (less padding) and Ref gets more vertical space for address display
 
-| Section | RebarTagCard (office) | PrintTag (print preview) |
-|---------|----------------------|--------------------------|
-| Qty/Length/Weight | 2-col (Qty+Length) then separate Weight row | 3-col row (Qty, Length, Weight) |
-| Dims | Only active dims, chunked in 4s, flat text | All 12 dims in 2-column grid (A-F left, G-R right) with shape circle |
-| Shape | Not shown | Shape code circle + "SHAPE" label + shape image area |
-| Barcode | Fake text barcode | Not present |
-| Footer | Duplicate timestamp header/footer | "R.S" left + "REBAR.SHOP" right |
+## File: `src/components/office/RebarTagCard.tsx`
 
-## Fix
+### Change 1: Replace shape circle with brand logo
+- Import `logoCoin from "@/assets/logo-coin.png"`
+- Replace the circle div (lines 103-108) with an `<img>` of the logo coin, sized ~40px
 
-Rewrite `RebarTagCard.tsx` to match the `PrintTag` structure exactly:
+### Change 2: Fix dims grid alignment
+- The dims grid (lines 110-123) already uses `gridColumn: 1` and `gridColumn: 2`, but all items render sequentially. The issue is the grid has `grid-cols-2` but items are placed by `gridColumn` style — need to use CSS grid row placement so A-F occupy rows 1-6 col 1, and G-R occupy rows 1-6 col 2.
+- Change to explicit `gridRow` assignments so both columns render in parallel.
 
-1. **Timestamp header**: Keep, but match PrintTag order (date left, "REBAR SHOP OS" right)
-2. **Mark/Size/Grade**: Already matches — keep as-is
-3. **Qty/Length/Weight**: Change from 2-col + separate weight row → single 3-col row
-4. **Shape + Dims**: Replace flat "DIMS:" section with 2-column layout: shape circle on left, all 12 dims (A-F / G-R) in 2-column grid on right — show empty dims too
-5. **Shape image**: Add flexible area showing `shapeImageUrl` or shape code placeholder
-6. **Remove barcode**: Delete the fake barcode section
-7. **Ref/Dwg/Item**: Change to 2-column grid (Ref+address left, Dwg+Item right)
-8. **Footer**: Change to "R.S" left + "REBAR.SHOP" right
+### Change 3: Ref section gets more space, Dwg/Item compact
+- Increase Ref section padding/min-height
+- Make Dwg/Item section more compact (reduce py)
 
 ### Technical detail
 
-All changes in one file: `src/components/office/RebarTagCard.tsx`. The component will be rewritten to mirror the inline styles and structure of the `PrintTag` component in `PrintTags.tsx`, but using Tailwind classes for consistency with the rest of the codebase.
-
-The `DIM_LEFT` / `DIM_RIGHT` split replaces the current `activeDims` chunking logic.
+Single file edit. The grid fix for dims uses `gridRow: i+1` on each dim item so the two columns align row-by-row.
 
