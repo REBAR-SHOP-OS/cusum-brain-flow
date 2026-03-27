@@ -340,7 +340,6 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           description: it.description,
           quantity: it.quantity,
           unit_price: it.unitPrice,
-          total: it.quantity * it.unitPrice,
           sort_order: idx,
         }));
         const { error: itemsErr } = await supabase.from("sales_invoice_items" as any).insert(rows as any);
