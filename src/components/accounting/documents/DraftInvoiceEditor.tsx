@@ -159,7 +159,6 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
                 description: qi.description || "",
                 quantity: qi.quantity || 1,
                 unit_price: qi.unit_price || 0,
-                total: qi.total || (qi.quantity || 1) * (qi.unit_price || 0),
                 sort_order: qi.sort_order ?? idx,
               }));
               supabase.from("sales_invoice_items" as any).insert(rows as any).then(() => {});
@@ -207,7 +206,6 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
                   description: m.description,
                   quantity: m.quantity,
                   unit_price: m.unitPrice,
-                  total: m.quantity * m.unitPrice,
                   sort_order: idx,
                 }));
                 supabase.from("sales_invoice_items" as any).insert(rows as any).then(() => {});
@@ -342,7 +340,6 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           description: it.description,
           quantity: it.quantity,
           unit_price: it.unitPrice,
-          total: it.quantity * it.unitPrice,
           sort_order: idx,
         }));
         const { error: itemsErr } = await supabase.from("sales_invoice_items" as any).insert(rows as any);
@@ -393,7 +390,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
       try {
         const qbItems = items.map(it => ({
           description: it.description,
-          amount: it.quantity * it.unitPrice,
+          unitPrice: it.unitPrice,
           quantity: it.quantity,
         }));
 
@@ -401,7 +398,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           body: {
             action: "create-invoice",
             customerName: customerName || undefined,
-            items: qbItems.length > 0 ? qbItems : [{ description: `Invoice ${invoiceNumber}`, amount: total, quantity: 1 }],
+            items: qbItems.length > 0 ? qbItems : [{ description: `Invoice ${invoiceNumber}`, unitPrice: total, quantity: 1 }],
             dueDate: dueDate || undefined,
             memo: `ERP Invoice ${invoiceNumber}`,
           },
