@@ -1,68 +1,37 @@
 
 
-# Speed Up Face Scan Without Losing Accuracy
+# Fix: Auto-Enrollment Saves Wrong Person's Photo Under Matched Profile
 
-## Problem
-Face recognition is slow due to:
-1. Using `gemini-2.5-pro` (expensive, slow) — overkill for face matching
-2. Sequential photo downloads (one-by-one for each profile)
-3. Captured image at 1280x960 with 0.92 quality (large payload)
-4. When uncertain (50-84% confidence), UI shows a manual confirm but doesn't force name input
+## Root Cause
 
-User requirement: **zero wrong matches** — if uncertain, ask user to type their name.
+In `kiosk-punch/index.ts` (lines 65-89), there is an **auto-enroll** feature: every time someone punches in/out, their current face photo is automatically saved under the **matched profile's** enrollment folder.
 
-## Solution
+**The problem:** If the AI misidentifies Zahra as Radin (even once), Zahra's photo gets saved under Radin's `face_enrollments`. This:
+1. Pollutes Radin's enrollment data with Zahra's face
+2. Makes future recognition worse (Radin's folder now contains Zahra's photos)
+3. Creates a cascading error — more wrong matches in the future
 
-### 1. Switch AI model to `gemini-2.5-flash` (edge function)
-**File:** `supabase/functions/face-recognize/index.ts`
-- Line 188: Change `gemini-2.5-pro` → `gemini-2.5-flash`
-- Line 236 (retry): Same change
-- Flash is 3-5x faster, still excellent at vision/face comparison with tool calling
-- Keep the same strict prompt and anti-bias rules
+## Solution: Remove Auto-Enrollment From Punch
 
-### 2. Parallelize photo downloads (edge function)
-**File:** `supabase/functions/face-recognize/index.ts`
-- Lines 76-108: Replace sequential `for...of` loop with `Promise.all` to download all photos concurrently
-- This alone can cut 2-5 seconds off scan time when there are many enrolled people
+**Completely disable auto-enrollment in `kiosk-punch`.** Enrollment should ONLY happen through the Face Memory panel where an admin manually controls whose photos are saved.
 
-### 3. Reduce captured image size (client)
-**File:** `src/hooks/useFaceRecognition.ts`
-- Lines 51-57: Change canvas from 1280x960 → 640x480, quality from 0.92 → 0.85
-- Smaller image = faster upload + faster AI processing
-- 640x480 is sufficient for face recognition
+### Changes
 
-### 4. Force name input on low confidence (client)
-**File:** `src/pages/TimeClock.tsx`
-- Lines 126-139: When `face.state === "low_confidence"` (50-84%), show the `FirstTimeRegistration` component (name input) instead of showing the match result with confirm buttons
-- This ensures **zero wrong matches** — uncertain = ask for name
+**File: `supabase/functions/kiosk-punch/index.ts`**
+- Remove lines 65-89 (the entire auto-enroll block)
+- Remove `faceBase64` from the destructured body (line 6) since it's no longer needed
 
-**File:** `src/components/timeclock/FaceRecognitionResult.tsx`
-- Remove the low-confidence confirm UI path. Only high-confidence (≥75%) matches show the confirm/punch buttons.
+**File: `src/pages/TimeClock.tsx`**
+- Line 162: Stop capturing `faceBase64` in `handleConfirmPunch` — no longer sent to the edge function
+- Change `body: { profileId, faceBase64 }` → `body: { profileId }`
 
-### 5. Raise minimum match threshold
-**File:** `supabase/functions/face-recognize/index.ts`
-- Line 260: Change `confidence >= 50` → `confidence >= 60` for `isMatched`
-- Below 60% is too unreliable to even suggest a name
+### Cleanup: Delete Zahra's Misplaced Photo
+- The wrongly-enrolled photo under Radin's profile (visible in the screenshot with red circle) should be manually deleted via the Face Memory panel's delete button.
 
-## Summary of Speed Gains
-```text
-Before                          After
-─────────────────────────────── ───────────────────────
-gemini-2.5-pro (~4-8s)         gemini-2.5-flash (~1-3s)
-Sequential downloads (~2-5s)    Parallel downloads (~0.5-1s)
-1280x960 @ 0.92 quality        640x480 @ 0.85 quality
-Total: ~6-13s                   Total: ~2-4s
-```
-
-## Safety Guarantee
-- High confidence (≥75%): auto-punch as before
-- Low confidence (60-74%): show name input prompt ("اسمت رو بزن")
-- Below 60%: no match, show registration
-- Zero wrong matches: uncertain = always ask
+## Why This Is the Right Fix
+Auto-enrollment is inherently dangerous: a single misidentification poisons the training data. Manual enrollment via the Face Memory panel (controlled by admins) is the only safe path.
 
 ## Files Changed
-- `supabase/functions/face-recognize/index.ts` — faster model, parallel downloads, higher threshold
-- `src/hooks/useFaceRecognition.ts` — smaller capture resolution
-- `src/pages/TimeClock.tsx` — route low_confidence to name input
-- `src/components/timeclock/FaceRecognitionResult.tsx` — remove low-confidence confirm path
+- `supabase/functions/kiosk-punch/index.ts` — remove auto-enroll block
+- `src/pages/TimeClock.tsx` — stop sending `faceBase64` to kiosk-punch
 
