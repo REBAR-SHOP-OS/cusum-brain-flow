@@ -1663,10 +1663,11 @@ export function ProVideoEditor({
       <TimelineBar
         sidebarTabs={[
           { id: "media", label: "Media", icon: <Film className="w-3.5 h-3.5" /> },
-          
+          { id: "text", label: "Text", icon: <FileText className="w-3.5 h-3.5" /> },
           { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
           { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
           { id: "subtitle", label: "Subtitle", icon: <Captions className="w-3.5 h-3.5" /> },
+          { id: "brand-kit", label: "Brand", icon: <Palette className="w-3.5 h-3.5" /> },
           { id: "text-voice", label: "Text+Voice", icon: <MessageSquareText className="w-3.5 h-3.5" /> },
           { id: "speed", label: `${videoSpeed}×`, icon: <Gauge className="w-3.5 h-3.5" /> },
         ]}
