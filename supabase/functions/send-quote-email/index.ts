@@ -393,7 +393,6 @@ Deno.serve((req) =>
       // 4b. Auto-push invoice to QuickBooks
       let qbInvoiceLink = "";
       try {
-        const metaItems = (meta.line_items || meta.items || []) as any[];
         const qbLineItems = (metaItems.length > 0 ? metaItems : []).map((mi: any) => ({
           description: mi.description || mi.name || "Item",
           unitPrice: Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0,
