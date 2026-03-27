@@ -13,6 +13,7 @@ import brandLogo from "@/assets/brand-logo.png";
 
 interface LineItem {
   description: string;
+  detail?: string;
   quantity: number;
   unitPrice: number;
 }
