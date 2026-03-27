@@ -63,6 +63,11 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
   const [items, setItems] = useState<LineItem[]>([
     { description: "", quantity: 1, unitPrice: 0 },
   ]);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [invoiceAmount, setInvoiceAmount] = useState(0);
 
   // Customer dropdown state
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
