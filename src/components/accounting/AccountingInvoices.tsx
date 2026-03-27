@@ -13,8 +13,9 @@ import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
-import { useSalesInvoices } from "@/hooks/useSalesInvoices";
+import { useSalesInvoices, SalesInvoice } from "@/hooks/useSalesInvoices";
 import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
+import { isPast, format } from "date-fns";
 
 type SortField = "DocNumber" | "Customer" | "TxnDate" | "DueDate" | "TotalAmt" | "Balance" | "Status";
 type SortDir = "asc" | "desc";
