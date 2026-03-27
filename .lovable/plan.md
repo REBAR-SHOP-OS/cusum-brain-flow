@@ -1,55 +1,61 @@
 
 
-# Add Aspect Ratio Selector to Video Editor
+# Fix: OCR Total Weight Mismatch (7.71t → 5.661t)
 
-## Summary
-Add an aspect ratio icon/button in the editor's playback controls bar. When the user selects a ratio, the video preview container resizes accordingly (e.g., 16:9 → widescreen, 9:16 → portrait, 1:1 → square). The CSS `aspect-ratio` and container constraints update in real-time.
+## Root Cause Analysis
 
-## Changes
+Three compounding bugs explain why the quotation Qty shows **5.661 tonnes** instead of the expected **~8.87 tonnes** (7.71 × 1.15):
 
-### `src/components/ad-director/ProVideoEditor.tsx`
+### Bug 1: lbs vs kg unit confusion
+The PDF's "Black wgt" column is in **lbs** (total = 17,006.90 lbs = 7,712.88 kg). The AI extraction prompt says "Set weight_kg directly from the document's stated weight" — but never instructs the model to detect units and convert lbs → kg. If the AI picks up values from the wrong column/unit, weights are wrong.
 
-1. **Add state**: `aspectRatio` with default `"16:9"` and a popover toggle
-2. **Add Aspect Ratio Popover** in the playback controls bar (line ~1584), next to fullscreen button:
-   - Icon: `RectangleHorizontal` or `Ratio` from lucide-react
-   - Popover with ratio buttons: `16:9`, `9:16`, `1:1`, `4:3`, `4:5`, `21:9`
-3. **Apply ratio to video container** (line ~1497): Replace `aspect-square` with dynamic `style={{ aspectRatio }}` based on selected ratio
-4. **Apply to canvas** for static cards: Update `canvas.width` / `canvas.height` based on ratio
-5. **Pass ratio to video element**: The `object-contain` class already handles fitting — just the container shape changes
+### Bug 2: Double waste/scrap application
+- `ai-estimate` applies `waste_factor_pct` (default **5%**) to all item weights **before** storing to DB (line 657-659: `applyWasteFactor`)
+- `ai-generate-quotation` reads those already-wasted weights, then applies `scrap_percent` (default **15%**) **again** (line 163: `totalWithScrap = totalWeightKg * (1 + scrapPct / 100)`)
+- Result: items are inflated by both factors but the Qty label only says "incl. 15% scrap"
 
-### Ratio → CSS mapping
+### Bug 3: `parseWeightSummaryFallback` has no lbs detection
+The regex fallback that scans AI response text for bar-size weights (line 36) matches numbers next to "10M", "15M" etc. but doesn't distinguish lbs from kg columns, potentially grabbing lbs values.
+
+## Fixes
+
+### 1. `supabase/functions/ai-estimate/index.ts` — AI prompt fix
+Add explicit instruction in the weight summary section (line ~477):
+```
+- CRITICAL: If the document shows weights in lbs/pounds, you MUST convert to kg (1 lb = 0.453592 kg). 
+  Look for column headers like "Black wgt", "Total lbs", "Weight (lbs)" to detect imperial units.
+  Always output weight_kg in KILOGRAMS, never in pounds.
+```
+
+### 2. `supabase/functions/ai-generate-quotation/index.ts` — Remove double scrap
+The estimation items already include the waste factor from `ai-estimate`. The quotation should NOT apply scrap again on top. Change line 161-164:
+
+**Before:**
 ```typescript
-const ASPECT_RATIOS = {
-  "16:9": "16/9",
-  "9:16": "9/16", 
-  "1:1": "1/1",
-  "4:3": "4/3",
-  "4:5": "4/5",
-  "21:9": "21/9",
-};
+const totalWeightKg = bomItems.reduce((s, i) => s + toNum(i.weight_kg), 0);
+const scrapPct = Number(scrap_percent ?? ...);
+const totalWithScrap = totalWeightKg * (1 + scrapPct / 100);
+const totalTonnes = totalWithScrap / 1000;
 ```
 
-### Video container change (line 1497)
-```tsx
-// Before:
-<div className="... aspect-square max-h-[60vh]">
-
-// After: 
-<div className="... max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] }}>
-```
-
-### Canvas dimensions for static cards
+**After:**
 ```typescript
-const ratioDims: Record<string, [number, number]> = {
-  "16:9": [1280, 720],
-  "9:16": [720, 1280],
-  "1:1": [1080, 1080],
-  "4:3": [1080, 810],
-  "4:5": [1080, 1350],
-  "21:9": [1260, 540],
-};
+// Items from ai-estimate already include waste_factor_pct (typically 5%)
+// The user-specified scrap_percent REPLACES the waste — not additive
+const rawWeightKg = bomItems.reduce((s, i) => s + toNum(i.weight_kg), 0);
+const estWastePct = Number(project.waste_factor_pct ?? 5);
+const baseWeightKg = rawWeightKg / (1 + estWastePct / 100); // Remove already-applied waste
+const scrapPct = Number(scrap_percent ?? pricingConfig.scrap_percentage ?? 15);
+const totalWithScrap = baseWeightKg * (1 + scrapPct / 100);
+const totalTonnes = totalWithScrap / 1000;
 ```
 
-## File Changed
-- `src/components/ad-director/ProVideoEditor.tsx`
+This un-does the estimation waste and applies only the user's chosen scrap %. With the PDF's 7712.88 kg base weight and 15% scrap: 7712.88 × 1.15 / 1000 = **8.87 tonnes** — correct.
+
+### 3. `supabase/functions/ai-estimate/index.ts` — Fallback parser lbs detection
+Add lbs detection to `parseWeightSummaryFallback`: if the text contains "Total lbs" or "lbs" near the weight values, divide extracted weights by 2.20462.
+
+## Files Changed
+- `supabase/functions/ai-estimate/index.ts` — add lbs→kg conversion instruction to prompt + fallback parser lbs detection
+- `supabase/functions/ai-generate-quotation/index.ts` — fix double scrap by backing out estimation waste before applying user scrap
 
