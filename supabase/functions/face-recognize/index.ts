@@ -17,11 +17,24 @@ Deno.serve((req) =>
     }
     const { capturedImageBase64, companyId } = parsed.data;
 
-    // Fetch all active face enrollments
-    const { data: enrollments, error: enrollErr } = await supabase
+    // Fetch active face enrollments, filtered by company if provided
+    let enrollQuery = supabase
       .from("face_enrollments")
       .select("id, profile_id, photo_url")
       .eq("is_active", true);
+
+    if (companyId) {
+      // Get profile IDs for this company first
+      const { data: companyProfiles } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("company_id", companyId);
+      if (companyProfiles && companyProfiles.length > 0) {
+        enrollQuery = enrollQuery.in("profile_id", companyProfiles.map(p => p.id));
+      }
+    }
+
+    const { data: enrollments, error: enrollErr } = await enrollQuery;
 
     if (enrollErr) {
       console.error("Error fetching enrollments:", enrollErr);
