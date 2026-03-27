@@ -476,6 +476,9 @@ If the document is a weight summary report or estimate summary (contains tables 
 - Set element_ref from the element name as shown in document
 - Set weight_kg directly from the document's stated weight for that row
 - CRITICAL: Preserve the exact weights from the document — do not recalculate them
+- CRITICAL: If the document shows weights in lbs/pounds, you MUST convert to kg (1 lb = 0.453592 kg).
+  Look for column headers like "Black wgt", "Total lbs", "Weight (lbs)", "lbs", "pounds" to detect imperial units.
+  Always output weight_kg in KILOGRAMS, never in pounds.
 - hook_type_near: "none", hook_type_far: "none", lap_type: "none", num_laps: 0, spacing_mm: null, bend_type: null, position: null, drawing_ref: null
 
 ## EXTRACTION INSTRUCTIONS
