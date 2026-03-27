@@ -1,34 +1,18 @@
 
 
-# Replace Music Generation: ElevenLabs → Lyria 3 (Gemini API)
+# Add Calendar Picker for Ship Date
 
-## Summary
-Replace the ElevenLabs music generation backend with Google's Lyria 3 model via the Gemini API (`generativelanguage.googleapis.com`). The existing `AudioPromptDialog` UI stays the same. When user submits a music prompt, it generates music via Lyria 3 and replaces the current audio track on the video.
+## Problem
+The "Ship Date" field in the Quotation Editor (`DraftQuotationEditor.tsx`) uses a plain `<Input type="date">` which shows the raw `yyyy-mm-dd` placeholder. User wants a proper calendar date picker.
 
-## API Details
-- **Endpoint**: `POST https://generativelanguage.googleapis.com/v1beta/models/lyria-3-clip-preview:generateContent`
-- **Auth**: `x-goog-api-key: GEMINI_API_KEY` (already configured)
-- **Request body**: `{ "contents": [{ "parts": [{ "text": "PROMPT" }] }] }`
-- **Response**: JSON with base64-encoded audio in `candidates[0].content.parts[0].inlineData.data` (MIME: `audio/mp3`)
+## Fix
+Replace the `<Input type="date">` at line 458-461 with a Shadcn `Popover` + `Calendar` component (date picker pattern).
 
-## Changes
+### Changes needed:
+1. **Add imports**: `Calendar` from `@/components/ui/calendar`, `CalendarIcon` from `lucide-react`, `format` from `date-fns`, `cn` from `@/lib/utils`
+2. **Add state**: `shipDate` as `Date | undefined`
+3. **Replace Input** (lines 456-462): Swap `<Input type="date">` with `Popover > PopoverTrigger (Button) > PopoverContent > Calendar` using the standard Shadcn datepicker pattern with `pointer-events-auto`
 
-### 1. New Edge Function: `supabase/functions/lyria-music/index.ts`
-- Uses `handleRequest` pattern (per project standards)
-- Accepts `{ prompt, duration }` — sends prompt to Lyria 3 `generateContent` endpoint
-- Returns raw audio binary response (like current `elevenlabs-music`)
-- Uses `GEMINI_API_KEY` from env
-- `authMode: "none"`, `rawResponse: true`
-
-### 2. Update: `src/components/ad-director/ProVideoEditor.tsx`
-- In `handleAudioGenerate` (~line 253): change `elevenlabs-music` → `lyria-music` for music type
-- Keep voiceover path (`elevenlabs-tts`) unchanged
-- Keep the enhance-music-prompt step (Step 1) unchanged
-
-### 3. No UI changes
-- `AudioPromptDialog` stays as-is (same prompt + duration + type selector)
-
-## Files Changed
-- `supabase/functions/lyria-music/index.ts` — new edge function
-- `src/components/ad-director/ProVideoEditor.tsx` — swap function name
+## File Changed
+- `src/components/accounting/documents/DraftQuotationEditor.tsx` — replace ship date input with calendar picker
 
