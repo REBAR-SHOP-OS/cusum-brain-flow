@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { downloadFile } from "@/lib/downloadUtils";
 import {
   Play, Pause, Volume2, VolumeX, Maximize2,
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
