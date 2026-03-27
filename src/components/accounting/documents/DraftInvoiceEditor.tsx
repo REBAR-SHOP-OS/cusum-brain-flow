@@ -173,7 +173,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
             // quotation_id points to sales_quotations — get quotation_number to find quotes record
             const { data: sq } = await supabase
               .from("sales_quotations")
-              .select("quotation_number, quote_id")
+              .select("quotation_number")
               .eq("id", quotationId)
               .maybeSingle();
             if (sq?.quotation_number) {
@@ -184,14 +184,14 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
                 .maybeSingle();
               sourceQuote = q;
             }
-            // Fallback: try quotes by quote_id directly
-            if (!sourceQuote && sq?.quote_id) {
+            // Fallback: try quotes by id directly (quotationId may actually be a quotes.id)
+            if (!sourceQuote) {
               const { data: q } = await supabase
                 .from("quotes")
                 .select("metadata")
-                .eq("id", sq.quote_id)
+                .eq("id", quotationId)
                 .maybeSingle();
-              sourceQuote = q;
+              if (q) sourceQuote = q;
             }
           }
           if (sourceQuote?.metadata) {
