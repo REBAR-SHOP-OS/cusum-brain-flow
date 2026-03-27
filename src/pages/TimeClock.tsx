@@ -399,7 +399,14 @@ export default function TimeClock() {
               <ScanFace className="w-5 h-5" /> Scan to Punch
             </Button>
           )}
-          {(face.state !== "idle" && face.state !== "scanning") && (
+          {face.state === "low_confidence" && (
+            <FirstTimeRegistration
+              captureFrame={face.captureFrame}
+              onComplete={() => face.reset()}
+              onCancel={() => face.reset()}
+            />
+          )}
+          {(face.state !== "idle" && face.state !== "scanning" && face.state !== "low_confidence") && (
             <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={!!activeEntry} onConfirmPunch={handleConfirmPunch} onReject={() => face.reset()} autoPunchCountdown={autoPunchCountdown} />
           )}
         </div>
