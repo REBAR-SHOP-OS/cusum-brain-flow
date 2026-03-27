@@ -34,13 +34,13 @@ Deno.serve((req) =>
       return { matched: false, reason: "No enrolled faces found" };
     }
 
-    // Group enrollments by profile_id, limit to 5 per person
+    // Group enrollments by profile_id, limit to 3 per person for balanced AI input
     const profileEnrollments = new Map<string, string[]>();
     const profileEnrollmentCounts = new Map<string, number>();
     for (const e of enrollments) {
       profileEnrollmentCounts.set(e.profile_id, (profileEnrollmentCounts.get(e.profile_id) || 0) + 1);
       const urls = profileEnrollments.get(e.profile_id) || [];
-      if (urls.length < 5) {
+      if (urls.length < 3) {
         urls.push(e.photo_url);
         profileEnrollments.set(e.profile_id, urls);
       }
