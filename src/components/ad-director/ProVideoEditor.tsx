@@ -11,7 +11,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
-  Palette, Film, LayoutGrid, X,
+  Palette, Film, LayoutGrid, X, Edit3,
   Mic, Captions, Gauge, MessageSquareText,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -726,6 +726,21 @@ export function ProVideoEditor({
     }
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); handleDeleteScene(selectedSceneIndex); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); }
+      if (e.key === "s" && !e.metaKey && !e.ctrlKey) { handleSplitScene(selectedSceneIndex); }
+      if (e.key === "d" && !e.metaKey && !e.ctrlKey) { handleDuplicateScene(selectedSceneIndex); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedSceneIndex]);
+
   const resetAll = () => {
     if (history.length > 0) {
       onUpdateStoryboard?.(history[0]);
@@ -1418,7 +1433,9 @@ export function ProVideoEditor({
 
         <div className="flex-1" />
 
-        <Badge variant="secondary" className="text-[9px]">Edit</Badge>
+        <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={() => handleSetActiveTab("brand-kit")}>
+          <Edit3 className="w-3 h-3" /> Edit
+        </Button>
 
         <Button
           variant="outline"
@@ -1646,10 +1663,11 @@ export function ProVideoEditor({
       <TimelineBar
         sidebarTabs={[
           { id: "media", label: "Media", icon: <Film className="w-3.5 h-3.5" /> },
-          
+          { id: "text", label: "Text", icon: <FileText className="w-3.5 h-3.5" /> },
           { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
           { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
           { id: "subtitle", label: "Subtitle", icon: <Captions className="w-3.5 h-3.5" /> },
+          { id: "brand-kit", label: "Brand", icon: <Palette className="w-3.5 h-3.5" /> },
           { id: "text-voice", label: "Text+Voice", icon: <MessageSquareText className="w-3.5 h-3.5" /> },
           { id: "speed", label: `${videoSpeed}×`, icon: <Gauge className="w-3.5 h-3.5" /> },
         ]}
