@@ -252,15 +252,29 @@ Deno.serve((req) =>
     if (action === "convert_to_invoice") {
       // ── Convert to Invoice ──
 
-      // 1. Fetch linked sales_quotation
-      const { data: sq } = await svc
+      // 1. Fetch linked sales_quotation — try both quote_id and quotation_number
+      let sq: any = null;
+      const { data: sqById } = await svc
         .from("sales_quotations")
         .select("*")
         .eq("quote_id", quote_id)
         .maybeSingle();
+      sq = sqById;
+
+      if (!sq && quoteNumber) {
+        const { data: sqByNum } = await svc
+          .from("sales_quotations")
+          .select("*")
+          .eq("quotation_number", quoteNumber)
+          .maybeSingle();
+        sq = sqByNum;
+      }
 
       const companyId = sq?.company_id || quote.company_id || "a0000000-0000-0000-0000-000000000001";
-      const amount = sq?.amount || totalAmount;
+      // Store tax-inclusive total for Stripe/email display, pre-tax for invoice record
+      const rawTotalWithTax = sq?.amount || totalAmount;
+      const invoiceTaxRate = (taxRate) / 100;
+      const amount = Math.round((rawTotalWithTax / (1 + invoiceTaxRate)) * 100) / 100;
 
       // 2. Generate invoice number
       const year = new Date().getFullYear();
@@ -290,7 +304,7 @@ Deno.serve((req) =>
           quotation_id: sq?.id || null,
           customer_name: sq?.customer_name || customerName,
           customer_company: sq?.customer_company || null,
-          amount,
+          amount: rawTotalWithTax,
           status: "sent",
           issued_date: issuedDate,
           due_date: dueDate,
@@ -302,7 +316,56 @@ Deno.serve((req) =>
 
       if (invErr) throw new Error(`Invoice creation failed: ${invErr.message}`);
 
-      // 4. Generate Stripe payment link
+      // 3b. Copy line items to sales_invoice_items
+      try {
+        let itemsCopied = false;
+        const metaItems = (meta.line_items || meta.items || []) as any[];
+        if (metaItems.length > 0) {
+          const invoiceItems = metaItems.map((mi: any, idx: number) => {
+            const qty = Number(mi.quantity) || Number(mi.qty) || 1;
+            const price = Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0;
+            return {
+              invoice_id: newInvoice.id,
+              company_id: companyId,
+              description: mi.description || mi.name || "Item",
+              quantity: qty,
+              unit: mi.unit || null,
+              unit_price: price,
+              sort_order: idx,
+            };
+          });
+          await svc.from("sales_invoice_items").insert(invoiceItems);
+          console.log(`[convert_to_invoice] Copied ${invoiceItems.length} line items from quotes.metadata`);
+          itemsCopied = true;
+        }
+        if (!itemsCopied && sq?.id) {
+          const { data: quoteItems } = await svc
+            .from("sales_quotation_items")
+            .select("description, quantity, unit, unit_price, total, sort_order, company_id")
+            .eq("quotation_id", sq.id)
+            .order("sort_order");
+          if (quoteItems && quoteItems.length > 0) {
+            const invoiceItems = quoteItems.map((qi: any) => ({
+              invoice_id: newInvoice.id,
+              company_id: qi.company_id || companyId,
+              description: qi.description,
+              quantity: qi.quantity,
+              unit: qi.unit,
+              unit_price: qi.unit_price,
+              sort_order: qi.sort_order,
+            }));
+            await svc.from("sales_invoice_items").insert(invoiceItems);
+            itemsCopied = true;
+          }
+        }
+        if (!itemsCopied) {
+          console.warn("[convert_to_invoice] No line items found to copy");
+        }
+      } catch (itemErr) {
+        console.warn("[convert_to_invoice] Failed to copy line items:", itemErr);
+      }
+
+      // 4. Generate Stripe payment link (use tax-inclusive amount)
       let stripePaymentUrl = "";
       try {
         const stripeRes = await fetch(`${supabaseUrl}/functions/v1/stripe-payment`, {
@@ -310,7 +373,7 @@ Deno.serve((req) =>
           headers: { "Content-Type": "application/json", Authorization: authHeader },
           body: JSON.stringify({
             action: "create-payment-link",
-            amount,
+            amount: rawTotalWithTax,
             currency: "cad",
             invoiceNumber,
             customerName: sq?.customer_name || customerName,
@@ -327,12 +390,83 @@ Deno.serve((req) =>
         console.warn("Stripe error:", e);
       }
 
-      // 5. Build invoice email
-      const payNowButton = stripePaymentUrl
-        ? `<div style="text-align:center;margin:32px 0;">
-            <a href="${stripePaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#e94560 0%,#c23152 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(233,69,96,0.4);">💳 Pay Now</a>
-            <p style="color:#888;font-size:12px;margin-top:10px;">Secure payment powered by Stripe</p>
-           </div>`
+      // 4b. Auto-push invoice to QuickBooks
+      let qbInvoiceLink = "";
+      try {
+        const metaItems = (meta.line_items || meta.items || []) as any[];
+        const qbLineItems = (metaItems.length > 0 ? metaItems : []).map((mi: any) => ({
+          description: mi.description || mi.name || "Item",
+          unitPrice: Number(mi.unitPrice) || Number(mi.unit_price) || Number(mi.price) || 0,
+          quantity: Number(mi.quantity) || Number(mi.qty) || 1,
+        }));
+
+        const { data: qbConnections } = await svc
+          .from("integration_connections")
+          .select("id, user_id, config")
+          .eq("integration_id", "quickbooks")
+          .eq("status", "connected");
+
+        let qbUserId = "";
+        if (qbConnections) {
+          for (const conn of qbConnections) {
+            const cfg = conn.config as Record<string, unknown> | null;
+            if (cfg?.company_id === companyId) {
+              qbUserId = conn.user_id;
+              break;
+            }
+            const { data: prof } = await svc
+              .from("profiles")
+              .select("company_id")
+              .eq("user_id", conn.user_id)
+              .maybeSingle();
+            if (prof?.company_id === companyId) {
+              qbUserId = conn.user_id;
+              break;
+            }
+          }
+        }
+
+        if (qbUserId) {
+          const qbRes = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+              "x-qb-user-id": qbUserId,
+            },
+            body: JSON.stringify({
+              action: "create-invoice",
+              customerName: sq?.customer_name || customerName,
+              items: qbLineItems.length > 0 ? qbLineItems : [{ description: "Invoice " + invoiceNumber, unitPrice: rawTotalWithTax, quantity: 1 }],
+              dueDate,
+              memo: `ERP Invoice ${invoiceNumber}`,
+            }),
+          });
+          if (qbRes.ok) {
+            const qbData = await qbRes.json();
+            qbInvoiceLink = qbData.invoiceLink || qbData.invoice?.InvoiceLink || "";
+            console.log(`[convert_to_invoice] QB invoice created, link: ${qbInvoiceLink}`);
+          } else {
+            console.warn("[convert_to_invoice] QB invoice creation failed:", await qbRes.text());
+          }
+        }
+      } catch (_e) {
+        console.warn("[convert_to_invoice] QB push error:", _e);
+      }
+
+      // 5. Build dual payment buttons
+      const paymentButtons: string[] = [];
+      if (stripePaymentUrl) {
+        paymentButtons.push(`<a href="${stripePaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#e94560 0%,#c23152 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(233,69,96,0.4);width:80%;text-align:center;">💳 Pay via Stripe</a>
+          <p style="color:#888;font-size:12px;margin-top:6px;">Secure payment powered by Stripe</p>`);
+      }
+      if (qbInvoiceLink) {
+        paymentButtons.push(`<a href="${qbInvoiceLink}" style="display:inline-block;background:linear-gradient(135deg,#2ca01c 0%,#1a7a12 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(44,160,28,0.4);width:80%;text-align:center;">📋 Pay via QuickBooks</a>
+          <p style="color:#888;font-size:12px;margin-top:6px;">Pay through QuickBooks Online</p>`);
+      }
+      const payNowButton = paymentButtons.length > 0
+        ? `<div style="text-align:center;margin:32px 0;">${paymentButtons.join('<div style="margin-top:16px;"></div>')}</div>`
         : "";
 
       const invoiceBodyHtml = `
@@ -341,7 +475,7 @@ Deno.serve((req) =>
         <div style="background:#f8f9fc;border-radius:8px;padding:20px;margin:24px 0;border-left:4px solid #e94560;">
           <table style="width:100%;">
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Invoice #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${invoiceNumber}</td></tr>
-            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Amount Due</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:22px;">$${amount.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Amount Due</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:22px;">$${rawTotalWithTax.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Issue Date</td><td style="text-align:right;color:#1a1a2e;">${issuedDate}</td></tr>
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Due Date</td><td style="text-align:right;color:#1a1a2e;font-weight:600;">${dueDate}</td></tr>
           </table>
@@ -388,8 +522,9 @@ Deno.serve((req) =>
         invoice_id: newInvoice.id,
         invoice_number: invoiceNumber,
         payment_link: stripePaymentUrl || null,
+        qb_payment_link: qbInvoiceLink || null,
         email_sent: emailOk,
-        message: `Invoice ${invoiceNumber} created${emailOk ? ` and sent to ${customer_email}` : " (email failed)"}${stripePaymentUrl ? " with payment link" : ""}`,
+        message: `Invoice ${invoiceNumber} created${emailOk ? ` and sent to ${customer_email}` : " (email failed)"}${stripePaymentUrl ? " with Stripe link" : ""}${qbInvoiceLink ? " with QB link" : ""}`,
       };
     }
 

@@ -371,6 +371,8 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
     }
     setSendingEmail(true);
     try {
+      // Auto-save before sending to ensure DB matches what the email shows
+      await handleSave();
       // Try to get a Stripe payment link
       let paymentUrl = "";
       try {
