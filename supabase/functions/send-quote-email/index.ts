@@ -629,11 +629,11 @@ Deno.serve((req) =>
         // Copy line items from quotation to invoice
         // PRIMARY SOURCE: quotes.metadata.line_items (always populated by DraftQuotationEditor & AI)
         // SECONDARY SOURCE: sales_quotation_items table (rarely populated)
+        const metaItems = (meta.line_items || meta.items || []) as any[];
         try {
           let itemsCopied = false;
 
           // 1. Primary: quotes.metadata.line_items
-          const metaItems = (meta.line_items || meta.items || []) as any[];
           if (metaItems.length > 0) {
             const invoiceItems = metaItems.map((mi: any, idx: number) => {
                const qty = Number(mi.quantity) || Number(mi.qty) || 1;
