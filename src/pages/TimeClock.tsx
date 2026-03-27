@@ -312,7 +312,6 @@ export default function TimeClock() {
               captureFrame={face.captureFrame}
               onComplete={() => {
                 face.reset();
-                setTimeout(() => handleScan(), 5000);
               }}
               onCancel={() => face.reset()}
             />
