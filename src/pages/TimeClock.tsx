@@ -340,6 +340,11 @@ export default function TimeClock() {
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>
+        <p className="text-[10px] text-muted-foreground/60 mt-2 text-center max-w-md leading-relaxed">
+          Your photo and name are securely stored in this app's memory for clock-in and clock-out purposes.
+          <br />
+          عکس و نام شما در حافظه این برنامه برای ثبت ورود و خروج ذخیره می‌شود.
+        </p>
       </div>
     );
   }
