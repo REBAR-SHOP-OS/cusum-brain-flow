@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 interface Enrollment {
   id: string;
   profile_id: string;
-  storage_path: string;
+  photo_url: string;
   is_active: boolean;
   created_at: string;
 }
@@ -41,7 +41,7 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
       // Fetch active enrollments
       const { data: enrollments, error: eErr } = await supabase
         .from("face_enrollments")
-        .select("id, profile_id, storage_path, is_active, created_at")
+        .select("id, profile_id, photo_url, is_active, created_at")
         .eq("is_active", true)
         .order("created_at", { ascending: false });
 
@@ -85,9 +85,10 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
 
         // Batch sign URLs
         for (const item of limited) {
+          const storagePath = item.photo_url.replace(/^.*face-enrollments\//, "");
           const { data } = await supabase.storage
             .from("face-enrollments")
-            .createSignedUrl(item.storage_path, 600);
+            .createSignedUrl(storagePath, 600);
           if (data?.signedUrl) {
             signedUrls.set(item.id, data.signedUrl);
           }
