@@ -398,7 +398,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           body: {
             action: "create-invoice",
             customerName: customerName || undefined,
-            items: qbItems.length > 0 ? qbItems : [{ description: `Invoice ${invoiceNumber}`, amount: total, quantity: 1 }],
+            items: qbItems.length > 0 ? qbItems : [{ description: `Invoice ${invoiceNumber}`, unitPrice: total, quantity: 1 }],
             dueDate: dueDate || undefined,
             memo: `ERP Invoice ${invoiceNumber}`,
           },
