@@ -1178,8 +1178,10 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
 // ─── Create Invoice ───────────────────────────────────────────────
 
 async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
-  const config = await getQBConfig(supabase, userId);
-  const companyId = await getUserCompanyId(supabase, userId);
+  // Support x-qb-user-id override for public acceptance flows (service-role callers)
+  const effectiveUserId = (body._qbUserId as string) || userId;
+  const config = await getQBConfig(supabase, effectiveUserId);
+  const companyId = await getUserCompanyId(supabase, effectiveUserId);
   const { orderId, dueDate, memo, taxCodeRef, salesTermRef, discountPercent, shippingAmount, classRef, departmentRef, dedupKey } = body as {
     orderId?: string;
     dueDate?: string; memo?: string; taxCodeRef?: string; salesTermRef?: string;
@@ -1189,7 +1191,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   };
 
   // Accept both "lineItems" and "items" as parameter names
-  let lineItems = (body.lineItems || body.items) as { description: string; amount: number; quantity?: number; serviceId?: string }[] | undefined;
+  let lineItems = (body.lineItems || body.items) as { description: string; amount?: number; unitPrice?: number; quantity?: number; serviceId?: string }[] | undefined;
   let customerId = body.customerId as string | undefined;
   const customerName = body.customerName as string | undefined;
 
@@ -1238,7 +1240,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
       .from("customers")
       .select("quickbooks_id, id")
       .eq("company_id", companyId)
-      .ilike("company_name", customerName)
+      .or(`company_name.ilike.${customerName},name.ilike.${customerName}`)
       .not("quickbooks_id", "is", null)
       .limit(1)
       .maybeSingle();
@@ -1247,14 +1249,14 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     } else {
       // 2. Search QuickBooks by display name
       try {
-        const searchResult = await qbFetch(config, `query?query=select * from Customer where DisplayName = '${customerName.replace(/'/g, "\\'")}'`);
-        const qbCustomers = searchResult?.QueryResponse?.Customer;
+        const searchResult = await qbFetch(config, `query?query=select * from Customer where DisplayName = '${customerName.replace(/'/g, "\\'")}'`) as Record<string, any>;
+        const qbCustomers = searchResult?.QueryResponse?.Customer as any[] | undefined;
         if (qbCustomers && qbCustomers.length > 0) {
-          customerId = qbCustomers[0].Id;
+          customerId = String(qbCustomers[0].Id);
         } else {
           // 3. Create customer in QB
-          const newCust = await qbFetch(config, "customer", "POST", { DisplayName: customerName });
-          customerId = newCust?.Id;
+          const newCust = await qbFetch(config, "customer", { method: "POST", body: JSON.stringify({ DisplayName: customerName }) }) as Record<string, any>;
+          customerId = String(newCust?.Customer?.Id || newCust?.Id || "");
         }
       } catch (e) {
         console.warn("[create-invoice] QB customer lookup/create failed:", e);
@@ -1269,17 +1271,23 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   const qbConfig = await getCompanyQBConfig(supabase, companyId);
   const effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || "TAX";
 
-  const lines: Record<string, unknown>[] = lineItems.map(item => ({
-    DetailType: "SalesItemLineDetail",
-    Amount: item.amount * (item.quantity || 1),
-    Description: item.description,
-    SalesItemLineDetail: {
-      Qty: item.quantity || 1,
-      UnitPrice: item.amount,
-      TaxCodeRef: { value: effectiveTaxCode },
-      ...(item.serviceId && { ItemRef: { value: item.serviceId } }),
-    },
-  }));
+  // Normalize line items: accept either unitPrice or legacy amount
+  const lines: Record<string, unknown>[] = lineItems.map(item => {
+    const qty = item.quantity || 1;
+    // If unitPrice is provided, use it directly; otherwise treat amount as unit price
+    const unitPrice = item.unitPrice ?? item.amount ?? 0;
+    return {
+      DetailType: "SalesItemLineDetail",
+      Amount: unitPrice * qty,
+      Description: item.description,
+      SalesItemLineDetail: {
+        Qty: qty,
+        UnitPrice: unitPrice,
+        TaxCodeRef: { value: effectiveTaxCode },
+        ...(item.serviceId && { ItemRef: { value: item.serviceId } }),
+      },
+    };
+  });
 
   // Add discount line if provided
   if (discountPercent && discountPercent > 0) {
