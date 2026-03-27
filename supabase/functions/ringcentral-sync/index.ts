@@ -616,7 +616,7 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
   );
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   console.log("ringcentral-sync invoked", new Date().toISOString());
 
   if (req.method === "OPTIONS") {
