@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useExtractSessions, useExtractRows } from "@/hooks/useExtractSessions";
 import { useShapeSchematics } from "@/hooks/useShapeSchematics";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
