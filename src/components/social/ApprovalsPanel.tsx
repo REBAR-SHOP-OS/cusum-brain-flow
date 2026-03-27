@@ -87,7 +87,6 @@ export function ApprovalsPanel() {
                             {post.page_name}
                           </span>
                         )}
-                        </Badge>
                         {isOverdue && (
                           <Badge variant="destructive" className="text-[10px]">Overdue</Badge>
                         )}
