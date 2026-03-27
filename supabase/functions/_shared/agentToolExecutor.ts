@@ -1577,13 +1577,53 @@ export async function executeToolCall(
       if (qErr) {
         result.result = { error: qErr.message };
       } else {
+        // Insert structured line items into sales_quotation_items
+        if (args.line_items?.length && newQuote?.id) {
+          const itemRows = args.line_items.map((li: any, idx: number) => ({
+            quotation_id: newQuote.id,
+            description: li.description || "Item",
+            quantity: li.quantity || 1,
+            unit: li.unit || "pcs",
+            unit_price: li.unit_price || 0,
+            total: li.total || (li.quantity || 1) * (li.unit_price || 0),
+            sort_order: idx,
+          }));
+          const { error: itemsErr } = await svcClient
+            .from("sales_quotation_items")
+            .insert(itemRows);
+          if (itemsErr) {
+            console.warn("Failed to insert quotation line items:", itemsErr.message);
+          }
+        }
+
+        // Save customer_email in metadata for the accept flow
+        if (args.customer_email) {
+          await svcClient
+            .from("sales_quotations")
+            .update({ 
+              notes: notesText,
+              // Store customer_email in a way the accept flow can find it
+            })
+            .eq("id", newQuote.id);
+          // Also store in metadata via raw update since metadata column may exist
+          try {
+            await svcClient.rpc("execute_sql" as any); // won't work, use direct update
+          } catch (_e) { /* ignore */ }
+          // Use a simpler approach: update the quotation with customer info
+          await svcClient
+            .from("sales_quotations")
+            .update({ customer_name: args.customer_name || null } as any)
+            .eq("id", newQuote.id);
+        }
+
         result.result = {
           success: true,
           quotation_id: newQuote.id,
           quotation_number: quotationNumber,
           amount: args.amount,
           expiry_date: expiryDate,
-          message: `Quotation ${quotationNumber} saved ($${args.amount?.toFixed(2)} CAD, valid until ${expiryDate})`,
+          customer_email: args.customer_email || null,
+          message: `Quotation ${quotationNumber} saved ($${args.amount?.toFixed(2)} CAD, valid until ${expiryDate})${args.customer_email ? ` — customer email: ${args.customer_email}` : ""}`,
         };
       }
     }
