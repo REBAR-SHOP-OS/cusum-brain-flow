@@ -149,8 +149,8 @@ Deno.serve((req) =>
           .select("status")
           .eq("id", post.id)
           .single();
-        if (freshPost?.status === "published" || freshPost?.status === "publishing") {
-          console.log(`[social-cron-publish] Skipping ${post.id} — status is already ${freshPost.status}`);
+        if (["published", "publishing", "declined", "failed"].includes(freshPost?.status)) {
+          console.log(`[social-cron-publish] Skipping ${post.id} — status is ${freshPost.status}`);
           continue;
         }
 
