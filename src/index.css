@@ -249,6 +249,15 @@
     margin: 15mm;
   }
 
+  /* Document reset for label printing */
+  html, body, #root {
+    width: 4in !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
   /* Hide app chrome & non-print elements */
   body > *:not(#root) { display: none !important; }
   nav, header, aside,
@@ -258,14 +267,32 @@
     display: none !important;
   }
 
+  /* Kill ALL layout wrappers */
+  .flex, .grid, .overflow-auto, .overflow-hidden,
+  [data-radix-scroll-area-viewport],
+  [class*="ScrollArea"], [class*="scroll-area"] {
+    display: block !important;
+    overflow: visible !important;
+    width: auto !important;
+    height: auto !important;
+  }
+
+  * {
+    overflow: visible !important;
+  }
+
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+
   /* ── Zebra rebar tag labels ── */
   .rebar-tag {
-    display: flex !important;
-    flex-direction: column !important;
+    position: static !important;
+    float: none !important;
+    display: block !important;
     width: 4in !important;
-    min-height: 6in !important;
-    max-height: 6in !important;
-    margin: 0 !important;
+    height: 6in !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     border: 1px solid #000 !important;
     border-radius: 0 !important;
@@ -274,6 +301,7 @@
     box-shadow: none !important;
     overflow: hidden !important;
     page-break-after: always;
+    break-after: page;
     page-break-inside: avoid;
   }
 
