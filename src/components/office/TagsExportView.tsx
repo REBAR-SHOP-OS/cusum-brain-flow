@@ -253,8 +253,8 @@ export function TagsExportView() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="px-6 py-4 flex items-center justify-between border-b border-border">
+      {/* Header — hidden in print */}
+      <div className="no-print-tag px-6 py-4 flex items-center justify-between border-b border-border">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">

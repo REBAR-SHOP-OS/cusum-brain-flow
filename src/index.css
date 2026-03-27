@@ -240,11 +240,6 @@
    ============================================ */
 @media print {
   @page {
-    size: auto;
-    margin: 10mm;
-  }
-
-  @page zebra {
     size: 4in 6in;
     margin: 0;
   }
@@ -254,23 +249,22 @@
     margin: 15mm;
   }
 
-  body * { visibility: hidden !important; }
-
-  /* Zebra label prints */
-  .rebar-tag {
-    page: zebra;
+  /* Hide app chrome & non-print elements */
+  body > *:not(#root) { display: none !important; }
+  nav, header, aside,
+  [data-sidebar], [role="navigation"],
+  .no-print-tag,
+  .scroll-area-scrollbar {
+    display: none !important;
   }
 
-  .rebar-tag,
-  .rebar-tag * {
-    visibility: visible !important;
-  }
-
+  /* ── Zebra rebar tag labels ── */
   .rebar-tag {
-    position: relative !important;
+    display: flex !important;
+    flex-direction: column !important;
     width: 4in !important;
-    height: 6in !important;
-    max-width: none !important;
+    min-height: 6in !important;
+    max-height: 6in !important;
     margin: 0 !important;
     padding: 0 !important;
     border: 1px solid #000 !important;
@@ -283,6 +277,11 @@
     page-break-inside: avoid;
   }
 
+  .rebar-tag,
+  .rebar-tag * {
+    visibility: visible !important;
+  }
+
   .rebar-tag * {
     color: #000 !important;
     border-color: #000 !important;
@@ -293,7 +292,7 @@
   .rebar-tag .bg-white { background: #fff !important; }
   .rebar-tag img { image-rendering: pixelated; }
 
-  /* Driver dropoff / delivery packing slip prints */
+  /* ── Driver dropoff / delivery packing slip ── */
   .driver-dropoff-print {
     page: a4;
   }
