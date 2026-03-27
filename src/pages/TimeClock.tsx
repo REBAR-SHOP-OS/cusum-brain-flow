@@ -186,12 +186,7 @@ export default function TimeClock() {
     face.reset();
     setAutoPunchCountdown(0);
 
-    // Auto-reset kiosk for next person
-    if (kioskMode) {
-      setTimeout(() => {
-        handleScan();
-      }, 4000);
-    }
+    // Kiosk resets — user must tap "Scan Face" for next person
   };
 
   // Build status map
