@@ -1632,6 +1632,22 @@ export function ProVideoEditor({
         onClose={() => setEditingOverlay(null)}
       />
 
+      {/* Voiceover Dialog */}
+      <VoiceoverDialog
+        open={voiceoverDialogOpen}
+        onClose={() => setVoiceoverDialogOpen(false)}
+        onGenerate={handleGenerateVoiceover}
+        generating={generatingVoiceover}
+      />
+
+      {/* Subtitle Dialog */}
+      <SubtitleDialog
+        open={subtitleDialogOpen}
+        onClose={() => setSubtitleDialogOpen(false)}
+        sceneId={storyboard[selectedSceneIndex]?.id || ""}
+        onAdd={handleAddSubtitle}
+      />
+
       {/* Hidden audio file input */}
       <input
         ref={audioUploadRef}
