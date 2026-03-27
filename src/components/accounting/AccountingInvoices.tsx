@@ -373,6 +373,7 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
             </Table>
           )}
         </CardContent>
+      </Card>
 
       <ConfirmActionDialog
         open={!!sendTarget}
