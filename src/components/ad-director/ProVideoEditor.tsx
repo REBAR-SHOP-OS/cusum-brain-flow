@@ -29,6 +29,8 @@ import { ScriptTab } from "./editor/ScriptTab";
 import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
 import { TextOverlayDialog } from "./editor/TextOverlayDialog";
 import { AudioPromptDialog, type AudioPromptResult } from "./editor/AudioPromptDialog";
+import { VoiceoverDialog, type VoiceoverResult } from "./editor/VoiceoverDialog";
+import { SubtitleDialog } from "./editor/SubtitleDialog";
 import { EditOverlayDialog } from "./editor/EditOverlayDialog";
 import { TextTab } from "./editor/TextTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
