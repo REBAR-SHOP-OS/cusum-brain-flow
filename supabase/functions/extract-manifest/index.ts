@@ -422,7 +422,13 @@ Rules:
         }
 
         // Save rows to DB
-        const items = extractedData.items || [];
+        let items = extractedData.items || [];
+
+        // Deterministic dimension overlay for spreadsheets — bypass AI for dim columns
+        if (isSpreadsheet && parsedWorkbook && items.length > 0) {
+          console.log(`[extract-manifest] Applying deterministic dim overlay for ${items.length} items`);
+          items = overlaySheetDims(parsedWorkbook, items);
+        }
 
         // Detect unit system from AI response — check if values contain imperial patterns
         let detectedUnitSystem = "metric";
