@@ -61,9 +61,8 @@ export function FirstTimeRegistration({ captureFrame, onComplete, onCancel }: Fi
   const registerNew = async (trimmedName: string) => {
     setStep("submitting");
     try {
-      const faceBase64 = captureFrame();
       const { data, error } = await supabase.functions.invoke("kiosk-register", {
-        body: { name: trimmedName, faceBase64 },
+        body: { name: trimmedName },
       });
       if (error || data?.error) throw new Error(data?.error || "Registration failed");
 
@@ -81,9 +80,8 @@ export function FirstTimeRegistration({ captureFrame, onComplete, onCancel }: Fi
   const handleSelectCandidate = async (candidate: Candidate) => {
     setStep("submitting");
     try {
-      const faceBase64 = captureFrame();
       const { data, error } = await supabase.functions.invoke("kiosk-register", {
-        body: { name: candidate.full_name, faceBase64, existingProfileId: candidate.id },
+        body: { name: candidate.full_name, existingProfileId: candidate.id },
       });
       if (error || data?.error) throw new Error(data?.error || "Registration failed");
 

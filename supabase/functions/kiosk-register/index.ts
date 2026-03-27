@@ -3,7 +3,7 @@ import { corsHeaders } from "../_shared/auth.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { name, faceBase64, existingProfileId } = ctx.body;
+    const { name, existingProfileId } = ctx.body;
     if (!name || name.trim().length < 2) {
       return new Response(JSON.stringify({ error: "Name is required (min 2 chars)" }), {
         status: 400,
@@ -43,32 +43,6 @@ Deno.serve((req) =>
           });
         }
         profileId = profile.id;
-      }
-    }
-
-    // Upload face photo & create enrollment (cap at 5)
-    if (faceBase64) {
-      const { count: enrollCount } = await ctx.serviceClient
-        .from("face_enrollments")
-        .select("*", { count: "exact", head: true })
-        .eq("profile_id", profileId)
-        .eq("is_active", true);
-
-      if ((enrollCount || 0) < 5) {
-        const filePath = `${profileId}/enroll-${Date.now()}.jpg`;
-        const byteArray = Uint8Array.from(atob(faceBase64), (c) => c.charCodeAt(0));
-
-        const { error: uploadErr } = await ctx.serviceClient.storage
-          .from("face-enrollments")
-          .upload(filePath, byteArray, { contentType: "image/jpeg" });
-
-        if (!uploadErr) {
-          await ctx.serviceClient.from("face_enrollments").insert({ profile_id: profileId, photo_url: filePath });
-        } else {
-          console.error("[kiosk-register] upload error:", uploadErr);
-        }
-      } else {
-        console.log("[kiosk-register] enrollment cap reached for profile:", profileId);
       }
     }
 
