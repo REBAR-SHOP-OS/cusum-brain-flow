@@ -11,6 +11,7 @@ import {
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
   Palette, Film, Type, LayoutGrid, X,
+  Mic, Captions,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -28,6 +29,8 @@ import { ScriptTab } from "./editor/ScriptTab";
 import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
 import { TextOverlayDialog } from "./editor/TextOverlayDialog";
 import { AudioPromptDialog, type AudioPromptResult } from "./editor/AudioPromptDialog";
+import { VoiceoverDialog, type VoiceoverResult } from "./editor/VoiceoverDialog";
+import { SubtitleDialog } from "./editor/SubtitleDialog";
 import { EditOverlayDialog } from "./editor/EditOverlayDialog";
 import { TextTab } from "./editor/TextTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
@@ -35,7 +38,7 @@ import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 
-type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor";
+type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle";
 
 interface ProVideoEditorProps {
   clips: ClipOutput[];
@@ -190,6 +193,14 @@ export function ProVideoEditor({
       setAudioPromptOpen(true);
       return;
     }
+    if (tab === "voiceover") {
+      setVoiceoverDialogOpen(true);
+      return;
+    }
+    if (tab === "subtitle") {
+      setSubtitleDialogOpen(true);
+      return;
+    }
     if (activeTab === tab) {
       setPanelOpen(prev => !prev);
     } else {
@@ -242,6 +253,51 @@ export function ProVideoEditor({
       setGeneratingAudio(false);
     }
   }, [toast]);
+
+  const handleGenerateVoiceover = useCallback(async (result: VoiceoverResult) => {
+    setGeneratingVoiceover(true);
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: result.text, voiceId: result.voiceId, speed: result.speed }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Voiceover generation failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      setAudioTracks([{
+        sceneId: "voiceover-generated",
+        label: "🎙️ Voiceover",
+        audioUrl,
+        kind: "voiceover",
+      }]);
+
+      setVoiceoverDialogOpen(false);
+      toast({ title: "✅ صدای گوینده با موفقیت تولید شد" });
+    } catch (err: any) {
+      console.error("Voiceover generation error:", err);
+      toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingVoiceover(false);
+    }
+  }, [toast]);
+
+  const handleAddSubtitle = useCallback((overlay: VideoOverlay) => {
+    setOverlays(prev => [...prev, overlay]);
+    toast({ title: "✅ زیرنویس اضافه شد" });
+  }, [toast]);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -259,6 +315,9 @@ export function ProVideoEditor({
   const audioUploadRef = useRef<HTMLInputElement>(null);
   const [audioPromptOpen, setAudioPromptOpen] = useState(false);
   const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [voiceoverDialogOpen, setVoiceoverDialogOpen] = useState(false);
+  const [generatingVoiceover, setGeneratingVoiceover] = useState(false);
+  const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
 
   const handleUploadAudio = useCallback(() => {
     audioUploadRef.current?.click();
@@ -1501,6 +1560,8 @@ export function ProVideoEditor({
           { id: "script", label: "Script", icon: <FileText className="w-3.5 h-3.5" /> },
           { id: "brand-kit", label: "Brand Kit", icon: <Palette className="w-3.5 h-3.5" /> },
           { id: "card-editor", label: "Card", icon: <LayoutGrid className="w-3.5 h-3.5" /> },
+          { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
+          { id: "subtitle", label: "Subtitle", icon: <Captions className="w-3.5 h-3.5" /> },
         ]}
         activeSidebarTab={activeTab}
         onSidebarTabSelect={handleSetActiveTab}
@@ -1569,6 +1630,22 @@ export function ProVideoEditor({
         overlay={editingOverlay}
         onSave={(id, newContent) => setOverlays(prev => prev.map(o => o.id === id ? { ...o, content: newContent } : o))}
         onClose={() => setEditingOverlay(null)}
+      />
+
+      {/* Voiceover Dialog */}
+      <VoiceoverDialog
+        open={voiceoverDialogOpen}
+        onClose={() => setVoiceoverDialogOpen(false)}
+        onGenerate={handleGenerateVoiceover}
+        generating={generatingVoiceover}
+      />
+
+      {/* Subtitle Dialog */}
+      <SubtitleDialog
+        open={subtitleDialogOpen}
+        onClose={() => setSubtitleDialogOpen(false)}
+        sceneId={storyboard[selectedSceneIndex]?.id || ""}
+        onAdd={handleAddSubtitle}
       />
 
       {/* Hidden audio file input */}
