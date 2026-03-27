@@ -30,15 +30,21 @@ const MASS_PER_M: Record<string, number> = {
 function parseWeightSummaryFallback(text: string): EstimationItemInput[] {
   const items: EstimationItemInput[] = [];
 
+  // Detect if document uses lbs/pounds instead of kg
+  const isImperial = /\b(lbs|pounds|Total\s*lbs|Black\s*wgt|Weight\s*\(lbs\))\b/i.test(text);
+  const lbsToKgFactor = isImperial ? 0.453592 : 1;
+  if (isImperial) console.log("Fallback parser: detected IMPERIAL (lbs) units — converting to kg");
+
   // Pattern 1: Look for bar size totals like "10M" followed by a weight number
   // Matches patterns like: "10M = 261.74 kg", "15M: 18,657.43", "20M 25858.14 kg"
-  const barSizePattern = /\b(10|15|20|25|30|35)\s*M\b[^0-9]*?([\d,]+\.?\d*)\s*(?:kg|Kg|KG)?/gi;
+  const barSizePattern = /\b(10|15|20|25|30|35)\s*M\b[^0-9]*?([\d,]+\.?\d*)\s*(?:kg|Kg|KG|lbs|Lbs|LBS)?/gi;
   let match;
   const barTotals = new Map<string, number>();
 
   while ((match = barSizePattern.exec(text)) !== null) {
     const barSize = `${match[1]}M`;
-    const weight = parseFloat(match[2].replace(/,/g, ""));
+    const rawWeight = parseFloat(match[2].replace(/,/g, ""));
+    const weight = rawWeight * lbsToKgFactor;
     if (weight > 0 && weight < 10_000_000) {
       // Keep the largest weight found for each bar size (likely the total)
       const existing = barTotals.get(barSize) || 0;
