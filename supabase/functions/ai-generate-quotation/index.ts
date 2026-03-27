@@ -1,6 +1,9 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
+/** Strip commas, units, spaces from numeric strings */
+const toNum = (v: unknown): number => Number(String(v ?? '').replace(/,/g, '').replace(/[^\d.-]/g, '')) || 0;
+
 // Hardcoded fallback pricing config (Canadian rebar industry standard)
 const FALLBACK_PRICING_CONFIG = {
   cage_pricing_rule: {
@@ -133,7 +136,7 @@ Deno.serve((req) =>
 
     for (const i of bomItems) {
       const barSize = i.bar_size || "unknown";
-      const weightKg = Number(i.weight_kg || 0);
+      const weightKg = toNum(i.weight_kg);
       const isCage = (i.element_type || "").toLowerCase().includes("cage");
 
       if (isCage) {
@@ -145,7 +148,7 @@ Deno.serve((req) =>
       if (!barSizeGroups[barSize]) {
         barSizeGroups[barSize] = { count: 0, total_weight_kg: 0, items: [] };
       }
-      barSizeGroups[barSize].count += Number(i.quantity || 0);
+      barSizeGroups[barSize].count += toNum(i.quantity);
       barSizeGroups[barSize].total_weight_kg += weightKg;
       barSizeGroups[barSize].items.push({
         element: i.element_ref || i.element_type,
@@ -155,7 +158,7 @@ Deno.serve((req) =>
       });
     }
 
-    const totalWeightKg = bomItems.reduce((s, i) => s + Number(i.weight_kg || 0), 0);
+    const totalWeightKg = bomItems.reduce((s, i) => s + toNum(i.weight_kg), 0);
     const scrapPct = Number(scrap_percent ?? pricingConfig.scrap_percentage ?? pricingConfig.default_scrap_percent ?? 15);
     const totalWithScrap = totalWeightKg * (1 + scrapPct / 100);
     const totalTonnes = totalWithScrap / 1000;

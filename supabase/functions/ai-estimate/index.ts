@@ -14,6 +14,9 @@ import * as XLSX from "npm:xlsx@0.18.5";
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
+/** Strip commas, units (kg, KG), spaces and other non-numeric chars before parsing */
+const toNum = (v: unknown): number => Number(String(v ?? '').replace(/,/g, '').replace(/[^\d.-]/g, '')) || 0;
+
 // Mass per meter lookup for deterministic fallback (kg/m)
 const MASS_PER_M: Record<string, number> = {
   "10M": 0.785, "15M": 1.570, "20M": 2.355, "25M": 3.925, "30M": 5.495, "35M": 7.850,
@@ -201,13 +204,13 @@ function parseSpreadsheetToItems(workbook: XLSX.WorkBook): EstimationItemInput[]
       const barSize = normalizeBarSize(rawSize);
       if (!barSize) continue;
 
-      const quantity = colMap.qty >= 0 ? (parseInt(String(row[colMap.qty] ?? "0")) || 0) : 1;
+      const quantity = colMap.qty >= 0 ? (toNum(row[colMap.qty]) || 1) : 1;
       if (quantity <= 0) continue;
 
-      const cutLengthRaw = colMap.length >= 0 ? (parseFloat(String(row[colMap.length] ?? "0")) || 0) : 0;
+      const cutLengthRaw = colMap.length >= 0 ? toNum(row[colMap.length]) : 0;
       const cutLengthMm = cutLengthRaw > 100 ? cutLengthRaw : cutLengthRaw * 1000;
 
-      const weightRaw = colMap.weight >= 0 ? (parseFloat(String(row[colMap.weight] ?? "0")) || 0) : 0;
+      const weightRaw = colMap.weight >= 0 ? toNum(row[colMap.weight]) : 0;
       const massPerM = MASS_PER_M[barSize] || 1.570;
       const weightKg = weightRaw > 0 ? weightRaw : Math.round(quantity * (cutLengthMm / 1000) * massPerM * 100) / 100;
 
@@ -614,8 +617,8 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
 
     for (const input of validItems) {
       // Hardened null-safe defaults — catches null, undefined, NaN, empty strings
-      input.quantity = Number(input.quantity) || 1;
-      input.cut_length_mm = Number(input.cut_length_mm) || 0;
+      input.quantity = toNum(input.quantity) || 1;
+      input.cut_length_mm = toNum(input.cut_length_mm) || 0;
 
       const std = standardsMap.get(input.bar_size);
       if (!std) {
@@ -639,7 +642,7 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
       const result = calculateItem(input, std, p);
 
       // Preserve AI-provided weight when calculation produced zero (e.g. summary PDFs with no cut_length)
-      const aiWeight = (input as any).weight_kg;
+      const aiWeight = toNum((input as any).weight_kg);
       if (aiWeight && aiWeight > 0 && result.weight_kg === 0) {
         result.weight_kg = Math.round(aiWeight * 1000) / 1000;
         const materialCost = p?.material_cost_per_kg ?? 0;
