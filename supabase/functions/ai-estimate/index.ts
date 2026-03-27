@@ -210,7 +210,7 @@ function parseSpreadsheetToItems(workbook: XLSX.WorkBook): EstimationItemInput[]
       const cutLengthRaw = colMap.length >= 0 ? toNum(row[colMap.length]) : 0;
       const cutLengthMm = cutLengthRaw > 100 ? cutLengthRaw : cutLengthRaw * 1000;
 
-      const weightRaw = colMap.weight >= 0 ? (parseFloat(String(row[colMap.weight] ?? "0")) || 0) : 0;
+      const weightRaw = colMap.weight >= 0 ? toNum(row[colMap.weight]) : 0;
       const massPerM = MASS_PER_M[barSize] || 1.570;
       const weightKg = weightRaw > 0 ? weightRaw : Math.round(quantity * (cutLengthMm / 1000) * massPerM * 100) / 100;
 
