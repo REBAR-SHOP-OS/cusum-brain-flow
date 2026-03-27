@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useExtractRows } from "@/hooks/useExtractSessions";
 import { useShapeSchematics } from "@/hooks/useShapeSchematics";
+import logoCoin from "@/assets/logo-coin.png";
 
 /* ── Weight calc ── */
 const MASS_KG_PER_M: Record<string, number> = {
