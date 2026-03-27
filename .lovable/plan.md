@@ -1,89 +1,79 @@
 
 
-# Add Colored Draggable Bars for Text & Audio on Timeline
+# Fix Missing LENGTH and DIMS in Extract Line Items
 
-## What
-Add two new track rows below the Video track in the timeline: a **Text track** (showing text overlays as colored bars) and an **Audio track** (showing voiceover/music items as colored bars). Each bar is draggable to reposition across scenes.
+## Problem
+After extracting an imperial (ft-in) XLSX file, **all LENGTH and DIMS columns show "—"** (empty). The mapping panel warning confirms: "Cut Length (mm): all values empty".
 
-## Current State
-- `TimelineBar.tsx` already receives `textOverlays` and `audioTracks` as props
-- Drag-to-reposition logic (`handleItemDragStart`, `onMoveOverlay`, `onMoveAudioTrack`) is fully wired
-- But no visual track rows exist — only the Video row is rendered
+Two root causes:
 
-## Plan
+1. **`overlaySheetDims` ignores `total_length`** — it deterministically reads dimension columns A–R from the XLSX but does NOT read the "Cut Length" / "Total Length" column. When the AI fails to parse imperial values, there's no fallback.
 
-### File: `src/components/ad-director/editor/TimelineBar.tsx`
+2. **AI returns null for imperial ft-in values** — the prompt says `"total_length": number in mm` but the source contains `3'-5"` style values. The AI either can't convert or returns nulls. Similarly for dimensions.
 
-**After the Video track `</div>` (after line ~536), add two new track rows:**
+## Solution
 
-#### 1. Text Overlay Track Row
-- Left label: `VolumeControl` or simple icon label showing "Text" with `Type` icon
-- Track area: Map over `textOverlays`, compute each bar's `left%` and `width%` based on its `sceneId` matching `cumulativeStarts`/scene duration
-- Bar style: **Purple/violet** colored rounded bar (`bg-violet-500/70`) with truncated text content, 16px tall
-- Each bar has `onMouseDown` → `handleItemDragStart("text", overlay.id, leftPct, widthPct)`
-- When `draggedItemId === overlay.id`, apply `itemDragOffsetPx` as a `translateX` transform
-- Click → `onEditOverlay?.(overlay)`
-- Delete button on hover
+### File: `supabase/functions/extract-manifest/index.ts`
 
-#### 2. Audio Track Row
-- Left label: "Audio" with `Music`/`Mic` icon
-- Track area: Map over `audioTracks`, compute position from `sceneId`
-- Bar style: **Teal/cyan** for voiceover (`bg-teal-500/70`), **amber** for music (`bg-amber-500/70`), 16px tall
-- Each bar has `onMouseDown` → `handleItemDragStart("audio", String(index), leftPct, widthPct)`
-- When dragged, apply offset transform
-- Click → volume popover or edit action
-- Delete button on hover
+#### Change 1: Extend `overlaySheetDims` to also overlay `total_length`
 
-#### Position Calculation (shared helper)
+Add header matching for "Cut Length", "Total Length", "Length", "CutLength", "TOTAL LENGTH" etc. in the same header row scan. When found, read the column value for each item and assign it as `total_length` using `parseDimension()` (which already handles ft-in strings like `3'-5"`).
+
+```text
+Current overlaySheetDims flow:
+  Find header row → map dim columns (A-R) → overlay values
+
+New flow:
+  Find header row → map dim columns (A-R) AND length column → overlay all values
+```
+
+Specifically, in the `hRow.forEach` loop (~line 80-83), also check for length-related headers:
 ```ts
-function getItemBarPosition(sceneId: string): { leftPct: number; widthPct: number } {
-  const idx = storyboard.findIndex(s => s.id === sceneId);
-  if (idx < 0) return { leftPct: 0, widthPct: 0 };
-  const leftPct = (cumulativeStarts[idx] / totalDuration) * 100;
-  const dur = getSceneDur(idx);
-  const widthPct = (dur / totalDuration) * 100;
-  return { leftPct, widthPct };
+const normalized = String(c).trim().toUpperCase()
+  .replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+if (["CUT LENGTH", "TOTAL LENGTH", "LENGTH", "CUTLENGTH"].includes(normalized)) {
+  colMap["__LENGTH__"] = i;
 }
 ```
 
-#### Bar Component Structure
-```tsx
-<div className="flex items-center gap-0.5">
-  <span className="w-14 text-[9px] text-muted-foreground flex items-center gap-1">
-    <Type className="w-3 h-3" /> Text
-  </span>
-  <div className="flex-1 h-5 relative rounded bg-muted/20">
-    {textOverlays.map(ov => {
-      const { leftPct, widthPct } = getItemBarPosition(ov.sceneId);
-      const isBeingDragged = draggedItemId === ov.id;
-      return (
-        <div
-          key={ov.id}
-          className="absolute top-0.5 bottom-0.5 rounded-sm bg-violet-500/70 cursor-grab 
-                     hover:bg-violet-500/90 transition-colors flex items-center px-1 group"
-          style={{
-            left: `${leftPct}%`, width: `${widthPct}%`,
-            transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
-            zIndex: isBeingDragged ? 30 : 5,
-          }}
-          onMouseDown={e => handleItemDragStart(e, "text", ov.id, leftPct, widthPct)}
-        >
-          <span className="text-[8px] text-white truncate">{ov.content}</span>
-          {onDeleteOverlay && (
-            <button onClick={e => { e.stopPropagation(); onDeleteOverlay(ov.id); }}
-              className="hidden group-hover:block absolute right-0.5 top-0.5">
-              <Trash2 className="w-2.5 h-2.5 text-white/70" />
-            </button>
-          )}
-        </div>
-      );
-    })}
-  </div>
-</div>
+Then in the items mapping loop (~line 87-97), add:
+```ts
+if (colMap["__LENGTH__"] != null) {
+  const raw = row[colMap["__LENGTH__"]];
+  const parsed = raw != null ? parseDimension(raw) : null;
+  if (parsed != null) it.total_length = parsed;
+}
 ```
 
-Same pattern for audio, with color based on `track.kind`.
+#### Change 2: Fix AI prompt for imperial data
+
+When the session's `unit_system` is known to be imperial (from the upload step), adjust the prompt to say:
+```
+"total_length": number — keep the original value as-is from the document (do NOT convert units)
+```
+
+Instead of `"total_length": number in mm` which confuses the AI when the source is imperial.
+
+#### Change 3: Post-AI fallback parse for string values
+
+After AI returns items but before `overlaySheetDims`, add a pass that converts any string values in `total_length` and dimension fields using `parseDimension()`:
+
+```ts
+// Ensure AI-returned string values are parsed
+items.forEach((item: any) => {
+  if (typeof item.total_length === "string") {
+    item.total_length = parseDimension(item.total_length);
+  }
+  for (const d of DIMS) {
+    if (typeof item[d] === "string") {
+      item[d] = parseDimension(item[d]);
+    }
+  }
+});
+```
+
+This catches cases where the AI returns `"3'-5\""` as a string instead of a number.
 
 ## Files changed
-- `src/components/ad-director/editor/TimelineBar.tsx` — add Text and Audio track rows with colored draggable bars
+- `supabase/functions/extract-manifest/index.ts` — extend `overlaySheetDims` to handle Cut Length column, add string-to-number parse pass, improve prompt for imperial sources
 
