@@ -250,12 +250,14 @@ Rules:
           .update({ progress: 20 })
           .eq("id", sessionId);
 
+        let parsedWorkbook: any = null;
         if (isSpreadsheet) {
           console.log(`Parsing spreadsheet: ${fileName}`);
           const fileResp = await fetch(fileUrl);
           if (!fileResp.ok) throw new Error(`Failed to fetch file: ${fileResp.status}`);
           const fileBytes = new Uint8Array(await fileResp.arrayBuffer());
-          const workbook = XLSX.read(fileBytes, { type: "array" });
+          parsedWorkbook = XLSX.read(fileBytes, { type: "array" });
+          const workbook = parsedWorkbook;
 
           const csvParts: string[] = [];
           for (const sheetName of workbook.SheetNames) {
