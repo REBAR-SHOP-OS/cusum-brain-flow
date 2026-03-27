@@ -237,7 +237,7 @@ export default function TimeClock() {
             <p className="font-medium text-sm truncate">{profile.full_name}</p>
             <p className="text-xs text-muted-foreground">
               {isClockedIn
-                ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}`
+                ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}${totalMins > elapsed! ? ` · Total: ${formatDuration(totalMins)}` : ""}`
                 : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
             </p>
           </div>
@@ -433,6 +433,14 @@ export default function TimeClock() {
                             since {format(new Date(activeEntry.clock_in), "h:mm a")}
                             {" · "}
                             {formatDuration(differenceInMinutes(now, new Date(activeEntry.clock_in)))}
+                            {(() => {
+                              const myTotalMins = allEntries.filter(e => e.profile_id === myProfile?.id).reduce((sum, e) => {
+                                const end = e.clock_out ? new Date(e.clock_out) : now;
+                                return sum + differenceInMinutes(end, new Date(e.clock_in));
+                              }, 0);
+                              const currentElapsed = differenceInMinutes(now, new Date(activeEntry.clock_in));
+                              return myTotalMins > currentElapsed ? ` · Total: ${formatDuration(myTotalMins)}` : "";
+                            })()}
                           </span>
                         </>
                       ) : (
@@ -583,7 +591,7 @@ export default function TimeClock() {
                                     <p className="font-medium text-sm truncate">{profile.full_name}</p>
                                     <p className="text-xs text-muted-foreground">
                                       {isClockedIn
-                                        ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}`
+                                        ? `In since ${format(new Date(clockInTime!), "h:mm a")} · ${formatDuration(elapsed!)}${totalMins > elapsed! ? ` · Total: ${formatDuration(totalMins)}` : ""}`
                                         : totalMins > 0 ? `Worked ${formatDuration(totalMins)} today` : "Not clocked in"}
                                     </p>
                                   </div>
