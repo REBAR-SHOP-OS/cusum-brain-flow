@@ -1,6 +1,9 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
+/** Strip commas, units, spaces from numeric strings */
+const toNum = (v: unknown): number => Number(String(v ?? '').replace(/,/g, '').replace(/[^\d.-]/g, '')) || 0;
+
 // Hardcoded fallback pricing config (Canadian rebar industry standard)
 const FALLBACK_PRICING_CONFIG = {
   cage_pricing_rule: {
