@@ -518,7 +518,7 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
           body: JSON.stringify({
             model: "google/gemini-2.5-pro",
             messages: [{ role: "user", content: contentParts }],
-            max_tokens: 16000,
+            max_tokens: 32000,
             temperature: 0.1,
           }),
         });
