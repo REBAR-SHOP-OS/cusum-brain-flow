@@ -121,6 +121,14 @@ export default function AcceptQuote() {
 
   // Already accepted
   if (quote.pageState === "accepted" || success) {
+    // Auto-redirect to payment link after 3 seconds
+    const paymentLink = invoiceResult?.payment_link;
+    if (paymentLink && success) {
+      setTimeout(() => {
+        window.location.href = paymentLink;
+      }, 3000);
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <div className="max-w-lg text-center space-y-6 bg-white rounded-2xl shadow-lg p-10">
@@ -131,15 +139,18 @@ export default function AcceptQuote() {
               <p className="text-gray-600 text-lg">
                 Invoice <strong>{invoiceResult.invoice_number}</strong> has been created and sent to your email.
               </p>
-              {invoiceResult.payment_link && (
-                <a
-                  href={invoiceResult.payment_link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-4 rounded-lg text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
-                >
-                  💳 Pay Now <ExternalLink className="h-5 w-5" />
-                </a>
+              {paymentLink ? (
+                <>
+                  <p className="text-gray-500 text-sm animate-pulse">Redirecting to payment in 3 seconds...</p>
+                  <a
+                    href={paymentLink}
+                    className="inline-flex items-center gap-2 bg-gradient-to-r from-red-500 to-red-600 text-white px-8 py-4 rounded-lg text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+                  >
+                    💳 Pay Now <ExternalLink className="h-5 w-5" />
+                  </a>
+                </>
+              ) : (
+                <p className="text-gray-500 text-sm">Check your email for payment details.</p>
               )}
             </>
           ) : (

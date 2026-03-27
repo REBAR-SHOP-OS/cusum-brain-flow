@@ -57,7 +57,7 @@ export function LandingFooter() {
               <a href="https://rebar.shop/rebar-fabrication/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Fabrication</a>
               <a href="https://rebar.shop/rebar-estimating/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Estimating</a>
               <a href="https://rebar.shop/rebar-detailing-shop-drawings/" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Detailing</a>
-              <a href="https://crm.rebar.shop/contactus" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Contact</a>
+              <a href="https://erp.rebar.shop/contactus" target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Contact</a>
             </div>
           </div>
 

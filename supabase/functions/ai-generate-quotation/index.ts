@@ -305,7 +305,7 @@ Deno.serve((req) =>
     const terms = [
       "Prices valid for 30 days from quote date.",
       "Payment terms: Net 30.",
-      "Full Terms & Conditions: https://www.crm.rebar.shop/terms",
+      "Full Terms & Conditions: https://www.erp.rebar.shop/terms",
     ];
 
     const notesText = [

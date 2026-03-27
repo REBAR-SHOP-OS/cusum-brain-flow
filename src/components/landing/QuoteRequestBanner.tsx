@@ -34,7 +34,7 @@ export function QuoteRequestBanner() {
             <p className="text-sm text-muted-foreground mb-6">
               Upload your structural drawings and our estimators will prepare a detailed quote in <strong>3–7 business days</strong>.
             </p>
-            <a href="https://crm.rebar.shop/contactus" target="_blank" rel="noopener noreferrer">
+            <a href="https://erp.rebar.shop/contactus" target="_blank" rel="noopener noreferrer">
               <Button variant="outline" className="text-sm">
                 Request Estimate <ArrowRight className="w-4 h-4 ml-1" />
               </Button>
