@@ -1,54 +1,54 @@
 
 
-# Add Print, Save PDF & Email-to-Self on Public Quote Page
+# Unify Create Customer + Add Email to Quote Flow
 
-## Overview
-Add three action buttons to the public AcceptQuote page so the customer can **Print**, **Save as PDF**, and **Email the quote to themselves** — all before accepting.
+## Problem
+1. The "Create customer" form in the quotation editor only has Name and Address — no email field
+2. Customer email is never saved in quote metadata (`customer_email`)
+3. When a customer clicks "Accept Quote", the backend fails with "No customer email found for this quotation" because there's no email stored anywhere
 
 ## Changes
 
-### 1. `src/pages/AcceptQuote.tsx` — Add action buttons + email dialog
+### 1. `src/components/accounting/documents/DraftQuotationEditor.tsx`
 
-**Print button**: Uses `window.print()`. Add a print-specific CSS class to hide buttons during print.
+**Add email to create-customer form:**
+- Add `newCustEmail` state variable
+- Add email input field between name and address in the inline create form
+- When creating via `customers` table insert, include `email` field
+- After creating, also store the email in component state
 
-**Save PDF button**: Uses `jsPDF` (already in project) to render the quote data into a branded PDF client-side — reuses the same layout structure visible on screen (header, line items, notes, totals).
+**Add email to customer selection:**
+- Fetch `email` alongside `customer_id, display_name, company_name` from `v_customers_clean`
+- Update `CustomerOption` interface to include `email?: string | null`
+- When a customer is selected, auto-populate `customerEmail` state from the customer record
 
-**Email to Self button**: Opens a small inline dialog asking for the customer's email address, then calls a new `send_quote_copy` action on `send-quote-email` edge function that sends a read-only copy (no accept button) to the provided email.
+**Save email in quote metadata:**
+- Add `customer_email` to the metadata object in `handleSave`
+- This ensures the `accept_and_convert` action can resolve the email from `meta.customer_email`
 
-Add three icon buttons (Printer, Download, Mail) in a toolbar row between the header and the quote body.
+**Auto-fill send dialog:**
+- When opening the email dialog, pre-fill `customerEmail` from the stored value
 
-### 2. `supabase/functions/send-quote-email/index.ts` — Add `send_quote_copy` action
+### 2. `supabase/functions/send-quote-email/index.ts`
 
-- Add `"send_quote_copy"` to the Zod action enum
-- New action block that:
-  - Takes `quote_id` + `customer_email` (required for this action)
-  - Builds the same branded quote email as `send_quote` but WITHOUT the "Accept Quote" button
-  - Sends via gmail-send using service role key (no user auth needed — public page)
-  - Does NOT change quote status
+**Store email on send_quote action:**
+- When `send_quote` succeeds, also write `customer_email` into the quote's metadata so it persists for the accept flow
+- This is already partially done via `sales_quotations.customer_email` but `accept_and_convert` also checks `meta.customer_email`
 
-### 3. Print CSS
-Add `@media print` styles in a `<style>` tag or Tailwind `print:hidden` classes to hide the action toolbar and accept section during printing.
+### 3. `supabase/functions/quote-public-view/index.ts`
 
-## UI Layout
+- No changes needed — it already reads from the quote record
+
+## Flow After Fix
 ```text
-┌─────────────────────────────────┐
-│  Rebar.shop  Quotation Review   │
-├─────────────────────────────────┤
-│  QAI-2590     $107,194.19 CAD   │
-│  Customer: ...  Valid Until: .. │
-├─────────────────────────────────┤
-│  [🖨 Print] [📥 Save PDF] [✉ Email]  │  ← NEW toolbar
-├─────────────────────────────────┤
-│  Line items table ...           │
-│  Notes / Terms ...              │
-│  Accept section ...             │
-└─────────────────────────────────┘
+1. User creates/selects customer → email auto-populated
+2. User saves quote → metadata includes customer_email
+3. User sends quote → email stored in both sales_quotations and metadata
+4. Customer clicks Accept → backend resolves email from metadata ✓
+5. Invoice email sent successfully ✓
 ```
 
-## Email Dialog
-Simple inline form: email input + Send button. On submit, calls `send-quote-email` with `action: "send_quote_copy"`.
-
 ## Files Changed
-- `src/pages/AcceptQuote.tsx` — add toolbar, print CSS, PDF generation, email dialog
-- `supabase/functions/send-quote-email/index.ts` — add `send_quote_copy` action
+- `src/components/accounting/documents/DraftQuotationEditor.tsx` — add email field to create form, auto-populate email on customer select, save email in metadata
+- `supabase/functions/send-quote-email/index.ts` — persist customer_email in quote metadata on send
 
