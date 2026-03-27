@@ -617,8 +617,8 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
 
     for (const input of validItems) {
       // Hardened null-safe defaults — catches null, undefined, NaN, empty strings
-      input.quantity = Number(input.quantity) || 1;
-      input.cut_length_mm = Number(input.cut_length_mm) || 0;
+      input.quantity = toNum(input.quantity) || 1;
+      input.cut_length_mm = toNum(input.cut_length_mm) || 0;
 
       const std = standardsMap.get(input.bar_size);
       if (!std) {
