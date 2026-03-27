@@ -148,11 +148,11 @@ function checkDataCoverage(rows: ExtractRow[], mapping: Record<string, string>) 
 }
 
 // ── Build dimensions JSON from row (with unit conversion) ────
-function buildDimensionsJson(row: ExtractRow, factor: number): Record<string, number> {
+function buildDimensionsJson(row: ExtractRow): Record<string, number> {
   const dims: Record<string, number> = {};
   for (const d of DIM_FIELDS) {
     const val = (row as any)[`dim_${d.toLowerCase()}`];
-    if (val != null && val !== 0) dims[d] = Math.round(Number(val) * factor);
+    if (val != null && val !== 0) dims[d] = Math.round(Number(val));
   }
   return dims;
 }
