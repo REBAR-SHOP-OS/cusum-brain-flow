@@ -3,7 +3,7 @@ import { corsHeaders } from "../_shared/auth.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { profileId, faceBase64 } = ctx.body;
+    const { profileId } = ctx.body;
     if (!profileId) {
       return new Response(JSON.stringify({ error: "profileId is required" }), {
         status: 400,
@@ -62,31 +62,6 @@ Deno.serve((req) =>
       action = "clock_in";
     }
 
-    // Auto-enroll face if < 5 active photos
-    if (faceBase64) {
-      try {
-        const { count } = await ctx.serviceClient
-          .from("face_enrollments")
-          .select("*", { count: "exact", head: true })
-          .eq("profile_id", profileId)
-          .eq("is_active", true);
-
-        if ((count || 0) < 5) {
-          const filePath = `${profileId}/auto-${Date.now()}.jpg`;
-          const byteArray = Uint8Array.from(atob(faceBase64), (c) => c.charCodeAt(0));
-
-          const { error: uploadErr } = await ctx.serviceClient.storage
-            .from("face-enrollments")
-            .upload(filePath, byteArray, { contentType: "image/jpeg" });
-
-          if (!uploadErr) {
-            await ctx.serviceClient.from("face_enrollments").insert({ profile_id: profileId, photo_url: filePath });
-          }
-        }
-      } catch (err) {
-        console.error("[kiosk-punch] auto-enroll error:", err);
-      }
-    }
 
     return { action, profile_id: profileId };
   }, {
