@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
 import { DraftInvoiceEditor } from "./documents/DraftInvoiceEditor";
-import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2, Package } from "lucide-react";
+import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2, Package, Trash2 } from "lucide-react";
 import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,17 +53,19 @@ type StatusFilter = "all" | "open" | "overdue" | "paid";
 export function AccountingInvoices({ data, initialSearch }: Props) {
   const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items, payments, qbAction, loadAll } = data;
   const { companyId } = useCompanyId();
-  const { invoices: localInvoices, isLoading: localLoading, generateNumber } = useSalesInvoices();
+  const { invoices: localInvoices, isLoading: localLoading, generateNumber, remove } = useSalesInvoices();
   const [search, setSearch] = useState(initialSearch || "");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
   const [voidTarget, setVoidTarget] = useState<{ id: string; doc: string; syncToken: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SalesInvoice | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState<QBInvoice | null>(null);
   const [sortField, setSortField] = useState<SortField>("DocNumber");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [editorInvoiceId, setEditorInvoiceId] = useState<string | null>(null);
   const [packingSlipInvoice, setPackingSlipInvoice] = useState<QBInvoice | null>(null);
+  const [erpPackingSlip, setErpPackingSlip] = useState<SalesInvoice | null>(null);
 
   const getPackingSlipData = (inv: QBInvoice) => ({
     invoiceNumber: inv.DocNumber,
@@ -342,8 +344,9 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                   <TableHead className="text-base">Customer</TableHead>
                   <TableHead className="text-base">Issued</TableHead>
                   <TableHead className="text-base">Due</TableHead>
-                  <TableHead className="text-base text-right">Amount</TableHead>
+                   <TableHead className="text-base text-right">Amount</TableHead>
                   <TableHead className="text-base">Status</TableHead>
+                  <TableHead className="text-base text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -365,6 +368,24 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                       <TableCell className="text-right font-semibold">{inv.amount ? fmt(inv.amount) : "—"}</TableCell>
                       <TableCell>
                         <Badge className={`${statusStyles[ds] || ""} border-0 text-sm`}>{ds}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm" variant="ghost" className="h-9 w-9 p-0"
+                            title="Print Packing Slip"
+                            onClick={() => setErpPackingSlip(inv)}
+                          >
+                            <Package className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost" className="h-9 w-9 p-0 text-destructive hover:text-destructive"
+                            title="Delete Invoice"
+                            onClick={() => setDeleteTarget(inv)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -397,6 +418,24 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         loading={actionLoading}
       />
 
+      <ConfirmActionDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        title="Delete This Invoice?"
+        description={`This will permanently delete Invoice ${deleteTarget?.invoice_number}.`}
+        variant="destructive"
+        confirmLabel="Yes, Delete"
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          setActionLoading(true);
+          try { await remove.mutateAsync(deleteTarget.id); } finally {
+            setActionLoading(false);
+            setDeleteTarget(null);
+          }
+        }}
+        loading={actionLoading}
+      />
+
       {previewInvoice && (
         <InvoiceEditor
           invoice={previewInvoice}
@@ -426,6 +465,25 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
         <PackingSlipTemplate
           data={getPackingSlipData(packingSlipInvoice)}
           onClose={() => setPackingSlipInvoice(null)}
+        />
+      )}
+
+      {erpPackingSlip && (
+        <PackingSlipTemplate
+          data={{
+            invoiceNumber: erpPackingSlip.invoice_number,
+            invoiceDate: erpPackingSlip.issued_date ? format(new Date(erpPackingSlip.issued_date), "MMM d, yyyy") : new Date().toLocaleDateString(),
+            customerName: erpPackingSlip.customer_name || erpPackingSlip.customer_company || "—",
+            deliveryNumber: "",
+            deliveryDate: "",
+            scope: erpPackingSlip.notes || "",
+            items: [{
+              quantity: 1,
+              size: "—",
+              type: "As per invoice",
+            }],
+          }}
+          onClose={() => setErpPackingSlip(null)}
         />
       )}
     </div>
