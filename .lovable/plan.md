@@ -1,30 +1,24 @@
 
 
-# Restrict Face Memory Button to 3 Specific Users
+# Add Privacy Notice Below Camera Feed in Kiosk Mode
 
-## Problem
-The "Memory" (Brain icon) button on the Face ID Kiosk is currently visible to all users. It must only be visible to: `radin@rebar.shop`, `sattar@rebar.shop`, `neel@rebar.shop`.
+## What
+Add an informational text below the date/time line in the kiosk view, informing users that their photo and name are stored in the app's memory for clock-in/clock-out purposes.
 
-## Fix
-In `src/pages/TimeClock.tsx` (line ~286), wrap the Memory button in a conditional that checks if `user?.email` is one of the 3 allowed emails. If not, the button is not rendered at all.
+## Change
 
-```typescript
-const MEMORY_ACCESS_EMAILS = ["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"];
-const canAccessMemory = MEMORY_ACCESS_EMAILS.includes(user?.email?.toLowerCase() ?? "");
-```
+**File:** `src/pages/TimeClock.tsx` — line 342
 
-Then guard the button and panel:
+After the date/time `<p>` tag, add a notice text in both Persian and English:
+
 ```tsx
-{canAccessMemory && (
-  <Button variant="ghost" size="sm" onClick={() => setShowMemoryPanel(true)}>
-    <Brain className="w-4 h-4" /> Memory
-  </Button>
-)}
-{canAccessMemory && (
-  <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
-)}
+<p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>
+<p className="text-[10px] text-muted-foreground/60 mt-2 text-center max-w-md leading-relaxed">
+  Your photo and name are securely stored in this app's memory for clock-in and clock-out purposes.
+  <br />
+  عکس و نام شما در حافظه این برنامه برای ثبت ورود و خروج ذخیره می‌شود.
+</p>
 ```
 
-## Files Changed
-- **`src/pages/TimeClock.tsx`** — add email whitelist guard around Memory button and FaceMemoryPanel
+This is a single-line addition — no logic changes needed.
 
