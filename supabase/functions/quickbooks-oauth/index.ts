@@ -948,16 +948,7 @@ async function handleSyncInvoices(supabase: ReturnType<typeof createClient>, use
         balance: (invoice.Balance as number) || 0,
         customer_id: customerId,
         company_id: companyId,
-        data: {
-          DocNumber: invoice.DocNumber,
-          TotalAmt: invoice.TotalAmt,
-          DueDate: invoice.DueDate,
-          TxnDate: invoice.TxnDate,
-          CustomerName: custRef?.name,
-          EmailStatus: invoice.EmailStatus,
-          Balance: invoice.Balance,
-          Line: invoice.Line,
-        },
+        data: invoice, // Store full QB object to preserve InvoiceLink and all fields
         last_synced_at: now,
       };
     });
