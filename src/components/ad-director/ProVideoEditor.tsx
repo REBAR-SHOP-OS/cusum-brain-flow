@@ -235,6 +235,10 @@ export function ProVideoEditor({
       setTextVoiceDialogOpen(true);
       return;
     }
+    if (tab === "image") {
+      setImageDialogOpen(true);
+      return;
+    }
     if (activeTab === tab) {
       setPanelOpen(prev => !prev);
     } else {
