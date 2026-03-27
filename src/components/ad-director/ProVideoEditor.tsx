@@ -209,6 +209,10 @@ export function ProVideoEditor({
       setSpeedPopoverOpen(true);
       return;
     }
+    if (tab === "text-voice") {
+      setTextVoiceDialogOpen(true);
+      return;
+    }
     if (activeTab === tab) {
       setPanelOpen(prev => !prev);
     } else {
