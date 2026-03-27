@@ -415,7 +415,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         } catch (_e) { /* stripe_payment_links not available */ }
       }
 
-      // Look up QB payment link from accounting_mirror
+      // Look up QB payment link from accounting_mirror (only real customer-facing links)
       let qbPayUrl = "";
       try {
         const { data: qbMirror } = await supabase
@@ -426,8 +426,9 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           .maybeSingle();
         if (qbMirror) {
           const mirrorData = qbMirror.data as Record<string, unknown>;
-          qbPayUrl = (mirrorData?.InvoiceLink as string) || 
-            `https://app.qbo.intuit.com/app/customerbalance?invoiceId=${qbMirror.quickbooks_id}`;
+          // Only use InvoiceLink — the customerbalance URL is an admin-only link, not for customers
+          const invoiceLink = mirrorData?.InvoiceLink as string | undefined;
+          if (invoiceLink) qbPayUrl = invoiceLink;
         }
       } catch (_e) { /* accounting_mirror not available */ }
 

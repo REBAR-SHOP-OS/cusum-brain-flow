@@ -649,7 +649,7 @@ Deno.serve((req) =>
         console.warn("[accept_and_convert] Failed to rebuild line items for email:", rebuildErr);
       }
 
-      // Look up QB payment link from accounting_mirror
+      // Look up QB payment link from accounting_mirror (only real customer-facing links)
       let qbPaymentUrl = "";
       try {
         const { data: qbMirror } = await svc
@@ -660,8 +660,10 @@ Deno.serve((req) =>
           .maybeSingle();
         if (qbMirror) {
           const mirrorData = qbMirror.data as any;
-          qbPaymentUrl = mirrorData?.InvoiceLink || 
-            `https://app.qbo.intuit.com/app/customerbalance?invoiceId=${qbMirror.quickbooks_id}`;
+          // Only use InvoiceLink — the customerbalance URL is admin-only, not customer-facing
+          if (mirrorData?.InvoiceLink) {
+            qbPaymentUrl = mirrorData.InvoiceLink;
+          }
         }
       } catch (_e) {
         console.warn("QB mirror lookup error:", _e);
