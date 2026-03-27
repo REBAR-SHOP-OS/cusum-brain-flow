@@ -1,25 +1,33 @@
 
 
-# Remove Dashboard Access for ai@rebar.shop
+# Show Cumulative Daily Hours (Not Just Current Session)
 
 ## Problem
-The `ai@rebar.shop` device account currently has access to `/home` (dashboard) via the `RoleGuard` allowed routes list and can see the full dashboard UI. This account is a shared shopfloor kiosk device — it should only access kiosk and shop floor routes.
+When a user is clocked in, the UI only shows the **current session** duration (e.g., "In since 10:33 AM · 23m"). It does not show cumulative hours from previous sessions that same day. If someone clocks out for a break and clocks back in, their earlier hours appear lost from the display.
 
-## Changes
+The `totalMins` calculation already correctly sums all daily entries (including the current open session), but this value is only displayed when the user is clocked **out**. When clocked **in**, only the current session elapsed time is shown.
 
-### 1. `src/components/auth/RoleGuard.tsx`
-- Line 137: Remove `/home` from the `DEVICE_ALLOWED` array
-- Change: `["/shopfloor", "/shop-floor", "/home", "/timeclock", ...]` → `["/shopfloor", "/shop-floor", "/timeclock", "/team-hub", "/settings", "/tasks", "/deliveries"]`
-- When `ai@rebar.shop` tries to access `/home`, it will be redirected to `/shopfloor`
+## Solution
+Show cumulative daily total alongside the current session info when clocked in. Three locations need updating:
 
-### 2. `src/components/layout/AppSidebar.tsx`
-- Already correct — the sidebar for `ai@rebar.shop` only shows "Kiosk" and "Shop Floor" (no Dashboard link). No change needed here.
+### 1. My Status Card (lines 432-436)
+Currently: `since 10:33 AM · 23m`
+After: `since 10:33 AM · 23m · Total today: 2h 29m`
 
-## Result
-- `ai@rebar.shop` is blocked from `/home` dashboard
-- Attempting to visit `/home` redirects to `/shopfloor`
-- Sidebar remains unchanged (already has no Dashboard link)
+Calculate `totalMins` from `entries` (all my daily entries) and display it when clocked in, alongside the current session elapsed.
+
+### 2. Team Status Office Cards (line 239-241)
+Currently when active: `In since 8:27 AM · 2h 29m`
+After: `In since 8:27 AM · 2h 29m (Total: 4h 15m)` — only show total separately if there are multiple sessions
+
+### 3. Kiosk Status Cards (lines 584-587)
+Same logic as Team Status — show cumulative total when clocked in and there are previous sessions.
+
+## Display Logic
+- If clocked in with **only one session today**: show `In since X · elapsed` (no change, totalMins equals elapsed)
+- If clocked in with **multiple sessions today**: show `In since X · elapsed · Total: Xh Ym`
+- If clocked out with hours: show `Worked Xh Ym today` (already works correctly)
 
 ## Files Changed
-- `src/components/auth/RoleGuard.tsx` — remove `/home` from device-allowed routes
+- `src/pages/TimeClock.tsx` — update display in 3 locations to show cumulative daily total
 
