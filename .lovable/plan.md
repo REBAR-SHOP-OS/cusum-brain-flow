@@ -1,20 +1,16 @@
 
 
-# Fix Print Layout: Kill All Layout Wrappers in Print Context
+# Fix Print Layout: Standalone Page Per Tag
 
 ## Problem
-The `.rebar-tag` cards are trapped inside ScrollArea, flex wrappers, and overflow-hidden containers that clip and distort the tags during print. The current print CSS only hides chrome elements but doesn't neutralize the layout wrappers surrounding the tags.
+Tags are still children of flex/scroll wrappers in print, causing layout distortion. Each `.rebar-tag` must render as a standalone page, independent of any parent layout.
 
-## Solution
-Add rules to `src/index.css` `@media print` block that:
+## Changes — `src/index.css` (replace lines 241-293)
 
-1. **Reset `html`, `body`, `#root`** to `width: 4in`, `height: auto`, no margin/padding, `overflow: visible`
-2. **Neutralize all layout wrappers** (`.flex`, `.grid`, `.overflow-auto`, `.overflow-hidden`, scroll-area elements) by forcing `display: block`, `overflow: visible`, `width: auto`, `height: auto`
+Three additions to the existing `@media print` block:
 
-### Changes to `src/index.css` (inside existing `@media print` block, after line 258)
-
+### 1. Document reset
 ```css
-/* Reset document for label printing */
 html, body, #root {
   width: 4in !important;
   height: auto !important;
@@ -22,8 +18,10 @@ html, body, #root {
   padding: 0 !important;
   overflow: visible !important;
 }
+```
 
-/* Kill ALL layout wrappers */
+### 2. Kill all layout wrappers
+```css
 .flex, .grid, .overflow-auto, .overflow-hidden,
 [data-radix-scroll-area-viewport],
 [class*="ScrollArea"], [class*="scroll-area"] {
@@ -34,8 +32,37 @@ html, body, #root {
 }
 ```
 
-This is inserted right after the "hide app chrome" rules and before the `.rebar-tag` rules.
+### 3. Standalone tag (replaces current `.rebar-tag` block)
+```css
+.rebar-tag {
+  position: static !important;
+  float: none !important;
+  display: block !important;
+  width: 4in !important;
+  height: 6in !important;
+  margin: 0 auto !important;
+  padding: 0 !important;
+  border: 1px solid #000 !important;
+  border-radius: 0 !important;
+  background: #fff !important;
+  color: #000 !important;
+  box-shadow: none !important;
+  overflow: hidden !important;
+  page-break-after: always;
+  break-after: page;
+  page-break-inside: avoid;
+}
+```
+
+Key differences from current:
+- `display: block` instead of `flex` — tag becomes a standalone block, not a flex child
+- `position: static` + `float: none` — removes any inherited positioning
+- `height: 6in` fixed (not min/max) — exact label size
+- `break-after: page` — modern page break alongside legacy `page-break-after`
+- `margin: 0 auto` — centers on page
+
+Everything else (hide chrome, visibility rules, driver-dropoff section) stays unchanged.
 
 ## Files Changed
-- `src/index.css` — add wrapper-killing rules to `@media print` block
+- `src/index.css` — rewrite `@media print` rebar-tag rules + add document/wrapper resets
 
