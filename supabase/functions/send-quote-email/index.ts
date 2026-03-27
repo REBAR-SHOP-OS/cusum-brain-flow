@@ -533,7 +533,6 @@ Deno.serve((req) =>
                 quantity: qi.quantity,
                 unit: qi.unit,
                 unit_price: qi.unit_price,
-                total: qi.total,
                 sort_order: qi.sort_order,
               }));
               await svc.from("sales_invoice_items").insert(invoiceItems);
