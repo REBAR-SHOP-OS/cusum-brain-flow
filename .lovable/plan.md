@@ -1,43 +1,27 @@
 
 
-# Fix Timeline: Real Drag Repositioning + Time Ruler
+# Audit, Optimize & Fix — Edge Function Issues
 
-## Problem
-1. Text and Audio bars snap to scene boundaries only — no free-positioning within or across scenes
-2. No time ruler/markers on the video track
+## Issues Found
 
-## Current State
-- Drag logic exists but only moves items between scenes (`onMoveOverlay` changes `sceneId`)
-- Bars always span the full width of their assigned scene — no `startTime`/`endTime` offsets
-- `VideoOverlay` type already has `startTime` and `endTime` fields (optional)
-- `AudioTrackItem` has no `startTime`/`endTime`
+### Issue 1: `ai-estimate` — Client timeout at 120s while server takes 176s
+The AI extraction call to `google/gemini-2.5-pro` with large PDFs takes 120-180s. The client `invokeEdgeFunction` has a 120s timeout, so it aborts before the server finishes (which succeeds at 176s).
 
-## Plan
+**Fix**: Increase client timeout from 120s to 180s in `GenerateQuotationDialog.tsx` line 237. Also switch the AI model from `gemini-2.5-pro` to `gemini-2.5-flash` in `ai-estimate/index.ts` line 519 — Flash is faster for structured extraction and handles this workload in ~60-90s instead of 150-180s, while maintaining extraction quality. Add a retry with `retries: 1` for timeout resilience.
 
-### 1. Add time fields to AudioTrackItem
-In `TimelineBar.tsx` interface, add optional `startTime` and `endTime` to `AudioTrackItem`. Also add callback `onRepositionAudioTrack` for fine-grained time updates.
+### Issue 2: `ringcentral-sync` — `ReferenceError: serve is not defined`
+Line 619 uses `serve(async (req) => {` but never imports or defines `serve`. This is the old Deno pattern — should be `Deno.serve`.
 
-### 2. Add time ruler above video track
-Render a row of tick marks with second labels (0s, 2s, 4s...) above the video track. Ticks are positioned using `(sec / totalDuration) * 100%`. Major ticks every 2s, minor every 1s. Scales with `zoomLevel`.
+**Fix**: Change `serve(async (req) => {` to `Deno.serve(async (req) => {` on line 619.
 
-### 3. Make bars freely draggable with pixel-accurate repositioning
-Currently bars snap to scene boundaries. Change the drag-end handler to:
-- Calculate the exact time position (in seconds) where the bar center lands
-- Determine which scene that time falls into
-- Calculate `startTime` relative to that scene's start
-- Call `onMoveOverlay(id, newSceneId, startTimeSec)` or `onRepositionAudioTrack(index, newSceneId, startTimeSec)`
+### Issue 3: `analyze-feedback-fix` — `Maximum call stack size exceeded`
+Screenshot fetch fails with stack overflow when converting large images to base64 via string concatenation. This is a known issue with large binary data.
 
-### 4. Position bars by absolute time, not scene boundaries
-Change bar rendering from scene-based positioning to time-based:
-- If overlay has `startTime`, position = `(cumulativeStarts[sceneIdx] + startTime) / totalDuration * 100%`
-- Bar width = item duration (e.g. `endTime - startTime` or a default like 3s) rather than full scene width
-- This allows bars to be narrower than scenes and positioned anywhere within them
-
-### 5. Update ProVideoEditor handlers
-- `handleMoveOverlay`: accept optional `startTime` parameter, update overlay's `startTime`
-- Add `handleRepositionAudioTrack`: update audio track's `sceneId` and `startTime`
+**Fix**: In `analyze-feedback-fix/index.ts` (~line 105), replace the recursive/string-concat base64 conversion with chunked array-based conversion using `Uint8Array` and building the base64 string in 8KB chunks.
 
 ## Files Changed
-- `src/components/ad-director/editor/TimelineBar.tsx` — time ruler, free-position drag logic, time-based bar rendering
-- `src/components/ad-director/ProVideoEditor.tsx` — update handlers to accept/store `startTime`
+- `src/components/accounting/GenerateQuotationDialog.tsx` — increase timeout to 180s, add 1 retry
+- `supabase/functions/ai-estimate/index.ts` — switch model to `gemini-2.5-flash` for speed
+- `supabase/functions/ringcentral-sync/index.ts` — fix `serve` → `Deno.serve`
+- `supabase/functions/analyze-feedback-fix/index.ts` — fix stack overflow in base64 conversion
 
