@@ -137,6 +137,104 @@ function rescueAIItems(items: any[]): EstimationItemInput[] {
   return rescued;
 }
 
+// ─── BAR SIZE NORMALIZATION for XLSX parsing ───
+const BAR_SIZE_NORMALIZE: Record<string, string> = {
+  "10": "10M", "10M": "10M", "#3": "10M",
+  "15": "15M", "15M": "15M", "#4": "15M", "#5": "15M",
+  "20": "20M", "20M": "20M", "#6": "20M",
+  "25": "25M", "25M": "25M", "#7": "25M", "#8": "25M",
+  "30": "30M", "30M": "30M", "#9": "30M", "#10": "30M",
+  "35": "35M", "35M": "35M", "#11": "35M",
+};
+
+function normalizeBarSize(raw: string): string | null {
+  const cleaned = raw?.toString().trim().toUpperCase().replace(/\s/g, "");
+  return BAR_SIZE_NORMALIZE[cleaned] ?? null;
+}
+
+/**
+ * Deterministic XLSX/XLS/CSV parser.
+ * Reads rows from a spreadsheet and extracts bar items by detecting
+ * columns with bar sizes, quantities, lengths, and weights.
+ */
+function parseSpreadsheetToItems(workbook: XLSX.WorkBook): EstimationItemInput[] {
+  const items: EstimationItemInput[] = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    if (rows.length < 2) continue;
+
+    // Find header row by looking for key terms
+    let headerIdx = -1;
+    let colMap: Record<string, number> = {};
+
+    for (let i = 0; i < Math.min(15, rows.length); i++) {
+      const row = rows[i];
+      if (!row || !Array.isArray(row)) continue;
+      const cells = row.map((c: any) => String(c ?? "").trim().toLowerCase());
+
+      const sizeIdx = cells.findIndex((c) => ["size", "bar size", "bar_size", "rebar size"].includes(c));
+      const qtyIdx = cells.findIndex((c) => ["qty", "quantity", "no. pcs", "pcs", "no."].includes(c) || c.includes("pcs"));
+      const lengthIdx = cells.findIndex((c) => ["length", "cut length", "total length", "cut_length"].includes(c));
+      const markIdx = cells.findIndex((c) => ["mark", "bar mark", "item"].includes(c));
+      const weightIdx = cells.findIndex((c) => c.includes("weight") || c.includes("mass") || c === "kg");
+      const typeIdx = cells.findIndex((c) => ["type", "bend type", "shape", "shape_code"].includes(c));
+      const dwgIdx = cells.findIndex((c) => c.includes("dwg") || c.includes("drawing") || c.includes("drg") || c.includes("element"));
+
+      if (sizeIdx >= 0 || (qtyIdx >= 0 && lengthIdx >= 0)) {
+        headerIdx = i;
+        colMap = { size: sizeIdx, qty: qtyIdx, length: lengthIdx, mark: markIdx, weight: weightIdx, type: typeIdx, dwg: dwgIdx };
+        break;
+      }
+    }
+
+    if (headerIdx < 0) continue;
+
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length < 2) continue;
+
+      // Try to find bar size
+      const rawSize = colMap.size >= 0 ? String(row[colMap.size] ?? "").trim() : "";
+      const barSize = normalizeBarSize(rawSize);
+      if (!barSize) continue;
+
+      const quantity = colMap.qty >= 0 ? (parseInt(String(row[colMap.qty] ?? "0")) || 0) : 1;
+      if (quantity <= 0) continue;
+
+      const cutLengthRaw = colMap.length >= 0 ? (parseFloat(String(row[colMap.length] ?? "0")) || 0) : 0;
+      const cutLengthMm = cutLengthRaw > 100 ? cutLengthRaw : cutLengthRaw * 1000;
+
+      const weightRaw = colMap.weight >= 0 ? (parseFloat(String(row[colMap.weight] ?? "0")) || 0) : 0;
+      const massPerM = MASS_PER_M[barSize] || 1.570;
+      const weightKg = weightRaw > 0 ? weightRaw : Math.round(quantity * (cutLengthMm / 1000) * massPerM * 100) / 100;
+
+      const mark = colMap.mark >= 0 ? String(row[colMap.mark] ?? "").trim() : `R${items.length + 1}`;
+      const bendType = colMap.type >= 0 ? String(row[colMap.type] ?? "").trim() : "";
+      const dwgRef = colMap.dwg >= 0 ? String(row[colMap.dwg] ?? "").trim() : "";
+
+      items.push({
+        element_type: "mixed",
+        element_ref: dwgRef || sheetName,
+        mark: mark || `R${items.length + 1}`,
+        bar_size: barSize,
+        quantity,
+        cut_length_mm: Math.round(cutLengthMm),
+        hook_type_near: "none",
+        hook_type_far: "none",
+        lap_type: "none",
+        num_laps: 0,
+        shape_code: bendType === "00" || !bendType ? "straight" : "other",
+        weight_kg: weightKg,
+      } as any);
+    }
+  }
+
+  return items;
+}
+
 
 Deno.serve((req) =>
   handleRequest(req, async ({ userId, companyId, serviceClient: supabaseAdmin, body }) => {
