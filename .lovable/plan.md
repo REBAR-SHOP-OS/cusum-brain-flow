@@ -1,28 +1,26 @@
 
 
-# Fix: Remove Weight Column, Restore Dwg in Shape Caption
-
-## Problem
-The previous edit incorrectly replaced "Dwg" with "Weight" in the shape caption. The user's intent was the opposite: **remove the Weight column** from the Qty/Length/Weight row, and **keep Dwg** in the shape caption.
+# Move Dwg Up to Qty/Length Row, Keep Only Item in Shape Caption
 
 ## Changes (single file: `src/components/office/RebarTagCard.tsx`)
 
-### 1. Remove Weight from the Qty/Length row (lines 96-112)
-Change the 3-column grid to a **2-column grid** with only Qty and Length:
+### 1. Add Dwg as third column in Qty/Length row (lines 97-108)
+- Change `grid-cols-2` → `grid-cols-3`
+- Add a third column showing Dwg value
 
 ```text
-BEFORE:  ┌─ QTY ─┬─ LENGTH ─┬─ WEIGHT ─┐
-AFTER:   ┌──── QTY ────┬──── LENGTH ────┐
+BEFORE:  ┌──── QTY ────┬──── LENGTH ────┐
+AFTER:   ┌── QTY ──┬── LENGTH ──┬── DWG ──┐
 ```
 
-- Change `grid-cols-3` → `grid-cols-2`
-- Remove the Weight `<div>` (lines 108-111)
-
-### 2. Revert shape caption back to Dwg (line 157)
-Change `Weight:` label back to `Dwg:` and swap the value from `{weight}` back to `{dwg}`:
+### 2. Remove Dwg from shape caption (lines 152-155)
+- Remove the Dwg line from the caption, keep only Item
 
 ```text
-BEFORE:  Weight: 70.65    Item: 1
-AFTER:   Dwg: —           Item: 1
+BEFORE:  Dwg: —    Item: 1
+AFTER:   Item: 1
 ```
+
+## File Changed
+- `src/components/office/RebarTagCard.tsx`
 
