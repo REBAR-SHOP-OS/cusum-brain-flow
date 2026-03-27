@@ -1526,7 +1526,6 @@ export function ProVideoEditor({
                         height={RATIO_DIMS[aspectRatio]?.[1] || 720}
                         className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
                       />
-                      />
                     ) : (
                       <img
                         src={videoSrc}
