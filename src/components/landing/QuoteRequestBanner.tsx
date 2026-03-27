@@ -19,7 +19,7 @@ export function QuoteRequestBanner() {
             <p className="text-sm text-muted-foreground mb-6">
               Already have your bar list ready? Send it over and receive a quote the <strong>same day</strong>.
             </p>
-            <a href="https://crm.rebar.shop/contactus" target="_blank" rel="noopener noreferrer">
+            <a href="https://erp.rebar.shop/contactus" target="_blank" rel="noopener noreferrer">
               <Button variant="outline" className="text-sm">
                 Same-Day Quote <ArrowRight className="w-4 h-4 ml-1" />
               </Button>
