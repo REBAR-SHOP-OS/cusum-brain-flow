@@ -1,15 +1,15 @@
 
 
-# Fix Print Layout: Standalone Page Per Tag
+# Fix Print Layout: Complete Wrapper Neutralization
 
 ## Problem
-Tags are still children of flex/scroll wrappers in print, causing layout distortion. Each `.rebar-tag` must render as a standalone page, independent of any parent layout.
+Tags are still clipped/distorted because ScrollArea, flex containers, and overflow-hidden wrappers constrain them in print context.
 
-## Changes — `src/index.css` (replace lines 241-293)
+## Changes — `src/index.css` `@media print` block
 
-Three additions to the existing `@media print` block:
+Replace lines 241-293 with the complete print reset:
 
-### 1. Document reset
+### 1. Document reset (NEW)
 ```css
 html, body, #root {
   width: 4in !important;
@@ -20,7 +20,7 @@ html, body, #root {
 }
 ```
 
-### 2. Kill all layout wrappers
+### 2. Kill all layout wrappers (NEW)
 ```css
 .flex, .grid, .overflow-auto, .overflow-hidden,
 [data-radix-scroll-area-viewport],
@@ -30,9 +30,17 @@ html, body, #root {
   width: auto !important;
   height: auto !important;
 }
+
+* {
+  overflow: visible !important;
+}
+
+::-webkit-scrollbar {
+  display: none !important;
+}
 ```
 
-### 3. Standalone tag (replaces current `.rebar-tag` block)
+### 3. Standalone tag per page (REPLACES current `.rebar-tag` block)
 ```css
 .rebar-tag {
   position: static !important;
@@ -54,15 +62,21 @@ html, body, #root {
 }
 ```
 
-Key differences from current:
-- `display: block` instead of `flex` — tag becomes a standalone block, not a flex child
-- `position: static` + `float: none` — removes any inherited positioning
+Key changes from current:
+- `display: block` (not flex) — standalone block element
+- `position: static` + `float: none` — no inherited positioning
 - `height: 6in` fixed (not min/max) — exact label size
-- `break-after: page` — modern page break alongside legacy `page-break-after`
-- `margin: 0 auto` — centers on page
+- `break-after: page` — modern page break
+- `margin: 0 auto` — centered
+- Global `* { overflow: visible }` kills all scroll traps
+- `::-webkit-scrollbar { display: none }` removes scrollbar space
 
-Everything else (hide chrome, visibility rules, driver-dropoff section) stays unchanged.
+### 4. Keep existing rules
+- `.rebar-tag *` visibility/color rules stay
+- `.bg-black`/`.bg-white`/`img` overrides stay
+- Driver dropoff print section untouched
+- `@page` definitions unchanged
 
 ## Files Changed
-- `src/index.css` — rewrite `@media print` rebar-tag rules + add document/wrapper resets
+- `src/index.css` — rewrite `@media print` rebar-tag + add document/wrapper resets
 
