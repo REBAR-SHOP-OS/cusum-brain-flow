@@ -56,30 +56,41 @@ function parseDimension(val: any): number | null {
 
 const DIMS = ["A","B","C","D","E","F","G","H","J","K","O","R"] as const;
 
+/** Normalize a header cell to a single dimension letter (A-R), handling "DIM A", "Dim. B", etc. */
+function normalizeDimHeader(raw: string): string | null {
+  const s = String(raw).trim().toUpperCase()
+    .replace(/^DIM\.?\s*/i, "")   // strip leading "DIM" or "DIM."
+    .replace(/[^A-Z]/g, "");       // keep only letters
+  if (s.length === 1 && (DIMS as readonly string[]).includes(s)) return s;
+  return null;
+}
+
 /** Extract dimension columns deterministically from XLSX sheet, bypassing AI */
 function overlaySheetDims(workbook: any, items: any[]): any[] {
   try {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-    // Find header row containing dimension letters
+    // Find header row containing dimension letters (exact or prefixed with DIM)
     const hIdx = rows.findIndex((r) =>
-      r.some((c) => c != null && DIMS.includes(String(c).trim().toUpperCase() as any))
+      r.some((c) => c != null && normalizeDimHeader(String(c)) !== null)
     );
-    if (hIdx < 0) return items;
+    if (hIdx < 0) { console.log("[overlaySheetDims] No dim header row found"); return items; }
     const hRow = rows[hIdx];
     const colMap: Record<string, number> = {};
     hRow.forEach((c: any, i: number) => {
       if (c == null) return;
-      const letter = String(c).trim().toUpperCase();
-      if ((DIMS as readonly string[]).includes(letter)) colMap[letter] = i;
+      const letter = normalizeDimHeader(String(c));
+      if (letter) colMap[letter] = i;
     });
-    if (Object.keys(colMap).length < 2) return items; // not enough dim columns found
+    if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return items; }
     console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} dim columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
     return items.map((it, n) => {
       const row = rows[hIdx + 1 + n] || [];
       for (const d of DIMS) {
         if (colMap[d] != null) {
-          it[d] = row[colMap[d]] ?? null;
+          const raw = row[colMap[d]];
+          // Parse cell value — handles ft-in strings, plain numbers, etc.
+          it[d] = raw != null ? (parseDimension(raw) ?? null) : null;
         }
       }
       it.I = null;
