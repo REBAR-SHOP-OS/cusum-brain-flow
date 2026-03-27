@@ -685,24 +685,25 @@ Deno.serve((req) =>
         console.warn("[accept_and_convert] Failed to rebuild line items for email:", rebuildErr);
       }
 
-      // Look up QB payment link from accounting_mirror (only real customer-facing links)
-      let qbPaymentUrl = "";
-      try {
-        const { data: qbMirror } = await svc
-          .from("accounting_mirror")
-          .select("data, quickbooks_id")
-          .eq("entity_type", "Invoice")
-          .ilike("data->>DocNumber", invoiceNumber)
-          .maybeSingle();
-        if (qbMirror) {
-          const mirrorData = qbMirror.data as any;
-          // Only use InvoiceLink — the customerbalance URL is admin-only, not customer-facing
-          if (mirrorData?.InvoiceLink) {
-            qbPaymentUrl = mirrorData.InvoiceLink;
+      // Use QB link from auto-push first, then fallback to accounting_mirror lookup
+      let qbPaymentUrl = qbInvoiceLink || "";
+      if (!qbPaymentUrl) {
+        try {
+          const { data: qbMirror } = await svc
+            .from("accounting_mirror")
+            .select("data, quickbooks_id")
+            .eq("entity_type", "Invoice")
+            .ilike("data->>DocNumber", invoiceNumber)
+            .maybeSingle();
+          if (qbMirror) {
+            const mirrorData = qbMirror.data as any;
+            if (mirrorData?.InvoiceLink) {
+              qbPaymentUrl = mirrorData.InvoiceLink;
+            }
           }
+        } catch (_e) {
+          console.warn("QB mirror lookup error:", _e);
         }
-      } catch (_e) {
-        console.warn("QB mirror lookup error:", _e);
       }
 
       // Build dual payment buttons
