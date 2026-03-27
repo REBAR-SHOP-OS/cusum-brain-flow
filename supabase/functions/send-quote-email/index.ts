@@ -623,6 +623,7 @@ Deno.serve((req) =>
             due_date: dueDate,
             notes: sqCheck?.notes || notes || null,
             sales_lead_id: sqCheck?.lead_id || null,
+            metadata: { source_quote_id: quote_id, source_quote_number: quoteNumber, line_items: lineItems },
           })
           .select()
           .single();
