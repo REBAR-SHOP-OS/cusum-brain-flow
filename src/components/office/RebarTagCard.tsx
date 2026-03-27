@@ -150,7 +150,7 @@ export function RebarTagCard({
           )}
         </div>
         <div className="flex gap-4 text-xs shrink-0 mt-1">
-          <div className="flex gap-1"><span className="font-bold">Weight:</span><span className="font-black">{weight || "—"}</span></div>
+          <div className="flex gap-1"><span className="font-bold">Dwg:</span><span className="font-black">{dwg || "—"}</span></div>
           <div className="flex gap-1"><span className="font-bold">Item:</span><span className="font-black">{item}</span></div>
         </div>
       </div>
