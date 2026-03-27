@@ -113,7 +113,12 @@ ${employeeList}
 
 For each employee, I'm providing their reference photos followed by the captured photo to match.
 
-STRICT RULES:
+CRITICAL ANTI-BIAS RULES:
+- The number of reference photos per person varies. Do NOT let more reference photos bias you toward that person.
+- Each person's identity is equally likely a priori. Judge ONLY on facial feature similarity.
+- Having more photos does NOT make someone more likely to be the match.
+
+STRICT MATCHING RULES:
 - You must be CERTAIN it is the same person before returning a match. If in doubt, return NO match.
 - Pay close attention to UNIQUE facial features: nose shape, eye spacing, jawline, facial hair, eyebrow shape, face proportions, ear shape.
 - Carefully compare: glasses (present/absent, frame style), facial hair (beard, mustache, stubble vs clean-shaven), face shape (round, oval, square), hairline and forehead size.

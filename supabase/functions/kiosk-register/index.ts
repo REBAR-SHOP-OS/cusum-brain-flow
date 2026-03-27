@@ -46,19 +46,29 @@ Deno.serve((req) =>
       }
     }
 
-    // Upload face photo & create enrollment
+    // Upload face photo & create enrollment (cap at 5)
     if (faceBase64) {
-      const filePath = `${profileId}/enroll-${Date.now()}.jpg`;
-      const byteArray = Uint8Array.from(atob(faceBase64), (c) => c.charCodeAt(0));
+      const { count: enrollCount } = await ctx.serviceClient
+        .from("face_enrollments")
+        .select("*", { count: "exact", head: true })
+        .eq("profile_id", profileId)
+        .eq("is_active", true);
 
-      const { error: uploadErr } = await ctx.serviceClient.storage
-        .from("face-enrollments")
-        .upload(filePath, byteArray, { contentType: "image/jpeg" });
+      if ((enrollCount || 0) < 5) {
+        const filePath = `${profileId}/enroll-${Date.now()}.jpg`;
+        const byteArray = Uint8Array.from(atob(faceBase64), (c) => c.charCodeAt(0));
 
-      if (!uploadErr) {
-        await ctx.serviceClient.from("face_enrollments").insert({ profile_id: profileId, photo_url: filePath });
+        const { error: uploadErr } = await ctx.serviceClient.storage
+          .from("face-enrollments")
+          .upload(filePath, byteArray, { contentType: "image/jpeg" });
+
+        if (!uploadErr) {
+          await ctx.serviceClient.from("face_enrollments").insert({ profile_id: profileId, photo_url: filePath });
+        } else {
+          console.error("[kiosk-register] upload error:", uploadErr);
+        }
       } else {
-        console.error("[kiosk-register] upload error:", uploadErr);
+        console.log("[kiosk-register] enrollment cap reached for profile:", profileId);
       }
     }
 
