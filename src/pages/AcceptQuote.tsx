@@ -300,7 +300,7 @@ export default function AcceptQuote() {
                     Please review our terms and conditions before accepting this quotation.
                   </p>
                   <a
-                    href="https://www.erp.rebar.shop/terms"
+                    href="https://cusum-brain-flow.lovable.app/terms"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 mt-2 font-medium"
@@ -320,7 +320,7 @@ export default function AcceptQuote() {
               />
               <label htmlFor="accept-terms" className="text-sm text-gray-700 cursor-pointer leading-relaxed">
                 I have read and accept the{" "}
-                <a href="https://www.erp.rebar.shop/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                <a href="https://cusum-brain-flow.lovable.app/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                   Terms & Conditions
                 </a>
                 {" "}and confirm this order.
