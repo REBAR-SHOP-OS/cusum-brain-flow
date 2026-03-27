@@ -14,6 +14,9 @@ import * as XLSX from "npm:xlsx@0.18.5";
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
+/** Strip commas, units (kg, KG), spaces and other non-numeric chars before parsing */
+const toNum = (v: unknown): number => Number(String(v ?? '').replace(/,/g, '').replace(/[^\d.-]/g, '')) || 0;
+
 // Mass per meter lookup for deterministic fallback (kg/m)
 const MASS_PER_M: Record<string, number> = {
   "10M": 0.785, "15M": 1.570, "20M": 2.355, "25M": 3.925, "30M": 5.495, "35M": 7.850,
