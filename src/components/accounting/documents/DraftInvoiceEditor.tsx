@@ -356,6 +356,9 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         <Button size="sm" variant="outline" onClick={handlePrint} className="gap-2">
           <Printer className="w-4 h-4" /> Print / PDF
         </Button>
+        <Button size="sm" variant="outline" onClick={() => setEmailDialogOpen(true)} className="gap-2">
+          <Mail className="w-4 h-4" /> Send Email
+        </Button>
         <Button size="sm" variant="outline" onClick={onClose}>
           <X className="w-4 h-4" />
         </Button>
