@@ -81,17 +81,28 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
       if (c == null) return;
       const letter = normalizeDimHeader(String(c));
       if (letter) colMap[letter] = i;
+      // Also detect length column headers
+      const normalized = String(c).trim().toUpperCase()
+        .replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+      if (["CUT LENGTH", "TOTAL LENGTH", "LENGTH", "CUTLENGTH", "CUT LEN", "TOT LENGTH"].includes(normalized)) {
+        colMap["__LENGTH__"] = i;
+      }
     });
     if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return items; }
-    console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} dim columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
+    console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
     return items.map((it, n) => {
       const row = rows[hIdx + 1 + n] || [];
       for (const d of DIMS) {
         if (colMap[d] != null) {
           const raw = row[colMap[d]];
-          // Parse cell value — handles ft-in strings, plain numbers, etc.
           it[d] = raw != null ? (parseDimension(raw) ?? null) : null;
         }
+      }
+      // Overlay total_length from spreadsheet if found
+      if (colMap["__LENGTH__"] != null) {
+        const raw = row[colMap["__LENGTH__"]];
+        const parsed = raw != null ? parseDimension(raw) : null;
+        if (parsed != null) it.total_length = parsed;
       }
       it.I = null;
       return it;
@@ -236,8 +247,8 @@ Match by HEADER NAME, not by column position index. DO NOT re-index or shift col
 
 Rules:
 - Extract ALL rows/items from the document
-- Keep ALL numerical values EXACTLY as they appear in the source document. Do NOT convert units. If the document shows inches, keep inches. If it shows millimeters, keep millimeters.
-- Dimensions (A,B,C,...) and total_length should be the exact numbers from the source, with no unit conversion
+- Keep ALL numerical values EXACTLY as they appear in the source document. Do NOT convert units. If the document shows inches, keep inches. If it shows millimeters, keep millimeters. If a value is "3'-5\"", return it as the string "3'-5\\"" or as the numeric equivalent in the document's native units.
+- Dimensions (A,B,C,...) and total_length should be the exact numbers from the source, with no unit conversion. For imperial ft-in values like 3'-5", return the raw string or the numeric inches value (e.g. 41).
 - If a dimension column is empty, use null
 - "type" is the ASA shape code (1-32, S1-S15, T1-T17, COIL, X, Y, etc.)
 - Items with no shape type are straight bars
@@ -434,6 +445,18 @@ Rules:
 
         // Save rows to DB
         let items = extractedData.items || [];
+
+        // Post-AI pass: convert any string values in length/dims to numbers
+        items.forEach((item: any) => {
+          if (typeof item.total_length === "string") {
+            item.total_length = parseDimension(item.total_length);
+          }
+          for (const d of DIMS) {
+            if (typeof item[d] === "string") {
+              item[d] = parseDimension(item[d]);
+            }
+          }
+        });
 
         // Deterministic dimension overlay for spreadsheets — bypass AI for dim columns
         if (isSpreadsheet && parsedWorkbook && items.length > 0) {
