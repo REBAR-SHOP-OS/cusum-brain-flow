@@ -2069,7 +2069,7 @@ export function AIExtractView() {
                   <span className="text-xs font-bold tracking-widest text-muted-foreground uppercase">
                     {activeRows.length} Line Items{mergedRows.length > 0 ? ` (${mergedRows.length} merged)` : ""}
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {/* Unit toggle */}
                     <div className="flex gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border">
                       {(["mm", "in", "ft", "imperial"] as const).map(u => (
