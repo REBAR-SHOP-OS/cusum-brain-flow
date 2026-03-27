@@ -1180,14 +1180,18 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
 async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);
   const companyId = await getUserCompanyId(supabase, userId);
-  const { orderId, customerId, customerName, lineItems, dueDate, memo, taxCodeRef, salesTermRef, discountPercent, shippingAmount, classRef, departmentRef, dedupKey } = body as {
-    orderId?: string; customerId: string; customerName: string;
-    lineItems: { description: string; amount: number; quantity?: number; serviceId?: string }[];
+  const { orderId, dueDate, memo, taxCodeRef, salesTermRef, discountPercent, shippingAmount, classRef, departmentRef, dedupKey } = body as {
+    orderId?: string;
     dueDate?: string; memo?: string; taxCodeRef?: string; salesTermRef?: string;
     discountPercent?: number; shippingAmount?: number;
     classRef?: string; departmentRef?: string;
     dedupKey?: string;
   };
+
+  // Accept both "lineItems" and "items" as parameter names
+  let lineItems = (body.lineItems || body.items) as { description: string; amount: number; quantity?: number; serviceId?: string }[] | undefined;
+  let customerId = body.customerId as string | undefined;
+  const customerName = body.customerName as string | undefined;
 
   // ── Server-side idempotency guard: order-based ─────────────────
   if (orderId) {
@@ -1224,6 +1228,37 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
         docNumber: meta?.docNumber || "",
         message: `Duplicate prevented — invoice already created for this session`,
       });
+    }
+  }
+
+  // ── Resolve customer ID from name if not provided ──────────────
+  if (!customerId && customerName) {
+    // 1. Check local customers table for quickbooks_id
+    const { data: localCust } = await supabase
+      .from("customers")
+      .select("quickbooks_id, id")
+      .eq("company_id", companyId)
+      .ilike("company_name", customerName)
+      .not("quickbooks_id", "is", null)
+      .limit(1)
+      .maybeSingle();
+    if (localCust?.quickbooks_id) {
+      customerId = localCust.quickbooks_id;
+    } else {
+      // 2. Search QuickBooks by display name
+      try {
+        const searchResult = await qbFetch(config, `query?query=select * from Customer where DisplayName = '${customerName.replace(/'/g, "\\'")}'`);
+        const qbCustomers = searchResult?.QueryResponse?.Customer;
+        if (qbCustomers && qbCustomers.length > 0) {
+          customerId = qbCustomers[0].Id;
+        } else {
+          // 3. Create customer in QB
+          const newCust = await qbFetch(config, "customer", "POST", { DisplayName: customerName });
+          customerId = newCust?.Id;
+        }
+      } catch (e) {
+        console.warn("[create-invoice] QB customer lookup/create failed:", e);
+      }
     }
   }
 
