@@ -188,6 +188,8 @@ export function ProVideoEditor({
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [activeTab, setActiveTab] = useState<EditorTab>("media");
   const [panelOpen, setPanelOpen] = useState(false);
+  const [videoSpeed, setVideoSpeed] = useState(1);
+  const [speedPopoverOpen, setSpeedPopoverOpen] = useState(false);
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
     if (tab === "music") {
