@@ -36,6 +36,21 @@ interface ChatMessageProps {
 export function ChatMessage({ message, onRegenerate, onRegenerateImage, onViewPost, onApprovePost, onRegeneratePost, agentImage, agentName, isPixelAgent }: ChatMessageProps) {
   const isUser = message.role === "user";
   const [translation, setTranslation] = useState<{ text: string; lang: string } | null>(null);
+  const [downloadingFile, setDownloadingFile] = useState<string | null>(null);
+
+  const handleFileDownload = async (file: UploadedFile) => {
+    const path = (file as any).path || file.url;
+    try {
+      setDownloadingFile(path);
+      const freshUrl = await getSignedFileUrl(path);
+      if (!freshUrl) throw new Error("empty");
+      await downloadFile(freshUrl, file.name);
+    } catch {
+      toast.error("Failed to get download link");
+    } finally {
+      setDownloadingFile(null);
+    }
+  };
 
   const handleTranslate = (translatedText: string, langLabel: string) => {
     setTranslation({ text: translatedText, lang: langLabel });
