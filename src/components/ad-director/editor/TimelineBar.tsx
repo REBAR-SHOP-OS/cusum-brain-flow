@@ -538,6 +538,93 @@ export function TimelineBar({
           </div>
       </div>
 
+      {/* ─── Text overlay track ─── */}
+      {textOverlays.length > 0 && (
+        <div className="flex items-center gap-0.5 mt-1">
+          <span className="w-14 shrink-0 text-[9px] text-muted-foreground flex items-center gap-1">
+            <Type className="w-3 h-3" /> Text
+          </span>
+          <div className="flex-1 h-5 relative rounded bg-muted/20 overflow-hidden">
+            {textOverlays.map((ov) => {
+              const idx = storyboard.findIndex(s => s.id === ov.sceneId);
+              if (idx < 0) return null;
+              const leftPct = ((cumulativeStarts[idx] || 0) / totalDuration) * 100;
+              const widthPct = (getSceneDur(idx) / totalDuration) * 100;
+              const isBeingDragged = draggedItemId === ov.id;
+              return (
+                <div
+                  key={ov.id}
+                  className="absolute top-0.5 bottom-0.5 rounded-sm bg-violet-500/70 cursor-grab hover:bg-violet-500/90 transition-colors flex items-center px-1 group"
+                  style={{
+                    left: `${leftPct}%`,
+                    width: `${Math.max(widthPct, 1)}%`,
+                    transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
+                    zIndex: isBeingDragged ? 30 : 5,
+                  }}
+                  onMouseDown={(e) => handleItemDragStart(e, "text", ov.id, leftPct, widthPct)}
+                  onClick={(e) => { e.stopPropagation(); onEditOverlay?.(ov); }}
+                >
+                  <span className="text-[8px] text-white truncate select-none">{ov.content}</span>
+                  {onDeleteOverlay && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onDeleteOverlay(ov.id); }}
+                      className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40"
+                    >
+                      <Trash2 className="w-2 h-2 text-white/80" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Audio track ─── */}
+      {audioTracks.length > 0 && (
+        <div className="flex items-center gap-0.5 mt-1">
+          <span className="w-14 shrink-0 text-[9px] text-muted-foreground flex items-center gap-1">
+            <Music className="w-3 h-3" /> Audio
+          </span>
+          <div className="flex-1 h-5 relative rounded bg-muted/20 overflow-hidden">
+            {audioTracks.map((track, tIdx) => {
+              const idx = storyboard.findIndex(s => s.id === track.sceneId);
+              if (idx < 0) return null;
+              const leftPct = ((cumulativeStarts[idx] || 0) / totalDuration) * 100;
+              const widthPct = (getSceneDur(idx) / totalDuration) * 100;
+              const itemId = `audio-${tIdx}`;
+              const isBeingDragged = draggedItemId === itemId;
+              const barColor = track.kind === "voiceover" ? "bg-teal-500/70 hover:bg-teal-500/90" : "bg-amber-500/70 hover:bg-amber-500/90";
+              return (
+                <div
+                  key={itemId}
+                  className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor}`}
+                  style={{
+                    left: `${leftPct}%`,
+                    width: `${Math.max(widthPct, 1)}%`,
+                    transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
+                    zIndex: isBeingDragged ? 30 : 5,
+                  }}
+                  onMouseDown={(e) => handleItemDragStart(e, "audio", String(tIdx), leftPct, widthPct)}
+                >
+                  <span className="text-[8px] text-white truncate select-none">
+                    {track.kind === "voiceover" ? "🎙" : "🎵"} {track.label}
+                  </span>
+                  {onRemoveAudioTrack && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onRemoveAudioTrack(tIdx); }}
+                      className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40"
+                    >
+                      <Trash2 className="w-2 h-2 text-white/80" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       </div>
       </div>
     </div>
