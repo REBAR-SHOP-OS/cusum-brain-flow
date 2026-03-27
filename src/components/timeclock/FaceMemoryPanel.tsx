@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 interface Enrollment {
   id: string;
   profile_id: string;
-  storage_path: string;
+  photo_url: string;
   is_active: boolean;
   created_at: string;
 }
