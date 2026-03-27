@@ -1,3 +1,5 @@
+import logoCoin from "@/assets/logo-coin.png";
+
 const DIM_LEFT = ["A", "B", "C", "D", "E", "F"] as const;
 const DIM_RIGHT = ["G", "H", "J", "K", "O", "R"] as const;
 
@@ -97,25 +99,22 @@ export function RebarTagCard({
         </div>
       </div>
 
-      {/* Shape code + Dims */}
+      {/* Logo + Dims */}
       <div className="grid shrink-0 border-b-2 border-black" style={{ gridTemplateColumns: "1fr 1.4fr" }}>
-        {/* Shape circle */}
+        {/* Brand logo */}
         <div className="border-r-2 border-black p-2 flex flex-col items-center justify-center">
-          <div className="w-10 h-10 rounded-full border-2 border-black flex items-center justify-center mb-1">
-            <span className="text-sm font-black">{shapeType || "S"}</span>
-          </div>
-          <span className="text-[9px] font-bold uppercase">Shape</span>
+          <img src={logoCoin} alt="Brand logo" className="w-10 h-10 object-contain" />
         </div>
-        {/* Dims grid */}
-        <div className="p-1.5 grid grid-cols-2 gap-x-3">
-          {DIM_LEFT.map((d) => (
-            <div key={d} className="text-xs flex gap-1" style={{ gridColumn: 1 }}>
+        {/* Dims grid — parallel columns */}
+        <div className="p-1.5" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gap: "0 0.75rem" }}>
+          {DIM_LEFT.map((d, i) => (
+            <div key={d} className="text-xs flex gap-1" style={{ gridRow: i + 1, gridColumn: 1 }}>
               <span className="font-bold w-3.5">{d}:</span>
               <span className="font-black">{formatDim(dims[d], us)}</span>
             </div>
           ))}
-          {DIM_RIGHT.map((d) => (
-            <div key={d} className="text-xs flex gap-1" style={{ gridColumn: 2 }}>
+          {DIM_RIGHT.map((d, i) => (
+            <div key={d} className="text-xs flex gap-1" style={{ gridRow: i + 1, gridColumn: 2 }}>
               <span className="font-bold w-3.5">{d}:</span>
               <span className="font-black">{formatDim(dims[d], us)}</span>
             </div>
@@ -142,16 +141,16 @@ export function RebarTagCard({
         )}
       </div>
 
-      {/* Ref / Dwg / Item */}
+      {/* Ref / Dwg / Item — compact Dwg/Item, more space for Ref */}
       <div className="grid grid-cols-2 border-b border-black text-xs shrink-0">
-        <div className="border-r border-black px-2 py-1.5">
+        <div className="border-r border-black px-2 py-2 min-h-[3rem]">
           <div className="flex gap-1">
             <span className="font-bold">Ref:</span>
             <span className="font-black uppercase truncate">{reference || customer || "—"}</span>
           </div>
-          {address && <div className="text-[9px] truncate">{address}</div>}
+          {address && <div className="text-[9px] leading-tight mt-0.5">{address}</div>}
         </div>
-        <div className="px-2 py-1.5">
+        <div className="px-2 py-1">
           <div className="flex gap-1"><span className="font-bold">Dwg:</span><span className="font-black">{dwg || "—"}</span></div>
           <div className="flex gap-1"><span className="font-bold">Item:</span><span className="font-black">{item}</span></div>
         </div>
