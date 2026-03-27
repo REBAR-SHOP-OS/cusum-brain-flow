@@ -37,9 +37,14 @@ export function ApprovalsPanel() {
     setFeedbackText((prev) => ({ ...prev, [approvalId]: "" }));
   };
 
+  const trulyPending = pendingApprovals.filter((a) => {
+    const post = getPost(a.post_id);
+    return post && !["published", "declined", "failed"].includes(post.status);
+  });
+
   const decidedApprovals = approvals.filter((a) => a.status !== "pending");
 
-  if (pendingApprovals.length === 0 && decidedApprovals.length === 0) {
+  if (trulyPending.length === 0 && decidedApprovals.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <CheckCircle className="w-10 h-10 text-muted-foreground mb-3" />
