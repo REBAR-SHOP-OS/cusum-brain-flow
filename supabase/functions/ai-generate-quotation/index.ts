@@ -209,7 +209,8 @@ Deno.serve((req) =>
       // All rebar, no cage distinction
       const amount = Number((totalTonnes * fabRate.price_per_ton).toFixed(2));
       lineItems.push({
-        description: `Rebar Supply & Fabrication – ${project.name} (incl. ${scrapPct}% scrap)`,
+        description: `Rebar Supply & Fabrication`,
+        detail: `${project.name} (incl. ${scrapPct}% scrap)`,
         quantity: Number(totalTonnes.toFixed(3)),
         unit: "tonnes",
         unit_price: fabRate.price_per_ton,
