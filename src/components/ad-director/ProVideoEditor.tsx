@@ -253,6 +253,51 @@ export function ProVideoEditor({
       setGeneratingAudio(false);
     }
   }, [toast]);
+
+  const handleGenerateVoiceover = useCallback(async (result: VoiceoverResult) => {
+    setGeneratingVoiceover(true);
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: result.text, voiceId: result.voiceId, speed: result.speed }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Voiceover generation failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      setAudioTracks([{
+        sceneId: "voiceover-generated",
+        label: "🎙️ Voiceover",
+        audioUrl,
+        kind: "voiceover",
+      }]);
+
+      setVoiceoverDialogOpen(false);
+      toast({ title: "✅ صدای گوینده با موفقیت تولید شد" });
+    } catch (err: any) {
+      console.error("Voiceover generation error:", err);
+      toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingVoiceover(false);
+    }
+  }, [toast]);
+
+  const handleAddSubtitle = useCallback((overlay: VideoOverlay) => {
+    setOverlays(prev => [...prev, overlay]);
+    toast({ title: "✅ زیرنویس اضافه شد" });
+  }, [toast]);
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
