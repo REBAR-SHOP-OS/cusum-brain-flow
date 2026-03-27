@@ -433,6 +433,7 @@ Deno.serve((req) =>
       let invoiceNumber: string;
       let invoiceId: string;
       let stripePaymentUrl = "";
+      let qbInvoiceLink = "";
 
       if (existingInvoice) {
         // Re-acceptance: invoice already exists, just re-send email
