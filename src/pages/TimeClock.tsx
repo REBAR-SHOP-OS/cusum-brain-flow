@@ -433,6 +433,14 @@ export default function TimeClock() {
                             since {format(new Date(activeEntry.clock_in), "h:mm a")}
                             {" · "}
                             {formatDuration(differenceInMinutes(now, new Date(activeEntry.clock_in)))}
+                            {(() => {
+                              const myTotalMins = entries.reduce((sum, e) => {
+                                const end = e.clock_out ? new Date(e.clock_out) : now;
+                                return sum + differenceInMinutes(end, new Date(e.clock_in));
+                              }, 0);
+                              const currentElapsed = differenceInMinutes(now, new Date(activeEntry.clock_in));
+                              return myTotalMins > currentElapsed ? ` · Total: ${formatDuration(myTotalMins)}` : "";
+                            })()}
                           </span>
                         </>
                       ) : (
