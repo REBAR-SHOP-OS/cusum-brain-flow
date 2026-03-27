@@ -1,54 +1,25 @@
 
 
-# Unify Create Customer + Add Email to Quote Flow
+# Fix: Customer Dropdown Not Showing All Customers
 
-## Problem
-1. The "Create customer" form in the quotation editor only has Name and Address — no email field
-2. Customer email is never saved in quote metadata (`customer_email`)
-3. When a customer clicks "Accept Quote", the backend fails with "No customer email found for this quotation" because there's no email stored anywhere
+## Root Cause
+The query to `v_customers_clean` has **no `.limit()` override**, so Supabase applies the default limit of **1000 rows**. There are **2,657 customers** in the view. Since the query orders alphabetically by `display_name`, customers starting with letters past roughly "K" (including "test") are cut off and never loaded.
 
-## Changes
+## Fix
 
-### 1. `src/components/accounting/documents/DraftQuotationEditor.tsx`
+### `src/components/accounting/documents/DraftQuotationEditor.tsx`
 
-**Add email to create-customer form:**
-- Add `newCustEmail` state variable
-- Add email input field between name and address in the inline create form
-- When creating via `customers` table insert, include `email` field
-- After creating, also store the email in component state
+**Option A (recommended):** Change the customer loading to a **search-on-type** pattern instead of loading all customers upfront:
+- Remove the bulk customer fetch from the initial `loadAll`
+- Instead, query `v_customers_clean` dynamically when the user types in the search box (debounced ~300ms)
+- Use `.ilike("display_name", `%${search}%`)` with `.limit(50)` for fast results
+- This handles any number of customers efficiently
 
-**Add email to customer selection:**
-- Fetch `email` alongside `customer_id, display_name, company_name` from `v_customers_clean`
-- Update `CustomerOption` interface to include `email?: string | null`
-- When a customer is selected, auto-populate `customerEmail` state from the customer record
+**Option B (quick fix):** Add `.limit(5000)` to the existing query to fetch all 2,657 records. Simpler but less scalable.
 
-**Save email in quote metadata:**
-- Add `customer_email` to the metadata object in `handleSave`
-- This ensures the `accept_and_convert` action can resolve the email from `meta.customer_email`
-
-**Auto-fill send dialog:**
-- When opening the email dialog, pre-fill `customerEmail` from the stored value
-
-### 2. `supabase/functions/send-quote-email/index.ts`
-
-**Store email on send_quote action:**
-- When `send_quote` succeeds, also write `customer_email` into the quote's metadata so it persists for the accept flow
-- This is already partially done via `sales_quotations.customer_email` but `accept_and_convert` also checks `meta.customer_email`
-
-### 3. `supabase/functions/quote-public-view/index.ts`
-
-- No changes needed — it already reads from the quote record
-
-## Flow After Fix
-```text
-1. User creates/selects customer → email auto-populated
-2. User saves quote → metadata includes customer_email
-3. User sends quote → email stored in both sales_quotations and metadata
-4. Customer clicks Accept → backend resolves email from metadata ✓
-5. Invoice email sent successfully ✓
-```
+### Additional cleanup
+- The "Add New Customer" form already works — after creation the customer is added to the local state and selected immediately. The issue is only that the dropdown doesn't show pre-existing customers beyond the 1000 limit.
 
 ## Files Changed
-- `src/components/accounting/documents/DraftQuotationEditor.tsx` — add email field to create form, auto-populate email on customer select, save email in metadata
-- `supabase/functions/send-quote-email/index.ts` — persist customer_email in quote metadata on send
+- `src/components/accounting/documents/DraftQuotationEditor.tsx` — switch customer dropdown to search-on-type or increase limit
 
