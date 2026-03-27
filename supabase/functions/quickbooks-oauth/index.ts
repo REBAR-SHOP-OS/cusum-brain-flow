@@ -1283,16 +1283,22 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     const qty = item.quantity || 1;
     // If unitPrice is provided, use it directly; otherwise treat amount as unit price
     const unitPrice = item.unitPrice ?? item.amount ?? 0;
+    const lineDetail: Record<string, unknown> = {
+      Qty: qty,
+      UnitPrice: unitPrice,
+      TaxCodeRef: { value: effectiveTaxCode },
+    };
+    // ItemRef is required by QuickBooks; fall back to "1" (the default Services item) if not provided
+    if (item.serviceId) {
+      lineDetail.ItemRef = { value: item.serviceId };
+    } else {
+      lineDetail.ItemRef = { value: "1", name: "Services" };
+    }
     return {
       DetailType: "SalesItemLineDetail",
       Amount: unitPrice * qty,
       Description: item.description,
-      SalesItemLineDetail: {
-        Qty: qty,
-        UnitPrice: unitPrice,
-        TaxCodeRef: { value: effectiveTaxCode },
-        ...(item.serviceId && { ItemRef: { value: item.serviceId } }),
-      },
+      SalesItemLineDetail: lineDetail,
     };
   });
 
