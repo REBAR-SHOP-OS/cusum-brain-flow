@@ -131,18 +131,61 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           unitPrice: it.unit_price || 0,
           serviceDate: it.service_date || "",
         })));
-      } else if (inv.amount && Number(inv.amount) > 0) {
-        // Fallback: no line items but invoice has amount (converted from quote)
-        setItems([{
-          description: "As per quotation",
-          quantity: 1,
-          unitPrice: Number(inv.amount),
-        }]);
+      } else {
+        // Fallback: try to fetch line items from the source quotation
+        const meta = (inv as any).metadata || {};
+        let resolved = false;
+        const quotationId = (inv as any).quotation_id;
+        if (quotationId) {
+          const { data: qItems } = await supabase
+            .from("sales_quotation_items" as any)
+            .select("description, quantity, unit_price, total, sort_order")
+            .eq("quotation_id", quotationId)
+            .order("sort_order");
+          if (qItems && (qItems as any[]).length > 0) {
+            const mapped = (qItems as any[]).map((qi: any) => ({
+              description: qi.description || "",
+              quantity: qi.quantity || 1,
+              unitPrice: qi.unit_price || 0,
+            }));
+            setItems(mapped);
+            resolved = true;
+            // Also persist these items to sales_invoice_items for future loads
+            if (companyId) {
+              const rows = (qItems as any[]).map((qi: any, idx: number) => ({
+                invoice_id: invoiceId,
+                company_id: companyId,
+                description: qi.description || "",
+                quantity: qi.quantity || 1,
+                unit_price: qi.unit_price || 0,
+                total: qi.total || (qi.quantity || 1) * (qi.unit_price || 0),
+                sort_order: qi.sort_order ?? idx,
+              }));
+              supabase.from("sales_invoice_items" as any).insert(rows as any).then(() => {});
+            }
+          }
+        }
+        // Second fallback: parse metadata.line_items
+        if (!resolved) {
+          const metaItems = meta.line_items as any[] | undefined;
+          if (metaItems && metaItems.length > 0) {
+            setItems(metaItems.map((mi: any) => ({
+              description: mi.description || mi.name || "",
+              quantity: mi.quantity || mi.qty || 1,
+              unitPrice: mi.unit_price || mi.unitPrice || mi.price || 0,
+            })));
+            resolved = true;
+          }
+        }
+        // Last fallback: single line with total amount
+        if (!resolved && inv.amount && Number(inv.amount) > 0) {
+          setItems([{ description: "Invoice total", quantity: 1, unitPrice: Number(inv.amount) }]);
+        }
       }
 
       // Store customer email and amount for email sending
-      const meta = (inv as any).metadata || {};
-      setCustomerEmail(meta.customer_email || (inv as any).customer_email || "");
+      const metaForEmail = (inv as any).metadata || {};
+      setCustomerEmail(metaForEmail.customer_email || (inv as any).customer_email || "");
       setInvoiceAmount(Number(inv.amount) || 0);
 
       if (custRes.data) {
@@ -272,29 +315,82 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
     }
     setSendingEmail(true);
     try {
-      // Build invoice email body
+      // Try to get a Stripe payment link
+      let paymentUrl = "";
+      try {
+        const { data: stripeData } = await supabase.functions.invoke("stripe-payment", {
+          body: {
+            action: "create-payment-link",
+            amount: total,
+            currency: "cad",
+            invoiceNumber,
+            customerName: customerName || undefined,
+            qbInvoiceId: invoiceId,
+          },
+        });
+        if (stripeData?.paymentLink?.stripe_url) {
+          paymentUrl = stripeData.paymentLink.stripe_url;
+        }
+      } catch {
+        // Stripe not configured — continue without payment link
+      }
+
+      // Build branded line items table
       const itemRows = items.map(it =>
-        `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee;">${it.description}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${it.quantity}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${fmt(it.unitPrice)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${fmt(it.quantity * it.unitPrice)}</td></tr>`
+        `<tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#333;">${it.description}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:center;font-size:13px;color:#333;">${it.quantity}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;color:#333;">${fmt(it.unitPrice)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-size:13px;font-weight:600;color:#333;">${fmt(it.quantity * it.unitPrice)}</td>
+        </tr>`
       ).join("");
 
+      const hstRate = taxRate;
+      const payBtnHtml = paymentUrl
+        ? `<div style="text-align:center;margin:24px 0;">
+            <a href="${paymentUrl}" style="display:inline-block;background:#dc2626;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:16px;font-weight:700;letter-spacing:0.5px;">💳 Pay Now — ${fmt(total)}</a>
+          </div>
+          <p style="text-align:center;font-size:12px;color:#888;margin-top:4px;">Secure payment via Stripe</p>`
+        : "";
+
       const emailBody = `
-        <p>Dear ${customerName || "Customer"},</p>
-        <p>Please find your invoice <strong>${invoiceNumber}</strong> below.</p>
-        <div style="background:#f8f9fc;border-radius:8px;padding:16px;margin:16px 0;">
-          <table style="width:100%;font-size:13px;border-collapse:collapse;">
-            <tr style="background:#1a1a2e;color:#fff;"><th style="padding:8px;text-align:left;">Description</th><th style="padding:8px;text-align:right;">Qty</th><th style="padding:8px;text-align:right;">Price</th><th style="padding:8px;text-align:right;">Amount</th></tr>
-            ${itemRows}
+        <p style="font-size:15px;color:#333;margin:0 0 16px;">Dear ${customerName || "Customer"},</p>
+        <p style="font-size:14px;color:#333;margin:0 0 20px;">Please find your invoice <strong>#${invoiceNumber}</strong> details below.</p>
+        
+        <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+          <thead>
+            <tr style="background:#1a1a2e;">
+              <th style="padding:10px 12px;text-align:left;color:#fff;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Description</th>
+              <th style="padding:10px 12px;text-align:center;color:#fff;font-size:12px;font-weight:600;text-transform:uppercase;">Qty</th>
+              <th style="padding:10px 12px;text-align:right;color:#fff;font-size:12px;font-weight:600;text-transform:uppercase;">Unit Price</th>
+              <th style="padding:10px 12px;text-align:right;color:#fff;font-size:12px;font-weight:600;text-transform:uppercase;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+        
+        <div style="border-top:2px solid #1a1a2e;padding-top:12px;margin-top:8px;">
+          <table style="width:100%;font-size:13px;">
+            <tr><td style="padding:4px 12px;text-align:right;color:#666;">Subtotal:</td><td style="padding:4px 12px;text-align:right;font-weight:600;color:#333;width:120px;">${fmt(subtotal)}</td></tr>
+            <tr><td style="padding:4px 12px;text-align:right;color:#666;">HST (${hstRate}%):</td><td style="padding:4px 12px;text-align:right;font-weight:600;color:#333;">${fmt(taxAmount)}</td></tr>
+            <tr><td style="padding:8px 12px;text-align:right;font-size:16px;font-weight:700;color:#1a1a2e;">Total Due:</td><td style="padding:8px 12px;text-align:right;font-size:16px;font-weight:700;color:#dc2626;">${fmt(total)}</td></tr>
           </table>
-          <div style="text-align:right;margin-top:12px;font-size:18px;font-weight:bold;color:#1a1a2e;">Total: ${fmt(total)}</div>
         </div>
-        <p>Due date: <strong>${dueDate || "Upon receipt"}</strong></p>
-        <p>Thank you for your business!</p>
+
+        ${payBtnHtml}
+
+        <div style="background:#f8f9fc;border-radius:8px;padding:12px 16px;margin:20px 0;font-size:13px;color:#555;">
+          <strong>Due Date:</strong> ${dueDate || "Upon receipt"}<br/>
+          ${notes ? `<strong>Notes:</strong> ${notes}` : ""}
+        </div>
+        
+        <p style="font-size:14px;color:#333;">Thank you for your business!</p>
       `;
 
       const { error } = await supabase.functions.invoke("gmail-send", {
         body: {
           to: email,
-          subject: `Invoice ${invoiceNumber} - Rebar.Shop`,
+          subject: `Invoice #${invoiceNumber} - ${fmt(total)} - Rebar.Shop`,
           body: emailBody,
         },
       });
