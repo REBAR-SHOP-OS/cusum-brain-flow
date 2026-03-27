@@ -28,6 +28,8 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   pending_approval: "Pending Approval ⏳",
   declined: "Declined ❌",
+  publishing: "Publishing 🔄",
+  failed: "Failed ❌",
 };
 
 function statusSummary(posts: SocialPost[]): { dominant: string; label: string } {
