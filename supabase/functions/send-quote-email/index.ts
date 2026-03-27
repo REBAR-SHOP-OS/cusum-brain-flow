@@ -630,12 +630,15 @@ Deno.serve((req) =>
                 memo: `ERP Invoice ${invoiceNumber}`,
               }),
             });
-          if (qbRes.ok) {
-            const qbData = await qbRes.json();
-            qbInvoiceLink = qbData.invoiceLink || qbData.invoice?.InvoiceLink || "";
-            console.log(`[accept_and_convert] QB invoice created: ${qbData.docNumber}, link: ${qbInvoiceLink}`);
+            if (qbRes.ok) {
+              const qbData = await qbRes.json();
+              qbInvoiceLink = qbData.invoiceLink || qbData.invoice?.InvoiceLink || "";
+              console.log(`[accept_and_convert] QB invoice created: ${qbData.docNumber}, link: ${qbInvoiceLink}`);
+            } else {
+              console.warn("[accept_and_convert] QB invoice creation failed:", await qbRes.text());
+            }
           } else {
-            console.warn("[accept_and_convert] QB invoice creation failed:", await qbRes.text());
+            console.warn("[accept_and_convert] No QB connection found for company", companyId);
           }
         } catch (_e) {
           console.warn("[accept_and_convert] QB push error:", _e);
