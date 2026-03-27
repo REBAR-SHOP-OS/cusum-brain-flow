@@ -1,40 +1,43 @@
 
 
-# Add Individual Photo Deletion to Face Memory Panel
+# Add "Create New Person" to Face Memory Enrollment
 
 ## Problem
-Currently the Face Memory panel only allows deleting ALL photos for a person (the trash icon per profile). The user wants the ability to delete individual photos one at a time.
+The "Enroll New Person" dropdown in the Face Memory panel only lists existing profiles. If someone isn't in the system yet, there's no way to add them directly from this panel.
 
-## Fix
+## Solution
+Add a "+ Add New Name" option at the top of the Select dropdown. When selected, show an inline text input for the new person's name. On confirmation, create a new profile in the `profiles` table, then proceed with the normal photo enrollment flow.
+
+## Changes
 
 **File:** `src/components/timeclock/FaceMemoryPanel.tsx`
 
-1. **Add `handleDeleteSingle` function** — soft-deletes a single enrollment by setting `is_active = false`, then re-fetches data.
+1. **New state**: Add `newPersonName` (string) and `creatingNewPerson` (boolean) state variables.
 
-2. **Add delete overlay on each photo thumbnail** (lines 406-423) — show a small red X button on hover/tap over each photo. Clicking it calls `handleDeleteSingle(enrollment.id)`.
+2. **Add "Create New" option in Select**: Add a special `SelectItem` with value `__new__` labeled "+ Add New Name" at the top of the dropdown list.
 
-### Changes
+3. **Handle selection**: When `__new__` is selected, show an inline Input field + confirm button instead of jumping to camera. When confirmed:
+   - Call `createProfile` from `useProfiles()` to insert a new profile with the entered name
+   - Set the newly created profile's ID as `selectedProfileId`
+   - Proceed to the camera/capture step
 
-**New function** (after `handleDeleteAll`, ~line 235):
-```typescript
-const handleDeleteSingle = async (enrollmentId: string) => {
-  const { error } = await supabase
-    .from("face_enrollments")
-    .update({ is_active: false })
-    .eq("id", enrollmentId);
-  if (error) toast.error("Failed to delete photo");
-  else { toast.success("Photo removed"); fetchData(); }
-};
+4. **Reset**: Clear `newPersonName` and `creatingNewPerson` in `resetAddForm`.
+
+### UI Flow
+```text
+Select a person...
+├── + Add New Name        ← new option
+├── Ai
+├── Amir AHD
+├── ...
+└── Saurabh Seghal (re-enroll)
 ```
 
-**Photo thumbnail** (lines 408-422): Wrap each photo in a `relative group` div, add a small absolute-positioned delete button that appears on hover:
-```tsx
-<button onClick={() => handleDeleteSingle(enrollment.id)}
-  className="absolute top-0 right-0 ... opacity-0 group-hover:opacity-100">
-  <X className="w-3 h-3" />
-</button>
-```
+When "+ Add New Name" is clicked → input field appears → user types name → clicks ✓ → profile created → camera starts for enrollment photos.
 
-## Files Changed
-- `src/components/timeclock/FaceMemoryPanel.tsx` — add single-photo delete handler + overlay button on thumbnails
+## Technical Details
+- Uses existing `createProfile` mutation from `useProfiles()` hook
+- New profile created with `is_active: true`, empty duties array, and the entered `full_name`
+- No new database changes needed — uses existing `profiles` table insert
+- The `useCompanyId` hook (used inside `useProfiles`) ensures `company_id` is set automatically
 
