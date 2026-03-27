@@ -642,7 +642,7 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
       const result = calculateItem(input, std, p);
 
       // Preserve AI-provided weight when calculation produced zero (e.g. summary PDFs with no cut_length)
-      const aiWeight = (input as any).weight_kg;
+      const aiWeight = toNum((input as any).weight_kg);
       if (aiWeight && aiWeight > 0 && result.weight_kg === 0) {
         result.weight_kg = Math.round(aiWeight * 1000) / 1000;
         const materialCost = p?.material_cost_per_kg ?? 0;
