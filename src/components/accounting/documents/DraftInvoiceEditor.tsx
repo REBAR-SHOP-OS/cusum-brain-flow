@@ -264,6 +264,56 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
 
   const handlePrint = () => window.print();
 
+  const handleSendEmail = async () => {
+    const email = recipientEmail || customerEmail;
+    if (!email) {
+      toast({ title: "No email address", description: "Enter a recipient email address", variant: "destructive" });
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      // Build invoice email body
+      const itemRows = items.map(it =>
+        `<tr><td style="padding:6px 8px;border-bottom:1px solid #eee;">${it.description}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${it.quantity}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${fmt(it.unitPrice)}</td><td style="padding:6px 8px;border-bottom:1px solid #eee;text-align:right;">${fmt(it.quantity * it.unitPrice)}</td></tr>`
+      ).join("");
+
+      const emailBody = `
+        <p>Dear ${customerName || "Customer"},</p>
+        <p>Please find your invoice <strong>${invoiceNumber}</strong> below.</p>
+        <div style="background:#f8f9fc;border-radius:8px;padding:16px;margin:16px 0;">
+          <table style="width:100%;font-size:13px;border-collapse:collapse;">
+            <tr style="background:#1a1a2e;color:#fff;"><th style="padding:8px;text-align:left;">Description</th><th style="padding:8px;text-align:right;">Qty</th><th style="padding:8px;text-align:right;">Price</th><th style="padding:8px;text-align:right;">Amount</th></tr>
+            ${itemRows}
+          </table>
+          <div style="text-align:right;margin-top:12px;font-size:18px;font-weight:bold;color:#1a1a2e;">Total: ${fmt(total)}</div>
+        </div>
+        <p>Due date: <strong>${dueDate || "Upon receipt"}</strong></p>
+        <p>Thank you for your business!</p>
+      `;
+
+      const { error } = await supabase.functions.invoke("gmail-send", {
+        body: {
+          to: email,
+          subject: `Invoice ${invoiceNumber} - Rebar.Shop`,
+          body: emailBody,
+        },
+      });
+      if (error) throw error;
+
+      // Update invoice status to sent
+      await supabase.from("sales_invoices").update({ status: "sent" }).eq("id", invoiceId);
+      setStatus("sent");
+      queryClient.invalidateQueries({ queryKey: ["sales_invoices"] });
+
+      setEmailDialogOpen(false);
+      toast({ title: "Invoice sent", description: `Email sent to ${email}` });
+    } catch (err: any) {
+      toast({ title: "Send failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
@@ -274,6 +324,30 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-8">
+      {/* Email Dialog */}
+      {emailDialogOpen && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center print:hidden" onClick={() => setEmailDialogOpen(false)}>
+          <div className="bg-white rounded-lg shadow-xl p-6 w-96 text-gray-900" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">Send Invoice via Email</h3>
+            <label className="text-sm text-gray-600 font-medium">Recipient Email</label>
+            <Input
+              type="email"
+              placeholder="customer@example.com"
+              value={recipientEmail || customerEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              className={`mt-1 mb-4 ${inputCls}`}
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setEmailDialogOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleSendEmail} disabled={sendingEmail} className="gap-2">
+                {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                Send
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="fixed top-4 right-4 flex gap-2 print:hidden z-50">
         <Button size="sm" onClick={handleSave} disabled={saving} className="gap-2">
