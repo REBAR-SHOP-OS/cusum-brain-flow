@@ -1,32 +1,31 @@
 
 
-# Unify Print and Office Tag — Single Component
+# Fix: Posts Stuck in "Publishing..." State
 
 ## Problem
-`RebarTagCard.tsx` (office) and `PrintTag` (in `PrintTags.tsx`) are duplicate components that drift apart whenever one is updated. Changes to the office card don't reflect in print and vice versa.
+Posts that were published days ago still show "publishing" with a spinner. Two root causes:
+
+1. **Missing label**: `SocialCalendar.tsx` has no entry for `"publishing"` in `STATUS_LABELS` (line 25-31), so it renders the raw DB string
+2. **No stale recovery**: `social-cron-publish` sets `status: "publishing"` (line 160) before attempting to publish. If the edge function times out or crashes mid-flight, posts stay stuck forever — the catch block never fires
 
 ## Solution
-Delete the `PrintTag` inline component from `PrintTags.tsx` and reuse the existing `RebarTagCard` component directly. The print route keeps its scoped CSS reset but renders `RebarTagCard` instead of `PrintTag`.
 
-### Changes in `src/pages/PrintTags.tsx`
+### 1. Add "publishing" label to calendar (SocialCalendar.tsx, line 25-31)
+Add `publishing: "Publishing 🔄"` to `STATUS_LABELS` so the calendar displays it cleanly instead of raw text.
 
-**1. Remove the entire `PrintTag` function** (lines 46-152) — it's now redundant.
+### 2. Add stale-publishing cleanup to cron (social-cron-publish, ~line 120)
+Before fetching due posts, run a cleanup query that resets any post stuck as `"publishing"` for more than 10 minutes back to `"scheduled"` so it gets retried on the next cron run:
 
-**2. Remove duplicate helper functions** (lines 7-44) — `getWeight`, `fmtMmToFtIn`, `fmtVal`, `fmtDim`, `DIM_LEFT`, `DIM_RIGHT`, `DIM_COLS` are already in `RebarTagCard.tsx` or computed inline. Keep only `getWeight` and `DIM_COLS` (needed for row mapping).
-
-**3. Import `RebarTagCard`** and render it instead of `PrintTag`:
-```tsx
-import { RebarTagCard } from "@/components/office/RebarTagCard";
+```sql
+UPDATE social_posts
+SET status = 'scheduled'
+WHERE status = 'publishing'
+  AND updated_at < now() - interval '10 minutes'
 ```
 
-**4. Update the render loop** (lines 257-276) to use `<RebarTagCard>` with the same props.
-
-**5. Update scoped CSS** — change `.print-tag` selector to `.rebar-tag` (the class used by `RebarTagCard`).
-
-### Export weight helper from RebarTagCard
-Move `MASS_KG_PER_M` and `getWeight` into `RebarTagCard.tsx` as a named export so `PrintTags.tsx` can reuse it. Also export `DIM_COLS` (the combined dim keys array).
+This handles edge function timeouts, crashes, and any other failure mode that bypasses the catch block.
 
 ## Files Changed
-- `src/components/office/RebarTagCard.tsx` — export `getWeight` and `DIM_COLS`
-- `src/pages/PrintTags.tsx` — delete `PrintTag`, import and render `RebarTagCard`
+- `src/components/social/SocialCalendar.tsx` — add `publishing` to `STATUS_LABELS`
+- `supabase/functions/social-cron-publish/index.ts` — add stale-publishing recovery query before main fetch
 
