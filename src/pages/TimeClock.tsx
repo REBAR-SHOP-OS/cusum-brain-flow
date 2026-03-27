@@ -54,6 +54,7 @@ export default function TimeClock() {
   const [enrollmentCount, setEnrollmentCount] = useState(0);
   const [autoPunchCountdown, setAutoPunchCountdown] = useState(0);
   const [showRegistration, setShowRegistration] = useState(false);
+  const [showMemoryPanel, setShowMemoryPanel] = useState(false);
 
   // Cache of profile IDs confirmed during this kiosk session
   const confirmedProfilesRef = useRef<Set<string>>(new Set());
