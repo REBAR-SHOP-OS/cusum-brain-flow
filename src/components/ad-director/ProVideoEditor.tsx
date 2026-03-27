@@ -1651,6 +1651,7 @@ export function ProVideoEditor({
           { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
           { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
           { id: "subtitle", label: "Subtitle", icon: <Captions className="w-3.5 h-3.5" /> },
+          { id: "text-voice", label: "Text+Voice", icon: <MessageSquareText className="w-3.5 h-3.5" /> },
           { id: "speed", label: `${videoSpeed}×`, icon: <Gauge className="w-3.5 h-3.5" /> },
         ]}
         activeSidebarTab={activeTab}
