@@ -172,13 +172,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
     loadAll();
   }, [quoteId, onClose, companyId]);
 
-  const filteredCustomers = useMemo(
-    () =>
-      customers.filter((c) =>
-        (c.name || "").toLowerCase().includes(customerSearch.toLowerCase())
-      ),
-    [customers, customerSearch]
-  );
+  const filteredCustomers = customers;
 
   const filteredProducts = useMemo(
     () =>
