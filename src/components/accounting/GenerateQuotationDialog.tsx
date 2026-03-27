@@ -139,14 +139,14 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
           setCustomerName(lead.contact_company || lead.contact_name || "");
         }
       }
-      if (proj.customer_id && customers?.length) {
-        const cust = (customers as any[]).find((c: any) => c.customer_id === proj.customer_id);
+      if (proj.customer_id && customerOptions?.length) {
+        const cust = customerOptions.find((c: any) => c.customer_id === proj.customer_id);
         if (cust) {
           setCustomerName(cust.display_name || cust.company_name || cust.normalized_name || "");
         }
       }
     }
-  }, [selectedProject, projects, leads, customers, customerName, selectedLeadId]);
+  }, [selectedProject, projects, leads, customerOptions, customerName, selectedLeadId]);
 
   // File handlers
   const addFiles = useCallback((files: FileList | File[]) => {
