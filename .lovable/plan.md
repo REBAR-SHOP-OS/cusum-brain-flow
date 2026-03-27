@@ -1,43 +1,27 @@
 
 
-# Add Video Speed Control Icon to Toolbar
+# Fix Blurry Timeline Video Strip
 
-## What
-Add a speed control icon (Gauge) to the timeline toolbar. Clicking it opens a popover with speed options (0.5x, 0.75x, 1x, 1.25x, 1.5x, 2x). The selected speed applies directly to the `<video>` element's `playbackRate`.
+## Problem
+The timeline strip shows a single low-resolution thumbnail (160×90, JPEG quality 0.6) which appears blurry when stretched across the full timeline width.
 
-## Changes
+## Solution
+Improve the `useVideoThumbnails` hook in `TimelineBar.tsx`:
 
-### 1. `src/components/ad-director/ProVideoEditor.tsx`
+1. **Increase resolution**: Change canvas size from 160×90 to 480×270 (3x larger)
+2. **Increase quality**: Change JPEG quality from 0.6 to 0.9
+3. **Generate multiple frames**: Extract 5-6 frames spread across the video duration to create a filmstrip effect, rather than a single frame at the midpoint
+4. **Display as repeating filmstrip**: Show multiple thumbnails side-by-side in the timeline clip instead of one stretched image
 
-- Add `Gauge` to lucide imports
-- Add `videoSpeed` state (`useState(1)`)
-- Add `"speed"` to `EditorTab` type
-- Intercept `"speed"` tab click in `handleSetActiveTab` → open a speed popover dialog
-- Apply `videoRef.current.playbackRate = videoSpeed` via a `useEffect` that watches `videoSpeed` and `selectedSceneIndex`
-- Add a new sidebar tab entry: `{ id: "speed", label: "Speed", icon: <Gauge /> }`
+### Technical details
 
-### 2. Create `src/components/ad-director/editor/SpeedControlPopover.tsx`
+**`src/components/ad-director/editor/TimelineBar.tsx`**:
 
-A simple popover component:
-- Shows current speed as badge on the Gauge icon
-- Lists speed options: 0.5×, 0.75×, 1×, 1.25×, 1.5×, 2×
-- Highlights current selection
-- Calls `onSpeedChange(value)` on click
-
-### 3. Wire speed to video element
-
-In `ProVideoEditor.tsx`, add useEffect:
-```tsx
-useEffect(() => {
-  if (videoRef.current) {
-    videoRef.current.playbackRate = videoSpeed;
-  }
-}, [videoSpeed, selectedSceneIndex, videoSrc]);
-```
-
-This ensures the playback rate is reapplied when switching scenes.
+- `useVideoThumbnails` will return `Record<string, string[]>` (array of frame URLs per scene) instead of `Record<string, string>`
+- Extract ~5 frames at evenly spaced intervals (0%, 20%, 40%, 60%, 80% of duration)
+- Canvas: 320×180, JPEG quality 0.85
+- In the timeline clip rendering (line ~379-390), display frames as a horizontal filmstrip using `display: flex` with multiple `<img>` elements instead of one stretched image
 
 ## Files changed
-- `src/components/ad-director/editor/SpeedControlPopover.tsx` — new
-- `src/components/ad-director/ProVideoEditor.tsx` — state, useEffect, toolbar icon, intercept handler
+- `src/components/ad-director/editor/TimelineBar.tsx` — update thumbnail extraction and rendering
 
