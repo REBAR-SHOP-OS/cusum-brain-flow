@@ -246,7 +246,7 @@ You MUST call the face_match_result function with your answer.`,
       try {
         const retryResult = await callAI({
           provider: "gemini",
-          model: "gemini-2.5-pro",
+          model: "gemini-2.5-flash",
           messages: [{ role: "user", content: contentParts }],
           tools: [toolDef],
           toolChoice: { type: "function", function: { name: "face_match_result" } },
