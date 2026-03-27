@@ -316,65 +316,92 @@ Deno.serve((req) =>
       }
     }
 
-    // ─── 2. Send files directly to Gemini 2.5 Pro for vision extraction ───
+    // ─── 2. Separate files by type: spreadsheets (deterministic) vs PDF/images (AI) ───
     let extractedItems: EstimationItemInput[] = [];
+    let spreadsheetItems: EstimationItemInput[] = [];
+    let hadSpreadsheetFiles = false;
+    let hadAIFiles = false;
 
     if (file_urls.length > 0) {
-      try {
-        const contentParts: any[] = [];
+      const contentParts: any[] = [];
 
-        function arrayBufferToBase64(buffer: Uint8Array): string {
-          const chunkSize = 8192;
-          let binary = "";
-          for (let i = 0; i < buffer.length; i += chunkSize) {
-            const chunk = buffer.subarray(i, Math.min(i + chunkSize, buffer.length));
-            for (let j = 0; j < chunk.length; j++) {
-              binary += String.fromCharCode(chunk[j]);
-            }
-          }
-          return btoa(binary);
-        }
-
-        for (const url of file_urls.slice(0, 4)) {
-          const lower = url.toLowerCase();
-          const isPdf = /\.pdf(\?|$)/.test(lower);
-          const isImage = /\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower);
-          const isCsv = /\.csv(\?|$)/.test(lower);
-
-          if (isPdf) {
-            try {
-              const res = await fetch(url);
-              if (!res.ok) { console.error(`Failed to fetch PDF: ${url} (${res.status})`); continue; }
-              const bytes = new Uint8Array(await res.arrayBuffer());
-              const b64 = arrayBufferToBase64(bytes);
-              contentParts.push({ type: "image_url", image_url: { url: `data:application/pdf;base64,${b64}` } });
-              console.log(`PDF converted to base64: ${(bytes.length / 1024).toFixed(0)}KB`);
-            } catch (fetchErr) {
-              console.error(`PDF fetch/convert error for ${url}:`, fetchErr);
-            }
-          } else if (isCsv) {
-            try {
-              const res = await fetch(url);
-              if (!res.ok) { console.error(`Failed to fetch CSV: ${url}`); continue; }
-              const text = await res.text();
-              contentParts.push({ type: "text", text: `[CSV DATA]\n${text.slice(0, 50000)}` });
-            } catch (fetchErr) {
-              console.error(`CSV fetch error for ${url}:`, fetchErr);
-            }
-          } else if (isImage) {
-            contentParts.push({ type: "image_url", image_url: { url } });
-          } else {
-            try {
-              const res = await fetch(url);
-              if (!res.ok) continue;
-              const bytes = new Uint8Array(await res.arrayBuffer());
-              const b64 = arrayBufferToBase64(bytes);
-              const ext = lower.split('.').pop()?.split('?')[0] ?? "octet-stream";
-              const mime = ext === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : `application/${ext}`;
-              contentParts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } });
-            } catch { /* skip unsupported */ }
+      function arrayBufferToBase64(buffer: Uint8Array): string {
+        const chunkSize = 8192;
+        let binary = "";
+        for (let i = 0; i < buffer.length; i += chunkSize) {
+          const chunk = buffer.subarray(i, Math.min(i + chunkSize, buffer.length));
+          for (let j = 0; j < chunk.length; j++) {
+            binary += String.fromCharCode(chunk[j]);
           }
         }
+        return btoa(binary);
+      }
+
+      for (const url of file_urls.slice(0, 4)) {
+        const lower = url.toLowerCase();
+        const isPdf = /\.pdf(\?|$)/.test(lower);
+        const isImage = /\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower);
+        const isCsv = /\.csv(\?|$)/.test(lower);
+        const isSpreadsheet = /\.(xlsx|xls)(\?|$)/.test(lower);
+
+        if (isSpreadsheet) {
+          // ─── DETERMINISTIC XLSX PARSING ───
+          hadSpreadsheetFiles = true;
+          try {
+            const res = await fetch(url);
+            if (!res.ok) { console.error(`Failed to fetch spreadsheet: ${url} (${res.status})`); continue; }
+            const bytes = new Uint8Array(await res.arrayBuffer());
+            console.log(`Parsing spreadsheet: ${(bytes.length / 1024).toFixed(0)}KB`);
+            const workbook = XLSX.read(bytes, { type: "array" });
+            const parsed = parseSpreadsheetToItems(workbook);
+            console.log(`Spreadsheet deterministic parse: ${parsed.length} items extracted`);
+            spreadsheetItems.push(...parsed);
+          } catch (xlsErr) {
+            console.error(`Spreadsheet parse error for ${url}:`, xlsErr);
+          }
+        } else if (isCsv) {
+          hadSpreadsheetFiles = true;
+          try {
+            const res = await fetch(url);
+            if (!res.ok) { console.error(`Failed to fetch CSV: ${url}`); continue; }
+            const text = await res.text();
+            // Parse CSV deterministically via XLSX
+            const workbook = XLSX.read(text, { type: "string" });
+            const parsed = parseSpreadsheetToItems(workbook);
+            console.log(`CSV deterministic parse: ${parsed.length} items extracted`);
+            spreadsheetItems.push(...parsed);
+          } catch (csvErr) {
+            console.error(`CSV parse error for ${url}:`, csvErr);
+            // Fallback: send as text to AI
+            try {
+              const res = await fetch(url);
+              if (res.ok) {
+                const text = await res.text();
+                contentParts.push({ type: "text", text: `[CSV DATA]\n${text.slice(0, 50000)}` });
+                hadAIFiles = true;
+              }
+            } catch { /* skip */ }
+          }
+        } else if (isPdf) {
+          hadAIFiles = true;
+          try {
+            const res = await fetch(url);
+            if (!res.ok) { console.error(`Failed to fetch PDF: ${url} (${res.status})`); continue; }
+            const bytes = new Uint8Array(await res.arrayBuffer());
+            const b64 = arrayBufferToBase64(bytes);
+            contentParts.push({ type: "image_url", image_url: { url: `data:application/pdf;base64,${b64}` } });
+            console.log(`PDF converted to base64: ${(bytes.length / 1024).toFixed(0)}KB`);
+          } catch (fetchErr) {
+            console.error(`PDF fetch/convert error for ${url}:`, fetchErr);
+          }
+        } else if (isImage) {
+          hadAIFiles = true;
+          contentParts.push({ type: "image_url", image_url: { url } });
+        } else {
+          // Unknown file type — skip, don't send as binary blob to AI
+          console.log(`Skipping unsupported file type: ${url}`);
+        }
+      }
 
         const extractionPrompt = `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings OR estimation documents and extract ALL rebar reinforcement items.
 
