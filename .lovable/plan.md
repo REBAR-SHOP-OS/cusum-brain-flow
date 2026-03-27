@@ -1,28 +1,26 @@
 
 
-# Fix: Status Filter Showing Wrong Posts in Published/Declined Tabs
+# Replace "Dwg" with "Weight" in Shape Caption
 
-## Problem
+## Change
 
-In `SocialMediaManager.tsx` line 143-147, the catch-all `else if (statusFilter !== "all")` branch adds `|| p.status === "scheduled" || p.status === "published"` to every non-all filter. This means:
-- **Published tab** shows published + scheduled posts
-- **Declined tab** shows declined + scheduled + published posts
-- **Drafts tab** shows drafts + scheduled + published posts
+In `src/components/office/RebarTagCard.tsx`, line 157: replace the "Dwg" label/value with "Weight" label/value.
 
-The comment says "Always keep scheduled + published visible" but that defeats the purpose of filtering by status.
-
-## Fix
-
-Replace the catch-all filter (lines 143-147) with strict equality — only show posts matching the selected status:
-
-```typescript
-} else if (statusFilter !== "all") {
-  items = items.filter((p) => p.status === statusFilter);
-}
+**Before:**
+```
+Dwg: —    Item: 1
 ```
 
-This one-line change ensures each status tab shows only its own posts.
+**After:**
+```
+Weight: 70.65    Item: 1
+```
+
+## Technical detail
+
+- Line 157: Change `Dwg:` → `Weight:`, change `{dwg || "—"}` → `{weight || "—"}`
+- The `weight` prop is already passed to the component and available.
 
 ## File Changed
-- `src/pages/SocialMediaManager.tsx` — line 145-146: remove `|| p.status === "scheduled" || p.status === "published"` from filter
+- `src/components/office/RebarTagCard.tsx` — line 157 only
 
