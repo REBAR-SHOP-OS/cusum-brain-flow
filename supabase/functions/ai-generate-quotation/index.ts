@@ -173,11 +173,11 @@ Deno.serve((req) =>
     const nonCageTonnes = (baseNonCageKg * (1 + scrapPct / 100)) / 1000;
 
     // ─── GUARD: Block $0 quotes ───
-    if (totalWeightKg <= 0 && bomItems.length === 0) {
+    if (rawWeightKg <= 0 && bomItems.length === 0) {
       return new Response(JSON.stringify({
         error: "No measurable rebar was extracted from this estimation project. Cannot generate a $0 quotation. Please re-upload the document or add items manually.",
         failure_reason: "zero_weight",
-        total_weight_kg: totalWeightKg,
+        total_weight_kg: rawWeightKg,
         item_count: bomItems.length,
       }), {
         status: 422,
