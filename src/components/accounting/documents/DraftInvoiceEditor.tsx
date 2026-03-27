@@ -258,7 +258,22 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
 
       // Store customer email and amount for email sending
       const metaForEmail = (inv as any).metadata || {};
-      setCustomerEmail(metaForEmail.customer_email || (inv as any).customer_email || "");
+      let resolvedEmail = metaForEmail.customer_email || (inv as any).customer_email || "";
+      
+      // Fallback: look up customer email from customers table by name
+      if (!resolvedEmail && (inv.customer_name || inv.customer_company) && companyId) {
+        const searchName = inv.customer_name || inv.customer_company || "";
+        const { data: custMatch } = await supabase
+          .from("customers")
+          .select("email")
+          .eq("company_id", companyId)
+          .or(`name.ilike.%${searchName}%,company_name.ilike.%${searchName}%`)
+          .limit(1)
+          .maybeSingle();
+        if (custMatch?.email) resolvedEmail = custMatch.email;
+      }
+      
+      setCustomerEmail(resolvedEmail);
       setInvoiceAmount(Number(inv.amount) || 0);
 
       if (custRes.data) {
