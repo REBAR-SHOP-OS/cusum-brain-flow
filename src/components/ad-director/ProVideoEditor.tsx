@@ -1660,6 +1660,14 @@ export function ProVideoEditor({
         onAdd={handleAddSubtitle}
       />
 
+      {/* Speed Control Dialog */}
+      <SpeedControlDialog
+        open={speedPopoverOpen}
+        onOpenChange={setSpeedPopoverOpen}
+        speed={videoSpeed}
+        onSpeedChange={setVideoSpeed}
+      />
+
       {/* Hidden audio file input */}
       <input
         ref={audioUploadRef}
