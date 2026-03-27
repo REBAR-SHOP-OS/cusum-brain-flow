@@ -403,6 +403,9 @@ Deno.serve((req) =>
         }
       }
 
+      // ─── AI extraction: only for PDF/image files ───
+      if (hadAIFiles && contentParts.length > 0) {
+        try {
         const extractionPrompt = `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings OR estimation documents and extract ALL rebar reinforcement items.
 
 ${scope_context ? `Context: ${scope_context}` : ""}
@@ -420,11 +423,11 @@ These drawings use RebarCAD notation common in Canadian rebar detailing. Key pat
 
 ### Quantity Notation
 - Simple: "5" means 5 pieces
-- Layer multiplier: "2x11" means 2 layers × 11 bars = 22 total bars
-- "4x2" means 4 sets × 2 bars = 8 total bars
+- Layer multiplier: "2x11" means 2 layers x 11 bars = 22 total bars
+- "4x2" means 4 sets x 2 bars = 8 total bars
 
 ### Bend Types (ACI/RebarCAD)
-- **Type 2**: L-shape (90° hook on one end) — dimensions A, B
+- **Type 2**: L-shape (90 degree hook on one end) — dimensions A, B
 - **Type 3**: Cranked/Z-shape — dimensions A, B, C
 - **Type 17**: U-bar/stirrup (hook both ends) — dimensions A, B
 - **T1**: Custom trapezoidal — dimensions A through G
@@ -461,12 +464,12 @@ If the document is a weight summary report or estimate summary (contains tables 
 - For each element row (e.g. "RAFT SLAB: 27201.09 kg"), create items distributing the weight proportionally across bar sizes based on the bar size weight table in the document
 - If only total weights per bar size are given (no per-element breakdown by size), create one item per bar size with the total weight
 - Set mark to "SUM-{element_abbrev}-{bar_size}" (e.g. "SUM-RS-15M", "SUM-WALL-20M", "SUM-GB-15M")
-  Element abbreviations: RAFT SLAB→RS, WALL→WALL, GRADE BEAMS→GB, PIERS→PIER, COLUMN→COL, SLAB→SL, FOOTING→FT, STAIR→ST
+  Element abbreviations: RAFT SLAB to RS, WALL to WALL, GRADE BEAMS to GB, PIERS to PIER, COLUMN to COL, SLAB to SL, FOOTING to FT, STAIR to ST
 - Set quantity to 1
 - Set shape_code to "straight"
 - Calculate cut_length_mm from weight: weight_kg / mass_kg_per_m * 1000
   Use approximate mass per meter: 10M=0.785, 15M=1.570, 20M=2.355, 25M=3.925, 30M=5.495, 35M=7.850 kg/m
-- Set element_type from the element name (RAFT SLAB→"slab", WALL→"wall", GRADE BEAMS→"grade_beam", PIERS→"pier", COLUMN→"column", FOOTING→"footing", STAIR→"stair")
+- Set element_type from the element name (RAFT SLAB to "slab", WALL to "wall", GRADE BEAMS to "grade_beam", PIERS to "pier", COLUMN to "column", FOOTING to "footing", STAIR to "stair")
 - Set element_ref from the element name as shown in document
 - Set weight_kg directly from the document's stated weight for that row
 - CRITICAL: Preserve the exact weights from the document — do not recalculate them
@@ -543,16 +546,13 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
                 console.log(`Extracted ${extractedItems.length} items (regex fallback)`);
               } catch (parseErr) {
                 console.error("JSON parse failed after regex match:", parseErr);
-                console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
               }
             } else {
               console.error("No JSON array found in AI response");
-              console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
             }
           }
 
           // ─── STRICT USEFULNESS TEST ───
-          // Require at least one item with a valid bar_size AND positive weight or length
           const hasUsefulItem = extractedItems.some(item =>
             item.bar_size && MASS_PER_M[item.bar_size] &&
             (Number(item.weight_kg) > 0 || Number(item.cut_length_mm) > 0)
@@ -560,32 +560,24 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
 
           if (!hasUsefulItem) {
             console.log(`AI returned ${extractedItems.length} items but none are useful — running deterministic fallback`);
-            
-            // Strategy 1: parse weight patterns from AI response text
             let rescued = parseWeightSummaryFallback(content);
-            
-            // Strategy 2: rescue from AI JSON items (group by bar_size, sum weights)
-            if (rescued.length === 0) {
-              console.log("Text fallback found nothing — trying rescueAIItems");
-              rescued = rescueAIItems(extractedItems);
-            }
-            
-            // Strategy 3: parse the cleaned JSON text itself for weight patterns
-            if (rescued.length === 0) {
-              console.log("rescueAIItems found nothing — trying fallback on raw cleaned text");
-              rescued = parseWeightSummaryFallback(cleaned);
-            }
-            
+            if (rescued.length === 0) rescued = rescueAIItems(extractedItems);
+            if (rescued.length === 0) rescued = parseWeightSummaryFallback(cleaned);
             if (rescued.length > 0) {
               console.log(`Deterministic fallback produced ${rescued.length} items`);
               extractedItems = rescued;
-            } else {
-              console.log("All fallback strategies failed — keeping original AI items with null guards");
             }
           }
         }
-      } catch (e) {
-        console.error("AI vision extraction error:", e);
+        } catch (e) {
+          console.error("AI vision extraction error:", e);
+        }
+      }
+
+      // ─── MERGE: spreadsheet items take priority, then AI items ───
+      if (spreadsheetItems.length > 0) {
+        console.log(`Merging ${spreadsheetItems.length} spreadsheet items with ${extractedItems.length} AI items`);
+        extractedItems = [...spreadsheetItems, ...extractedItems];
       }
     }
 
