@@ -241,6 +241,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
           salesperson: customerName || null,
           metadata: {
             customer_name: customerName,
+            customer_email: customerEmail || undefined,
             customer_address: customerAddress,
             project_name: projectName,
             tax_rate: taxRate,
