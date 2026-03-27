@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Loader2, Upload, X, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -211,28 +212,18 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
         fileUrls.push(urlData.publicUrl);
       }
 
-      // 2. Run AI estimation
-      const { data: estData, error: estError } = await supabase.functions.invoke("ai-estimate", {
-        body: {
-          name: projectName || "AI Auto Quotation",
-          file_urls: fileUrls,
-          waste_factor_pct: 15,
-          customer_id: selectedCustomerId || undefined,
-          lead_id: selectedLeadId || leadId || undefined,
-        },
-      });
-      if (estError) {
-        // supabase.functions.invoke swallows error bodies — try to get the message
-        const errMsg = typeof estError === "object" && estError?.message ? estError.message : String(estError);
-        throw new Error(errMsg);
-      }
-      if (estData?.error) throw new Error(estData.error);
-      if (estData?.extraction_failed) throw new Error(estData.error || "Could not extract rebar data from the uploaded file.");
+      // 2. Run AI estimation via invokeEdgeFunction for better error visibility
+      const estData = await invokeEdgeFunction("ai-estimate", {
+        name: projectName || "AI Auto Quotation",
+        file_urls: fileUrls,
+        waste_factor_pct: 15,
+        customer_id: selectedCustomerId || undefined,
+        lead_id: selectedLeadId || leadId || undefined,
+      }, { timeoutMs: 120000 });
 
       const newProjectId = estData?.project?.id || estData?.project_id;
       if (!newProjectId) throw new Error("Estimation did not return a project ID");
 
-      // Check if estimation produced meaningful data
       const estWeight = estData?.summary?.total_weight_kg ?? 0;
       if (estWeight <= 0) {
         throw new Error("No rebar data could be extracted from the uploaded file(s). Please ensure you're uploading a rebar schedule, shop drawing, or weight summary report.");

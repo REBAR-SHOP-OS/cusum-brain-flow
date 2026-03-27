@@ -10,6 +10,7 @@ import {
   type EstimationItemResult,
   type ValidationRule,
 } from "../_shared/rebarCalcEngine.ts";
+import * as XLSX from "npm:xlsx@0.18.5";
 
 const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY")!;
 
@@ -136,6 +137,104 @@ function rescueAIItems(items: any[]): EstimationItemInput[] {
   return rescued;
 }
 
+// ─── BAR SIZE NORMALIZATION for XLSX parsing ───
+const BAR_SIZE_NORMALIZE: Record<string, string> = {
+  "10": "10M", "10M": "10M", "#3": "10M",
+  "15": "15M", "15M": "15M", "#4": "15M", "#5": "15M",
+  "20": "20M", "20M": "20M", "#6": "20M",
+  "25": "25M", "25M": "25M", "#7": "25M", "#8": "25M",
+  "30": "30M", "30M": "30M", "#9": "30M", "#10": "30M",
+  "35": "35M", "35M": "35M", "#11": "35M",
+};
+
+function normalizeBarSize(raw: string): string | null {
+  const cleaned = raw?.toString().trim().toUpperCase().replace(/\s/g, "");
+  return BAR_SIZE_NORMALIZE[cleaned] ?? null;
+}
+
+/**
+ * Deterministic XLSX/XLS/CSV parser.
+ * Reads rows from a spreadsheet and extracts bar items by detecting
+ * columns with bar sizes, quantities, lengths, and weights.
+ */
+function parseSpreadsheetToItems(workbook: XLSX.WorkBook): EstimationItemInput[] {
+  const items: EstimationItemInput[] = [];
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) continue;
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+    if (rows.length < 2) continue;
+
+    // Find header row by looking for key terms
+    let headerIdx = -1;
+    let colMap: Record<string, number> = {};
+
+    for (let i = 0; i < Math.min(15, rows.length); i++) {
+      const row = rows[i];
+      if (!row || !Array.isArray(row)) continue;
+      const cells = row.map((c: any) => String(c ?? "").trim().toLowerCase());
+
+      const sizeIdx = cells.findIndex((c) => ["size", "bar size", "bar_size", "rebar size"].includes(c));
+      const qtyIdx = cells.findIndex((c) => ["qty", "quantity", "no. pcs", "pcs", "no."].includes(c) || c.includes("pcs"));
+      const lengthIdx = cells.findIndex((c) => ["length", "cut length", "total length", "cut_length"].includes(c));
+      const markIdx = cells.findIndex((c) => ["mark", "bar mark", "item"].includes(c));
+      const weightIdx = cells.findIndex((c) => c.includes("weight") || c.includes("mass") || c === "kg");
+      const typeIdx = cells.findIndex((c) => ["type", "bend type", "shape", "shape_code"].includes(c));
+      const dwgIdx = cells.findIndex((c) => c.includes("dwg") || c.includes("drawing") || c.includes("drg") || c.includes("element"));
+
+      if (sizeIdx >= 0 || (qtyIdx >= 0 && lengthIdx >= 0)) {
+        headerIdx = i;
+        colMap = { size: sizeIdx, qty: qtyIdx, length: lengthIdx, mark: markIdx, weight: weightIdx, type: typeIdx, dwg: dwgIdx };
+        break;
+      }
+    }
+
+    if (headerIdx < 0) continue;
+
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || row.length < 2) continue;
+
+      // Try to find bar size
+      const rawSize = colMap.size >= 0 ? String(row[colMap.size] ?? "").trim() : "";
+      const barSize = normalizeBarSize(rawSize);
+      if (!barSize) continue;
+
+      const quantity = colMap.qty >= 0 ? (parseInt(String(row[colMap.qty] ?? "0")) || 0) : 1;
+      if (quantity <= 0) continue;
+
+      const cutLengthRaw = colMap.length >= 0 ? (parseFloat(String(row[colMap.length] ?? "0")) || 0) : 0;
+      const cutLengthMm = cutLengthRaw > 100 ? cutLengthRaw : cutLengthRaw * 1000;
+
+      const weightRaw = colMap.weight >= 0 ? (parseFloat(String(row[colMap.weight] ?? "0")) || 0) : 0;
+      const massPerM = MASS_PER_M[barSize] || 1.570;
+      const weightKg = weightRaw > 0 ? weightRaw : Math.round(quantity * (cutLengthMm / 1000) * massPerM * 100) / 100;
+
+      const mark = colMap.mark >= 0 ? String(row[colMap.mark] ?? "").trim() : `R${items.length + 1}`;
+      const bendType = colMap.type >= 0 ? String(row[colMap.type] ?? "").trim() : "";
+      const dwgRef = colMap.dwg >= 0 ? String(row[colMap.dwg] ?? "").trim() : "";
+
+      items.push({
+        element_type: "mixed",
+        element_ref: dwgRef || sheetName,
+        mark: mark || `R${items.length + 1}`,
+        bar_size: barSize,
+        quantity,
+        cut_length_mm: Math.round(cutLengthMm),
+        hook_type_near: "none",
+        hook_type_far: "none",
+        lap_type: "none",
+        num_laps: 0,
+        shape_code: bendType === "00" || !bendType ? "straight" : "other",
+        weight_kg: weightKg,
+      } as any);
+    }
+  }
+
+  return items;
+}
+
 
 Deno.serve((req) =>
   handleRequest(req, async ({ userId, companyId, serviceClient: supabaseAdmin, body }) => {
@@ -217,66 +316,96 @@ Deno.serve((req) =>
       }
     }
 
-    // ─── 2. Send files directly to Gemini 2.5 Pro for vision extraction ───
+    // ─── 2. Separate files by type: spreadsheets (deterministic) vs PDF/images (AI) ───
     let extractedItems: EstimationItemInput[] = [];
+    let spreadsheetItems: EstimationItemInput[] = [];
+    let hadSpreadsheetFiles = false;
+    let hadAIFiles = false;
 
     if (file_urls.length > 0) {
-      try {
-        const contentParts: any[] = [];
+      const contentParts: any[] = [];
 
-        function arrayBufferToBase64(buffer: Uint8Array): string {
-          const chunkSize = 8192;
-          let binary = "";
-          for (let i = 0; i < buffer.length; i += chunkSize) {
-            const chunk = buffer.subarray(i, Math.min(i + chunkSize, buffer.length));
-            for (let j = 0; j < chunk.length; j++) {
-              binary += String.fromCharCode(chunk[j]);
-            }
-          }
-          return btoa(binary);
-        }
-
-        for (const url of file_urls.slice(0, 4)) {
-          const lower = url.toLowerCase();
-          const isPdf = /\.pdf(\?|$)/.test(lower);
-          const isImage = /\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower);
-          const isCsv = /\.csv(\?|$)/.test(lower);
-
-          if (isPdf) {
-            try {
-              const res = await fetch(url);
-              if (!res.ok) { console.error(`Failed to fetch PDF: ${url} (${res.status})`); continue; }
-              const bytes = new Uint8Array(await res.arrayBuffer());
-              const b64 = arrayBufferToBase64(bytes);
-              contentParts.push({ type: "image_url", image_url: { url: `data:application/pdf;base64,${b64}` } });
-              console.log(`PDF converted to base64: ${(bytes.length / 1024).toFixed(0)}KB`);
-            } catch (fetchErr) {
-              console.error(`PDF fetch/convert error for ${url}:`, fetchErr);
-            }
-          } else if (isCsv) {
-            try {
-              const res = await fetch(url);
-              if (!res.ok) { console.error(`Failed to fetch CSV: ${url}`); continue; }
-              const text = await res.text();
-              contentParts.push({ type: "text", text: `[CSV DATA]\n${text.slice(0, 50000)}` });
-            } catch (fetchErr) {
-              console.error(`CSV fetch error for ${url}:`, fetchErr);
-            }
-          } else if (isImage) {
-            contentParts.push({ type: "image_url", image_url: { url } });
-          } else {
-            try {
-              const res = await fetch(url);
-              if (!res.ok) continue;
-              const bytes = new Uint8Array(await res.arrayBuffer());
-              const b64 = arrayBufferToBase64(bytes);
-              const ext = lower.split('.').pop()?.split('?')[0] ?? "octet-stream";
-              const mime = ext === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : `application/${ext}`;
-              contentParts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } });
-            } catch { /* skip unsupported */ }
+      function arrayBufferToBase64(buffer: Uint8Array): string {
+        const chunkSize = 8192;
+        let binary = "";
+        for (let i = 0; i < buffer.length; i += chunkSize) {
+          const chunk = buffer.subarray(i, Math.min(i + chunkSize, buffer.length));
+          for (let j = 0; j < chunk.length; j++) {
+            binary += String.fromCharCode(chunk[j]);
           }
         }
+        return btoa(binary);
+      }
 
+      for (const url of file_urls.slice(0, 4)) {
+        const lower = url.toLowerCase();
+        const isPdf = /\.pdf(\?|$)/.test(lower);
+        const isImage = /\.(png|jpg|jpeg|webp|gif)(\?|$)/.test(lower);
+        const isCsv = /\.csv(\?|$)/.test(lower);
+        const isSpreadsheet = /\.(xlsx|xls)(\?|$)/.test(lower);
+
+        if (isSpreadsheet) {
+          // ─── DETERMINISTIC XLSX PARSING ───
+          hadSpreadsheetFiles = true;
+          try {
+            const res = await fetch(url);
+            if (!res.ok) { console.error(`Failed to fetch spreadsheet: ${url} (${res.status})`); continue; }
+            const bytes = new Uint8Array(await res.arrayBuffer());
+            console.log(`Parsing spreadsheet: ${(bytes.length / 1024).toFixed(0)}KB`);
+            const workbook = XLSX.read(bytes, { type: "array" });
+            const parsed = parseSpreadsheetToItems(workbook);
+            console.log(`Spreadsheet deterministic parse: ${parsed.length} items extracted`);
+            spreadsheetItems.push(...parsed);
+          } catch (xlsErr) {
+            console.error(`Spreadsheet parse error for ${url}:`, xlsErr);
+          }
+        } else if (isCsv) {
+          hadSpreadsheetFiles = true;
+          try {
+            const res = await fetch(url);
+            if (!res.ok) { console.error(`Failed to fetch CSV: ${url}`); continue; }
+            const text = await res.text();
+            // Parse CSV deterministically via XLSX
+            const workbook = XLSX.read(text, { type: "string" });
+            const parsed = parseSpreadsheetToItems(workbook);
+            console.log(`CSV deterministic parse: ${parsed.length} items extracted`);
+            spreadsheetItems.push(...parsed);
+          } catch (csvErr) {
+            console.error(`CSV parse error for ${url}:`, csvErr);
+            // Fallback: send as text to AI
+            try {
+              const res = await fetch(url);
+              if (res.ok) {
+                const text = await res.text();
+                contentParts.push({ type: "text", text: `[CSV DATA]\n${text.slice(0, 50000)}` });
+                hadAIFiles = true;
+              }
+            } catch { /* skip */ }
+          }
+        } else if (isPdf) {
+          hadAIFiles = true;
+          try {
+            const res = await fetch(url);
+            if (!res.ok) { console.error(`Failed to fetch PDF: ${url} (${res.status})`); continue; }
+            const bytes = new Uint8Array(await res.arrayBuffer());
+            const b64 = arrayBufferToBase64(bytes);
+            contentParts.push({ type: "image_url", image_url: { url: `data:application/pdf;base64,${b64}` } });
+            console.log(`PDF converted to base64: ${(bytes.length / 1024).toFixed(0)}KB`);
+          } catch (fetchErr) {
+            console.error(`PDF fetch/convert error for ${url}:`, fetchErr);
+          }
+        } else if (isImage) {
+          hadAIFiles = true;
+          contentParts.push({ type: "image_url", image_url: { url } });
+        } else {
+          // Unknown file type — skip, don't send as binary blob to AI
+          console.log(`Skipping unsupported file type: ${url}`);
+        }
+      }
+
+      // ─── AI extraction: only for PDF/image files ───
+      if (hadAIFiles && contentParts.length > 0) {
+        try {
         const extractionPrompt = `You are a senior Canadian rebar detailer and structural estimator. Analyze the uploaded structural/shop drawings OR estimation documents and extract ALL rebar reinforcement items.
 
 ${scope_context ? `Context: ${scope_context}` : ""}
@@ -294,11 +423,11 @@ These drawings use RebarCAD notation common in Canadian rebar detailing. Key pat
 
 ### Quantity Notation
 - Simple: "5" means 5 pieces
-- Layer multiplier: "2x11" means 2 layers × 11 bars = 22 total bars
-- "4x2" means 4 sets × 2 bars = 8 total bars
+- Layer multiplier: "2x11" means 2 layers x 11 bars = 22 total bars
+- "4x2" means 4 sets x 2 bars = 8 total bars
 
 ### Bend Types (ACI/RebarCAD)
-- **Type 2**: L-shape (90° hook on one end) — dimensions A, B
+- **Type 2**: L-shape (90 degree hook on one end) — dimensions A, B
 - **Type 3**: Cranked/Z-shape — dimensions A, B, C
 - **Type 17**: U-bar/stirrup (hook both ends) — dimensions A, B
 - **T1**: Custom trapezoidal — dimensions A through G
@@ -335,12 +464,12 @@ If the document is a weight summary report or estimate summary (contains tables 
 - For each element row (e.g. "RAFT SLAB: 27201.09 kg"), create items distributing the weight proportionally across bar sizes based on the bar size weight table in the document
 - If only total weights per bar size are given (no per-element breakdown by size), create one item per bar size with the total weight
 - Set mark to "SUM-{element_abbrev}-{bar_size}" (e.g. "SUM-RS-15M", "SUM-WALL-20M", "SUM-GB-15M")
-  Element abbreviations: RAFT SLAB→RS, WALL→WALL, GRADE BEAMS→GB, PIERS→PIER, COLUMN→COL, SLAB→SL, FOOTING→FT, STAIR→ST
+  Element abbreviations: RAFT SLAB to RS, WALL to WALL, GRADE BEAMS to GB, PIERS to PIER, COLUMN to COL, SLAB to SL, FOOTING to FT, STAIR to ST
 - Set quantity to 1
 - Set shape_code to "straight"
 - Calculate cut_length_mm from weight: weight_kg / mass_kg_per_m * 1000
   Use approximate mass per meter: 10M=0.785, 15M=1.570, 20M=2.355, 25M=3.925, 30M=5.495, 35M=7.850 kg/m
-- Set element_type from the element name (RAFT SLAB→"slab", WALL→"wall", GRADE BEAMS→"grade_beam", PIERS→"pier", COLUMN→"column", FOOTING→"footing", STAIR→"stair")
+- Set element_type from the element name (RAFT SLAB to "slab", WALL to "wall", GRADE BEAMS to "grade_beam", PIERS to "pier", COLUMN to "column", FOOTING to "footing", STAIR to "stair")
 - Set element_ref from the element name as shown in document
 - Set weight_kg directly from the document's stated weight for that row
 - CRITICAL: Preserve the exact weights from the document — do not recalculate them
@@ -417,16 +546,13 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
                 console.log(`Extracted ${extractedItems.length} items (regex fallback)`);
               } catch (parseErr) {
                 console.error("JSON parse failed after regex match:", parseErr);
-                console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
               }
             } else {
               console.error("No JSON array found in AI response");
-              console.error("Raw content (first 1000):", cleaned.substring(0, 1000));
             }
           }
 
           // ─── STRICT USEFULNESS TEST ───
-          // Require at least one item with a valid bar_size AND positive weight or length
           const hasUsefulItem = extractedItems.some(item =>
             item.bar_size && MASS_PER_M[item.bar_size] &&
             (Number(item.weight_kg) > 0 || Number(item.cut_length_mm) > 0)
@@ -434,32 +560,24 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
 
           if (!hasUsefulItem) {
             console.log(`AI returned ${extractedItems.length} items but none are useful — running deterministic fallback`);
-            
-            // Strategy 1: parse weight patterns from AI response text
             let rescued = parseWeightSummaryFallback(content);
-            
-            // Strategy 2: rescue from AI JSON items (group by bar_size, sum weights)
-            if (rescued.length === 0) {
-              console.log("Text fallback found nothing — trying rescueAIItems");
-              rescued = rescueAIItems(extractedItems);
-            }
-            
-            // Strategy 3: parse the cleaned JSON text itself for weight patterns
-            if (rescued.length === 0) {
-              console.log("rescueAIItems found nothing — trying fallback on raw cleaned text");
-              rescued = parseWeightSummaryFallback(cleaned);
-            }
-            
+            if (rescued.length === 0) rescued = rescueAIItems(extractedItems);
+            if (rescued.length === 0) rescued = parseWeightSummaryFallback(cleaned);
             if (rescued.length > 0) {
               console.log(`Deterministic fallback produced ${rescued.length} items`);
               extractedItems = rescued;
-            } else {
-              console.log("All fallback strategies failed — keeping original AI items with null guards");
             }
           }
         }
-      } catch (e) {
-        console.error("AI vision extraction error:", e);
+        } catch (e) {
+          console.error("AI vision extraction error:", e);
+        }
+      }
+
+      // ─── MERGE: spreadsheet items take priority, then AI items ───
+      if (spreadsheetItems.length > 0) {
+        console.log(`Merging ${spreadsheetItems.length} spreadsheet items with ${extractedItems.length} AI items`);
+        extractedItems = [...spreadsheetItems, ...extractedItems];
       }
     }
 
@@ -519,10 +637,24 @@ Return ONLY a valid JSON array of items. Do NOT wrap in markdown code fences.`;
     const summary = computeProjectSummary(calculatedItems);
 
     // ─── ZERO-WEIGHT GUARD: Don't persist useless projects ───
-    if (summary.total_weight_kg <= 0 && extractedItems.length > 0) {
-      console.error("Extraction produced items but total weight is 0 — aborting project creation");
+    if (summary.total_weight_kg <= 0) {
+      const fileTypes = [];
+      if (hadSpreadsheetFiles) fileTypes.push("spreadsheet");
+      if (hadAIFiles) fileTypes.push("PDF/image");
+      const typeStr = fileTypes.join(" and ") || "uploaded";
+      
+      let errorMsg: string;
+      if (hadSpreadsheetFiles && !hadAIFiles && spreadsheetItems.length === 0) {
+        errorMsg = `Could not extract rebar data from the spreadsheet file. Ensure columns include Bar Size, Quantity, and Length/Weight. Supported formats: .xlsx, .xls, .csv.`;
+      } else if (extractedItems.length === 0) {
+        errorMsg = `No rebar data could be extracted from the ${typeStr} file(s). Please upload a rebar bar schedule, shop drawing, or weight summary report.`;
+      } else {
+        errorMsg = `Extracted ${extractedItems.length} items from ${typeStr} file(s) but computed total weight is zero. The file may not contain valid rebar data.`;
+      }
+      
+      console.error(`Zero-weight guard triggered: ${errorMsg}`);
       return new Response(JSON.stringify({
-        error: "Could not extract usable rebar weights from the uploaded document. The file may be a summary format that could not be parsed. Please try uploading a detailed bar schedule or shop drawing.",
+        error: errorMsg,
         extraction_failed: true,
       }), { status: 422, headers: { "Content-Type": "application/json" } });
     }
