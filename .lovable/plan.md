@@ -1,79 +1,61 @@
 
-Fix the missing QuickBooks payment link by addressing the real data gap, not just the email/button UI.
 
-## What I found
-- The invoice email/editor already tries to show a QuickBooks payment link in both places:
-  - `src/components/accounting/documents/DraftInvoiceEditor.tsx`
-  - `supabase/functions/send-quote-email/index.ts`
-- Both lookups depend on `accounting_mirror.data.InvoiceLink`.
-- The backend currently has no such data:
-  - `accounting_mirror` has invoice rows, but `InvoiceLink` is null for all checked records.
-  - Query result shows `with_invoice_link = 0` for all mirrored invoices.
-- There is also no mirrored QuickBooks invoice matching `INV-20260001`, so even the fallback lookup by ERP invoice number cannot find one.
-- The mirror sync code is the root cause:
-  - `supabase/functions/quickbooks-oauth/index.ts` stores only a reduced invoice payload and does not include `InvoiceLink`
-  - even though the more general sync path in `supabase/functions/qb-sync-engine/index.ts` would preserve the full invoice object if it is used.
+# Auto-Sync ERP Invoice to QuickBooks + Fix InvoiceLink Preservation
 
-## Root cause
-The app is not missing the button logic anymore. It is missing the QuickBooks customer-facing link data in the backend mirror, and likely the ERP invoice is not being created/synced into QuickBooks in time for lookup.
+## Problem
+1. ERP invoices (created via accept_and_convert or manually) are never pushed to QuickBooks, so no QB `InvoiceLink` exists
+2. The `handleSyncInvoices` in `quickbooks-oauth` stores a **reduced** invoice payload that strips `InvoiceLink` from the data
+3. `handleCreateInvoice` creates QB invoices but doesn't mirror the result to `accounting_mirror`
 
 ## Plan
-### 1. Preserve QuickBooks payment link data in invoice sync
-Update the invoice mirroring path in `supabase/functions/quickbooks-oauth/index.ts` so invoice records written to `accounting_mirror` include:
-- `InvoiceLink`
-- `Id`
-- `CustomerRef`
-- any other customer-payment fields already returned by QuickBooks
 
-This makes the existing email/editor lookup actually work.
+### 1. Fix `quickbooks-oauth/index.ts` — Preserve full invoice data in sync
 
-### 2. Make QB link lookup more reliable
-Update both:
-- `src/components/accounting/documents/DraftInvoiceEditor.tsx`
-- `supabase/functions/send-quote-email/index.ts`
+In `handleSyncInvoices` (lines 942-963), change the reduced `data` object to store the full QB invoice object (like `qb-sync-engine` does at line 344). This ensures `InvoiceLink` and all other fields are preserved.
 
-to resolve the QuickBooks invoice using a safer fallback chain:
 ```text
-1. exact DocNumber match in accounting_mirror
-2. local invoice → stored QuickBooks id if available
-3. mirrored invoice by amount/customer/date proximity if needed
-4. only show QB button when a real customer-facing InvoiceLink exists
+Before:  data: { DocNumber, TotalAmt, DueDate, TxnDate, CustomerName, ... }
+After:   data: invoice   (full QB object)
 ```
 
-Important change: do not generate the internal `customerbalance` fallback URL anymore when no real QuickBooks payment link exists. That URL is not the real customer payment link and is causing confusion.
+### 2. Fix `quickbooks-oauth/index.ts` — Mirror after create-invoice
 
-### 3. Add a clear “not synced yet” behavior
-If Stripe exists but QuickBooks does not:
-- keep Stripe button visible
-- hide QuickBooks button
-- optionally show a small status message in the editor like “QuickBooks payment link not available yet”
+In `handleCreateInvoice` (after line 1288), after the QB API returns the created invoice, upsert the result into `accounting_mirror` so the `InvoiceLink` is immediately available. Also store the QB invoice ID on the `sales_invoices` record in a metadata field for future lookups.
 
-This avoids sending a broken/empty QB payment experience.
+### 3. Auto-push to QuickBooks on send email
 
-### 4. Ensure converted invoices can be matched to QuickBooks later
-Review the ERP invoice creation/conversion flow and store a durable link for future lookup when available, such as:
-- local invoice id ↔ QuickBooks invoice id
-- or metadata on the sales invoice row once synced
+In `DraftInvoiceEditor.tsx` `handleSendEmail`, before looking up the QB payment link:
+- Call `quickbooks-oauth` with `action: "create-invoice"` using the invoice's line items, customer, and amounts
+- The response includes the full QB invoice with `InvoiceLink`
+- Use the `InvoiceLink` directly from the response (no need for mirror lookup)
+- Also works as a mirror write (from change #2)
 
-That removes dependence on fuzzy `DocNumber` matching alone.
+### 4. Auto-push to QuickBooks on accept_and_convert
 
-## Files to update
-- `supabase/functions/quickbooks-oauth/index.ts`
-- `src/components/accounting/documents/DraftInvoiceEditor.tsx`
-- `supabase/functions/send-quote-email/index.ts`
+In `send-quote-email/index.ts`, after creating the Stripe payment link (line 553-576), add a similar call to push the invoice to QuickBooks:
+- Call `quickbooks-oauth` with `action: "create-invoice"` using the service role key
+- Extract `InvoiceLink` from the response
+- Use it in the dual-button email HTML
 
-## Expected result
-After this change:
-- QuickBooks payment links will appear only when a real QuickBooks `InvoiceLink` exists
-- invoice emails can include both Stripe and QuickBooks links reliably
-- users will no longer see “missing QB link” caused by empty mirrored data
-- if QuickBooks has not produced a payment link yet, the UI will fail gracefully instead of pretending one exists
-
-## Technical note
-Current evidence strongly points to sync/data preservation, not rendering:
+### Flow after fix
 ```text
-accounting_mirror invoice rows exist
-InvoiceLink is null for all checked rows
-INV-20260001 has Stripe links, but no matching mirrored QuickBooks invoice/link
+Quote accepted → Invoice created in ERP
+  → Stripe payment link generated ✓ (already works)
+  → QB invoice created via API → InvoiceLink returned
+  → Both payment buttons in email ✓
+  
+Manual send email → QB invoice created via API
+  → InvoiceLink returned → both buttons in email ✓
 ```
-So the correct fix is to improve QuickBooks sync + lookup persistence, not just keep changing the email template.
+
+### Customer ID resolution
+Both push flows need a QB customer ID. The code will:
+1. Look up the customer in `customers` table for `quickbooks_id`
+2. If not found, search QB by customer name
+3. If still not found, create the customer in QB first
+
+## Files Changed
+- `supabase/functions/quickbooks-oauth/index.ts` — store full invoice object in sync, mirror after create-invoice
+- `supabase/functions/send-quote-email/index.ts` — push invoice to QB during accept_and_convert
+- `src/components/accounting/documents/DraftInvoiceEditor.tsx` — push invoice to QB during manual send email
+
