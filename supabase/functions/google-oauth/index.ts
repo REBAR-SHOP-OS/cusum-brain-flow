@@ -52,10 +52,6 @@ Deno.serve((req) =>
 
     if (!action && body.action) action = body.action as string;
 
-    const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    );
 
     // ─── Generate OAuth URL (unified — requests ALL scopes) ────────
     if (action === "get-auth-url") {
