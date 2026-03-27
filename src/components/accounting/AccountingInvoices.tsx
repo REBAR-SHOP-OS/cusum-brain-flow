@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ConfirmActionDialog } from "./ConfirmActionDialog";
 import { InvoiceEditor } from "./InvoiceEditor";
 import { DraftInvoiceEditor } from "./documents/DraftInvoiceEditor";
-import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2, Package } from "lucide-react";
+import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2, Package, Trash2 } from "lucide-react";
 import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
 import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
 import { supabase } from "@/integrations/supabase/client";
