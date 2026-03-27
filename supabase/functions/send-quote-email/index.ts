@@ -1,7 +1,9 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { buildBrandedEmail, fetchActorSignature } from "../_shared/brandedEmail.ts";
+import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const sendSchema = z.object({
   quote_id: z.string().uuid(),
@@ -10,6 +12,102 @@ const sendSchema = z.object({
 });
 
 const APP_URL = "https://cusum-brain-flow.lovable.app";
+
+/**
+ * Send an email directly via Gmail API using any available sender from user_gmail_tokens.
+ * Used for public/unauthenticated flows (accept_and_convert, send_quote_copy)
+ * where there is no logged-in user context.
+ */
+async function sendEmailDirectViaGmail(
+  svc: ReturnType<typeof createClient>,
+  to: string,
+  subject: string,
+  bodyHtml: string
+): Promise<boolean> {
+  // Find first available Gmail sender
+  const { data: tokenRow } = await svc
+    .from("user_gmail_tokens")
+    .select("user_id, refresh_token, is_encrypted")
+    .limit(1)
+    .maybeSingle();
+
+  if (!tokenRow?.refresh_token) {
+    console.error("[sendEmailDirectViaGmail] No Gmail tokens found in user_gmail_tokens");
+    return false;
+  }
+
+  let refreshToken = tokenRow.refresh_token;
+  if (tokenRow.is_encrypted) {
+    refreshToken = await decryptToken(refreshToken);
+  }
+
+  const clientId = Deno.env.get("GMAIL_CLIENT_ID");
+  const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+  if (!clientId || !clientSecret) {
+    console.error("[sendEmailDirectViaGmail] Gmail OAuth credentials not configured");
+    return false;
+  }
+
+  // Refresh access token
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    console.error("[sendEmailDirectViaGmail] Token refresh failed:", await tokenRes.text());
+    return false;
+  }
+
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData.access_token;
+
+  // Get sender email
+  const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!profileRes.ok) {
+    console.error("[sendEmailDirectViaGmail] Failed to get Gmail profile");
+    return false;
+  }
+  const profile = await profileRes.json();
+  const fromEmail = profile.emailAddress;
+
+  // Build raw email
+  const emailLines = [
+    `From: ${fromEmail}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    bodyHtml,
+  ];
+  const email = emailLines.join("\r\n");
+  const base64 = btoa(unescape(encodeURIComponent(email)));
+  const raw = base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  // Send
+  const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw }),
+  });
+
+  if (!sendRes.ok) {
+    console.error("[sendEmailDirectViaGmail] Gmail send failed:", await sendRes.text());
+    return false;
+  }
+
+  console.log(`[sendEmailDirectViaGmail] Email sent to ${to} from ${fromEmail}`);
+  return true;
+}
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
@@ -297,20 +395,22 @@ Deno.serve((req) =>
 
     if (action === "accept_and_convert") {
       // ── Public acceptance: convert to invoice (no auth required) ──
-      // Validate quote is in a sendable state
+      // Try to find linked sales_quotation by quotation_number
       const { data: sqCheck } = await svc
         .from("sales_quotations")
-        .select("id, status, customer_name, customer_company, company_id, amount, lead_id, notes")
-        .eq("quote_id", quote_id)
+        .select("id, status, customer_name, customer_company, company_id, amount, lead_id, notes, customer_email, quotation_number")
+        .eq("quotation_number", quoteNumber)
         .maybeSingle();
 
       const sqStatus = sqCheck?.status || "";
-      const validStatuses = ["sent", "sent_to_customer"];
-      if (!validStatuses.includes(sqStatus) && !validStatuses.includes(quote.status || "")) {
+      const validStatuses = ["sent", "sent_to_customer", "accepted"];
+      const quoteAccepted = quote.status === "accepted" || sqStatus === "customer_approved";
+
+      if (!quoteAccepted && !validStatuses.includes(sqStatus) && !validStatuses.includes(quote.status || "")) {
         throw new Error("This quotation can no longer be accepted. It may have already been processed, expired, or cancelled.");
       }
 
-      // Resolve customer email from sales_quotation or metadata
+      // Resolve customer email
       const resolvedEmail = customer_email || (meta.customer_email as string) || (sqCheck as any)?.customer_email || "";
       if (!resolvedEmail) {
         throw new Error("No customer email found for this quotation");
@@ -319,73 +419,112 @@ Deno.serve((req) =>
       const companyId = sqCheck?.company_id || quote.company_id || "a0000000-0000-0000-0000-000000000001";
       const amount = sqCheck?.amount || totalAmount;
 
-      // Generate invoice number
-      const year = new Date().getFullYear();
-      const { data: latestInv } = await svc
+      // Check if invoice already exists (re-acceptance scenario)
+      const { data: existingInvoice } = await svc
         .from("sales_invoices")
-        .select("invoice_number")
-        .like("invoice_number", `INV-${year}%`)
-        .order("invoice_number", { ascending: false })
-        .limit(1);
+        .select("id, invoice_number, status")
+        .eq("quotation_id", sqCheck?.id || "00000000-0000-0000-0000-000000000000")
+        .maybeSingle();
 
-      let invSeq = 1;
-      if (latestInv && latestInv.length > 0) {
-        const lastNum = parseInt(latestInv[0].invoice_number.replace(`INV-${year}`, ""), 10);
-        if (!isNaN(lastNum)) invSeq = lastNum + 1;
+      let invoiceNumber: string;
+      let invoiceId: string;
+      let stripePaymentUrl = "";
+
+      if (existingInvoice) {
+        // Re-acceptance: invoice already exists, just re-send email
+        invoiceNumber = existingInvoice.invoice_number;
+        invoiceId = existingInvoice.id;
+        console.log(`[accept_and_convert] Re-acceptance: existing invoice ${invoiceNumber}`);
+
+        // Try to find existing Stripe payment link
+        try {
+          const { data: paymentLink } = await svc
+            .from("payment_links")
+            .select("stripe_url")
+            .eq("invoice_id", invoiceId)
+            .maybeSingle();
+          stripePaymentUrl = paymentLink?.stripe_url || "";
+        } catch (_e) { /* no payment_links table or no link */ }
+      } else {
+        // First acceptance: create invoice
+        const year = new Date().getFullYear();
+        const { data: latestInv } = await svc
+          .from("sales_invoices")
+          .select("invoice_number")
+          .like("invoice_number", `INV-${year}%`)
+          .order("invoice_number", { ascending: false })
+          .limit(1);
+
+        let invSeq = 1;
+        if (latestInv && latestInv.length > 0) {
+          const lastNum = parseInt(latestInv[0].invoice_number.replace(`INV-${year}`, ""), 10);
+          if (!isNaN(lastNum)) invSeq = lastNum + 1;
+        }
+        invoiceNumber = `INV-${year}${String(invSeq).padStart(4, "0")}`;
+        const issuedDate = new Date().toISOString().split("T")[0];
+        const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+
+        const { data: newInvoice, error: invErr } = await svc
+          .from("sales_invoices")
+          .insert({
+            company_id: companyId,
+            invoice_number: invoiceNumber,
+            quotation_id: sqCheck?.id || null,
+            customer_name: sqCheck?.customer_name || customerName,
+            customer_company: sqCheck?.customer_company || null,
+            amount,
+            status: "sent",
+            issued_date: issuedDate,
+            due_date: dueDate,
+            notes: sqCheck?.notes || notes || null,
+            sales_lead_id: sqCheck?.lead_id || null,
+          })
+          .select()
+          .single();
+
+        if (invErr) throw new Error(`Invoice creation failed: ${invErr.message}`);
+        invoiceId = newInvoice.id;
+
+        // Generate Stripe payment link
+        try {
+          const stripeRes = await fetch(`${supabaseUrl}/functions/v1/stripe-payment`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+              apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
+            },
+            body: JSON.stringify({
+              action: "create-payment-link",
+              amount,
+              currency: "cad",
+              invoiceNumber,
+              customerName: sqCheck?.customer_name || customerName,
+              qbInvoiceId: newInvoice.id,
+            }),
+          });
+          if (stripeRes.ok) {
+            const stripeData = await stripeRes.json();
+            stripePaymentUrl = stripeData.paymentLink?.stripe_url || "";
+          }
+        } catch (_e) {
+          console.warn("Stripe error:", _e);
+        }
+
+        // Update statuses
+        if (sqCheck) {
+          await svc.from("sales_quotations").update({
+            status: "customer_approved",
+            customer_approved_at: new Date().toISOString(),
+          } as any).eq("id", sqCheck.id);
+        }
+        await svc.from("quotes").update({ status: "accepted" } as any).eq("id", quote_id);
       }
-      const invoiceNumber = `INV-${year}${String(invSeq).padStart(4, "0")}`;
+
+      // Build and send invoice email directly via Gmail API (no user auth needed)
       const issuedDate = new Date().toISOString().split("T")[0];
       const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
 
-      // Create invoice
-      const { data: newInvoice, error: invErr } = await svc
-        .from("sales_invoices")
-        .insert({
-          company_id: companyId,
-          invoice_number: invoiceNumber,
-          quotation_id: sqCheck?.id || null,
-          customer_name: sqCheck?.customer_name || customerName,
-          customer_company: sqCheck?.customer_company || null,
-          amount,
-          status: "sent",
-          issued_date: issuedDate,
-          due_date: dueDate,
-          notes: sqCheck?.notes || notes || null,
-          sales_lead_id: sqCheck?.lead_id || null,
-        })
-        .select()
-        .single();
-
-      if (invErr) throw new Error(`Invoice creation failed: ${invErr.message}`);
-
-      // Generate Stripe payment link (use service role key for auth)
-      let stripePaymentUrl = "";
-      try {
-        const stripeRes = await fetch(`${supabaseUrl}/functions/v1/stripe-payment`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-            apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
-          },
-          body: JSON.stringify({
-            action: "create-payment-link",
-            amount,
-            currency: "cad",
-            invoiceNumber,
-            customerName: sqCheck?.customer_name || customerName,
-            qbInvoiceId: newInvoice.id,
-          }),
-        });
-        if (stripeRes.ok) {
-          const stripeData = await stripeRes.json();
-          stripePaymentUrl = stripeData.paymentLink?.stripe_url || "";
-        }
-      } catch (e) {
-        console.warn("Stripe error:", e);
-      }
-
-      // Build and send invoice email
       const payNowButton = stripePaymentUrl
         ? `<div style="text-align:center;margin:32px 0;">
             <a href="${stripePaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#e94560 0%,#c23152 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(233,69,96,0.4);">💳 Pay Now</a>
@@ -413,39 +552,16 @@ Deno.serve((req) =>
 
       const brandedInvoiceHtml = buildBrandedEmail({ bodyHtml: invoiceBodyHtml });
 
-      // Send invoice email using service role
-      const emailRes = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
-        },
-        body: JSON.stringify({
-          to: resolvedEmail,
-          subject: `Invoice ${invoiceNumber} - REBAR.SHOP`,
-          body: brandedInvoiceHtml,
-        }),
-      });
-
-      // Update statuses
-      if (sqCheck) {
-        await svc.from("sales_quotations").update({
-          status: "customer_approved",
-          customer_approved_at: new Date().toISOString(),
-        } as any).eq("id", sqCheck.id);
-      }
-      await svc.from("quotes").update({ status: "accepted" } as any).eq("id", quote_id);
-
-      const emailOk = emailRes.ok;
+      // Send directly via Gmail API (bypasses gmail-send auth requirement)
+      const emailOk = await sendEmailDirectViaGmail(svc, resolvedEmail, `Invoice ${invoiceNumber} - REBAR.SHOP`, brandedInvoiceHtml);
 
       return {
         success: true,
-        invoice_id: newInvoice.id,
+        invoice_id: invoiceId,
         invoice_number: invoiceNumber,
         payment_link: stripePaymentUrl || null,
         email_sent: emailOk,
-        message: `Invoice ${invoiceNumber} created${emailOk ? ` and sent to ${resolvedEmail}` : " (email failed)"}${stripePaymentUrl ? " with payment link" : ""}`,
+        message: `Invoice ${invoiceNumber} ${existingInvoice ? "re-sent" : "created"}${emailOk ? ` and sent to ${resolvedEmail}` : " (email failed)"}${stripePaymentUrl ? " with payment link" : ""}`,
       };
     }
 
@@ -473,23 +589,10 @@ Deno.serve((req) =>
 
       const brandedHtml = buildBrandedEmail({ bodyHtml });
 
-      const emailRes = await fetch(`${supabaseUrl}/functions/v1/gmail-send`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
-          apikey: Deno.env.get("SUPABASE_ANON_KEY") || "",
-        },
-        body: JSON.stringify({
-          to: targetEmail,
-          subject: `Quotation ${quoteNumber} - REBAR.SHOP (Copy)`,
-          body: brandedHtml,
-        }),
-      });
-
-      if (!emailRes.ok) {
-        const errText = await emailRes.text();
-        throw new Error(`Email send failed: ${errText}`);
+      // Send directly via Gmail API (no user auth context for public callers)
+      const emailOk = await sendEmailDirectViaGmail(svc, targetEmail, `Quotation ${quoteNumber} - REBAR.SHOP (Copy)`, brandedHtml);
+      if (!emailOk) {
+        throw new Error("Failed to send quote copy email. Please try again.");
       }
 
       return { success: true, message: `Quote copy sent to ${targetEmail}` };
