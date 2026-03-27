@@ -443,12 +443,13 @@ Deno.serve((req) =>
         // Try to find existing Stripe payment link
         try {
           const { data: paymentLink } = await svc
-            .from("payment_links")
+            .from("stripe_payment_links")
             .select("stripe_url")
-            .eq("invoice_id", invoiceId)
+            .eq("qb_invoice_id", invoiceId)
+            .eq("status", "active")
             .maybeSingle();
           stripePaymentUrl = paymentLink?.stripe_url || "";
-        } catch (_e) { /* no payment_links table or no link */ }
+        } catch (_e) { /* no stripe_payment_links or no link */ }
       } else {
         // First acceptance: create invoice
         const year = new Date().getFullYear();
@@ -574,6 +575,66 @@ Deno.serve((req) =>
       const issuedDate = new Date().toISOString().split("T")[0];
       const dueDate = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
 
+      // Rebuild line items from structured data (sales_quotation_items or sales_invoice_items)
+      let emailLineItemsHtml = lineItemsTable; // fallback to metadata-based table
+      let emailAmountDue = rawTotalWithTax; // always show tax-inclusive total to customer
+      try {
+        // Try invoice items first (just copied), then quotation items
+        let structuredItems: any[] = [];
+        const { data: invItems } = await svc
+          .from("sales_invoice_items")
+          .select("description, quantity, unit_price, total, sort_order")
+          .eq("invoice_id", invoiceId)
+          .order("sort_order");
+        if (invItems && invItems.length > 0) {
+          structuredItems = invItems;
+        } else if (sqCheck?.id) {
+          const { data: qItems } = await svc
+            .from("sales_quotation_items")
+            .select("description, quantity, unit_price, total, sort_order")
+            .eq("quotation_id", sqCheck.id)
+            .order("sort_order");
+          if (qItems && qItems.length > 0) structuredItems = qItems;
+        }
+
+        if (structuredItems.length > 0) {
+          const itemSubtotal = structuredItems.reduce((s: number, i: any) => s + (Number(i.total) || (Number(i.quantity) * Number(i.unit_price))), 0);
+          const itemTaxRate = ((meta.tax_rate as number) ?? 13);
+          const itemTax = Math.round(itemSubtotal * itemTaxRate) / 100;
+          const itemTotal = itemSubtotal + itemTax;
+          emailAmountDue = itemTotal;
+
+          const rowsHtml = structuredItems.map((si: any) => {
+            const qty = Number(si.quantity) || 0;
+            const price = Number(si.unit_price) || 0;
+            const lineTotal = Number(si.total) || qty * price;
+            return `<tr>
+              <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#333;">${si.description || ""}</td>
+              <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#333;text-align:right;">${qty}</td>
+              <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#333;text-align:right;">$${price.toLocaleString("en-CA", { minimumFractionDigits: 2 })}</td>
+              <td style="padding:8px 14px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#333;text-align:right;font-weight:600;">$${lineTotal.toLocaleString("en-CA", { minimumFractionDigits: 2 })}</td>
+            </tr>`;
+          }).join("");
+
+          emailLineItemsHtml = `<table style="width:100%;border-collapse:collapse;margin:20px 0;">
+            <thead><tr>
+              <th style="text-align:left;padding:10px 14px;background:#f1f3f9;color:#555;font-size:12px;border-bottom:2px solid #e5e7eb;">Description</th>
+              <th style="text-align:right;padding:10px 14px;background:#f1f3f9;color:#555;font-size:12px;border-bottom:2px solid #e5e7eb;">Qty</th>
+              <th style="text-align:right;padding:10px 14px;background:#f1f3f9;color:#555;font-size:12px;border-bottom:2px solid #e5e7eb;">Unit Price</th>
+              <th style="text-align:right;padding:10px 14px;background:#f1f3f9;color:#555;font-size:12px;border-bottom:2px solid #e5e7eb;">Amount</th>
+            </tr></thead>
+            <tbody>${rowsHtml}</tbody>
+            <tfoot>
+              <tr><td colspan="3" style="text-align:right;padding:8px 14px;font-size:13px;color:#888;">Subtotal:</td><td style="text-align:right;padding:8px 14px;font-size:13px;font-weight:600;">$${itemSubtotal.toLocaleString("en-CA", { minimumFractionDigits: 2 })}</td></tr>
+              <tr><td colspan="3" style="text-align:right;padding:8px 14px;font-size:13px;color:#888;">HST (${itemTaxRate}%):</td><td style="text-align:right;padding:8px 14px;font-size:13px;">$${itemTax.toLocaleString("en-CA", { minimumFractionDigits: 2 })}</td></tr>
+              <tr><td colspan="3" style="text-align:right;padding:8px 14px;font-size:15px;font-weight:700;color:#1a1a2e;">Total:</td><td style="text-align:right;padding:8px 14px;font-size:15px;font-weight:700;color:#e94560;">$${itemTotal.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+            </tfoot>
+          </table>`;
+        }
+      } catch (rebuildErr) {
+        console.warn("[accept_and_convert] Failed to rebuild line items for email:", rebuildErr);
+      }
+
       const payNowButton = stripePaymentUrl
         ? `<div style="text-align:center;margin:32px 0;">
             <a href="${stripePaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#e94560 0%,#c23152 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(233,69,96,0.4);">💳 Pay Now</a>
@@ -587,12 +648,12 @@ Deno.serve((req) =>
         <div style="background:#f8f9fc;border-radius:8px;padding:20px;margin:24px 0;border-left:4px solid #e94560;">
           <table style="width:100%;">
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Invoice #</td><td style="text-align:right;font-weight:600;color:#1a1a2e;">${invoiceNumber}</td></tr>
-            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Amount Due</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:22px;">$${amount.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
+            <tr><td style="color:#888;font-size:13px;padding:4px 0;">Amount Due</td><td style="text-align:right;font-weight:700;color:#e94560;font-size:22px;">$${emailAmountDue.toLocaleString("en-CA", { minimumFractionDigits: 2 })} CAD</td></tr>
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Issue Date</td><td style="text-align:right;color:#1a1a2e;">${issuedDate}</td></tr>
             <tr><td style="color:#888;font-size:13px;padding:4px 0;">Due Date</td><td style="text-align:right;color:#1a1a2e;font-weight:600;">${dueDate}</td></tr>
           </table>
         </div>
-        ${lineItemsTable}
+        ${emailLineItemsHtml}
         ${payNowButton}
         <p style="font-size:14px;color:#555;line-height:1.6;margin-top:24px;">
           All amounts are in Canadian Dollars (CAD). Payment is due by <strong>${dueDate}</strong>.
