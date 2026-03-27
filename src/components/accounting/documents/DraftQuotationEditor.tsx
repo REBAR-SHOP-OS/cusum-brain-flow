@@ -70,6 +70,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const [customerSearch, setCustomerSearch] = useState("");
   const [addingNewCustomer, setAddingNewCustomer] = useState(false);
   const [newCustName, setNewCustName] = useState("");
+  const [newCustEmail, setNewCustEmail] = useState("");
   const [newCustAddress, setNewCustAddress] = useState("");
 
   // Product dropdown state
