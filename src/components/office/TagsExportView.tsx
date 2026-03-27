@@ -132,14 +132,17 @@ export function TagsExportView() {
     window.open(url, "_blank");
   }, [selectedSession, selectedSessionId, sortMode]);
 
-  // Intercept Ctrl+P on the tags page → redirect to clean print route
+  // Intercept Ctrl+P / Cmd+P → redirect to clean print route
   useEffect(() => {
-    const handler = (e: Event) => {
-      e.preventDefault();
-      handlePrint();
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+        e.preventDefault();
+        e.stopPropagation();
+        handlePrint();
+      }
     };
-    window.addEventListener("beforeprint", handler);
-    return () => window.removeEventListener("beforeprint", handler);
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
   }, [handlePrint]);
 
   // Zebra ZPL export
