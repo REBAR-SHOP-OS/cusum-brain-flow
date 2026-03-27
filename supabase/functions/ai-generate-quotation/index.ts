@@ -158,12 +158,19 @@ Deno.serve((req) =>
       });
     }
 
-    const totalWeightKg = bomItems.reduce((s, i) => s + toNum(i.weight_kg), 0);
+    // Items from ai-estimate already include waste_factor_pct (typically 5%).
+    // Back out the estimation waste so we apply ONLY the user's scrap_percent.
+    const rawWeightKg = bomItems.reduce((s, i) => s + toNum(i.weight_kg), 0);
+    const estWastePct = Number(project.waste_factor_pct ?? 5);
+    const baseWeightKg = estWastePct > 0 ? rawWeightKg / (1 + estWastePct / 100) : rawWeightKg;
     const scrapPct = Number(scrap_percent ?? pricingConfig.scrap_percentage ?? pricingConfig.default_scrap_percent ?? 15);
-    const totalWithScrap = totalWeightKg * (1 + scrapPct / 100);
+    const totalWithScrap = baseWeightKg * (1 + scrapPct / 100);
     const totalTonnes = totalWithScrap / 1000;
-    const cageTonnes = (cageWeightKg * (1 + scrapPct / 100)) / 1000;
-    const nonCageTonnes = (nonCageWeightKg * (1 + scrapPct / 100)) / 1000;
+    // Back out waste for cage/non-cage splits too
+    const baseCageKg = estWastePct > 0 ? cageWeightKg / (1 + estWastePct / 100) : cageWeightKg;
+    const baseNonCageKg = estWastePct > 0 ? nonCageWeightKg / (1 + estWastePct / 100) : nonCageWeightKg;
+    const cageTonnes = (baseCageKg * (1 + scrapPct / 100)) / 1000;
+    const nonCageTonnes = (baseNonCageKg * (1 + scrapPct / 100)) / 1000;
 
     // ─── GUARD: Block $0 quotes ───
     if (totalWeightKg <= 0 && bomItems.length === 0) {
