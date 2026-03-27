@@ -1418,7 +1418,9 @@ export function ProVideoEditor({
 
         <div className="flex-1" />
 
-        <Badge variant="secondary" className="text-[9px]">Edit</Badge>
+        <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={() => handleSetActiveTab("brand-kit")}>
+          <Edit3 className="w-3 h-3" /> Edit
+        </Button>
 
         <Button
           variant="outline"
