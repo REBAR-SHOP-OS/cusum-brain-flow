@@ -43,7 +43,7 @@ import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 
-type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice";
+type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice" | "image";
 
 interface ProVideoEditorProps {
   clips: ClipOutput[];
