@@ -1,7 +1,9 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { buildBrandedEmail, fetchActorSignature } from "../_shared/brandedEmail.ts";
+import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const sendSchema = z.object({
   quote_id: z.string().uuid(),
@@ -10,6 +12,102 @@ const sendSchema = z.object({
 });
 
 const APP_URL = "https://cusum-brain-flow.lovable.app";
+
+/**
+ * Send an email directly via Gmail API using any available sender from user_gmail_tokens.
+ * Used for public/unauthenticated flows (accept_and_convert, send_quote_copy)
+ * where there is no logged-in user context.
+ */
+async function sendEmailDirectViaGmail(
+  svc: ReturnType<typeof createClient>,
+  to: string,
+  subject: string,
+  bodyHtml: string
+): Promise<boolean> {
+  // Find first available Gmail sender
+  const { data: tokenRow } = await svc
+    .from("user_gmail_tokens")
+    .select("user_id, refresh_token, is_encrypted")
+    .limit(1)
+    .maybeSingle();
+
+  if (!tokenRow?.refresh_token) {
+    console.error("[sendEmailDirectViaGmail] No Gmail tokens found in user_gmail_tokens");
+    return false;
+  }
+
+  let refreshToken = tokenRow.refresh_token;
+  if (tokenRow.is_encrypted) {
+    refreshToken = await decryptToken(refreshToken);
+  }
+
+  const clientId = Deno.env.get("GMAIL_CLIENT_ID");
+  const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+  if (!clientId || !clientSecret) {
+    console.error("[sendEmailDirectViaGmail] Gmail OAuth credentials not configured");
+    return false;
+  }
+
+  // Refresh access token
+  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    console.error("[sendEmailDirectViaGmail] Token refresh failed:", await tokenRes.text());
+    return false;
+  }
+
+  const tokenData = await tokenRes.json();
+  const accessToken = tokenData.access_token;
+
+  // Get sender email
+  const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!profileRes.ok) {
+    console.error("[sendEmailDirectViaGmail] Failed to get Gmail profile");
+    return false;
+  }
+  const profile = await profileRes.json();
+  const fromEmail = profile.emailAddress;
+
+  // Build raw email
+  const emailLines = [
+    `From: ${fromEmail}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    bodyHtml,
+  ];
+  const email = emailLines.join("\r\n");
+  const base64 = btoa(unescape(encodeURIComponent(email)));
+  const raw = base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  // Send
+  const sendRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ raw }),
+  });
+
+  if (!sendRes.ok) {
+    console.error("[sendEmailDirectViaGmail] Gmail send failed:", await sendRes.text());
+    return false;
+  }
+
+  console.log(`[sendEmailDirectViaGmail] Email sent to ${to} from ${fromEmail}`);
+  return true;
+}
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
