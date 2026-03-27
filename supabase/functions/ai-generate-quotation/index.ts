@@ -161,6 +161,7 @@ Deno.serve((req) =>
     // Items from ai-estimate already include waste_factor_pct (typically 5%).
     // Back out the estimation waste so we apply ONLY the user's scrap_percent.
     const rawWeightKg = bomItems.reduce((s, i) => s + toNum(i.weight_kg), 0);
+    const totalWeightKg = rawWeightKg;
     const estWastePct = Number(project.waste_factor_pct ?? 5);
     const baseWeightKg = estWastePct > 0 ? rawWeightKg / (1 + estWastePct / 100) : rawWeightKg;
     const scrapPct = Number(scrap_percent ?? pricingConfig.scrap_percentage ?? pricingConfig.default_scrap_percent ?? 15);
