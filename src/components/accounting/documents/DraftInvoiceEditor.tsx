@@ -177,9 +177,26 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
             resolved = true;
           }
         }
-        // Last fallback: single line with total amount
+        // Last fallback: single line with total amount (amount is already pre-tax subtotal)
         if (!resolved && inv.amount && Number(inv.amount) > 0) {
           setItems([{ description: "Invoice total", quantity: 1, unitPrice: Number(inv.amount) }]);
+        }
+        // Safety: if amount looks like it already includes tax (legacy data),
+        // back-calculate. We detect this by checking if quotation_id exists and
+        // the amount matches the quotation total (which is tax-inclusive).
+        if (!resolved && inv.amount && inv.quotation_id) {
+          try {
+            const { data: sq } = await supabase
+              .from("sales_quotations")
+              .select("amount")
+              .eq("id", inv.quotation_id)
+              .maybeSingle();
+            if (sq?.amount && Math.abs(Number(sq.amount) - Number(inv.amount)) < 1) {
+              // Amount matches quotation total = it's tax-inclusive, back-calculate
+              const preTax = Math.round((Number(inv.amount) / (1 + taxRate / 100)) * 100) / 100;
+              setItems([{ description: "Invoice total", quantity: 1, unitPrice: preTax }]);
+            }
+          } catch (_e) { /* ignore */ }
         }
       }
 
