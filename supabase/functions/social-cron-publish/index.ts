@@ -146,7 +146,16 @@ Deno.serve((req) =>
 
     const results: { postId: string; platform: string; success: boolean; error?: string }[] = [];
 
+    const SUPPORTED_PLATFORMS = ["facebook", "instagram", "linkedin"];
+
     for (const post of duePosts) {
+      // Skip unsupported platforms — leave as scheduled, don't mark failed
+      if (!SUPPORTED_PLATFORMS.includes(post.platform)) {
+        console.log(`[social-cron-publish] Skipping ${post.id} — platform "${post.platform}" not yet supported`);
+        results.push({ postId: post.id, platform: post.platform, success: false, error: "Platform not yet supported" });
+        continue;
+      }
+
       try {
         // Guard: re-check status to prevent duplicate publishing (race condition with manual publish)
         const { data: freshPost } = await supabase
