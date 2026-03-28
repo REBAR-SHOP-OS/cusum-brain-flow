@@ -71,14 +71,13 @@ Deno.serve((req) =>
 
     console.log(`[social-cron-publish] Query returned ${duePosts?.length ?? 0} approved posts, error: ${fetchError?.message ?? 'none'}`);
 
-    // Auto-publish overdue unapproved posts — deadline: midnight of scheduled day
-    // Business rule: if Neel hasn't approved by midnight, publish anyway
+    // Flag overdue unapproved posts as failed — do NOT auto-approve
     const midnightCutoff = new Date();
-    midnightCutoff.setUTCHours(0, 0, 0, 0); // start of today UTC
+    midnightCutoff.setUTCHours(0, 0, 0, 0);
 
     const { data: overduePosts } = await supabase
       .from("social_posts")
-      .select("*")
+      .select("id, platform, scheduled_date")
       .eq("status", "scheduled")
       .eq("neel_approved", false)
       .lt("scheduled_date", midnightCutoff.toISOString())
@@ -86,18 +85,13 @@ Deno.serve((req) =>
       .limit(20);
 
     if (overduePosts && overduePosts.length > 0) {
-      console.log(`[social-cron-publish] Found ${overduePosts.length} overdue unapproved posts — auto-approving (Neel deadline passed)`);
+      console.log(`[social-cron-publish] Found ${overduePosts.length} overdue unapproved posts — marking as failed (approval deadline passed)`);
       for (const op of overduePosts) {
-        console.log(`[social-cron-publish] Auto-approving overdue post ${op.id}: platform=${op.platform}, scheduled_date=${op.scheduled_date}`);
+        console.log(`[social-cron-publish] Failing overdue post ${op.id}: platform=${op.platform}, scheduled_date=${op.scheduled_date}`);
         await supabase
           .from("social_posts")
-          .update({ neel_approved: true })
+          .update({ status: "failed", qa_status: "needs_review", last_error: "Approval deadline passed — not approved by Neel/Sattar" })
           .eq("id", op.id);
-        op.neel_approved = true;
-      }
-      // Merge into duePosts, avoiding duplicates
-      if (duePosts) {
-        duePosts.push(...overduePosts.filter(op => !duePosts.some(d => d.id === op.id)));
       }
     }
 
@@ -152,7 +146,16 @@ Deno.serve((req) =>
 
     const results: { postId: string; platform: string; success: boolean; error?: string }[] = [];
 
+    const SUPPORTED_PLATFORMS = ["facebook", "instagram", "linkedin"];
+
     for (const post of duePosts) {
+      // Skip unsupported platforms — leave as scheduled, don't mark failed
+      if (!SUPPORTED_PLATFORMS.includes(post.platform)) {
+        console.log(`[social-cron-publish] Skipping ${post.id} — platform "${post.platform}" not yet supported`);
+        results.push({ postId: post.id, platform: post.platform, success: false, error: "Platform not yet supported" });
+        continue;
+      }
+
       try {
         // Guard: re-check status to prevent duplicate publishing (race condition with manual publish)
         const { data: freshPost } = await supabase
@@ -455,7 +458,7 @@ async function publishToLinkedIn(
     if (!connection) return { error: "LinkedIn not connected" };
     const config = connection.config as { access_token: string; expires_at: number };
 
-    if (config.expires_at < Date.now()) return { error: "LinkedIn token expired" };
+    if (config.expires_at < Date.now()) return { error: "LinkedIn token expired — please reconnect LinkedIn in Settings → Integrations" };
 
     // Get user URN
     const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
