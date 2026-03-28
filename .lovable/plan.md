@@ -1,69 +1,36 @@
 
 
-# Build Local SEO Audit into App + Auto-Generate SEO Tasks
+# Build AI Visibility Audit into App + Auto-Generate SEO Tasks
 
 ## Overview
-Transform the Local SEO module from a simple "run audit and display text" view into a structured, interactive module with checklist tracking and automatic task generation from audit findings.
+Mirror the Local SEO module pattern: replace the freeform text audit in `SeoAiVisibility.tsx` with structured, interactive category cards and auto-generate SEO tasks from high-priority findings.
 
-## Approach
+## Changes
 
-### 1. Restructure the AI audit prompt to return structured JSON
-**File:** New edge function `supabase/functions/seo-local-audit/index.ts`
+### 1. New Edge Function: `supabase/functions/seo-ai-visibility-audit/index.ts`
+Same pattern as `seo-local-audit`. Uses tool calling to return structured JSON with 4 categories:
+- **AI Platform Visibility** (ChatGPT, Google AI, Perplexity likelihood scores)
+- **Content Gaps** (missing informational content, FAQs, guides)
+- **Schema Markup** (Organization, Product, Service, FAQPage recommendations)
+- **Action Items** (5 specific actions to improve AI visibility)
 
-Instead of returning freeform text, the AI will return structured JSON with 5 categories, each containing checklist items with status, priority, and task-worthy recommendations:
+Each category has checklist items with `title`, `description`, `priority`, `is_task`, `expected_impact`. High/critical items auto-insert into `seo_tasks` with `task_type: "ai_visibility"`.
 
-```text
-{
-  categories: [
-    { name: "Google Business Profile", items: [
-      { title: "Set primary category to Steel Fabricator", priority: "high", description: "...", is_task: true },
-      ...
-    ]},
-    { name: "Local Keywords", items: [...] },
-    { name: "Review Management", items: [...] },
-    { name: "Competitor Analysis", items: [...] },
-    { name: "NAP Consistency", items: [...] }
-  ]
-}
-```
+### 2. Rebuild `src/components/seo/SeoAiVisibility.tsx`
+Replace raw text display with the same interactive UI as `SeoLocal.tsx`:
+- 4 stat cards (Total Items, Completed, Tasks Created, High Priority)
+- Run Audit button calling the new edge function
+- Collapsible category cards with checkboxes, priority badges, task indicators
+- Toast notification when tasks are auto-generated
 
-Uses `ai-generic` with tool calling to enforce structured output. The function also auto-inserts items marked `is_task: true` into `seo_tasks` with `task_type: "local"` and `created_by: "ai"`.
-
-### 2. Rebuild SeoLocal.tsx with interactive UI
-**File:** `src/components/seo/SeoLocal.tsx`
-
-Replace the raw text display with:
-- **5 category cards** (GBP, Keywords, Reviews, Competitors, NAP) — each expandable with checklist items
-- Each item shows: title, description, priority badge, and a checkbox for manual tracking
-- A "Generate Tasks" button that sends selected high-priority items to `seo_tasks`
-- The audit results are stored in component state (and optionally persisted via the edge function)
-- Stats cards at top update to show: total items, completed items, tasks generated, high-priority count
-
-### 3. Auto-generate seo_tasks from audit
-**File:** `supabase/functions/seo-local-audit/index.ts`
-
-After the AI returns structured results, the edge function:
-- Filters items where `is_task: true` and `priority` is "high" or "critical"
-- Inserts them into `seo_tasks` with `task_type: "local"`, `created_by: "ai"`, `status: "open"`
-- Uses the existing `domain_id` and `company_id` from `seo_domains`
-- Returns both the structured audit and the count of tasks created
-
-### 4. Add "local" task type support
-**File:** `src/components/seo/SeoTasks.tsx` — add `local` to `taskTypeColors`:
+### 3. Add `ai_visibility` task type to `src/components/seo/SeoTasks.tsx`
+Add to `taskTypeColors`:
 ```typescript
-local: "bg-orange-500/10 text-orange-600",
+ai_visibility: "bg-violet-500/10 text-violet-600",
 ```
-
-## Technical Details
-
-- The edge function uses `handleRequest` + `callAI` from shared modules (same pattern as `seo-ai-strategy`)
-- AI model: `gemini-2.5-flash` (fast, structured output)
-- Tool calling enforces the JSON schema — no parsing issues
-- Tasks are deduplicated by checking existing open tasks with similar titles before inserting
-- The `seo_tasks` table already has all needed columns (`task_type`, `ai_reasoning`, `expected_impact`, `created_by`)
 
 ## Files Changed
-- `supabase/functions/seo-local-audit/index.ts` — new edge function for structured local SEO audit + task generation
-- `src/components/seo/SeoLocal.tsx` — rebuild with interactive checklist UI and task generation
-- `src/components/seo/SeoTasks.tsx` — add "local" task type color
+- `supabase/functions/seo-ai-visibility-audit/index.ts` — new edge function
+- `src/components/seo/SeoAiVisibility.tsx` — rebuild with interactive checklist UI
+- `src/components/seo/SeoTasks.tsx` — add `ai_visibility` task type color
 
