@@ -1,25 +1,81 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Bot, Search, Eye, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Sparkles, Bot, Search, Code, Loader2, ChevronDown, ListChecks, MapPin, Eye,
+} from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+interface AuditItem {
+  title: string;
+  description: string;
+  priority: "critical" | "high" | "medium" | "low";
+  is_task: boolean;
+  expected_impact?: string;
+}
+
+interface AuditCategory {
+  name: string;
+  icon: string;
+  items: AuditItem[];
+}
+
+interface AuditResult {
+  audit: { categories: AuditCategory[] };
+  tasksCreated: number;
+}
+
+const ICON_MAP: Record<string, React.ReactNode> = {
+  bot: <Bot className="w-4 h-4" />,
+  search: <Search className="w-4 h-4" />,
+  code: <Code className="w-4 h-4" />,
+  sparkles: <Sparkles className="w-4 h-4" />,
+};
+
+const PRIORITY_STYLES: Record<string, string> = {
+  critical: "bg-destructive/10 text-destructive",
+  high: "bg-orange-500/10 text-orange-600",
+  medium: "bg-yellow-500/10 text-yellow-600",
+  low: "bg-blue-500/10 text-blue-500",
+};
+
 export function SeoAiVisibility() {
   const [loading, setLoading] = useState(false);
-  const [auditResult, setAuditResult] = useState<string | null>(null);
+  const [result, setResult] = useState<AuditResult | null>(null);
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
 
-  const runAiVisibilityAudit = async () => {
+  const runAudit = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("ai-generic", {
+      const { data, error } = await supabase.functions.invoke("seo-ai-visibility-audit", {
         body: {
-          prompt: "Perform an AI Visibility audit for rebar.shop (a rebar fabrication company). Check: 1) How likely is this brand to appear in ChatGPT, Google AI Overviews, Perplexity, and other AI search tools? 2) What content gaps exist? 3) What structured data / schema markup would help? 4) Suggest 5 specific actions to improve AI visibility. Be specific and actionable.",
-          systemPrompt: "You are an AI Visibility specialist who helps brands optimize their presence in AI-powered search tools (ChatGPT, Google AI Mode, Perplexity, Claude). Focus on practical, implementable recommendations."
+          domain: "rebar.shop",
+          description: "a rebar fabrication and delivery company in Toronto/GTA, Ontario, Canada",
         },
       });
       if (error) throw error;
-      setAuditResult(data?.result || data?.content || "No results.");
+      setResult(data as AuditResult);
+      setChecked({});
+      const expanded: Record<string, boolean> = {};
+      (data as AuditResult).audit.categories.forEach((c: AuditCategory) => {
+        expanded[c.name] = true;
+      });
+      setOpenCategories(expanded);
+
+      if (data.tasksCreated > 0) {
+        toast.success(`${data.tasksCreated} AI visibility tasks auto-generated`, {
+          description: "View them in the Tasks tab",
+        });
+      }
     } catch (err: any) {
       toast.error("Failed to run audit", { description: err.message });
     } finally {
@@ -27,74 +83,182 @@ export function SeoAiVisibility() {
     }
   };
 
+  const toggleCheck = (key: string) => {
+    setChecked((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const categories = result?.audit?.categories || [];
+  const totalItems = categories.reduce((s, c) => s + c.items.length, 0);
+  const completedItems = Object.values(checked).filter(Boolean).length;
+  const highPriorityCount = categories.reduce(
+    (s, c) => s + c.items.filter((i) => i.priority === "high" || i.priority === "critical").length,
+    0,
+  );
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">AI Visibility</h1>
-        <p className="text-muted-foreground mt-1">Grow your visibility in AI search tools like ChatGPT and Google's AI Mode.</p>
+        <p className="text-muted-foreground mt-1">
+          Structured audit, checklist tracking, and automatic task generation for AI search visibility.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Bot className="w-4 h-4 text-violet-500" />
-              ChatGPT Visibility
+              <ListChecks className="w-4 h-4 text-primary" />
+              Total Items
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-foreground">—</p>
-            <p className="text-xs text-muted-foreground">Run audit to check</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Search className="w-4 h-4 text-blue-500" />
-              Google AI Mode
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold text-foreground">—</p>
-            <p className="text-xs text-muted-foreground">Monitoring coming soon</p>
+            <p className="text-2xl font-bold text-foreground">{totalItems || "—"}</p>
+            <p className="text-xs text-muted-foreground">{categories.length} categories</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Eye className="w-4 h-4 text-emerald-500" />
-              Perplexity Presence
+              Completed
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold text-foreground">—</p>
-            <p className="text-xs text-muted-foreground">Run audit to check</p>
+            <p className="text-2xl font-bold text-foreground">
+              {totalItems ? `${completedItems}/${totalItems}` : "—"}
+            </p>
+            <p className="text-xs text-muted-foreground">Checklist progress</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-violet-500" />
+              Tasks Created
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-foreground">{result?.tasksCreated ?? "—"}</p>
+            <p className="text-xs text-muted-foreground">Auto-generated</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-destructive" />
+              High Priority
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-bold text-foreground">{highPriorityCount || "—"}</p>
+            <p className="text-xs text-muted-foreground">Critical + High items</p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Run Audit Button */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-violet-500" />
-            AI Visibility Audit
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Analyze how your brand appears across AI-powered search tools and get actionable recommendations.
-          </p>
-          <Button onClick={runAiVisibilityAudit} disabled={loading}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
-            Run AI Visibility Audit
-          </Button>
-          {auditResult && (
-            <div className="mt-4 p-4 rounded-lg bg-muted/50 text-sm whitespace-pre-wrap text-foreground">
-              {auditResult}
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">AI Visibility Audit</p>
+              <p className="text-xs text-muted-foreground">
+                AI-powered audit for rebar.shop across ChatGPT, Google AI, Perplexity with auto-task generation.
+              </p>
             </div>
-          )}
+            <Button onClick={runAudit} disabled={loading}>
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Bot className="w-4 h-4 mr-2" />
+              )}
+              {result ? "Re-run Audit" : "Run AI Visibility Audit"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
+
+      {/* Category Cards */}
+      {categories.map((category) => (
+        <Collapsible
+          key={category.name}
+          open={openCategories[category.name] ?? false}
+          onOpenChange={(open) =>
+            setOpenCategories((prev) => ({ ...prev, [category.name]: open }))
+          }
+        >
+          <Card>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors">
+                <CardTitle className="flex items-center justify-between text-base">
+                  <span className="flex items-center gap-2">
+                    {ICON_MAP[category.icon] || <Bot className="w-4 h-4" />}
+                    {category.name}
+                    <Badge variant="secondary" className="ml-2 text-xs">
+                      {category.items.length} items
+                    </Badge>
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-muted-foreground transition-transform ${
+                      openCategories[category.name] ? "rotate-180" : ""
+                    }`}
+                  />
+                </CardTitle>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="pt-0 space-y-3">
+                {category.items.map((item, idx) => {
+                  const key = `${category.name}-${idx}`;
+                  return (
+                    <div
+                      key={key}
+                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                        checked[key] ? "bg-muted/40 opacity-60" : "bg-background"
+                      }`}
+                    >
+                      <Checkbox
+                        checked={checked[key] || false}
+                        onCheckedChange={() => toggleCheck(key)}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`text-sm font-medium ${
+                              checked[key] ? "line-through text-muted-foreground" : "text-foreground"
+                            }`}
+                          >
+                            {item.title}
+                          </span>
+                          <Badge className={`text-[10px] ${PRIORITY_STYLES[item.priority] || ""}`}>
+                            {item.priority}
+                          </Badge>
+                          {item.is_task && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Task
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {item.description}
+                        </p>
+                        {item.expected_impact && (
+                          <p className="text-xs text-primary/80">
+                            Impact: {item.expected_impact}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      ))}
     </div>
   );
 }
