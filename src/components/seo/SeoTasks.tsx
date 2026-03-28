@@ -25,6 +25,7 @@ const taskTypeColors: Record<string, string> = {
   technical: "bg-orange-500/10 text-orange-600",
   internal_link: "bg-blue-500/10 text-blue-600",
   local: "bg-orange-500/10 text-orange-600",
+  ai_visibility: "bg-violet-500/10 text-violet-600",
 };
 
 interface AnalyzeResult {
