@@ -458,7 +458,7 @@ async function publishToLinkedIn(
     if (!connection) return { error: "LinkedIn not connected" };
     const config = connection.config as { access_token: string; expires_at: number };
 
-    if (config.expires_at < Date.now()) return { error: "LinkedIn token expired" };
+    if (config.expires_at < Date.now()) return { error: "LinkedIn token expired — please reconnect LinkedIn in Settings → Integrations" };
 
     // Get user URN
     const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
