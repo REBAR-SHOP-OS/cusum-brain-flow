@@ -1,63 +1,69 @@
 
 
-# Audit: Social Media Integration Issues
+# Build Local SEO Audit into App + Auto-Generate SEO Tasks
 
-## Issues Found
+## Overview
+Transform the Local SEO module from a simple "run audit and display text" view into a structured, interactive module with checklist tracking and automatic task generation from audit findings.
 
-### Issue 1: Unsupported platforms silently fail as "failed"
-**Location:** `supabase/functions/social-cron-publish/index.ts` line 182
-**Bug:** `publishResult` defaults to `{ error: "Unsupported platform" }`. Only Facebook, Instagram, and LinkedIn have publish handlers. Twitter/X, TikTok, and YouTube posts get picked up by cron, marked as `"publishing"`, then immediately marked `"failed"` with error "Unsupported platform". This wastes cron cycles and confuses users.
-**Fix:** Before entering the publish loop, skip posts on unsupported platforms — leave them as `"scheduled"` instead of marking them failed. Add a guard at line 155:
-```typescript
-const SUPPORTED_PLATFORMS = ["facebook", "instagram", "linkedin"];
-if (!SUPPORTED_PLATFORMS.includes(post.platform)) {
-  console.log(`[social-cron-publish] Skipping ${post.id} — platform "${post.platform}" not yet supported`);
-  results.push({ postId: post.id, platform: post.platform, success: false, error: "Platform not yet supported" });
-  continue;
+## Approach
+
+### 1. Restructure the AI audit prompt to return structured JSON
+**File:** New edge function `supabase/functions/seo-local-audit/index.ts`
+
+Instead of returning freeform text, the AI will return structured JSON with 5 categories, each containing checklist items with status, priority, and task-worthy recommendations:
+
+```text
+{
+  categories: [
+    { name: "Google Business Profile", items: [
+      { title: "Set primary category to Steel Fabricator", priority: "high", description: "...", is_task: true },
+      ...
+    ]},
+    { name: "Local Keywords", items: [...] },
+    { name: "Review Management", items: [...] },
+    { name: "Competitor Analysis", items: [...] },
+    { name: "NAP Consistency", items: [...] }
+  ]
 }
 ```
 
-### Issue 2: Auto-approval of overdue unapproved posts bypasses safety gate
-**Location:** `supabase/functions/social-cron-publish/index.ts` lines 74-101
-**Bug:** Posts scheduled before midnight that Neel hasn't approved get auto-approved and published. This contradicts the approval gate — a post Neel intentionally didn't approve will still go out.
-**Fix:** Instead of auto-approving, mark these posts as `"failed"` with a clear reason so the team can decide:
+Uses `ai-generic` with tool calling to enforce structured output. The function also auto-inserts items marked `is_task: true` into `seo_tasks` with `task_type: "local"` and `created_by: "ai"`.
+
+### 2. Rebuild SeoLocal.tsx with interactive UI
+**File:** `src/components/seo/SeoLocal.tsx`
+
+Replace the raw text display with:
+- **5 category cards** (GBP, Keywords, Reviews, Competitors, NAP) — each expandable with checklist items
+- Each item shows: title, description, priority badge, and a checkbox for manual tracking
+- A "Generate Tasks" button that sends selected high-priority items to `seo_tasks`
+- The audit results are stored in component state (and optionally persisted via the edge function)
+- Stats cards at top update to show: total items, completed items, tasks generated, high-priority count
+
+### 3. Auto-generate seo_tasks from audit
+**File:** `supabase/functions/seo-local-audit/index.ts`
+
+After the AI returns structured results, the edge function:
+- Filters items where `is_task: true` and `priority` is "high" or "critical"
+- Inserts them into `seo_tasks` with `task_type: "local"`, `created_by: "ai"`, `status: "open"`
+- Uses the existing `domain_id` and `company_id` from `seo_domains`
+- Returns both the structured audit and the count of tasks created
+
+### 4. Add "local" task type support
+**File:** `src/components/seo/SeoTasks.tsx` — add `local` to `taskTypeColors`:
 ```typescript
-// Instead of auto-approving, flag as needing attention
-await supabase.from("social_posts")
-  .update({ status: "failed", last_error: "Approval deadline passed — not approved by Neel/Sattar" })
-  .eq("id", op.id);
+local: "bg-orange-500/10 text-orange-600",
 ```
 
-### Issue 3: LinkedIn token expiry has no user notification
-**Location:** `supabase/functions/social-cron-publish/index.ts` line 458
-**Bug:** When LinkedIn token expires, the post silently fails with "LinkedIn token expired". No notification is sent to the user, and the token has no refresh mechanism. Users only discover this when they see "Failed" posts days later.
-**Fix:** Add `last_error` with a clear message pointing users to reconnect LinkedIn:
-```typescript
-if (config.expires_at < Date.now()) {
-  return { error: "LinkedIn token expired — please reconnect LinkedIn in Settings → Integrations" };
-}
-```
-This is already partially handled since failed posts get `last_error` set, but the message should be more actionable.
+## Technical Details
 
-### Issue 4: Calendar shows wrong status color for future unapproved posts
-**Location:** `src/components/social/SocialCalendar.tsx` lines 246-250
-**Bug:** The calendar currently shows "Pending Approval" for ALL scheduled posts where `!isApproved`. But from the screenshot, some posts on Sat/Sun correctly show "Pending Approval ⏳" while others show "Scheduled · Approved". The issue is that when a group contains mixed approval states (some approved, some not), `isApproved` is `true` if ANY post in the group is approved — hiding unapproved siblings.
-**Fix:** No code change needed here — this is working as designed since posts are grouped by platform+title+page. The visible "Pending Approval" posts are genuinely unapproved.
-
-### Issue 5: LinkedIn image upload uses deprecated UGC API
-**Location:** `supabase/functions/social-cron-publish/index.ts` lines 444-551
-**Bug:** The LinkedIn publish function uses the deprecated `/v2/ugcPosts` endpoint and `/v2/assets?action=registerUpload` for image uploads. LinkedIn deprecated the UGC API in favor of the Community Management API (`/rest/posts`). This may stop working without notice.
-**Fix:** Migrate to LinkedIn's Community Management API (lower priority, but flagged as technical debt).
-
-## Summary of Changes
-
-| File | Issue | Fix |
-|------|-------|-----|
-| `supabase/functions/social-cron-publish/index.ts` line 155 | Unsupported platforms fail loudly | Skip with `continue`, don't mark as failed |
-| `supabase/functions/social-cron-publish/index.ts` lines 74-101 | Auto-approval bypasses safety | Mark as failed instead of auto-approving |
-| `supabase/functions/social-cron-publish/index.ts` line 458 | LinkedIn token expiry silent | Improve error message for user action |
-| `supabase/functions/social-cron-publish/index.ts` lines 444-551 | Deprecated LinkedIn API | Flag as tech debt (no immediate change) |
+- The edge function uses `handleRequest` + `callAI` from shared modules (same pattern as `seo-ai-strategy`)
+- AI model: `gemini-2.5-flash` (fast, structured output)
+- Tool calling enforces the JSON schema — no parsing issues
+- Tasks are deduplicated by checking existing open tasks with similar titles before inserting
+- The `seo_tasks` table already has all needed columns (`task_type`, `ai_reasoning`, `expected_impact`, `created_by`)
 
 ## Files Changed
-- `supabase/functions/social-cron-publish/index.ts` — 3 targeted fixes
+- `supabase/functions/seo-local-audit/index.ts` — new edge function for structured local SEO audit + task generation
+- `src/components/seo/SeoLocal.tsx` — rebuild with interactive checklist UI and task generation
+- `src/components/seo/SeoTasks.tsx` — add "local" task type color
 
