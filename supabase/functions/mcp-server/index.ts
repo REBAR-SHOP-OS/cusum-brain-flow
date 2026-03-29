@@ -16,7 +16,7 @@ function getDb() {
 
 const mcpServer = new McpServer({
   name: "rebar-erp",
-  version: "1.0.1",
+  version: "1.1.0",
 });
 
 // ── Tool: list_social_posts ─────────────────────────────────
