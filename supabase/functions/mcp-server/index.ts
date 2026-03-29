@@ -16,7 +16,7 @@ function getDb() {
 
 const mcpServer = new McpServer({
   name: "rebar-erp",
-  version: "1.0.1",
+  version: "1.1.0",
 });
 
 // ── Tool: list_social_posts ─────────────────────────────────
@@ -824,10 +824,297 @@ mcpServer.tool("merge_customers", {
   },
 });
 
+// ── Tool: create_customer (write) ───────────────────────────
+
+mcpServer.tool("create_customer", {
+  description:
+    "Create a new customer record. Required: name, company_id. Optional: company_name, customer_type, phone, email, payment_terms, billing_address, notes.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "Customer name (required)" },
+      company_id: { type: "string", description: "Company/tenant ID (required)" },
+      company_name: { type: "string", description: "Company name" },
+      customer_type: { type: "string", description: "Type: company or individual" },
+      phone: { type: "string", description: "Phone number" },
+      email: { type: "string", description: "Email address" },
+      payment_terms: { type: "string", description: "Payment terms" },
+      billing_address: { type: "string", description: "Billing address" },
+      notes: { type: "string", description: "Notes" },
+    },
+    required: ["name", "company_id"],
+  },
+  handler: async ({ name, company_id, company_name, customer_type, phone, email, payment_terms, billing_address, notes }: Record<string, unknown>) => {
+    const db = getDb();
+    const row: Record<string, unknown> = {
+      name,
+      company_id,
+      status: "active",
+    };
+    if (company_name) row.company_name = company_name;
+    if (customer_type) row.customer_type = customer_type;
+    if (phone) row.phone = phone;
+    if (email) row.email = email;
+    if (payment_terms) row.payment_terms = payment_terms;
+    if (billing_address) row.billing_address = billing_address;
+    if (notes) row.notes = notes;
+
+    const { data, error } = await db.from("customers").insert(row).select().single();
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+
+    // Log activity
+    await db.from("activity_events").insert({
+      company_id,
+      entity_type: "customer",
+      entity_id: data.id,
+      event_type: "created",
+      description: `Customer "${name}" created via ChatGPT`,
+      source: "chatgpt",
+      actor_type: "ai",
+    });
+
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: create_quote (write) ──────────────────────────────
+
+mcpServer.tool("create_quote", {
+  description:
+    "Create a new quote. Auto-generates quote_number. Required: company_id, customer_id. Optional: total_amount, valid_until, notes, metadata (line items object).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      company_id: { type: "string", description: "Company/tenant ID (required)" },
+      customer_id: { type: "string", description: "Customer ID (required)" },
+      total_amount: { type: "number", description: "Total amount" },
+      valid_until: { type: "string", description: "Expiry date (YYYY-MM-DD)" },
+      notes: { type: "string", description: "Notes" },
+      metadata: { type: "object", description: "Line items and extra data" },
+    },
+    required: ["company_id", "customer_id"],
+  },
+  handler: async ({ company_id, customer_id, total_amount, valid_until, notes, metadata }: Record<string, unknown>) => {
+    const db = getDb();
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { count } = await db
+        .from("quotes")
+        .select("id", { count: "exact", head: true })
+        .like("quote_number", `QT-${today}%`);
+      const seq = String((count || 0) + 1 + attempt).padStart(3, "0");
+      const quoteNumber = `QT-${today}-${seq}`;
+
+      const row: Record<string, unknown> = {
+        quote_number: quoteNumber,
+        company_id,
+        customer_id,
+        status: "draft",
+        total_amount: total_amount || 0,
+      };
+      if (valid_until) row.valid_until = valid_until;
+      if (notes) row.notes = notes;
+      if (metadata) row.metadata = metadata;
+
+      const { data, error } = await db.from("quotes").insert(row).select().single();
+      if (!error) {
+        await db.from("activity_events").insert({
+          company_id: company_id as string,
+          entity_type: "quote",
+          entity_id: data.id,
+          event_type: "created",
+          description: `Quote ${quoteNumber} created via ChatGPT`,
+          source: "chatgpt",
+          actor_type: "ai",
+        });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      }
+      if (!error.message?.includes("duplicate") && !error.message?.includes("unique")) {
+        return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+      }
+    }
+    return { content: [{ type: "text", text: "Error: Failed to generate unique quote number after 5 attempts" }] };
+  },
+});
+
+// ── Tool: create_order (write) ──────────────────────────────
+
+mcpServer.tool("create_order", {
+  description:
+    "Create a new order. Auto-generates order_number. Required: company_id, customer_id. Optional: total_amount, status, order_kind, due_date, notes, quote_id.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      company_id: { type: "string", description: "Company/tenant ID (required)" },
+      customer_id: { type: "string", description: "Customer ID (required)" },
+      total_amount: { type: "number", description: "Total amount" },
+      status: { type: "string", description: "Order status (default: approved)" },
+      order_kind: { type: "string", description: "Order kind (default: commercial)" },
+      due_date: { type: "string", description: "Due date (YYYY-MM-DD)" },
+      notes: { type: "string", description: "Notes" },
+      quote_id: { type: "string", description: "Linked quote ID" },
+    },
+    required: ["company_id", "customer_id"],
+  },
+  handler: async ({ company_id, customer_id, total_amount, status, order_kind, due_date, notes, quote_id }: Record<string, unknown>) => {
+    const db = getDb();
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { count } = await db
+        .from("orders")
+        .select("id", { count: "exact", head: true })
+        .like("order_number", `ORD-${today}%`);
+      const seq = String((count || 0) + 1 + attempt).padStart(3, "0");
+      const orderNumber = `ORD-${today}-${seq}`;
+
+      const row: Record<string, unknown> = {
+        order_number: orderNumber,
+        company_id,
+        customer_id,
+        total_amount: total_amount || 0,
+        status: status || "approved",
+        order_kind: order_kind || "commercial",
+        order_date: new Date().toISOString().slice(0, 10),
+      };
+      if (due_date) row.due_date = due_date;
+      if (notes) row.notes = notes;
+      if (quote_id) row.quote_id = quote_id;
+
+      const { data, error } = await db.from("orders").insert(row).select().single();
+      if (!error) {
+        await db.from("activity_events").insert({
+          company_id: company_id as string,
+          entity_type: "order",
+          entity_id: data.id,
+          event_type: "created",
+          description: `Order ${orderNumber} created via ChatGPT`,
+          source: "chatgpt",
+          actor_type: "ai",
+        });
+        return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      }
+      if (!error.message?.includes("duplicate") && !error.message?.includes("unique")) {
+        return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+      }
+    }
+    return { content: [{ type: "text", text: "Error: Failed to generate unique order number after 5 attempts" }] };
+  },
+});
+
+// ── Tool: update_order (write) ──────────────────────────────
+
+mcpServer.tool("update_order", {
+  description:
+    "Update an order's fields by ID. Supports: status, total_amount, due_date, notes, delivery_method.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Order ID (required)" },
+      status: { type: "string", description: "New status" },
+      total_amount: { type: "number", description: "New total amount" },
+      due_date: { type: "string", description: "New due date (YYYY-MM-DD)" },
+      notes: { type: "string", description: "New notes" },
+      delivery_method: { type: "string", description: "Delivery method" },
+    },
+    required: ["id"],
+  },
+  handler: async ({ id, status, total_amount, due_date, notes, delivery_method }: Record<string, unknown>) => {
+    const db = getDb();
+    const updates: Record<string, unknown> = {};
+    if (status !== undefined) updates.status = status;
+    if (total_amount !== undefined) updates.total_amount = total_amount;
+    if (due_date !== undefined) updates.due_date = due_date;
+    if (notes !== undefined) updates.notes = notes;
+    if (delivery_method !== undefined) updates.delivery_method = delivery_method;
+    if (Object.keys(updates).length === 0) {
+      return { content: [{ type: "text", text: "No fields to update" }] };
+    }
+    const { data, error } = await db.from("orders").update(updates).eq("id", id).select().maybeSingle();
+    if (error) return { content: [{ type: "text", text: `Error: ${error.message}` }] };
+    if (!data) return { content: [{ type: "text", text: "Error: Order not found" }] };
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  },
+});
+
+// ── Tool: convert_lead_to_quote (write) ─────────────────────
+
+mcpServer.tool("convert_lead_to_quote", {
+  description:
+    "Convert a lead into a draft quote. Reads lead data (customer, expected_value) and creates a quote linked to the lead. Required: lead_id, company_id.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      lead_id: { type: "string", description: "Lead ID (required)" },
+      company_id: { type: "string", description: "Company/tenant ID (required)" },
+    },
+    required: ["lead_id", "company_id"],
+  },
+  handler: async ({ lead_id, company_id }: Record<string, unknown>) => {
+    const db = getDb();
+
+    // Fetch lead
+    const { data: lead, error: lErr } = await db
+      .from("leads")
+      .select("id, title, contact_id, expected_value, customer_id, notes")
+      .eq("id", lead_id)
+      .maybeSingle();
+    if (lErr || !lead) return { content: [{ type: "text", text: `Error: Lead not found` }] };
+
+    const customerId = lead.customer_id;
+    if (!customerId) {
+      return { content: [{ type: "text", text: "Error: Lead has no customer_id. Assign a customer before converting." }] };
+    }
+
+    // Generate quote number
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const { count } = await db
+        .from("quotes")
+        .select("id", { count: "exact", head: true })
+        .like("quote_number", `QT-${today}%`);
+      const seq = String((count || 0) + 1 + attempt).padStart(3, "0");
+      const quoteNumber = `QT-${today}-${seq}`;
+
+      const { data: quote, error: qErr } = await db.from("quotes").insert({
+        quote_number: quoteNumber,
+        company_id,
+        customer_id: customerId,
+        lead_id: lead.id,
+        status: "draft",
+        total_amount: lead.expected_value || 0,
+        notes: lead.notes ? `From lead: ${lead.title}\n${lead.notes}` : `From lead: ${lead.title}`,
+      }).select().single();
+
+      if (!qErr) {
+        // Update lead stage to proposal
+        await db.from("leads").update({ stage: "proposal" }).eq("id", lead_id);
+
+        await db.from("activity_events").insert({
+          company_id: company_id as string,
+          entity_type: "quote",
+          entity_id: quote.id,
+          event_type: "created",
+          description: `Quote ${quoteNumber} created from lead "${lead.title}" via ChatGPT`,
+          source: "chatgpt",
+          actor_type: "ai",
+        });
+
+        return { content: [{ type: "text", text: JSON.stringify({ quote, lead_updated: true }, null, 2) }] };
+      }
+      if (!qErr.message?.includes("duplicate") && !qErr.message?.includes("unique")) {
+        return { content: [{ type: "text", text: `Error: ${qErr.message}` }] };
+      }
+    }
+    return { content: [{ type: "text", text: "Error: Failed to generate unique quote number after 5 attempts" }] };
+  },
+});
+
 // ── Boot diagnostics ────────────────────────────────────────
 
 const envName = Deno.env.get("ENV") || Deno.env.get("ENVIRONMENT") || Deno.env.get("DENO_DEPLOYMENT_ID") || "unknown";
-console.log("MCP BOOT:", { env: envName, baseUrl: supabaseUrl, server: "rebar-erp", version: "1.0.0" });
+console.log("MCP BOOT:", { env: envName, baseUrl: supabaseUrl, server: "rebar-erp", version: "1.1.0" });
 console.log("MCP TOOLS:", mcpServer.listTools?.() || "no listTools method");
 
 // ── HTTP Transport ──────────────────────────────────────────
