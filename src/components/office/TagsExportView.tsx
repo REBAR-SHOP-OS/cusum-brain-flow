@@ -72,8 +72,24 @@ export function TagsExportView() {
   const [zebraZpl, setZebraZpl] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [projectAddress, setProjectAddress] = useState("");
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+
+  // Fetch project address as fallback for tags
+  useEffect(() => {
+    if (!selectedSessionId) { setProjectAddress(""); return; }
+    supabase
+      .from("barlists")
+      .select("project:projects(site_address)")
+      .eq("extract_session_id", selectedSessionId)
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        const addr = (data as any)?.project?.site_address;
+        setProjectAddress(addr || "");
+      });
+  }, [selectedSessionId]);
 
   // Only show approved/validated/mapped sessions that have data
   const availableSessions = useMemo(
@@ -112,7 +128,7 @@ export function TagsExportView() {
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
           return r[key] != null ? formatDim(Number(r[key]), us) : "";
         }),
-        weight, picture, r.customer || "", r.reference || "", r.address || (selectedSession as any)?.site_address || "",
+        weight, picture, r.customer || "", r.reference || "", r.address || (selectedSession as any)?.site_address || projectAddress || "",
       ].join(",");
     });
     const csv = [headers.join(","), ...csvRows].join("\n");
@@ -474,7 +490,7 @@ export function TagsExportView() {
                     item={row.row_index}
                     customer={row.customer || ""}
                     reference={row.reference || ""}
-                    address={row.address || (selectedSession as any)?.site_address || ""}
+                    address={row.address || (selectedSession as any)?.site_address || projectAddress || ""}
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
                     unitSystem={(selectedSession as any)?.unit_system || "metric"}
