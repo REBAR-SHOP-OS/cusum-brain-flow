@@ -62,6 +62,7 @@ interface ProVideoEditorProps {
   onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
   onUpdateBrand?: (brand: BrandProfile) => void;
   onMusicSelect?: (url: string | null) => void;
+  onDuplicateClip?: (oldSceneId: string, newSceneId: string) => void;
   externalActiveTab?: string | null;
   onActiveTabChanged?: (tab: string | null) => void;
 }
