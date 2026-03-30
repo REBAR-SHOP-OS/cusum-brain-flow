@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, Music, Mic, Upload, X } from "lucide-react";
+import { Loader2, Music, Mic, Upload, X, Sparkles } from "lucide-react";
 
 export interface AudioPromptResult {
   type: "music" | "voiceover";

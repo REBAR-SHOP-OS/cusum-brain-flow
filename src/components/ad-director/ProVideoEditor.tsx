@@ -30,7 +30,7 @@ import { MusicTab } from "./editor/MusicTab";
 import { ScriptTab } from "./editor/ScriptTab";
 import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
 import { TextOverlayDialog } from "./editor/TextOverlayDialog";
-import { AudioPromptDialog, type AudioPromptResult } from "./editor/AudioPromptDialog";
+import { AudioPromptDialog, type AudioPromptResult, type AudioUploadResult } from "./editor/AudioPromptDialog";
 import { VoiceoverDialog, type VoiceoverResult } from "./editor/VoiceoverDialog";
 import { SubtitleDialog } from "./editor/SubtitleDialog";
 import { TextVoiceDialog, type TextVoiceResult } from "./editor/TextVoiceDialog";
