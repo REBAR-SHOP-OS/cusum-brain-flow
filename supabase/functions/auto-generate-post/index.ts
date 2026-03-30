@@ -388,7 +388,8 @@ Return an array of 5 objects:
             user_id: userId,
             platform,
             title: post.title || "Untitled",
-            content: stripPersianBlock(post.content || ""),
+            content: stripPersianBlock(post.content || "") +
+              (post.farsi_translation ? "\n\n" + post.farsi_translation : ""),
             hashtags: post.hashtags || [],
             image_url: null,
             status: "pending_approval",
