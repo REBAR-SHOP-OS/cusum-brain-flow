@@ -1407,7 +1407,7 @@ export function ProVideoEditor({
     setAudioTracks(prev => {
       const withoutMusic = prev.filter(a => a.kind !== "music");
       if (url) {
-        return [...withoutMusic, { sceneId: "", label: "Music", audioUrl: url, kind: "music" as const }];
+        return [...withoutMusic, { sceneId: "", label: "Music", audioUrl: url, kind: "music" as const, globalStartTime: 0 }];
       }
       return withoutMusic;
     });
