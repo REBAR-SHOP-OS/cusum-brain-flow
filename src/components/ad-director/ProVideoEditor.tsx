@@ -1000,7 +1000,7 @@ export function ProVideoEditor({
     // Validate trim range
     const newDuration = trimEnd - trimStart;
     if (newDuration < 0.5) {
-      toast({ title: "برش ممکن نیست", description: "مدت زمان بسیار کوتاه است", variant: "destructive" });
+      toast({ title: "Cannot trim", description: "Duration too short", variant: "destructive" });
       return;
     }
 
