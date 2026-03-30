@@ -58,7 +58,7 @@ import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
-import { formatLengthByMode, lengthUnitLabelByMode, type LengthDisplayMode } from "@/lib/unitSystem";
+import { formatLengthByMode, lengthUnitLabelByMode, displayModeToMm, type LengthDisplayMode } from "@/lib/unitSystem";
 
 function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
   const [showRetry, setShowRetry] = useState(false);

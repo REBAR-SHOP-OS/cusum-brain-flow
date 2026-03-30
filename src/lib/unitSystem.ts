@@ -170,6 +170,17 @@ export function formatLengthByMode(mm: number | null | undefined, mode: LengthDi
   }
 }
 
+/** Convert a numeric value entered in display mode back to mm */
+export function displayModeToMm(value: number, mode: LengthDisplayMode): number {
+  switch (mode) {
+    case "mm": return value;
+    case "in": return Math.round(value * 25.4);
+    case "ft": return Math.round(value * 304.8);
+    case "imperial": return Math.round(value * 25.4); // plain number treated as inches
+    default: return value;
+  }
+}
+
 /** Get the short unit label for a display mode */
 export function lengthUnitLabelByMode(mode: LengthDisplayMode): string {
   switch (mode) {
