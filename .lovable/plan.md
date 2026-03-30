@@ -1,43 +1,75 @@
 
 
-# Consolidate Calendar Cards: One Card Per Platform Per Day
+# Deduplicate Calendar Cards & Prevent Duplicate Publishing
 
 ## Problem
-The calendar shows too many scattered cards because posts are grouped by `platform + title + page_name`. With multiple pages and titles, each day can have 10+ cards, making the view unusable (as shown in the screenshot).
+1. The calendar still shows many individual cards per platform per day — the grouping change consolidated by platform but each row in the DB is still a separate card. The screenshot shows ~7+ cards per day for Instagram alone because multiple posts exist with the same title/content for the same platform on the same day.
+2. No guard exists to prevent publishing the same content to the same platform twice.
 
-## Rule
-Each day column should show **one card per platform**, consolidating all posts for that platform into a single card. This limits cards to ~5-6 per day (one per active platform), keeping the view clean and organized.
+## Two Rules to Enforce
 
-## Changes
+### Rule 1: Calendar shows max ONE card per platform per day (already grouped)
+The `groupByPlatform` change is already in place. The screenshot suggests there are genuinely many separate posts per platform per day. The current code correctly groups them into one card with a "×N" badge. If individual cards still appear, it may be a rendering or caching issue. Will verify and ensure the consolidated view works.
 
-### File: `src/components/social/SocialCalendar.tsx`
+### Rule 2: Prevent duplicate content from being published to the same platform
 
-1. **Rewrite `groupByPlatform`** to group by platform only (not title/page):
-   ```typescript
-   function groupByPlatform(posts: SocialPost[]) {
-     const map = new Map<string, SocialPost[]>();
-     for (const p of posts) {
-       const key = p.platform || "other";
-       if (!map.has(key)) map.set(key, []);
-       map.get(key)!.push(p);
-     }
-     return [...map.entries()].sort(([a], [b]) => {
-       return (PLATFORM_ORDER.indexOf(a) ?? 99) - (PLATFORM_ORDER.indexOf(b) ?? 99);
-     });
-   }
-   ```
+#### A. Backend Guard — `social-publish/index.ts` (line ~62-83)
+Before publishing, check if a post with the same `title + platform + page_name` and `status = 'published'` already exists for the same day:
 
-2. **Update the card rendering** to show consolidated info:
-   - Platform icon + post count badge (e.g. "×6")
-   - Show the number of unique pages (e.g. "3 pages")
-   - Show dominant status across all posts in the group
-   - Keep the existing click behavior (opens group dialog)
+```typescript
+// After the existing "already published" check for this specific post_id
+if (post_id) {
+  const { data: postData } = await supabaseAdmin
+    .from("social_posts")
+    .select("title, platform, page_name, scheduled_date")
+    .eq("id", post_id)
+    .maybeSingle();
 
-3. **Fix `platformName` extraction** — since key is now just the platform string, remove the `split("_")[0]` logic.
+  if (postData?.title) {
+    const dayStart = postData.scheduled_date 
+      ? new Date(postData.scheduled_date).toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
 
-## Result
-Each day column will have at most one card per platform (max ~7 cards), matching the user's requirement of organized, non-scattered display.
+    const { data: duplicate } = await supabaseAdmin
+      .from("social_posts")
+      .select("id")
+      .eq("platform", postData.platform)
+      .eq("title", postData.title)
+      .eq("status", "published")
+      .neq("id", post_id)
+      .gte("scheduled_date", dayStart + "T00:00:00Z")
+      .lte("scheduled_date", dayStart + "T23:59:59Z")
+      .maybeSingle();
+
+    if (duplicate) {
+      return error 409: "Duplicate — this content was already published"
+    }
+  }
+}
+```
+
+#### B. Backend Guard — `social-cron-publish/index.ts` (line ~63-70)
+Same duplicate check before processing each due post in the cron loop.
+
+#### C. Calendar Dedup — `SocialCalendar.tsx`
+Add deduplication within each platform group: if multiple posts share the same `title + page_name`, only show one representative card (with a count). This collapses truly duplicate entries visually:
+
+```typescript
+function deduplicatePosts(posts: SocialPost[]): SocialPost[] {
+  const seen = new Set<string>();
+  return posts.filter(p => {
+    const key = `${p.platform}_${p.title}_${p.page_name || ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+```
+
+Apply before rendering in the calendar: filter `dayPosts` through `deduplicatePosts` so duplicate titles on the same platform are collapsed.
 
 ## Files Changed
-- `src/components/social/SocialCalendar.tsx`
+- `src/components/social/SocialCalendar.tsx` — add `deduplicatePosts` filter to remove duplicate title+page+platform entries per day
+- `supabase/functions/social-publish/index.ts` — add duplicate content guard before publishing
+- `supabase/functions/social-cron-publish/index.ts` — add duplicate content guard in cron loop
 
