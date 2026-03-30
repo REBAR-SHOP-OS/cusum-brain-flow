@@ -64,6 +64,7 @@ interface ProVideoEditorProps {
   onUpdateBrand?: (brand: BrandProfile) => void;
   onMusicSelect?: (url: string | null) => void;
   onDuplicateClip?: (oldSceneId: string, newSceneId: string) => void;
+  onAddSceneWithMedia?: (url: string, fileName: string) => void;
   externalActiveTab?: string | null;
   onActiveTabChanged?: (tab: string | null) => void;
 }
@@ -188,6 +189,7 @@ export function ProVideoEditor({
   finalVideoUrl, onBack, onExport, exporting,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming, onUpdateSegments,
   onUpdateStoryboard, onUpdateBrand, onMusicSelect, onDuplicateClip,
+  onAddSceneWithMedia,
   externalActiveTab, onActiveTabChanged,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
@@ -1973,6 +1975,7 @@ export function ProVideoEditor({
                   onSelectScene={setSelectedSceneIndex}
                   onRegenerateScene={onRegenerateScene}
                   onUpdateClipUrl={onUpdateClipUrl}
+                  onAddSceneWithMedia={onAddSceneWithMedia}
                 />
               )}
               {activeTab === "text" && (

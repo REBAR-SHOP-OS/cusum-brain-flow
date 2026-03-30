@@ -16,9 +16,10 @@ interface MediaTabProps {
   onSelectScene: (idx: number) => void;
   onRegenerateScene?: (sceneId: string) => void;
   onUpdateClipUrl?: (sceneId: string, url: string) => void;
+  onAddSceneWithMedia?: (url: string, fileName: string) => void;
 }
 
-export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSelectScene, onRegenerateScene, onUpdateClipUrl }: MediaTabProps) {
+export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSelectScene, onRegenerateScene, onUpdateClipUrl, onAddSceneWithMedia }: MediaTabProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showProperties, setShowProperties] = useState(false);
@@ -56,10 +57,15 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !scene) return;
+    if (!file) return;
     const url = URL.createObjectURL(file);
-    onUpdateClipUrl?.(scene.id, url);
-    toast({ title: "Media replaced", description: file.name });
+    if (onAddSceneWithMedia) {
+      onAddSceneWithMedia(url, file.name);
+      toast({ title: "Media added", description: `New scene created from ${file.name}` });
+    } else if (scene) {
+      onUpdateClipUrl?.(scene.id, url);
+      toast({ title: "Media replaced", description: file.name });
+    }
     e.target.value = "";
   };
 
@@ -169,7 +175,7 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
 
       {/* Replace media */}
       <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Replace media</Label>
+        <Label className="text-xs text-muted-foreground">Add / Replace media</Label>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="text-xs h-7 gap-1 flex-1" onClick={handleUpload}>
             <Upload className="w-3 h-3" /> Upload
