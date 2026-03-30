@@ -385,7 +385,7 @@ export function TagsExportView() {
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Size</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Type</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">
-                    Total Length {((selectedSession as any)?.unit_system === "imperial") ? "(ft-in)" : "(mm)"}
+                    Total Length {sessionUnitToDisplay((selectedSession as any)?.unit_system) === "imperial" ? "(ft-in)" : "(mm)"}
                   </th>
                   {DIM_COLS.map((c) => (
                     <th key={c} className="text-[10px] font-bold tracking-widest text-primary uppercase text-right px-3 py-2 whitespace-nowrap">{c}</th>
