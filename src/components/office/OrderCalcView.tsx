@@ -240,7 +240,27 @@ export function OrderCalcView() {
 
       {/* Controls */}
       {items.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Source Unit */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+              Source Unit
+            </label>
+            <div className="flex gap-2">
+              {(["mm", "in", "ft"] as SourceUnit[]).map(u => (
+                <Button
+                  key={u}
+                  size="sm"
+                  variant={sourceUnit === u ? "default" : "outline"}
+                  onClick={() => setSourceUnit(u)}
+                  className="flex-1"
+                >
+                  {u === "mm" ? "mm" : u === "in" ? "Inches" : "Feet"}
+                </Button>
+              ))}
+            </div>
+          </div>
+
           {/* Stock length */}
           <div className="space-y-2">
             <label className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
