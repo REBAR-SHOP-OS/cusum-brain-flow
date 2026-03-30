@@ -1,55 +1,45 @@
 
 
-# Add Per-Group "Select All" Toggle in Pages Sub-Panel
+# Fix: Persian Translation Not Persisted to Database
 
 ## Problem
-Currently there's one global "Select All" button. User wants each platform group (Facebook, Instagram, LinkedIn) to have its own independent "Select All" toggle.
+The "🔒 Internal reference only" section always shows "ترجمه‌ای موجود نیست" in the Social Media Manager review panel, even when the AI agent generated Persian translations.
+
+## Root Cause
+Data flow breakdown:
+
+1. AI agent generates content with `---PERSIAN---` block in the message
+2. `PixelChatRenderer.extractPostData()` **parses** the Persian block into separate fields: `imageTextTranslation` and `captionTranslation`
+3. These fields are stripped from `caption` — so `post.caption` no longer contains `---PERSIAN---`
+4. `handleApprovePost` in `AgentWorkspace.tsx` looks for `---PERSIAN---` inside `post.caption` → finds nothing → saves empty Persian block to DB
+5. `PostReviewPanel` reads from DB content → no Persian block → shows fallback "ترجمه‌ای موجود نیست"
 
 ## Solution
 
-### File: `src/components/social/SelectionSubPanel.tsx`
+### File: `src/pages/AgentWorkspace.tsx`
 
-**In `renderGrouped()`** — Add a per-group "Select All" button inside each group header:
+In `handleApprovePost`, instead of only extracting Persian from `post.caption`, also reconstruct it from the `PixelPostData` fields `imageTextTranslation` and `captionTranslation`:
 
 ```typescript
-const renderGrouped = () => {
-  if (!groups || groups.length === 0) return renderFlat();
+// Current: only checks post.caption for ---PERSIAN---
+const persianIdx = rawCaption.indexOf("---PERSIAN---");
+const persianBlock = persianIdx !== -1 ? rawCaption.slice(persianIdx) : "";
 
-  return (
-    <div className="space-y-3">
-      {groups.map((group) => {
-        const groupValues = group.options.map(o => o.value);
-        const allGroupSelected = groupValues.every(v => currentMulti.includes(v));
-
-        const toggleGroup = () => {
-          if (allGroupSelected) {
-            setCurrentMulti(prev => prev.filter(v => !groupValues.includes(v)));
-          } else {
-            setCurrentMulti(prev => [...new Set([...prev, ...groupValues])]);
-          }
-        };
-
-        return (
-          <div key={group.label} className="rounded-lg border bg-card overflow-hidden">
-            <div className="px-3.5 py-2.5 bg-muted/60 border-b flex items-center justify-between">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                {group.label}
-              </p>
-              <button onClick={toggleGroup} className="text-xs font-medium ...">
-                <CheckCheck /> {allGroupSelected ? "Deselect all" : "Select all"}
-              </button>
-            </div>
-            {group.options.map(...)}
-          </div>
-        );
-      })}
-    </div>
-  );
-};
+// Fixed: also reconstruct from PixelPostData fields
+let persianBlock = "";
+const persianIdx = rawCaption.indexOf("---PERSIAN---");
+if (persianIdx !== -1) {
+  persianBlock = rawCaption.slice(persianIdx);
+} else if (post.imageTextTranslation || post.captionTranslation) {
+  persianBlock = "---PERSIAN---\n🖼️ متن روی عکس: " 
+    + (post.imageTextTranslation || "") 
+    + "\n📝 ترجمه کپشن: " 
+    + (post.captionTranslation || "");
+}
 ```
 
-The global "Select All" at the top remains for selecting everything across all groups.
+This ensures Persian translations flow from AI → chat card → DB → review panel.
 
 ## Files Changed
-- `src/components/social/SelectionSubPanel.tsx` — add per-group select/deselect toggle in group headers
+- `src/pages/AgentWorkspace.tsx` — reconstruct Persian block from `post.imageTextTranslation` and `post.captionTranslation` when `---PERSIAN---` is not found in caption
 
