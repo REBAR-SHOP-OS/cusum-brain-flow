@@ -514,13 +514,13 @@ class BackgroundAdDirectorService {
         );
         if (unresolvedClips.length === 0) break;
 
-        console.log(`[AdDirector] Retry round ${retryRound}/${MAX_RETRY_ROUNDS}: ${failedClips.length} failed scene(s)`);
-        this.update({ statusText: `Retrying failed scenes... attempt ${retryRound}/${MAX_RETRY_ROUNDS} (${failedClips.length} scene${failedClips.length > 1 ? "s" : ""})` });
+        console.log(`[AdDirector] Retry round ${retryRound}/${MAX_RETRY_ROUNDS}: ${unresolvedClips.length} unresolved scene(s)`);
+        this.update({ statusText: `Retrying failed scenes... attempt ${retryRound}/${MAX_RETRY_ROUNDS} (${unresolvedClips.length} scene${unresolvedClips.length > 1 ? "s" : ""})` });
 
         // Small delay before retry to avoid rate limits
         await new Promise(r => setTimeout(r, 4000));
 
-        const retryPromises = failedClips.map(async (failedClip) => {
+        const retryPromises = unresolvedClips.map(async (failedClip) => {
           if (this.cancelFlag) return;
           const scene = storyboardWithDefaults.find(s => s.id === failedClip.sceneId);
           if (!scene) return;
