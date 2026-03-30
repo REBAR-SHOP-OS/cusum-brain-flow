@@ -1,75 +1,65 @@
 
 
-# Fix: Persian Translation Leaking into Caption Field
+# Unit System Audit — Remaining Issues
 
-## Root Cause
+## Issues Found
 
-In `supabase/functions/auto-generate-post/index.ts` line 391-392, the `farsi_translation` field from the AI is appended to the saved content. The AI prompt instructs it to prefix with `---PERSIAN---`, but the AI sometimes omits the separator or embeds Persian directly in the `content` field. When the `---PERSIAN---` marker is missing, the `PostReviewPanel` frontend cannot split it out, so Persian text appears in the editable Caption textarea.
+### Issue 1: DetailedListView Uses Company-Level Unit Instead of Session Unit (HIGH)
+**File**: `src/components/office/DetailedListView.tsx` line 27
 
-## Fixes
+`useUnitSystem()` reads from the company profile (metric/imperial). But cut plan items originate from extract sessions that may have a different unit. If company is metric but the barlist was imported as imperial, dimensions show "MM" sub-labels on values that should display as inches.
 
-### Fix 1: Normalize `farsi_translation` separator (auto-generate-post)
-**File**: `supabase/functions/auto-generate-post/index.ts` lines 391-392
+**Fix**: Accept an optional `sessionUnit` prop or resolve the unit from the linked extract session. Fall back to company unit when no session context is available.
 
-Before appending `farsi_translation`, ensure `---PERSIAN---` is always present:
-```typescript
-let persianBlock = "";
-if (post.farsi_translation) {
-  const ft = post.farsi_translation.trim();
-  persianBlock = ft.startsWith("---PERSIAN---") 
-    ? "\n\n" + ft 
-    : "\n\n---PERSIAN---\n" + ft;
-}
-content: stripPersianBlock(post.content || "") + persianBlock,
-```
+### Issue 2: DetailedListView Inline Edit Saves Raw Input Without Unit Conversion (HIGH)
+**File**: `src/components/office/DetailedListView.tsx` line 268
 
-### Fix 2: Strip inline Persian from `post.content` (auto-generate-post)
-**File**: `supabase/functions/auto-generate-post/index.ts` — enhance `stripPersianBlock`
+When editing `cut_length_mm` inline, the raw `parseInt(e.target.value)` is saved directly. If the display shows imperial but the user enters "54" (meaning 54 inches), it's stored as 54 mm — a 25.4× error.
 
-Add a regex to remove any lines containing Persian/Arabic Unicode characters (U+0600–U+06FF) from the content field, as a safety net against AI embedding Persian directly in `content`:
-```typescript
-function stripPersianBlock(text: string): string {
-  let t = text;
-  const idx = t.indexOf("---PERSIAN---");
-  if (idx !== -1) t = t.slice(0, idx);
-  t = t.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
-  t = t.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
-  // Remove any remaining lines with Persian/Arabic script
-  t = t.split("\n").filter(line => !/[\u0600-\u06FF]/.test(line)).join("\n");
-  return t.trim();
-}
-```
+Same issue for dimension edits on line 275.
 
-### Fix 3: Frontend safety — strip Persian from `localContent` (PostReviewPanel)
-**File**: `src/components/social/PostReviewPanel.tsx` lines 229-230
+**Fix**: Apply `displayModeToMm()` conversion before saving, matching the pattern already used in `AIExtractView.tsx`.
 
-Add a fallback: even when no `---PERSIAN---` separator is found, detect and strip Persian text from `localContent` using `🖼️ متن روی عکس:` markers or Unicode range:
-```typescript
-} else {
-  // No separator found — still strip any Persian markers or lines
-  let cleaned = rawC;
-  const persianMarker = cleaned.match(/🖼️\s*متن روی عکس:([\s\S]*?)(?=📝|$)/);
-  const captionMarker = cleaned.match(/📝\s*ترجمه کپشن:([\s\S]*?)$/);
-  if (persianMarker) {
-    setPersianImageText(persianMarker[1]?.trim() || "");
-    cleaned = cleaned.replace(persianMarker[0], "");
-  }
-  if (captionMarker) {
-    setPersianCaptionText(captionMarker[1]?.trim() || "");
-    cleaned = cleaned.replace(captionMarker[0], "");
-  }
-  // Strip any remaining lines with Persian/Arabic characters
-  cleaned = cleaned.split("\n").filter(l => !/[\u0600-\u06FF]/.test(l)).join("\n");
-  setLocalContent(cleaned.trim());
-}
-```
+### Issue 3: Mapping Preview Shows "LENGTH (mm)" in Screenshot Despite Code Saying "LENGTH (raw)" (LOW)
+**File**: `src/components/office/BarlistMappingPanel.tsx` line 349
+
+The code already says `LENGTH (raw)` and `DIMS (raw)` — this was fixed in the previous audit. The screenshot may show a cached version. **No code change needed**, but worth verifying the deployed build is current.
+
+### Issue 4: CSV Export Dimension Columns Have No Unit Labels (LOW)
+**File**: `src/components/office/TagsExportView.tsx` line 118
+
+CSV headers for dimension columns are just `A, B, C, D...` with no unit indication. The length column correctly shows `TOTAL LENGTH (mm)` or `TOTAL LENGTH (ft-in)`, but dimensions don't follow this pattern. Users importing the CSV may not know the unit.
+
+**Fix**: Append `(mm)` or `(in)` to dimension column headers based on session unit.
+
+### Issue 5: `sessionUnitToDisplay` Collapses "in" and "ft" to "metric" — No Way to Display Inches-Only (LOW)
+**File**: `src/lib/unitSystem.ts` line 173
+
+If a session's source unit was `"in"`, after mapping all values are stored as mm. `sessionUnitToDisplay("in")` returns `"metric"` → tags/print show raw mm values. This is technically correct (DB is mm), but if the user imported an inch-based barlist, they likely expect imperial display on tags.
+
+**Fix (optional)**: Map `"in"` → `"imperial"` in `sessionUnitToDisplay` so tags auto-display as ft-in for inch-sourced barlists.
+
+---
+
+## Proposed Changes
+
+### Fix 1 + Fix 2: DetailedListView — session unit awareness + inline edit conversion
+**File**: `src/components/office/DetailedListView.tsx`
+- Import `displayModeToMm` and `sessionUnitToDisplay` from `@/lib/unitSystem`
+- Resolve the session's unit system from the linked cut plan's extract session (or accept as prop)
+- Apply `displayModeToMm()` when saving inline edits for `cut_length_mm` and dimension values
+- Update dimension sub-labels to use the resolved session unit
+
+### Fix 3: CSV dimension headers
+**File**: `src/components/office/TagsExportView.tsx`
+- Change dimension headers from `A, B, C...` to `A (mm), B (mm)...` or `A (in), B (in)...` based on session unit
+
+### Fix 4 (optional): Map "in" source → imperial display
+**File**: `src/lib/unitSystem.ts`
+- Change `sessionUnitToDisplay` to return `"imperial"` for `"in"` and `"ft"` source units
 
 ## Files to Change
-1. `supabase/functions/auto-generate-post/index.ts` — normalize separator + enhance `stripPersianBlock`
-2. `src/components/social/PostReviewPanel.tsx` — frontend fallback stripping
-
-## Result
-- Persian will never appear in Caption regardless of AI output format
-- Persian will always be routed to the "Internal reference only" section
-- Triple safety: backend strip + separator normalization + frontend fallback
+1. `src/components/office/DetailedListView.tsx` — unit-aware inline editing + correct labels
+2. `src/components/office/TagsExportView.tsx` — CSV dimension headers with unit
+3. `src/lib/unitSystem.ts` — optionally map "in"/"ft" → imperial display
 
