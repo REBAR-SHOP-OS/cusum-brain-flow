@@ -1,45 +1,43 @@
 
 
-# Fix: Persian Translation Not Persisted to Database
+# Fix: Page Selection Should Only Apply to Current Platform's Card
 
 ## Problem
-The "🔒 Internal reference only" section always shows "ترجمه‌ای موجود نیست" in the Social Media Manager review panel, even when the AI agent generated Persian translations.
+When user selects pages for a Facebook card, the same pages are also written to the Instagram card (and any other sibling). This is because `handlePagesSaveMulti` updates ALL sibling rows matching `title + scheduled_date`, ignoring platform.
 
 ## Root Cause
-Data flow breakdown:
-
-1. AI agent generates content with `---PERSIAN---` block in the message
-2. `PixelChatRenderer.extractPostData()` **parses** the Persian block into separate fields: `imageTextTranslation` and `captionTranslation`
-3. These fields are stripped from `caption` — so `post.caption` no longer contains `---PERSIAN---`
-4. `handleApprovePost` in `AgentWorkspace.tsx` looks for `---PERSIAN---` inside `post.caption` → finds nothing → saves empty Persian block to DB
-5. `PostReviewPanel` reads from DB content → no Persian block → shows fallback "ترجمه‌ای موجود نیست"
+**`PostReviewPanel.tsx` line 474-476** — the sibling filter matches on `title + scheduled_date` but does NOT filter by `platform`. All cards at the same time slot get the same `page_name`.
 
 ## Solution
 
-### File: `src/pages/AgentWorkspace.tsx`
+### File: `src/components/social/PostReviewPanel.tsx`
 
-In `handleApprovePost`, instead of only extracting Persian from `post.caption`, also reconstruct it from the `PixelPostData` fields `imageTextTranslation` and `captionTranslation`:
+**Change `handlePagesSaveMulti`** to only update the current post's row (matching its platform), not all siblings:
 
 ```typescript
-// Current: only checks post.caption for ---PERSIAN---
-const persianIdx = rawCaption.indexOf("---PERSIAN---");
-const persianBlock = persianIdx !== -1 ? rawCaption.slice(persianIdx) : "";
+const handlePagesSaveMulti = async (values: string[]) => {
+  setLocalPages(values);
+  const pagesString = values.join(", ");
 
-// Fixed: also reconstruct from PixelPostData fields
-let persianBlock = "";
-const persianIdx = rawCaption.indexOf("---PERSIAN---");
-if (persianIdx !== -1) {
-  persianBlock = rawCaption.slice(persianIdx);
-} else if (post.imageTextTranslation || post.captionTranslation) {
-  persianBlock = "---PERSIAN---\n🖼️ متن روی عکس: " 
-    + (post.imageTextTranslation || "") 
-    + "\n📝 ترجمه کپشن: " 
-    + (post.captionTranslation || "");
-}
+  // Only update the CURRENT post row — not siblings on other platforms
+  const { error } = await supabase
+    .from("social_posts")
+    .update({ page_name: pagesString })
+    .eq("id", post.id);
+
+  if (error) {
+    toast({ title: "Failed to update pages", description: error.message, variant: "destructive" });
+  }
+  queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+  setSubPanel(null);
+};
 ```
 
-This ensures Persian translations flow from AI → chat card → DB → review panel.
+## Result
+- Selecting pages for a Facebook card only updates that Facebook row
+- Instagram card keeps its own independent page selection
+- Each platform card maintains separate page assignments
 
 ## Files Changed
-- `src/pages/AgentWorkspace.tsx` — reconstruct Persian block from `post.imageTextTranslation` and `post.captionTranslation` when `---PERSIAN---` is not found in caption
+- `src/components/social/PostReviewPanel.tsx` — scope page update to current post only
 
