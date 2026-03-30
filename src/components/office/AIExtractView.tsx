@@ -2248,9 +2248,9 @@ export function AIExtractView() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="6000">6M (6,000mm)</SelectItem>
-                      <SelectItem value="12000">12M (12,000mm)</SelectItem>
-                      <SelectItem value="18000">18M (18,000mm)</SelectItem>
+                      <SelectItem value="6000">6M {displayUnit === "mm" ? "(6,000mm)" : `(19'-8")`}</SelectItem>
+                      <SelectItem value="12000">12M {displayUnit === "mm" ? "(12,000mm)" : `(39'-4")`}</SelectItem>
+                      <SelectItem value="18000">18M {displayUnit === "mm" ? "(18,000mm)" : `(59'-1")`}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
