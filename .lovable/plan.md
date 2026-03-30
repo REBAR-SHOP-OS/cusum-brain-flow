@@ -1,35 +1,57 @@
 
 
-# Group Pages by Platform in Selection Sub-Panel
+# Fix: Card Display and Platform Isolation
 
-## Problem
-The Pages selection panel shows a flat list of all pages. User wants them grouped by platform (Instagram header → its pages, Facebook header → its pages, LinkedIn header → its pages).
+## Problems
+1. Calendar cards show full page names (truncated) — user wants page **count** displayed as a number
+2. Clicking a Facebook card opens the review panel showing "Instagram, Facebook" — should show only the clicked card's platform
 
-## Approach
+## Root Cause
 
-### 1. Add `groups` support to `SelectionSubPanel`
+**Problem 1**: `SocialCalendar.tsx` line 220-222 renders `post.page_name` as text. Should show count instead.
 
-Add an optional `groups` prop of type `{ label: string; options: SelectionOption[] }[]`. When provided, render grouped sections with platform headers instead of a flat list.
+**Problem 2**: `PostReviewPanel.tsx` lines 211-216 collects ALL sibling platforms matching `title + day`. When Facebook and Instagram cards share the same title and day, clicking either card shows both platforms.
 
-### 2. Build grouped page options in `PostReviewPanel`
+## Solution
 
-Replace `filteredPageOptions` (flat array) with `groupedPageOptions` that structures pages per platform:
+### File 1: `src/components/social/SocialCalendar.tsx`
+**Line 220-222** — Show page count instead of full names:
+```typescript
+// From:
+<p className="text-xs font-medium truncate">
+  {post.page_name || (platform.charAt(0).toUpperCase() + platform.slice(1))}
+</p>
 
-```text
-[
-  { label: "Instagram", options: [Ontario Steel Detailing, Rebar.shop, ...] },
-  { label: "Facebook", options: [Ontario Steel Detailing, Rebar.shop, ...] },
-  { label: "LinkedIn", options: [Ontario Steel Detailing, Ontario Logistics] },
-]
+// To:
+<p className="text-xs font-medium truncate">
+  {post.page_name
+    ? `Pages (${post.page_name.split(", ").filter(Boolean).length})`
+    : (platform.charAt(0).toUpperCase() + platform.slice(1))}
+</p>
 ```
 
-Only include platforms that are in `localPlatforms`. Deduplicate pages within each group.
+### File 2: `src/components/social/PostReviewPanel.tsx`
+**Lines 211-216** — Only use the clicked post's own platform, not siblings:
+```typescript
+// From: collecting all sibling platforms by title+day
+const siblingPlatforms = [...new Set(
+  allPosts
+    .filter(p => p.title === post.title && ...)
+    .map(p => p.platform)
+)];
+setLocalPlatforms(siblingPlatforms.length > 0 ? siblingPlatforms : [post.platform]);
 
-### 3. UI rendering
+// To: just use the current post's platform
+setLocalPlatforms([post.platform]);
+```
 
-Each group gets a bold platform name header, followed by its page checkboxes indented below. Visual separator between groups.
+## Result
+- Cards show "Pages (6)" instead of "Ontario Steel Detailing, Rebar.shop, Ont..."
+- Each card's platform icon remains correct (already working)
+- Clicking a Facebook card opens review panel showing only "Facebook"
+- Clicking an Instagram card opens review panel showing only "Instagram"
 
 ## Files Changed
-- `src/components/social/SelectionSubPanel.tsx` — add `groups` prop and grouped rendering
-- `src/components/social/PostReviewPanel.tsx` — build grouped options from `PLATFORM_PAGES` keyed by `localPlatforms`
+- `src/components/social/SocialCalendar.tsx` — show page count on card
+- `src/components/social/PostReviewPanel.tsx` — isolate platform to clicked card
 
