@@ -907,7 +907,7 @@ export function TimelineBar({
             <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
               <Music className="w-3 h-3" /> Audio
             </span>
-            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={() => setSelectedAudioIdx(null)}>
+            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={(e) => { setSelectedAudioIdx(null); handleTrackClick(e); }}>
               {audioTracks.map((track, tIdx) => {
                 let leftPct: number;
                 let widthPct: number;
