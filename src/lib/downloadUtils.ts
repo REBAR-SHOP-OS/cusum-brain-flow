@@ -16,6 +16,14 @@ export async function downloadFile(
     return directDownload(url, filename);
   }
 
+  // Supabase storage URLs: use anchor tag to bypass CORS fetch issues
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
+  if (supabaseUrl && url.includes(supabaseUrl)) {
+    console.log("[download] Supabase storage URL detected, using anchor download");
+    triggerAnchorDownload(url, filename);
+    return;
+  }
+
   // 1) Try direct fetch
   try {
     console.log("[download] Attempting direct fetch:", url.slice(0, 80));
@@ -87,4 +95,15 @@ function triggerBlobDownload(blob: Blob, filename: string) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(blobUrl);
+}
+
+function triggerAnchorDownload(url: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
