@@ -797,6 +797,7 @@ export function TimelineBar({
       </div>
       </div>
       )}
+    </div>
   );
 }
 
