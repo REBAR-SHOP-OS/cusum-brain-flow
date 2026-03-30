@@ -1,33 +1,35 @@
 
 
-# Add Scene Action Buttons to Timeline Toolbar
+# Fix: Address Not Showing on Rebar Tags
 
-## Problem
-The toolbar area between the sidebar tab icons and the Cards/Zoom controls is empty (line 395 — just a `flex-1` spacer). The user wants quick-access scene action buttons placed there, so they don't have to right-click the scene to find Trim, Stretch, Split, etc.
+## Root Cause
+The `site_address` field on `extract_sessions` is `NULL` for all recent sessions — users aren't filling it in during extraction. However, project addresses DO exist in the `projects` table, linked via `barlists.extract_session_id → barlists.project_id → projects.site_address`.
 
-## Change
+The current fallback chain is: `row.address → session.site_address → ""` — both are null, so nothing shows.
 
-### File: `src/components/ad-director/editor/TimelineBar.tsx`
+## Fix: Add Project Address as Final Fallback
 
-Replace the empty `<div className="flex-1" />` spacer (line 395) with a row of icon buttons for the **currently selected scene**, followed by a remaining flex spacer:
+### 1. `src/components/office/TagsExportView.tsx`
+- After fetching `selectedSession`, also query the project address:
+  ```
+  barlists (where extract_session_id = sessionId) → project_id → projects.site_address
+  ```
+- Store in `projectAddress` state
+- Update address prop: `address={row.address || session.site_address || projectAddress || ""}`
 
-**Buttons to add (icon-only, small, with tooltips):**
-- Trim (-1s) — `Scissors`
-- Stretch (+1s) — `Expand`
-- Split — `SplitSquareHorizontal`
-- Duplicate — `Copy`
-- Mute/Unmute — `VolumeOff` / `Volume2`
-- Regenerate — `RefreshCw`
-- Delete — `Trash2` (destructive color)
+### 2. `src/pages/PrintTags.tsx`
+- Same query: look up `barlists` by `extract_session_id`, then `projects.site_address`
+- Use as fallback after `sessionAddress`: `address={row.address || sessionAddress || projectAddress || ""}`
 
-**Logic:**
-- Each button calls the corresponding `onXxxScene?.(selectedSceneIndex)` callback
-- Buttons only render if their callback prop exists
-- Regenerate only enabled if scene clip is completed
-- All buttons disabled if no scene is selected (`selectedSceneIndex < 0`)
-- Buttons use `variant="ghost"` with `h-6 w-6 p-0` sizing (matching zoom buttons)
-- Separated from sidebar tabs with a `border-l border-border/20`
+### 3. No changes to `RebarTagCard.tsx`
+The component already renders the address correctly when it receives a non-empty string.
+
+## Fallback Chain (after fix)
+```text
+row.address → session.site_address → project.site_address → ""
+```
 
 ## Files Changed
-- `src/components/ad-director/editor/TimelineBar.tsx` — add scene action buttons in toolbar empty space
+- `src/components/office/TagsExportView.tsx` — add project address lookup
+- `src/pages/PrintTags.tsx` — add project address lookup
 
