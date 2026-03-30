@@ -240,15 +240,22 @@ export function AIExtractView() {
   // Ref to hold the confirmed unit value immune to state overwrites from sync effects
   const confirmedUnitRef = useRef<string>("mm");
 
+  // Reset lock when switching sessions so the new session's unit is picked up
+  useEffect(() => {
+    userSetUnitRef.current = false;
+  }, [activeSessionId]);
+
   // Sync selectedUnitSystem from activeSession ONLY on initial load (not after user explicitly sets it)
   useEffect(() => {
-    if (!userSetUnitRef.current && activeSession?.unit_system && activeSession.unit_system !== selectedUnitSystem) {
-      setSelectedUnitSystem(activeSession.unit_system);
-      setDisplayUnit(activeSession.unit_system);
+    if (!userSetUnitRef.current && activeSession?.unit_system) {
+      const unit = activeSession.unit_system;
+      setSelectedUnitSystem(unit);
+      setDisplayUnit(unit);
+      confirmedUnitRef.current = unit;
       // Once we've loaded the session's unit, lock it so realtime refreshes don't overwrite
       userSetUnitRef.current = true;
     }
-  }, [activeSession?.unit_system]);
+  }, [activeSession?.unit_system, activeSessionId]);
 
   // Filter out merged rows for display
   const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
