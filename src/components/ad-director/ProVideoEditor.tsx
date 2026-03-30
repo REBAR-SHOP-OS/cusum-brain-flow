@@ -684,100 +684,65 @@ export function ProVideoEditor({
   // Ref to hold current scene's VO data — avoids re-triggering playback effect on array changes
   const currentSceneVoRef = useRef<{ url: string; volume: number } | null>(null);
 
-  // Lightweight effect: update VO ref when tracks/scene change (no Audio teardown)
+  // Position-aware voiceover playback: audio plays only when playhead is within the track's time range
   useEffect(() => {
-    const sceneId = storyboard[selectedSceneIndex]?.id;
-    const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
-    currentSceneVoRef.current = vo ? { url: vo.audioUrl, volume: vo.volume ?? 1 } : null;
-  }, [audioTracks, storyboard, selectedSceneIndex]);
-
-  // Main playback effect — only re-runs on play state or scene change
-  // NOTE: mutedScenes removed from deps to prevent audio teardown/restart glitches;
-  // muted-scene volume is handled in the volume effect below.
-  useEffect(() => {
-    const sceneId = storyboard[selectedSceneIndex]?.id;
-    const vo = currentSceneVoRef.current;
-
-    // If same VO is already playing, don't touch it — no cleanup returned
-    if (audioRef.current && currentVoUrlRef.current === vo?.url && !audioRef.current.paused) {
-      return; // Keep playing, no teardown
-    }
-
-    let cancelled = false;
-    let syncHandler: (() => void) | null = null;
-    let vid: HTMLVideoElement | null = null;
-
-    const cleanup = () => {
-      cancelled = true;
-      if (voDebounceRef.current) { clearTimeout(voDebounceRef.current); voDebounceRef.current = null; }
-      if (vid && syncHandler) vid.removeEventListener("timeupdate", syncHandler);
+    if (!isPlaying || isMuted) {
       if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
       currentVoUrlRef.current = null;
-    };
+      return;
+    }
 
     // Don't start voiceover during scene transition
-    if (sceneTransitioning.current) { cleanup(); return cleanup; }
+    if (sceneTransitioning.current) return;
 
-    if (!vo || !isPlaying || isMuted) { cleanup(); return cleanup; }
+    // Find the voiceover track that covers current globalTime
+    const activeVo = audioTracks.find(a => {
+      if (a.kind !== "voiceover") return false;
+      const start = a.globalStartTime ?? 0;
+      const dur = a.duration ?? totalDuration;
+      return globalTime >= start && globalTime < start + dur;
+    });
 
-    // Clean up previous instance
+    if (!activeVo) {
+      // Playhead is outside any voiceover track — pause
+      if (audioRef.current) { audioRef.current.pause(); }
+      return;
+    }
+
+    const voStart = activeVo.globalStartTime ?? 0;
+    const audioOffset = globalTime - voStart;
+
+    // Same VO already playing — just sync time, don't recreate
+    if (audioRef.current && currentVoUrlRef.current === activeVo.audioUrl) {
+      // Only correct if drift > 0.3s
+      if (Math.abs(audioRef.current.currentTime - audioOffset) > 0.3) {
+        audioRef.current.currentTime = audioOffset;
+      }
+      if (audioRef.current.paused) {
+        audioRef.current.play().catch(() => {});
+      }
+      return;
+    }
+
+    // Different VO or first play — create new Audio
     if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
 
-    // Debounce to prevent double-trigger from rapid state changes
-    voDebounceRef.current = setTimeout(() => {
-      if (cancelled) return;
-      const a = new Audio(vo.url);
-      // Adjust voiceover playback rate if it's longer than the video clip
-      const sceneClipDur = clipDurations[sceneId!];
-      const sceneVoDur = voiceoverDurations[sceneId!];
-      if (sceneClipDur && sceneVoDur && sceneVoDur > sceneClipDur) {
-        a.playbackRate = Math.min(sceneVoDur / sceneClipDur, 1.6);
-      } else {
-        a.playbackRate = 1;
-      }
-      // Apply muted-scene volume inline
-      if (sceneId && mutedScenes.has(sceneId)) {
-        a.volume = 0;
-      }
-      audioRef.current = a;
-      a.playbackRate = videoSpeed;
-      currentVoUrlRef.current = vo.url;
+    const a = new Audio(activeVo.audioUrl);
+    a.currentTime = audioOffset;
+    a.playbackRate = videoSpeed;
 
-      // For video scenes, sync VO start to video's actual playing event
-      const currentClip = clips.find(c => c.sceneId === sceneId);
-      const isStaticCard = storyboard[selectedSceneIndex]?.generationMode === "static-card" || currentClip?.videoUrl?.startsWith("data:image/");
-      let voStarted = false;
+    // Apply muted-scene volume
+    const sceneId = activeVo.sceneId;
+    if (sceneId && mutedScenes.has(sceneId)) {
+      a.volume = 0;
+    } else {
+      a.volume = activeVo.volume ?? 1;
+    }
 
-      if (!isStaticCard && videoRef.current) {
-        const onPlaying = () => {
-          if (cancelled || !audioRef.current || voStarted) return;
-          voStarted = true;
-          audioRef.current.currentTime = videoRef.current?.currentTime ?? 0;
-          audioRef.current.play().catch(() => {});
-          videoRef.current?.removeEventListener("playing", onPlaying);
-        };
-        // If video is already playing, start immediately
-        if (!videoRef.current.paused && videoRef.current.readyState >= 3) {
-          if (!voStarted) {
-            voStarted = true;
-            a.currentTime = videoRef.current.currentTime ?? 0;
-            a.play().catch(() => {});
-          }
-        } else {
-          videoRef.current.addEventListener("playing", onPlaying);
-        }
-
-        // No drift correction — VO is speed-matched to clip, drift is minimal
-        vid = videoRef.current;
-      } else {
-        // Static card — play immediately
-        a.currentTime = 0;
-        a.play().catch(() => {});
-      }
-    }, 50);
-
-    return cleanup;
-  }, [selectedSceneIndex, isPlaying, isMuted]);
+    audioRef.current = a;
+    currentVoUrlRef.current = activeVo.audioUrl;
+    a.play().catch(() => {});
+  }, [globalTime, isPlaying, isMuted, audioTracks, totalDuration, videoSpeed]);
 
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);
