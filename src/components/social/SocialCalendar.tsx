@@ -137,7 +137,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
           if (!post.scheduled_date) return false;
           return isSameDay(parseISO(post.scheduled_date), day);
         });
-        const dayPosts = deduplicatePosts(dayPostsRaw);
+        const dayPosts = dayPostsRaw;
         const isCurrentDay = isToday(day);
         const dayPostIds = dayPosts.map((p) => p.id);
         const allDaySelected = dayPostIds.length > 0 && dayPostIds.every((id) => selectedPostIds?.has(id));
