@@ -383,11 +383,10 @@ export function PostReviewPanel({
     // Map UI platform keys to DB platform values
     const dbPlatforms = [...new Set(sanitized.map(p => platformMap[p] || p))];
 
-    // Find all siblings for this title + day
-    const day = post.scheduled_date?.substring(0, 10);
+    // Find all siblings for this title + exact time slot
     const siblings = allPosts.filter(p =>
       p.title === post.title &&
-      (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
+      p.scheduled_date === post.scheduled_date
     );
     const targetSet = new Set(dbPlatforms as string[]);
     const existingSet = new Set(siblings.map(s => s.platform as string));
@@ -447,18 +446,13 @@ export function PostReviewPanel({
 
   const handleContentTypeSave = async (value: string) => {
     setLocalContentType(value);
-    // Batch update all siblings (same title + platform + day)
-    const day = post.scheduled_date?.substring(0, 10);
+    // Batch update all siblings (same title + platform + exact time slot)
     let query = supabase
       .from("social_posts")
       .update({ content_type: value })
       .eq("platform", post.platform)
-      .eq("title", post.title);
-    if (day) {
-      query = query.gte("scheduled_date", `${day}T00:00:00`).lte("scheduled_date", `${day}T23:59:59`);
-    } else {
-      query = query.eq("id", post.id);
-    }
+      .eq("title", post.title)
+      .eq("scheduled_date", post.scheduled_date);
     const { error } = await query;
     if (error) {
       toast({ title: "Failed to update content type", description: error.message, variant: "destructive" });
@@ -473,11 +467,10 @@ export function PostReviewPanel({
     // Store all selected pages as comma-separated string on the current post's row
     const pagesString = values.join(", ");
 
-    // Update ALL sibling rows (same title + day) across all platforms to have the same pages
-    const day = post.scheduled_date?.substring(0, 10);
+    // Update ALL sibling rows (same title + exact time slot) across all platforms to have the same pages
     const siblings = allPosts.filter(p =>
       p.title === post.title &&
-      (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
+      p.scheduled_date === post.scheduled_date
     );
 
     const promises: PromiseLike<any>[] = [];
