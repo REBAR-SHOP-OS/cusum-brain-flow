@@ -474,7 +474,7 @@ export function TagsExportView() {
                     item={row.row_index}
                     customer={row.customer || ""}
                     reference={row.reference || ""}
-                    address={row.address || ""}
+                    address={row.address || (selectedSession as any)?.site_address || ""}
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
                     unitSystem={(selectedSession as any)?.unit_system || "metric"}
