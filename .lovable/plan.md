@@ -1,34 +1,38 @@
 
 
-# Fix: Persian Translation Not Displaying in Post Review Panel
-
-## Problem
-When a post is approved from the Pixel agent chat, the Persian translation block (`---PERSIAN---`) is stripped from the content before saving to the database. As a result, the PostReviewPanel can never parse it back, and always shows "ترجمه‌ای موجود نیست" (No translation available).
+# Fix: Pages Not Reflecting After Save
 
 ## Root Cause
-In `src/pages/AgentWorkspace.tsx`, the `handleApprovePost` function (lines 528-532) explicitly removes the Persian block from the caption before inserting into `social_posts`. The `content` field in DB never contains the `---PERSIAN---` section. The PostReviewPanel parsing logic (lines 226-238) correctly looks for it but finds nothing.
 
-## Solution
+When pages are stored as comma-separated strings in `page_name` (e.g. `"Ontario Steel Detailing, Rebar.shop, Ontario Logistics"`), two places treat this whole string as a single value instead of splitting it:
 
-### File: `src/pages/AgentWorkspace.tsx`
+1. **`SocialMediaManager.tsx` line 81**: `groupPages` collects `s.page_name` without splitting → results in `["Ontario Steel Detailing, Rebar.shop, ..."]` (1 element) instead of individual page names
+2. **`SocialCalendar.tsx` line 166**: `onGroupClick(post, [post.page_name])` wraps the whole comma string as one array element
 
-**Preserve the Persian block in `content`**:
-- Before the cleaning steps, extract the Persian block from `rawCaption`
-- Clean the English portion as currently done (remove image markdown, contact info, etc.)
-- After cleaning, **re-append** the extracted Persian block to the final `content` value before insert
-- This matches exactly what `PostReviewPanel.flushSave` does (line 308-312)
+Both feed into `PostReviewPanel` where `localPages` is set from `groupPages`, causing `Pages (1)` to display even when 6 pages were selected.
 
-Specifically:
-1. Before line 529, extract the Persian block: `const persianBlock = persianIdx !== -1 ? rawCaption.slice(persianIdx) : ""`
-2. Continue cleaning the English part as before
-3. At line 556 where `content` is set, append: `const content = cleanCaption + (persianBlock ? "\n\n" + persianBlock : "")`
+## Fix
+
+### File: `src/pages/SocialMediaManager.tsx`
+**Line 81** — Split comma-separated `page_name` before deduplication:
+```typescript
+return [...new Set(
+  siblings.flatMap(s => s.page_name ? s.page_name.split(", ").filter(Boolean) : [])
+)] as string[];
+```
+
+### File: `src/components/social/SocialCalendar.tsx`
+**Line 166** — Split `page_name` when passing to `onGroupClick`:
+```typescript
+onGroupClick(post, post.page_name ? post.page_name.split(", ").filter(Boolean) : []);
+```
 
 ## Result
-- Persian image text and caption translation will be preserved in DB
-- PostReviewPanel will correctly parse and display them
-- The English editable textarea still won't show Persian (already handled by stripping before display)
-- Publishing still strips Persian (handled by `usePublishPost.ts`)
+- Saving 6 pages → `Pages (6)` displays correctly in the review panel
+- Calendar cards show full page list
+- Scheduling reflects the correct pages
 
 ## Files Changed
-- `src/pages/AgentWorkspace.tsx` — preserve Persian block during post approval
+- `src/pages/SocialMediaManager.tsx` — fix `groupPages` derivation
+- `src/components/social/SocialCalendar.tsx` — fix `onGroupClick` page splitting
 
