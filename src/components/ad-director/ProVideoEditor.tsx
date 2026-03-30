@@ -326,6 +326,7 @@ export function ProVideoEditor({
       audioUrl,
       kind: result.kind,
       startTime: 0,
+      globalStartTime: 0,
     }]);
     setAudioPromptOpen(false);
     toast({ title: "✅ فایل صوتی اضافه شد" });
