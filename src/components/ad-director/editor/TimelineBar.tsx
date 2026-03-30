@@ -951,7 +951,7 @@ export function TimelineBar({
       <div className="flex items-center gap-2 px-3 py-1 border-t border-white/[0.06] bg-zinc-950">
         {/* Skip back */}
         <button
-          onClick={() => onSkipScene?.(-1) || onSeek(0)}
+          onClick={() => { if (onSkipScene) onSkipScene(-1); else onSeek(0); }}
           className="text-zinc-500 hover:text-white transition-colors"
           title="Skip back"
         >
