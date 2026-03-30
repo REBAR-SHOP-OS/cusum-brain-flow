@@ -13,18 +13,49 @@ import {
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
+import { useUnitSystem, formatLength, barSizeLabel, sessionUnitToDisplay, displayModeToMm, type UnitSystem, type LengthDisplayMode } from "@/lib/unitSystem";
 
 export function DetailedListView({ initialPlanId }: { initialPlanId?: string | null }) {
   const { plans, loading: plansLoading } = useCutPlans();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(initialPlanId ?? null);
+  const [sessionUnit, setSessionUnit] = useState<string | null>(null);
 
   // Sync when parent navigates with a new planId (e.g. Edit from Production Queue)
   useEffect(() => {
     setSelectedPlanId(initialPlanId ?? null);
   }, [initialPlanId]);
   const { items, loading: itemsLoading, fetchItems } = useCutPlanItems(selectedPlanId);
-  const unitSystem = useUnitSystem();
+  const companyUnit = useUnitSystem();
+
+  // Resolve session unit from cut_plan → barlist → extract_session
+  useEffect(() => {
+    if (!selectedPlanId) { setSessionUnit(null); return; }
+    (async () => {
+      const { data: plan } = await supabase
+        .from("cut_plans")
+        .select("barlist_id")
+        .eq("id", selectedPlanId)
+        .single();
+      if (!plan?.barlist_id) { setSessionUnit(null); return; }
+      const { data: barlist } = await supabase
+        .from("barlists")
+        .select("extract_session_id")
+        .eq("id", plan.barlist_id)
+        .single();
+      if (!barlist?.extract_session_id) { setSessionUnit(null); return; }
+      const { data: session } = await supabase
+        .from("extract_sessions")
+        .select("unit_system")
+        .eq("id", barlist.extract_session_id)
+        .single();
+      setSessionUnit(session?.unit_system ?? null);
+    })();
+  }, [selectedPlanId]);
+
+  // Use session unit if available, otherwise fall back to company unit
+  const unitSystem: UnitSystem = sessionUnit ? sessionUnitToDisplay(sessionUnit) : companyUnit;
+  // The LengthDisplayMode for converting user input back to mm
+  const editUnit: LengthDisplayMode = (sessionUnit as LengthDisplayMode) || (companyUnit === "imperial" ? "imperial" : "mm");
   const qc = useQueryClient();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, any>>({});
@@ -49,7 +80,14 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
   const saveEdit = async () => {
     if (!editingItemId) return;
     const { bend_dimensions, ...rest } = editValues;
-    const updatePayload: Record<string, any> = { ...rest, bend_dimensions };
+    // Convert cut_length_mm from display unit back to mm
+    const convertedLength = displayModeToMm(rest.cut_length_mm || 0, editUnit);
+    // Convert dimension values from display unit back to mm
+    const convertedDims: Record<string, number | undefined> = {};
+    for (const [k, v] of Object.entries(bend_dimensions || {})) {
+      convertedDims[k] = v ? displayModeToMm(Number(v), editUnit) : undefined;
+    }
+    const updatePayload: Record<string, any> = { ...rest, cut_length_mm: convertedLength, bend_dimensions: convertedDims };
     const { error } = await supabase
       .from("cut_plan_items")
       .update(updatePayload)
@@ -275,7 +313,7 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
                       <Input key={c} type="number" className="h-6 text-xs px-1 w-12" value={editValues.bend_dimensions?.[c] || ""} onChange={e => setEditValues(v => ({ ...v, bend_dimensions: { ...v.bend_dimensions, [c]: parseInt(e.target.value) || undefined } }))} />
                     ) : (
                       <span key={c} className="text-xs text-muted-foreground">
-                        {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">{unitSystem === "imperial" ? "IN" : "MM"}</sub></span> : ""}
+                        {dims[c] ? <span className="text-foreground">{unitSystem === "imperial" ? Math.round(Number(dims[c]) / 25.4) : dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">{unitSystem === "imperial" ? "IN" : "MM"}</sub></span> : ""}
                       </span>
                     )
                   ))}
