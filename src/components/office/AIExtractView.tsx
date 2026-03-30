@@ -2206,7 +2206,7 @@ export function AIExtractView() {
                                   {edit ? (
                                     <div className="flex items-center gap-1">
                                       <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
-                                      <span className="text-[9px] text-muted-foreground whitespace-nowrap">mm</span>
+                                      <span className="text-[9px] text-muted-foreground whitespace-nowrap">{lengthUnitLabelByMode(displayUnit as LengthDisplayMode)}</span>
                                     </div>
                                   ) : (
                                     (row as any)[key] != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? formatLengthByMode((row as any)[key], displayUnit as LengthDisplayMode) : String((row as any)[key])) : ""
