@@ -2073,18 +2073,15 @@ export function AIExtractView() {
                     {activeRows.length} Line Items{mergedRows.length > 0 ? ` (${mergedRows.length} merged)` : ""}
                   </span>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {/* Unit toggle */}
+                    {/* Display unit toggle (display-only, does NOT affect source unit / mapping) */}
                     <div className="flex gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border">
                       {(["mm", "in", "ft", "imperial"] as const).map(u => (
                         <button
                           key={u}
                           type="button"
-                          onClick={() => {
-                            userSetUnitRef.current = true;
-                            setSelectedUnitSystem(u);
-                          }}
+                          onClick={() => setDisplayUnit(u)}
                           className={`px-2 py-1 rounded text-[10px] font-semibold transition-all ${
-                            selectedUnitSystem === u
+                            displayUnit === u
                               ? "bg-primary text-primary-foreground shadow-sm"
                               : "text-muted-foreground hover:text-foreground hover:bg-background/60"
                           }`}
