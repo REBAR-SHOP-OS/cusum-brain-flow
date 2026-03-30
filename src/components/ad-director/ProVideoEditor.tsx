@@ -367,7 +367,7 @@ export function ProVideoEditor({
       }]);
 
       setVoiceoverDialogOpen(false);
-      toast({ title: "✅ صدای گوینده با موفقیت تولید شد" });
+      toast({ title: "✅ Voiceover generated successfully" });
     } catch (err: any) {
       console.error("Voiceover generation error:", err);
       toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
