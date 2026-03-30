@@ -162,9 +162,18 @@ export function RebarTagCard({
       <div className="border-b border-black text-xs shrink-0 px-2 py-2 min-h-[3.5rem] overflow-hidden">
         <div className="flex gap-1">
           <span className="font-bold">Ref:</span>
-          <span className="font-black uppercase">{reference || customer || "—"}</span>
+          <span className="font-black uppercase">{reference || "—"}</span>
         </div>
-        {address && <div className="text-[9px] leading-tight mt-0.5 line-clamp-2">{address}</div>}
+        <div className="flex gap-1">
+          <span className="font-bold">Company:</span>
+          <span className="font-black uppercase">{customer || "—"}</span>
+        </div>
+        {address && (
+          <div className="flex gap-1">
+            <span className="font-bold">Remark:</span>
+            <span className="font-black uppercase line-clamp-1">{address}</span>
+          </div>
+        )}
       </div>
 
       {/* Footer */}
