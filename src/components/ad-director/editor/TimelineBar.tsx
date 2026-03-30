@@ -6,7 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import {
   ZoomIn, ZoomOut, Maximize, Music, Type, Plus, Mic,
   Volume2, VolumeX, Trash2, RefreshCw, Edit3, Move,
-  Scissors, Expand, SplitSquareHorizontal, Copy,
+  Scissors, SplitSquareHorizontal, Copy,
   ArrowLeft, ArrowRight, VolumeOff, FileText,
   RotateCcw, Sparkles, MoveVertical,
   LayoutGrid, Rows3, GripVertical,
