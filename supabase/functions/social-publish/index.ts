@@ -62,7 +62,7 @@ Deno.serve((req) =>
     if (post_id) {
       const { data: existing } = await supabaseAdmin
         .from("social_posts")
-        .select("status, neel_approved, declined_by")
+        .select("status, neel_approved, declined_by, title, platform, page_name, scheduled_date")
         .eq("id", post_id)
         .maybeSingle();
 
@@ -80,6 +80,32 @@ Deno.serve((req) =>
           JSON.stringify({ error: `This post was declined${existing.declined_by ? ` by ${existing.declined_by}` : ''} and cannot be published.` }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
+      }
+
+      // HARD GATE: prevent duplicate content from being published to the same platform
+      if (existing?.title) {
+        const dayStr = existing.scheduled_date
+          ? new Date(existing.scheduled_date).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+        const { data: duplicate } = await supabaseAdmin
+          .from("social_posts")
+          .select("id")
+          .eq("platform", existing.platform)
+          .eq("title", existing.title)
+          .eq("page_name", existing.page_name || "")
+          .eq("status", "published")
+          .neq("id", post_id)
+          .gte("scheduled_date", `${dayStr}T00:00:00Z`)
+          .lte("scheduled_date", `${dayStr}T23:59:59Z`)
+          .limit(1)
+          .maybeSingle();
+        if (duplicate) {
+          console.warn(`[social-publish] BLOCKED — duplicate content already published: ${duplicate.id}`);
+          return new Response(
+            JSON.stringify({ error: "Duplicate — this content was already published to this platform today." }),
+            { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
       }
 
       // Look up publisher's email for canPublish bypass
