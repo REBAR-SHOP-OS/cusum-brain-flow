@@ -69,8 +69,8 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md bg-background border-border">
         <DialogHeader>
-          <DialogTitle>موسیقی</DialogTitle>
-          <DialogDescription>موسیقی را تولید کنید یا فایل صوتی آپلود کنید.</DialogDescription>
+          <DialogTitle>Music</DialogTitle>
+          <DialogDescription>Generate music or upload an audio file.</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="generate" className="w-full">
