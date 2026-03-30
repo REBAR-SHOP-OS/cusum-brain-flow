@@ -35,6 +35,7 @@ interface PostReviewPanelProps {
   onClose: () => void;
   onSchedule: () => void;
   onDecline: () => void;
+  onSelectNewPost?: (id: string) => void;
 }
 
 // ── Option lists ──
@@ -130,6 +131,7 @@ export function PostReviewPanel({
   onClose,
   onSchedule,
   onDecline,
+  onSelectNewPost,
 }: PostReviewPanelProps) {
   const { posts: allPosts, updatePost, deletePost, createPost } = useSocialPosts();
   const { toast } = useToast();
@@ -425,7 +427,19 @@ export function PostReviewPanel({
     }
 
     if (promises.length > 0) {
-      await Promise.all(promises);
+      const results = await Promise.all(promises);
+      // If current post was deleted, re-select a surviving sibling
+      const currentDeleted = toDelete.some(s => s.id === post.id);
+      if (currentDeleted && onSelectNewPost) {
+        // Try to find a newly created post ID from insert results
+        for (const res of results) {
+          const row = res?.data?.[0];
+          if (row?.id && !toDelete.some(d => d.id === row.id)) {
+            onSelectNewPost(row.id);
+            break;
+          }
+        }
+      }
     }
     queryClient.invalidateQueries({ queryKey: ["social_posts"] });
     setSubPanel(null);
