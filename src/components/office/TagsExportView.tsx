@@ -12,6 +12,7 @@ import {
 import { ZebraZplModal } from "@/components/office/ZebraZplModal";
 import { generateZpl } from "@/utils/generateZpl";
 import { supabase } from "@/integrations/supabase/client";
+import { sessionUnitToDisplay } from "@/lib/unitSystem";
 import { toast } from "sonner";
 import {
   LayoutGrid, Table as TableIcon, Download, Printer,
