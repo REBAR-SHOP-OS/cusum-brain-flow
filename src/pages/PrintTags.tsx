@@ -126,7 +126,7 @@ export default function PrintTags() {
               item={row.row_index}
               customer={row.customer || ""}
               reference={row.reference || ""}
-              address={row.address || sessionAddress || ""}
+              address={row.address || sessionAddress || projectAddress || ""}
               dims={dims}
               shapeImageUrl={getShapeImageUrl(shapeType)}
               unitSystem={unitSystem}

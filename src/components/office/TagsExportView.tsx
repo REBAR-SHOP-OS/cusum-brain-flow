@@ -128,7 +128,7 @@ export function TagsExportView() {
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
           return r[key] != null ? formatDim(Number(r[key]), us) : "";
         }),
-        weight, picture, r.customer || "", r.reference || "", r.address || (selectedSession as any)?.site_address || "",
+        weight, picture, r.customer || "", r.reference || "", r.address || (selectedSession as any)?.site_address || projectAddress || "",
       ].join(",");
     });
     const csv = [headers.join(","), ...csvRows].join("\n");
