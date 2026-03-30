@@ -138,18 +138,40 @@ export function SelectionSubPanel(props: SelectionSubPanelProps) {
 
     return (
       <div className="space-y-3">
-        {groups.map((group, gIdx) => (
-          <div key={group.label} className="rounded-lg border bg-card overflow-hidden">
-            <div className="px-3.5 py-2.5 bg-muted/60 border-b">
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                {group.label}
-              </p>
+        {groups.map((group) => {
+          const groupValues = group.options.map((o) => o.value);
+          const allGroupSelected = groupValues.length > 0 && groupValues.every((v) => currentMulti.includes(v));
+
+          const toggleGroup = () => {
+            if (allGroupSelected) {
+              setCurrentMulti((prev) => prev.filter((v) => !groupValues.includes(v)));
+            } else {
+              setCurrentMulti((prev) => [...new Set([...prev, ...groupValues])]);
+            }
+          };
+
+          return (
+            <div key={group.label} className="rounded-lg border bg-card overflow-hidden">
+              <div className="px-3.5 py-2.5 bg-muted/60 border-b flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  {group.label}
+                </p>
+                <button
+                  onClick={toggleGroup}
+                  className={`flex items-center gap-1 text-xs font-medium transition-colors ${
+                    allGroupSelected ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  <span>{allGroupSelected ? "Deselect" : "Select All"}</span>
+                </button>
+              </div>
+              {group.options.map((opt, idx) =>
+                renderOption(opt, idx === group.options.length - 1)
+              )}
             </div>
-            {group.options.map((opt, idx) =>
-              renderOption(opt, idx === group.options.length - 1)
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
