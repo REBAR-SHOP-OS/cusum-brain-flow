@@ -1,13 +1,15 @@
+import { useState, useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
 import { ArrowRight, AlertTriangle, Brain, Cpu, Database, BarChart3, Layers, Eye, Gauge, ServerCog, Tablet, Radio, Cloud, Cog, ChevronRight, Check, X } from "lucide-react";
 import { AnimatedCounter } from "@/components/ceo/AnimatedCounter";
 import logoCoin from "@/assets/logo-coin.png";
 import { InteractiveBrainBg } from "@/components/brain/InteractiveBrainBg";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { PublicChatWidget } from "@/components/landing/PublicChatWidget";
+import { LandingSectionBoundary } from "@/components/landing/LandingSectionBoundary";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const STATS = [
   { value: 30, suffix: "%", label: "Waste Reduction", prefix: "" },
@@ -73,10 +75,40 @@ const TIERS = [
 export default function Landing() {
   const { user, loading } = useAuth();
 
-  if (loading) {
+  // Auth timeout: never block rendering for more than 3 seconds
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setTimedOut(true), 3000);
+    return () => clearTimeout(t);
+  }, [loading]);
+
+  const isLoading = loading && !timedOut;
+
+  if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="min-h-screen bg-background">
+        {/* Skeleton header */}
+        <div className="border-b border-border px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
+          <div className="flex items-center gap-2">
+            <Skeleton className="w-8 h-8 rounded-lg" />
+            <Skeleton className="w-32 h-5" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="w-16 h-8 rounded-md" />
+            <Skeleton className="w-28 h-8 rounded-md" />
+          </div>
+        </div>
+        {/* Skeleton hero */}
+        <div className="max-w-5xl mx-auto text-center py-24 px-6 space-y-6">
+          <Skeleton className="w-48 h-6 mx-auto rounded-full" />
+          <Skeleton className="w-full max-w-lg h-12 mx-auto" />
+          <Skeleton className="w-full max-w-md h-6 mx-auto" />
+          <div className="flex justify-center gap-4 pt-4">
+            <Skeleton className="w-36 h-10 rounded-md" />
+            <Skeleton className="w-36 h-10 rounded-md" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -108,7 +140,9 @@ export default function Landing() {
       <main>
         {/* Hero */}
         <section className="relative py-24 md:py-32 px-6 overflow-hidden" aria-label="Hero">
-          <InteractiveBrainBg />
+          <LandingSectionBoundary section="InteractiveBrainBg" fallback={<div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/10" />}>
+            <InteractiveBrainBg />
+          </LandingSectionBoundary>
           <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-background/80 pointer-events-none" />
           <div className="relative z-10 max-w-5xl mx-auto text-center">
             <span className="inline-block mb-4 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold tracking-wide">
@@ -132,7 +166,9 @@ export default function Landing() {
               {STATS.map((s) => (
                 <div key={s.label} className="text-center">
                   <div className="text-3xl md:text-4xl font-bold text-primary">
-                    <AnimatedCounter value={s.value} prefix={s.prefix} suffix={s.suffix} decimals={0} />
+                    <LandingSectionBoundary section="AnimatedCounter" fallback={<span>{s.prefix}{s.value}{s.suffix}</span>}>
+                      <AnimatedCounter value={s.value} prefix={s.prefix} suffix={s.suffix} decimals={0} />
+                    </LandingSectionBoundary>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">{s.label}</p>
                 </div>
@@ -331,7 +367,9 @@ export default function Landing() {
       </main>
 
       <LandingFooter />
-      <PublicChatWidget />
+      <LandingSectionBoundary section="PublicChatWidget">
+        <PublicChatWidget />
+      </LandingSectionBoundary>
     </div>
   );
 }
