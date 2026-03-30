@@ -19,7 +19,7 @@ interface MediaTabProps {
   onAddSceneWithMedia?: (url: string, fileName: string) => void;
 }
 
-export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSelectScene, onRegenerateScene, onUpdateClipUrl }: MediaTabProps) {
+export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSelectScene, onRegenerateScene, onUpdateClipUrl, onAddSceneWithMedia }: MediaTabProps) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showProperties, setShowProperties] = useState(false);
