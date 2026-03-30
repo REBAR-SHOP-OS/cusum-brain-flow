@@ -370,7 +370,7 @@ export function ProVideoEditor({
       toast({ title: "✅ Voiceover generated successfully" });
     } catch (err: any) {
       console.error("Voiceover generation error:", err);
-      toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
+      toast({ title: "Voiceover generation failed", description: err.message, variant: "destructive" });
     } finally {
       setGeneratingVoiceover(false);
     }
