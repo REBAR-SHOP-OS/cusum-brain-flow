@@ -392,6 +392,51 @@ export function TimelineBar({
             ))}
           </div>
         )}
+        {/* ─── Scene action buttons ─── */}
+        {selectedSceneIndex >= 0 && (
+          <div className="flex items-center gap-0.5 ml-2 pl-2 border-l border-border/20">
+            {onTrimScene && (
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onTrimScene(selectedSceneIndex)} title="Trim (-1s)">
+                <Scissors className="w-3 h-3" />
+              </Button>
+            )}
+            {onStretchScene && (
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onStretchScene(selectedSceneIndex)} title="Stretch (+1s)">
+                <Expand className="w-3 h-3" />
+              </Button>
+            )}
+            {onSplitScene && (
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onSplitScene(selectedSceneIndex)} title="Split">
+                <SplitSquareHorizontal className="w-3 h-3" />
+              </Button>
+            )}
+            {onDuplicateScene && (
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onDuplicateScene(selectedSceneIndex)} title="Duplicate">
+                <Copy className="w-3 h-3" />
+              </Button>
+            )}
+            {onMuteScene && (
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onMuteScene(selectedSceneIndex)} title={mutedScenes?.has(storyboard[selectedSceneIndex]?.id) ? "Unmute" : "Mute"}>
+                {mutedScenes?.has(storyboard[selectedSceneIndex]?.id) ? <VolumeOff className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
+              </Button>
+            )}
+            {onRegenerateScene && (
+              <Button
+                variant="ghost" size="sm" className="h-6 w-6 p-0"
+                onClick={() => onRegenerateScene(storyboard[selectedSceneIndex]?.id)}
+                disabled={clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id)?.status !== "completed"}
+                title="Regenerate"
+              >
+                <RefreshCw className="w-3 h-3" />
+              </Button>
+            )}
+            {onDeleteScene && (
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={() => onDeleteScene(selectedSceneIndex)} title="Delete">
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            )}
+          </div>
+        )}
         <div className="flex-1" />
         <Button
           variant="ghost"
