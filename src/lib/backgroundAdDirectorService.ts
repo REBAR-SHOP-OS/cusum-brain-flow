@@ -503,6 +503,85 @@ class BackgroundAdDirectorService {
       await Promise.allSettled(scenePromises);
       clearInterval(progressInterval);
 
+      // Phase 2b: Auto-retry failed scenes (up to 2 rounds)
+      const MAX_RETRY_ROUNDS = 2;
+      for (let retryRound = 1; retryRound <= MAX_RETRY_ROUNDS; retryRound++) {
+        if (this.cancelFlag) break;
+
+        const failedClips = this.state.clips.filter(c => c.status === "failed");
+        if (failedClips.length === 0) break;
+
+        console.log(`[AdDirector] Retry round ${retryRound}/${MAX_RETRY_ROUNDS}: ${failedClips.length} failed scene(s)`);
+        this.update({ statusText: `Retrying failed scenes... attempt ${retryRound}/${MAX_RETRY_ROUNDS} (${failedClips.length} scene${failedClips.length > 1 ? "s" : ""})` });
+
+        // Small delay before retry to avoid rate limits
+        await new Promise(r => setTimeout(r, 4000));
+
+        const retryPromises = failedClips.map(async (failedClip) => {
+          if (this.cancelFlag) return;
+          const scene = storyboardWithDefaults.find(s => s.id === failedClip.sceneId);
+          if (!scene) return;
+          const segment = newSegments.find(seg => seg.id === scene.segmentId);
+          if (scene.generationMode === "static-card" || segment?.type === "closing") return;
+
+          const motionPrompt = continuityPrefix + scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+          this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "generating" as const, error: null, progress: 10 } : c));
+
+          try {
+            const sceneIdx = storyboardWithDefaults.indexOf(scene);
+            const isFirstScene = sceneIdx === 0;
+            const isLastVisualScene = sceneIdx === lastVisualIdx;
+
+            let referenceImage: string | undefined;
+            if (isFirstScene && introImageUrl) {
+              referenceImage = introImageUrl;
+            } else if (isLastVisualScene && outroImageUrl) {
+              referenceImage = outroImageUrl;
+            } else if (characterImageUrl && scene.generationMode === "image-to-video") {
+              referenceImage = characterImageUrl;
+            }
+
+            const chosenProvider = videoProvider || "wan";
+            const isI2V = !!referenceImage;
+            const chosenModel = videoModel || (isI2V ? "wan2.6-i2v" : "wan2.6-t2v");
+
+            const result = await invokeEdgeFunction<{
+              url?: string; videoUrl?: string; generationId?: string; jobId?: string;
+              provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
+            }>("generate-video", {
+              action: "generate", prompt: motionPrompt, duration: sceneDuration,
+              aspectRatio: wanRatio, provider: chosenProvider, model: chosenModel,
+              ...(isI2V ? { imageUrl: referenceImage } : {}),
+              negativePrompt: "static image, zoom only, no motion, blurry, text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind",
+            }, { timeoutMs: EDGE_TIMEOUT_MS });
+
+            const videoUrl = result.url || result.videoUrl;
+            const genId = result.jobId || result.generationId;
+            const provider = result.provider || "wan";
+
+            if (result.mode === "slideshow" && result.imageUrls?.length) {
+              this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: result.imageUrls![0], progress: 100 } : c));
+            } else if (videoUrl) {
+              this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl, progress: 100, generationId: genId } : c));
+            } else if (genId) {
+              this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "generating" as const, generationId: genId, progress: 30 } : c));
+              await this.pollGeneration(scene.id, genId, provider);
+            } else {
+              this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "failed" as const, error: "No video URL returned (retry)", progress: 0 } : c));
+            }
+          } catch (err: any) {
+            this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "failed" as const, error: err.message, progress: 0 } : c));
+          }
+        });
+
+        await Promise.allSettled(retryPromises);
+      }
+
+      const stillFailed = this.state.clips.filter(c => c.status === "failed").length;
+      if (stillFailed > 0) {
+        console.warn(`[AdDirector] ${stillFailed} scene(s) still failed after retries`);
+      }
+
       // Phase 3: Export / stitch
       this.update({ statusText: "Assembling final video...", progressValue: 90 });
       await this.handleExportInternal(storyboardWithDefaults, newSegments, brand);
