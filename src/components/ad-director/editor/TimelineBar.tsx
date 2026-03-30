@@ -290,11 +290,14 @@ export function TimelineBar({
     return { sceneIdx: lastIdx, localTime: Math.max(0, timeSec - (cumulativeStarts[lastIdx] || 0)) };
   }, [storyboard, cumulativeStarts]);
 
+  const textDraggedRef = useRef(false);
+
   const handleItemDragStart = useCallback((
     e: React.MouseEvent, type: "text" | "audio", id: string, leftPct: number, widthPct: number,
   ) => {
     e.stopPropagation();
     e.preventDefault();
+    textDraggedRef.current = false;
     itemDragRef.current = { type, id, startX: e.clientX, origLeftPct: leftPct, origWidthPct: widthPct };
     setItemDragOffsetPx(0);
     setItemDragging(true);
@@ -317,10 +320,12 @@ export function TimelineBar({
       const dx = e.clientX - itemDragRef.current.startX;
       const isClick = Math.abs(dx) < 3;
 
+      if (!isClick) {
+        textDraggedRef.current = true;
+      }
+
       if (isClick && itemDragRef.current.type === "text") {
-        // Click — open edit dialog
-        const ov = textOverlays.find(o => o.id === itemDragRef.current!.id);
-        if (ov) onEditOverlay?.(ov);
+        // Single click on text — no action (double-click opens editor)
       } else if (isClick && itemDragRef.current.type === "audio") {
         // Click on audio — just deselect
       } else {
@@ -888,15 +893,19 @@ export function TimelineBar({
                       willChange: isBeingDragged ? 'transform' : undefined,
                     }}
                     onMouseDown={(e) => handleItemDragStart(e, "text", ov.id, leftPct, widthPct)}
-                    onDoubleClick={(e) => { e.stopPropagation(); onEditOverlay?.(ov); }}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      if (textDraggedRef.current) { textDraggedRef.current = false; return; }
+                      onEditOverlay?.(ov);
+                    }}
                   >
                     <span className="text-[8px] text-white truncate select-none">{ov.content}</span>
                     {onDeleteOverlay && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onDeleteOverlay(ov.id); }}
-                        className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40"
+                        className="hidden group-hover:flex absolute -right-1 -top-1 items-center justify-center w-4 h-4 rounded-full bg-red-600/80 hover:bg-red-500 z-10"
                       >
-                        <Trash2 className="w-2 h-2 text-white/80" />
+                        <Trash2 className="w-3 h-3 text-white" />
                       </button>
                     )}
                   </div>
