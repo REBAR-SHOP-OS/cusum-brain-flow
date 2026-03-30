@@ -1,49 +1,57 @@
 
 
-# Fix: Generate Button — Proper Audio Position & Text Sync
+# Fix: Click on Video Track Moves Playhead to Click Position
 
 ## Problem
-1. All generated voiceover tracks get `globalStartTime: 0` — they should each start at their scene's cumulative position on the timeline
-2. No `duration` is set on generated tracks — the position-aware playback effect can't determine when each track should play
-3. The green bars all stack at position 0 instead of aligning with their respective scenes
+Clicking on the video track scenes calls `onSelectScene(i)` with `e.stopPropagation()`, which prevents the parent `handleTrackClick` from firing. The playhead never moves to where the user clicks. Text and Audio track rows also lack click-to-seek behavior.
 
-## Fix (1 file)
+## Solution (1 file)
 
-### `src/components/ad-director/ProVideoEditor.tsx`
+### `src/components/ad-director/editor/TimelineBar.tsx`
 
-**In `generateAllVoiceovers` (~line 1273-1355):**
-
-1. Compute cumulative scene start times at the beginning of the function (same logic as `cumulativeStarts` memo)
-2. When pushing each new track, set:
-   - `globalStartTime` = cumulative start of that scene
-   - `duration` = measured `voDur` (or clip duration fallback)
-3. Batch-update `voiceoverDurations` after the loop instead of inside it, to trigger the text overlay `useEffect` once with complete data
-
+**1. Scene click — also seek playhead (line 713)**
+Change the scene `onClick` to both select the scene AND seek the playhead to the click position:
 ```typescript
-// Before the for loop:
-let cumStart = 0;
-const sceneStarts: Record<string, number> = {};
-for (const scene of storyboard) {
-  sceneStarts[scene.id] = cumStart;
-  const seg = segments.find(s => s.id === scene.segmentId);
-  cumStart += seg ? seg.endTime - seg.startTime : 4;
-}
-
-// When pushing track:
-newTracks.push({
-  sceneId: scene.id,
-  label: seg.label,
-  audioUrl: url,
-  kind: "voiceover",
-  globalStartTime: sceneStarts[scene.id] ?? 0,
-  duration: voDur ?? clipDur ?? (seg.endTime - seg.startTime),
-});
+onClick={(e) => {
+  e.stopPropagation();
+  onSelectScene(i);
+  // Also move playhead to click position
+  if (trackRef.current) {
+    const rect = trackRef.current.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    const timeSec = pct * totalDuration;
+    onSeek(Math.max(0, Math.min(totalDuration, timeSec)));
+  }
+}}
 ```
 
-This ensures each green bar appears at the correct timeline position matching its scene, and the position-aware playback logic can determine exactly when to play each voiceover.
+**2. Text overlay track — add click-to-seek (line 863)**
+Add `onClick={handleTrackClick}` to the text track container `div`. Update existing text bar click to also seek.
+
+**3. Audio track — add click-to-seek (line 912)**
+The audio container already has `onClick={() => setSelectedAudioIdx(null)}`. Change it to also seek:
+```typescript
+onClick={(e) => {
+  setSelectedAudioIdx(null);
+  handleTrackClick(e);
+}}
+```
+
+**4. Update `handleTrackClick` to work with any track row (line 384)**
+Currently it uses `trackRef.current` (video track). Change it to use the event target's parent container or accept the element from `e.currentTarget`:
+```typescript
+const handleTrackClick = (e: React.MouseEvent) => {
+  const rect = (trackRef.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
+  // account for the 14-unit label offset
+  const pct = (e.clientX - rect.left) / rect.width;
+  const timeSec = pct * totalDuration;
+  onSeek(Math.max(0, Math.min(totalDuration, timeSec)));
+};
+```
+Remove the `snapToSceneBoundary` call from `handleTrackClick` so the playhead goes exactly where clicked (snap is still used during scrubbing).
 
 ## Result
-- Generate button produces green bars aligned to their respective scenes
-- Blue text overlays auto-sync via existing `useEffect` on `voiceoverDurations`
-- Audio plays only when playhead reaches each bar's position
+- Click anywhere on video, text, or audio track → playhead jumps to that exact position
+- Scene selection still works alongside playhead movement
+- No snapping on click — precise positioning
 
