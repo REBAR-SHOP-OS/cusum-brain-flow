@@ -115,10 +115,14 @@ ${dimLines}
 
 ^FO25,860^GB762,3,3^FS
 
-^CF0,45
-^FO25,878^FDDWG: ${dwg}   ITEM: ${item}^FS
-^CF0,45
-^FO25,933^FDREF: ${reference}^FS
+^CF0,42
+^FO25,870^FDDWG: ${dwg}   ITEM: ${item}^FS
+^CF0,38
+^FO25,915^FDREF: ${sanitizeZpl(row.reference || "")}^FS
+^CF0,38
+^FO25,955^FDCO: ${sanitizeZpl(row.customer || "")}^FS
+^CF0,38
+^FO25,995^FDREMARK: ${sanitizeZpl(row.remark || "")}^FS
 
 ^FO25,1000^GB762,3,3^FS
 

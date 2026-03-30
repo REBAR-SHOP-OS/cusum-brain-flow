@@ -159,7 +159,7 @@ export function RebarTagCard({
       </div>
 
       {/* Ref — full width */}
-      <div className="border-b border-black text-xs shrink-0 px-2 py-2 min-h-[3.5rem] overflow-hidden">
+      <div className="border-b border-black text-[10px] shrink-0 px-2 py-1 min-h-[3.5rem] overflow-hidden">
         <div className="flex gap-1">
           <span className="font-bold">Ref:</span>
           <span className="font-black uppercase">{reference || "—"}</span>
