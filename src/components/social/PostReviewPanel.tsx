@@ -393,7 +393,7 @@ export function PostReviewPanel({
     // Delete siblings whose platform is no longer selected
     const toDelete = siblings.filter(s => !targetSet.has(s.platform));
     // Platforms that need new rows (ONE row per platform)
-    const toAdd = dbPlatforms.filter(p => !existingSet.has(p));
+    const toAdd = dbPlatforms.filter(p => !existingSet.has(p as string));
 
     const promises: PromiseLike<any>[] = [];
 
