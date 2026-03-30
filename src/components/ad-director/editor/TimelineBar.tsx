@@ -165,6 +165,8 @@ export function TimelineBar({
   const [viewMode, setViewMode] = useState<"expanded" | "compact">("expanded");
   const [selectedAudioIdx, setSelectedAudioIdx] = useState<number | null>(null);
 
+  useEffect(() => { setSelectedAudioIdx(null); }, [selectedSceneIndex]);
+
   // ─── Scene drag-to-reorder state ───
   const [sceneDragIdx, setSceneDragIdx] = useState<number | null>(null);
   const [sceneDropIdx, setSceneDropIdx] = useState<number | null>(null);
