@@ -333,11 +333,9 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
               <div className="bg-muted/50 px-3 py-1.5 border-b border-border">
                 <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
                   Mapped Preview — First {previewRows.length} of {rows.length} rows
-                  {lengthUnit !== "mm" && (
-                    <span className="ml-2 text-primary">
-                      (source: {unitLabel} → stored as mm)
-                    </span>
-                  )}
+                  <span className="ml-2 text-primary">
+                    (source: {unitLabel} → stored as mm)
+                  </span>
                 </span>
               </div>
               <div className="overflow-x-auto max-h-52">
@@ -348,9 +346,9 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                       <TableHead className="text-[10px] font-bold tracking-wider">MARK</TableHead>
                       <TableHead className="text-[10px] font-bold tracking-wider">SIZE</TableHead>
                       <TableHead className="text-[10px] font-bold tracking-wider">SHAPE</TableHead>
-                      <TableHead className="text-[10px] font-bold tracking-wider text-right">LENGTH ({unitLabel})</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider text-right">LENGTH (raw)</TableHead>
                       <TableHead className="text-[10px] font-bold tracking-wider text-right">QTY</TableHead>
-                      <TableHead className="text-[10px] font-bold tracking-wider">DIMS ({unitLabel})</TableHead>
+                      <TableHead className="text-[10px] font-bold tracking-wider">DIMS (raw)</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

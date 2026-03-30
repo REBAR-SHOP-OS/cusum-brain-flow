@@ -176,6 +176,8 @@ export function AIExtractView() {
   const [pendingDedupeSessionId, setPendingDedupeSessionId] = useState<string | null>(null);
   const [mappingConfirmed, setMappingConfirmed] = useState(false);
   const [selectedUnitSystem, setSelectedUnitSystem] = useState<string>("mm");
+  // Display-only unit toggle for line items table — decoupled from source unit
+  const [displayUnit, setDisplayUnit] = useState<string>("mm");
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, loading: rowsLoading, hasFetched: rowsHasFetched, refresh: refreshRows } = useExtractRows(activeSessionId);
@@ -242,6 +244,7 @@ export function AIExtractView() {
   useEffect(() => {
     if (!userSetUnitRef.current && activeSession?.unit_system && activeSession.unit_system !== selectedUnitSystem) {
       setSelectedUnitSystem(activeSession.unit_system);
+      setDisplayUnit(activeSession.unit_system);
       // Once we've loaded the session's unit, lock it so realtime refreshes don't overwrite
       userSetUnitRef.current = true;
     }
@@ -2070,18 +2073,15 @@ export function AIExtractView() {
                     {activeRows.length} Line Items{mergedRows.length > 0 ? ` (${mergedRows.length} merged)` : ""}
                   </span>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {/* Unit toggle */}
+                    {/* Display unit toggle (display-only, does NOT affect source unit / mapping) */}
                     <div className="flex gap-0.5 p-0.5 rounded-md bg-muted/60 border border-border">
                       {(["mm", "in", "ft", "imperial"] as const).map(u => (
                         <button
                           key={u}
                           type="button"
-                          onClick={() => {
-                            userSetUnitRef.current = true;
-                            setSelectedUnitSystem(u);
-                          }}
+                          onClick={() => setDisplayUnit(u)}
                           className={`px-2 py-1 rounded text-[10px] font-semibold transition-all ${
-                            selectedUnitSystem === u
+                            displayUnit === u
                               ? "bg-primary text-primary-foreground shadow-sm"
                               : "text-muted-foreground hover:text-foreground hover:bg-background/60"
                           }`}
@@ -2187,17 +2187,23 @@ export function AIExtractView() {
                             </TableCell>
                             <TableCell className="text-xs text-right font-mono p-1">
                               {edit ? (
-                                <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
-                              ) : (row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—")}
+                                <div className="flex items-center gap-1">
+                                  <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
+                                  <span className="text-[9px] text-muted-foreground whitespace-nowrap">mm</span>
+                                </div>
+                              ) : (row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, displayUnit as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—")}
                             </TableCell>
                             {dimCols.map((d) => {
                               const key = `dim_${d.toLowerCase()}`;
                               return (
                                 <TableCell key={d} className="text-xs text-right font-mono text-muted-foreground p-1">
                                   {edit ? (
-                                    <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
+                                    <div className="flex items-center gap-1">
+                                      <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
+                                      <span className="text-[9px] text-muted-foreground whitespace-nowrap">mm</span>
+                                    </div>
                                   ) : (
-                                    (row as any)[key] != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? formatLengthByMode((row as any)[key], selectedUnitSystem as LengthDisplayMode) : String((row as any)[key])) : ""
+                                    (row as any)[key] != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? formatLengthByMode((row as any)[key], displayUnit as LengthDisplayMode) : String((row as any)[key])) : ""
                                   )}
                                 </TableCell>
                               );
