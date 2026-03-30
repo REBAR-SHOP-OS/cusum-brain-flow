@@ -144,7 +144,7 @@ export function TagsExportView() {
 
   // Print tags — open dedicated print route in new window
   const handlePrint = useCallback(() => {
-    const us = (selectedSession as any)?.unit_system || "metric";
+    const us = sessionUnitToDisplay((selectedSession as any)?.unit_system);
     const url = `/print-tags?sessionId=${selectedSessionId}&unit=${us}&sort=${sortMode}`;
     window.open(url, "_blank");
   }, [selectedSession, selectedSessionId, sortMode]);
