@@ -413,7 +413,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       {flowState === "idle" && (
         <>
           {showIntro ? (
-            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+            <div className="fixed inset-0 z-50 bg-black flex items-center justify-center cursor-pointer" onClick={() => setShowIntro(false)}>
               <video
                 src="/videos/ad-director-intro.mp4"
                 autoPlay
