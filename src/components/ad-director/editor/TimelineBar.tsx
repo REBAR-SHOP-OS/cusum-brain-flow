@@ -136,6 +136,8 @@ interface TimelineBarProps {
   onEditVoiceoverText?: (sceneId: string) => void;
   onMoveOverlay?: (id: string, newSceneId: string, startTime?: number) => void;
   onMoveAudioTrack?: (index: number, newSceneId: string, startTime?: number) => void;
+  onTrimApply?: (index: number, trimStart: number, trimEnd: number) => Promise<void>;
+  isTrimming?: boolean;
   onRegenerateAll?: () => void;
   isRegeneratingAll?: boolean;
   // Playback integration
