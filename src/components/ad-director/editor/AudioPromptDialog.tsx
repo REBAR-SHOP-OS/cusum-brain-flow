@@ -5,10 +5,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, Music, Mic, Upload, X, Sparkles } from "lucide-react";
+import { Loader2, Music, Upload, X, Sparkles } from "lucide-react";
 
 export interface AudioPromptResult {
   type: "music" | "voiceover";
@@ -30,19 +29,17 @@ interface AudioPromptDialogProps {
 }
 
 export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, loading }: AudioPromptDialogProps) {
-  const [type, setType] = useState<"music" | "voiceover">("music");
   const [prompt, setPrompt] = useState("");
   const [duration, setDuration] = useState("30");
 
   // Upload state
-  const [uploadKind, setUploadKind] = useState<"music" | "voiceover">("music");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = () => {
     if (!prompt.trim()) return;
-    onGenerate({ type, prompt: prompt.trim(), duration: Number(duration) });
+    onGenerate({ type: "music", prompt: prompt.trim(), duration: Number(duration) });
   };
 
   const handleFileChange = (file: File | null) => {
@@ -58,7 +55,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
 
   const handleUploadSubmit = () => {
     if (!selectedFile || !onUpload) return;
-    onUpload({ file: selectedFile, kind: uploadKind });
+    onUpload({ file: selectedFile, kind: "music" });
     handleFileChange(null);
   };
 
@@ -72,8 +69,8 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md bg-background border-border">
         <DialogHeader>
-          <DialogTitle>تولید صدا</DialogTitle>
-          <DialogDescription>صدا را تولید کنید یا فایل صوتی آپلود کنید.</DialogDescription>
+          <DialogTitle>موسیقی</DialogTitle>
+          <DialogDescription>موسیقی را تولید کنید یا فایل صوتی آپلود کنید.</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="generate" className="w-full">
@@ -89,71 +86,33 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
           {/* Generate Tab */}
           <TabsContent value="generate" className="space-y-4 pt-2">
             <div className="space-y-2">
-              <Label>نوع</Label>
-              <RadioGroup value={type} onValueChange={(v) => setType(v as "music" | "voiceover")} className="flex gap-4">
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="music" id="type-music" />
-                  <Label htmlFor="type-music" className="flex items-center gap-1 cursor-pointer">
-                    <Music className="w-3.5 h-3.5" /> موسیقی
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="voiceover" id="type-vo" />
-                  <Label htmlFor="type-vo" className="flex items-center gap-1 cursor-pointer">
-                    <Mic className="w-3.5 h-3.5" /> صداگذاری
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            <div className="space-y-2">
               <Label>پرامپت</Label>
               <Input
-                placeholder={type === "music" ? "cinematic intro music..." : "متن صداگذاری..."}
+                placeholder="cinematic intro music..."
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !loading && handleSubmit()}
               />
             </div>
 
-            {type === "music" && (
-              <div className="space-y-2">
-                <Label>مدت زمان</Label>
-                <ToggleGroup type="single" value={duration} onValueChange={(v) => v && setDuration(v)} className="justify-start">
-                  <ToggleGroupItem value="15" className="text-xs">15s</ToggleGroupItem>
-                  <ToggleGroupItem value="30" className="text-xs">30s</ToggleGroupItem>
-                  <ToggleGroupItem value="60" className="text-xs">60s</ToggleGroupItem>
-                </ToggleGroup>
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label>مدت زمان</Label>
+              <ToggleGroup type="single" value={duration} onValueChange={(v) => v && setDuration(v)} className="justify-start">
+                <ToggleGroupItem value="15" className="text-xs">15s</ToggleGroupItem>
+                <ToggleGroupItem value="30" className="text-xs">30s</ToggleGroupItem>
+                <ToggleGroupItem value="60" className="text-xs">60s</ToggleGroupItem>
+              </ToggleGroup>
+            </div>
 
             <div className="flex justify-end">
               <Button onClick={handleSubmit} disabled={!prompt.trim() || loading}>
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> در حال تولید...</> : "تولید صدا"}
+                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> در حال تولید...</> : "تولید موسیقی"}
               </Button>
             </div>
           </TabsContent>
 
           {/* Upload Tab */}
           <TabsContent value="upload" className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label>نوع فایل</Label>
-              <RadioGroup value={uploadKind} onValueChange={(v) => setUploadKind(v as "music" | "voiceover")} className="flex gap-4">
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="music" id="upload-music" />
-                  <Label htmlFor="upload-music" className="flex items-center gap-1 cursor-pointer">
-                    <Music className="w-3.5 h-3.5" /> موسیقی
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <RadioGroupItem value="voiceover" id="upload-vo" />
-                  <Label htmlFor="upload-vo" className="flex items-center gap-1 cursor-pointer">
-                    <Mic className="w-3.5 h-3.5" /> صداگذاری
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
-
             {/* Drop zone */}
             <div
               className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
@@ -169,7 +128,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
                 onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
               />
               <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">فایل صوتی را بکشید و رها کنید یا کلیک کنید</p>
+              <p className="text-sm text-muted-foreground">فایل موسیقی را بکشید و رها کنید یا کلیک کنید</p>
               <p className="text-xs text-muted-foreground mt-1">MP3, WAV, M4A, OGG</p>
             </div>
 
