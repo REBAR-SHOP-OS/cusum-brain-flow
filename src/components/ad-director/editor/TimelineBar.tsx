@@ -876,10 +876,9 @@ export function TimelineBar({
                 const sceneDur = getSceneDur(idx);
                 const itemStart = ov.startTime ?? 0;
                 const itemEnd = ov.endTime ?? sceneDur;
-                const absStart = sceneStart + itemStart;
                 const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-                const leftPct = (absStart / totalDuration) * 100;
-                const widthPct = ((absEnd - absStart) / totalDuration) * 100;
+                const leftPct = 0;
+                const widthPct = (absEnd / totalDuration) * 100;
                 const isBeingDragged = draggedItemId === ov.id;
                 return (
                   <div
