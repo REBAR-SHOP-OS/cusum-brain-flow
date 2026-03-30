@@ -76,10 +76,10 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
         <Tabs defaultValue="generate" className="w-full">
           <TabsList className="w-full">
             <TabsTrigger value="generate" className="flex-1 gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" /> تولید با AI
+              <Sparkles className="w-3.5 h-3.5" /> Generate with AI
             </TabsTrigger>
             <TabsTrigger value="upload" className="flex-1 gap-1.5">
-              <Upload className="w-3.5 h-3.5" /> آپلود فایل
+              <Upload className="w-3.5 h-3.5" /> Upload File
             </TabsTrigger>
           </TabsList>
 
