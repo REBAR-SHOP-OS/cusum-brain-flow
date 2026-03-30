@@ -1498,7 +1498,7 @@ export function ProVideoEditor({
 
       // ── Phase 3: Apply all tracks at once ──
       setAudioTracks(newTracks);
-      toast({ title: "✅ تولید کامل شد", description: `${newTracks.length} ترک صدا و موسیقی ساخته شد` });
+      toast({ title: "✅ Generation complete", description: `${newTracks.length} audio & music tracks created` });
     } catch (err: any) {
       toast({ title: "Voiceover generation failed", description: err.message, variant: "destructive" });
     } finally {
