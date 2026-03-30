@@ -112,7 +112,7 @@ export function TagsExportView() {
   // CSV export
   const handleExportCSV = () => {
     if (!sortedRows.length) return;
-    const us = (selectedSession as any)?.unit_system || "metric";
+    const us = sessionUnitToDisplay((selectedSession as any)?.unit_system);
     const lengthHeader = us === "imperial" ? "TOTAL LENGTH (ft-in)" : "TOTAL LENGTH (mm)";
     const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", lengthHeader,
       ...DIM_COLS, "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD"];
