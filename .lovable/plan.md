@@ -1,35 +1,33 @@
 
 
-# Fix: All Track Bars Start from Zero Point
+# Add Dedicated "Music" Track Row (Yellow) to Timeline
 
 ## Problem
-Text overlay bars and audio bars are positioned starting from their associated scene's start time. The user wants all bars to start exactly from position 0 on the timeline.
+Music tracks are currently mixed into the "Audio" row alongside voiceovers. The user wants a separate, always-visible "Music" row with yellow bars.
 
 ## Changes — `src/components/ad-director/editor/TimelineBar.tsx`
 
-### 1. Text overlay bars (lines 875-882)
-Change the positioning calculation so the bar starts at 0 and extends to its current end:
-```tsx
-// Before:
-const absStart = sceneStart + itemStart;
-const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-const leftPct = (absStart / totalDuration) * 100;
-const widthPct = ((absEnd - absStart) / totalDuration) * 100;
+### 1. Add a new "🎵 Music" track row after the Audio row (~line 977)
+- Filter `audioTracks` to separate music (`kind === "music"`) from non-music (voiceover)
+- Render the existing Audio row with only voiceover tracks
+- Add a new row labeled "Music" that always renders (even when empty, showing a placeholder)
+- Yellow bar color: `bg-yellow-500/60 hover:bg-yellow-500/80`
+- Same drag, click, delete, and volume behavior as the audio row
 
-// After:
-const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-const leftPct = 0;
-const widthPct = (absEnd / totalDuration) * 100;
+### 2. Always show the Music row
+Unlike Text and Audio rows which hide when empty, the Music row will always be visible with a subtle "No music" placeholder when no music track exists — making it clear that music can be added.
+
+### 3. Split audioTracks rendering
 ```
-
-### 2. Audio track bars (lines 926-945)
-Same change — force `leftPct = 0` and extend width from 0 to the bar's original end position:
-- For `globalStartTime`-based tracks: `leftPct = 0`, `widthPct = ((globalStartTime + trackDur) / totalDuration) * 100`
-- For scene-based tracks: `leftPct = 0`, `widthPct = (absEnd / totalDuration) * 100`
+const musicTracks = audioTracks.filter(t => t.kind === "music");
+const voiceoverTracks = audioTracks.filter(t => t.kind !== "music");
+```
+- Existing Audio row renders `voiceoverTracks` only
+- New Music row renders `musicTracks` with yellow bars
 
 ## Files Changed
-- `src/components/ad-director/editor/TimelineBar.tsx`
+- `src/components/ad-director/editor/TimelineBar.tsx` — split audio/music, add yellow Music row
 
 ## Result
-All text and audio bars will start from the leftmost edge (0s) of the timeline, aligned with the video track's starting point.
+A dedicated yellow "Music" row always visible in the timeline, clearly separated from voiceover audio tracks.
 
