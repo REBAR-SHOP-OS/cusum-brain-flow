@@ -254,9 +254,9 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         : statusLabel}
                       </span>
                     </div>
-                    {status === "declined" && firstPost.decline_reason && (
-                      <p className="text-[10px] text-destructive/70 truncate mt-0.5" title={firstPost.decline_reason}>
-                        💬 {firstPost.decline_reason}
+                    {status === "declined" && post.decline_reason && (
+                      <p className="text-[10px] text-destructive/70 truncate mt-0.5" title={post.decline_reason}>
+                        💬 {post.decline_reason}
                       </p>
                     )}
                   </button>
