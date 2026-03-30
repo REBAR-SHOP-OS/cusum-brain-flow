@@ -62,6 +62,7 @@ interface ProVideoEditorProps {
   onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
   onUpdateBrand?: (brand: BrandProfile) => void;
   onMusicSelect?: (url: string | null) => void;
+  onDuplicateClip?: (oldSceneId: string, newSceneId: string) => void;
   externalActiveTab?: string | null;
   onActiveTabChanged?: (tab: string | null) => void;
 }
@@ -185,7 +186,7 @@ export function ProVideoEditor({
   clips, storyboard, segments, brand,
   finalVideoUrl, onBack, onExport, exporting,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming, onUpdateSegments,
-  onUpdateStoryboard, onUpdateBrand, onMusicSelect,
+  onUpdateStoryboard, onUpdateBrand, onMusicSelect, onDuplicateClip,
   externalActiveTab, onActiveTabChanged,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
@@ -1043,16 +1044,18 @@ export function ProVideoEditor({
       onUpdateSegments(updatedSegments);
     }
 
+    const newSceneId = crypto.randomUUID();
     const newScene: StoryboardScene = {
       ...scene,
-      id: crypto.randomUUID(),
+      id: newSceneId,
       segmentId: seg ? newSegId : scene.segmentId,
     };
     const updated = [...storyboard];
     updated.splice(index + 1, 0, newScene);
     onUpdateStoryboard?.(updated);
+    onDuplicateClip?.(scene.id, newSceneId);
     toast({ title: "Scene duplicated" });
-  }, [storyboard, segments, pushHistory, onUpdateStoryboard, onUpdateSegments, toast]);
+  }, [storyboard, segments, pushHistory, onUpdateStoryboard, onUpdateSegments, onDuplicateClip, toast]);
 
   const handleMoveScene = useCallback((index: number, dir: -1 | 1) => {
     const target = index + dir;
