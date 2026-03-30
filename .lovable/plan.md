@@ -1,33 +1,30 @@
 
 
-# Show Placeholder Cards as 5 Separate Cards (Not Grouped)
+# One Card Per Time Slot + Platform (Pages as Metadata)
 
 ## Problem
-The `groupByPlatform` function groups all "unassigned" posts into a single card showing "×3" (or ×5). The user wants each placeholder "?" card to appear individually — 5 separate cards at the 5 different time slots.
-
-## Root Cause
-All 5 placeholders share `platform: "unassigned"`, so `groupByPlatform` merges them into one grouped card.
+Currently, selecting multiple pages creates separate DB rows (one per page), resulting in multiple cards in the calendar for the same time+platform. The user's rule: **1 time slot + 1 platform = 1 card**. Pages should be stored as metadata on that single card.
 
 ## Solution
 
+### File: `src/components/social/PostReviewPanel.tsx`
+
+1. **Rewrite `handlePagesSaveMulti`**: Instead of creating/deleting sibling rows per page, simply **update the current post's `page_name`** field with all selected pages joined as comma-separated string (e.g. `"Ontario Steel Detailing, Rebar.shop"`). No row creation or deletion.
+
+2. **Rewrite `handlePlatformsSaveMulti`**: When adding a new platform, create ONE row per platform (not one per page). Set `page_name` to the comma-separated list of all currently selected pages. When removing a platform, delete its single row.
+
 ### File: `src/components/social/SocialCalendar.tsx`
 
-1. **Render each post individually instead of grouping by platform** — Replace the `groupByPlatform` rendering with a flat list where each post gets its own card. Each card shows:
-   - Platform icon
-   - Page name or platform label
-   - Time (e.g., 6:30 AM, 7:30 AM, etc.)
-   - Status label
-   - Selection checkbox
+3. **Display pages on card**: Show the `page_name` value (which may contain multiple comma-separated names) on the card — already handled since it displays `post.page_name`.
 
-2. **Keep sorting** — Sort posts by `scheduled_date` ascending so they appear in chronological order within each day column.
-
-This means ALL posts render individually (not just placeholders), which gives the user full visibility into every single post.
+### No DB migration needed
+`page_name` is already a `text` column — storing comma-separated values works without schema changes.
 
 ## Result
-- 5 placeholder "?" cards appear as 5 separate entries at their respective times
-- All other posts also render individually (no more hidden grouping)
-- Each card is independently selectable and clickable
+- Selecting Instagram + 3 pages → 1 card showing "Instagram" with pages as metadata
+- Selecting 2 platforms + 3 pages → 2 cards (one per platform), each with all 3 pages stored
+- Calendar stays clean: 1 card per time slot per platform
 
 ## Files Changed
-- `src/components/social/SocialCalendar.tsx` — replace grouped rendering with individual post cards
+- `src/components/social/PostReviewPanel.tsx` — simplify page/platform save handlers
 
