@@ -1975,6 +1975,7 @@ export function ProVideoEditor({
                   onSelectScene={setSelectedSceneIndex}
                   onRegenerateScene={onRegenerateScene}
                   onUpdateClipUrl={onUpdateClipUrl}
+                  onAddSceneWithMedia={onAddSceneWithMedia}
                 />
               )}
               {activeTab === "text" && (

@@ -391,6 +391,36 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           onUpdateStoryboard={(sb) => service.patchState({ storyboard: sb })}
           onUpdateBrand={(b) => service.patchState({ brand: b })}
           onMusicSelect={(url) => service.patchState({ musicTrackUrl: url })}
+          onAddSceneWithMedia={(url, fileName) => {
+            const state = service.getState();
+            const newId = crypto.randomUUID();
+            const segId = crypto.randomUUID();
+            const lastSeg = state.segments[state.segments.length - 1];
+            const startTime = lastSeg ? lastSeg.endTime : 0;
+            const duration = 5;
+            const newSegment: ScriptSegment = {
+              id: segId, type: "hook", label: fileName,
+              text: "", startTime, endTime: startTime + duration,
+            };
+            const newScene: StoryboardScene = {
+              id: newId, segmentId: segId,
+              objective: fileName, visualStyle: "custom",
+              shotType: "medium", cameraMovement: "static",
+              environment: "", subjectAction: "", emotionalTone: "",
+              transitionNote: "cut", generationMode: "static-card",
+              continuityRequirements: "", prompt: "",
+              continuityLock: false, locked: false,
+            };
+            const newClip: ClipOutput = {
+              sceneId: newId, status: "completed" as const,
+              videoUrl: url, progress: 100,
+            };
+            service.patchState({
+              segments: [...state.segments, newSegment],
+              storyboard: [...state.storyboard, newScene],
+              clips: [...state.clips, newClip],
+            });
+          }}
           onDuplicateClip={(oldId, newId) => {
             const existing = service.getState().clips.find(c => c.sceneId === oldId);
             if (existing) {
