@@ -991,6 +991,48 @@ export function ProVideoEditor({
     onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.startTime + clamped);
   }, [storyboard, segments, pushHistory, onUpdateSegmentTiming]);
 
+  const [isTrimming, setIsTrimming] = useState(false);
+
+  const handleTrimApply = useCallback(async (index: number, trimStart: number, trimEnd: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const clip = clips.find(c => c.sceneId === scene.id);
+    if (!clip?.videoUrl) {
+      toast({ title: "برش ممکن نیست", description: "ویدئویی برای این صحنه وجود ندارد", variant: "destructive" });
+      return;
+    }
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+
+    // Validate trim range
+    const newDuration = trimEnd - trimStart;
+    if (newDuration < 0.5) {
+      toast({ title: "برش ممکن نیست", description: "مدت زمان بسیار کوتاه است", variant: "destructive" });
+      return;
+    }
+
+    setIsTrimming(true);
+    try {
+      pushHistory(storyboard);
+      const trimmedUrl = await trimVideo(clip.videoUrl, trimStart, trimEnd);
+
+      // Update clip URL
+      onUpdateClipUrl?.(scene.id, trimmedUrl);
+
+      // Update segment timing to match new duration
+      onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.startTime + newDuration);
+
+      // Update cached clip duration
+      setClipDurations(prev => ({ ...prev, [scene.id]: newDuration }));
+
+      toast({ title: "✂️ صحنه برش خورد", description: `مدت جدید: ${newDuration.toFixed(1)}s` });
+    } catch (err: any) {
+      toast({ title: "خطا در برش", description: err.message || "برش ویدئو با خطا مواجه شد", variant: "destructive" });
+    } finally {
+      setIsTrimming(false);
+    }
+  }, [storyboard, clips, segments, pushHistory, onUpdateClipUrl, onUpdateSegmentTiming, toast]);
+
   const handleSplitScene = useCallback((index: number) => {
     const scene = storyboard[index];
     if (!scene) return;
