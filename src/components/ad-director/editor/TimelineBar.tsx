@@ -967,6 +967,7 @@ export function TimelineBar({
           </div>
         )}
 
+        </div> {/* end wrapper with global playhead */}
         </div>
       </div>
       )}
