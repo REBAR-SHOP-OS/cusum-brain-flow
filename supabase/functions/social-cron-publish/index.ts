@@ -39,6 +39,8 @@ function stripPersianBlock(text: string): string {
   if (idx !== -1) t = t.slice(0, idx);
   t = t.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
   t = t.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
+  // Strip any remaining Persian/Arabic characters as safety net
+  t = t.split("\n").filter(l => !/[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(l)).join("\n");
   return t.trim();
 }
 
@@ -144,7 +146,7 @@ Deno.serve((req) =>
       console.log(`  Post ${p.id}: platform=${p.platform}, scheduled_date=${p.scheduled_date}, status=${p.status}`);
     }
 
-    const results: { postId: string; platform: string; success: boolean; error?: string }[] = [];
+    const results: { postId: string; platform: string; success: boolean; error?: string; pages?: string[] }[] = [];
 
     const SUPPORTED_PLATFORMS = ["facebook", "instagram", "linkedin"];
 
@@ -168,29 +170,54 @@ Deno.serve((req) =>
           continue;
         }
 
-        // Guard: prevent duplicate content from being published to same platform on same day
-        if (post.title) {
-          const dayStr = post.scheduled_date
-            ? new Date(post.scheduled_date).toISOString().split("T")[0]
-            : new Date().toISOString().split("T")[0];
-          const { data: duplicate } = await supabase
-            .from("social_posts")
-            .select("id")
-            .eq("platform", post.platform)
-            .eq("title", post.title)
-            .eq("page_name", post.page_name || "")
-            .eq("status", "published")
-            .neq("id", post.id)
-            .gte("scheduled_date", `${dayStr}T00:00:00Z`)
-            .lte("scheduled_date", `${dayStr}T23:59:59Z`)
-            .limit(1)
-            .maybeSingle();
-          if (duplicate) {
-            console.warn(`[social-cron-publish] Skipping ${post.id} — duplicate already published: ${duplicate.id}`);
-            await supabase.from("social_posts").update({ status: "failed", last_error: "Duplicate — same content already published today" }).eq("id", post.id);
-            results.push({ postId: post.id, platform: post.platform, success: false, error: "Duplicate content already published" });
-            continue;
+        // ── Enhanced Duplicate Guard ──────────────────────────────────
+        // Check per individual page: same (content+image) OR same title on same platform+day
+        const dayStr = post.scheduled_date
+          ? new Date(post.scheduled_date).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+
+        const { data: publishedToday } = await supabase
+          .from("social_posts")
+          .select("id, title, content, image_url, page_name")
+          .eq("platform", post.platform)
+          .eq("status", "published")
+          .neq("id", post.id)
+          .gte("scheduled_date", `${dayStr}T00:00:00Z`)
+          .lte("scheduled_date", `${dayStr}T23:59:59Z`)
+          .limit(50);
+
+        const individualPages = post.page_name
+          ? post.page_name.split(", ").map((p: string) => p.trim()).filter(Boolean)
+          : [];
+
+        let isDuplicate = false;
+        if (publishedToday && publishedToday.length > 0) {
+          for (const pub of publishedToday) {
+            // Check content+image match (CRITICAL: prevents identical posts)
+            const sameContent = pub.content === post.content && pub.image_url === post.image_url;
+            const sameTitle = pub.title && post.title && pub.title === post.title;
+
+            if (sameContent || sameTitle) {
+              // Check if any page overlaps
+              const pubPages = pub.page_name
+                ? pub.page_name.split(", ").map((p: string) => p.trim()).filter(Boolean)
+                : [];
+              const hasPageOverlap = individualPages.length === 0 || pubPages.length === 0
+                || individualPages.some((pg: string) => pubPages.includes(pg));
+
+              if (hasPageOverlap) {
+                isDuplicate = true;
+                console.warn(`[social-cron-publish] Duplicate detected: post ${post.id} matches published ${pub.id} (content+image=${sameContent}, title=${sameTitle})`);
+                break;
+              }
+            }
           }
+        }
+
+        if (isDuplicate) {
+          await supabase.from("social_posts").update({ status: "failed", last_error: "Duplicate — same content already published today" }).eq("id", post.id);
+          results.push({ postId: post.id, platform: post.platform, success: false, error: "Duplicate content already published" });
+          continue;
         }
 
         // Mark publish attempt to prevent retry storms
@@ -207,10 +234,11 @@ Deno.serve((req) =>
           ? cleanContent
           : [cleanContent, (post.hashtags || []).length > 0 ? "\n\n" + (post.hashtags || []).join(" ") : ""].join("");
 
-        let publishResult: { id?: string; error?: string } = { error: "Unsupported platform" };
+        // ── Multi-Page Publishing Loop ────────────────────────────────
+        const pageErrors: string[] = [];
+        const pageSuccesses: string[] = [];
 
         if (post.platform === "facebook" || post.platform === "instagram") {
-          // Get user token
           const tokenPlatform = post.platform === "instagram" ? "instagram" : "facebook";
           let tokenData = (await supabase
             .from("user_meta_tokens")
@@ -234,123 +262,143 @@ Deno.serve((req) =>
           }
 
           if (!tokenData) {
-            publishResult = { error: `${post.platform} not connected for any user` };
+            pageErrors.push(`${post.platform} not connected for any user`);
           } else {
-            const pages = (tokenData.pages as Array<{ id: string }>) || [];
+            const pages = (tokenData.pages as Array<{ id: string; name?: string }>) || [];
             if (pages.length === 0) {
-              publishResult = { error: "No Facebook Pages found" };
+              pageErrors.push("No Facebook Pages found");
             } else {
-              // Match page_name from the post to the correct page
-              let selectedPage = pages[0] as { id: string; name?: string };
-              if (post.page_name) {
-                const matched = pages.find((p: { id: string; name?: string }) => p.name === post.page_name);
-                if (matched) selectedPage = matched;
-              }
-              const pageId = selectedPage.id;
-              let pageTokenData = (await supabase
-                .from("user_meta_tokens")
-                .select("access_token")
-                .eq("user_id", post.user_id)
-                .eq("platform", `${tokenPlatform}_page_${pageId}`)
-                .maybeSingle()).data;
-              // Fallback: try any user's page token
-              if (!pageTokenData) {
-                pageTokenData = (await supabase
+              // Split page_name into individual pages and publish to EACH
+              const targetPages = individualPages.length > 0 ? individualPages : [pages[0]?.name || ""];
+
+              for (const targetPageName of targetPages) {
+                // Find matching page from token data
+                let selectedPage = pages[0] as { id: string; name?: string };
+                if (targetPageName) {
+                  const matched = pages.find((p: { id: string; name?: string }) => p.name === targetPageName);
+                  if (matched) {
+                    selectedPage = matched;
+                  } else {
+                    console.warn(`[social-cron-publish] Page "${targetPageName}" not found in token pages [${pages.map(p => p.name).join(", ")}], using first page`);
+                  }
+                }
+                const pageId = selectedPage.id;
+
+                // Get page-specific access token
+                let pageTokenData = (await supabase
                   .from("user_meta_tokens")
                   .select("access_token")
+                  .eq("user_id", post.user_id)
                   .eq("platform", `${tokenPlatform}_page_${pageId}`)
-                  .limit(1)
                   .maybeSingle()).data;
-              }
-              let pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
-
-              if (post.platform === "facebook") {
-                // Refresh page token using user's long-lived token for current permissions
-                const userLLT = tokenData.access_token;
-                const refreshedToken = await refreshPageToken(userLLT, pageId);
-                if (refreshedToken) {
-                  pageAccessToken = refreshedToken;
-                  // Persist refreshed token
-                  await supabase
+                if (!pageTokenData) {
+                  pageTokenData = (await supabase
                     .from("user_meta_tokens")
-                    .upsert({
-                      user_id: post.user_id,
-                      platform: `facebook_page_${pageId}`,
-                      access_token: refreshedToken,
-                    }, { onConflict: "user_id,platform" });
-                } else {
-                  console.warn(`[social-cron-publish] Token refresh failed for post ${post.id}, using stored token`);
+                    .select("access_token")
+                    .eq("platform", `${tokenPlatform}_page_${pageId}`)
+                    .limit(1)
+                    .maybeSingle()).data;
                 }
+                let pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
 
-                // Pre-flight: verify page token validity
-                const preflightRes = await fetch(`${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`);
-                const preflightData = await preflightRes.json();
-                if (preflightData.error) {
-                  console.error(`[social-cron-publish] Facebook pre-flight failed for post ${post.id}:`, preflightData.error);
-                  publishResult = { error: `Facebook permissions error: ${preflightData.error.message || "Token invalid"}. Reconnect Facebook with pages_read_engagement and pages_manage_posts.` };
-                } else {
-                  // Verify pages_manage_posts permission before publishing
+                let publishResult: { id?: string; error?: string } = { error: "Unsupported platform" };
+
+                if (post.platform === "facebook") {
+                  // Refresh page token
+                  const userLLT = tokenData.access_token;
+                  const refreshedToken = await refreshPageToken(userLLT, pageId);
+                  if (refreshedToken) {
+                    pageAccessToken = refreshedToken;
+                    await supabase
+                      .from("user_meta_tokens")
+                      .upsert({
+                        user_id: post.user_id,
+                        platform: `facebook_page_${pageId}`,
+                        access_token: refreshedToken,
+                      }, { onConflict: "user_id,platform" });
+                  }
+
+                  // Pre-flight: verify page token validity
+                  const preflightRes = await fetch(`${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`);
+                  const preflightData = await preflightRes.json();
+                  if (preflightData.error) {
+                    console.error(`[social-cron-publish] Facebook pre-flight failed for page "${targetPageName}":`, preflightData.error);
+                    pageErrors.push(`Page "${targetPageName}": ${preflightData.error.message || "Token invalid"}`);
+                    continue;
+                  }
+
+                  // Verify permissions
                   try {
                     const permRes = await fetch(`${GRAPH_API}/me/permissions?access_token=${pageAccessToken}`);
                     const permData = await permRes.json();
                     if (permData.data && Array.isArray(permData.data)) {
                       const managePostsPerm = permData.data.find((p: any) => p.permission === "pages_manage_posts");
                       if (!managePostsPerm || managePostsPerm.status !== "granted") {
-                        publishResult = { error: "Facebook App does not have 'pages_manage_posts' permission approved. Add this user as a Tester in Meta Developer Console, or submit for App Review." };
+                        pageErrors.push(`Page "${targetPageName}": Missing pages_manage_posts permission`);
+                        continue;
                       }
                     }
                   } catch (permErr) {
-                    console.warn(`[social-cron-publish] Permission check failed for post ${post.id}, proceeding:`, permErr);
+                    console.warn(`[social-cron-publish] Permission check failed for page "${targetPageName}", proceeding:`, permErr);
                   }
-                  if (!publishResult.error) {
-                    publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
+
+                  publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
+
+                  // Image fallback: retry text-only if image publish failed
+                  if (publishResult.error && post.image_url) {
+                    console.warn(`[social-cron-publish] Image publish failed for page "${targetPageName}", retrying text-only`);
+                    publishResult = await publishToFacebook(pageId, pageAccessToken, message, null);
                   }
-                }
-              } else {
-                const igAccounts = (tokenData.instagram_accounts as Array<{ id: string; pageId?: string }>) || [];
-                if (igAccounts.length === 0) {
-                  publishResult = { error: "No Instagram Business Account found" };
                 } else {
-                  // Match IG account to the selected Facebook page
+                  // Instagram
+                  const igAccounts = (tokenData.instagram_accounts as Array<{ id: string; pageId?: string }>) || [];
+                  if (igAccounts.length === 0) {
+                    pageErrors.push(`Page "${targetPageName}": No Instagram Business Account found`);
+                    continue;
+                  }
                   const matchedIg = igAccounts.find(ig => ig.pageId === pageId) || igAccounts[0];
-                  publishResult = await publishToInstagram(matchedIg.id, pageAccessToken, message, post.image_url);
+                  publishResult = await publishToInstagram(
+                    matchedIg.id, pageAccessToken, message, post.image_url,
+                    post.content_type || "post", post.cover_image_url
+                  );
+                }
+
+                if (publishResult.error) {
+                  console.error(`[social-cron-publish] Failed to publish to page "${targetPageName}": ${publishResult.error}`);
+                  pageErrors.push(`Page "${targetPageName}": ${publishResult.error}`);
+                } else {
+                  console.log(`[social-cron-publish] Published to page "${targetPageName}" successfully (id: ${publishResult.id})`);
+                  pageSuccesses.push(targetPageName);
                 }
               }
             }
           }
         } else if (post.platform === "linkedin") {
-          publishResult = await publishToLinkedIn(supabase, post.user_id, message, post.image_url);
-        }
-
-        // Image fallback: if publish with image failed, retry text-only
-        if (publishResult.error && post.image_url && (post.platform === "facebook" || post.platform === "linkedin")) {
-          console.error(`[social-cron-publish] Image publish failed for ${post.id}: ${publishResult.error}. Retrying text-only...`);
-          if (post.platform === "facebook") {
-            // Re-derive pageId and token for text-only retry
-            const tokenPlatform = "facebook";
-            let tokenData2 = (await supabase.from("user_meta_tokens").select("access_token, pages").eq("user_id", post.user_id).eq("platform", tokenPlatform).maybeSingle()).data;
-            if (!tokenData2) tokenData2 = (await supabase.from("user_meta_tokens").select("access_token, pages, user_id").eq("platform", tokenPlatform).limit(1).maybeSingle()).data;
-            if (tokenData2) {
-              const pages2 = (tokenData2.pages as Array<{ id: string; name?: string }>) || [];
-              let selectedPage2 = pages2[0];
-              if (post.page_name) { const m = pages2.find(p => p.name === post.page_name); if (m) selectedPage2 = m; }
-              if (selectedPage2) {
-                let pt2 = (await supabase.from("user_meta_tokens").select("access_token").eq("user_id", post.user_id).eq("platform", `${tokenPlatform}_page_${selectedPage2.id}`).maybeSingle()).data;
-                if (!pt2) pt2 = (await supabase.from("user_meta_tokens").select("access_token").eq("platform", `${tokenPlatform}_page_${selectedPage2.id}`).limit(1).maybeSingle()).data;
-                const pat2 = pt2?.access_token || tokenData2.access_token;
-                publishResult = await publishToFacebook(selectedPage2.id, pat2, message, null);
-              }
-            }
+          const publishResult = await publishToLinkedIn(supabase, post.user_id, message, post.image_url);
+          if (publishResult.error) {
+            pageErrors.push(publishResult.error);
+          } else {
+            pageSuccesses.push("linkedin");
           }
         }
 
-        if (publishResult.error) {
-          console.error(`[social-cron-publish] FINAL FAILURE for post ${post.id}: ${publishResult.error}`);
-          await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review", last_error: publishResult.error }).eq("id", post.id);
-          results.push({ postId: post.id, platform: post.platform, success: false, error: publishResult.error });
+        // Determine final status based on per-page results
+        if (pageSuccesses.length > 0) {
+          const partialError = pageErrors.length > 0 ? ` (failed on: ${pageErrors.join("; ")})` : "";
+          await supabase.from("social_posts").update({
+            status: "published",
+            qa_status: "published",
+            ...(partialError ? { last_error: partialError } : {}),
+          }).eq("id", post.id);
+          results.push({ postId: post.id, platform: post.platform, success: true, pages: pageSuccesses });
+          if (pageErrors.length > 0) {
+            console.warn(`[social-cron-publish] Post ${post.id} partially published. Successes: [${pageSuccesses.join(", ")}], Failures: [${pageErrors.join("; ")}]`);
+          }
         } else {
-          await supabase.from("social_posts").update({ status: "published", qa_status: "published" }).eq("id", post.id);
-          results.push({ postId: post.id, platform: post.platform, success: true });
+          const errMsg = pageErrors.join("; ") || "Unknown publishing error";
+          console.error(`[social-cron-publish] FINAL FAILURE for post ${post.id}: ${errMsg}`);
+          await supabase.from("social_posts").update({ status: "failed", qa_status: "needs_review", last_error: errMsg }).eq("id", post.id);
+          results.push({ postId: post.id, platform: post.platform, success: false, error: errMsg });
         }
       } catch (err) {
         console.error(`Failed to publish post ${post.id}:`, err);
@@ -407,7 +455,8 @@ async function publishToFacebook(
 }
 
 async function publishToInstagram(
-  igAccountId: string, accessToken: string, caption: string, imageUrl?: string | null
+  igAccountId: string, accessToken: string, caption: string, imageUrl?: string | null,
+  contentType: string = "post", coverImageUrl?: string | null
 ): Promise<{ id?: string; error?: string }> {
   if (!imageUrl) return { error: "Instagram requires an image" };
   try {
@@ -421,15 +470,31 @@ async function publishToInstagram(
       } catch { /* ignore HEAD failures */ }
     }
 
+    const isStory = contentType === "story";
+
     const containerBody: Record<string, string> = {
-      caption,
       access_token: accessToken,
     };
-    if (isVideo) {
+
+    if (isStory) {
+      containerBody.media_type = "STORIES";
+      if (isVideo) {
+        containerBody.video_url = imageUrl;
+      } else {
+        containerBody.image_url = imageUrl;
+      }
+      console.log(`[cron-IG] Publishing Instagram Story (video=${isVideo})`);
+    } else if (isVideo) {
       containerBody.media_type = "REELS";
       containerBody.video_url = imageUrl;
+      containerBody.caption = caption;
+      if (coverImageUrl) {
+        containerBody.cover_url = coverImageUrl;
+        console.log(`[cron-IG] Using cover image for reel: ${coverImageUrl.substring(0, 60)}…`);
+      }
     } else {
       containerBody.image_url = imageUrl;
+      containerBody.caption = caption;
     }
 
     const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
@@ -520,7 +585,6 @@ async function publishToLinkedIn(
     // If image, register and upload
     if (imageUrl) {
       try {
-        // Register upload
         const registerRes = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
           method: "POST",
           headers: {
@@ -542,7 +606,6 @@ async function publishToLinkedIn(
           const asset = registerData.value?.asset;
 
           if (uploadUrl && asset) {
-            // Download the image
             const imgRes = await fetch(imageUrl);
             if (imgRes.ok) {
               const imgBlob = await imgRes.blob();
@@ -565,7 +628,6 @@ async function publishToLinkedIn(
         }
       } catch (e) {
         console.error("LinkedIn image upload error (non-critical):", e);
-        // Continue with text-only post
       }
     }
 
