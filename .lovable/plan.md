@@ -1,55 +1,45 @@
 
 
-# Split Scene at Playhead Position (Scissors Button)
+# Fix: LinkedIn "Not Connected" Error Despite Active Connection
 
-## Problem
-The scissors button currently trims 1 second off the end of a scene. The user wants it to **cut/split the scene at the exact playhead position** — wherever the playhead indicator is on the timeline.
+## Root Cause
+The LinkedIn publishing functions query `integration_connections` filtered by `user_id`. The user triggering publishes (`b0c1c3d5...`) has **zero** rows in `integration_connections` — they never personally connected LinkedIn. The LinkedIn connection belongs to a different user (`c9b3adc2...`).
 
-## Changes
+For Facebook/Instagram, the code already has a **fallback** pattern: if the current user has no token, it falls back to any user's token. LinkedIn lacks this fallback.
 
-### 1. `src/components/ad-director/ProVideoEditor.tsx`
-- **Modify `handleTrimScene`** (or repurpose it) to split the scene at the current `globalTime` position instead of trimming 1s:
-  - Calculate where the playhead is relative to the selected scene: `splitPoint = globalTime - cumulativeStarts[index]`
-  - If playhead is at the very start or end of the scene (< 0.5s from edge), show a toast warning and abort
-  - Create two segments from the original: first segment `[startTime, startTime + splitPoint]`, second segment `[startTime + splitPoint, endTime]`
-  - Create a new scene for the second half, insert it after the current scene
-  - Push history for undo support
-  - Update segment timings for both halves
+## Fix
 
-### 2. `src/components/ad-director/editor/TimelineBar.tsx`
-- Update the scissors button tooltip from `"Trim (-1s)"` to `"Split at playhead"`
-- Update context menu label from `"Trim (−1s)"` to `"Split at playhead"`
+### 1. `supabase/functions/social-publish/index.ts` (line ~426-431)
+Add fallback query when no LinkedIn connection found for the current user:
 
-### Logic
 ```typescript
-const handleTrimScene = useCallback((index: number) => {
-  const scene = storyboard[index];
-  if (!scene) return;
-  const seg = segments.find(s => s.id === scene.segmentId);
-  if (!seg) return;
-  
-  const sceneStart = cumulativeStarts[index] || 0;
-  const splitPoint = globalTime - sceneStart; // local time within scene
-  const sceneDur = seg.endTime - seg.startTime;
-  
-  if (splitPoint < 0.5 || splitPoint > sceneDur - 0.5) {
-    toast({ title: "Cannot split", description: "Move playhead to the middle of the scene", variant: "destructive" });
-    return;
-  }
-  
-  pushHistory(storyboard);
-  // Shorten current scene to [startTime, startTime + splitPoint]
-  onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.startTime + splitPoint);
-  // Create new scene for second half
-  const newScene = { ...scene, id: crypto.randomUUID(), segmentId: crypto.randomUUID() };
-  const updated = [...storyboard];
-  updated.splice(index + 1, 0, newScene);
-  onUpdateStoryboard?.(updated);
-  toast({ title: "Scene split", description: `Split at ${globalTime.toFixed(1)}s` });
-}, [storyboard, segments, globalTime, cumulativeStarts, pushHistory, onUpdateSegmentTiming, onUpdateStoryboard, toast]);
+let { data: connection } = await supabase
+  .from("integration_connections")
+  .select("config")
+  .eq("user_id", userId)
+  .eq("integration_id", "linkedin")
+  .maybeSingle();
+
+// Fallback: use any user's LinkedIn connection
+if (!connection) {
+  const { data: fallback } = await supabase
+    .from("integration_connections")
+    .select("config")
+    .eq("integration_id", "linkedin")
+    .eq("status", "connected")
+    .order("last_sync_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  connection = fallback;
+}
+
+if (!connection) return { error: "LinkedIn not connected..." };
 ```
 
+### 2. `supabase/functions/social-cron-publish/index.ts` (line ~451-456)
+Same fallback pattern.
+
 ## Files Changed
-- `src/components/ad-director/ProVideoEditor.tsx` — rewrite `handleTrimScene` to split at playhead
-- `src/components/ad-director/editor/TimelineBar.tsx` — update tooltip/label text
+- `supabase/functions/social-publish/index.ts` — add LinkedIn connection fallback
+- `supabase/functions/social-cron-publish/index.ts` — add LinkedIn connection fallback
 
