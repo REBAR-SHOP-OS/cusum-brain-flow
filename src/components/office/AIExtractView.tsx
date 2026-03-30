@@ -2255,7 +2255,7 @@ export function AIExtractView() {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Kerf (mm)</label>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Kerf ({displayUnit === "mm" ? "mm" : "in"})</label>
                   <Input
                     type="number"
                     className="w-20 h-9 text-xs"
