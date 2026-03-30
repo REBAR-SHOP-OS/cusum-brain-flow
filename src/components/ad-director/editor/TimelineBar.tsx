@@ -914,67 +914,108 @@ export function TimelineBar({
           </div>
         )}
 
-        {/* ─── Audio track ─── */}
-        {audioTracks.length > 0 && (
-          <div className="flex items-center gap-0.5 mt-0.5">
-            <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
-              <Music className="w-3 h-3" /> Audio
-            </span>
-            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={(e) => { setSelectedAudioIdx(null); handleTrackClick(e); }}>
-              {audioTracks.map((track, tIdx) => {
-                let leftPct: number;
-                let widthPct: number;
-                if (track.globalStartTime != null && totalDuration > 0) {
-                  const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
-                  leftPct = 0;
-                  widthPct = ((track.globalStartTime + trackDur) / totalDuration) * 100;
-                } else {
-                  const idx = storyboard.findIndex(s => s.id === track.sceneId);
-                  if (idx < 0) {
-                    leftPct = 0; widthPct = 100;
-                  } else {
-                    const sceneStart = cumulativeStarts[idx] || 0;
-                    const sceneDur = getSceneDur(idx);
-                    const itemEnd = track.endTime ?? sceneDur;
-                    const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-                    leftPct = 0;
-                    widthPct = (absEnd / totalDuration) * 100;
-                  }
-                }
-                const itemId = `audio-${tIdx}`;
-                const isBeingDragged = draggedItemId === itemId;
-                const barColor = track.kind === "voiceover" ? "bg-teal-500/60 hover:bg-teal-500/80" : "bg-amber-500/60 hover:bg-amber-500/80";
-                return (
-                  <div
-                    key={itemId}
-                    className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor} ${selectedAudioIdx === tIdx ? 'ring-1 ring-white/60' : ''}`}
-                    style={{
-                      left: `${leftPct}%`,
-                      width: `${Math.max(widthPct, 0.8)}%`,
-                      transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
-                      zIndex: isBeingDragged ? 30 : 5,
-                      willChange: isBeingDragged ? 'transform' : undefined,
-                    }}
-                    onMouseDown={(e) => handleItemDragStart(e, "audio", String(tIdx), leftPct, widthPct)}
-                    onClick={(e) => { e.stopPropagation(); setSelectedAudioIdx(tIdx); }}
-                  >
-                    <span className="text-[8px] text-white truncate select-none">
-                      {track.kind === "voiceover" ? "🎙" : "🎵"} {track.label}
-                    </span>
-                    {onRemoveAudioTrack && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onRemoveAudioTrack(tIdx); }}
-                        className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40"
+        {/* ─── Audio (Voiceover) track ─── */}
+        {(() => {
+          const voiceoverTracks = audioTracks.map((t, i) => ({ track: t, origIdx: i })).filter(({ track }) => track.kind !== "music");
+          const musicTracks = audioTracks.map((t, i) => ({ track: t, origIdx: i })).filter(({ track }) => track.kind === "music");
+          return (<>
+            {voiceoverTracks.length > 0 && (
+              <div className="flex items-center gap-0.5 mt-0.5">
+                <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
+                  <Music className="w-3 h-3" /> Audio
+                </span>
+                <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={(e) => { setSelectedAudioIdx(null); handleTrackClick(e); }}>
+                  {voiceoverTracks.map(({ track, origIdx }) => {
+                    let leftPct: number;
+                    let widthPct: number;
+                    if (track.globalStartTime != null && totalDuration > 0) {
+                      const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
+                      leftPct = 0;
+                      widthPct = ((track.globalStartTime + trackDur) / totalDuration) * 100;
+                    } else {
+                      const idx = storyboard.findIndex(s => s.id === track.sceneId);
+                      if (idx < 0) { leftPct = 0; widthPct = 100; } else {
+                        const sceneStart = cumulativeStarts[idx] || 0;
+                        const sceneDur = getSceneDur(idx);
+                        const itemEnd = track.endTime ?? sceneDur;
+                        const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
+                        leftPct = 0;
+                        widthPct = (absEnd / totalDuration) * 100;
+                      }
+                    }
+                    const itemId = `audio-${origIdx}`;
+                    const isBeingDragged = draggedItemId === itemId;
+                    return (
+                      <div
+                        key={itemId}
+                        className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group bg-teal-500/60 hover:bg-teal-500/80 ${selectedAudioIdx === origIdx ? 'ring-1 ring-white/60' : ''}`}
+                        style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, 0.8)}%`, transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined, zIndex: isBeingDragged ? 30 : 5, willChange: isBeingDragged ? 'transform' : undefined }}
+                        onMouseDown={(e) => handleItemDragStart(e, "audio", String(origIdx), leftPct, widthPct)}
+                        onClick={(e) => { e.stopPropagation(); setSelectedAudioIdx(origIdx); }}
                       >
-                        <Trash2 className="w-2 h-2 text-white/80" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+                        <span className="text-[8px] text-white truncate select-none">🎙 {track.label}</span>
+                        {onRemoveAudioTrack && (
+                          <button onClick={(e) => { e.stopPropagation(); onRemoveAudioTrack(origIdx); }} className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40">
+                            <Trash2 className="w-2 h-2 text-white/80" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ─── Music track (always visible, yellow) ─── */}
+            <div className="flex items-center gap-0.5 mt-0.5">
+              <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
+                <Music className="w-3 h-3" /> Music
+              </span>
+              <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={(e) => { setSelectedAudioIdx(null); handleTrackClick(e); }}>
+                {musicTracks.length === 0 && (
+                  <span className="absolute inset-0 flex items-center justify-center text-[8px] text-zinc-600 select-none">No music — click + to add</span>
+                )}
+                {musicTracks.map(({ track, origIdx }) => {
+                  let leftPct: number;
+                  let widthPct: number;
+                  if (track.globalStartTime != null && totalDuration > 0) {
+                    const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
+                    leftPct = 0;
+                    widthPct = ((track.globalStartTime + trackDur) / totalDuration) * 100;
+                  } else {
+                    const idx = storyboard.findIndex(s => s.id === track.sceneId);
+                    if (idx < 0) { leftPct = 0; widthPct = 100; } else {
+                      const sceneStart = cumulativeStarts[idx] || 0;
+                      const sceneDur = getSceneDur(idx);
+                      const itemEnd = track.endTime ?? sceneDur;
+                      const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
+                      leftPct = 0;
+                      widthPct = (absEnd / totalDuration) * 100;
+                    }
+                  }
+                  const itemId = `audio-${origIdx}`;
+                  const isBeingDragged = draggedItemId === itemId;
+                  return (
+                    <div
+                      key={itemId}
+                      className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group bg-yellow-500/60 hover:bg-yellow-500/80 ${selectedAudioIdx === origIdx ? 'ring-1 ring-white/60' : ''}`}
+                      style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, 0.8)}%`, transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined, zIndex: isBeingDragged ? 30 : 5, willChange: isBeingDragged ? 'transform' : undefined }}
+                      onMouseDown={(e) => handleItemDragStart(e, "audio", String(origIdx), leftPct, widthPct)}
+                      onClick={(e) => { e.stopPropagation(); setSelectedAudioIdx(origIdx); }}
+                    >
+                      <span className="text-[8px] text-white truncate select-none">🎵 {track.label}</span>
+                      {onRemoveAudioTrack && (
+                        <button onClick={(e) => { e.stopPropagation(); onRemoveAudioTrack(origIdx); }} className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40">
+                          <Trash2 className="w-2 h-2 text-white/80" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          </>);
+        })()}
 
         {/* ─── Global Playhead (spans all rows) ─── */}
         <div
