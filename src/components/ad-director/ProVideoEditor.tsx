@@ -1543,14 +1543,36 @@ export function ProVideoEditor({
           {/* Video / Static Card */}
           <div ref={videoContainerRef} className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9" }}
             onMouseMove={(e) => {
-              if (!draggingOverlayId || !videoContainerRef.current) return;
+              if (!videoContainerRef.current) return;
               const rect = videoContainerRef.current.getBoundingClientRect();
+              // ─── Resize logic ───
+              if (resizingOverlay) {
+                const dxPct = ((e.clientX - resizeStart.current.mouseX) / rect.width) * 100;
+                const dyPct = ((e.clientY - resizeStart.current.mouseY) / rect.height) * 100;
+                const { handle } = resizingOverlay;
+                let newW = resizeStart.current.w;
+                let newH = resizeStart.current.h;
+                let newX = resizeStart.current.x;
+                let newY = resizeStart.current.y;
+                if (handle.includes("e")) newW = resizeStart.current.w + dxPct;
+                if (handle.includes("w")) { newW = resizeStart.current.w - dxPct; newX = resizeStart.current.x + dxPct; }
+                if (handle.includes("s")) newH = resizeStart.current.h + dyPct;
+                if (handle.includes("n")) { newH = resizeStart.current.h - dyPct; newY = resizeStart.current.y + dyPct; }
+                newW = Math.max(5, Math.min(90, newW));
+                newH = Math.max(5, Math.min(90, newH));
+                newX = Math.max(0, Math.min(95, newX));
+                newY = Math.max(0, Math.min(95, newY));
+                setOverlays(prev => prev.map(o => o.id === resizingOverlay.id ? { ...o, size: { w: newW, h: newH }, position: { x: newX, y: newY } } : o));
+                return;
+              }
+              // ─── Drag logic ───
+              if (!draggingOverlayId) return;
               const x = ((e.clientX - rect.left) / rect.width) * 100 - dragOffset.current.x;
               const y = ((e.clientY - rect.top) / rect.height) * 100 - dragOffset.current.y;
               setOverlays(prev => prev.map(o => o.id === draggingOverlayId ? { ...o, position: { x: Math.max(0, Math.min(90, x)), y: Math.max(0, Math.min(90, y)) } } : o));
             }}
-            onMouseUp={() => setDraggingOverlayId(null)}
-            onMouseLeave={() => setDraggingOverlayId(null)}
+            onMouseUp={() => { setDraggingOverlayId(null); setResizingOverlay(null); }}
+            onMouseLeave={() => { setDraggingOverlayId(null); setResizingOverlay(null); }}
           >
             {videoSrc ? (
               <>
