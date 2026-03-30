@@ -81,7 +81,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {isInternal && <VizzyCallHandler />}
 
             {/* Floating Vizzy avatar — visible for all @rebar.shop employees */}
-            {isInternal && <FloatingVizzyButton />}
+            {user?.email === "sattar@rebar.shop" && <FloatingVizzyButton />}
 
             {/* Screenshot Feedback button — internal @rebar.shop users only */}
             {isInternal && <ScreenshotFeedbackButton />}
