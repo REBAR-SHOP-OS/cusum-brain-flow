@@ -16,6 +16,7 @@ interface MediaTabProps {
   onSelectScene: (idx: number) => void;
   onRegenerateScene?: (sceneId: string) => void;
   onUpdateClipUrl?: (sceneId: string, url: string) => void;
+  onAddSceneWithMedia?: (url: string, fileName: string) => void;
 }
 
 export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSelectScene, onRegenerateScene, onUpdateClipUrl }: MediaTabProps) {
