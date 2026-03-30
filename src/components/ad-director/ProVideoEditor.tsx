@@ -378,7 +378,7 @@ export function ProVideoEditor({
 
   const handleAddSubtitle = useCallback((overlay: VideoOverlay) => {
     setOverlays(prev => [...prev, overlay]);
-    toast({ title: "✅ زیرنویس اضافه شد" });
+    toast({ title: "✅ Subtitle added" });
   }, [toast]);
 
   const handleTextVoiceGenerate = useCallback(async (result: TextVoiceResult) => {
