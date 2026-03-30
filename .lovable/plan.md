@@ -1,41 +1,52 @@
 
 
-# Fix: Playhead Always Visible Above Video Track & Starts at Zero
+# Trim Mode for Scene Cards via Scissors Icon
+
+## Current State
+- The scissors icon currently calls `handleTrimScene` which **splits** the scene at the playhead — same as the split button.
+- Resize handles already exist on each scene card (left/right edges, `w-1.5`, nearly invisible).
+- `onResizeScene` and `handleResizeScene` already work to change scene duration.
 
 ## Problem
-1. The playhead (red indicator line) can render behind the video track scenes because scene elements have `z-10` (selected) and `z-20` (resize handles), while the playhead wrapper is `z-40` but the video track content with `overflow-hidden` and stacking context can obscure it.
-2. The playhead should always initialize at position 0 (start of video).
+The user wants the scissors icon to enable **trimming** (adjusting start/end of the selected card), not splitting. The existing resize handles are too thin to discover.
 
-## Solution (1 file)
+## Plan
 
-### `src/components/ad-director/editor/TimelineBar.tsx`
+### 1. Add Trim Mode State — `TimelineBar.tsx`
+- Add `trimMode` boolean state.
+- Clicking the scissors icon toggles `trimMode` on/off (instead of calling `onTrimScene`).
+- When `trimMode` is active, the scissors icon gets a highlight (e.g., `bg-red-500/30`).
 
-**1. Increase playhead z-index to `z-50`** (line ~678) so it always renders above all track content including selected scenes (`z-10`) and resize handles (`z-20`).
+### 2. Enhanced Trim Handles — `TimelineBar.tsx` (scene cards, ~line 713-769)
+- When `trimMode` is true AND the scene is selected:
+  - Left handle: `w-3` with visible red/yellow styling, a grip icon
+  - Right handle: same
+- When `trimMode` is false: keep current thin invisible handles
 
-**2. Move the playhead div AFTER the track rows** in the DOM order — currently it's placed before the video track inside the wrapper div. Move it to after all track rows (video, text, audio) but still inside the relative wrapper. This ensures correct stacking even without z-index differences.
-
-**3. Ensure `globalTime` starts at 0** — verify that `playheadPct` calculation (line 393) correctly produces 0% when `globalTime` is 0. This is already correct (`globalTime / totalDuration * 100 = 0`), but we should also ensure the rAF update (line 200-207) doesn't override with stale values on mount.
-
-## Changes
-
-### File: `src/components/ad-director/editor/TimelineBar.tsx`
-
-**Move playhead div**: Cut lines 675-693 (the Global Playhead block) and paste it just before the closing `</div>` of the "All Track Rows Wrapper" (before line 979). This places it after video, text, and audio rows in DOM order.
-
-**Update z-index**: Change `z-40` to `z-50` on the playhead div class (line 678).
-
+### 3. Update Scissors Button — `TimelineBar.tsx` (~line 515-519)
+Change from:
 ```tsx
-{/* ─── Global Playhead (spans all rows) ─── */}
-<div
-  ref={playheadRef}
-  className={`absolute top-0 bottom-0 z-50 ${scrubbing ? 'cursor-grabbing' : 'cursor-grab'} pointer-events-auto`}
-  style={{ left: `${playheadPct}%`, width: '16px', transform: 'translateX(-7px)', willChange: 'left' }}
-  ...
->
+onClick={() => onTrimScene(selectedSceneIndex)}
 ```
+To:
+```tsx
+onClick={() => setTrimMode(prev => !prev)}
+```
+With active state styling when `trimMode` is true.
+
+### 4. Also Update Context Menu — `TimelineBar.tsx` (~line 785-789)
+Change the "Split at playhead" context menu item for `onTrimScene` to toggle trim mode as well, or relabel it to "Trim Scene".
+
+### 5. Auto-exit Trim Mode
+- When selecting a different scene, exit trim mode.
+- When clicking outside the timeline, exit trim mode.
+
+## Files Changed
+- `src/components/ad-director/editor/TimelineBar.tsx` — all changes are here (state + UI)
 
 ## Result
-- Playhead always renders on top of all track elements (video, text, audio)
-- Playhead starts at position 0 (beginning of video timeline)
-- No visual obstruction from scene cards, thumbnails, or resize handles
+- Clicking scissors shows prominent drag handles on left/right of the selected scene card
+- User drags handles to shorten or extend the scene
+- Clicking scissors again exits trim mode
+- Existing `handleResizeScene` / `onResizeScene` handles the actual duration change
 
