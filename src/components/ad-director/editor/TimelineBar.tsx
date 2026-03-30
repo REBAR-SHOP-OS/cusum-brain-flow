@@ -876,10 +876,9 @@ export function TimelineBar({
                 const sceneDur = getSceneDur(idx);
                 const itemStart = ov.startTime ?? 0;
                 const itemEnd = ov.endTime ?? sceneDur;
-                const absStart = sceneStart + itemStart;
                 const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-                const leftPct = (absStart / totalDuration) * 100;
-                const widthPct = ((absEnd - absStart) / totalDuration) * 100;
+                const leftPct = 0;
+                const widthPct = (absEnd / totalDuration) * 100;
                 const isBeingDragged = draggedItemId === ov.id;
                 return (
                   <div
@@ -927,8 +926,8 @@ export function TimelineBar({
                 let widthPct: number;
                 if (track.globalStartTime != null && totalDuration > 0) {
                   const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
-                  leftPct = (track.globalStartTime / totalDuration) * 100;
-                  widthPct = (trackDur / totalDuration) * 100;
+                  leftPct = 0;
+                  widthPct = ((track.globalStartTime + trackDur) / totalDuration) * 100;
                 } else {
                   const idx = storyboard.findIndex(s => s.id === track.sceneId);
                   if (idx < 0) {
@@ -936,12 +935,10 @@ export function TimelineBar({
                   } else {
                     const sceneStart = cumulativeStarts[idx] || 0;
                     const sceneDur = getSceneDur(idx);
-                    const itemStart = track.startTime ?? 0;
                     const itemEnd = track.endTime ?? sceneDur;
-                    const absStart = sceneStart + itemStart;
                     const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-                    leftPct = (absStart / totalDuration) * 100;
-                    widthPct = ((absEnd - absStart) / totalDuration) * 100;
+                    leftPct = 0;
+                    widthPct = (absEnd / totalDuration) * 100;
                   }
                 }
                 const itemId = `audio-${tIdx}`;
