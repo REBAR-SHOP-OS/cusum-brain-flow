@@ -140,7 +140,9 @@ export default function Landing() {
       <main>
         {/* Hero */}
         <section className="relative py-24 md:py-32 px-6 overflow-hidden" aria-label="Hero">
-          <InteractiveBrainBg />
+          <LandingSectionBoundary section="InteractiveBrainBg" fallback={<div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-accent/10" />}>
+            <InteractiveBrainBg />
+          </LandingSectionBoundary>
           <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-transparent to-background/80 pointer-events-none" />
           <div className="relative z-10 max-w-5xl mx-auto text-center">
             <span className="inline-block mb-4 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold tracking-wide">
