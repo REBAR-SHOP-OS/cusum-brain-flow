@@ -2057,7 +2057,7 @@ export function ProVideoEditor({
         onRegenerateScene={onRegenerateScene}
         onDeleteScene={handleDeleteScene}
         onTrimScene={handleTrimScene}
-        onStretchScene={handleStretchScene}
+        
         onSplitScene={handleSplitScene}
         onDuplicateScene={handleDuplicateScene}
         onMoveScene={handleMoveScene}
