@@ -1,58 +1,75 @@
 
 
-# Unit System Audit — Remaining Issues
+# Fix: Persian Translation Leaking into Caption Field
 
-## Issues Found
+## Root Cause
 
-### Issue 1: Line Items Table Header Uses Wrong Variable (HIGH)
-**Line 2130** in `AIExtractView.tsx`:
+In `supabase/functions/auto-generate-post/index.ts` line 391-392, the `farsi_translation` field from the AI is appended to the saved content. The AI prompt instructs it to prefix with `---PERSIAN---`, but the AI sometimes omits the separator or embeds Persian directly in the `content` field. When the `---PERSIAN---` marker is missing, the `PostReviewPanel` frontend cannot split it out, so Persian text appears in the editable Caption textarea.
+
+## Fixes
+
+### Fix 1: Normalize `farsi_translation` separator (auto-generate-post)
+**File**: `supabase/functions/auto-generate-post/index.ts` lines 391-392
+
+Before appending `farsi_translation`, ensure `---PERSIAN---` is always present:
+```typescript
+let persianBlock = "";
+if (post.farsi_translation) {
+  const ft = post.farsi_translation.trim();
+  persianBlock = ft.startsWith("---PERSIAN---") 
+    ? "\n\n" + ft 
+    : "\n\n---PERSIAN---\n" + ft;
+}
+content: stripPersianBlock(post.content || "") + persianBlock,
 ```
-LENGTH ({lengthUnitLabelByMode(selectedUnitSystem as LengthDisplayMode)})
+
+### Fix 2: Strip inline Persian from `post.content` (auto-generate-post)
+**File**: `supabase/functions/auto-generate-post/index.ts` — enhance `stripPersianBlock`
+
+Add a regex to remove any lines containing Persian/Arabic Unicode characters (U+0600–U+06FF) from the content field, as a safety net against AI embedding Persian directly in `content`:
+```typescript
+function stripPersianBlock(text: string): string {
+  let t = text;
+  const idx = t.indexOf("---PERSIAN---");
+  if (idx !== -1) t = t.slice(0, idx);
+  t = t.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
+  t = t.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
+  // Remove any remaining lines with Persian/Arabic script
+  t = t.split("\n").filter(line => !/[\u0600-\u06FF]/.test(line)).join("\n");
+  return t.trim();
+}
 ```
-Uses `selectedUnitSystem` (source/mapping unit) instead of `displayUnit`. When user toggles display to "in", header still shows the mapping unit label.
 
-**Fix**: Change to `displayUnit`.
+### Fix 3: Frontend safety — strip Persian from `localContent` (PostReviewPanel)
+**File**: `src/components/social/PostReviewPanel.tsx` lines 229-230
 
-### Issue 2: Merged Rows Table Uses `selectedUnitSystem` for Display (MEDIUM)
-**Line 2004** in `AIExtractView.tsx`:
+Add a fallback: even when no `---PERSIAN---` separator is found, detect and strip Persian text from `localContent` using `🖼️ متن روی عکس:` markers or Unicode range:
+```typescript
+} else {
+  // No separator found — still strip any Persian markers or lines
+  let cleaned = rawC;
+  const persianMarker = cleaned.match(/🖼️\s*متن روی عکس:([\s\S]*?)(?=📝|$)/);
+  const captionMarker = cleaned.match(/📝\s*ترجمه کپشن:([\s\S]*?)$/);
+  if (persianMarker) {
+    setPersianImageText(persianMarker[1]?.trim() || "");
+    cleaned = cleaned.replace(persianMarker[0], "");
+  }
+  if (captionMarker) {
+    setPersianCaptionText(captionMarker[1]?.trim() || "");
+    cleaned = cleaned.replace(captionMarker[0], "");
+  }
+  // Strip any remaining lines with Persian/Arabic characters
+  cleaned = cleaned.split("\n").filter(l => !/[\u0600-\u06FF]/.test(l)).join("\n");
+  setLocalContent(cleaned.trim());
+}
 ```
-formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode)
-```
-The merged/dedupe preview table formats lengths using the source unit instead of the display unit.
 
-**Fix**: Change to `displayUnit`.
+## Files to Change
+1. `supabase/functions/auto-generate-post/index.ts` — normalize separator + enhance `stripPersianBlock`
+2. `src/components/social/PostReviewPanel.tsx` — frontend fallback stripping
 
-### Issue 3: ZPL Label Hardcodes "LENGTH (mm)" (MEDIUM)
-**Line 79** in `generateZpl.ts`:
-```
-^FO310,205^FDLENGTH (mm):^FS
-```
-Always prints "LENGTH (mm)" on Zebra labels regardless of unit system. Also, line 43 outputs raw mm value without conversion.
-
-**Fix**: Accept a `unitSystem` parameter in `generateZpl()`. Format length values and label based on the unit. Pass `sessionUnitToDisplay()` from `TagsExportView`.
-
-### Issue 4: ZPL Dims Output Raw mm Values (MEDIUM)
-**Line 29** in `generateZpl.ts`:
-```
-const text = chunk.map((d) => `${d}:${dims[d]}`).join("  ");
-```
-Always outputs raw mm dimension values, no conversion for imperial.
-
-**Fix**: Apply formatting based on passed unit system.
-
----
-
-## Proposed Changes
-
-### File 1: `src/components/office/AIExtractView.tsx`
-- **Line 2130**: `selectedUnitSystem` → `displayUnit`
-- **Line 2004**: `selectedUnitSystem` → `displayUnit`
-
-### File 2: `src/utils/generateZpl.ts`
-- Add `unitSystem` parameter to `generateZpl()`
-- Format length and dims using `sessionUnitToDisplay` mapping
-- Update label text from hardcoded "LENGTH (mm)" to dynamic
-
-### File 3: `src/components/office/TagsExportView.tsx`
-- Pass `sessionUnitToDisplay(selectedSession?.unit_system)` to `generateZpl()`
+## Result
+- Persian will never appear in Caption regardless of AI output format
+- Persian will always be routed to the "Internal reference only" section
+- Triple safety: backend strip + separator normalization + frontend fallback
 
