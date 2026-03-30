@@ -163,6 +163,9 @@ export function TimelineBar({
   const [zoomLevel, setZoomLevel] = useState(1);
   const thumbnails = useVideoThumbnails(clips);
   const [viewMode, setViewMode] = useState<"expanded" | "compact">("expanded");
+  const [selectedAudioIdx, setSelectedAudioIdx] = useState<number | null>(null);
+
+  useEffect(() => { setSelectedAudioIdx(null); }, [selectedSceneIndex]);
 
   // ─── Scene drag-to-reorder state ───
   const [sceneDragIdx, setSceneDragIdx] = useState<number | null>(null);
@@ -794,7 +797,7 @@ export function TimelineBar({
           <span className="w-14 shrink-0 text-[9px] text-muted-foreground flex items-center gap-1">
             <Music className="w-3 h-3" /> Audio
           </span>
-          <div className="flex-1 h-5 relative rounded bg-muted/20 overflow-hidden">
+          <div className="flex-1 h-5 relative rounded bg-muted/20 overflow-hidden" onClick={() => setSelectedAudioIdx(null)}>
             {audioTracks.map((track, tIdx) => {
               const idx = storyboard.findIndex(s => s.id === track.sceneId);
               let leftPct: number;
@@ -818,7 +821,7 @@ export function TimelineBar({
               return (
                 <div
                   key={itemId}
-                  className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor}`}
+                  className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor} ${selectedAudioIdx === tIdx ? 'ring-2 ring-white ring-offset-1 ring-offset-black/50' : ''}`}
                   style={{
                     left: `${leftPct}%`,
                     width: `${Math.max(widthPct, 0.8)}%`,
@@ -826,6 +829,7 @@ export function TimelineBar({
                     zIndex: isBeingDragged ? 30 : 5,
                   }}
                   onMouseDown={(e) => handleItemDragStart(e, "audio", String(tIdx), leftPct, widthPct)}
+                  onClick={(e) => { e.stopPropagation(); setSelectedAudioIdx(tIdx); }}
                 >
                   <span className="text-[8px] text-white truncate select-none">
                     {track.kind === "voiceover" ? "🎙" : "🎵"} {track.label}
