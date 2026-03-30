@@ -1,57 +1,55 @@
 
 
-# Fix: Card Display and Platform Isolation
+# Add Per-Group "Select All" Toggle in Pages Sub-Panel
 
-## Problems
-1. Calendar cards show full page names (truncated) — user wants page **count** displayed as a number
-2. Clicking a Facebook card opens the review panel showing "Instagram, Facebook" — should show only the clicked card's platform
-
-## Root Cause
-
-**Problem 1**: `SocialCalendar.tsx` line 220-222 renders `post.page_name` as text. Should show count instead.
-
-**Problem 2**: `PostReviewPanel.tsx` lines 211-216 collects ALL sibling platforms matching `title + day`. When Facebook and Instagram cards share the same title and day, clicking either card shows both platforms.
+## Problem
+Currently there's one global "Select All" button. User wants each platform group (Facebook, Instagram, LinkedIn) to have its own independent "Select All" toggle.
 
 ## Solution
 
-### File 1: `src/components/social/SocialCalendar.tsx`
-**Line 220-222** — Show page count instead of full names:
-```typescript
-// From:
-<p className="text-xs font-medium truncate">
-  {post.page_name || (platform.charAt(0).toUpperCase() + platform.slice(1))}
-</p>
+### File: `src/components/social/SelectionSubPanel.tsx`
 
-// To:
-<p className="text-xs font-medium truncate">
-  {post.page_name
-    ? `Pages (${post.page_name.split(", ").filter(Boolean).length})`
-    : (platform.charAt(0).toUpperCase() + platform.slice(1))}
-</p>
+**In `renderGrouped()`** — Add a per-group "Select All" button inside each group header:
+
+```typescript
+const renderGrouped = () => {
+  if (!groups || groups.length === 0) return renderFlat();
+
+  return (
+    <div className="space-y-3">
+      {groups.map((group) => {
+        const groupValues = group.options.map(o => o.value);
+        const allGroupSelected = groupValues.every(v => currentMulti.includes(v));
+
+        const toggleGroup = () => {
+          if (allGroupSelected) {
+            setCurrentMulti(prev => prev.filter(v => !groupValues.includes(v)));
+          } else {
+            setCurrentMulti(prev => [...new Set([...prev, ...groupValues])]);
+          }
+        };
+
+        return (
+          <div key={group.label} className="rounded-lg border bg-card overflow-hidden">
+            <div className="px-3.5 py-2.5 bg-muted/60 border-b flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {group.label}
+              </p>
+              <button onClick={toggleGroup} className="text-xs font-medium ...">
+                <CheckCheck /> {allGroupSelected ? "Deselect all" : "Select all"}
+              </button>
+            </div>
+            {group.options.map(...)}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 ```
 
-### File 2: `src/components/social/PostReviewPanel.tsx`
-**Lines 211-216** — Only use the clicked post's own platform, not siblings:
-```typescript
-// From: collecting all sibling platforms by title+day
-const siblingPlatforms = [...new Set(
-  allPosts
-    .filter(p => p.title === post.title && ...)
-    .map(p => p.platform)
-)];
-setLocalPlatforms(siblingPlatforms.length > 0 ? siblingPlatforms : [post.platform]);
-
-// To: just use the current post's platform
-setLocalPlatforms([post.platform]);
-```
-
-## Result
-- Cards show "Pages (6)" instead of "Ontario Steel Detailing, Rebar.shop, Ont..."
-- Each card's platform icon remains correct (already working)
-- Clicking a Facebook card opens review panel showing only "Facebook"
-- Clicking an Instagram card opens review panel showing only "Instagram"
+The global "Select All" at the top remains for selecting everything across all groups.
 
 ## Files Changed
-- `src/components/social/SocialCalendar.tsx` — show page count on card
-- `src/components/social/PostReviewPanel.tsx` — isolate platform to clicked card
+- `src/components/social/SelectionSubPanel.tsx` — add per-group select/deselect toggle in group headers
 
