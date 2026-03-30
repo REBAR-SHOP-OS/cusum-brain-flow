@@ -1126,14 +1126,20 @@ export function ProVideoEditor({
   }, [storyboard, mutedScenes, toast]);
 
   const handleDeleteScene = useCallback((index: number) => {
-    if (storyboard.length <= 1) {
-      toast({ title: "Cannot delete", description: "At least one scene required", variant: "destructive" });
-      return;
-    }
+    const sceneId = storyboard[index]?.id;
+    if (!sceneId) return;
     pushHistory(storyboard);
     const updated = storyboard.filter((_, i) => i !== index);
     onUpdateStoryboard?.(updated);
-    if (selectedSceneIndex >= updated.length) setSelectedSceneIndex(updated.length - 1);
+    // Clean up associated audio tracks and overlays
+    setAudioTracks(prev => prev.filter(t => t.sceneId !== sceneId));
+    setOverlays(prev => prev.filter(o => o.sceneId !== sceneId));
+    // Adjust selection
+    if (updated.length === 0) {
+      setSelectedSceneIndex(0);
+    } else if (selectedSceneIndex >= updated.length) {
+      setSelectedSceneIndex(updated.length - 1);
+    }
     toast({ title: "Scene deleted" });
   }, [storyboard, pushHistory, onUpdateStoryboard, selectedSceneIndex, toast]);
 
