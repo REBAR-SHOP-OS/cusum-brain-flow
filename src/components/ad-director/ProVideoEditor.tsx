@@ -1489,7 +1489,7 @@ export function ProVideoEditor({
           toast({ title: "🎵 Music generated" });
         } else {
           console.warn("Music generation failed:", musicResponse.status);
-          toast({ title: "⚠ موسیقی ساخته نشد", description: "ادامه بدون موسیقی", variant: "destructive" });
+          toast({ title: "⚠ Music generation failed", description: "Continuing without music", variant: "destructive" });
         }
       } catch (musicErr: any) {
         console.warn("Music generation error:", musicErr.message);
