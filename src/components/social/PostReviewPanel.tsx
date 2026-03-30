@@ -456,58 +456,27 @@ export function PostReviewPanel({
 
   const handlePagesSaveMulti = async (values: string[]) => {
     setLocalPages(values);
-    // Reconcile sibling rows: find all siblings for this title + platform + day
+    // Store all selected pages as comma-separated string on the current post's row
+    const pagesString = values.join(", ");
+
+    // Update ALL sibling rows (same title + day) across all platforms to have the same pages
     const day = post.scheduled_date?.substring(0, 10);
     const siblings = allPosts.filter(p =>
       p.title === post.title &&
-      p.platform === post.platform &&
       (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
     );
-    const selectedSet = new Set(values);
-
-    // Also query fresh from DB to avoid stale-cache duplicates
-    const { data: freshSiblings } = await supabase
-      .from("social_posts")
-      .select("id, page_name")
-      .eq("platform", post.platform)
-      .eq("title", post.title)
-      .gte("scheduled_date", `${day}T00:00:00`)
-      .lte("scheduled_date", `${day}T23:59:59`);
-    const freshPageSet = new Set((freshSiblings || []).map(s => s.page_name || ""));
-    // Merge cached + fresh siblings for deletion check
-    const allSiblingPages = new Set([...siblings.map(s => s.page_name || ""), ...freshPageSet]);
-
-    // Delete siblings whose page is no longer selected
-    const toDelete = siblings.filter(s => !selectedSet.has(s.page_name || ""));
-    // Create new rows only for pages that don't exist in DB
-    const toAdd = values.filter(p => !allSiblingPages.has(p));
 
     const promises: PromiseLike<any>[] = [];
-    for (const sib of toDelete) {
-      promises.push(supabase.from("social_posts").delete().eq("id", sib.id).select());
-    }
-    for (const pageName of toAdd) {
+    for (const sib of siblings) {
       promises.push(
-        supabase.from("social_posts").insert({
-          user_id: post.user_id,
-          platform: post.platform,
-          status: post.status,
-          qa_status: post.qa_status,
-          title: post.title,
-          content: post.content,
-          image_url: post.image_url,
-          scheduled_date: post.scheduled_date,
-          hashtags: post.hashtags,
-          page_name: pageName,
-          content_type: post.content_type,
-          neel_approved: post.neel_approved,
-        }).select()
+        supabase.from("social_posts").update({ page_name: pagesString }).eq("id", sib.id)
       );
     }
+
     if (promises.length > 0) {
       await Promise.all(promises);
-      queryClient.invalidateQueries({ queryKey: ["social_posts"] });
     }
+    queryClient.invalidateQueries({ queryKey: ["social_posts"] });
     setSubPanel(null);
   };
 
