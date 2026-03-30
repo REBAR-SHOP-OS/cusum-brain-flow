@@ -128,7 +128,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
                 onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
               />
               <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">فایل موسیقی را بکشید و رها کنید یا کلیک کنید</p>
+              <p className="text-sm text-muted-foreground">Drag and drop a music file or click to browse</p>
               <p className="text-xs text-muted-foreground mt-1">MP3, WAV, M4A, OGG</p>
             </div>
 
