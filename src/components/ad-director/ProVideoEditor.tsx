@@ -58,6 +58,7 @@ interface ProVideoEditorProps {
   onUpdateClipUrl?: (sceneId: string, url: string) => void;
   onUpdateSegment?: (id: string, text: string) => void;
   onUpdateSegmentTiming?: (id: string, startTime: number, endTime: number) => void;
+  onUpdateSegments?: (segments: ScriptSegment[]) => void;
   onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
   onUpdateBrand?: (brand: BrandProfile) => void;
   onMusicSelect?: (url: string | null) => void;
