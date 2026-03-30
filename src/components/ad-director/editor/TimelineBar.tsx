@@ -578,7 +578,7 @@ export function TimelineBar({
                 variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10"
                 onClick={() => onRegenerateScene(storyboard[selectedSceneIndex]?.id)}
                 disabled={clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id)?.status !== "completed"}
-                title="Regenerate"
+                title="بازسازی کامل (فیلم، صدا، متن)"
               >
                 <RefreshCw className="w-3 h-3" />
               </Button>
@@ -894,7 +894,7 @@ export function TimelineBar({
                           )}
                           {onRegenerateScene && clip?.status === "completed" && (
                             <button onClick={() => { onRegenerateScene(scene.id); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                              <RefreshCw className="w-2.5 h-2.5" />Regenerate
+                              <RefreshCw className="w-2.5 h-2.5" />بازسازی کامل
                             </button>
                           )}
                           {onDeleteScene && (
