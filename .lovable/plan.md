@@ -1,25 +1,34 @@
 
 
-# Fix Delete Scene — Allow Deleting Selected Card
+# Change "Auto Voiceover" Button to Music-Only Generation
 
 ## Problem
-Clicking the trash icon (🗑️) shows "Cannot delete — At least one scene required" even when there are multiple scenes, or prevents deletion of the last scene. The user expects the selected card to be deleted when clicking this icon.
-
-## Root Cause
-In `ProVideoEditor.tsx` line 1129, there's a guard: `if (storyboard.length <= 1)` that blocks deletion. This may be triggering incorrectly due to stale closure, or the user wants to delete even the last scene.
+The "Auto Voiceover" button (circled in screenshot) currently generates voiceovers + text overlays + music. The user wants this button to **only** generate instrumental/advertising background music and apply it to the video timeline (yellow bar in Music row).
 
 ## Changes
 
 ### `src/components/ad-director/ProVideoEditor.tsx`
-- **Remove the minimum-1 guard** from `handleDeleteScene`
-- When deleting the last scene, reset to an empty state or allow the timeline to be empty
-- Also clean up associated audio tracks and overlays for the deleted scene (voiceover, text, music tied to that scene)
-- Adjust `selectedSceneIndex` after deletion: if all scenes deleted, set to -1 or 0
 
-### `src/components/ad-director/editor/TimelineBar.tsx`
-- Handle the case where `storyboard` is empty gracefully (show empty state or placeholder)
+**1. Rename button and create a new `generateBackgroundMusic` function:**
+- New function `generateBackgroundMusic` that:
+  - Clears existing music tracks only
+  - Uses `lyria-music` edge function to generate instrumental ad music
+  - Creates a music audio track and adds it to `audioTracks`
+  - Sets `musicUrl` state
+- Does NOT touch voiceover tracks, text overlays, or video
+
+**2. Update the button (lines 1773-1782):**
+- Change label from "Auto Voiceover" to "Auto Music" (or "🎵 موسیقی خودکار")
+- Change `onClick` from `generateAllVoiceovers` to `generateBackgroundMusic`
+- Use a separate loading state (`generatingMusic`) instead of `generatingVoiceovers`
+
+**3. The new `generateBackgroundMusic` function logic:**
+- Build a prompt from segment texts: `"Cinematic instrumental advertising background music for: ..."`
+- Calculate total duration from segments
+- Call `lyria-music` edge function
+- On success: add music track with `kind: "music"`, `globalStartTime: 0`, `sceneId: ""`
+- This ensures the yellow bar appears in the Music row of the timeline
 
 ## Files Changed
-- `src/components/ad-director/ProVideoEditor.tsx` — remove minimum scene guard, clean up associated tracks on delete
-- `src/components/ad-director/editor/TimelineBar.tsx` — handle empty storyboard gracefully
+- `src/components/ad-director/ProVideoEditor.tsx` — replace button handler, add new music-only generation function
 
