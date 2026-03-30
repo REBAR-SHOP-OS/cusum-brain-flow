@@ -472,11 +472,12 @@ Rules:
             if (item[key] != null) sampleValues.push(String(item[key]));
           }
         }
-        // Match feet-inches (6'-4") OR standalone inches (54")
-        const imperialPattern = /\d+\s*['']\s*-?\s*\d+\s*["""]|\d+(?:\.\d+)?\s*["""]\s*$/;
+        // Match feet-inches (6'-4") OR standalone inches (54") OR feet-only (5')
+        const imperialPattern = /\d+\s*['']\s*-?\s*\d+\s*["""]|\d+(?:\.\d+)?\s*["""]\s*$|\d+(?:\.\d+)?\s*['']\s*$/;
         if (sampleValues.some((v) => imperialPattern.test(v))) {
-          detectedUnitSystem = "imperial";
-          console.log("Detected imperial unit system from AI response values");
+          // parseDimension already normalized ft-in → inches, so effective unit is "in"
+          detectedUnitSystem = "in";
+          console.log("Detected imperial unit system from AI response values — setting unit to 'in' (parseDimension normalizes to inches)");
         }
 
         // Secondary check: scan raw XLSX cells for standalone inch marks (e.g. 54")
@@ -490,7 +491,7 @@ Rules:
                 if (typeof cell === "string") sampleCells.push(cell);
               }
             }
-            if (sampleCells.some((c: string) => /^\d+(?:\.\d+)?\s*[""]\s*$/.test(c.trim()))) {
+            if (sampleCells.some((c: string) => /^\d+(?:\.\d+)?\s*[""'']\s*$/.test(c.trim()))) {
               detectedUnitSystem = "in";
               console.log("Detected inch unit system from raw XLSX cell values");
             }
