@@ -513,8 +513,8 @@ export function TimelineBar({
         {/* Scene action buttons */}
         {selectedSceneIndex >= 0 && (
           <div className="flex items-center gap-0.5 ml-1.5 pl-1.5 border-l border-white/[0.06]">
-            {onTrimScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onTrimScene(selectedSceneIndex)} title="Split at playhead">
+            {onResizeScene && (
+              <Button variant="ghost" size="sm" className={`h-6 w-6 p-0 transition-colors ${trimMode ? 'text-red-400 bg-red-500/20 hover:bg-red-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/10'}`} onClick={() => setTrimMode(prev => !prev)} title={trimMode ? "Exit trim mode" : "Trim scene"}>
                 <Scissors className="w-3 h-3" />
               </Button>
             )}
