@@ -554,7 +554,7 @@ export default function AgentWorkspace() {
       const lines = cleanCaption.split("\n").filter(l => l.trim().length > 0);
       const titleLine = lines[0] || "Pixel Post";
       const title = titleLine.replace(/^[\p{Emoji}\s]+/u, "").slice(0, 50) || "Pixel Post";
-      const content = cleanCaption;
+      const content = cleanCaption + (persianBlock ? "\n\n" + persianBlock : "");
       // Extract slot index from post id (format: "post-{index}-{hash}")
       const scheduledDate = new Date(selectedDate);
       const idMatch = post.id?.match(/^post-(\d+)/);
