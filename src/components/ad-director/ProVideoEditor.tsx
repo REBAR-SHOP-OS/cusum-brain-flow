@@ -1500,6 +1500,115 @@ export function ProVideoEditor({
     }
   };
 
+  // ─── Regenerate a single scene fully (video + voiceover + text) ───
+  const handleRegenerateFullScene = async (sceneId: string) => {
+    const scene = storyboard.find(s => s.id === sceneId);
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+
+    // 1. Trigger video regeneration
+    onRegenerateScene?.(sceneId);
+    toast({ title: "🔄 بازسازی کامل صحنه...", description: "فیلم، صدا و متن در حال تولید است" });
+
+    // 2. Remove existing voiceover & text overlays for this scene
+    setAudioTracks(prev => prev.filter(a => !(a.sceneId === sceneId && a.kind === "voiceover")));
+    setOverlays(prev => prev.filter(o => !(o.sceneId === sceneId && o.kind === "text")));
+
+    // 3. Regenerate voiceover for this scene
+    if (seg?.text?.trim()) {
+      try {
+        const voiceoverText = scene.voiceover?.trim() || seg.text.trim();
+
+        // Compute cumulative start time for this scene
+        let cumStart = 0;
+        for (const s of storyboard) {
+          if (s.id === sceneId) break;
+          const sSeg = segments.find(x => x.id === s.segmentId);
+          cumStart += sSeg ? sSeg.endTime - sSeg.startTime : 4;
+        }
+
+        // Measure clip duration
+        let clipDur = clipDurations[sceneId];
+        if (!clipDur) {
+          const clip = clips.find(c => c.sceneId === sceneId);
+          if (clip?.videoUrl && !clip.videoUrl.startsWith("data:image/")) {
+            const measured = await measureVideoDuration(clip.videoUrl);
+            if (measured && measured > 0) {
+              clipDur = measured;
+              setClipDurations(prev => ({ ...prev, [sceneId]: measured }));
+            }
+          }
+        }
+
+        // Generate TTS
+        let response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ text: voiceoverText }),
+          }
+        );
+        if (response.ok) {
+          let blob = await response.blob();
+          let url = URL.createObjectURL(blob);
+          let voDur = await measureAudioDuration(url);
+
+          // Speed-fit if needed
+          if (clipDur && voDur && voDur > clipDur * 1.2) {
+            const targetSpeed = Math.min(voDur / clipDur, 1.2);
+            const retryResponse = await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                  Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+                },
+                body: JSON.stringify({ text: voiceoverText, speed: parseFloat(targetSpeed.toFixed(2)) }),
+              }
+            );
+            if (retryResponse.ok) {
+              URL.revokeObjectURL(url);
+              blob = await retryResponse.blob();
+              url = URL.createObjectURL(blob);
+              voDur = await measureAudioDuration(url);
+            }
+          }
+
+          const clipDuration = clipDur ?? (seg.endTime - seg.startTime);
+          const trackDuration = voDur ?? clipDuration;
+
+          if (voDur && isFinite(voDur)) {
+            setVoiceoverDurations(prev => ({ ...prev, [sceneId]: voDur! }));
+          }
+
+          setAudioTracks(prev => [
+            ...prev.filter(a => !(a.sceneId === sceneId && a.kind === "voiceover")),
+            {
+              sceneId,
+              label: seg.label,
+              audioUrl: url,
+              kind: "voiceover",
+              globalStartTime: cumStart,
+              duration: trackDuration,
+            },
+          ]);
+          toast({ title: "✅ صدای گوینده بازسازی شد" });
+        }
+      } catch (err: any) {
+        console.warn("Single scene VO regen failed:", err.message);
+      }
+    }
+
+    // 4. Text overlays will auto-regenerate via the voiceoverDurations useEffect
+  };
+
   // Helper to measure audio duration from a blob URL
   const measureAudioDuration = (url: string): Promise<number | null> => {
     return new Promise((resolve) => {
