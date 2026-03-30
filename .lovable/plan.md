@@ -1,39 +1,43 @@
 
 
-# Generate Video Editor Architecture PDF
+# Fix: Audio Track Drag-and-Drop Stays Where Released
 
-## Overview
-Generate a comprehensive Persian/English bilingual PDF documenting the full architecture of the REBAR SHOP OS Video Editor (Ad Director), covering all layers from data types to UI components, background services, edge functions, and the timeline system.
+## Problem
+When dragging the green audio bar and releasing it at a new position, it snaps back or doesn't land where expected. Root cause: audio tracks are created without `globalStartTime` or `duration`, so:
+1. First drag: `duration` falls back to `totalDur` (full video length), making `clampedStart = max(0, min(x, 0)) = 0` — always snaps to start
+2. The track width spans the entire timeline, so visually it looks like it didn't move
 
-## Approach
-Use ReportLab to generate a professional PDF with:
-- Cover page with project branding
-- Table of contents
-- Architecture diagrams (text-based)
-- Component hierarchy
-- Data flow documentation
-- Type definitions
-- Edge function documentation
-- Timeline system details
+## Fix (2 files)
 
-## Content Sections
+### File 1: `src/components/ad-director/ProVideoEditor.tsx`
 
-1. **Cover Page** — "AI Video Editor — Architecture Document"
-2. **System Overview** — High-level flow: User prompt → Script analysis → Storyboard → Video generation → Editor
-3. **Component Hierarchy** — Full tree of React components (AdDirectorContent → ProVideoEditor → TimelineBar, dialogs, tabs)
-4. **Data Model** — All TypeScript types (BrandProfile, ScriptSegment, StoryboardScene, ClipOutput, VideoOverlay, AudioTrackItem, etc.)
-5. **State Management** — ProVideoEditor's 40+ state variables, refs, and memoized values
-6. **Timeline Architecture** — TimelineBar internals (rAF playhead, ruler ticks, snap system, transport bar, zoom, drag system)
-7. **Background Service** — BackgroundAdDirectorService singleton lifecycle
-8. **Audio/Voiceover Pipeline** — TTS generation, two-pass fitting, sync with video
-9. **Video Generation Pipeline** — Edge function generate-video (Wan/Sora/Veo routing with fallbacks)
-10. **Video Stitching** — Client-side canvas-based stitching with overlays
-11. **Overlay System** — Logo, text, image overlays with drag/resize
-12. **Editor Tabs** — All sidebar panels (Media, Text, Music, BrandKit, Script, Card Editor, etc.)
+**handleMoveAudioTrack** (line 1431-1442): Fix the duration fallback. Instead of falling back to `totalDur` (which makes clamping useless), calculate actual duration from audio element or use a reasonable default (e.g., the track's current visual span). Remove the aggressive clamping that forces `clampedStart` to 0 when `dur === totalDur`.
 
-## Technical
-- Python script using ReportLab
-- Output to `/mnt/documents/Video_Editor_Architecture.pdf`
-- Professional dark-themed cover, clean body layout
-- QA via pdftoppm inspection
+```typescript
+const handleMoveAudioTrack = useCallback((index: number, _newSceneId: string, absoluteTime?: number) => {
+  setAudioTracks(prev => prev.map((at, i) => {
+    if (i !== index || absoluteTime == null) return at;
+    const totalDur = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0) || 30;
+    // Use existing duration, or compute from start/end, or default to scene duration
+    const trackDur = at.duration 
+      ?? (at.endTime != null && at.startTime != null ? at.endTime - at.startTime : null)
+      ?? totalDur; // full-span tracks stay full-span
+    const clampedStart = Math.max(0, Math.min(absoluteTime, totalDur));
+    return { ...at, globalStartTime: clampedStart, duration: trackDur };
+  }));
+}, [segments]);
+```
+
+Key change: Clamp to `totalDur` (not `totalDur - dur`), so full-span audio can still be repositioned.
+
+**Audio track creation** (lines ~303, ~323, ~487, ~1406): Add `globalStartTime: 0` and compute actual `duration` when creating tracks, so they have explicit values from the start.
+
+### File 2: `src/components/ad-director/editor/TimelineBar.tsx`
+
+No changes needed — the rendering and drag calculation logic is correct. The issue is entirely in how `handleMoveAudioTrack` clamps the position.
+
+## Result
+- Dragging the audio bar and releasing it places it exactly at the drop position
+- Full-span music tracks can be repositioned to start at any point
+- Voiceover clips maintain their duration when moved
 
