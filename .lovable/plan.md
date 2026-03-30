@@ -1,95 +1,75 @@
 
 
-# Unit System Comprehensive Audit
+# Audit: Social Media Publishing Flow
 
-## Current Architecture Summary
+## Current State
 
-```text
-Source file → extract-manifest (detects unit: mm/in/ft/imperial)
-  → extract_rows (raw values)
-  → BarlistMappingPanel (user selects source unit)
-  → manage-extract apply-mapping (converts raw → mm)
-  → extract_rows (mm values stored)
-  → Display: AIExtractView, TagsExportView, DetailedListView, PrintTags, ZPL labels
-```
-
-All values in DB are stored as mm after mapping. Display should convert mm → user's preferred display unit.
-
----
+The system has most of the flow correct:
+- `social-cron-publish` queries posts where `status = "scheduled"` AND `neel_approved = true` AND `scheduled_date <= now()`
+- Duplicate guard checks `title + platform + page_name + date`
+- Approval gate blocks unapproved posts
 
 ## Issues Found
 
-### Issue 1: DetailedListView `startEdit` Loads Raw mm Into Edit Fields (HIGH)
-**File**: `src/components/office/DetailedListView.tsx` line 62-72
+### Issue 1: Multi-Page Publishing — Only First Page Gets Published (CRITICAL)
 
-When the user clicks Edit, `startEdit` populates `editValues.cut_length_mm` with the raw DB value (mm). But the non-editing display shows `formatLength(item.cut_length_mm, unitSystem)` which converts to ft-in for imperial. So if unit is imperial and the DB has 1372 mm, the display shows `4'-6"` but the edit input shows `1372`. The user sees a confusing jump and might enter `54` thinking inches, but the save logic now converts it via `displayModeToMm(54, editUnit)` → `54 * 25.4 = 1372 mm`. This is actually **correct on save** but **confusing on load** — the edit field should show the display-unit value, not raw mm.
+`page_name` is stored as comma-separated string (e.g., `"Page1, Page2, Page3"`). Both `social-cron-publish` (line 246) and `social-publish` (line 170) do `pages.find(p => p.name === post.page_name)` — this matches the **entire comma-separated string** against individual page names, so it **never matches** and falls back to the first page only.
 
-Same issue for `bend_dimensions` — edit fields show raw mm values.
+**Result**: If a card has 6 pages selected, only the first page in the user's token gets the post. The other 5 pages are silently skipped.
 
-**Fix**: Convert mm → display unit when populating edit fields in `startEdit`.
+**Fix**: In `social-cron-publish`, split `post.page_name` by `, ` and publish to **each** matched page in a loop. For Instagram, match each page to its linked IG account.
 
-### Issue 2: DetailedListView Table Header Has No Unit Label (MEDIUM)
-**File**: `src/components/office/DetailedListView.tsx` line 247
+### Issue 2: Duplicate Guard Only Checks Title — Not Content or Image (MEDIUM)
 
-The "Length" column header doesn't indicate the unit. User can't tell if values are mm or inches. Compare with AIExtractView which shows `LENGTH (mm)` or `LENGTH (in)`.
+The duplicate guard (cron line 180, publish line 94) checks `title + platform + page_name`. But two posts could have different titles and identical content+image. The user specifically said "same image AND same caption" should be blocked.
 
-**Fix**: Show `Length (mm)` or `Length (in)` based on `unitSystem`.
+**Fix**: Add `content` (or a hash of content) and `image_url` to the duplicate check query.
 
-### Issue 3: DetailedListView Dimension Headers Have No Unit Labels (MEDIUM)
-**File**: `src/components/office/DetailedListView.tsx` line 248
+### Issue 3: Duplicate Guard Uses Full `page_name` String (MEDIUM)
 
-Dim column headers are just `A, B, C...` with no unit indication (unlike the sub-labels inside cells).
+Since `page_name` is comma-separated, the duplicate check `eq("page_name", post.page_name || "")` only catches exact string matches. A post to "Page1, Page2" won't be flagged as duplicate of a post to "Page1, Page2, Page3" even if same content goes to the same actual pages.
 
-**Fix**: Add unit suffix to dim column headers or ensure consistency.
+**Fix**: When checking duplicates per-page (after splitting), check each individual page name.
 
-### Issue 4: OrderCalcView Assumes mm Input Without Unit Detection (MEDIUM)
-**File**: `src/components/office/OrderCalcView.tsx` line 78-79
+### Issue 4: Instagram Cron Publish Doesn't Pass `content_type` (LOW)
 
-The parser uses a heuristic: `rawLen > 100 ? rawLen : rawLen * 1000`. This assumes values >100 are mm and <100 are meters. But if the uploaded file has inch values (e.g., 54 inches), `54 < 100` → treated as 54 meters → `54000 mm`. This is a 1000× error for imperial barlists.
+`social-cron-publish` line 316 calls `publishToInstagram(matchedIg.id, pageAccessToken, message, post.image_url)` without passing `content_type` or `cover_image_url`. Stories and reels may not publish correctly via cron.
 
-No unit selection UI exists in OrderCalcView.
-
-**Fix**: Add a source unit selector (mm/in/ft) to OrderCalcView and apply proper conversion.
-
-### Issue 5: Optimization Config Labels Hardcoded as mm (LOW)
-**File**: `src/components/office/AIExtractView.tsx` lines 2240-2273
-
-Stock length dropdown shows `6M (6,000mm)`, `12M (12,000mm)`, `18M (18,000mm)`. Kerf label says `Kerf (mm)`, Min Remnant says `Min Remnant (mm)`. These are correct for metric but could confuse imperial users. Since optimization always works in mm internally, this is cosmetic.
-
-**Fix (optional)**: Show imperial equivalents when session is imperial: `12M (39'-4")`.
-
-### Issue 6: Mapping Preview Header Shows "LENGTH (mm)" in UI Despite Code Saying "LENGTH (raw)" (CONFIRMED NON-ISSUE)
-**File**: `src/components/office/BarlistMappingPanel.tsx` line 349
-
-The code correctly says `LENGTH (raw)`. The screenshot showing "LENGTH (mm)" is from a cached/stale build. No code change needed.
+**Fix**: Pass `post.content_type` and `post.cover_image_url` to `publishToInstagram`.
 
 ---
 
 ## Proposed Changes
 
-### Fix 1: DetailedListView `startEdit` — Show Display-Unit Values in Edit Fields
-**File**: `src/components/office/DetailedListView.tsx`
-- In `startEdit`, convert `item.cut_length_mm` from mm to the display unit before setting it as edit value
-- Same for each `bend_dimensions` value
-- This way, what the user sees in the read-only column matches what appears in the edit input
+### File 1: `supabase/functions/social-cron-publish/index.ts`
 
-### Fix 2 + 3: DetailedListView Header Labels
-**File**: `src/components/office/DetailedListView.tsx`
-- Change `<span>Length</span>` → `<span>Length ({unitSystem === "imperial" ? "in" : "mm"})</span>`
-- Optionally add unit to dim headers
+**Multi-page loop** (lines 243-320):
+- Split `post.page_name` by `, ` to get individual page names
+- Loop over each page name, find matching page in token data, publish to each
+- For Instagram, match each page to its IG account
+- Track per-page success/failure
 
-### Fix 4: OrderCalcView — Add Unit Selector
-**File**: `src/components/office/OrderCalcView.tsx`
-- Add a source unit toggle (mm / inches / feet) above the file upload
-- Apply proper conversion factor instead of the `>100` heuristic
-- This prevents 1000× errors when uploading inch-based barlists
+**Enhanced duplicate guard** (lines 171-194):
+- Check `content` and `image_url` in addition to `title`
+- Check per individual page name (not full comma-separated string)
 
-### Fix 5 (optional): Optimization Config Imperial Labels
-**File**: `src/components/office/AIExtractView.tsx`
-- Show imperial equivalents in stock length dropdown when `displayUnit` is imperial
+**Instagram content_type** (line 316):
+- Pass `post.content_type` and `post.cover_image_url` to `publishToInstagram`
 
-## Files to Change
-1. `src/components/office/DetailedListView.tsx` — edit field conversion on load + header labels
-2. `src/components/office/OrderCalcView.tsx` — add source unit selector
-3. `src/components/office/AIExtractView.tsx` — optional: imperial labels in optimizer config
+### File 2: `supabase/functions/social-publish/index.ts`
+
+**Enhanced duplicate guard** (lines 86-109):
+- Add `content` substring match or `image_url` equality to duplicate check
+- Split `page_name` and check per-page duplicates
+
+**Multi-page support** (lines 167-174):
+- Split `page_name` by `, ` and publish to each matched page in a loop
+
+### File 3: Deploy both edge functions
+
+## Result
+- Posts publish to ALL selected pages (not just the first)
+- Duplicate detection catches same image+caption across platforms
+- Stories/reels publish correctly via cron
+- Approval flow (radin/zahra schedule → neel/sattar approve → auto-publish at scheduled time) remains intact
 
