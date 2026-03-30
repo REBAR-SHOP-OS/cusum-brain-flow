@@ -191,7 +191,7 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: supabaseAdmin, body, req: originalReq } = ctx;
     const authHeader = originalReq.headers.get("Authorization")!;
-    const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate } = body;
+    const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate, placeholderIds = [] } = body;
 
     const postDate = scheduledDate || new Date().toISOString();
     const dateStr = new Date(postDate).toLocaleDateString("en-US", {
