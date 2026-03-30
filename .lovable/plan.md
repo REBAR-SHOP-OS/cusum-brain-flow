@@ -1,25 +1,45 @@
 
 
-# Show Customer Address on Rebar Tags
+# Timeline: Compact Card View + Drag-to-Reorder Scenes
 
 ## Problem
-The Ref section on rebar tags shows the address only if the individual row has an `address` value (extracted from the source spreadsheet). Most rows don't have per-row addresses, but the **session** always has a `site_address` field entered by the user. This fallback isn't being used.
+The timeline currently only has one view — the full expanded track. The user wants:
+1. A **compact card view** showing scenes as small cards
+2. A **toggle** to switch between compact and expanded views
+3. **Drag-to-reorder** scenes (not just Move Left/Right from the popover menu)
 
-## Fix
+## Changes
 
-### 1. `src/components/office/TagsExportView.tsx`
-Pass the session's `site_address` as fallback when the row's `address` is empty:
-```
-address={row.address || selectedSession?.site_address || ""}
-```
-Apply in both the card view (line ~477) and CSV export (line ~115).
+### File: `src/components/ad-director/editor/TimelineBar.tsx`
 
-### 2. `src/pages/PrintTags.tsx`
-The print page only has `sessionId`, not the session object. Fetch the session's `site_address` from `extract_sessions` table and use it as fallback:
-- Query `extract_sessions` for `site_address` using `sessionId`
-- Pass `address={row.address || sessionAddress || ""}` to each `RebarTagCard`
+**1. Add view mode toggle (compact / expanded)**
+- Add a `viewMode` state: `"expanded" | "compact"` (default: `"expanded"`)
+- Add a toggle button in the toolbar row (next to zoom controls) with `LayoutGrid` / `Rows3` icons
+- When `compact`, render scenes as small horizontal cards (thumbnail + title + duration badge) in a scrollable row, ~48px tall instead of 80px
+- When `expanded`, render the existing full timeline track (current behavior)
 
-### Files Changed
-- `src/components/office/TagsExportView.tsx` — use session `site_address` as address fallback
-- `src/pages/PrintTags.tsx` — fetch session `site_address`, use as fallback
+**2. Compact card view**
+- Each scene rendered as a rounded card (~120px wide, ~48px tall) with:
+  - Thumbnail background (from existing `thumbnails` extraction)
+  - Duration badge (top-left)
+  - Status dot (top-right)
+  - Scene title (bottom, truncated)
+  - Selected state: primary ring
+- Cards sit in a horizontal flex row with gap
+
+**3. Drag-to-reorder scenes**
+- Use HTML5 drag events (`draggable`, `onDragStart`, `onDragOver`, `onDrop`) on scene cards/blocks in both views
+- Track `dragIndex` and `dropIndex` state to show a visual insertion indicator
+- On drop, call existing `onMoveScene` callback to reorder (compute direction from index difference)
+- Show a vertical blue line at the drop target position
+
+## Technical Details
+- No new dependencies — HTML5 drag API is sufficient for scene reorder
+- Both compact and expanded views support drag reorder
+- Text/audio tracks only visible in expanded mode
+- Time ruler only visible in expanded mode
+- Zoom controls only visible in expanded mode
+
+## Files Changed
+- `src/components/ad-director/editor/TimelineBar.tsx` — add compact view toggle, drag-to-reorder
 
