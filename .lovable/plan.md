@@ -1,41 +1,58 @@
 
 
-# Fix: Persian Translation Never Saved to DB in Auto-Generate Flow
+# Unit System Audit — Remaining Issues
 
-## Problem
-The "🔒 Internal reference only" section always shows "ترجمه‌ای موجود نیست" for auto-generated posts because the Persian translation is stripped before saving.
+## Issues Found
 
-## Root Cause
-In `supabase/functions/auto-generate-post/index.ts`:
-
-1. The AI prompt correctly asks for `farsi_translation` as a separate JSON field (line 317)
-2. The AI returns it in `post.farsi_translation`
-3. **Line 391**: `content: stripPersianBlock(post.content || "")` — strips any Persian from `content`
-4. **`post.farsi_translation` is completely ignored** — it's logged at line 609 but never appended to the saved `content`
-
-The `stripPersianBlock` function was likely added to prevent Persian from leaking into published captions, but it inadvertently prevents the Persian block from ever reaching the DB.
-
-## Fix
-
-### File: `supabase/functions/auto-generate-post/index.ts`
-
-**Change line 391** — Append `farsi_translation` to the clean content instead of discarding it:
-
-```typescript
-// Before (line 391):
-content: stripPersianBlock(post.content || ""),
-
-// After:
-content: stripPersianBlock(post.content || "") + 
-  (post.farsi_translation ? "\n\n" + post.farsi_translation : ""),
+### Issue 1: Line Items Table Header Uses Wrong Variable (HIGH)
+**Line 2130** in `AIExtractView.tsx`:
 ```
+LENGTH ({lengthUnitLabelByMode(selectedUnitSystem as LengthDisplayMode)})
+```
+Uses `selectedUnitSystem` (source/mapping unit) instead of `displayUnit`. When user toggles display to "in", header still shows the mapping unit label.
 
-This ensures:
-- English caption is cleaned of any accidentally embedded Persian (via `stripPersianBlock`)
-- The structured `farsi_translation` field (which contains the `---PERSIAN---` separator) is appended back
-- `PostReviewPanel` can then parse the `---PERSIAN---` block and display it in the internal reference section
-- The publish flow already strips `---PERSIAN---` before publishing, so no risk of Persian leaking to social platforms
+**Fix**: Change to `displayUnit`.
 
-## Files Changed
-- `supabase/functions/auto-generate-post/index.ts` — append `farsi_translation` to saved content
+### Issue 2: Merged Rows Table Uses `selectedUnitSystem` for Display (MEDIUM)
+**Line 2004** in `AIExtractView.tsx`:
+```
+formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode)
+```
+The merged/dedupe preview table formats lengths using the source unit instead of the display unit.
+
+**Fix**: Change to `displayUnit`.
+
+### Issue 3: ZPL Label Hardcodes "LENGTH (mm)" (MEDIUM)
+**Line 79** in `generateZpl.ts`:
+```
+^FO310,205^FDLENGTH (mm):^FS
+```
+Always prints "LENGTH (mm)" on Zebra labels regardless of unit system. Also, line 43 outputs raw mm value without conversion.
+
+**Fix**: Accept a `unitSystem` parameter in `generateZpl()`. Format length values and label based on the unit. Pass `sessionUnitToDisplay()` from `TagsExportView`.
+
+### Issue 4: ZPL Dims Output Raw mm Values (MEDIUM)
+**Line 29** in `generateZpl.ts`:
+```
+const text = chunk.map((d) => `${d}:${dims[d]}`).join("  ");
+```
+Always outputs raw mm dimension values, no conversion for imperial.
+
+**Fix**: Apply formatting based on passed unit system.
+
+---
+
+## Proposed Changes
+
+### File 1: `src/components/office/AIExtractView.tsx`
+- **Line 2130**: `selectedUnitSystem` → `displayUnit`
+- **Line 2004**: `selectedUnitSystem` → `displayUnit`
+
+### File 2: `src/utils/generateZpl.ts`
+- Add `unitSystem` parameter to `generateZpl()`
+- Format length and dims using `sessionUnitToDisplay` mapping
+- Update label text from hardcoded "LENGTH (mm)" to dynamic
+
+### File 3: `src/components/office/TagsExportView.tsx`
+- Pass `sessionUnitToDisplay(selectedSession?.unit_system)` to `generateZpl()`
 
