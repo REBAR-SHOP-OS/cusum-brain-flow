@@ -131,6 +131,7 @@ export function PostReviewPanel({
   onClose,
   onSchedule,
   onDecline,
+  onSelectNewPost,
 }: PostReviewPanelProps) {
   const { posts: allPosts, updatePost, deletePost, createPost } = useSocialPosts();
   const { toast } = useToast();
