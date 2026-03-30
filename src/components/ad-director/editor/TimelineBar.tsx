@@ -708,7 +708,7 @@ export function TimelineBar({
                       onDragOver={(e) => handleSceneDragOver(e, i)}
                       onDrop={(e) => handleSceneDrop(e, i)}
                       onDragEnd={handleSceneDragEnd}
-                      onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
+                      onClick={(e) => { e.stopPropagation(); onSelectScene(i); if (trackRef.current) { const rect = trackRef.current.getBoundingClientRect(); const pct = (e.clientX - rect.left) / rect.width; onSeek(Math.max(0, Math.min(totalDuration, pct * totalDuration))); } }}
                       className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden rounded-sm
                         ${isSelected ? "ring-2 ring-red-500 ring-inset z-10" : "ring-1 ring-white/[0.06] ring-inset"}
                         ${isDropTarget ? "ring-2 ring-red-500 ring-inset" : ""}
