@@ -1,44 +1,42 @@
 
 
-# Add "Save Changes" Button to Apply Edits Before Download
+# Fix: Duplicate Scene Should Copy the Video Clip
 
 ## Problem
-Currently the Download button downloads the original/last-exported video. There's no way to apply timeline edits (splits, trims, reorders, text overlays, audio) and produce an updated video before downloading.
+When duplicating a scene card, the new scene gets a new `id` but no corresponding entry is added to the `clips` array. Since the timeline looks up video thumbnails via `clips.find(c => c.sceneId === scene.id)`, the duplicated card shows no video.
 
 ## Solution
 
-### `src/components/ad-director/ProVideoEditor.tsx`
+### `src/components/ad-director/ProVideoEditor.tsx` — `handleDuplicateScene` (~line 1029)
 
-**1. Add `onSaveChanges` prop and `saving` state**
-- Add new prop `onSaveChanges?: () => Promise<void>` to `ProVideoEditorProps`
-- Add local state `saving` boolean
+Add a new prop `onDuplicateClip?: (oldSceneId: string, newSceneId: string) => void` to `ProVideoEditorProps`, and call it inside `handleDuplicateScene` after creating the new scene:
 
-**2. Add a "Save" icon button** in the top bar, between the spacer (`flex-1`) and the Download button (~line 1577-1580):
-- Icon: `Save` from lucide-react (floppy disk icon)
-- Label: "Save" / spinner when saving
-- Green accent styling to distinguish from other buttons
-- On click: calls `onExport` (which already does the full stitch+upload pipeline), then shows a success toast
-- Track `hasChanges` state: set to `true` whenever `pushHistory` is called (any edit), reset to `false` after successful save
-- Disable Download button when `hasChanges` is true (show tooltip "Save changes first")
+```tsx
+const newSceneId = crypto.randomUUID();
+const newScene: StoryboardScene = { ...scene, id: newSceneId, segmentId: ... };
+// ...
+onDuplicateClip?.(scene.id, newSceneId); // copy the clip entry
+```
 
-**3. Track dirty state**
-- Add `hasChanges` state, initialized `false`
-- In `pushHistory` callback, set `hasChanges = true`
-- After `onExport` completes successfully, set `hasChanges = false`
-- Show a small dot/badge on the Save button when `hasChanges` is true
+### `src/components/ad-director/AdDirectorContent.tsx` — pass `onDuplicateClip`
 
-### `src/components/ad-director/AdDirectorContent.tsx`
+Wire the new prop to clone the matching clip in the service state:
 
-No changes needed — `onExport` (which maps to `handleExport`) already does the full render pipeline (stitch clips → upload → save to history → update `finalVideoUrl`).
+```tsx
+onDuplicateClip={(oldId, newId) => {
+  const existing = service.getState().clips.find(c => c.sceneId === oldId);
+  if (existing) {
+    service.patchState({
+      clips: [...service.getState().clips, { ...existing, sceneId: newId }],
+    });
+  }
+}}
+```
 
-## UI Behavior
-1. User makes edits → Save button shows indicator dot
-2. User clicks Save → spinner, runs export pipeline, produces new `finalVideoUrl`
-3. After save completes → Download button becomes active with updated video
-4. User clicks Download → downloads the freshly rendered video
+## Files Changed
+1. `src/components/ad-director/ProVideoEditor.tsx` — add prop + call in duplicate handler
+2. `src/components/ad-director/AdDirectorContent.tsx` — pass `onDuplicateClip` callback
 
 ## Result
-- Clear save-then-download workflow
-- User knows when changes are unsaved
-- Download always gets the latest rendered version
+Duplicated scene cards will immediately show the same video thumbnail and have a "completed" clip status, matching the original card exactly.
 
