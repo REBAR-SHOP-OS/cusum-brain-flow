@@ -75,10 +75,40 @@ const TIERS = [
 export default function Landing() {
   const { user, loading } = useAuth();
 
-  if (loading) {
+  // Auth timeout: never block rendering for more than 3 seconds
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setTimedOut(true), 3000);
+    return () => clearTimeout(t);
+  }, [loading]);
+
+  const isLoading = loading && !timedOut;
+
+  if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="min-h-screen bg-background">
+        {/* Skeleton header */}
+        <div className="border-b border-border px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
+          <div className="flex items-center gap-2">
+            <Skeleton className="w-8 h-8 rounded-lg" />
+            <Skeleton className="w-32 h-5" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="w-16 h-8 rounded-md" />
+            <Skeleton className="w-28 h-8 rounded-md" />
+          </div>
+        </div>
+        {/* Skeleton hero */}
+        <div className="max-w-5xl mx-auto text-center py-24 px-6 space-y-6">
+          <Skeleton className="w-48 h-6 mx-auto rounded-full" />
+          <Skeleton className="w-full max-w-lg h-12 mx-auto" />
+          <Skeleton className="w-full max-w-md h-6 mx-auto" />
+          <div className="flex justify-center gap-4 pt-4">
+            <Skeleton className="w-36 h-10 rounded-md" />
+            <Skeleton className="w-36 h-10 rounded-md" />
+          </div>
+        </div>
       </div>
     );
   }
