@@ -1008,13 +1008,30 @@ export function ProVideoEditor({
   const handleDuplicateScene = useCallback((index: number) => {
     const scene = storyboard[index];
     if (!scene) return;
-    const newScene: StoryboardScene = { ...scene, id: crypto.randomUUID() };
+    const seg = segments.find(s => s.id === scene.segmentId);
+
     pushHistory(storyboard);
+
+    // Create new segment (copy with new ID)
+    const newSegId = crypto.randomUUID();
+    if (seg && onUpdateSegments) {
+      const newSeg = { ...seg, id: newSegId };
+      const updatedSegments = [...segments];
+      const segIdx = segments.indexOf(seg);
+      updatedSegments.splice(segIdx + 1, 0, newSeg);
+      onUpdateSegments(updatedSegments);
+    }
+
+    const newScene: StoryboardScene = {
+      ...scene,
+      id: crypto.randomUUID(),
+      segmentId: seg ? newSegId : scene.segmentId,
+    };
     const updated = [...storyboard];
     updated.splice(index + 1, 0, newScene);
     onUpdateStoryboard?.(updated);
     toast({ title: "Scene duplicated" });
-  }, [storyboard, pushHistory, onUpdateStoryboard, toast]);
+  }, [storyboard, segments, pushHistory, onUpdateStoryboard, onUpdateSegments, toast]);
 
   const handleMoveScene = useCallback((index: number, dir: -1 | 1) => {
     const target = index + dir;
