@@ -7,6 +7,17 @@ import type { SocialPost } from "@/hooks/useSocialPosts";
 const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
 
 
+/** Collapse posts with the same platform+title+page_name into one representative */
+function deduplicatePosts(posts: SocialPost[]): SocialPost[] {
+  const seen = new Set<string>();
+  return posts.filter(p => {
+    const key = `${p.platform}_${p.title}_${p.page_name || ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function groupByPlatform(posts: SocialPost[]) {
   const map = new Map<string, SocialPost[]>();
   for (const p of posts) {
