@@ -1273,6 +1273,15 @@ export function ProVideoEditor({
   const generateAllVoiceovers = async () => {
     setGeneratingVoiceovers(true);
     const newTracks: AudioTrackItem[] = [];
+    const batchedDurations: Record<string, number> = {};
+    // Compute cumulative scene start times
+    let cumStart = 0;
+    const sceneStarts: Record<string, number> = {};
+    for (const scene of storyboard) {
+      sceneStarts[scene.id] = cumStart;
+      const seg = segments.find(s => s.id === scene.segmentId);
+      cumStart += seg ? seg.endTime - seg.startTime : 4;
+    }
     try {
       for (const seg of segments) {
         if (!seg.text.trim()) continue;
@@ -1339,11 +1348,22 @@ export function ProVideoEditor({
           }
         }
 
+        const clipDuration = clipDur ?? (seg.endTime - seg.startTime);
+        const trackDuration = voDur ?? clipDuration;
         if (voDur && isFinite(voDur)) {
-          setVoiceoverDurations(prev => ({ ...prev, [scene.id]: voDur! }));
+          batchedDurations[scene.id] = voDur;
         }
-        newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover", globalStartTime: 0 });
+        newTracks.push({
+          sceneId: scene.id,
+          label: seg.label,
+          audioUrl: url,
+          kind: "voiceover",
+          globalStartTime: sceneStarts[scene.id] ?? 0,
+          duration: trackDuration,
+        });
       }
+      // Batch-update durations to trigger text overlay useEffect once
+      setVoiceoverDurations(prev => ({ ...prev, ...batchedDurations }));
       // Replace voiceover tracks, keep music
       setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
       toast({ title: "Voiceovers generated", description: `${newTracks.length} audio tracks created` });
