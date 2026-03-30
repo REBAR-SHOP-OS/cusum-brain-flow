@@ -938,7 +938,7 @@ export function ProVideoEditor({
     const sceneDur = seg.endTime - seg.startTime;
 
     if (splitPoint < 0.5 || splitPoint > sceneDur - 0.5) {
-      toast({ title: "برش ممکن نیست", description: "نشانه‌گر را به وسط صحنه منتقل کنید", variant: "destructive" });
+      toast({ title: "Cannot split", description: "Move playhead to the middle of the scene", variant: "destructive" });
       return;
     }
 
