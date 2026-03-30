@@ -8,6 +8,7 @@ import {
   Scissors, Expand, SplitSquareHorizontal, Copy,
   ArrowLeft, ArrowRight, VolumeOff, FileText,
   RotateCcw, Sparkles, MoveVertical,
+  LayoutGrid, Rows3, GripVertical,
 } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
