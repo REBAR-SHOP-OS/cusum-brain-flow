@@ -1849,9 +1849,9 @@ export function ProVideoEditor({
             try {
               await onExport?.();
               setHasChanges(false);
-              toast({ title: "✅ تغییرات ذخیره شد" });
+              toast({ title: "✅ Changes saved" });
             } catch (e: any) {
-              toast({ title: "خطا در ذخیره", description: e?.message, variant: "destructive" });
+              toast({ title: "Save failed", description: e?.message, variant: "destructive" });
             } finally {
               setSaving(false);
             }
