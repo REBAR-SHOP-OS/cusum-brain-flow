@@ -1,42 +1,30 @@
 
 
-# Fix: Duplicate Scene Should Copy the Video Clip
+# Fix Text Track (Blue Bars) — Better Delete, Drag-safe Double-Click
 
-## Problem
-When duplicating a scene card, the new scene gets a new `id` but no corresponding entry is added to the `clips` array. Since the timeline looks up video thumbnails via `clips.find(c => c.sceneId === scene.id)`, the duplicated card shows no video.
+## Current State
+- Delete button exists but is tiny (3x3px), practically invisible
+- `onDoubleClick` already wired for edit — but after a drag, the browser may still fire a `dblclick` event
 
-## Solution
+## Changes — `src/components/ad-director/editor/TimelineBar.tsx`
 
-### `src/components/ad-director/ProVideoEditor.tsx` — `handleDuplicateScene` (~line 1029)
+### 1. Bigger, visible delete button
+Make the delete button larger (16x16) with a proper `X` icon, always visible on hover — not hidden in a 3px circle.
 
-Add a new prop `onDuplicateClip?: (oldSceneId: string, newSceneId: string) => void` to `ProVideoEditorProps`, and call it inside `handleDuplicateScene` after creating the new scene:
+### 2. Prevent edit dialog after drag
+Track whether a drag occurred. In `handleItemDragStart` / mouse-up logic, set a flag (`didDragRef`) when actual movement happens. In `onDoubleClick`, check the flag — if a drag just happened, skip opening the editor.
 
-```tsx
-const newSceneId = crypto.randomUUID();
-const newScene: StoryboardScene = { ...scene, id: newSceneId, segmentId: ... };
-// ...
-onDuplicateClip?.(scene.id, newSceneId); // copy the clip entry
-```
+### Implementation Detail
 
-### `src/components/ad-director/AdDirectorContent.tsx` — pass `onDuplicateClip`
+**Delete button** (~line 894-901): Increase size from `w-3 h-3` to `w-4 h-4`, icon from `w-2 h-2` to `w-3 h-3`, add red background on hover.
 
-Wire the new prop to clone the matching clip in the service state:
-
-```tsx
-onDuplicateClip={(oldId, newId) => {
-  const existing = service.getState().clips.find(c => c.sceneId === oldId);
-  if (existing) {
-    service.patchState({
-      clips: [...service.getState().clips, { ...existing, sceneId: newId }],
-    });
-  }
-}}
-```
+**Drag-safe double-click** (~line 890-891): Add a `textDraggedRef` ref. Set it to `true` when drag movement exceeds 3px threshold. In `onDoubleClick`, if `textDraggedRef.current` is true, reset it and return early (don't open editor). Reset the ref on mouseup.
 
 ## Files Changed
-1. `src/components/ad-director/ProVideoEditor.tsx` — add prop + call in duplicate handler
-2. `src/components/ad-director/AdDirectorContent.tsx` — pass `onDuplicateClip` callback
+- `src/components/ad-director/editor/TimelineBar.tsx`
 
 ## Result
-Duplicated scene cards will immediately show the same video thumbnail and have a "completed" clip status, matching the original card exactly.
+- Delete button clearly visible on hover
+- Double-click opens edit only when not dragging
+- Dragging never triggers the edit dialog
 
