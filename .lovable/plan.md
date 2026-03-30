@@ -2,68 +2,90 @@
 
 # Unit System Audit — Issues Found
 
-## Issues Identified
+## Current Architecture
 
-### Issue 1: 4-Mode Unit System vs 2-Mode Mismatch
-The extraction pipeline uses a **4-mode** unit system (`mm`, `in`, `ft`, `imperial`) stored in `extract_sessions.unit_system`. But downstream components (TagsExportView, RebarTagCard, PrintTags) only understand a **2-mode** system (`metric` | `imperial`).
-
-- **TagsExportView** (line 496): passes `(selectedSession as any)?.unit_system || "metric"` to `RebarTagCard` — if the session's unit is `"in"` or `"ft"`, it falls through to the else branch and renders raw mm values, not converted.
-- **RebarTagCard** (line 37): only checks `unitSystem === "imperial"` — `"in"` and `"ft"` are treated as metric (raw mm output).
-- **PrintTags** (line 14): reads `unit` param from URL — same 2-mode limitation.
-- **TagsExportView handlePrint** (line 146): passes `unit_system` to PrintTags URL, which could be `"in"` or `"ft"` — PrintTags doesn't handle these.
-
-### Issue 2: TagsExportView Table — Same 2-Mode Problem
-`formatDim()` in TagsExportView (line 31-49) only handles `"imperial"` — if `unit_system` is `"in"` or `"ft"`, dimensions display as raw mm.
-The table header (line 387) only checks `=== "imperial"` for the label.
-
-### Issue 3: Mapping Panel Preview Shows Raw DB Values (Not Source Units)
-`BarlistMappingPanel` preview table (line 366) displays `row.length` as `String(row.length)`. Per memory, "preview displays raw extracted numeric strings rather than mm-formatted values." This is correct per spec. **No issue here.**
-
-### Issue 4: Weight Calculation Unaffected by Units (Correct)
-`getWeight()` always uses `lengthMm` (stored in mm) × `mass_kg_per_m`. This is correct — weight calculation should always use mm internally. **No issue.**
-
-### Issue 5: DetailedListView Only Checks "imperial"
-`DetailedListView.tsx` (line 278): dimension sub-label shows `"IN"` only for `unitSystem === "imperial"`, otherwise `"MM"`. Uses `useUnitSystem()` which returns company-level setting (`metric` | `imperial`), not the session's 4-mode unit. This means if a company is metric but a barlist was imported in inches, the detailed list always shows "MM" labels. **Mismatch between session unit and company unit.**
-
-### Issue 6: `generateZpl` — Unknown Unit Handling
-The ZPL generator likely has the same 2-mode limitation. Not critical but worth checking during implementation.
+```text
+Source file → extract-manifest (detects unit: mm/in/ft/imperial)
+  → extract_rows (raw values stored)
+  → BarlistMappingPanel (user selects/confirms source unit)
+  → manage-extract apply-mapping (converts raw → mm using factor)
+  → extract_rows (converted mm values stored)
+  → Display: AIExtractView line items / TagsExportView / PrintTags / DetailedListView
+```
 
 ---
 
-## Root Cause
+## Issue 1: Line Items Display Toggle Conflates Source Unit with Display Unit
 
-Two independent unit systems coexist without a bridge:
-1. **Session-level** (4 modes): `mm`, `in`, `ft`, `imperial` — set during extraction
-2. **Company-level** (2 modes): `metric`, `imperial` — set in member settings
+**Location**: `AIExtractView.tsx` lines 2074-2091
 
-Display components downstream only understand the 2-mode system.
+The mm/in/ft/imperial toggle in the "Line Items" table uses `selectedUnitSystem` — the **same** state variable used for the source unit in the mapping panel. After mapping is applied (data converted to mm in DB), toggling this to "in" calls `formatLengthByMode(row.total_length_mm, "in")` which divides the already-converted mm value by 25.4. This is correct for **display** purposes.
 
-## Proposed Fix
+**However**, `selectedUnitSystem` is also bound to `confirmedUnitRef` which feeds into `applyMapping()`. If the user toggles the display to "in" and then re-applies mapping (e.g. re-maps), it would re-convert using "in" as source unit — corrupting data.
 
-### Approach: Normalize session unit to display-compatible format
+**Severity**: Medium — only triggers if user re-applies mapping after toggling display unit.
 
-Create a helper function that maps the 4-mode session unit to the display system expected by tags/print:
+## Issue 2: Inline Edit Saves Raw Input Without Unit Context
 
-```text
-Session unit → Display mapping:
-  "mm"       → "metric"
-  "in"       → "metric"    (data already converted to mm in DB)
-  "ft"       → "metric"    (data already converted to mm in DB)
-  "imperial" → "imperial"  (display as ft-in from mm)
-```
+**Location**: `AIExtractView.tsx` lines 2189-2190
 
-**Key insight**: After `applyMapping` runs, ALL values in DB are stored as mm regardless of source unit. The only display question is whether to show mm values as-is ("metric") or convert mm→ft-in for display ("imperial").
+When editing `total_length_mm` inline, the input value is saved directly to DB as-is (line 831: `Number(fields.total_length_mm)`). If the display toggle shows "in" but the user enters "54" thinking it's inches, it saves as 54 mm. The input field has no unit indicator and no conversion logic.
 
-### Files to Change
+Same issue for dimension columns (lines 2197-2198).
 
-1. **`src/lib/unitSystem.ts`** — Add `sessionUnitToDisplay(sessionUnit: string): "metric" | "imperial"` helper
-2. **`src/components/office/TagsExportView.tsx`** — Use `sessionUnitToDisplay()` instead of raw `session.unit_system`
-3. **`src/components/office/RebarTagCard.tsx`** — No changes needed (already handles `metric`/`imperial`)
-4. **`src/pages/PrintTags.tsx`** — Normalize `unit` param through `sessionUnitToDisplay()`
-5. **`src/components/office/TagsExportView.tsx` handlePrint** — Normalize unit before passing to URL
+**Severity**: High — user enters values in displayed unit but they're saved as mm.
 
-### Result
-- Session unit `"in"` or `"ft"` won't silently break tag/print display
-- Data is always mm in DB; display is either "show mm" or "show ft-in"
-- No DB migration needed
+## Issue 3: Mapping Panel Preview Shows Raw DB Values — Misleading Header
+
+**Location**: `BarlistMappingPanel.tsx` lines 336-341, 351, 366
+
+The preview header says `LENGTH (mm)` or `LENGTH (in)` based on selected unit, but the actual values shown are **raw DB values** (no conversion applied). When source is "mm" but values are actually inches (e.g., 54), it shows `LENGTH (mm) = 54` which is misleading — it should clarify these are raw/unconverted values.
+
+**Severity**: Low — by design per memory, but header label creates false impression.
+
+## Issue 4: DetailedListView Uses Company Unit, Not Session Unit
+
+**Location**: `DetailedListView.tsx` line 278
+
+Dimension sub-labels use `useUnitSystem()` (company-level: metric/imperial) instead of the session's `unit_system`. If company is metric but session was imported as imperial, dimensions show "MM" labels on ft-in converted values.
+
+**Severity**: Medium — incorrect labels when session unit differs from company unit.
+
+## Issue 5: `sessionUnitToDisplay` Maps "in" and "ft" to "metric" — Possibly Wrong
+
+**Location**: `unitSystem.ts` line 173
+
+After `applyMapping`, all DB values ARE in mm. So displaying them as "metric" (raw mm) is technically correct. However, if a user imports an imperial barlist and expects to see ft-in on tags, the session unit is "in" → mapped to "metric" → tags show mm. The user must manually set "imperial" in the mapping panel for tags to show ft-in.
+
+**Severity**: Low — correct by design but may confuse users importing inch-based barlists who expect imperial display.
+
+## Issue 6: No Unit Conversion on ZPL Label Generation
+
+**Location**: Need to verify in `generateZpl` — likely uses raw mm values and doesn't apply `sessionUnitToDisplay`.
+
+**Severity**: Unknown — needs verification.
+
+---
+
+## Proposed Fixes
+
+### Fix 1: Separate Display Unit from Source Unit (Critical)
+- Add a new state `displayUnit` in `AIExtractView.tsx` for the line items toggle
+- Keep `selectedUnitSystem` / `confirmedUnitRef` exclusively for the mapping panel's source unit
+- The display toggle only changes `displayUnit`, never touches `confirmedUnitRef`
+
+### Fix 2: Unit-Aware Inline Editing
+- When inline editing with display unit ≠ mm, convert user input back to mm before saving
+- Show the current display unit label next to the input field
+
+### Fix 3: Clarify Mapping Preview Header
+- Change preview header from `LENGTH (mm)` to `LENGTH (raw)` or `LENGTH (source)` to avoid implying values are in mm when they may not be
+
+### Fix 4: Pass Session Unit to DetailedListView
+- Thread the session's `unit_system` through to `DetailedListView` instead of using company-level `useUnitSystem()`
+
+## Files to Change
+1. `src/components/office/AIExtractView.tsx` — separate `displayUnit` state from `selectedUnitSystem`; unit-aware inline editing
+2. `src/components/office/BarlistMappingPanel.tsx` — clarify preview header label
+3. `src/components/office/DetailedListView.tsx` — accept session unit prop instead of company unit
 
