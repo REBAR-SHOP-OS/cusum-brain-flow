@@ -1044,16 +1044,18 @@ export function ProVideoEditor({
       onUpdateSegments(updatedSegments);
     }
 
+    const newSceneId = crypto.randomUUID();
     const newScene: StoryboardScene = {
       ...scene,
-      id: crypto.randomUUID(),
+      id: newSceneId,
       segmentId: seg ? newSegId : scene.segmentId,
     };
     const updated = [...storyboard];
     updated.splice(index + 1, 0, newScene);
     onUpdateStoryboard?.(updated);
+    onDuplicateClip?.(scene.id, newSceneId);
     toast({ title: "Scene duplicated" });
-  }, [storyboard, segments, pushHistory, onUpdateStoryboard, onUpdateSegments, toast]);
+  }, [storyboard, segments, pushHistory, onUpdateStoryboard, onUpdateSegments, onDuplicateClip, toast]);
 
   const handleMoveScene = useCallback((index: number, dir: -1 | 1) => {
     const target = index + dir;
