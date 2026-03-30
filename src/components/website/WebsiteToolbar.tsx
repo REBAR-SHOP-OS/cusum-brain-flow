@@ -112,6 +112,18 @@ export function WebsiteToolbar({
 
       <div className="flex-1" />
 
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 text-xs gap-1.5 hidden sm:flex"
+        onClick={handleFixHero}
+        disabled={fixingHero}
+        title="Inject static hero to fix blank homepage"
+      >
+        {fixingHero ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+        Fix Hero
+      </Button>
+
       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onRefresh} title="Refresh">
         <RefreshCw className="w-4 h-4" />
       </Button>
