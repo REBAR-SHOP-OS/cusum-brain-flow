@@ -467,11 +467,10 @@ export function PostReviewPanel({
     // Store all selected pages as comma-separated string on the current post's row
     const pagesString = values.join(", ");
 
-    // Update ALL sibling rows (same title + day) across all platforms to have the same pages
-    const day = post.scheduled_date?.substring(0, 10);
+    // Update ALL sibling rows (same title + exact time slot) across all platforms to have the same pages
     const siblings = allPosts.filter(p =>
       p.title === post.title &&
-      (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
+      p.scheduled_date === post.scheduled_date
     );
 
     const promises: PromiseLike<any>[] = [];
