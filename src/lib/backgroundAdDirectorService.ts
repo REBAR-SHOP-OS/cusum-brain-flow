@@ -8,6 +8,7 @@
 
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { stitchClips } from "@/lib/videoStitch";
+import { slideshowToVideo } from "@/lib/slideshowToVideo";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type {
@@ -471,7 +472,12 @@ class BackgroundAdDirectorService {
           const provider = result.provider || "wan";
 
           if (result.mode === "slideshow" && result.imageUrls?.length) {
-            this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: result.imageUrls![0], progress: 100 } : c));
+            try {
+              const slideshowBlobUrl = await slideshowToVideo({ imageUrls: result.imageUrls!, durationPerImage: 4, width: 1280, height: 720 });
+              this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: slideshowBlobUrl, progress: 100 } : c));
+            } catch {
+              this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: result.imageUrls![0], progress: 100 } : c));
+            }
           } else if (videoUrl) {
             this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl, progress: 100, generationId: genId } : c));
           } else if (genId) {
@@ -503,21 +509,24 @@ class BackgroundAdDirectorService {
       await Promise.allSettled(scenePromises);
       clearInterval(progressInterval);
 
-      // Phase 2b: Auto-retry failed scenes (up to 2 rounds)
+      // Phase 2b: Auto-retry unresolved scenes (failed/idle/generating-without-url) — up to 2 rounds
       const MAX_RETRY_ROUNDS = 2;
       for (let retryRound = 1; retryRound <= MAX_RETRY_ROUNDS; retryRound++) {
         if (this.cancelFlag) break;
 
-        const failedClips = this.state.clips.filter(c => c.status === "failed");
-        if (failedClips.length === 0) break;
+        const unresolvedClips = this.state.clips.filter(c =>
+          c.status === "failed" || c.status === "idle" || c.status === "queued" ||
+          (c.status === "generating" && !c.videoUrl)
+        );
+        if (unresolvedClips.length === 0) break;
 
-        console.log(`[AdDirector] Retry round ${retryRound}/${MAX_RETRY_ROUNDS}: ${failedClips.length} failed scene(s)`);
-        this.update({ statusText: `Retrying failed scenes... attempt ${retryRound}/${MAX_RETRY_ROUNDS} (${failedClips.length} scene${failedClips.length > 1 ? "s" : ""})` });
+        console.log(`[AdDirector] Retry round ${retryRound}/${MAX_RETRY_ROUNDS}: ${unresolvedClips.length} unresolved scene(s)`);
+        this.update({ statusText: `Retrying failed scenes... attempt ${retryRound}/${MAX_RETRY_ROUNDS} (${unresolvedClips.length} scene${unresolvedClips.length > 1 ? "s" : ""})` });
 
         // Small delay before retry to avoid rate limits
         await new Promise(r => setTimeout(r, 4000));
 
-        const retryPromises = failedClips.map(async (failedClip) => {
+        const retryPromises = unresolvedClips.map(async (failedClip) => {
           if (this.cancelFlag) return;
           const scene = storyboardWithDefaults.find(s => s.id === failedClip.sceneId);
           if (!scene) return;
@@ -560,7 +569,12 @@ class BackgroundAdDirectorService {
             const provider = result.provider || "wan";
 
             if (result.mode === "slideshow" && result.imageUrls?.length) {
-              this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: result.imageUrls![0], progress: 100 } : c));
+              try {
+                const slideshowBlobUrl = await slideshowToVideo({ imageUrls: result.imageUrls!, durationPerImage: 4, width: 1280, height: 720 });
+                this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: slideshowBlobUrl, progress: 100 } : c));
+              } catch {
+                this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: result.imageUrls![0], progress: 100 } : c));
+              }
             } else if (videoUrl) {
               this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl, progress: 100, generationId: genId } : c));
             } else if (genId) {
@@ -577,9 +591,16 @@ class BackgroundAdDirectorService {
         await Promise.allSettled(retryPromises);
       }
 
-      const stillFailed = this.state.clips.filter(c => c.status === "failed").length;
-      if (stillFailed > 0) {
-        console.warn(`[AdDirector] ${stillFailed} scene(s) still failed after retries`);
+      const unresolvedCount = this.state.clips.filter(c => c.status !== "completed" || !c.videoUrl).length;
+      if (unresolvedCount > 0) {
+        console.warn(`[AdDirector] ${unresolvedCount} scene(s) still without video after retries — staying in editing mode`);
+        toast.error(`${unresolvedCount} scene(s) could not be generated. You can retry them individually in the editor.`);
+        this.update({ flowState: "editing", statusText: "", progressValue: 100 });
+        this.running = false;
+        if (!this.listener) {
+          toast.info("Video generation incomplete — some scenes need attention.");
+        }
+        return;
       }
 
       // Phase 3: Export / stitch

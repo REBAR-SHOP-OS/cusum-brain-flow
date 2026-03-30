@@ -50,7 +50,10 @@ function resolvePreviewText(project: AdProjectRow): string | null {
 export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete, onRename }: VideoHistoryProps) {
   const visible = projects.filter((p) => {
     const hasVideo = p.final_video_url && !p.final_video_url.startsWith("blob:");
-    const hasDraftClips = !p.final_video_url && Array.isArray(p.clips) && p.clips.length > 0;
+    // Draft: only show if at least one clip is completed with a valid videoUrl
+    const hasDraftClips = !p.final_video_url && Array.isArray(p.clips) && (p.clips as any[]).some(
+      (c) => c.status === "completed" && c.videoUrl && typeof c.videoUrl === "string" && !c.videoUrl.startsWith("blob:")
+    );
     const hasThumbnail = !!p.thumbnail_url;
     return hasVideo || hasDraftClips || hasThumbnail;
   });

@@ -480,13 +480,41 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                   service.patchState({ finalVideoUrl: url, flowState: "result" });
                 }}
                 onSelectDraft={(project) => {
-                  service.patchState({
-                    segments: project.segments ?? [],
-                    storyboard: project.storyboard ?? [],
-                    clips: project.clips ?? [],
-                    continuity: project.continuity ?? null,
-                    flowState: "result",
+                  const clips = (project.clips ?? []) as any[];
+                  const storyboard = (project.storyboard ?? []) as any[];
+                  // Check if all scenes have completed clips with video
+                  const allComplete = storyboard.every((scene: any) => {
+                    const clip = clips.find((c: any) => c.sceneId === scene.id);
+                    return clip && clip.status === "completed" && clip.videoUrl && typeof clip.videoUrl === "string";
                   });
+                  
+                  if (allComplete) {
+                    service.patchState({
+                      segments: project.segments ?? [],
+                      storyboard: project.storyboard ?? [],
+                      clips: project.clips ?? [],
+                      continuity: project.continuity ?? null,
+                      flowState: "result",
+                    });
+                  } else {
+                    // Mark incomplete clips as failed so pipeline retries them
+                    const fixedClips = clips.map((c: any) => {
+                      if (c.status !== "completed" || !c.videoUrl) {
+                        return { ...c, status: "failed", error: "Missing video — auto-retry" };
+                      }
+                      return c;
+                    });
+                    service.patchState({
+                      segments: project.segments ?? [],
+                      storyboard: project.storyboard ?? [],
+                      clips: fixedClips,
+                      continuity: project.continuity ?? null,
+                      flowState: "generating",
+                      statusText: "Recovering missing scenes...",
+                      progressValue: 10,
+                    });
+                    toast({ title: "Recovering missing scenes", description: "Re-generating incomplete video clips..." });
+                  }
                 }}
                 onDelete={(id) => deleteProject.mutate(id)}
                 onRename={async (id, newName) => {
