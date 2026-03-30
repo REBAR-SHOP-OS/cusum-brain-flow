@@ -2248,14 +2248,14 @@ export function AIExtractView() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="6000">6M (6,000mm)</SelectItem>
-                      <SelectItem value="12000">12M (12,000mm)</SelectItem>
-                      <SelectItem value="18000">18M (18,000mm)</SelectItem>
+                      <SelectItem value="6000">6M {displayUnit === "mm" ? "(6,000mm)" : `(19'-8")`}</SelectItem>
+                      <SelectItem value="12000">12M {displayUnit === "mm" ? "(12,000mm)" : `(39'-4")`}</SelectItem>
+                      <SelectItem value="18000">18M {displayUnit === "mm" ? "(18,000mm)" : `(59'-1")`}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Kerf (mm)</label>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Kerf ({displayUnit === "mm" ? "mm" : "in"})</label>
                   <Input
                     type="number"
                     className="w-20 h-9 text-xs"
@@ -2264,7 +2264,7 @@ export function AIExtractView() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Min Remnant (mm)</label>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Min Remnant ({displayUnit === "mm" ? "mm" : "in"})</label>
                   <Input
                     type="number"
                     className="w-24 h-9 text-xs"

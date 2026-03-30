@@ -76,7 +76,8 @@ function parseRows(rows: any[][]): ParsedItem[] {
     const quantity = parseInt(String(row[colMap.pcs] ?? "0")) || 0;
     if (quantity <= 0) continue;
     const rawLen = parseFloat(String(row[colMap.length] ?? "0")) || 0;
-    const cut_length_mm = rawLen > 100 ? rawLen : rawLen * 1000;
+    // Will be converted using sourceUnit factor at calculation time
+    const cut_length_mm = rawLen;
     items.push({ bar_size, quantity, cut_length_mm });
   }
   return items;
@@ -97,13 +98,15 @@ function calculate(
   items: ParsedItem[],
   stockLengthM: number,
   wastePct: number,
-  wpm: Record<string, number>
+  wpm: Record<string, number>,
+  unitFactor: number = 1
 ): SizeSummary[] {
   const grouped: Record<string, { pieces: number; length_mm: number }> = {};
   for (const it of items) {
     if (!grouped[it.bar_size]) grouped[it.bar_size] = { pieces: 0, length_mm: 0 };
     grouped[it.bar_size].pieces += it.quantity;
-    grouped[it.bar_size].length_mm += it.cut_length_mm * it.quantity;
+    // Convert raw value to mm using the source unit factor
+    grouped[it.bar_size].length_mm += (it.cut_length_mm * unitFactor) * it.quantity;
   }
 
   const stockMm = stockLengthM * 1000;
@@ -132,12 +135,15 @@ function calculate(
 // --- Component ---
 
 const STOCK_LENGTHS = [6, 12, 18];
+type SourceUnit = "mm" | "in" | "ft";
+const UNIT_TO_MM: Record<SourceUnit, number> = { mm: 1, in: 25.4, ft: 304.8 };
 
 export function OrderCalcView() {
   const [stockLength, setStockLength] = useState(12);
   const [wastePct, setWastePct] = useState(5);
   const [items, setItems] = useState<ParsedItem[]>([]);
   const [results, setResults] = useState<SizeSummary[]>([]);
+  const [sourceUnit, setSourceUnit] = useState<SourceUnit>("mm");
   const [fileName, setFileName] = useState<string | null>(null);
   const [wpm, setWpm] = useState<Record<string, number>>(FALLBACK_WPM);
 
@@ -157,8 +163,8 @@ export function OrderCalcView() {
 
   // Recalculate when inputs change
   useEffect(() => {
-    if (items.length) setResults(calculate(items, stockLength, wastePct, wpm));
-  }, [items, stockLength, wastePct, wpm]);
+    if (items.length) setResults(calculate(items, stockLength, wastePct, wpm, UNIT_TO_MM[sourceUnit]));
+  }, [items, stockLength, wastePct, wpm, sourceUnit]);
 
   const handleFile = useCallback(async (file: File) => {
     const buf = await file.arrayBuffer();
@@ -234,7 +240,27 @@ export function OrderCalcView() {
 
       {/* Controls */}
       {items.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Source Unit */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+              Source Unit
+            </label>
+            <div className="flex gap-2">
+              {(["mm", "in", "ft"] as SourceUnit[]).map(u => (
+                <Button
+                  key={u}
+                  size="sm"
+                  variant={sourceUnit === u ? "default" : "outline"}
+                  onClick={() => setSourceUnit(u)}
+                  className="flex-1"
+                >
+                  {u === "mm" ? "mm" : u === "in" ? "Inches" : "Feet"}
+                </Button>
+              ))}
+            </div>
+          </div>
+
           {/* Stock length */}
           <div className="space-y-2">
             <label className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
