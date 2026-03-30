@@ -729,6 +729,13 @@ export function MessageThread({
                                         <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20 max-w-[300px]">
                                           <Mic className="w-4 h-4 text-primary shrink-0" />
                                           <audio controls preload="metadata" className="h-8 w-full min-w-0" src={att.url} />
+                                          <button
+                                            onClick={() => downloadFile(att.url, att.name || "voice-message.webm")}
+                                            className="shrink-0 p-1 rounded hover:bg-muted/60 transition-colors"
+                                            title="Download"
+                                          >
+                                            <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                                          </button>
                                         </div>
                                       );
                                     }
