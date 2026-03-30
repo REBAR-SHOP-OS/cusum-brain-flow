@@ -58,7 +58,7 @@ import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
-import { formatLengthByMode, lengthUnitLabelByMode, type LengthDisplayMode } from "@/lib/unitSystem";
+import { formatLengthByMode, lengthUnitLabelByMode, displayModeToMm, type LengthDisplayMode } from "@/lib/unitSystem";
 
 function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
   const [showRetry, setShowRetry] = useState(false);
@@ -831,10 +831,16 @@ export function AIExtractView() {
         if (fields.quantity !== undefined) updateData.quantity = Number(fields.quantity) || 0;
         if (fields.bar_size !== undefined) updateData.bar_size = fields.bar_size || null;
         if (fields.shape_type !== undefined) updateData.shape_type = fields.shape_type || null;
-        if (fields.total_length_mm !== undefined) updateData.total_length_mm = Number(fields.total_length_mm) || null;
+        if (fields.total_length_mm !== undefined) {
+          const raw = Number(fields.total_length_mm) || null;
+          updateData.total_length_mm = raw != null ? displayModeToMm(raw, displayUnit as LengthDisplayMode) : null;
+        }
         dimCols.forEach(d => {
           const key = `dim_${d.toLowerCase()}`;
-          if (fields[key] !== undefined) updateData[key] = fields[key] !== "" ? Number(fields[key]) : null;
+          if (fields[key] !== undefined) {
+            const raw = fields[key] !== "" ? Number(fields[key]) : null;
+            updateData[key] = raw != null ? displayModeToMm(raw, displayUnit as LengthDisplayMode) : null;
+          }
         });
         return supabase.from("extract_rows").update(updateData).eq("id", rowId);
       });
@@ -2189,7 +2195,7 @@ export function AIExtractView() {
                               {edit ? (
                                 <div className="flex items-center gap-1">
                                   <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
-                                  <span className="text-[9px] text-muted-foreground whitespace-nowrap">mm</span>
+                                  <span className="text-[9px] text-muted-foreground whitespace-nowrap">{lengthUnitLabelByMode(displayUnit as LengthDisplayMode)}</span>
                                 </div>
                               ) : (row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, displayUnit as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—")}
                             </TableCell>
@@ -2200,7 +2206,7 @@ export function AIExtractView() {
                                   {edit ? (
                                     <div className="flex items-center gap-1">
                                       <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit[key] ?? ""} onChange={e => updateEditField(row.id, key, e.target.value)} />
-                                      <span className="text-[9px] text-muted-foreground whitespace-nowrap">mm</span>
+                                      <span className="text-[9px] text-muted-foreground whitespace-nowrap">{lengthUnitLabelByMode(displayUnit as LengthDisplayMode)}</span>
                                     </div>
                                   ) : (
                                     (row as any)[key] != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? formatLengthByMode((row as any)[key], displayUnit as LengthDisplayMode) : String((row as any)[key])) : ""
