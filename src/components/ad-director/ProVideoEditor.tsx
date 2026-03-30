@@ -1456,50 +1456,9 @@ export function ProVideoEditor({
       // Batch-update durations to trigger text overlay useEffect once
       setVoiceoverDurations(prev => ({ ...prev, ...batchedDurations }));
 
-      // ── Phase 2: Auto-generate background music ──
-      try {
-        toast({ title: "🎵 Generating music..." });
-        const allTexts = segments.map(s => s.text).filter(Boolean).join(". ");
-        const musicPrompt = `Cinematic instrumental background music for a professional video about: ${allTexts.slice(0, 300)}`;
-        const totalDuration = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
-
-        const musicResponse = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lyria-music`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: JSON.stringify({ prompt: musicPrompt, duration: Math.min(totalDuration, 60) }),
-          }
-        );
-
-        if (musicResponse.ok) {
-          const musicBlob = await musicResponse.blob();
-          const musicUrl = URL.createObjectURL(musicBlob);
-          setMusicUrl(musicUrl);
-          newTracks.push({
-            sceneId: "",
-            label: "🎵 Background Music",
-            audioUrl: musicUrl,
-            kind: "music" as const,
-            globalStartTime: 0,
-          });
-          toast({ title: "🎵 Music generated" });
-        } else {
-          console.warn("Music generation failed:", musicResponse.status);
-          toast({ title: "⚠ Music generation failed", description: "Continuing without music", variant: "destructive" });
-        }
-      } catch (musicErr: any) {
-        console.warn("Music generation error:", musicErr.message);
-        toast({ title: "⚠ Music generation failed", variant: "destructive" });
-      }
-
-      // ── Phase 3: Apply all tracks at once ──
+      // ── Apply all voiceover tracks ──
       setAudioTracks(newTracks);
-      toast({ title: "✅ Generation complete", description: `${newTracks.length} audio & music tracks created` });
+      toast({ title: "✅ Voiceover complete", description: `${newTracks.length} voiceover track(s) created` });
     } catch (err: any) {
       toast({ title: "Voiceover generation failed", description: err.message, variant: "destructive" });
     } finally {
