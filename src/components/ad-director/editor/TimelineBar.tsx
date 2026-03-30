@@ -313,18 +313,29 @@ export function TimelineBar({
       }
       const trackWidth = trackRef.current.getBoundingClientRect().width;
       const dx = e.clientX - itemDragRef.current.startX;
-      const deltaPct = (dx / trackWidth) * 100;
-      const newLeftPct = Math.max(0, Math.min(100, itemDragRef.current.origLeftPct + deltaPct));
-      const newTimeSec = (newLeftPct / 100) * totalDuration;
+      const isClick = Math.abs(dx) < 3;
 
-      if (itemDragRef.current.type === "text") {
-        const { sceneIdx, localTime } = findSceneAtTime(newTimeSec);
-        const targetSceneId = storyboard[sceneIdx]?.id;
-        if (targetSceneId) {
-          onMoveOverlay?.(itemDragRef.current.id, targetSceneId, localTime);
-        }
+      if (isClick && itemDragRef.current.type === "text") {
+        // Click — open edit dialog
+        const ov = textOverlays.find(o => o.id === itemDragRef.current!.id);
+        if (ov) onEditOverlay?.(ov);
+      } else if (isClick && itemDragRef.current.type === "audio") {
+        // Click on audio — just deselect
       } else {
-        onMoveAudioTrack?.(parseInt(itemDragRef.current.id), "", newTimeSec);
+        // Actual drag — move item
+        const deltaPct = (dx / trackWidth) * 100;
+        const newLeftPct = Math.max(0, Math.min(100, itemDragRef.current.origLeftPct + deltaPct));
+        const newTimeSec = (newLeftPct / 100) * totalDuration;
+
+        if (itemDragRef.current.type === "text") {
+          const { sceneIdx, localTime } = findSceneAtTime(newTimeSec);
+          const targetSceneId = storyboard[sceneIdx]?.id;
+          if (targetSceneId) {
+            onMoveOverlay?.(itemDragRef.current.id, targetSceneId, localTime);
+          }
+        } else {
+          onMoveAudioTrack?.(parseInt(itemDragRef.current.id), "", newTimeSec);
+        }
       }
 
       itemDragRef.current = null;

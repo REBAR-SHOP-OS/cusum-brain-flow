@@ -1407,7 +1407,7 @@ export function ProVideoEditor({
       const newDur = seg ? seg.endTime - seg.startTime : 4;
       if (startTime != null) {
         const itemDuration = (o.endTime != null && o.startTime != null) ? (o.endTime - o.startTime) : 3;
-        const clampedStart = Math.max(0, Math.min(startTime, newDur - itemDuration));
+        const clampedStart = Math.max(0, startTime);
         return { ...o, sceneId: newSceneId, startTime: clampedStart, endTime: clampedStart + itemDuration };
       }
       return { ...o, sceneId: newSceneId };
