@@ -391,6 +391,14 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           onUpdateStoryboard={(sb) => service.patchState({ storyboard: sb })}
           onUpdateBrand={(b) => service.patchState({ brand: b })}
           onMusicSelect={(url) => service.patchState({ musicTrackUrl: url })}
+          onDuplicateClip={(oldId, newId) => {
+            const existing = service.getState().clips.find(c => c.sceneId === oldId);
+            if (existing) {
+              service.patchState({
+                clips: [...service.getState().clips, { ...existing, sceneId: newId }],
+              });
+            }
+          }}
         />
       </div>
     );

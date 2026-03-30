@@ -186,7 +186,7 @@ export function ProVideoEditor({
   clips, storyboard, segments, brand,
   finalVideoUrl, onBack, onExport, exporting,
   onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming, onUpdateSegments,
-  onUpdateStoryboard, onUpdateBrand, onMusicSelect,
+  onUpdateStoryboard, onUpdateBrand, onMusicSelect, onDuplicateClip,
   externalActiveTab, onActiveTabChanged,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
