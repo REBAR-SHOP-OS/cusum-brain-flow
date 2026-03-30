@@ -1,45 +1,43 @@
 
 
-# Fix: LinkedIn "Not Connected" Error Despite Active Connection
+# Consolidate Calendar Cards: One Card Per Platform Per Day
 
-## Root Cause
-The LinkedIn publishing functions query `integration_connections` filtered by `user_id`. The user triggering publishes (`b0c1c3d5...`) has **zero** rows in `integration_connections` — they never personally connected LinkedIn. The LinkedIn connection belongs to a different user (`c9b3adc2...`).
+## Problem
+The calendar shows too many scattered cards because posts are grouped by `platform + title + page_name`. With multiple pages and titles, each day can have 10+ cards, making the view unusable (as shown in the screenshot).
 
-For Facebook/Instagram, the code already has a **fallback** pattern: if the current user has no token, it falls back to any user's token. LinkedIn lacks this fallback.
+## Rule
+Each day column should show **one card per platform**, consolidating all posts for that platform into a single card. This limits cards to ~5-6 per day (one per active platform), keeping the view clean and organized.
 
-## Fix
+## Changes
 
-### 1. `supabase/functions/social-publish/index.ts` (line ~426-431)
-Add fallback query when no LinkedIn connection found for the current user:
+### File: `src/components/social/SocialCalendar.tsx`
 
-```typescript
-let { data: connection } = await supabase
-  .from("integration_connections")
-  .select("config")
-  .eq("user_id", userId)
-  .eq("integration_id", "linkedin")
-  .maybeSingle();
+1. **Rewrite `groupByPlatform`** to group by platform only (not title/page):
+   ```typescript
+   function groupByPlatform(posts: SocialPost[]) {
+     const map = new Map<string, SocialPost[]>();
+     for (const p of posts) {
+       const key = p.platform || "other";
+       if (!map.has(key)) map.set(key, []);
+       map.get(key)!.push(p);
+     }
+     return [...map.entries()].sort(([a], [b]) => {
+       return (PLATFORM_ORDER.indexOf(a) ?? 99) - (PLATFORM_ORDER.indexOf(b) ?? 99);
+     });
+   }
+   ```
 
-// Fallback: use any user's LinkedIn connection
-if (!connection) {
-  const { data: fallback } = await supabase
-    .from("integration_connections")
-    .select("config")
-    .eq("integration_id", "linkedin")
-    .eq("status", "connected")
-    .order("last_sync_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  connection = fallback;
-}
+2. **Update the card rendering** to show consolidated info:
+   - Platform icon + post count badge (e.g. "×6")
+   - Show the number of unique pages (e.g. "3 pages")
+   - Show dominant status across all posts in the group
+   - Keep the existing click behavior (opens group dialog)
 
-if (!connection) return { error: "LinkedIn not connected..." };
-```
+3. **Fix `platformName` extraction** — since key is now just the platform string, remove the `split("_")[0]` logic.
 
-### 2. `supabase/functions/social-cron-publish/index.ts` (line ~451-456)
-Same fallback pattern.
+## Result
+Each day column will have at most one card per platform (max ~7 cards), matching the user's requirement of organized, non-scattered display.
 
 ## Files Changed
-- `supabase/functions/social-publish/index.ts` — add LinkedIn connection fallback
-- `supabase/functions/social-cron-publish/index.ts` — add LinkedIn connection fallback
+- `src/components/social/SocialCalendar.tsx`
 
