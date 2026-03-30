@@ -333,11 +333,9 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
               <div className="bg-muted/50 px-3 py-1.5 border-b border-border">
                 <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
                   Mapped Preview — First {previewRows.length} of {rows.length} rows
-                  {lengthUnit !== "mm" && (
-                    <span className="ml-2 text-primary">
-                      (source: {unitLabel} → stored as mm)
-                    </span>
-                  )}
+                  <span className="ml-2 text-primary">
+                    (source: {unitLabel} → stored as mm)
+                  </span>
                 </span>
               </div>
               <div className="overflow-x-auto max-h-52">
