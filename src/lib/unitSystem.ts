@@ -202,8 +202,8 @@ export function lengthUnitLabelByMode(mode: LengthDisplayMode): string {
  * or convert mm → ft-in for display ("imperial").
  */
 export function sessionUnitToDisplay(sessionUnit: string | null | undefined): UnitSystem {
-  if (sessionUnit === "imperial") return "imperial";
-  return "metric"; // mm, in, ft, or unknown → show raw mm
+  if (sessionUnit === "imperial" || sessionUnit === "in" || sessionUnit === "ft") return "imperial";
+  return "metric"; // mm or unknown → show raw mm
 }
 
 // ─── Hook: read company's unit_system ───────────────────────

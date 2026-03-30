@@ -13,18 +13,49 @@ import {
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useUnitSystem, formatLength, barSizeLabel } from "@/lib/unitSystem";
+import { useUnitSystem, formatLength, barSizeLabel, sessionUnitToDisplay, displayModeToMm, type UnitSystem, type LengthDisplayMode } from "@/lib/unitSystem";
 
 export function DetailedListView({ initialPlanId }: { initialPlanId?: string | null }) {
   const { plans, loading: plansLoading } = useCutPlans();
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(initialPlanId ?? null);
+  const [sessionUnit, setSessionUnit] = useState<string | null>(null);
 
   // Sync when parent navigates with a new planId (e.g. Edit from Production Queue)
   useEffect(() => {
     setSelectedPlanId(initialPlanId ?? null);
   }, [initialPlanId]);
   const { items, loading: itemsLoading, fetchItems } = useCutPlanItems(selectedPlanId);
-  const unitSystem = useUnitSystem();
+  const companyUnit = useUnitSystem();
+
+  // Resolve session unit from cut_plan → barlist → extract_session
+  useEffect(() => {
+    if (!selectedPlanId) { setSessionUnit(null); return; }
+    (async () => {
+      const { data: plan } = await supabase
+        .from("cut_plans")
+        .select("barlist_id")
+        .eq("id", selectedPlanId)
+        .single();
+      if (!plan?.barlist_id) { setSessionUnit(null); return; }
+      const { data: barlist } = await supabase
+        .from("barlists")
+        .select("extract_session_id")
+        .eq("id", plan.barlist_id)
+        .single();
+      if (!barlist?.extract_session_id) { setSessionUnit(null); return; }
+      const { data: session } = await supabase
+        .from("extract_sessions")
+        .select("unit_system")
+        .eq("id", barlist.extract_session_id)
+        .single();
+      setSessionUnit(session?.unit_system ?? null);
+    })();
+  }, [selectedPlanId]);
+
+  // Use session unit if available, otherwise fall back to company unit
+  const unitSystem: UnitSystem = sessionUnit ? sessionUnitToDisplay(sessionUnit) : companyUnit;
+  // The LengthDisplayMode for converting user input back to mm
+  const editUnit: LengthDisplayMode = (sessionUnit as LengthDisplayMode) || (companyUnit === "imperial" ? "imperial" : "mm");
   const qc = useQueryClient();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, any>>({});
