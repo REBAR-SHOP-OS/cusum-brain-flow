@@ -97,22 +97,13 @@ export default function SocialMediaManager() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  const isProtectedPost = useCallback((id: string) => {
-    const post = posts.find((p) => p.id === id);
-    return post?.status === "scheduled" || post?.status === "published";
-  }, [posts]);
-
   const toggleSelectPost = useCallback((id: string) => {
-    if (isProtectedPost(id)) {
-      toast({ title: "پست‌های زمان‌بندی شده و منتشر شده قابل حذف نیستند", variant: "destructive" });
-      return;
-    }
     setSelectedPostIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  }, [isProtectedPost, toast]);
+  }, []);
 
   const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
