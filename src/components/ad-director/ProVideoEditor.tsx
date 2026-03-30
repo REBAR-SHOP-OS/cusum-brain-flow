@@ -1018,7 +1018,7 @@ export function ProVideoEditor({
       // Update cached clip duration
       setClipDurations(prev => ({ ...prev, [scene.id]: newDuration }));
 
-      toast({ title: "✂️ صحنه برش خورد", description: `مدت جدید: ${newDuration.toFixed(1)}s` });
+      toast({ title: "✂️ Scene trimmed", description: `New duration: ${newDuration.toFixed(1)}s` });
     } catch (err: any) {
       toast({ title: "خطا در برش", description: err.message || "برش ویدئو با خطا مواجه شد", variant: "destructive" });
     } finally {
