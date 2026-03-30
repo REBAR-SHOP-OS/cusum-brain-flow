@@ -1348,11 +1348,22 @@ export function ProVideoEditor({
           }
         }
 
+        const clipDuration = clipDur ?? (seg.endTime - seg.startTime);
+        const trackDuration = voDur ?? clipDuration;
         if (voDur && isFinite(voDur)) {
-          setVoiceoverDurations(prev => ({ ...prev, [scene.id]: voDur! }));
+          batchedDurations[scene.id] = voDur;
         }
-        newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover", globalStartTime: 0 });
+        newTracks.push({
+          sceneId: scene.id,
+          label: seg.label,
+          audioUrl: url,
+          kind: "voiceover",
+          globalStartTime: sceneStarts[scene.id] ?? 0,
+          duration: trackDuration,
+        });
       }
+      // Batch-update durations to trigger text overlay useEffect once
+      setVoiceoverDurations(prev => ({ ...prev, ...batchedDurations }));
       // Replace voiceover tracks, keep music
       setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
       toast({ title: "Voiceovers generated", description: `${newTracks.length} audio tracks created` });
