@@ -165,7 +165,7 @@ export function RebarTagCard({
           <span className="font-black uppercase">{reference || "—"}</span>
         </div>
         <div className="flex gap-1">
-          <span className="font-bold">Company:</span>
+          <span className="font-bold">Customer:</span>
           <span className="font-black uppercase">{customer || "—"}</span>
         </div>
         {address && (
