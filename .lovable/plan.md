@@ -1,15 +1,26 @@
 
 
-# Remove Automatic Music Generation
+# Map Ref to Reference, Remove Address from Tag
 
 ## Problem
-When voiceovers are generated, the system automatically generates background music as "Phase 2" (lines 1459-1498 in `ProVideoEditor.tsx`). The user wants music to only be generated when explicitly requested via the "Auto Music" button.
+The Ref section currently shows `reference || customer` with the address displayed below it. The user wants the Ref field to map strictly to the `reference` value — no address line.
 
-## Change
+## Changes
 
-### `src/components/ad-director/ProVideoEditor.tsx`
-- **Remove Phase 2** (lines 1459-1498): Delete the automatic music generation block inside the voiceover generation function. Music should only come from the explicit `generateBackgroundMusic` function triggered by the "Auto Music" button.
-- Update the Phase 3 toast to say "Voiceover complete" instead of "Generation complete" with audio & music count.
+### `src/components/office/RebarTagCard.tsx` (lines 161-168)
+- Remove the `{address && ...}` line that displays the address below the Ref
+- Keep `Ref:` showing `reference || customer || "—"` (or just `reference || "—"` if customer fallback is also unwanted)
 
-This is a single-file, surgical removal. The "Auto Music" button (line 1825-1834) remains fully functional for when the user explicitly wants music.
+### `src/components/office/RebarTagCard.tsx` (props interface)
+- Remove `address` from `RebarTagCardProps` since it's no longer used
+
+### `src/pages/PrintTags.tsx` (line 130)
+- Remove the `address` prop passed to `RebarTagCard`
+
+### `src/utils/generateZpl.ts` (line 101)
+- Already maps `reference` correctly — no change needed
+
+## Impact
+- Tag layout becomes cleaner — Ref section shows only the reference value
+- Address fetching logic in PrintTags becomes unused but harmless (can be cleaned up)
 
