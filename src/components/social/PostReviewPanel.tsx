@@ -467,24 +467,16 @@ export function PostReviewPanel({
 
   const handlePagesSaveMulti = async (values: string[]) => {
     setLocalPages(values);
-    // Store all selected pages as comma-separated string on the current post's row
     const pagesString = values.join(", ");
 
-    // Update ALL sibling rows (same title + exact time slot) across all platforms to have the same pages
-    const siblings = allPosts.filter(p =>
-      p.title === post.title &&
-      p.scheduled_date === post.scheduled_date
-    );
+    // Only update the CURRENT post row — not siblings on other platforms
+    const { error } = await supabase
+      .from("social_posts")
+      .update({ page_name: pagesString })
+      .eq("id", post.id);
 
-    const promises: PromiseLike<any>[] = [];
-    for (const sib of siblings) {
-      promises.push(
-        supabase.from("social_posts").update({ page_name: pagesString }).eq("id", sib.id)
-      );
-    }
-
-    if (promises.length > 0) {
-      await Promise.all(promises);
+    if (error) {
+      toast({ title: "Failed to update pages", description: error.message, variant: "destructive" });
     }
     queryClient.invalidateQueries({ queryKey: ["social_posts"] });
     setSubPanel(null);
