@@ -181,6 +181,8 @@ export function TimelineBar({
   // ─── Scene drag-to-reorder state ───
   const [sceneDragIdx, setSceneDragIdx] = useState<number | null>(null);
   const [sceneDropIdx, setSceneDropIdx] = useState<number | null>(null);
+  const [contextMenuScene, setContextMenuScene] = useState<number | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // ─── Item drag-to-reposition state ───
   const itemDragRef = useRef<{
@@ -698,8 +700,7 @@ export function TimelineBar({
               const isDropTarget = sceneDropIdx === i && sceneDragIdx !== null && sceneDragIdx !== i;
 
               return (
-                <Popover key={scene.id}>
-                  <PopoverTrigger asChild>
+                <div key={scene.id} className="relative" style={{ flex: dur, display: 'flex' }}>
                     <div
                       draggable={!!onMoveScene}
                       onDragStart={(e) => handleSceneDragStart(e, i)}
@@ -707,6 +708,7 @@ export function TimelineBar({
                       onDrop={(e) => handleSceneDrop(e, i)}
                       onDragEnd={handleSceneDragEnd}
                       onClick={(e) => { e.stopPropagation(); onSelectScene(i); if (trackRef.current) { const rect = trackRef.current.getBoundingClientRect(); const pct = (e.clientX - rect.left) / rect.width; onSeek(Math.max(0, Math.min(totalDuration, pct * totalDuration))); } }}
+                      onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenuScene(i); setContextMenuPos({ x: e.clientX, y: e.clientY }); }}
                       className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden rounded-sm
                         ${isSelected ? "ring-2 ring-red-500 ring-inset z-10" : "ring-1 ring-white/[0.06] ring-inset"}
                         ${isDropTarget ? "ring-2 ring-red-500 ring-inset" : ""}
@@ -787,68 +789,79 @@ export function TimelineBar({
                         </div>
                       )}
                     </div>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-44 p-1.5 bg-zinc-900 border-white/10" side="top" align="center">
-                    <div className="space-y-0.5">
-                      <button onClick={() => onSelectScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200">Select</button>
-                      {onEditPrompt && (
-                        <button onClick={() => onEditPrompt(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <Edit3 className="w-2.5 h-2.5" />Edit Prompt
-                        </button>
-                      )}
-                      {onEditVoiceover && (
-                        <button onClick={() => onEditVoiceover(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <FileText className="w-2.5 h-2.5" />Edit Voiceover Text
-                        </button>
-                      )}
-                      {onResizeScene && (
-                        <button onClick={() => { onSelectScene(i); setTrimMode(true); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <Scissors className="w-2.5 h-2.5" />Trim Scene
-                        </button>
-                      )}
-                      {onStretchScene && (
-                        <button onClick={() => onStretchScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <Expand className="w-2.5 h-2.5" />Stretch (+1s)
-                        </button>
-                      )}
-                      {onSplitScene && (
-                        <button onClick={() => onSplitScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <SplitSquareHorizontal className="w-2.5 h-2.5" />Split
-                        </button>
-                      )}
-                      {onDuplicateScene && (
-                        <button onClick={() => onDuplicateScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <Copy className="w-2.5 h-2.5" />Duplicate
-                        </button>
-                      )}
-                      {onMoveScene && i > 0 && (
-                        <button onClick={() => onMoveScene(i, -1)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <ArrowLeft className="w-2.5 h-2.5" />Move Left
-                        </button>
-                      )}
-                      {onMoveScene && i < storyboard.length - 1 && (
-                        <button onClick={() => onMoveScene(i, 1)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <ArrowRight className="w-2.5 h-2.5" />Move Right
-                        </button>
-                      )}
-                      {onMuteScene && (
-                        <button onClick={() => onMuteScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <VolumeOff className="w-2.5 h-2.5" />{mutedScenes?.has(scene.id) ? "Unmute" : "Mute Scene"}
-                        </button>
-                      )}
-                      {onRegenerateScene && clip?.status === "completed" && (
-                        <button onClick={() => onRegenerateScene(scene.id)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <RefreshCw className="w-2.5 h-2.5" />Regenerate
-                        </button>
-                      )}
-                      {onDeleteScene && (
-                        <button onClick={() => onDeleteScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-red-500/20 text-red-400 flex items-center gap-1">
-                          <Trash2 className="w-2.5 h-2.5" />Delete
-                        </button>
-                      )}
+                  {contextMenuScene === i && (
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setContextMenuScene(null)}
+                      onContextMenu={(e) => { e.preventDefault(); setContextMenuScene(null); }}
+                    >
+                      <div
+                        className="absolute w-44 p-1.5 bg-zinc-900 border border-white/10 rounded-md shadow-md z-50"
+                        style={{ left: contextMenuPos.x, top: contextMenuPos.y, transform: 'translateY(-100%)' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="space-y-0.5">
+                          <button onClick={() => { onSelectScene(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200">Select</button>
+                          {onEditPrompt && (
+                            <button onClick={() => { onEditPrompt(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <Edit3 className="w-2.5 h-2.5" />Edit Prompt
+                            </button>
+                          )}
+                          {onEditVoiceover && (
+                            <button onClick={() => { onEditVoiceover(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <FileText className="w-2.5 h-2.5" />Edit Voiceover Text
+                            </button>
+                          )}
+                          {onResizeScene && (
+                            <button onClick={() => { onSelectScene(i); setTrimMode(true); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <Scissors className="w-2.5 h-2.5" />Trim Scene
+                            </button>
+                          )}
+                          {onStretchScene && (
+                            <button onClick={() => { onStretchScene(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <Expand className="w-2.5 h-2.5" />Stretch (+1s)
+                            </button>
+                          )}
+                          {onSplitScene && (
+                            <button onClick={() => { onSplitScene(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <SplitSquareHorizontal className="w-2.5 h-2.5" />Split
+                            </button>
+                          )}
+                          {onDuplicateScene && (
+                            <button onClick={() => { onDuplicateScene(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <Copy className="w-2.5 h-2.5" />Duplicate
+                            </button>
+                          )}
+                          {onMoveScene && i > 0 && (
+                            <button onClick={() => { onMoveScene(i, -1); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <ArrowLeft className="w-2.5 h-2.5" />Move Left
+                            </button>
+                          )}
+                          {onMoveScene && i < storyboard.length - 1 && (
+                            <button onClick={() => { onMoveScene(i, 1); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <ArrowRight className="w-2.5 h-2.5" />Move Right
+                            </button>
+                          )}
+                          {onMuteScene && (
+                            <button onClick={() => { onMuteScene(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <VolumeOff className="w-2.5 h-2.5" />{mutedScenes?.has(scene.id) ? "Unmute" : "Mute Scene"}
+                            </button>
+                          )}
+                          {onRegenerateScene && clip?.status === "completed" && (
+                            <button onClick={() => { onRegenerateScene(scene.id); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                              <RefreshCw className="w-2.5 h-2.5" />Regenerate
+                            </button>
+                          )}
+                          {onDeleteScene && (
+                            <button onClick={() => { onDeleteScene(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-red-500/20 text-red-400 flex items-center gap-1">
+                              <Trash2 className="w-2.5 h-2.5" />Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </PopoverContent>
-                </Popover>
+                  )}
+                </div>
               );
             })}
 
