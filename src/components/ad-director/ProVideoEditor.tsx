@@ -353,10 +353,11 @@ export function ProVideoEditor({
       const audioUrl = URL.createObjectURL(audioBlob);
 
       setAudioTracks([{
-        sceneId: "voiceover-generated",
+        sceneId: storyboard[0]?.id || "",
         label: "🎙️ Voiceover",
         audioUrl,
         kind: "voiceover",
+        startTime: 0,
       }]);
 
       setVoiceoverDialogOpen(false);
