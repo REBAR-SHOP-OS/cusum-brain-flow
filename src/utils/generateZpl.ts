@@ -12,6 +12,8 @@ export interface ZplRowData {
   dwg: string;
   row_index: number | string;
   reference: string;
+  customer: string;
+  remark: string;
   dims: Record<string, number | null>;
 }
 
