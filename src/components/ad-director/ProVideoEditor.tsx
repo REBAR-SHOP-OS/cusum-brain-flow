@@ -1648,7 +1648,31 @@ export function ProVideoEditor({
                     }}
                   >
                     {(ov.kind === "logo" || ov.kind === "image") ? (
-                      <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain pointer-events-none" />
+                      <div className="relative group">
+                        <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain pointer-events-none" />
+                        {/* Resize handles */}
+                        {["nw","ne","sw","se"].map(handle => (
+                          <div
+                            key={handle}
+                            className={`absolute w-2.5 h-2.5 bg-white border-2 border-primary rounded-sm opacity-0 group-hover:opacity-100 transition-opacity ${resizingOverlay?.id === ov.id ? "opacity-100" : ""}`}
+                            style={{
+                              top: handle.includes("n") ? -5 : "auto",
+                              bottom: handle.includes("s") ? -5 : "auto",
+                              left: handle.includes("w") ? -5 : "auto",
+                              right: handle.includes("e") ? -5 : "auto",
+                              cursor: (handle === "nw" || handle === "se") ? "nwse-resize" : "nesw-resize",
+                              zIndex: 30,
+                              pointerEvents: "auto",
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: ov.size.w, h: ov.size.h, x: ov.position.x, y: ov.position.y };
+                              setResizingOverlay({ id: ov.id, handle });
+                            }}
+                          />
+                        ))}
+                      </div>
                     ) : (
                       <div className="flex justify-center">
                         <span className="text-white font-semibold text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] bg-black/50 backdrop-blur-md px-4 py-2 rounded-md text-center leading-relaxed pointer-events-none" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
