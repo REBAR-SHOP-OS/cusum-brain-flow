@@ -136,6 +136,8 @@ interface TimelineBarProps {
   onEditVoiceoverText?: (sceneId: string) => void;
   onMoveOverlay?: (id: string, newSceneId: string, startTime?: number) => void;
   onMoveAudioTrack?: (index: number, newSceneId: string, startTime?: number) => void;
+  onTrimApply?: (index: number, trimStart: number, trimEnd: number) => Promise<void>;
+  isTrimming?: boolean;
   onRegenerateAll?: () => void;
   isRegeneratingAll?: boolean;
   // Playback integration
@@ -158,6 +160,7 @@ export function TimelineBar({
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
   onMoveOverlay, onMoveAudioTrack,
+  onTrimApply, isTrimming,
   onRegenerateAll, isRegeneratingAll,
   isPlaying, onTogglePlay, onFrameStep, onSkipScene,
 }: TimelineBarProps) {
@@ -360,7 +363,7 @@ export function TimelineBar({
     };
   }, [itemDragging, storyboard, totalDuration, findSceneAtTime, onMoveOverlay, onMoveAudioTrack]);
 
-  // Drag-to-resize
+  // Drag-to-resize / trim
   const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
     e.stopPropagation();
     e.preventDefault();
@@ -374,6 +377,9 @@ export function TimelineBar({
     return seg ? seg.endTime - seg.startTime : 4;
   };
 
+  // Track trim preview offsets for visual feedback
+  const [trimPreview, setTrimPreview] = useState<{ index: number; trimStartOffset: number; trimEndOffset: number } | null>(null);
+
   useEffect(() => {
     if (!isDragging) return;
     const handleMouseMove = (e: MouseEvent) => {
@@ -382,14 +388,38 @@ export function TimelineBar({
       const pxPerSec = trackWidth / totalDuration;
       const dx = e.clientX - dragState.current.startX;
       const deltaSec = dx / pxPerSec;
-      const newDur = dragState.current.side === "right"
-        ? dragState.current.startDur + deltaSec
-        : dragState.current.startDur - deltaSec;
-      onResizeScene?.(dragState.current.index, Math.max(1, newDur));
+
+      if (trimMode && onTrimApply) {
+        // In trim mode: show preview of what will be trimmed
+        const sceneDur = dragState.current.startDur;
+        let trimStartOffset = 0;
+        let trimEndOffset = 0;
+        if (dragState.current.side === "left") {
+          trimStartOffset = Math.max(0, Math.min(sceneDur - 0.5, deltaSec));
+        } else {
+          trimEndOffset = Math.max(0, Math.min(sceneDur - 0.5, -deltaSec));
+        }
+        setTrimPreview({ index: dragState.current.index, trimStartOffset, trimEndOffset });
+      } else {
+        // Normal resize mode
+        const newDur = dragState.current.side === "right"
+          ? dragState.current.startDur + deltaSec
+          : dragState.current.startDur - deltaSec;
+        onResizeScene?.(dragState.current.index, Math.max(1, newDur));
+      }
     };
     const handleMouseUp = () => {
+      if (trimMode && onTrimApply && dragState.current && trimPreview) {
+        const sceneDur = dragState.current.startDur;
+        const trimStart = trimPreview.trimStartOffset;
+        const trimEnd = sceneDur - trimPreview.trimEndOffset;
+        if (trimStart > 0 || trimPreview.trimEndOffset > 0) {
+          onTrimApply(dragState.current.index, trimStart, trimEnd);
+        }
+      }
       dragState.current = null;
       setIsDragging(false);
+      setTrimPreview(null);
     };
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
@@ -397,7 +427,7 @@ export function TimelineBar({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, totalDuration, onResizeScene]);
+  }, [isDragging, totalDuration, onResizeScene, trimMode, onTrimApply, trimPreview]);
 
   const playheadPct = totalDuration > 0 ? (globalTime / totalDuration) * 100 : 0;
 
@@ -745,6 +775,27 @@ export function TimelineBar({
                       ) : clip?.videoUrl ? (
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
                       ) : null}
+                      {/* Trim preview overlay */}
+                      {trimPreview && trimPreview.index === i && (
+                        <>
+                          {trimPreview.trimStartOffset > 0 && (
+                            <div className="absolute top-0 bottom-0 left-0 bg-red-500/40 z-20 pointer-events-none"
+                              style={{ width: `${(trimPreview.trimStartOffset / dur) * 100}%` }}
+                            />
+                          )}
+                          {trimPreview.trimEndOffset > 0 && (
+                            <div className="absolute top-0 bottom-0 right-0 bg-red-500/40 z-20 pointer-events-none"
+                              style={{ width: `${(trimPreview.trimEndOffset / dur) * 100}%` }}
+                            />
+                          )}
+                        </>
+                      )}
+                      {/* Trimming spinner */}
+                      {isTrimming && isSelected && (
+                        <div className="absolute inset-0 bg-black/60 z-30 flex items-center justify-center">
+                          <div className="text-[9px] text-white animate-pulse">Trimming…</div>
+                        </div>
+                      )}
                       {/* Status */}
                       <div className="absolute top-0.5 right-0.5 z-10">
                         <span className={`text-[7px] px-1 py-px rounded-full font-medium ${
