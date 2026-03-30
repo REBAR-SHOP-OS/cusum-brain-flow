@@ -7,27 +7,15 @@ import type { SocialPost } from "@/hooks/useSocialPosts";
 const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
 
 
-/** Collapse posts with the same platform+title+page_name into one representative */
-function deduplicatePosts(posts: SocialPost[]): SocialPost[] {
-  const seen = new Set<string>();
-  return posts.filter(p => {
-    const key = `${p.platform}_${p.title}_${p.page_name || ""}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function groupByPlatform(posts: SocialPost[]) {
-  const map = new Map<string, SocialPost[]>();
-  for (const p of posts) {
-    const key = p.platform || "other";
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(p);
-  }
-  return [...map.entries()].sort(([a], [b]) => {
-    return (PLATFORM_ORDER.indexOf(a) === -1 ? 99 : PLATFORM_ORDER.indexOf(a))
-         - (PLATFORM_ORDER.indexOf(b) === -1 ? 99 : PLATFORM_ORDER.indexOf(b));
+/** Sort posts by scheduled_date ascending, then by platform order */
+function sortPosts(posts: SocialPost[]): SocialPost[] {
+  return [...posts].sort((a, b) => {
+    const dateA = a.scheduled_date ? new Date(a.scheduled_date).getTime() : 0;
+    const dateB = b.scheduled_date ? new Date(b.scheduled_date).getTime() : 0;
+    if (dateA !== dateB) return dateA - dateB;
+    const platA = PLATFORM_ORDER.indexOf(a.platform) === -1 ? 99 : PLATFORM_ORDER.indexOf(a.platform);
+    const platB = PLATFORM_ORDER.indexOf(b.platform) === -1 ? 99 : PLATFORM_ORDER.indexOf(b.platform);
+    return platA - platB;
   });
 }
 
