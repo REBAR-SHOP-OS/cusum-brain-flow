@@ -351,18 +351,31 @@ async function applyMapping(sb: any, sessionId: string, unitSystem?: string) {
     updates.raw_total_length_mm = rawLength;
     updates.raw_dims_json = rawDims;
 
-    // ── Apply unit conversion to length ──
+    // ── Apply unit conversion to length (with sanity guard) ──
     if (rawLength != null && lengthFactor !== 1) {
-      updates.total_length_mm = Math.round(Number(rawLength) * lengthFactor);
+      const converted = Math.round(Number(rawLength) * lengthFactor);
+      if (converted > 100000 && lengthFactor > 1) {
+        // Value likely already in mm — skip conversion to prevent double-conversion
+        console.warn(`[applyMapping] Row ${row.row_index}: length ${rawLength} × ${lengthFactor} → ${converted}mm exceeds sanity limit. Keeping raw value as mm.`);
+        updates.total_length_mm = Math.round(Number(rawLength));
+      } else {
+        updates.total_length_mm = converted;
+      }
     } else if (rawLength != null) {
       updates.total_length_mm = rawLength; // mm → no conversion, but restore from raw
     }
 
-    // ── Apply unit conversion to all dimensions ──
+    // ── Apply unit conversion to all dimensions (with sanity guard) ──
     for (const col of DIM_COLUMNS) {
       const rawVal = rawDims[col] ?? row[col];
       if (rawVal != null && rawVal !== 0 && lengthFactor !== 1) {
-        updates[col] = Math.round(Number(rawVal) * lengthFactor);
+        const converted = Math.round(Number(rawVal) * lengthFactor);
+        if (converted > 100000 && lengthFactor > 1) {
+          console.warn(`[applyMapping] Row ${row.row_index}: dim ${col} ${rawVal} × ${lengthFactor} → ${converted}mm exceeds sanity limit. Keeping raw value.`);
+          updates[col] = Math.round(Number(rawVal));
+        } else {
+          updates[col] = converted;
+        }
       } else if (rawVal != null) {
         updates[col] = rawVal; // restore from raw
       }

@@ -491,7 +491,7 @@ Rules:
                 if (typeof cell === "string") sampleCells.push(cell);
               }
             }
-            if (sampleCells.some((c: string) => /^\d+(?:\.\d+)?\s*[""]\s*$/.test(c.trim()))) {
+            if (sampleCells.some((c: string) => /^\d+(?:\.\d+)?\s*[""'']\s*$/.test(c.trim()))) {
               detectedUnitSystem = "in";
               console.log("Detected inch unit system from raw XLSX cell values");
             }
