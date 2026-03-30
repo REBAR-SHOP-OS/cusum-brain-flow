@@ -4,6 +4,7 @@ import { useExtractRows } from "@/hooks/useExtractSessions";
 import { useShapeSchematics } from "@/hooks/useShapeSchematics";
 import { RebarTagCard, DIM_COLS, getWeight } from "@/components/office/RebarTagCard";
 import { supabase } from "@/integrations/supabase/client";
+import { sessionUnitToDisplay } from "@/lib/unitSystem";
 
 /* ═══════════════════════════════════════════
    Print-only page — zero app layout
