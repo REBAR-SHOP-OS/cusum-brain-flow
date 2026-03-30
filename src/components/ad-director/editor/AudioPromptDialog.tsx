@@ -86,7 +86,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
           {/* Generate Tab */}
           <TabsContent value="generate" className="space-y-4 pt-2">
             <div className="space-y-2">
-              <Label>پرامپت</Label>
+              <Label>Prompt</Label>
               <Input
                 placeholder="cinematic intro music..."
                 value={prompt}
