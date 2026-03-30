@@ -10,15 +10,13 @@ const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twit
 function groupByPlatform(posts: SocialPost[]) {
   const map = new Map<string, SocialPost[]>();
   for (const p of posts) {
-    const key = `${p.platform || "other"}_${p.title || p.id}_${p.page_name || ""}`;
+    const key = p.platform || "other";
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(p);
   }
   return [...map.entries()].sort(([a], [b]) => {
-    const aPlatform = a.startsWith("unassigned") ? "unassigned" : a.split("_")[0];
-    const bPlatform = b.startsWith("unassigned") ? "unassigned" : b.split("_")[0];
-    return (PLATFORM_ORDER.indexOf(aPlatform) === -1 ? 99 : PLATFORM_ORDER.indexOf(aPlatform))
-         - (PLATFORM_ORDER.indexOf(bPlatform) === -1 ? 99 : PLATFORM_ORDER.indexOf(bPlatform));
+    return (PLATFORM_ORDER.indexOf(a) === -1 ? 99 : PLATFORM_ORDER.indexOf(a))
+         - (PLATFORM_ORDER.indexOf(b) === -1 ? 99 : PLATFORM_ORDER.indexOf(b));
   });
 }
 
@@ -165,8 +163,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
             {/* Platform-Grouped Cards */}
             <div className="space-y-2">
               {groupByPlatform(dayPosts).map(([platform, posts]) => {
-                const platformName = platform.startsWith("unassigned") ? "unassigned" : platform.split("_")[0];
-                const pIcon = platformIcons[platformName] || platformIcons.twitter;
+                const pIcon = platformIcons[platform] || platformIcons.twitter;
                 const groupIds = posts.map(p => p.id);
                 const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
                 const { dominant: status, label: statusLabel } = statusSummary(posts);
@@ -229,7 +226,14 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs font-medium truncate">{firstPost.title || "Untitled"}</p>
+                    {(() => {
+                      const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))];
+                      return uniquePages.length > 0 ? (
+                        <p className="text-xs font-medium truncate">{uniquePages.length === 1 ? uniquePages[0] : `${uniquePages.length} pages`}</p>
+                      ) : (
+                        <p className="text-xs font-medium truncate">{platform.charAt(0).toUpperCase() + platform.slice(1)}</p>
+                      );
+                    })()}
                     <div className="flex items-center gap-1 mt-0.5 text-[10px]">
                       {firstPost.scheduled_date && (
                         <span className="text-muted-foreground">{format(parseISO(firstPost.scheduled_date), "h:mm a")}</span>
