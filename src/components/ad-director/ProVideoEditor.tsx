@@ -468,6 +468,10 @@ export function ProVideoEditor({
   const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
+  // ─── Resize overlay state ───
+  const [resizingOverlay, setResizingOverlay] = useState<{ id: string; handle: string } | null>(null);
+  const resizeStart = useRef<{ mouseX: number; mouseY: number; w: number; h: number; x: number; y: number }>({ mouseX: 0, mouseY: 0, w: 0, h: 0, x: 0, y: 0 });
+
   const handleUploadAudio = useCallback(() => {
     audioUploadRef.current?.click();
   }, []);
