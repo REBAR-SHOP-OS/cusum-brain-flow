@@ -2001,7 +2001,7 @@ export function AIExtractView() {
                                   {row.bar_size_mapped || row.bar_size || "—"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—"}</TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (<TableCell className="text-xs font-mono p-1.5">{row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, displayUnit) || "—") : String(row.total_length_mm)) : "—"}</TableCell> || "—") : String(row.total_length_mm)) : "—"}</TableCell>
                               <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
                               <TableCell className="text-xs p-1.5">
                                 {survivorRow ? (
