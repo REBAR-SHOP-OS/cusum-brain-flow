@@ -159,12 +159,12 @@ export function RebarTagCard({
       </div>
 
       {/* Ref — full width */}
-      <div className="border-b border-black text-xs shrink-0 px-2 py-2 min-h-[3.5rem]">
+      <div className="border-b border-black text-xs shrink-0 px-2 py-2 min-h-[3.5rem] overflow-hidden">
         <div className="flex gap-1">
           <span className="font-bold">Ref:</span>
           <span className="font-black uppercase">{reference || customer || "—"}</span>
         </div>
-        {address && <div className="text-[9px] leading-tight mt-0.5">{address}</div>}
+        {address && <div className="text-[9px] leading-tight mt-0.5 line-clamp-2">{address}</div>}
       </div>
 
       {/* Footer */}
