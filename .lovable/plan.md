@@ -1,17 +1,55 @@
 
 
-# Remove "Edit" Button from Editor Toolbar
+# Fix: Duplicate Scene Creates Complete Copy
 
-## Change
-Remove the "Edit" button (with pencil icon) from the top-right toolbar in `ProVideoEditor.tsx`.
+## Problem
+`handleDuplicateScene` creates a new scene with the same `segmentId` but does NOT create a new segment entry. The duplicated card appears blank because:
+1. No new segment is created — the duplicate shares the original's segment reference
+2. No clip is associated with the new scene ID — so no thumbnails or video appear
+3. The clip from the original scene should be copied for the duplicate
 
-## File: `src/components/ad-director/ProVideoEditor.tsx`
-**Lines 1545-1547** — Delete the Edit button:
+## Solution (1 file)
+
+### `src/components/ad-director/ProVideoEditor.tsx` — `handleDuplicateScene`
+
+Update the function to:
+1. Create a new segment (copy of original with new ID and same timing)
+2. Add it to `segments` via `onUpdateSegments`
+3. Create the new scene referencing the new segment ID
+4. Copy the clip reference so thumbnails/video appear on the duplicate
+
 ```typescript
-<Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={() => handleSetActiveTab("brand-kit")}>
-  <Edit3 className="w-3 h-3" /> Edit
-</Button>
+const handleDuplicateScene = useCallback((index: number) => {
+  const scene = storyboard[index];
+  if (!scene) return;
+  const seg = segments.find(s => s.id === scene.segmentId);
+  
+  pushHistory(storyboard);
+  
+  // Create new segment (copy with new ID)
+  const newSegId = crypto.randomUUID();
+  if (seg && onUpdateSegments) {
+    const newSeg = { ...seg, id: newSegId };
+    const updatedSegments = [...segments];
+    const segIdx = segments.indexOf(seg);
+    updatedSegments.splice(segIdx + 1, 0, newSeg);
+    onUpdateSegments(updatedSegments);
+  }
+  
+  const newScene: StoryboardScene = {
+    ...scene,
+    id: crypto.randomUUID(),
+    segmentId: seg ? newSegId : scene.segmentId,
+  };
+  const updated = [...storyboard];
+  updated.splice(index + 1, 0, newScene);
+  onUpdateStoryboard?.(updated);
+  toast({ title: "Scene duplicated" });
+}, [storyboard, segments, pushHistory, onUpdateStoryboard, onUpdateSegments, toast]);
 ```
 
-Also check if `Edit3` import from lucide-react is still used elsewhere; if not, remove it from the import statement.
+## Result
+- Duplicated scene gets its own segment with correct timing
+- The card appears with proper duration label and content
+- Consistent with how split/trim already work
 
