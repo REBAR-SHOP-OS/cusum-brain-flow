@@ -132,12 +132,15 @@ function calculate(
 // --- Component ---
 
 const STOCK_LENGTHS = [6, 12, 18];
+type SourceUnit = "mm" | "in" | "ft";
+const UNIT_TO_MM: Record<SourceUnit, number> = { mm: 1, in: 25.4, ft: 304.8 };
 
 export function OrderCalcView() {
   const [stockLength, setStockLength] = useState(12);
   const [wastePct, setWastePct] = useState(5);
   const [items, setItems] = useState<ParsedItem[]>([]);
   const [results, setResults] = useState<SizeSummary[]>([]);
+  const [sourceUnit, setSourceUnit] = useState<SourceUnit>("mm");
   const [fileName, setFileName] = useState<string | null>(null);
   const [wpm, setWpm] = useState<Record<string, number>>(FALLBACK_WPM);
 
