@@ -59,16 +59,30 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
   const qc = useQueryClient();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, any>>({});
+  // Convert mm value to display unit for edit fields
+  const mmToEditUnit = (mm: number | null | undefined): number | string => {
+    if (mm == null) return "";
+    if (editUnit === "in") return Math.round((mm / 25.4) * 100) / 100;
+    if (editUnit === "ft") return Math.round((mm / 304.8) * 100) / 100;
+    if (editUnit === "imperial") return Math.round((mm / 25.4) * 100) / 100;
+    return mm;
+  };
+
   const startEdit = (item: any) => {
     setEditingItemId(item.id);
+    // Convert DB mm values to display unit so edit fields match what user sees
+    const convertedDims: Record<string, any> = {};
+    for (const [k, v] of Object.entries(item.bend_dimensions || {})) {
+      convertedDims[k] = v ? mmToEditUnit(Number(v)) : undefined;
+    }
     setEditValues({
       mark_number: item.mark_number || "",
       total_pieces: item.total_pieces,
-      cut_length_mm: item.cut_length_mm,
+      cut_length_mm: mmToEditUnit(item.cut_length_mm),
       bend_type: item.bend_type,
       asa_shape_code: item.asa_shape_code || "",
       drawing_ref: item.drawing_ref || "",
-      bend_dimensions: { ...(item.bend_dimensions || {}) },
+      bend_dimensions: convertedDims,
     });
   };
 
