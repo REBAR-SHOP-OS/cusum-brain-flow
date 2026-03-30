@@ -2001,7 +2001,7 @@ export function AIExtractView() {
                                   {row.bar_size_mapped || row.bar_size || "—"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, selectedUnitSystem as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—"}</TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, displayUnit as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—"}</TableCell>
                               <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
                               <TableCell className="text-xs p-1.5">
                                 {survivorRow ? (
@@ -2127,7 +2127,7 @@ export function AIExtractView() {
                         <TableHead className="text-[10px] font-bold tracking-wider w-[50px] sticky top-0 bg-muted/95 z-10">SIZE</TableHead>
                         <TableHead className="text-[10px] font-bold tracking-wider w-[50px] sticky top-0 bg-muted/95 z-10">TYPE</TableHead>
                         <TableHead className="text-[10px] font-bold tracking-wider w-[70px] text-right sticky top-0 bg-muted/95 z-10">
-                          LENGTH ({lengthUnitLabelByMode(selectedUnitSystem as LengthDisplayMode)})
+                          LENGTH ({lengthUnitLabelByMode(displayUnit as LengthDisplayMode)})
                         </TableHead>
                         {dimCols.map((d) => (
                           <TableHead key={d} className="text-[10px] font-bold tracking-wider w-[50px] text-right sticky top-0 bg-muted/95 z-10">{d}</TableHead>

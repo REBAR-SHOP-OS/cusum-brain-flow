@@ -185,7 +185,8 @@ export function TagsExportView() {
         dims,
       };
     });
-    setZebraZpl(generateZpl(zplRows, selectedSession?.name || "tags-export"));
+    const zplUnit = sessionUnitToDisplay(selectedSession?.unit_system);
+    setZebraZpl(generateZpl(zplRows, selectedSession?.name || "tags-export", zplUnit));
     setZebraOpen(true);
   };
 
