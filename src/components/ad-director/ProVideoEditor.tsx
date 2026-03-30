@@ -300,10 +300,11 @@ export function ProVideoEditor({
       const audioUrl = URL.createObjectURL(audioBlob);
 
       setAudioTracks([{
-        sceneId: "generated",
+        sceneId: storyboard[0]?.id || "",
         label: result.type === "music" ? "🎵 Generated Music" : "🎙️ Generated Voiceover",
         audioUrl: audioUrl,
         kind: result.type === "music" ? "music" : "voiceover",
+        startTime: 0,
       }]);
 
       setAudioPromptOpen(false);
