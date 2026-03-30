@@ -1,62 +1,49 @@
 
 
-# Fix: Audio Track Z-Index & Position-Aware Playback
+# Fix: Generate Button — Proper Audio Position & Text Sync
 
-## Problems (from screenshot)
-1. **Visual**: Green audio bar renders on top of the red playhead line — playhead should always be on top
-2. **Functional**: Audio plays from the start of the scene regardless of where the green bar is positioned on the timeline. If user drags audio to start at 3s, audio should only be heard when playhead reaches 3s.
+## Problem
+1. All generated voiceover tracks get `globalStartTime: 0` — they should each start at their scene's cumulative position on the timeline
+2. No `duration` is set on generated tracks — the position-aware playback effect can't determine when each track should play
+3. The green bars all stack at position 0 instead of aligning with their respective scenes
 
-## Root Causes
+## Fix (1 file)
 
-### Z-Index
-- Playhead is in the video track section with `z-20`
-- Audio/text tracks are rendered in separate `div` sections *below* the video track in DOM order
-- The playhead line doesn't extend into the audio/text track rows
+### `src/components/ad-director/ProVideoEditor.tsx`
 
-### Audio Playback
-- Current logic in `ProVideoEditor.tsx` (line ~690-780) finds voiceover by `sceneId` and plays it when the scene starts
-- It completely ignores `globalStartTime` — the track always plays from `currentTime: 0` synced to video start
-- No mechanism checks "is the playhead currently within this audio track's time range?"
+**In `generateAllVoiceovers` (~line 1273-1355):**
 
-## Solution
+1. Compute cumulative scene start times at the beginning of the function (same logic as `cumulativeStarts` memo)
+2. When pushing each new track, set:
+   - `globalStartTime` = cumulative start of that scene
+   - `duration` = measured `voDur` (or clip duration fallback)
+3. Batch-update `voiceoverDurations` after the loop instead of inside it, to trigger the text overlay `useEffect` once with complete data
 
-### File 1: `src/components/ad-director/editor/TimelineBar.tsx`
-
-**Extend playhead across all track rows**: Move the playhead rendering to a wrapper that spans video + text + audio rows, or add a secondary playhead line in the text and audio rows. The cleanest approach: wrap all track rows (video, text, audio) in a single `relative` container and render the playhead once across all of them with a higher z-index (`z-40`).
-
-### File 2: `src/components/ad-director/ProVideoEditor.tsx`
-
-**Position-aware voiceover playback**: Modify the voiceover playback effect to:
-1. Calculate the global time of the current playback position
-2. For each voiceover track, check if `globalTime` falls within `[globalStartTime, globalStartTime + duration]`
-3. If yes, calculate the offset into the audio: `audioOffset = globalTime - globalStartTime`
-4. Set `audio.currentTime = audioOffset` and play
-5. If playhead is outside the track's range, pause/don't play the audio
-
-Key change in the playback effect (~line 697):
 ```typescript
-// Instead of finding VO by sceneId:
-const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
+// Before the for loop:
+let cumStart = 0;
+const sceneStarts: Record<string, number> = {};
+for (const scene of storyboard) {
+  sceneStarts[scene.id] = cumStart;
+  const seg = segments.find(s => s.id === scene.segmentId);
+  cumStart += seg ? seg.endTime - seg.startTime : 4;
+}
 
-// Find VO by global time position:
-const activeVo = audioTracks.find(a => {
-  if (a.kind !== "voiceover") return false;
-  const start = a.globalStartTime ?? 0;
-  const dur = a.duration ?? totalDuration;
-  return globalTime >= start && globalTime < start + dur;
+// When pushing track:
+newTracks.push({
+  sceneId: scene.id,
+  label: seg.label,
+  audioUrl: url,
+  kind: "voiceover",
+  globalStartTime: sceneStarts[scene.id] ?? 0,
+  duration: voDur ?? clipDur ?? (seg.endTime - seg.startTime),
 });
 ```
 
-Then set `audio.currentTime = globalTime - (activeVo.globalStartTime ?? 0)` instead of syncing to video currentTime.
-
-Also update the `timeupdate` sync handler to pause audio when playhead moves outside the track's range.
-
-## Files Changed
-1. `src/components/ad-director/editor/TimelineBar.tsx` — playhead spans all rows
-2. `src/components/ad-director/ProVideoEditor.tsx` — position-aware audio playback
+This ensures each green bar appears at the correct timeline position matching its scene, and the position-aware playback logic can determine exactly when to play each voiceover.
 
 ## Result
-- Red playhead line is always visible on top of all track bars
-- Audio only plays when playhead is within the audio track's time range
-- Dragging the audio bar to a different position changes when the audio is heard
+- Generate button produces green bars aligned to their respective scenes
+- Blue text overlays auto-sync via existing `useEffect` on `voiceoverDurations`
+- Audio plays only when playhead reaches each bar's position
 
