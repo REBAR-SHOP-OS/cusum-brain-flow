@@ -990,20 +990,37 @@ export function ProVideoEditor({
     if (!scene) return;
     const seg = segments.find(s => s.id === scene.segmentId);
     if (!seg) return;
-    const midTime = (seg.startTime + seg.endTime) / 2;
-    const newSceneId = crypto.randomUUID();
-    const newSegId = crypto.randomUUID();
-    const newScene: StoryboardScene = {
-      ...scene,
-      id: newSceneId,
-      segmentId: newSegId,
-    };
+
+    const sceneDur = seg.endTime - seg.startTime;
+    const splitAt = currentTime;
+    if (splitAt <= 0.05 || splitAt >= sceneDur - 0.05) {
+      toast({ title: "Cannot split", description: "Move playhead inside the scene first." });
+      return;
+    }
+
     pushHistory(storyboard);
+
+    const absoluteSplit = seg.startTime + splitAt;
+    const newSegId = crypto.randomUUID();
+
+    // Trim original segment and create new second half
+    const updatedSegments = segments.map(s =>
+      s.id === seg.id ? { ...s, endTime: absoluteSplit } : s
+    );
+    const segIdx = updatedSegments.findIndex(s => s.id === seg.id);
+    const newSeg = { ...seg, id: newSegId, startTime: absoluteSplit, endTime: seg.endTime };
+    updatedSegments.splice(segIdx + 1, 0, newSeg);
+    onUpdateSegments?.(updatedSegments);
+
+    // Insert new scene after current
+    const newScene: StoryboardScene = { ...scene, id: crypto.randomUUID(), segmentId: newSegId };
     const updated = [...storyboard];
     updated.splice(index + 1, 0, newScene);
     onUpdateStoryboard?.(updated);
-    toast({ title: "Scene split", description: `Scene ${index + 1} divided at ${midTime.toFixed(1)}s` });
-  }, [storyboard, segments, pushHistory, onUpdateStoryboard, toast]);
+
+    setCurrentTime(0);
+    toast({ title: "Scene split", description: `Split at ${splitAt.toFixed(1)}s` });
+  }, [storyboard, segments, currentTime, pushHistory, onUpdateStoryboard, onUpdateSegments, toast]);
 
   const handleDuplicateScene = useCallback((index: number) => {
     const scene = storyboard[index];
