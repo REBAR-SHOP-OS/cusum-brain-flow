@@ -8,6 +8,7 @@ import {
   Scissors, Expand, SplitSquareHorizontal, Copy,
   ArrowLeft, ArrowRight, VolumeOff, FileText,
   RotateCcw, Sparkles, MoveVertical,
+  LayoutGrid, Rows3, GripVertical,
 } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
@@ -161,6 +162,11 @@ export function TimelineBar({
   const [isDragging, setIsDragging] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
   const thumbnails = useVideoThumbnails(clips);
+  const [viewMode, setViewMode] = useState<"expanded" | "compact">("expanded");
+
+  // ─── Scene drag-to-reorder state ───
+  const [sceneDragIdx, setSceneDragIdx] = useState<number | null>(null);
+  const [sceneDropIdx, setSceneDropIdx] = useState<number | null>(null);
 
   // ─── Item drag-to-reposition state ───
   const itemDragRef = useRef<{
@@ -330,6 +336,39 @@ export function TimelineBar({
     return seg ? seg.endTime - seg.startTime : 4;
   };
 
+  // ─── Scene drag-to-reorder handlers ───
+  const handleSceneDragStart = useCallback((e: React.DragEvent, idx: number) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(idx));
+    setSceneDragIdx(idx);
+  }, []);
+
+  const handleSceneDragOver = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setSceneDropIdx(idx);
+  }, []);
+
+  const handleSceneDrop = useCallback((e: React.DragEvent, dropIdx: number) => {
+    e.preventDefault();
+    const fromIdx = sceneDragIdx;
+    setSceneDragIdx(null);
+    setSceneDropIdx(null);
+    if (fromIdx === null || fromIdx === dropIdx || !onMoveScene) return;
+    // Move one step at a time to reach the target
+    const dir = dropIdx > fromIdx ? 1 : -1;
+    let current = fromIdx;
+    while (current !== dropIdx) {
+      onMoveScene(current, dir as -1 | 1);
+      current += dir;
+    }
+  }, [sceneDragIdx, onMoveScene]);
+
+  const handleSceneDragEnd = useCallback(() => {
+    setSceneDragIdx(null);
+    setSceneDropIdx(null);
+  }, []);
+
   return (
     <div className="border-t border-border/40 bg-card/80 backdrop-blur-sm">
       {/* Toolbar */}
@@ -354,12 +393,86 @@ export function TimelineBar({
           </div>
         )}
         <div className="flex-1" />
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.max(z / 1.5, 0.5))} title="Zoom Out"><ZoomOut className="w-3 h-3" /></Button>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.min(z * 1.5, 5))} title="Zoom In"><ZoomIn className="w-3 h-3" /></Button>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(1)} title="Fit"><Maximize className="w-3 h-3" /></Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-1.5 text-[9px] gap-1"
+          onClick={() => setViewMode(v => v === "expanded" ? "compact" : "expanded")}
+          title={viewMode === "expanded" ? "Compact view" : "Expanded view"}
+        >
+          {viewMode === "expanded" ? <LayoutGrid className="w-3 h-3" /> : <Rows3 className="w-3 h-3" />}
+          {viewMode === "expanded" ? "Cards" : "Track"}
+        </Button>
+        {viewMode === "expanded" && (
+          <>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.max(z / 1.5, 0.5))} title="Zoom Out"><ZoomOut className="w-3 h-3" /></Button>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.min(z * 1.5, 5))} title="Zoom In"><ZoomIn className="w-3 h-3" /></Button>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(1)} title="Fit"><Maximize className="w-3 h-3" /></Button>
+          </>
+        )}
       </div>
 
-      {/* Tracks */}
+      {/* ─── Compact card view ─── */}
+      {viewMode === "compact" && (
+        <div className="px-3 py-2 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+          <div className="flex items-center gap-2">
+            {storyboard.map((scene, i) => {
+              const clip = clips.find(c => c.sceneId === scene.id);
+              const seg = segments.find(s => s.id === scene.segmentId);
+              const isSelected = i === selectedSceneIndex;
+              const isCompleted = clip?.status === "completed";
+              const isGenerating = clip?.status === "generating";
+              const durSec = seg ? (seg.endTime - seg.startTime).toFixed(0) : "--";
+              const isDropTarget = sceneDropIdx === i && sceneDragIdx !== null && sceneDragIdx !== i;
+
+              return (
+                <div
+                  key={scene.id}
+                  draggable={!!onMoveScene}
+                  onDragStart={(e) => handleSceneDragStart(e, i)}
+                  onDragOver={(e) => handleSceneDragOver(e, i)}
+                  onDrop={(e) => handleSceneDrop(e, i)}
+                  onDragEnd={handleSceneDragEnd}
+                  onClick={() => onSelectScene(i)}
+                  className={`relative flex-shrink-0 w-[120px] h-12 rounded-md overflow-hidden cursor-pointer transition-all
+                    ${isSelected ? "ring-2 ring-primary" : "ring-1 ring-border/40"}
+                    ${sceneDragIdx === i ? "opacity-40" : ""}
+                    ${isDropTarget ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}
+                    ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
+                  `}
+                >
+                  {/* Thumbnail */}
+                  {thumbnails[scene.id]?.[0] ? (
+                    <>
+                      <img src={thumbnails[scene.id][0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                    </>
+                  ) : null}
+                  {/* Duration badge */}
+                  <span className="absolute top-0.5 left-0.5 text-[7px] px-1 py-px rounded-full bg-black/50 text-white font-mono z-10">{durSec}s</span>
+                  {/* Status dot */}
+                  <div className="absolute top-1 right-1 z-10">
+                    <div className={`w-2 h-2 rounded-full ${isCompleted ? "bg-emerald-400" : isGenerating ? "bg-blue-400 animate-pulse" : "bg-muted-foreground/40"}`} />
+                  </div>
+                  {/* Drag handle */}
+                  {onMoveScene && (
+                    <GripVertical className="absolute top-1 left-[calc(50%-5px)] w-2.5 h-2.5 text-white/50 z-10" />
+                  )}
+                  {/* Scene title */}
+                  <div className="absolute bottom-0.5 left-1 right-1 z-10">
+                    <div className="text-[8px] text-white font-medium truncate drop-shadow-sm">
+                      {seg?.label || `Scene ${i + 1}`}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Expanded track view ─── */}
+      {viewMode === "expanded" && (
       <div className="px-3 py-2 space-y-1.5 relative overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
         <div style={{ width: `${100 * zoomLevel}%`, minWidth: "100%" }}>
         {/* ─── Time ruler ─── */}
@@ -402,14 +515,22 @@ export function TimelineBar({
               const isCompleted = clip?.status === "completed";
               const isGenerating = clip?.status === "generating";
               const durSec = seg ? (seg.endTime - seg.startTime).toFixed(0) : "--";
+              const isDropTarget = sceneDropIdx === i && sceneDragIdx !== null && sceneDragIdx !== i;
 
               return (
                 <Popover key={scene.id}>
                   <PopoverTrigger asChild>
                     <div
+                      draggable={!!onMoveScene}
+                      onDragStart={(e) => handleSceneDragStart(e, i)}
+                      onDragOver={(e) => handleSceneDragOver(e, i)}
+                      onDrop={(e) => handleSceneDrop(e, i)}
+                      onDragEnd={handleSceneDragEnd}
                       onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
                       className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden
                         ${isSelected ? "ring-2 ring-primary ring-inset z-10" : ""}
+                        ${isDropTarget ? "ring-2 ring-primary ring-inset" : ""}
+                        ${sceneDragIdx === i ? "opacity-40" : ""}
                         ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
                       `}
                       style={{ flex: dur }}
@@ -452,6 +573,10 @@ export function TimelineBar({
                       <div className="absolute top-0.5 left-0.5 z-10">
                         <span className="text-[7px] px-1 py-px rounded-full bg-black/50 text-white font-mono">{durSec}s</span>
                       </div>
+                      {/* Drop indicator line */}
+                      {isDropTarget && (
+                        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary z-30" />
+                      )}
                       {/* Scene info */}
                       <div className="relative z-10 px-1 pb-0.5 w-full">
                         <div className="text-[8px] text-white font-semibold truncate drop-shadow-sm">
@@ -671,6 +796,7 @@ export function TimelineBar({
 
       </div>
       </div>
+      )}
     </div>
   );
 }
