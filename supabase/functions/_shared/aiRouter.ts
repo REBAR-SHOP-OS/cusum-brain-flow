@@ -239,16 +239,34 @@ async function _callAIStreamSingle(provider: AIProvider, model: string, opts: AI
 export async function callAIStream(opts: AIRequestOptions): Promise<Response> {
   const provider = opts.provider || "gemini";
   const model = opts.model || "gemini-2.5-flash";
+  const maxRetries = 3;
 
-  try {
-    return await _callAIStreamSingle(provider, model, opts);
-  } catch (e) {
-    if (e instanceof AIError && e.status === 429) {
-      console.warn(`AI stream ${model} rate-limited (429), falling back to gemini-2.5-flash`);
-      return await _callAIStreamSingle("gemini", "gemini-2.5-flash", opts);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await _callAIStreamSingle(provider, model, opts);
+    } catch (e) {
+      if (e instanceof AIError) {
+        // Retry on 503/504 with exponential backoff
+        if ((e.status === 503 || e.status === 504) && attempt < maxRetries) {
+          const delay = 1000 * Math.pow(2, attempt);
+          console.warn(`AI stream ${model} returned ${e.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        // Fallback on 429/503/504 after retries exhausted
+        if (e.status === 429 || e.status === 503 || e.status === 504) {
+          const fb = opts.fallback || { provider: "gemini" as AIProvider, model: "gemini-2.5-flash" };
+          // Don't fallback to the same model
+          if (fb.provider !== provider || fb.model !== model) {
+            console.warn(`AI stream ${model} error ${e.status}, falling back to ${fb.model}`);
+            return await _callAIStreamSingle(fb.provider, fb.model, opts);
+          }
+        }
+      }
+      throw e;
     }
-    throw e;
   }
+  throw new Error("AI stream exhausted all retries");
 }
 
 async function _logUsage(
