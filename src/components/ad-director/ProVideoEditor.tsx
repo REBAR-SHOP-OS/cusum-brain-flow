@@ -1929,6 +1929,13 @@ export function ProVideoEditor({
         onMoveOverlay={handleMoveOverlay}
         onMoveAudioTrack={handleMoveAudioTrack}
         onEditOverlay={(ov) => setEditingOverlay(ov)}
+        isPlaying={isPlaying}
+        onTogglePlay={togglePlay}
+        onFrameStep={(dir) => {
+          const step = 0.016 * dir; // ~1 frame at 60fps
+          handleGlobalSeek(Math.max(0, Math.min(totalDuration, globalTime + step)));
+        }}
+        onSkipScene={skipScene}
       />
 
       {/* Audio Prompt Dialog */}
