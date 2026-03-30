@@ -1,67 +1,41 @@
 
 
-# Fix: Split Scene at Playhead Position
+# Fix: Playhead Always Visible Above Video Track & Starts at Zero
 
 ## Problem
-Current `handleSplitScene` splits at the **midpoint** of the segment (`(seg.startTime + seg.endTime) / 2`), ignoring the playhead position. It also doesn't create a proper second segment — just a new scene referencing a non-existent segment ID.
+1. The playhead (red indicator line) can render behind the video track scenes because scene elements have `z-10` (selected) and `z-20` (resize handles), while the playhead wrapper is `z-40` but the video track content with `overflow-hidden` and stacking context can obscure it.
+2. The playhead should always initialize at position 0 (start of video).
 
 ## Solution (1 file)
 
-### `src/components/ad-director/ProVideoEditor.tsx` — `handleSplitScene`
+### `src/components/ad-director/editor/TimelineBar.tsx`
 
-Replace the split logic to:
+**1. Increase playhead z-index to `z-50`** (line ~678) so it always renders above all track content including selected scenes (`z-10`) and resize handles (`z-20`).
 
-1. **Use `currentTime`** (playhead position within the selected scene) as the split point
-2. **Guard**: if playhead is at 0 or at the end, don't split (nothing to cut)
-3. **Create two segments** from the original:
-   - Segment A: `startTime` → `startTime + currentTime` (first half)
-   - Segment B: `startTime + currentTime` → `endTime` (second half)
-4. **Update segments** via `onUpdateSegments` — modify original segment's endTime, insert new segment after it
-5. **Create new scene** referencing the new segment ID
-6. **Reset playhead** to 0 after split
+**2. Move the playhead div AFTER the track rows** in the DOM order — currently it's placed before the video track inside the wrapper div. Move it to after all track rows (video, text, audio) but still inside the relative wrapper. This ensures correct stacking even without z-index differences.
 
-```typescript
-const handleSplitScene = useCallback((index: number) => {
-  const scene = storyboard[index];
-  if (!scene) return;
-  const seg = segments.find(s => s.id === scene.segmentId);
-  if (!seg) return;
+**3. Ensure `globalTime` starts at 0** — verify that `playheadPct` calculation (line 393) correctly produces 0% when `globalTime` is 0. This is already correct (`globalTime / totalDuration * 100 = 0`), but we should also ensure the rAF update (line 200-207) doesn't override with stale values on mount.
 
-  const sceneDur = seg.endTime - seg.startTime;
-  // Use currentTime as split point within the scene
-  const splitAt = currentTime;
-  if (splitAt <= 0.05 || splitAt >= sceneDur - 0.05) {
-    toast({ title: "Cannot split", description: "Move playhead inside the scene first." });
-    return;
-  }
+## Changes
 
-  pushHistory(storyboard);
+### File: `src/components/ad-director/editor/TimelineBar.tsx`
 
-  const absoluteSplit = seg.startTime + splitAt;
-  const newSegId = crypto.randomUUID();
+**Move playhead div**: Cut lines 675-693 (the Global Playhead block) and paste it just before the closing `</div>` of the "All Track Rows Wrapper" (before line 979). This places it after video, text, and audio rows in DOM order.
 
-  // Create two segments: original trimmed + new second half
-  const updatedSegments = segments.map(s =>
-    s.id === seg.id ? { ...s, endTime: absoluteSplit } : s
-  );
-  const segIdx = updatedSegments.findIndex(s => s.id === seg.id);
-  const newSeg = { ...seg, id: newSegId, startTime: absoluteSplit, endTime: seg.endTime };
-  updatedSegments.splice(segIdx + 1, 0, newSeg);
-  onUpdateSegments?.(updatedSegments);
+**Update z-index**: Change `z-40` to `z-50` on the playhead div class (line 678).
 
-  // Insert new scene after current
-  const newScene = { ...scene, id: crypto.randomUUID(), segmentId: newSegId };
-  const updated = [...storyboard];
-  updated.splice(index + 1, 0, newScene);
-  onUpdateStoryboard?.(updated);
-
-  setCurrentTime(0);
-  toast({ title: "Scene split", description: `Split at ${splitAt.toFixed(1)}s` });
-}, [storyboard, segments, currentTime, pushHistory, onUpdateStoryboard, onUpdateSegments, toast]);
+```tsx
+{/* ─── Global Playhead (spans all rows) ─── */}
+<div
+  ref={playheadRef}
+  className={`absolute top-0 bottom-0 z-50 ${scrubbing ? 'cursor-grabbing' : 'cursor-grab'} pointer-events-auto`}
+  style={{ left: `${playheadPct}%`, width: '16px', transform: 'translateX(-7px)', willChange: 'left' }}
+  ...
+>
 ```
 
 ## Result
-- Playhead position determines exactly where the scene is cut
-- Two properly-sized segments are created with correct timing
-- Both resulting cards show correct thumbnails and durations
+- Playhead always renders on top of all track elements (video, text, audio)
+- Playhead starts at position 0 (beginning of video timeline)
+- No visual obstruction from scene cards, thumbnails, or resize handles
 
