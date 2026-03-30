@@ -257,7 +257,7 @@ export function ProVideoEditor({
     setGeneratingAudio(true);
     try {
       // Step 1: Enhance prompt with Gemini AI
-      toast({ title: "🧠 در حال بهینه‌سازی پرامپت با هوش مصنوعی..." });
+      toast({ title: "🧠 Enhancing prompt with AI..." });
       const enhanceUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enhance-music-prompt`;
       const enhanceRes = await fetch(enhanceUrl, {
         method: "POST",
@@ -279,7 +279,7 @@ export function ProVideoEditor({
       }
 
       // Step 2: Generate audio with ElevenLabs using enhanced prompt
-      toast({ title: "🎵 در حال تولید صدا..." });
+      toast({ title: "🎵 Generating audio..." });
       const functionName = result.type === "music" ? "lyria-music" : "elevenlabs-tts";
       const body = result.type === "music"
         ? { prompt: finalPrompt, duration: result.duration, type: "music" }
@@ -313,10 +313,10 @@ export function ProVideoEditor({
       }]);
 
       setAudioPromptOpen(false);
-      toast({ title: "✅ صدا با موفقیت تولید شد" });
+      toast({ title: "✅ Audio generated successfully" });
     } catch (err: any) {
       console.error("Audio generation error:", err);
-      toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
+      toast({ title: "Audio generation failed", description: err.message, variant: "destructive" });
     } finally {
       setGeneratingAudio(false);
     }
@@ -333,7 +333,7 @@ export function ProVideoEditor({
       globalStartTime: 0,
     }]);
     setAudioPromptOpen(false);
-    toast({ title: "✅ فایل صوتی اضافه شد" });
+    toast({ title: "✅ Audio file added" });
   }, [toast]);
 
   const handleGenerateVoiceover = useCallback(async (result: VoiceoverResult) => {
@@ -367,10 +367,10 @@ export function ProVideoEditor({
       }]);
 
       setVoiceoverDialogOpen(false);
-      toast({ title: "✅ صدای گوینده با موفقیت تولید شد" });
+      toast({ title: "✅ Voiceover generated successfully" });
     } catch (err: any) {
       console.error("Voiceover generation error:", err);
-      toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
+      toast({ title: "Voiceover generation failed", description: err.message, variant: "destructive" });
     } finally {
       setGeneratingVoiceover(false);
     }
@@ -378,7 +378,7 @@ export function ProVideoEditor({
 
   const handleAddSubtitle = useCallback((overlay: VideoOverlay) => {
     setOverlays(prev => [...prev, overlay]);
-    toast({ title: "✅ زیرنویس اضافه شد" });
+    toast({ title: "✅ Subtitle added" });
   }, [toast]);
 
   const handleTextVoiceGenerate = useCallback(async (result: TextVoiceResult) => {
@@ -439,10 +439,10 @@ export function ProVideoEditor({
       });
 
       setTextVoiceDialogOpen(false);
-      toast({ title: "✅ متن و صدا با موفقیت تولید شد" });
+      toast({ title: "✅ Text & voice generated successfully" });
     } catch (err: any) {
       console.error("TextVoice generation error:", err);
-      toast({ title: "خطا در تولید متن و صدا", description: err.message, variant: "destructive" });
+      toast({ title: "Text & voice generation failed", description: err.message, variant: "destructive" });
     } finally {
       setGeneratingTextVoice(false);
     }
@@ -938,7 +938,7 @@ export function ProVideoEditor({
     const sceneDur = seg.endTime - seg.startTime;
 
     if (splitPoint < 0.5 || splitPoint > sceneDur - 0.5) {
-      toast({ title: "برش ممکن نیست", description: "نشانه‌گر را به وسط صحنه منتقل کنید", variant: "destructive" });
+      toast({ title: "Cannot split", description: "Move playhead to the middle of the scene", variant: "destructive" });
       return;
     }
 
@@ -970,7 +970,7 @@ export function ProVideoEditor({
     updatedStoryboard.splice(index + 1, 0, newScene);
     onUpdateStoryboard?.(updatedStoryboard);
 
-    toast({ title: "صحنه برش خورد", description: `برش در ${globalTime.toFixed(1)}s` });
+    toast({ title: "Scene split", description: `Split at ${globalTime.toFixed(1)}s` });
   }, [storyboard, segments, globalTime, cumulativeStarts, toast, pushHistory, onUpdateSegments, onUpdateStoryboard]);
 
 
@@ -991,7 +991,7 @@ export function ProVideoEditor({
     if (!scene) return;
     const clip = clips.find(c => c.sceneId === scene.id);
     if (!clip?.videoUrl) {
-      toast({ title: "برش ممکن نیست", description: "ویدئویی برای این صحنه وجود ندارد", variant: "destructive" });
+      toast({ title: "Cannot trim", description: "No video for this scene", variant: "destructive" });
       return;
     }
     const seg = segments.find(s => s.id === scene.segmentId);
@@ -1000,7 +1000,7 @@ export function ProVideoEditor({
     // Validate trim range
     const newDuration = trimEnd - trimStart;
     if (newDuration < 0.5) {
-      toast({ title: "برش ممکن نیست", description: "مدت زمان بسیار کوتاه است", variant: "destructive" });
+      toast({ title: "Cannot trim", description: "Duration too short", variant: "destructive" });
       return;
     }
 
@@ -1018,9 +1018,9 @@ export function ProVideoEditor({
       // Update cached clip duration
       setClipDurations(prev => ({ ...prev, [scene.id]: newDuration }));
 
-      toast({ title: "✂️ صحنه برش خورد", description: `مدت جدید: ${newDuration.toFixed(1)}s` });
+      toast({ title: "✂️ Scene trimmed", description: `New duration: ${newDuration.toFixed(1)}s` });
     } catch (err: any) {
-      toast({ title: "خطا در برش", description: err.message || "برش ویدئو با خطا مواجه شد", variant: "destructive" });
+      toast({ title: "Trim failed", description: err.message || "Video trimming error", variant: "destructive" });
     } finally {
       setIsTrimming(false);
     }
@@ -1457,7 +1457,7 @@ export function ProVideoEditor({
 
       // ── Phase 2: Auto-generate background music ──
       try {
-        toast({ title: "🎵 در حال تولید موسیقی..." });
+        toast({ title: "🎵 Generating music..." });
         const allTexts = segments.map(s => s.text).filter(Boolean).join(". ");
         const musicPrompt = `Cinematic instrumental background music for a professional video about: ${allTexts.slice(0, 300)}`;
         const totalDuration = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
@@ -1486,19 +1486,19 @@ export function ProVideoEditor({
             kind: "music" as const,
             globalStartTime: 0,
           });
-          toast({ title: "🎵 موسیقی ساخته شد" });
+          toast({ title: "🎵 Music generated" });
         } else {
           console.warn("Music generation failed:", musicResponse.status);
-          toast({ title: "⚠ موسیقی ساخته نشد", description: "ادامه بدون موسیقی", variant: "destructive" });
+          toast({ title: "⚠ Music generation failed", description: "Continuing without music", variant: "destructive" });
         }
       } catch (musicErr: any) {
         console.warn("Music generation error:", musicErr.message);
-        toast({ title: "⚠ موسیقی ساخته نشد", variant: "destructive" });
+        toast({ title: "⚠ Music generation failed", variant: "destructive" });
       }
 
       // ── Phase 3: Apply all tracks at once ──
       setAudioTracks(newTracks);
-      toast({ title: "✅ تولید کامل شد", description: `${newTracks.length} ترک صدا و موسیقی ساخته شد` });
+      toast({ title: "✅ Generation complete", description: `${newTracks.length} audio & music tracks created` });
     } catch (err: any) {
       toast({ title: "Voiceover generation failed", description: err.message, variant: "destructive" });
     } finally {
@@ -1514,7 +1514,7 @@ export function ProVideoEditor({
 
     // 1. Trigger video regeneration
     onRegenerateScene?.(sceneId);
-    toast({ title: "🔄 بازسازی کامل صحنه...", description: "فیلم، صدا و متن در حال تولید است" });
+    toast({ title: "🔄 Regenerating full scene...", description: "Video, audio, and text are being generated" });
 
     // 2. Remove existing voiceover & text overlays for this scene
     setAudioTracks(prev => prev.filter(a => !(a.sceneId === sceneId && a.kind === "voiceover")));
@@ -1605,7 +1605,7 @@ export function ProVideoEditor({
               duration: trackDuration,
             },
           ]);
-          toast({ title: "✅ صدای گوینده بازسازی شد" });
+          toast({ title: "✅ Voiceover regenerated" });
         }
       } catch (err: any) {
         console.warn("Single scene VO regen failed:", err.message);

@@ -46,19 +46,19 @@ export function VoiceoverDialog({ open, onClose, onGenerate, generating }: Voice
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
             <Mic className="w-4 h-4" />
-            تولید صدای گوینده
+            Generate Voiceover
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <Textarea
             value={text}
             onChange={e => setText(e.target.value)}
-            placeholder="متن را وارد کنید تا خوانده شود..."
+            placeholder="Enter text to be spoken..."
             className="text-sm min-h-[100px]"
             dir="auto"
           />
           <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">صدا</label>
+            <label className="text-xs text-muted-foreground">Voice</label>
             <Select value={voiceId} onValueChange={setVoiceId}>
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue />
@@ -72,7 +72,7 @@ export function VoiceoverDialog({ open, onClose, onGenerate, generating }: Voice
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs text-muted-foreground">سرعت</label>
+              <label className="text-xs text-muted-foreground">Speed</label>
               <span className="text-xs text-muted-foreground">{speed.toFixed(1)}x</span>
             </div>
             <Slider
@@ -84,14 +84,14 @@ export function VoiceoverDialog({ open, onClose, onGenerate, generating }: Voice
             />
           </div>
           <p className="text-[10px] text-muted-foreground">
-            حداکثر ۵۰۰۰ کاراکتر • صدای قبلی جایگزین می‌شود
+            Max 5000 characters • Replaces previous voiceover
           </p>
         </div>
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={generating}>انصراف</Button>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={generating}>Cancel</Button>
           <Button size="sm" onClick={handleGenerate} disabled={!text.trim() || generating}>
             {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Mic className="w-3.5 h-3.5 mr-1" />}
-            {generating ? "در حال تولید..." : "تولید صدا"}
+            {generating ? "Generating..." : "Generate Voice"}
           </Button>
         </DialogFooter>
       </DialogContent>

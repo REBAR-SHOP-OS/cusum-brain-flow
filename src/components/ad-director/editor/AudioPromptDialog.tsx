@@ -69,24 +69,24 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md bg-background border-border">
         <DialogHeader>
-          <DialogTitle>موسیقی</DialogTitle>
-          <DialogDescription>موسیقی را تولید کنید یا فایل صوتی آپلود کنید.</DialogDescription>
+          <DialogTitle>Music</DialogTitle>
+          <DialogDescription>Generate music or upload an audio file.</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="generate" className="w-full">
           <TabsList className="w-full">
             <TabsTrigger value="generate" className="flex-1 gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" /> تولید با AI
+              <Sparkles className="w-3.5 h-3.5" /> Generate with AI
             </TabsTrigger>
             <TabsTrigger value="upload" className="flex-1 gap-1.5">
-              <Upload className="w-3.5 h-3.5" /> آپلود فایل
+              <Upload className="w-3.5 h-3.5" /> Upload File
             </TabsTrigger>
           </TabsList>
 
           {/* Generate Tab */}
           <TabsContent value="generate" className="space-y-4 pt-2">
             <div className="space-y-2">
-              <Label>پرامپت</Label>
+              <Label>Prompt</Label>
               <Input
                 placeholder="cinematic intro music..."
                 value={prompt}
@@ -96,7 +96,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
             </div>
 
             <div className="space-y-2">
-              <Label>مدت زمان</Label>
+              <Label>Duration</Label>
               <ToggleGroup type="single" value={duration} onValueChange={(v) => v && setDuration(v)} className="justify-start">
                 <ToggleGroupItem value="15" className="text-xs">15s</ToggleGroupItem>
                 <ToggleGroupItem value="30" className="text-xs">30s</ToggleGroupItem>
@@ -106,7 +106,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
 
             <div className="flex justify-end">
               <Button onClick={handleSubmit} disabled={!prompt.trim() || loading}>
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> در حال تولید...</> : "تولید موسیقی"}
+                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : "Generate Music"}
               </Button>
             </div>
           </TabsContent>
@@ -128,7 +128,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
                 onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
               />
               <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">فایل موسیقی را بکشید و رها کنید یا کلیک کنید</p>
+              <p className="text-sm text-muted-foreground">Drag and drop a music file or click to browse</p>
               <p className="text-xs text-muted-foreground mt-1">MP3, WAV, M4A, OGG</p>
             </div>
 
@@ -148,7 +148,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
 
             <div className="flex justify-end">
               <Button onClick={handleUploadSubmit} disabled={!selectedFile || !onUpload}>
-                افزودن به تایم‌لاین
+                Add to Timeline
               </Button>
             </div>
           </TabsContent>

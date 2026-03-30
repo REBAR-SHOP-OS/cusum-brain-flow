@@ -37,24 +37,24 @@ export function SubtitleDialog({ open, onClose, sceneId, onAdd }: SubtitleDialog
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
             <Captions className="w-4 h-4" />
-            افزودن زیرنویس
+            Add Subtitle
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <Textarea
             value={text}
             onChange={e => setText(e.target.value)}
-            placeholder="متن زیرنویس را وارد کنید..."
+            placeholder="Enter subtitle text..."
             className="text-sm min-h-[80px]"
             dir="auto"
           />
           <p className="text-[10px] text-muted-foreground">
-            زیرنویس در پایین ویدئو نمایش داده می‌شود
+            Subtitle will appear at the bottom of the video
           </p>
         </div>
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose}>انصراف</Button>
-          <Button size="sm" onClick={handleAdd} disabled={!text.trim()}>افزودن زیرنویس</Button>
+          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={handleAdd} disabled={!text.trim()}>Add Subtitle</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
