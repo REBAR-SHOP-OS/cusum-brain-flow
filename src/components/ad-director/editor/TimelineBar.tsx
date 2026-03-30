@@ -393,9 +393,23 @@ export function TimelineBar({
           </div>
         )}
         <div className="flex-1" />
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.max(z / 1.5, 0.5))} title="Zoom Out"><ZoomOut className="w-3 h-3" /></Button>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.min(z * 1.5, 5))} title="Zoom In"><ZoomIn className="w-3 h-3" /></Button>
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(1)} title="Fit"><Maximize className="w-3 h-3" /></Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-1.5 text-[9px] gap-1"
+          onClick={() => setViewMode(v => v === "expanded" ? "compact" : "expanded")}
+          title={viewMode === "expanded" ? "Compact view" : "Expanded view"}
+        >
+          {viewMode === "expanded" ? <LayoutGrid className="w-3 h-3" /> : <Rows3 className="w-3 h-3" />}
+          {viewMode === "expanded" ? "Cards" : "Track"}
+        </Button>
+        {viewMode === "expanded" && (
+          <>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.max(z / 1.5, 0.5))} title="Zoom Out"><ZoomOut className="w-3 h-3" /></Button>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.min(z * 1.5, 5))} title="Zoom In"><ZoomIn className="w-3 h-3" /></Button>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(1)} title="Fit"><Maximize className="w-3 h-3" /></Button>
+          </>
+        )}
       </div>
 
       {/* Tracks */}
