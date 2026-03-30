@@ -57,10 +57,13 @@ export function WebsiteToolbar({
         body: { action: "inject" },
       });
       if (error) throw error;
-      if (data?.alreadyExists) {
-        toast.info("Static hero already exists on the homepage");
+      if (data?.injected) {
+        toast.success(`Hero CSS fix injected (${data.slideIds?.length || 0} slides). Refresh to see changes.`);
+        onRefresh();
+      } else if (data?.removed) {
+        toast.success("Hero CSS fix removed.");
       } else {
-        toast.success("Homepage hero fixed! Refresh the preview to see changes.");
+        toast.info("Hero fix applied.");
         onRefresh();
       }
     } catch (err: any) {
