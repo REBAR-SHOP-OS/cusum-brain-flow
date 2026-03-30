@@ -439,7 +439,7 @@ export function ProVideoEditor({
       });
 
       setTextVoiceDialogOpen(false);
-      toast({ title: "✅ متن و صدا با موفقیت تولید شد" });
+      toast({ title: "✅ Text & voice generated successfully" });
     } catch (err: any) {
       console.error("TextVoice generation error:", err);
       toast({ title: "خطا در تولید متن و صدا", description: err.message, variant: "destructive" });
