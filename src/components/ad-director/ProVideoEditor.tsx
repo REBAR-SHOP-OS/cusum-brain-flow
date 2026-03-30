@@ -320,10 +320,11 @@ export function ProVideoEditor({
   const handleAudioUpload = useCallback((result: AudioUploadResult) => {
     const audioUrl = URL.createObjectURL(result.file);
     setAudioTracks(prev => [...prev, {
-      sceneId: "uploaded",
+      sceneId: storyboard[0]?.id || "",
       label: result.kind === "music" ? `🎵 ${result.file.name}` : `🎙️ ${result.file.name}`,
       audioUrl,
       kind: result.kind,
+      startTime: 0,
     }]);
     setAudioPromptOpen(false);
     toast({ title: "✅ فایل صوتی اضافه شد" });
