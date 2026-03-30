@@ -423,12 +423,25 @@ async function publishToLinkedIn(
   imageUrl?: string
 ): Promise<{ id?: string; error?: string }> {
   try {
-    const { data: connection } = await supabase
+    let { data: connection } = await supabase
       .from("integration_connections")
       .select("config")
       .eq("user_id", userId)
       .eq("integration_id", "linkedin")
       .maybeSingle();
+
+    // Fallback: use any user's LinkedIn connection (mirrors FB/IG pattern)
+    if (!connection) {
+      const { data: fallback } = await supabase
+        .from("integration_connections")
+        .select("config")
+        .eq("integration_id", "linkedin")
+        .eq("status", "connected")
+        .order("last_sync_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      connection = fallback;
+    }
 
     if (!connection) return { error: "LinkedIn not connected. Please connect it from Integrations." };
     const config = connection.config as { access_token: string; expires_at: number };
