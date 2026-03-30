@@ -1514,7 +1514,7 @@ export function ProVideoEditor({
 
     // 1. Trigger video regeneration
     onRegenerateScene?.(sceneId);
-    toast({ title: "🔄 بازسازی کامل صحنه...", description: "فیلم، صدا و متن در حال تولید است" });
+    toast({ title: "🔄 Regenerating full scene...", description: "Video, audio, and text are being generated" });
 
     // 2. Remove existing voiceover & text overlays for this scene
     setAudioTracks(prev => prev.filter(a => !(a.sceneId === sceneId && a.kind === "voiceover")));
