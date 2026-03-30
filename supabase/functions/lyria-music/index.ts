@@ -1,13 +1,12 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ body }) => {
     const { prompt, duration } = body;
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
 
-    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
+    if (!ELEVENLABS_API_KEY) throw new Error("ELEVENLABS_API_KEY not configured");
     if (!prompt) {
       return new Response(JSON.stringify({ error: "prompt is required" }), {
         status: 400,
@@ -15,46 +14,35 @@ Deno.serve((req) =>
       });
     }
 
-    const url = "https://generativelanguage.googleapis.com/v1beta/models/lyria-3-clip-preview:generateContent";
+    const durationSeconds = Math.min(Math.max(duration || 30, 5), 60);
 
-    const response = await fetch(`${url}?key=${GEMINI_API_KEY}`, {
+    console.log("Generating music via ElevenLabs:", { prompt: prompt.slice(0, 100), durationSeconds });
+
+    const response = await fetch("https://api.elevenlabs.io/v1/music", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        prompt,
+        duration_seconds: durationSeconds,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Lyria 3 API error:", response.status, errorText);
+      console.error("ElevenLabs Music API error:", response.status, errorText);
       return new Response(JSON.stringify({ error: "Music generation failed" }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const data = await response.json();
-    const audioBase64 = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    const mimeType = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || "audio/mp3";
+    const audioBuffer = await response.arrayBuffer();
 
-    if (!audioBase64) {
-      console.error("No audio data in Lyria response:", JSON.stringify(data).slice(0, 500));
-      return new Response(JSON.stringify({ error: "No audio generated" }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Decode base64 to binary
-    const binaryString = atob(audioBase64);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-
-    return new Response(bytes.buffer, {
-      headers: { ...corsHeaders, "Content-Type": mimeType },
+    return new Response(audioBuffer, {
+      headers: { ...corsHeaders, "Content-Type": "audio/mpeg" },
     });
   }, { functionName: "lyria-music", authMode: "none", requireCompany: false, rawResponse: true })
 );
