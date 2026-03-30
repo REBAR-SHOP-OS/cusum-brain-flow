@@ -97,22 +97,13 @@ export default function SocialMediaManager() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
-  const isProtectedPost = useCallback((id: string) => {
-    const post = posts.find((p) => p.id === id);
-    return post?.status === "scheduled" || post?.status === "published";
-  }, [posts]);
-
   const toggleSelectPost = useCallback((id: string) => {
-    if (isProtectedPost(id)) {
-      toast({ title: "پست‌های زمان‌بندی شده و منتشر شده قابل حذف نیستند", variant: "destructive" });
-      return;
-    }
     setSelectedPostIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
-  }, [isProtectedPost, toast]);
+  }, []);
 
   const exitSelectionMode = useCallback(() => {
     setSelectionMode(false);
@@ -162,42 +153,38 @@ export default function SocialMediaManager() {
   }, [posts, platformFilter, statusFilter, searchQuery]);
 
   const toggleSelectAll = useCallback(() => {
-    const selectableIds = filteredPosts.filter((p) => p.status !== "scheduled" && p.status !== "published").map((p) => p.id);
-    if (selectableIds.length > 0 && selectableIds.every((id) => selectedPostIds.has(id))) {
+    const allIds = filteredPosts.map((p) => p.id);
+    if (allIds.length > 0 && allIds.every((id) => selectedPostIds.has(id))) {
       setSelectedPostIds(new Set());
     } else {
-      setSelectedPostIds(new Set(selectableIds));
+      setSelectedPostIds(new Set(allIds));
     }
   }, [filteredPosts, selectedPostIds]);
 
   const handleSelectDay = useCallback((dayPostIds: string[]) => {
-    const safeIds = dayPostIds.filter((id) => !isProtectedPost(id));
     setSelectedPostIds((prev) => {
-      const allSelected = safeIds.every((id) => prev.has(id));
+      const allSelected = dayPostIds.every((id) => prev.has(id));
       const next = new Set(prev);
       if (allSelected) {
-        for (const id of safeIds) next.delete(id);
+        for (const id of dayPostIds) next.delete(id);
       } else {
-        for (const id of safeIds) next.add(id);
+        for (const id of dayPostIds) next.add(id);
       }
       return next;
     });
-  }, [isProtectedPost]);
+  }, []);
 
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleting(true);
 
-    // Filter out protected posts as a safety net
-    const deletableIds = [...selectedPostIds].filter((id) => !isProtectedPost(id));
-
-    for (const id of deletableIds) {
+    for (const id of selectedPostIds) {
       await deletePost.mutateAsync(id);
     }
 
     setBulkDeleting(false);
     setShowDeleteConfirm(false);
     exitSelectionMode();
-  }, [selectedPostIds, deletePost, exitSelectionMode, isProtectedPost]);
+  }, [selectedPostIds, deletePost, exitSelectionMode]);
 
   const weekPosts = useMemo(() => {
     const wEnd = addDays(weekStart, 7);

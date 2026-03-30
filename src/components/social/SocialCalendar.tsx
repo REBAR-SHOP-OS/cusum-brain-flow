@@ -212,12 +212,18 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                     )}
                   >
                     {onToggleSelect && (
-                      <div className="absolute top-1.5 right-1.5">
+                      <div
+                        className="absolute top-1.5 right-1.5 z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          groupIds.forEach(id => onToggleSelect(id));
+                        }}
+                      >
                         <div className={cn(
-                          "w-4 h-4 rounded-sm border flex items-center justify-center",
+                          "w-4 h-4 rounded-sm border flex items-center justify-center cursor-pointer",
                           allGroupSelected
                             ? "bg-primary border-primary text-primary-foreground"
-                            : "border-muted-foreground/40"
+                            : "border-muted-foreground/40 hover:border-primary"
                         )}>
                           {allGroupSelected && (
                             <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
