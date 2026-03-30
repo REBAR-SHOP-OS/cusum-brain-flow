@@ -383,11 +383,10 @@ export function PostReviewPanel({
     // Map UI platform keys to DB platform values
     const dbPlatforms = [...new Set(sanitized.map(p => platformMap[p] || p))];
 
-    // Find all siblings for this title + day
-    const day = post.scheduled_date?.substring(0, 10);
+    // Find all siblings for this title + exact time slot
     const siblings = allPosts.filter(p =>
       p.title === post.title &&
-      (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
+      p.scheduled_date === post.scheduled_date
     );
     const targetSet = new Set(dbPlatforms as string[]);
     const existingSet = new Set(siblings.map(s => s.platform as string));
