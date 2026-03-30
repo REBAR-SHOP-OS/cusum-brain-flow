@@ -795,7 +795,7 @@ export function TimelineBar({
           <span className="w-14 shrink-0 text-[9px] text-muted-foreground flex items-center gap-1">
             <Music className="w-3 h-3" /> Audio
           </span>
-          <div className="flex-1 h-5 relative rounded bg-muted/20 overflow-hidden">
+          <div className="flex-1 h-5 relative rounded bg-muted/20 overflow-hidden" onClick={() => setSelectedAudioIdx(null)}>
             {audioTracks.map((track, tIdx) => {
               const idx = storyboard.findIndex(s => s.id === track.sceneId);
               let leftPct: number;
