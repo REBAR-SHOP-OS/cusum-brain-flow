@@ -153,11 +153,11 @@ export default function SocialMediaManager() {
   }, [posts, platformFilter, statusFilter, searchQuery]);
 
   const toggleSelectAll = useCallback(() => {
-    const selectableIds = filteredPosts.filter((p) => p.status !== "scheduled" && p.status !== "published").map((p) => p.id);
-    if (selectableIds.length > 0 && selectableIds.every((id) => selectedPostIds.has(id))) {
+    const allIds = filteredPosts.map((p) => p.id);
+    if (allIds.length > 0 && allIds.every((id) => selectedPostIds.has(id))) {
       setSelectedPostIds(new Set());
     } else {
-      setSelectedPostIds(new Set(selectableIds));
+      setSelectedPostIds(new Set(allIds));
     }
   }, [filteredPosts, selectedPostIds]);
 
