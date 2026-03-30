@@ -30,7 +30,7 @@ import { MusicTab } from "./editor/MusicTab";
 import { ScriptTab } from "./editor/ScriptTab";
 import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
 import { TextOverlayDialog } from "./editor/TextOverlayDialog";
-import { AudioPromptDialog, type AudioPromptResult } from "./editor/AudioPromptDialog";
+import { AudioPromptDialog, type AudioPromptResult, type AudioUploadResult } from "./editor/AudioPromptDialog";
 import { VoiceoverDialog, type VoiceoverResult } from "./editor/VoiceoverDialog";
 import { SubtitleDialog } from "./editor/SubtitleDialog";
 import { TextVoiceDialog, type TextVoiceResult } from "./editor/TextVoiceDialog";
@@ -314,6 +314,18 @@ export function ProVideoEditor({
     } finally {
       setGeneratingAudio(false);
     }
+  }, [toast]);
+
+  const handleAudioUpload = useCallback((result: AudioUploadResult) => {
+    const audioUrl = URL.createObjectURL(result.file);
+    setAudioTracks(prev => [...prev, {
+      sceneId: "uploaded",
+      label: result.kind === "music" ? `🎵 ${result.file.name}` : `🎙️ ${result.file.name}`,
+      audioUrl,
+      kind: result.kind,
+    }]);
+    setAudioPromptOpen(false);
+    toast({ title: "✅ فایل صوتی اضافه شد" });
   }, [toast]);
 
   const handleGenerateVoiceover = useCallback(async (result: VoiceoverResult) => {
@@ -1826,6 +1838,7 @@ export function ProVideoEditor({
         open={audioPromptOpen}
         onOpenChange={setAudioPromptOpen}
         onGenerate={handleGenerateAudio}
+        onUpload={handleAudioUpload}
         loading={generatingAudio}
       />
 
