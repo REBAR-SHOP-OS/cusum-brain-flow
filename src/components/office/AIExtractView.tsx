@@ -176,6 +176,8 @@ export function AIExtractView() {
   const [pendingDedupeSessionId, setPendingDedupeSessionId] = useState<string | null>(null);
   const [mappingConfirmed, setMappingConfirmed] = useState(false);
   const [selectedUnitSystem, setSelectedUnitSystem] = useState<string>("mm");
+  // Display-only unit toggle for line items table — decoupled from source unit
+  const [displayUnit, setDisplayUnit] = useState<string>("mm");
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, loading: rowsLoading, hasFetched: rowsHasFetched, refresh: refreshRows } = useExtractRows(activeSessionId);
