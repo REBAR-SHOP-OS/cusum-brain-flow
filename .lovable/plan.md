@@ -1,30 +1,33 @@
 
 
-# Add Customer Address in Ref Box — Truncated to Fit
+# Remove "Stretch (+1s)" Button and Functionality
 
-## Current State
-The Ref box (lines 161-168 in `RebarTagCard.tsx`) already shows `address` below the Ref line. However, long addresses can overflow the fixed-height card.
+## Problem
+The user wants the "Stretch (+1s)" icon/button (the expand arrows icon circled in the screenshot) removed from the toolbar along with its functionality.
 
-## Change — `src/components/office/RebarTagCard.tsx`
+## Changes
 
-### Line 167: Restrict address text to prevent overflow
-- Add `truncate` or `line-clamp-2` to the address div so it stays within the Ref box bounds
-- Ensure the address text is capped at 2 lines max with ellipsis overflow
+### `src/components/ad-director/editor/TimelineBar.tsx`
+- Remove the `Expand` icon import (if not used elsewhere)
+- Remove the Stretch button block (lines 559-562):
+  ```tsx
+  // DELETE:
+  {onStretchScene && (
+    <Button ... onClick={() => onStretchScene(selectedSceneIndex)} title="Stretch (+1s)">
+      <Expand className="w-3 h-3" />
+    </Button>
+  )}
+  ```
+- Remove `onStretchScene` from props interface and destructuring
 
-```tsx
-// Before:
-{address && <div className="text-[9px] leading-tight mt-0.5">{address}</div>}
-
-// After:
-{address && <div className="text-[9px] leading-tight mt-0.5 line-clamp-2">{address}</div>}
-```
-
-### Also ensure the Ref box has `overflow-hidden` to prevent any bleed:
-- Add `overflow-hidden` to the parent div (line 162)
+### `src/components/ad-director/ProVideoEditor.tsx`
+- Remove `handleStretchScene` function
+- Remove passing `onStretchScene` prop to `TimelineBar`
 
 ## Files Changed
-- `src/components/office/RebarTagCard.tsx` — add text clamping on address, overflow-hidden on Ref box
+- `src/components/ad-director/editor/TimelineBar.tsx` — remove Stretch button and prop
+- `src/components/ad-director/ProVideoEditor.tsx` — remove stretch handler and prop
 
 ## Result
-Address always displays in the Ref box but is restricted to 2 lines with ellipsis, preventing layout overflow on thermal labels.
+The stretch icon disappears from the toolbar. No "+1s" functionality remains.
 
