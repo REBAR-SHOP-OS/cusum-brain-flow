@@ -163,8 +163,8 @@ export function OrderCalcView() {
 
   // Recalculate when inputs change
   useEffect(() => {
-    if (items.length) setResults(calculate(items, stockLength, wastePct, wpm));
-  }, [items, stockLength, wastePct, wpm]);
+    if (items.length) setResults(calculate(items, stockLength, wastePct, wpm, UNIT_TO_MM[sourceUnit]));
+  }, [items, stockLength, wastePct, wpm, sourceUnit]);
 
   const handleFile = useCallback(async (file: File) => {
     const buf = await file.arrayBuffer();
