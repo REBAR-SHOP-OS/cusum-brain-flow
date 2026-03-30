@@ -487,7 +487,7 @@ export function ProVideoEditor({
     const url = URL.createObjectURL(file);
     setAudioTracks(prev => [
       ...prev,
-      { kind: "music" as const, audioUrl: url, label: file.name, volume: 0.7, sceneId: storyboard[0]?.id || "", startTime: 0 },
+      { kind: "music" as const, audioUrl: url, label: file.name, volume: 0.7, sceneId: storyboard[0]?.id || "", startTime: 0, globalStartTime: 0 },
     ]);
     e.target.value = "";
   }, []);
