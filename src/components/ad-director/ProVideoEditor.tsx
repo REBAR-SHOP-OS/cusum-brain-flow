@@ -1457,7 +1457,7 @@ export function ProVideoEditor({
 
       // ── Phase 2: Auto-generate background music ──
       try {
-        toast({ title: "🎵 در حال تولید موسیقی..." });
+        toast({ title: "🎵 Generating music..." });
         const allTexts = segments.map(s => s.text).filter(Boolean).join(". ");
         const musicPrompt = `Cinematic instrumental background music for a professional video about: ${allTexts.slice(0, 300)}`;
         const totalDuration = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
