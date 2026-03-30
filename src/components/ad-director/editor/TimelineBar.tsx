@@ -888,7 +888,7 @@ export function TimelineBar({
                       willChange: isBeingDragged ? 'transform' : undefined,
                     }}
                     onMouseDown={(e) => handleItemDragStart(e, "text", ov.id, leftPct, widthPct)}
-                    onClick={(e) => { e.stopPropagation(); onEditOverlay?.(ov); }}
+                    onDoubleClick={(e) => { e.stopPropagation(); onEditOverlay?.(ov); }}
                   >
                     <span className="text-[8px] text-white truncate select-none">{ov.content}</span>
                     {onDeleteOverlay && (
