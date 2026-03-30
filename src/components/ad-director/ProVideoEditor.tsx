@@ -11,7 +11,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
-  Palette, Film, LayoutGrid, X, Edit3,
+  Palette, Film, LayoutGrid, X,
   Mic, Captions, Gauge, MessageSquareText,
   RectangleHorizontal, ImagePlus,
 } from "lucide-react";
@@ -1542,9 +1542,6 @@ export function ProVideoEditor({
 
         <div className="flex-1" />
 
-        <Button variant="outline" size="sm" className="h-7 text-[10px] gap-1" onClick={() => handleSetActiveTab("brand-kit")}>
-          <Edit3 className="w-3 h-3" /> Edit
-        </Button>
 
         <Button
           variant="outline"
