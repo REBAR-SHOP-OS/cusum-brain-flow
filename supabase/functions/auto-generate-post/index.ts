@@ -377,30 +377,55 @@ Return an array of 5 objects:
         // Create posts and generate images via Lovable AI
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-        // Phase 1: Insert ALL text-only posts first (fast, ~2s total)
+        // Phase 1: Upsert text-only posts (update placeholders if provided, otherwise insert)
         const insertedPosts: { post: any; insertedPost: any; index: number }[] = [];
         for (let i = 0; i < generatedPosts.length; i++) {
           const post = generatedPosts[i];
           const slot = TIME_SLOTS[i] || TIME_SLOTS[0];
           const scheduledAt = buildScheduledDate(postDate, slot.hour, slot.minute);
 
-          const { data: insertedPost, error: insertError } = await supabaseAdmin
-            .from("social_posts")
-            .insert({
-              user_id: userId,
-              platform,
-              title: post.title || "Untitled",
-              content: stripPersianBlock(post.content || ""),
-              hashtags: post.hashtags || [],
-              image_url: null,
-              status: "pending_approval",
-              scheduled_date: scheduledAt,
-            })
-            .select()
-            .single();
+          const postData = {
+            user_id: userId,
+            platform,
+            title: post.title || "Untitled",
+            content: stripPersianBlock(post.content || ""),
+            hashtags: post.hashtags || [],
+            image_url: null,
+            status: "pending_approval",
+            scheduled_date: scheduledAt,
+          };
 
-          if (insertError) {
-            console.error("Failed to insert post:", insertError);
+          let insertedPost: any = null;
+          let insertError: any = null;
+
+          // If we have a placeholder ID for this slot, update it instead of inserting
+          if (placeholderIds.length > i && placeholderIds[i]) {
+            const { data, error } = await supabaseAdmin
+              .from("social_posts")
+              .update(postData)
+              .eq("id", placeholderIds[i])
+              .select()
+              .single();
+            insertedPost = data;
+            insertError = error;
+            if (insertError) {
+              console.warn(`Placeholder update failed for ${placeholderIds[i]}, falling back to insert`);
+            }
+          }
+
+          // Fallback: insert new row
+          if (!insertedPost) {
+            const { data, error } = await supabaseAdmin
+              .from("social_posts")
+              .insert(postData)
+              .select()
+              .single();
+            insertedPost = data;
+            insertError = error;
+          }
+
+          if (insertError || !insertedPost) {
+            console.error("Failed to insert/update post:", insertError);
             continue;
           }
           insertedPosts.push({ post, insertedPost, index: i });
