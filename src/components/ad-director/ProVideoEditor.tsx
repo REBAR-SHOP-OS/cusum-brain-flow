@@ -58,6 +58,7 @@ interface ProVideoEditorProps {
   onUpdateClipUrl?: (sceneId: string, url: string) => void;
   onUpdateSegment?: (id: string, text: string) => void;
   onUpdateSegmentTiming?: (id: string, startTime: number, endTime: number) => void;
+  onUpdateSegments?: (segments: ScriptSegment[]) => void;
   onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
   onUpdateBrand?: (brand: BrandProfile) => void;
   onMusicSelect?: (url: string | null) => void;
@@ -183,7 +184,7 @@ function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: 
 export function ProVideoEditor({
   clips, storyboard, segments, brand,
   finalVideoUrl, onBack, onExport, exporting,
-  onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming,
+  onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming, onUpdateSegments,
   onUpdateStoryboard, onUpdateBrand, onMusicSelect,
   externalActiveTab, onActiveTabChanged,
 }: ProVideoEditorProps) {
@@ -956,14 +957,47 @@ export function ProVideoEditor({
     const scene = storyboard[index];
     if (!scene) return;
     const seg = segments.find(s => s.id === scene.segmentId);
-    if (!seg || (seg.endTime - seg.startTime) <= 1) {
-      toast({ title: "Cannot trim", description: "Scene is already at minimum duration", variant: "destructive" });
+    if (!seg) return;
+
+    const sceneStart = cumulativeStarts[index] || 0;
+    const splitPoint = globalTime - sceneStart;
+    const sceneDur = seg.endTime - seg.startTime;
+
+    if (splitPoint < 0.5 || splitPoint > sceneDur - 0.5) {
+      toast({ title: "برش ممکن نیست", description: "نشانه‌گر را به وسط صحنه منتقل کنید", variant: "destructive" });
       return;
     }
+
     pushHistory(storyboard);
-    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.endTime - 1);
-    toast({ title: "Scene trimmed", description: `Scene ${index + 1} shortened by 1s` });
-  }, [storyboard, segments, toast, pushHistory, onUpdateSegmentTiming]);
+
+    // Create new segment for the second half
+    const newSegId = crypto.randomUUID();
+    const newSceneId = crypto.randomUUID();
+    const newSeg: ScriptSegment = {
+      ...seg,
+      id: newSegId,
+      startTime: seg.startTime + splitPoint,
+      endTime: seg.endTime,
+      label: seg.label + " (2)",
+    };
+
+    // Update existing segment to end at split point + add new segment
+    const updatedSegments = segments.map(s => s.id === seg.id ? { ...s, endTime: seg.startTime + splitPoint } : s);
+    updatedSegments.splice(segments.indexOf(seg) + 1, 0, newSeg);
+    onUpdateSegments?.(updatedSegments);
+
+    // Insert new scene after current
+    const newScene: StoryboardScene = {
+      ...scene,
+      id: newSceneId,
+      segmentId: newSegId,
+    };
+    const updatedStoryboard = [...storyboard];
+    updatedStoryboard.splice(index + 1, 0, newScene);
+    onUpdateStoryboard?.(updatedStoryboard);
+
+    toast({ title: "صحنه برش خورد", description: `برش در ${globalTime.toFixed(1)}s` });
+  }, [storyboard, segments, globalTime, cumulativeStarts, toast, pushHistory, onUpdateSegments, onUpdateStoryboard]);
 
   const handleStretchScene = useCallback((index: number) => {
     const scene = storyboard[index];

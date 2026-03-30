@@ -387,6 +387,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           onUpdateSegmentTiming={(id, startTime, endTime) => service.patchState({
             segments: service.getState().segments.map(s => s.id === id ? { ...s, startTime, endTime } : s),
           })}
+          onUpdateSegments={(segs) => service.patchState({ segments: segs })}
           onUpdateStoryboard={(sb) => service.patchState({ storyboard: sb })}
           onUpdateBrand={(b) => service.patchState({ brand: b })}
           onMusicSelect={(url) => service.patchState({ musicTrackUrl: url })}
