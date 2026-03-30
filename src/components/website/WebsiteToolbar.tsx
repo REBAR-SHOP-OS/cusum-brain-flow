@@ -1,4 +1,5 @@
-import { Monitor, Tablet, Smartphone, ExternalLink, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Monitor, Tablet, Smartphone, ExternalLink, RefreshCw, ShieldCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -8,6 +9,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export type DeviceMode = "desktop" | "tablet" | "mobile";
 
@@ -44,6 +47,28 @@ export function WebsiteToolbar({
   onDeviceChange,
   onRefresh,
 }: WebsiteToolbarProps) {
+  const [fixingHero, setFixingHero] = useState(false);
+
+  const handleFixHero = async () => {
+    setFixingHero(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("wp-fix-hero", {
+        method: "POST",
+        body: { action: "inject" },
+      });
+      if (error) throw error;
+      if (data?.alreadyExists) {
+        toast.info("Static hero already exists on the homepage");
+      } else {
+        toast.success("Homepage hero fixed! Refresh the preview to see changes.");
+        onRefresh();
+      }
+    } catch (err: any) {
+      toast.error("Failed to fix hero: " + (err.message || "Unknown error"));
+    } finally {
+      setFixingHero(false);
+    }
+  };
   const deviceButtons: { mode: DeviceMode; icon: React.ElementType; label: string }[] = [
     { mode: "desktop", icon: Monitor, label: "Desktop" },
     { mode: "tablet", icon: Tablet, label: "Tablet" },
@@ -86,6 +111,18 @@ export function WebsiteToolbar({
       </div>
 
       <div className="flex-1" />
+
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 text-xs gap-1.5 hidden sm:flex"
+        onClick={handleFixHero}
+        disabled={fixingHero}
+        title="Inject static hero to fix blank homepage"
+      >
+        {fixingHero ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+        Fix Hero
+      </Button>
 
       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onRefresh} title="Refresh">
         <RefreshCw className="w-4 h-4" />
