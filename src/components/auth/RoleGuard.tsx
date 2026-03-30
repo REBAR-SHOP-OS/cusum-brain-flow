@@ -54,10 +54,15 @@ export function RoleGuard({ children }: RoleGuardProps) {
   const { isSuperAdmin } = useSuperAdmin();
   const location = useLocation();
 
-  // Super admins bypass all route restrictions
-  if (isSuperAdmin) return <>{children}</>;
-
   const email = user?.email || "";
+
+  // Block specific emails from shop floor routes — even super admins
+  if (ACCESS_POLICIES.blockedFromShopFloor.includes(email.toLowerCase()) && (location.pathname.startsWith("/shop-floor") || location.pathname.startsWith("/shopfloor"))) {
+    return <Navigate to="/home" replace />;
+  }
+
+  // Super admins bypass all other route restrictions
+  if (isSuperAdmin) return <>{children}</>;
   const isInternal = email.endsWith("@rebar.shop");
 
   // For external users, check if they're a linked customer
