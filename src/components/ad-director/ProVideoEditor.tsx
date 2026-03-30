@@ -991,7 +991,7 @@ export function ProVideoEditor({
     if (!scene) return;
     const clip = clips.find(c => c.sceneId === scene.id);
     if (!clip?.videoUrl) {
-      toast({ title: "برش ممکن نیست", description: "ویدئویی برای این صحنه وجود ندارد", variant: "destructive" });
+      toast({ title: "Cannot trim", description: "No video for this scene", variant: "destructive" });
       return;
     }
     const seg = segments.find(s => s.id === scene.segmentId);
