@@ -1,56 +1,68 @@
 
 
-# Fix Blank Hero on rebar.shop via WordPress API
+# Fix Existing Slider Revolution Hero on rebar.shop
 
-## Root Cause
-The **Slider Revolution 7** plugin JavaScript is failing to render slide content. The `<sr7-slide>` elements contain only empty `<sr7-bg>` tags — the JS that populates them with images, text, and CTAs never executes. This is a client-side JS initialization failure in the WordPress theme, not something fixable by editing slide data.
+## Analysis
 
-## Solution
-Create an edge function that uses the WP REST API (write access) to **inject a static CSS/HTML hero fallback** into the homepage (page ID `13672`). This fallback will:
-- Use the same banner images already uploaded to the media library
-- Display a rotating hero with CSS-only animation (no JS dependency)
-- Be placed **before** the Slider Revolution shortcode so content is always visible
-- Include a `<noscript>` / CSS fallback that works even if all JS fails
+The SR7 slider (data-id="6", alias="slider-1") is present on the page with 8 slides, and the `<image_lists>` element contains all 8 image URLs. However, the `<sr7-bg>` elements inside each slide are empty — the SR7 JavaScript fails to populate them with background images during initialization.
 
-## Implementation
+**Current `wp-fix-hero` injects a replacement hero and hides SR7. The user wants to fix SR7 itself.**
 
-### 1. New edge function: `supabase/functions/wp-fix-hero/index.ts`
-- **GET** mode: Fetch page 13672 content, check if hero fallback already exists
-- **POST** mode: Update page 13672 content to prepend a static HTML hero section
+## Strategy
 
-The static hero will:
-- Use a full-width CSS image carousel with 8 banner images (already on the server)
-- Auto-rotate via CSS `@keyframes` animation (no JS needed)
-- Include fade transitions between slides
-- Show the first image immediately (no loading delay)
-- Be wrapped in a distinctive `<div id="rebar-static-hero">` for easy identification
+Rewrite `wp-fix-hero` to inject a **repair script** instead of a replacement hero. The script will:
+1. Wait for the SR7 module to appear in DOM
+2. Read image URLs from the existing `<image_lists>` element
+3. Populate each empty `<sr7-slide > sr7-bg>` with the correct background image
+4. If SR7 JS still fails after 3 seconds, apply the images as inline background styles directly
 
-### 2. Banner images to use (from the existing `image_lists`):
-1. `rebar-estimation-banner-1920-vivid.webp`
-2. `shop-drawings-ultra-hq-scaled.webp`
-3. `rebar-detailing-high-quality-1.webp`
-4. `dowel-rebar-blue-chalkboard.webp`
-5. `spring_build_bonus_offer_sale.webp`
-6. `rebar-stirrups-sale.webp`
-7. `straight-rebar-sale-1.webp`
-8. `custom_rebar_high_quality-1.webp`
+Additionally:
+- Remove any previously injected static hero (`rebar-static-hero`) and the `display:none` CSS that hides SR7
+- Add a "remove" action to clean up if needed
 
-### 3. Strategy for the page update
-- Fetch current page content via `GET /pages/13672`
-- Check if `rebar-static-hero` already exists (idempotent)
-- Prepend the static hero HTML **before** the existing content
-- Optionally wrap the Slider Revolution shortcode in a `display:none` div to prevent the empty 900px gap
-- Update via `PUT /pages/13672`
+## Changes
 
-### 4. Add a button/action in the Office or admin UI
-- Add a "Fix Homepage Hero" action in the website management section so it can be triggered when needed
+### `supabase/functions/wp-fix-hero/index.ts`
+- Replace `buildHeroHTML()` with `buildRepairScript()` that generates a `<script>` block
+- The repair script logic:
+  - On DOMContentLoaded, find `sr7-module` and its `image_lists > img` elements
+  - Map each image `data-src` to the corresponding `sr7-slide > sr7-bg` (by index)
+  - Set `style="background-image: url(...); background-size: cover; background-position: center;"` on each `sr7-bg`
+  - Add a MutationObserver fallback: if SR7 JS clears/resets, reapply images
+- Remove the `hideSR` CSS injection (no longer hiding SR7)
+- Keep the inject/remove/GET actions with updated markers (`<!-- REBAR SR7 FIX -->`)
+- Clean up any old static hero content during inject
+
+### `src/components/website/WebsiteToolbar.tsx`
+- Rename button label from "Fix Hero" to "Repair Slider" for clarity
+
+## Repair Script Logic (pseudocode)
+```text
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var mod = document.querySelector('sr7-module');
+  if (!mod) return;
+  var imgs = mod.querySelectorAll('image_lists img');
+  var slides = mod.querySelectorAll('sr7-slide');
+  imgs.forEach(function(img, i) {
+    if (i < slides.length) {
+      var bg = slides[i].querySelector('sr7-bg');
+      if (bg && !bg.style.backgroundImage) {
+        bg.style.backgroundImage = 'url(' + img.dataset.src + ')';
+        bg.style.backgroundSize = 'cover';
+        bg.style.backgroundPosition = 'center';
+        bg.style.width = '100%';
+        bg.style.height = '100%';
+      }
+    }
+  });
+  // Force first slide visible
+  if (slides[0]) slides[0].style.opacity = '1';
+});
+</script>
+```
 
 ## Files Changed
-- `supabase/functions/wp-fix-hero/index.ts` — new edge function to inject static hero
-- One UI file (website management section) — button to trigger the fix
-
-## Risk Assessment
-- **Safe**: The WP REST API update is reversible (page revisions are kept)
-- **Non-destructive**: Prepends content, does not delete existing slider
-- **Idempotent**: Checks for existing fallback before inserting
+- `supabase/functions/wp-fix-hero/index.ts` — replace static hero injection with SR7 repair script injection
+- `src/components/website/WebsiteToolbar.tsx` — update button label
 
