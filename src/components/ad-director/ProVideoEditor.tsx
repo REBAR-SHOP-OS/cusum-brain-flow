@@ -970,7 +970,7 @@ export function ProVideoEditor({
     updatedStoryboard.splice(index + 1, 0, newScene);
     onUpdateStoryboard?.(updatedStoryboard);
 
-    toast({ title: "صحنه برش خورد", description: `برش در ${globalTime.toFixed(1)}s` });
+    toast({ title: "Scene split", description: `Split at ${globalTime.toFixed(1)}s` });
   }, [storyboard, segments, globalTime, cumulativeStarts, toast, pushHistory, onUpdateSegments, onUpdateStoryboard]);
 
 
