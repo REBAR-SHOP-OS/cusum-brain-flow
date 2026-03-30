@@ -775,6 +775,27 @@ export function TimelineBar({
                       ) : clip?.videoUrl ? (
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
                       ) : null}
+                      {/* Trim preview overlay */}
+                      {trimPreview && trimPreview.index === i && (
+                        <>
+                          {trimPreview.trimStartOffset > 0 && (
+                            <div className="absolute top-0 bottom-0 left-0 bg-red-500/40 z-20 pointer-events-none"
+                              style={{ width: `${(trimPreview.trimStartOffset / dur) * 100}%` }}
+                            />
+                          )}
+                          {trimPreview.trimEndOffset > 0 && (
+                            <div className="absolute top-0 bottom-0 right-0 bg-red-500/40 z-20 pointer-events-none"
+                              style={{ width: `${(trimPreview.trimEndOffset / dur) * 100}%` }}
+                            />
+                          )}
+                        </>
+                      )}
+                      {/* Trimming spinner */}
+                      {isTrimming && isSelected && (
+                        <div className="absolute inset-0 bg-black/60 z-30 flex items-center justify-center">
+                          <div className="text-[9px] text-white animate-pulse">Trimming…</div>
+                        </div>
+                      )}
                       {/* Status */}
                       <div className="absolute top-0.5 right-0.5 z-10">
                         <span className={`text-[7px] px-1 py-px rounded-full font-medium ${
