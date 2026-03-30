@@ -72,8 +72,24 @@ export function TagsExportView() {
   const [zebraZpl, setZebraZpl] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [projectAddress, setProjectAddress] = useState("");
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
+
+  // Fetch project address as fallback for tags
+  useEffect(() => {
+    if (!selectedSessionId) { setProjectAddress(""); return; }
+    supabase
+      .from("barlists")
+      .select("project:projects(site_address)")
+      .eq("extract_session_id", selectedSessionId)
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        const addr = (data as any)?.project?.site_address;
+        setProjectAddress(addr || "");
+      });
+  }, [selectedSessionId]);
 
   // Only show approved/validated/mapped sessions that have data
   const availableSessions = useMemo(
