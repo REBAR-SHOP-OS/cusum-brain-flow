@@ -78,7 +78,7 @@ export default function SocialMediaManager() {
       s.platform === selectedPost.platform &&
       (day ? s.scheduled_date?.substring(0, 10) === day : s.id === selectedPost.id)
     );
-    return [...new Set(siblings.map(s => s.page_name).filter(Boolean))] as string[];
+    return [...new Set(siblings.flatMap(s => s.page_name ? s.page_name.split(", ").filter(Boolean) : []))] as string[];
   }, [selectedPost, posts]);
   const setSelectedPost = useCallback((post: SocialPost | null) => {
     setSelectedPostId(post?.id ?? null);
