@@ -1493,7 +1493,7 @@ export function ProVideoEditor({
         }
       } catch (musicErr: any) {
         console.warn("Music generation error:", musicErr.message);
-        toast({ title: "⚠ موسیقی ساخته نشد", variant: "destructive" });
+        toast({ title: "⚠ Music generation failed", variant: "destructive" });
       }
 
       // ── Phase 3: Apply all tracks at once ──
