@@ -795,9 +795,9 @@ export function TimelineBar({
                           <FileText className="w-2.5 h-2.5" />Edit Voiceover Text
                         </button>
                       )}
-                      {onTrimScene && (
-                        <button onClick={() => onTrimScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <Scissors className="w-2.5 h-2.5" />Split at playhead
+                      {onResizeScene && (
+                        <button onClick={() => { onSelectScene(i); setTrimMode(true); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <Scissors className="w-2.5 h-2.5" />Trim Scene
                         </button>
                       )}
                       {onStretchScene && (
