@@ -6,7 +6,7 @@ import { Slider } from "@/components/ui/slider";
 import {
   ZoomIn, ZoomOut, Maximize, Music, Type, Plus, Mic,
   Volume2, VolumeX, Trash2, RefreshCw, Edit3, Move,
-  Scissors, Expand, SplitSquareHorizontal, Copy,
+  Scissors, SplitSquareHorizontal, Copy,
   ArrowLeft, ArrowRight, VolumeOff, FileText,
   RotateCcw, Sparkles, MoveVertical,
   LayoutGrid, Rows3, GripVertical,
@@ -119,7 +119,7 @@ interface TimelineBarProps {
   onRegenerateScene?: (sceneId: string) => void;
   onDeleteScene?: (index: number) => void;
   onTrimScene?: (index: number) => void;
-  onStretchScene?: (index: number) => void;
+  
   onSplitScene?: (index: number) => void;
   onDuplicateScene?: (index: number) => void;
   onMoveScene?: (index: number, dir: -1 | 1) => void;
@@ -155,7 +155,7 @@ export function TimelineBar({
   onDeleteOverlay, onEditOverlay, onRemoveAudioTrack,
   onRegenerateScene, onDeleteScene,
   sidebarTabs = [], activeSidebarTab, onSidebarTabSelect,
-  onTrimScene, onStretchScene, onSplitScene, onDuplicateScene,
+  onTrimScene, onSplitScene, onDuplicateScene,
   onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
@@ -556,11 +556,8 @@ export function TimelineBar({
                 <Scissors className="w-3 h-3" />
               </Button>
             )}
-            {onStretchScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onStretchScene(selectedSceneIndex)} title="Stretch (+1s)">
-                <Expand className="w-3 h-3" />
-              </Button>
-            )}
+
+
             {onSplitScene && (
               <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onSplitScene(selectedSceneIndex)} title="Split">
                 <SplitSquareHorizontal className="w-3 h-3" />
@@ -868,11 +865,8 @@ export function TimelineBar({
                               <Scissors className="w-2.5 h-2.5" />Trim Scene
                             </button>
                           )}
-                          {onStretchScene && (
-                            <button onClick={() => { onStretchScene(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                              <Expand className="w-2.5 h-2.5" />Stretch (+1s)
-                            </button>
-                          )}
+
+
                           {onSplitScene && (
                             <button onClick={() => { onSplitScene(i); setContextMenuScene(null); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
                               <SplitSquareHorizontal className="w-2.5 h-2.5" />Split

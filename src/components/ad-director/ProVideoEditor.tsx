@@ -971,15 +971,6 @@ export function ProVideoEditor({
     toast({ title: "صحنه برش خورد", description: `برش در ${globalTime.toFixed(1)}s` });
   }, [storyboard, segments, globalTime, cumulativeStarts, toast, pushHistory, onUpdateSegments, onUpdateStoryboard]);
 
-  const handleStretchScene = useCallback((index: number) => {
-    const scene = storyboard[index];
-    if (!scene) return;
-    const seg = segments.find(s => s.id === scene.segmentId);
-    if (!seg) return;
-    pushHistory(storyboard);
-    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.endTime + 1);
-    toast({ title: "Scene stretched", description: `Scene ${index + 1} extended by 1s` });
-  }, [storyboard, segments, toast, pushHistory, onUpdateSegmentTiming]);
 
   const handleResizeScene = useCallback((index: number, newDuration: number) => {
     const scene = storyboard[index];
@@ -2057,7 +2048,7 @@ export function ProVideoEditor({
         onRegenerateScene={onRegenerateScene}
         onDeleteScene={handleDeleteScene}
         onTrimScene={handleTrimScene}
-        onStretchScene={handleStretchScene}
+        
         onSplitScene={handleSplitScene}
         onDuplicateScene={handleDuplicateScene}
         onMoveScene={handleMoveScene}
