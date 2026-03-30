@@ -81,6 +81,8 @@ export interface AudioTrackItem {
   volume?: number; // 0-1, default 1
   startTime?: number; // seconds within the scene
   endTime?: number;   // seconds within the scene
+  globalStartTime?: number; // absolute seconds in timeline (overrides scene-relative positioning)
+  duration?: number; // track duration in seconds
 }
 
 interface SidebarTab {
