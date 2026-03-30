@@ -262,15 +262,16 @@ export function TimelineBar({
       // Calculate new center position in time
       const newLeftPct = Math.max(0, Math.min(100, itemDragRef.current.origLeftPct + deltaPct));
       const newTimeSec = (newLeftPct / 100) * totalDuration;
-      const { sceneIdx, localTime } = findSceneAtTime(newTimeSec);
-      const targetSceneId = storyboard[sceneIdx]?.id;
 
-      if (targetSceneId) {
-        if (itemDragRef.current.type === "text") {
+      if (itemDragRef.current.type === "text") {
+        const { sceneIdx, localTime } = findSceneAtTime(newTimeSec);
+        const targetSceneId = storyboard[sceneIdx]?.id;
+        if (targetSceneId) {
           onMoveOverlay?.(itemDragRef.current.id, targetSceneId, localTime);
-        } else {
-          onMoveAudioTrack?.(parseInt(itemDragRef.current.id), targetSceneId, localTime);
         }
+      } else {
+        // Audio: pass absolute time directly for global positioning
+        onMoveAudioTrack?.(parseInt(itemDragRef.current.id), "", newTimeSec);
       }
 
       itemDragRef.current = null;
