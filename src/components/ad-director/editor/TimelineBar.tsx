@@ -135,6 +135,8 @@ interface TimelineBarProps {
   onEditVoiceoverText?: (sceneId: string) => void;
   onMoveOverlay?: (id: string, newSceneId: string, startTime?: number) => void;
   onMoveAudioTrack?: (index: number, newSceneId: string, startTime?: number) => void;
+  onRegenerateAll?: () => void;
+  isRegeneratingAll?: boolean;
   // Playback integration
   isPlaying?: boolean;
   onTogglePlay?: () => void;
@@ -155,6 +157,7 @@ export function TimelineBar({
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
   onMoveOverlay, onMoveAudioTrack,
+  onRegenerateAll, isRegeneratingAll,
   isPlaying, onTogglePlay, onFrameStep, onSkipScene,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
@@ -541,6 +544,23 @@ export function TimelineBar({
               </Button>
             )}
           </div>
+        )}
+        {onRegenerateAll && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-[9px] gap-1 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
+            onClick={onRegenerateAll}
+            disabled={isRegeneratingAll}
+            title="Generate audio & text for all scenes"
+          >
+            {isRegeneratingAll ? (
+              <RefreshCw className="w-3 h-3 animate-spin" />
+            ) : (
+              <Sparkles className="w-3 h-3" />
+            )}
+            <span>{isRegeneratingAll ? "Generating…" : "Generate"}</span>
+          </Button>
         )}
         <div className="flex-1" />
         <Button
