@@ -1,30 +1,29 @@
 
 
-# One Card Per Time Slot + Platform (Pages as Metadata)
+# Fix: Stay on Card After Platform/Page Save
 
 ## Problem
-Currently, selecting multiple pages creates separate DB rows (one per page), resulting in multiple cards in the calendar for the same time+platform. The user's rule: **1 time slot + 1 platform = 1 card**. Pages should be stored as metadata on that single card.
+When a user selects platforms or pages inside the review panel and clicks Save:
+1. **Platform save**: If the original platform is removed, the current post row gets deleted from DB. Since `selectedPostId` still points to the deleted ID, `posts.find(p => p.id === selectedPostId)` returns `undefined` → panel closes.
+2. **Page save**: Works but the card display may not update immediately because `page_name` on the selected post needs to reflect the new comma-separated value.
 
 ## Solution
 
 ### File: `src/components/social/PostReviewPanel.tsx`
 
-1. **Rewrite `handlePagesSaveMulti`**: Instead of creating/deleting sibling rows per page, simply **update the current post's `page_name`** field with all selected pages joined as comma-separated string (e.g. `"Ontario Steel Detailing, Rebar.shop"`). No row creation or deletion.
+1. **`handlePlatformsSaveMulti`** (line ~372): After creating new platform rows and deleting old ones, if the current `post.id` was among the deleted rows, call `onSelectNewPost(newId)` (a new callback prop) with the ID of one of the newly created rows so the parent updates `selectedPostId` to keep the panel open.
 
-2. **Rewrite `handlePlatformsSaveMulti`**: When adding a new platform, create ONE row per platform (not one per page). Set `page_name` to the comma-separated list of all currently selected pages. When removing a platform, delete its single row.
+2. **`handlePagesSaveMulti`** (line ~457): Already works correctly (no row deletion), but ensure `setSubPanel(null)` returns to main panel view without closing the Sheet. No change needed here — just verify.
 
-### File: `src/components/social/SocialCalendar.tsx`
+### File: `src/pages/SocialMediaManager.tsx`
 
-3. **Display pages on card**: Show the `page_name` value (which may contain multiple comma-separated names) on the card — already handled since it displays `post.page_name`.
+3. Pass a new `onSelectNewPost` callback to `PostReviewPanel` that calls `setSelectedPostId(newId)` — this keeps the panel open on the new sibling post after the original is deleted during platform changes.
 
-### No DB migration needed
-`page_name` is already a `text` column — storing comma-separated values works without schema changes.
-
-## Result
-- Selecting Instagram + 3 pages → 1 card showing "Instagram" with pages as metadata
-- Selecting 2 platforms + 3 pages → 2 cards (one per platform), each with all 3 pages stored
-- Calendar stays clean: 1 card per time slot per platform
+## Technical Detail
+- In `handlePlatformsSaveMulti`: collect IDs from insert results. If `post.id` is in `toDelete`, call `onSelectNewPost` with the first new ID (or first remaining sibling ID).
+- The `selectedPost` derivation (line 67-70 in SocialMediaManager) will then find the new post and keep the Sheet open.
 
 ## Files Changed
-- `src/components/social/PostReviewPanel.tsx` — simplify page/platform save handlers
+- `src/components/social/PostReviewPanel.tsx` — update `handlePlatformsSaveMulti` to re-select a surviving post after platform change
+- `src/pages/SocialMediaManager.tsx` — pass `onSelectNewPost` callback prop
 
