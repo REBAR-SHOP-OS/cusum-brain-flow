@@ -98,13 +98,15 @@ function calculate(
   items: ParsedItem[],
   stockLengthM: number,
   wastePct: number,
-  wpm: Record<string, number>
+  wpm: Record<string, number>,
+  unitFactor: number = 1
 ): SizeSummary[] {
   const grouped: Record<string, { pieces: number; length_mm: number }> = {};
   for (const it of items) {
     if (!grouped[it.bar_size]) grouped[it.bar_size] = { pieces: 0, length_mm: 0 };
     grouped[it.bar_size].pieces += it.quantity;
-    grouped[it.bar_size].length_mm += it.cut_length_mm * it.quantity;
+    // Convert raw value to mm using the source unit factor
+    grouped[it.bar_size].length_mm += (it.cut_length_mm * unitFactor) * it.quantity;
   }
 
   const stockMm = stockLengthM * 1000;
