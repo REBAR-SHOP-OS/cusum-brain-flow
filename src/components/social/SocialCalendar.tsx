@@ -133,10 +133,11 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
     <div className="overflow-x-auto pb-2 scrollbar-thin">
       <div className="grid grid-cols-7 gap-2 min-w-[700px]">
       {days.map((day) => {
-        const dayPosts = posts.filter((post) => {
+        const dayPostsRaw = posts.filter((post) => {
           if (!post.scheduled_date) return false;
           return isSameDay(parseISO(post.scheduled_date), day);
         });
+        const dayPosts = deduplicatePosts(dayPostsRaw);
         const isCurrentDay = isToday(day);
         const dayPostIds = dayPosts.map((p) => p.id);
         const allDaySelected = dayPostIds.length > 0 && dayPostIds.every((id) => selectedPostIds?.has(id));
