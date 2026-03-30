@@ -893,15 +893,19 @@ export function TimelineBar({
                       willChange: isBeingDragged ? 'transform' : undefined,
                     }}
                     onMouseDown={(e) => handleItemDragStart(e, "text", ov.id, leftPct, widthPct)}
-                    onDoubleClick={(e) => { e.stopPropagation(); onEditOverlay?.(ov); }}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      if (textDraggedRef.current) { textDraggedRef.current = false; return; }
+                      onEditOverlay?.(ov);
+                    }}
                   >
                     <span className="text-[8px] text-white truncate select-none">{ov.content}</span>
                     {onDeleteOverlay && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onDeleteOverlay(ov.id); }}
-                        className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40"
+                        className="hidden group-hover:flex absolute -right-1 -top-1 items-center justify-center w-4 h-4 rounded-full bg-red-600/80 hover:bg-red-500 z-10"
                       >
-                        <Trash2 className="w-2 h-2 text-white/80" />
+                        <Trash2 className="w-3 h-3 text-white" />
                       </button>
                     )}
                   </div>
