@@ -631,6 +631,7 @@ export default function SocialMediaManager() {
         onClose={() => { setSelectedPost(null); }}
         onSchedule={() => selectedPost && handleSchedule(selectedPost)}
         onDecline={() => selectedPost && setDeclineTarget(selectedPost)}
+        onSelectNewPost={(id) => setSelectedPostId(id)}
       />
 
       {/* Brand Kit Dialog */}
