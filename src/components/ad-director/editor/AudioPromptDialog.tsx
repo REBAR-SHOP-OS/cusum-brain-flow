@@ -96,7 +96,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
             </div>
 
             <div className="space-y-2">
-              <Label>مدت زمان</Label>
+              <Label>Duration</Label>
               <ToggleGroup type="single" value={duration} onValueChange={(v) => v && setDuration(v)} className="justify-start">
                 <ToggleGroupItem value="15" className="text-xs">15s</ToggleGroupItem>
                 <ToggleGroupItem value="30" className="text-xs">30s</ToggleGroupItem>
