@@ -1428,20 +1428,18 @@ export function ProVideoEditor({
     }));
   }, [storyboard, segments]);
 
-  const handleMoveAudioTrack = useCallback((index: number, newSceneId: string, startTime?: number) => {
+  const handleMoveAudioTrack = useCallback((index: number, _newSceneId: string, absoluteTime?: number) => {
     setAudioTracks(prev => prev.map((at, i) => {
-      if (i !== index) return at;
-      const newSceneIdx = storyboard.findIndex(s => s.id === newSceneId);
-      const seg = newSceneIdx >= 0 ? segments.find(s => s.id === storyboard[newSceneIdx]?.segmentId) : null;
-      const newDur = seg ? seg.endTime - seg.startTime : 4;
-      if (startTime != null) {
-        const itemDuration = (at.endTime != null && at.startTime != null) ? (at.endTime - at.startTime) : newDur;
-        const clampedStart = Math.max(0, Math.min(startTime, newDur - Math.min(itemDuration, newDur)));
-        return { ...at, sceneId: newSceneId, startTime: clampedStart, endTime: clampedStart + Math.min(itemDuration, newDur) };
-      }
-      return { ...at, sceneId: newSceneId };
+      if (i !== index || absoluteTime == null) return at;
+      // Calculate track duration from existing data
+      const trackDur = at.duration ?? (at.endTime != null && at.startTime != null ? at.endTime - at.startTime : undefined);
+      // Compute total duration from segments
+      const totalDur = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0) || 30;
+      const dur = trackDur ?? totalDur;
+      const clampedStart = Math.max(0, Math.min(absoluteTime, totalDur - dur));
+      return { ...at, globalStartTime: clampedStart, duration: dur };
     }));
-  }, [storyboard, segments]);
+  }, [segments]);
 
   // AI Command Bar
   const handleAiSubmit = async () => {
