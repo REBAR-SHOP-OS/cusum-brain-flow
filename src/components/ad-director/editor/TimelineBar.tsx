@@ -9,6 +9,7 @@ import {
   ArrowLeft, ArrowRight, VolumeOff, FileText,
   RotateCcw, Sparkles, MoveVertical,
   LayoutGrid, Rows3, GripVertical,
+  Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
@@ -78,11 +79,11 @@ export interface AudioTrackItem {
   label: string;
   audioUrl: string;
   kind: "voiceover" | "music";
-  volume?: number; // 0-1, default 1
-  startTime?: number; // seconds within the scene
-  endTime?: number;   // seconds within the scene
-  globalStartTime?: number; // absolute seconds in timeline (overrides scene-relative positioning)
-  duration?: number; // track duration in seconds
+  volume?: number;
+  startTime?: number;
+  endTime?: number;
+  globalStartTime?: number;
+  duration?: number;
 }
 
 interface SidebarTab {
@@ -105,21 +106,17 @@ interface TimelineBarProps {
   onAddAudio?: () => void;
   textOverlays?: VideoOverlay[];
   audioTracks?: AudioTrackItem[];
-  // Sidebar tab icons
   sidebarTabs?: SidebarTab[];
   activeSidebarTab?: string;
   onSidebarTabSelect?: (tabId: string) => void;
-  // Volume controls
   videoVolume?: number;
   onVideoVolumeChange?: (v: number) => void;
   onAudioTrackVolumeChange?: (index: number, v: number) => void;
-  // Edit actions
   onDeleteOverlay?: (id: string) => void;
   onEditOverlay?: (overlay: VideoOverlay) => void;
   onRemoveAudioTrack?: (index: number) => void;
   onRegenerateScene?: (sceneId: string) => void;
   onDeleteScene?: (index: number) => void;
-  // New editing actions
   onTrimScene?: (index: number) => void;
   onStretchScene?: (index: number) => void;
   onSplitScene?: (index: number) => void;
@@ -130,17 +127,19 @@ interface TimelineBarProps {
   onMuteScene?: (index: number) => void;
   onResizeScene?: (index: number, newDuration: number) => void;
   mutedScenes?: Set<string>;
-  // Text overlay extras
   onEditOverlayPosition?: (id: string, position: "top" | "center" | "bottom") => void;
   onResizeOverlay?: (id: string, size: "small" | "medium" | "large") => void;
   onToggleOverlayAnimation?: (id: string) => void;
-  // Audio extras
   onReRecordVoiceover?: (sceneId: string, customText?: string) => void;
   onUpdateVoiceoverText?: (sceneId: string, text: string) => void;
   onEditVoiceoverText?: (sceneId: string) => void;
-  // Drag-to-reposition (with optional startTime for free-positioning)
   onMoveOverlay?: (id: string, newSceneId: string, startTime?: number) => void;
   onMoveAudioTrack?: (index: number, newSceneId: string, startTime?: number) => void;
+  // Playback integration
+  isPlaying?: boolean;
+  onTogglePlay?: () => void;
+  onFrameStep?: (dir: -1 | 1) => void;
+  onSkipScene?: (dir: -1 | 1) => void;
 }
 
 export function TimelineBar({
@@ -156,8 +155,12 @@ export function TimelineBar({
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
   onMoveOverlay, onMoveAudioTrack,
+  isPlaying, onTogglePlay, onFrameStep, onSkipScene,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
+  const playheadRef = useRef<HTMLDivElement>(null);
+  const rulerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [textTrackMuted, setTextTrackMuted] = useState(false);
   const [voiceoverTexts, setVoiceoverTexts] = useState<Record<string, string>>({});
   const dragState = useRef<{ index: number; startX: number; startDur: number; side: "left" | "right" } | null>(null);
@@ -166,6 +169,7 @@ export function TimelineBar({
   const thumbnails = useVideoThumbnails(clips);
   const [viewMode, setViewMode] = useState<"expanded" | "compact">("expanded");
   const [selectedAudioIdx, setSelectedAudioIdx] = useState<number | null>(null);
+  const [snapGuidePos, setSnapGuidePos] = useState<number | null>(null);
 
   useEffect(() => { setSelectedAudioIdx(null); }, [selectedSceneIndex]);
 
@@ -176,7 +180,7 @@ export function TimelineBar({
   // ─── Item drag-to-reposition state ───
   const itemDragRef = useRef<{
     type: "text" | "audio";
-    id: string;       // overlay id or audio track index as string
+    id: string;
     startX: number;
     origLeftPct: number;
     origWidthPct: number;
@@ -185,22 +189,47 @@ export function TimelineBar({
   const [itemDragging, setItemDragging] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
 
-  // ─── Playhead scrub state ───
+  // ─── rAF Playhead ───
+  const rafRef = useRef<number | null>(null);
   const scrubbingRef = useRef(false);
   const [scrubbing, setScrubbing] = useState(false);
 
+  // Smooth playhead positioning via rAF (bypass React re-renders)
+  useEffect(() => {
+    const update = () => {
+      if (playheadRef.current && trackRef.current && !scrubbingRef.current) {
+        const pct = totalDuration > 0 ? (globalTime / totalDuration) * 100 : 0;
+        playheadRef.current.style.left = `${pct}%`;
+      }
+      rafRef.current = requestAnimationFrame(update);
+    };
+    rafRef.current = requestAnimationFrame(update);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [globalTime, totalDuration]);
+
+  // Scrub handler
   useEffect(() => {
     if (!scrubbing) return;
     const onMove = (e: MouseEvent) => {
       if (!scrubbingRef.current || !trackRef.current) return;
       const rect = trackRef.current.getBoundingClientRect();
       const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const snappedTime = Math.round(pct * totalDuration * 10) / 10;
-      onSeek(Math.max(0, Math.min(totalDuration, snappedTime)));
+      // Snap to scene boundaries
+      const timeSec = pct * totalDuration;
+      const snapped = snapToSceneBoundary(timeSec, totalDuration, cumulativeStarts, storyboard, segments);
+      onSeek(Math.max(0, Math.min(totalDuration, snapped.time)));
+      // Update playhead directly for 60fps
+      if (playheadRef.current) {
+        playheadRef.current.style.left = `${(snapped.time / totalDuration) * 100}%`;
+      }
+      setSnapGuidePos(snapped.snapped ? (snapped.time / totalDuration) * 100 : null);
     };
     const onUp = () => {
       scrubbingRef.current = false;
       setScrubbing(false);
+      setSnapGuidePos(null);
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -208,9 +237,42 @@ export function TimelineBar({
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [scrubbing, totalDuration, onSeek]);
+  }, [scrubbing, totalDuration, onSeek, cumulativeStarts, storyboard, segments]);
 
-  // Find which scene a global time (seconds) falls into
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't capture when typing in inputs
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        onTogglePlay?.();
+      } else if (e.code === "ArrowLeft" && onFrameStep) {
+        e.preventDefault();
+        onFrameStep(-1);
+      } else if (e.code === "ArrowRight" && onFrameStep) {
+        e.preventDefault();
+        onFrameStep(1);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onTogglePlay, onFrameStep]);
+
+  // Ctrl+Scroll zoom
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const handler = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.85 : 1.18;
+      setZoomLevel(z => Math.max(0.5, Math.min(20, z * delta)));
+    };
+    container.addEventListener("wheel", handler, { passive: false });
+    return () => container.removeEventListener("wheel", handler);
+  }, []);
+
   const findSceneAtTime = useCallback((timeSec: number): { sceneIdx: number; localTime: number } => {
     for (let i = 0; i < storyboard.length; i++) {
       const start = cumulativeStarts[i] || 0;
@@ -223,18 +285,8 @@ export function TimelineBar({
     return { sceneIdx: lastIdx, localTime: Math.max(0, timeSec - (cumulativeStarts[lastIdx] || 0)) };
   }, [storyboard, cumulativeStarts]);
 
-  // Find which scene a percentage position falls into
-  const findSceneAtPct = useCallback((pct: number) => {
-    const timeSec = (pct / 100) * totalDuration;
-    return findSceneAtTime(timeSec).sceneIdx;
-  }, [totalDuration, findSceneAtTime]);
-
   const handleItemDragStart = useCallback((
-    e: React.MouseEvent,
-    type: "text" | "audio",
-    id: string,
-    leftPct: number,
-    widthPct: number,
+    e: React.MouseEvent, type: "text" | "audio", id: string, leftPct: number, widthPct: number,
   ) => {
     e.stopPropagation();
     e.preventDefault();
@@ -259,7 +311,6 @@ export function TimelineBar({
       const trackWidth = trackRef.current.getBoundingClientRect().width;
       const dx = e.clientX - itemDragRef.current.startX;
       const deltaPct = (dx / trackWidth) * 100;
-      // Calculate new center position in time
       const newLeftPct = Math.max(0, Math.min(100, itemDragRef.current.origLeftPct + deltaPct));
       const newTimeSec = (newLeftPct / 100) * totalDuration;
 
@@ -270,7 +321,6 @@ export function TimelineBar({
           onMoveOverlay?.(itemDragRef.current.id, targetSceneId, localTime);
         }
       } else {
-        // Audio: pass absolute time directly for global positioning
         onMoveAudioTrack?.(parseInt(itemDragRef.current.id), "", newTimeSec);
       }
 
@@ -287,7 +337,7 @@ export function TimelineBar({
     };
   }, [itemDragging, storyboard, totalDuration, findSceneAtTime, onMoveOverlay, onMoveAudioTrack]);
 
-  // Drag-to-resize handlers
+  // Drag-to-resize
   const handleDragStart = useCallback((e: React.MouseEvent, index: number, side: "left" | "right") => {
     e.stopPropagation();
     e.preventDefault();
@@ -312,8 +362,7 @@ export function TimelineBar({
       const newDur = dragState.current.side === "right"
         ? dragState.current.startDur + deltaSec
         : dragState.current.startDur - deltaSec;
-      const clamped = Math.max(1, newDur);
-      onResizeScene?.(dragState.current.index, clamped);
+      onResizeScene?.(dragState.current.index, Math.max(1, newDur));
     };
     const handleMouseUp = () => {
       dragState.current = null;
@@ -333,8 +382,9 @@ export function TimelineBar({
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
-    const snappedTime = Math.round(pct * totalDuration);
-    onSeek(Math.max(0, Math.min(totalDuration, snappedTime)));
+    const timeSec = pct * totalDuration;
+    const snapped = snapToSceneBoundary(timeSec, totalDuration, cumulativeStarts, storyboard, segments);
+    onSeek(Math.max(0, Math.min(totalDuration, snapped.time)));
   };
 
   const getSceneDur = (i: number) => {
@@ -342,7 +392,7 @@ export function TimelineBar({
     return seg ? seg.endTime - seg.startTime : 4;
   };
 
-  // ─── Scene drag-to-reorder handlers ───
+  // Scene drag-to-reorder
   const handleSceneDragStart = useCallback((e: React.DragEvent, idx: number) => {
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", String(idx));
@@ -361,7 +411,6 @@ export function TimelineBar({
     setSceneDragIdx(null);
     setSceneDropIdx(null);
     if (fromIdx === null || fromIdx === dropIdx || !onMoveScene) return;
-    // Move one step at a time to reach the target
     const dir = dropIdx > fromIdx ? 1 : -1;
     let current = fromIdx;
     while (current !== dropIdx) {
@@ -375,22 +424,72 @@ export function TimelineBar({
     setSceneDropIdx(null);
   }, []);
 
+  // ─── Zoom-aware ruler ticks ───
+  const rulerTicks = useMemo(() => {
+    if (totalDuration <= 0) return [];
+    const effectiveZoom = zoomLevel;
+    let majorInterval: number;
+    let minorInterval: number;
+    if (effectiveZoom < 2) {
+      majorInterval = 1; minorInterval = 0.5;
+    } else if (effectiveZoom < 5) {
+      majorInterval = 0.5; minorInterval = 0.1;
+    } else if (effectiveZoom < 10) {
+      majorInterval = 0.1; minorInterval = 0.05;
+    } else {
+      majorInterval = 0.1; minorInterval = 0.01;
+    }
+
+    const ticks: { time: number; pct: number; isMajor: boolean; label: string }[] = [];
+    const step = minorInterval;
+    const count = Math.ceil(totalDuration / step) + 1;
+    // Virtualize: limit to ~600 ticks max
+    const maxTicks = 600;
+    const skipFactor = count > maxTicks ? Math.ceil(count / maxTicks) : 1;
+
+    for (let i = 0; i <= count; i += skipFactor) {
+      const time = +(i * step).toFixed(3);
+      if (time > totalDuration) break;
+      const pct = (time / totalDuration) * 100;
+      const isMajor = Math.abs(time % majorInterval) < 0.001 || Math.abs(time % majorInterval - majorInterval) < 0.001;
+      let label = "";
+      if (isMajor) {
+        if (effectiveZoom >= 5) {
+          const s = Math.floor(time);
+          const ms = Math.round((time - s) * 1000);
+          label = ms === 0 ? `${s}s` : `${s}.${ms.toString().padStart(3, "0").replace(/0+$/, "")}`;
+        } else {
+          label = `${time}s`;
+        }
+      }
+      ticks.push({ time, pct, isMajor, label });
+    }
+    return ticks;
+  }, [totalDuration, zoomLevel]);
+
+  // ─── Snap guide positions (scene boundaries) ───
+  const sceneBoundaryPcts = useMemo(() => {
+    const boundaries: number[] = [0];
+    for (let i = 0; i < storyboard.length; i++) {
+      const endTime = (cumulativeStarts[i] || 0) + getSceneDur(i);
+      boundaries.push((endTime / totalDuration) * 100);
+    }
+    return boundaries;
+  }, [storyboard, cumulativeStarts, totalDuration, segments]);
+
   return (
-    <div className="border-t border-border/40 bg-card/80 backdrop-blur-sm">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/20">
-        <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Timeline</span>
-        <span className="text-[10px] text-muted-foreground font-mono ml-2">
-          {formatTime(globalTime)} / {formatTime(totalDuration)}
-        </span>
+    <div className="border-t border-white/[0.06] bg-zinc-950 select-none">
+      {/* ─── Top Toolbar ─── */}
+      <div className="flex items-center gap-1.5 px-3 py-1 border-b border-white/[0.06]">
+        <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-widest">Timeline</span>
         {sidebarTabs.length > 0 && (
-          <div className="flex items-center gap-0.5 ml-3 pl-3 border-l border-border/20">
+          <div className="flex items-center gap-0.5 ml-2 pl-2 border-l border-white/[0.06]">
             {sidebarTabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => onSidebarTabSelect?.(tab.id)}
-                className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors
-                  ${activeSidebarTab === tab.id ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted/30"}`}
+                className={`w-7 h-7 rounded flex items-center justify-center transition-colors
+                  ${activeSidebarTab === tab.id ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.04]"}`}
                 title={tab.label}
               >
                 {tab.icon}
@@ -398,37 +497,37 @@ export function TimelineBar({
             ))}
           </div>
         )}
-        {/* ─── Scene action buttons ─── */}
+        {/* Scene action buttons */}
         {selectedSceneIndex >= 0 && (
-          <div className="flex items-center gap-0.5 ml-2 pl-2 border-l border-border/20">
+          <div className="flex items-center gap-0.5 ml-1.5 pl-1.5 border-l border-white/[0.06]">
             {onTrimScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onTrimScene(selectedSceneIndex)} title="Split at playhead">
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onTrimScene(selectedSceneIndex)} title="Split at playhead">
                 <Scissors className="w-3 h-3" />
               </Button>
             )}
             {onStretchScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onStretchScene(selectedSceneIndex)} title="Stretch (+1s)">
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onStretchScene(selectedSceneIndex)} title="Stretch (+1s)">
                 <Expand className="w-3 h-3" />
               </Button>
             )}
             {onSplitScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onSplitScene(selectedSceneIndex)} title="Split">
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onSplitScene(selectedSceneIndex)} title="Split">
                 <SplitSquareHorizontal className="w-3 h-3" />
               </Button>
             )}
             {onDuplicateScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onDuplicateScene(selectedSceneIndex)} title="Duplicate">
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onDuplicateScene(selectedSceneIndex)} title="Duplicate">
                 <Copy className="w-3 h-3" />
               </Button>
             )}
             {onMuteScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onMuteScene(selectedSceneIndex)} title={mutedScenes?.has(storyboard[selectedSceneIndex]?.id) ? "Unmute" : "Mute"}>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onMuteScene(selectedSceneIndex)} title={mutedScenes?.has(storyboard[selectedSceneIndex]?.id) ? "Unmute" : "Mute"}>
                 {mutedScenes?.has(storyboard[selectedSceneIndex]?.id) ? <VolumeOff className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
               </Button>
             )}
             {onRegenerateScene && (
               <Button
-                variant="ghost" size="sm" className="h-6 w-6 p-0"
+                variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10"
                 onClick={() => onRegenerateScene(storyboard[selectedSceneIndex]?.id)}
                 disabled={clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id)?.status !== "completed"}
                 title="Regenerate"
@@ -437,7 +536,7 @@ export function TimelineBar({
               </Button>
             )}
             {onDeleteScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={() => onDeleteScene(selectedSceneIndex)} title="Delete">
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => onDeleteScene(selectedSceneIndex)} title="Delete">
                 <Trash2 className="w-3 h-3" />
               </Button>
             )}
@@ -445,9 +544,8 @@ export function TimelineBar({
         )}
         <div className="flex-1" />
         <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 px-1.5 text-[9px] gap-1"
+          variant="ghost" size="sm"
+          className="h-6 px-1.5 text-[9px] gap-1 text-zinc-400 hover:text-white hover:bg-white/10"
           onClick={() => setViewMode(v => v === "expanded" ? "compact" : "expanded")}
           title={viewMode === "expanded" ? "Compact view" : "Expanded view"}
         >
@@ -456,9 +554,10 @@ export function TimelineBar({
         </Button>
         {viewMode === "expanded" && (
           <>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.max(z / 1.5, 0.5))} title="Zoom Out"><ZoomOut className="w-3 h-3" /></Button>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(z => Math.min(z * 1.5, 5))} title="Zoom In"><ZoomIn className="w-3 h-3" /></Button>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setZoomLevel(1)} title="Fit"><Maximize className="w-3 h-3" /></Button>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setZoomLevel(z => Math.max(z / 1.3, 0.5))} title="Zoom Out"><ZoomOut className="w-3 h-3" /></Button>
+            <span className="text-[9px] text-zinc-500 font-mono min-w-[28px] text-center">{zoomLevel.toFixed(1)}×</span>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setZoomLevel(z => Math.min(z * 1.3, 20))} title="Zoom In"><ZoomIn className="w-3 h-3" /></Button>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setZoomLevel(1)} title="Fit"><Maximize className="w-3 h-3" /></Button>
           </>
         )}
       </div>
@@ -486,30 +585,25 @@ export function TimelineBar({
                   onDragEnd={handleSceneDragEnd}
                   onClick={() => onSelectScene(i)}
                   className={`relative flex-shrink-0 w-[120px] h-12 rounded-md overflow-hidden cursor-pointer transition-all
-                    ${isSelected ? "ring-2 ring-primary" : "ring-1 ring-border/40"}
+                    ${isSelected ? "ring-2 ring-red-500" : "ring-1 ring-white/10"}
                     ${sceneDragIdx === i ? "opacity-40" : ""}
-                    ${isDropTarget ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}
-                    ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
+                    ${isDropTarget ? "ring-2 ring-red-500 ring-offset-2 ring-offset-zinc-950" : ""}
+                    ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-zinc-800/40"}
                   `}
                 >
-                  {/* Thumbnail */}
                   {thumbnails[scene.id]?.[0] ? (
                     <>
                       <img src={thumbnails[scene.id][0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                     </>
                   ) : null}
-                  {/* Duration badge */}
-                  <span className="absolute top-0.5 left-0.5 text-[7px] px-1 py-px rounded-full bg-black/50 text-white font-mono z-10">{durSec}s</span>
-                  {/* Status dot */}
+                  <span className="absolute top-0.5 left-0.5 text-[7px] px-1 py-px rounded-full bg-black/60 text-white font-mono z-10">{durSec}s</span>
                   <div className="absolute top-1 right-1 z-10">
-                    <div className={`w-2 h-2 rounded-full ${isCompleted ? "bg-emerald-400" : isGenerating ? "bg-blue-400 animate-pulse" : "bg-muted-foreground/40"}`} />
+                    <div className={`w-2 h-2 rounded-full ${isCompleted ? "bg-emerald-400" : isGenerating ? "bg-blue-400 animate-pulse" : "bg-zinc-600"}`} />
                   </div>
-                  {/* Drag handle */}
                   {onMoveScene && (
                     <GripVertical className="absolute top-1 left-[calc(50%-5px)] w-2.5 h-2.5 text-white/50 z-10" />
                   )}
-                  {/* Scene title */}
                   <div className="absolute bottom-0.5 left-1 right-1 z-10">
                     <div className="text-[8px] text-white font-medium truncate drop-shadow-sm">
                       {seg?.label || `Scene ${i + 1}`}
@@ -524,39 +618,34 @@ export function TimelineBar({
 
       {/* ─── Expanded track view ─── */}
       {viewMode === "expanded" && (
-      <div className="px-3 py-2 space-y-1.5 relative overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+      <div ref={scrollContainerRef} className="px-3 py-1.5 space-y-0 relative overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
         <div style={{ width: `${100 * zoomLevel}%`, minWidth: "100%" }}>
-        {/* ─── Time ruler ─── */}
-        <div className="flex items-center gap-0.5 mb-1">
+
+        {/* ─── Time Ruler ─── */}
+        <div className="flex items-center gap-0.5 mb-0.5">
           <span className="w-14 shrink-0" />
-          <div className="flex-1 h-4 relative border-b border-border/30">
-            {Array.from({ length: Math.ceil(totalDuration * 2) + 1 }, (_, i) => {
-              const sec = i * 0.5;
-              const leftPct = (sec / totalDuration) * 100;
-              if (leftPct > 100) return null;
-              const isMajor = sec % 1 === 0;
-              return (
-                <div key={i} className="absolute top-0 bottom-0" style={{ left: `${leftPct}%` }}>
-                  <div className={`absolute bottom-0 w-px ${isMajor ? 'h-3 bg-muted-foreground/50' : 'h-1.5 bg-muted-foreground/25'}`} />
-                  {isMajor && (
-                    <span className="absolute bottom-3.5 text-[7px] text-muted-foreground font-mono -translate-x-1/2 select-none">{sec}s</span>
-                  )}
-                </div>
-              );
-            })}
+          <div ref={rulerRef} className="flex-1 h-5 relative border-b border-white/[0.06] cursor-pointer"
+            onClick={handleTrackClick}
+          >
+            {rulerTicks.map((tick, ti) => (
+              <div key={ti} className="absolute top-0 bottom-0" style={{ left: `${tick.pct}%` }}>
+                <div className={`absolute bottom-0 w-px ${tick.isMajor ? 'h-3 bg-zinc-500' : 'h-1.5 bg-zinc-700'}`} />
+                {tick.label && (
+                  <span className="absolute bottom-3.5 text-[7px] text-zinc-500 font-mono -translate-x-1/2 select-none whitespace-nowrap">
+                    {tick.label}
+                  </span>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* ─── Video track ─── */}
+        {/* ─── Video Track ─── */}
         <div className="flex items-center gap-0.5">
-          <VolumeControl
-            label="Video"
-            volume={videoVolume}
-            onVolumeChange={onVideoVolumeChange}
-          />
-           <div
+          <VolumeControl label="Video" volume={videoVolume} onVolumeChange={onVideoVolumeChange} />
+          <div
             ref={trackRef}
-            className="flex-1 flex gap-px h-20 relative cursor-pointer rounded overflow-hidden"
+            className="flex-1 flex gap-px h-20 relative cursor-pointer rounded overflow-hidden bg-zinc-900/30"
             onClick={handleTrackClick}
           >
             {storyboard.map((scene, i) => {
@@ -579,57 +668,53 @@ export function TimelineBar({
                       onDrop={(e) => handleSceneDrop(e, i)}
                       onDragEnd={handleSceneDragEnd}
                       onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
-                      className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden
-                        ${isSelected ? "ring-2 ring-primary ring-inset z-10" : ""}
-                        ${isDropTarget ? "ring-2 ring-primary ring-inset" : ""}
+                      className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden rounded-sm
+                        ${isSelected ? "ring-2 ring-red-500 ring-inset z-10" : "ring-1 ring-white/[0.06] ring-inset"}
+                        ${isDropTarget ? "ring-2 ring-red-500 ring-inset" : ""}
                         ${sceneDragIdx === i ? "opacity-40" : ""}
-                        ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
+                        ${isCompleted ? "bg-emerald-900/30" : isGenerating ? "bg-blue-900/20 animate-pulse" : "bg-zinc-800/40"}
+                        hover:brightness-110
                       `}
-                      style={{ flex: dur }}
+                      style={{ flex: dur, willChange: "transform" }}
                       title={seg?.label || `Scene ${i + 1}`}
                     >
                       {/* Left drag handle */}
                       {onResizeScene && (
                         <div
                           onMouseDown={(e) => handleDragStart(e, i, "left")}
-                          className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 z-20"
+                          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-red-500/50 z-20 transition-colors"
                         />
                       )}
-                      {/* Live thumbnail preview */}
+                      {/* Thumbnails */}
                       {thumbnails[scene.id]?.length ? (
                         <>
                           <div className="absolute inset-0 flex">
                             {thumbnails[scene.id].map((frame, fi) => (
-                              <img
-                                key={fi}
-                                src={frame}
-                                alt=""
-                                className="h-full object-cover flex-1 min-w-0"
-                              />
+                              <img key={fi} src={frame} alt="" className="h-full object-cover flex-1 min-w-0" />
                             ))}
                           </div>
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                         </>
                       ) : clip?.videoUrl ? (
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
                       ) : null}
-                      {/* Status badge */}
+                      {/* Status */}
                       <div className="absolute top-0.5 right-0.5 z-10">
                         <span className={`text-[7px] px-1 py-px rounded-full font-medium ${
-                          isCompleted ? "bg-emerald-500/80 text-white" : isGenerating ? "bg-blue-500/80 text-white" : "bg-muted/60 text-muted-foreground"
+                          isCompleted ? "bg-emerald-500/80 text-white" : isGenerating ? "bg-blue-500/80 text-white" : "bg-zinc-700/80 text-zinc-300"
                         }`}>
                           {isCompleted ? "done" : isGenerating ? "gen…" : clip?.status || "idle"}
                         </span>
                       </div>
-                      {/* Duration badge */}
+                      {/* Duration */}
                       <div className="absolute top-0.5 left-0.5 z-10">
-                        <span className="text-[7px] px-1 py-px rounded-full bg-black/50 text-white font-mono">{durSec}s</span>
+                        <span className="text-[7px] px-1 py-px rounded-full bg-black/60 text-white font-mono">{durSec}s</span>
                       </div>
-                      {/* Drop indicator line */}
+                      {/* Drop indicator */}
                       {isDropTarget && (
-                        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary z-30" />
+                        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-500 z-30" />
                       )}
-                      {/* Scene info */}
+                      {/* Info */}
                       <div className="relative z-10 px-1 pb-0.5 w-full">
                         <div className="text-[8px] text-white font-semibold truncate drop-shadow-sm">
                           {scene.objective || seg?.label || `Scene ${i + 1}`}
@@ -641,88 +726,74 @@ export function TimelineBar({
                         )}
                       </div>
                       {isSelected && (
-                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-500" />
                       )}
                       {/* Right drag handle */}
                       {onResizeScene && (
                         <div
                           onMouseDown={(e) => handleDragStart(e, i, "right")}
-                          className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-primary/60 z-20"
+                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-red-500/50 z-20 transition-colors"
                         />
                       )}
                     </div>
                   </PopoverTrigger>
-                  <PopoverContent className="w-44 p-1.5" side="top" align="center">
+                  <PopoverContent className="w-44 p-1.5 bg-zinc-900 border-white/10" side="top" align="center">
                     <div className="space-y-0.5">
-                      <button
-                        onClick={() => onSelectScene(i)}
-                        className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground"
-                      >Select</button>
+                      <button onClick={() => onSelectScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200">Select</button>
                       {onEditPrompt && (
-                        <button
-                          onClick={() => onEditPrompt(i)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><Edit3 className="w-2.5 h-2.5" />Edit Prompt</button>
+                        <button onClick={() => onEditPrompt(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <Edit3 className="w-2.5 h-2.5" />Edit Prompt
+                        </button>
                       )}
                       {onEditVoiceover && (
-                        <button
-                          onClick={() => onEditVoiceover(i)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><FileText className="w-2.5 h-2.5" />Edit Voiceover Text</button>
+                        <button onClick={() => onEditVoiceover(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <FileText className="w-2.5 h-2.5" />Edit Voiceover Text
+                        </button>
                       )}
                       {onTrimScene && (
-                        <button
-                          onClick={() => onTrimScene(i)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><Scissors className="w-2.5 h-2.5" />Split at playhead</button>
+                        <button onClick={() => onTrimScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <Scissors className="w-2.5 h-2.5" />Split at playhead
+                        </button>
                       )}
                       {onStretchScene && (
-                        <button
-                          onClick={() => onStretchScene(i)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><Expand className="w-2.5 h-2.5" />Stretch (+1s)</button>
+                        <button onClick={() => onStretchScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <Expand className="w-2.5 h-2.5" />Stretch (+1s)
+                        </button>
                       )}
                       {onSplitScene && (
-                        <button
-                          onClick={() => onSplitScene(i)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><SplitSquareHorizontal className="w-2.5 h-2.5" />Split</button>
+                        <button onClick={() => onSplitScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <SplitSquareHorizontal className="w-2.5 h-2.5" />Split
+                        </button>
                       )}
                       {onDuplicateScene && (
-                        <button
-                          onClick={() => onDuplicateScene(i)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><Copy className="w-2.5 h-2.5" />Duplicate</button>
+                        <button onClick={() => onDuplicateScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <Copy className="w-2.5 h-2.5" />Duplicate
+                        </button>
                       )}
                       {onMoveScene && i > 0 && (
-                        <button
-                          onClick={() => onMoveScene(i, -1)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><ArrowLeft className="w-2.5 h-2.5" />Move Left</button>
+                        <button onClick={() => onMoveScene(i, -1)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <ArrowLeft className="w-2.5 h-2.5" />Move Left
+                        </button>
                       )}
                       {onMoveScene && i < storyboard.length - 1 && (
-                        <button
-                          onClick={() => onMoveScene(i, 1)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><ArrowRight className="w-2.5 h-2.5" />Move Right</button>
+                        <button onClick={() => onMoveScene(i, 1)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <ArrowRight className="w-2.5 h-2.5" />Move Right
+                        </button>
                       )}
                       {onMuteScene && (
-                        <button
-                          onClick={() => onMuteScene(i)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><VolumeOff className="w-2.5 h-2.5" />{mutedScenes?.has(scene.id) ? "Unmute" : "Mute Scene"}</button>
+                        <button onClick={() => onMuteScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <VolumeOff className="w-2.5 h-2.5" />{mutedScenes?.has(scene.id) ? "Unmute" : "Mute Scene"}
+                        </button>
                       )}
-                      {onRegenerateScene && isCompleted && (
-                        <button
-                          onClick={() => onRegenerateScene(scene.id)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><RefreshCw className="w-2.5 h-2.5" />Regenerate</button>
+                      {onRegenerateScene && clip?.status === "completed" && (
+                        <button onClick={() => onRegenerateScene(scene.id)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <RefreshCw className="w-2.5 h-2.5" />Regenerate
+                        </button>
                       )}
                       {onDeleteScene && (
-                        <button
-                          onClick={() => onDeleteScene(i)}
-                          className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-destructive/20 text-destructive flex items-center gap-1"
-                        ><Trash2 className="w-2.5 h-2.5" />Delete</button>
+                        <button onClick={() => onDeleteScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-red-500/20 text-red-400 flex items-center gap-1">
+                          <Trash2 className="w-2.5 h-2.5" />Delete
+                        </button>
                       )}
                     </div>
                   </PopoverContent>
@@ -730,10 +801,18 @@ export function TimelineBar({
               );
             })}
 
-            {/* Playhead — draggable for scrubbing */}
+            {/* ─── Snap guide ─── */}
+            {snapGuidePos != null && (
+              <div className="absolute top-0 bottom-0 w-px z-30 pointer-events-none" style={{ left: `${snapGuidePos}%` }}>
+                <div className="w-px h-full bg-yellow-400/60" style={{ borderLeft: "1px dashed" }} />
+              </div>
+            )}
+
+            {/* ─── Playhead — rAF-driven ─── */}
             <div
+              ref={playheadRef}
               className={`absolute top-0 bottom-0 z-20 ${scrubbing ? 'cursor-grabbing' : 'cursor-grab'}`}
-              style={{ left: `${playheadPct}%`, width: '14px', transform: 'translateX(-6px)', transition: scrubbing ? 'none' : 'left 0.1s linear' }}
+              style={{ left: `${playheadPct}%`, width: '16px', transform: 'translateX(-7px)', willChange: 'left' }}
               onMouseDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -741,161 +820,257 @@ export function TimelineBar({
                 setScrubbing(true);
               }}
             >
-              <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white -translate-x-1/2" />
-              <div className={`absolute left-1/2 -translate-x-1/2 -translate-y-0.5 rounded-full bg-white transition-transform ${scrubbing ? 'w-3 h-3' : 'w-2 h-2'}`} />
+              {/* Red playhead line */}
+              <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-red-500 -translate-x-1/2" />
+              {/* Triangle head */}
+              <div className="absolute left-1/2 -translate-x-1/2 -top-0.5" style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '6px solid #ef4444' }} />
+              {/* Bottom indicator */}
+              <div className={`absolute left-1/2 -translate-x-1/2 bottom-0 rounded-full bg-red-500 transition-transform ${scrubbing ? 'w-2 h-2' : 'w-1.5 h-1.5'}`} />
             </div>
           </div>
-      </div>
-
-      {/* ─── Text overlay track ─── */}
-      {textOverlays.length > 0 && (
-        <div className="flex items-center gap-0.5 mt-1">
-          <span className="w-14 shrink-0 text-[9px] text-muted-foreground flex items-center gap-1">
-            <Type className="w-3 h-3" /> Text
-          </span>
-          <div className="flex-1 h-5 relative rounded bg-muted/20 overflow-hidden">
-            {textOverlays.map((ov) => {
-              const idx = storyboard.findIndex(s => s.id === ov.sceneId);
-              if (idx < 0) return null;
-              const sceneStart = cumulativeStarts[idx] || 0;
-              const sceneDur = getSceneDur(idx);
-              const itemStart = ov.startTime ?? 0;
-              const itemEnd = ov.endTime ?? sceneDur;
-              const absStart = sceneStart + itemStart;
-              const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-              const leftPct = (absStart / totalDuration) * 100;
-              const widthPct = ((absEnd - absStart) / totalDuration) * 100;
-              const isBeingDragged = draggedItemId === ov.id;
-              return (
-                <div
-                  key={ov.id}
-                  className="absolute top-0.5 bottom-0.5 rounded-sm bg-violet-500/70 cursor-grab hover:bg-violet-500/90 transition-colors flex items-center px-1 group"
-                  style={{
-                    left: `${leftPct}%`,
-                    width: `${Math.max(widthPct, 0.8)}%`,
-                    transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
-                    zIndex: isBeingDragged ? 30 : 5,
-                  }}
-                  onMouseDown={(e) => handleItemDragStart(e, "text", ov.id, leftPct, widthPct)}
-                  onClick={(e) => { e.stopPropagation(); onEditOverlay?.(ov); }}
-                >
-                  <span className="text-[8px] text-white truncate select-none">{ov.content}</span>
-                  {onDeleteOverlay && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onDeleteOverlay(ov.id); }}
-                      className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40"
-                    >
-                      <Trash2 className="w-2 h-2 text-white/80" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
         </div>
-      )}
 
-      {/* ─── Audio track ─── */}
-      {audioTracks.length > 0 && (
-        <div className="flex items-center gap-0.5 mt-1">
-          <span className="w-14 shrink-0 text-[9px] text-muted-foreground flex items-center gap-1">
-            <Music className="w-3 h-3" /> Audio
-          </span>
-          <div className="flex-1 h-5 relative rounded bg-muted/20 overflow-hidden" onClick={() => setSelectedAudioIdx(null)}>
-            {audioTracks.map((track, tIdx) => {
-              let leftPct: number;
-              let widthPct: number;
-              if (track.globalStartTime != null && totalDuration > 0) {
-                // Global absolute positioning
-                const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
-                leftPct = (track.globalStartTime / totalDuration) * 100;
-                widthPct = (trackDur / totalDuration) * 100;
-              } else {
-                const idx = storyboard.findIndex(s => s.id === track.sceneId);
-                if (idx < 0) {
-                  leftPct = 0;
-                  widthPct = 100;
+        {/* ─── Text overlay track ─── */}
+        {textOverlays.length > 0 && (
+          <div className="flex items-center gap-0.5 mt-0.5">
+            <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
+              <Type className="w-3 h-3" /> Text
+            </span>
+            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden">
+              {textOverlays.map((ov) => {
+                const idx = storyboard.findIndex(s => s.id === ov.sceneId);
+                if (idx < 0) return null;
+                const sceneStart = cumulativeStarts[idx] || 0;
+                const sceneDur = getSceneDur(idx);
+                const itemStart = ov.startTime ?? 0;
+                const itemEnd = ov.endTime ?? sceneDur;
+                const absStart = sceneStart + itemStart;
+                const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
+                const leftPct = (absStart / totalDuration) * 100;
+                const widthPct = ((absEnd - absStart) / totalDuration) * 100;
+                const isBeingDragged = draggedItemId === ov.id;
+                return (
+                  <div
+                    key={ov.id}
+                    className="absolute top-0.5 bottom-0.5 rounded-sm bg-violet-500/60 cursor-grab hover:bg-violet-500/80 transition-colors flex items-center px-1 group"
+                    style={{
+                      left: `${leftPct}%`,
+                      width: `${Math.max(widthPct, 0.8)}%`,
+                      transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
+                      zIndex: isBeingDragged ? 30 : 5,
+                      willChange: isBeingDragged ? 'transform' : undefined,
+                    }}
+                    onMouseDown={(e) => handleItemDragStart(e, "text", ov.id, leftPct, widthPct)}
+                    onClick={(e) => { e.stopPropagation(); onEditOverlay?.(ov); }}
+                  >
+                    <span className="text-[8px] text-white truncate select-none">{ov.content}</span>
+                    {onDeleteOverlay && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDeleteOverlay(ov.id); }}
+                        className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40"
+                      >
+                        <Trash2 className="w-2 h-2 text-white/80" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ─── Audio track ─── */}
+        {audioTracks.length > 0 && (
+          <div className="flex items-center gap-0.5 mt-0.5">
+            <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
+              <Music className="w-3 h-3" /> Audio
+            </span>
+            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={() => setSelectedAudioIdx(null)}>
+              {audioTracks.map((track, tIdx) => {
+                let leftPct: number;
+                let widthPct: number;
+                if (track.globalStartTime != null && totalDuration > 0) {
+                  const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
+                  leftPct = (track.globalStartTime / totalDuration) * 100;
+                  widthPct = (trackDur / totalDuration) * 100;
                 } else {
-                  const sceneStart = cumulativeStarts[idx] || 0;
-                  const sceneDur = getSceneDur(idx);
-                  const itemStart = track.startTime ?? 0;
-                  const itemEnd = track.endTime ?? sceneDur;
-                  const absStart = sceneStart + itemStart;
-                  const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-                  leftPct = (absStart / totalDuration) * 100;
-                  widthPct = ((absEnd - absStart) / totalDuration) * 100;
+                  const idx = storyboard.findIndex(s => s.id === track.sceneId);
+                  if (idx < 0) {
+                    leftPct = 0; widthPct = 100;
+                  } else {
+                    const sceneStart = cumulativeStarts[idx] || 0;
+                    const sceneDur = getSceneDur(idx);
+                    const itemStart = track.startTime ?? 0;
+                    const itemEnd = track.endTime ?? sceneDur;
+                    const absStart = sceneStart + itemStart;
+                    const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
+                    leftPct = (absStart / totalDuration) * 100;
+                    widthPct = ((absEnd - absStart) / totalDuration) * 100;
+                  }
                 }
-              }
-              const itemId = `audio-${tIdx}`;
-              const isBeingDragged = draggedItemId === itemId;
-              const barColor = track.kind === "voiceover" ? "bg-teal-500/70 hover:bg-teal-500/90" : "bg-amber-500/70 hover:bg-amber-500/90";
-              return (
-                <div
-                  key={itemId}
-                  className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor} ${selectedAudioIdx === tIdx ? 'ring-2 ring-white ring-offset-1 ring-offset-black/50' : ''}`}
-                  style={{
-                    left: `${leftPct}%`,
-                    width: `${Math.max(widthPct, 0.8)}%`,
-                    transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
-                    zIndex: isBeingDragged ? 30 : 5,
-                  }}
-                  onMouseDown={(e) => handleItemDragStart(e, "audio", String(tIdx), leftPct, widthPct)}
-                  onClick={(e) => { e.stopPropagation(); setSelectedAudioIdx(tIdx); }}
-                >
-                  <span className="text-[8px] text-white truncate select-none">
-                    {track.kind === "voiceover" ? "🎙" : "🎵"} {track.label}
-                  </span>
-                  {onRemoveAudioTrack && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onRemoveAudioTrack(tIdx); }}
-                      className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40"
-                    >
-                      <Trash2 className="w-2 h-2 text-white/80" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                const itemId = `audio-${tIdx}`;
+                const isBeingDragged = draggedItemId === itemId;
+                const barColor = track.kind === "voiceover" ? "bg-teal-500/60 hover:bg-teal-500/80" : "bg-amber-500/60 hover:bg-amber-500/80";
+                return (
+                  <div
+                    key={itemId}
+                    className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor} ${selectedAudioIdx === tIdx ? 'ring-1 ring-white/60' : ''}`}
+                    style={{
+                      left: `${leftPct}%`,
+                      width: `${Math.max(widthPct, 0.8)}%`,
+                      transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined,
+                      zIndex: isBeingDragged ? 30 : 5,
+                      willChange: isBeingDragged ? 'transform' : undefined,
+                    }}
+                    onMouseDown={(e) => handleItemDragStart(e, "audio", String(tIdx), leftPct, widthPct)}
+                    onClick={(e) => { e.stopPropagation(); setSelectedAudioIdx(tIdx); }}
+                  >
+                    <span className="text-[8px] text-white truncate select-none">
+                      {track.kind === "voiceover" ? "🎙" : "🎵"} {track.label}
+                    </span>
+                    {onRemoveAudioTrack && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onRemoveAudioTrack(tIdx); }}
+                        className="hidden group-hover:flex absolute right-0.5 top-0.5 items-center justify-center w-3 h-3 rounded-full bg-black/40"
+                      >
+                        <Trash2 className="w-2 h-2 text-white/80" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
+        )}
+
         </div>
+      </div>
       )}
 
+      {/* ─── Transport Bar ─── */}
+      <div className="flex items-center gap-2 px-3 py-1 border-t border-white/[0.06] bg-zinc-950">
+        {/* Skip back */}
+        <button
+          onClick={() => onSkipScene?.(-1) || onSeek(0)}
+          className="text-zinc-500 hover:text-white transition-colors"
+          title="Skip back"
+        >
+          <SkipBack className="w-3.5 h-3.5" />
+        </button>
+        {/* Frame step back */}
+        <button
+          onClick={() => onFrameStep?.(-1)}
+          className="text-zinc-500 hover:text-white transition-colors"
+          title="Previous frame (←)"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        {/* Play/Pause */}
+        <button
+          onClick={onTogglePlay}
+          className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          title={isPlaying ? "Pause (Space)" : "Play (Space)"}
+        >
+          {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+        </button>
+        {/* Frame step forward */}
+        <button
+          onClick={() => onFrameStep?.(1)}
+          className="text-zinc-500 hover:text-white transition-colors"
+          title="Next frame (→)"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+        {/* Skip forward */}
+        <button
+          onClick={() => onSkipScene?.(1) || onSeek(totalDuration)}
+          className="text-zinc-500 hover:text-white transition-colors"
+          title="Skip forward"
+        >
+          <SkipForward className="w-3.5 h-3.5" />
+        </button>
+
+        {/* Time display */}
+        <div className="flex items-center gap-1 ml-2">
+          <span className="text-[11px] text-white font-mono tabular-nums tracking-tight">
+            {formatTimePrecise(globalTime)}
+          </span>
+          <span className="text-[10px] text-zinc-600">/</span>
+          <span className="text-[11px] text-zinc-500 font-mono tabular-nums tracking-tight">
+            {formatTimePrecise(totalDuration)}
+          </span>
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Zoom slider */}
+        {viewMode === "expanded" && (
+          <div className="flex items-center gap-1.5">
+            <ZoomOut className="w-3 h-3 text-zinc-600" />
+            <input
+              type="range"
+              min={0.5}
+              max={20}
+              step={0.1}
+              value={zoomLevel}
+              onChange={(e) => setZoomLevel(+e.target.value)}
+              className="w-20 h-1 accent-zinc-500 bg-zinc-800 rounded-full appearance-none cursor-pointer
+                [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5
+                [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-zinc-400 [&::-webkit-slider-thumb]:cursor-pointer"
+            />
+            <ZoomIn className="w-3 h-3 text-zinc-600" />
+          </div>
+        )}
       </div>
-      </div>
-      )}
     </div>
   );
 }
 
+/* ─── Snap helper ─── */
+function snapToSceneBoundary(
+  timeSec: number,
+  totalDuration: number,
+  cumulativeStarts: number[],
+  storyboard: { segmentId: string }[],
+  segments: { id: string; startTime: number; endTime: number }[],
+  threshold = 0.15 // seconds
+): { time: number; snapped: boolean } {
+  const boundaries = [0, totalDuration];
+  for (let i = 0; i < storyboard.length; i++) {
+    boundaries.push(cumulativeStarts[i] || 0);
+    const seg = segments.find(s => s.id === storyboard[i]?.segmentId);
+    if (seg) boundaries.push((cumulativeStarts[i] || 0) + (seg.endTime - seg.startTime));
+  }
+  for (const b of boundaries) {
+    if (Math.abs(timeSec - b) < threshold) {
+      return { time: b, snapped: true };
+    }
+  }
+  return { time: timeSec, snapped: false };
+}
+
 /* ─── Inline Volume Control ─── */
 function VolumeControl({
-  label,
-  volume,
-  onVolumeChange,
-  hideSlider,
+  label, volume, onVolumeChange, hideSlider,
 }: {
-  label: string;
-  volume: number;
-  onVolumeChange?: (v: number) => void;
-  hideSlider?: boolean;
+  label: string; volume: number; onVolumeChange?: (v: number) => void; hideSlider?: boolean;
 }) {
   const isMuted = volume === 0;
-
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button className="flex items-center gap-0.5 w-14 shrink-0 group" title={`${label} volume`}>
           {isMuted
-            ? <VolumeX className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
-            : <Volume2 className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+            ? <VolumeX className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300 transition-colors" />
+            : <Volume2 className="w-3 h-3 text-zinc-500 group-hover:text-zinc-300 transition-colors" />
           }
-          <span className="text-[9px] text-muted-foreground group-hover:text-foreground truncate transition-colors">{label}</span>
+          <span className="text-[9px] text-zinc-500 group-hover:text-zinc-300 truncate transition-colors">{label}</span>
         </button>
       </PopoverTrigger>
       {!hideSlider && onVolumeChange && (
-        <PopoverContent className="w-40 p-2" side="top" align="start">
+        <PopoverContent className="w-40 p-2 bg-zinc-900 border-white/10" side="top" align="start">
           <div className="space-y-1.5">
-            <p className="text-[10px] font-medium text-foreground">{label} Volume</p>
+            <p className="text-[10px] font-medium text-zinc-200">{label} Volume</p>
             <Slider
               value={[Math.round(volume * 100)]}
               min={0} max={100} step={1}
@@ -903,10 +1078,10 @@ function VolumeControl({
               className="w-full"
             />
             <div className="flex justify-between items-center">
-              <span className="text-[9px] text-muted-foreground">{Math.round(volume * 100)}%</span>
+              <span className="text-[9px] text-zinc-400">{Math.round(volume * 100)}%</span>
               <button
                 onClick={() => onVolumeChange(isMuted ? 1 : 0)}
-                className="text-[9px] text-muted-foreground hover:text-foreground"
+                className="text-[9px] text-zinc-400 hover:text-zinc-200"
               >
                 {isMuted ? "Unmute" : "Mute"}
               </button>
@@ -918,8 +1093,9 @@ function VolumeControl({
   );
 }
 
-function formatTime(s: number) {
+function formatTimePrecise(s: number) {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
-  return `${m}:${sec.toString().padStart(2, "0")}`;
+  const ms = Math.floor((s % 1) * 1000);
+  return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}:${ms.toString().padStart(3, "0")}`;
 }
