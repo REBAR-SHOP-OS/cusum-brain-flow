@@ -1,48 +1,56 @@
 
 
-# Fix Homepage Rendering — Prevent Blank Hero
+# Fix Blank Hero on rebar.shop via WordPress API
 
-## Analysis
+## Root Cause
+The **Slider Revolution 7** plugin JavaScript is failing to render slide content. The `<sr7-slide>` elements contain only empty `<sr7-bg>` tags — the JS that populates them with images, text, and CTAs never executes. This is a client-side JS initialization failure in the WordPress theme, not something fixable by editing slide data.
 
-The Landing page (`src/pages/Landing.tsx`) is **entirely static** — no API calls to `erp.rebar.shop` or any external service. All data (STATS, PROBLEMS, MODULES, etc.) is hardcoded. The `PublicChatWidget` calls an edge function but is independent and non-blocking.
+## Solution
+Create an edge function that uses the WP REST API (write access) to **inject a static CSS/HTML hero fallback** into the homepage (page ID `13672`). This fallback will:
+- Use the same banner images already uploaded to the media library
+- Display a rotating hero with CSS-only animation (no JS dependency)
+- Be placed **before** the Slider Revolution shortcode so content is always visible
+- Include a `<noscript>` / CSS fallback that works even if all JS fails
 
-**Root causes of intermittent blank hero:**
-1. **No error boundary** — Landing is a public route (`<Route path="/" element={<Landing />} />`) with no `SmartErrorBoundary` wrapper. If `InteractiveBrainBg` or `AnimatedCounter` (framer-motion) throws, the entire page goes blank.
-2. **`useAuth` blocking** — Landing calls `useAuth()` and shows a full-screen spinner while `loading` is true. If auth takes long or errors, users see blank/spinner indefinitely.
-3. **`InteractiveBrainBg`** uses complex SVG animations, `requestAnimationFrame`, and CSS animations that can error on certain browsers.
-4. **`AnimatedCounter`** depends on `framer-motion` spring/transform — if framer-motion fails to load (chunk error), the whole hero crashes.
-5. **`PublicChatWidget`** makes network calls on mount — if it throws, it takes down the page.
+## Implementation
 
-## Changes
+### 1. New edge function: `supabase/functions/wp-fix-hero/index.ts`
+- **GET** mode: Fetch page 13672 content, check if hero fallback already exists
+- **POST** mode: Update page 13672 content to prepend a static HTML hero section
 
-### 1. `src/App.tsx` — Wrap Landing in error boundary
-- Add `SmartErrorBoundary` around the Landing route element
+The static hero will:
+- Use a full-width CSS image carousel with 8 banner images (already on the server)
+- Auto-rotate via CSS `@keyframes` animation (no JS needed)
+- Include fade transitions between slides
+- Show the first image immediately (no loading delay)
+- Be wrapped in a distinctive `<div id="rebar-static-hero">` for easy identification
 
-### 2. `src/pages/Landing.tsx` — Add resilience
-- Wrap `InteractiveBrainBg` in try/catch error boundary (inline or component-level)
-- Wrap `AnimatedCounter` usage with a lightweight error boundary that falls back to static text
-- Add a timeout on `useAuth` loading state: if loading > 3 seconds, render the page anyway (treat as not logged in)
-- Wrap `PublicChatWidget` in error boundary
+### 2. Banner images to use (from the existing `image_lists`):
+1. `rebar-estimation-banner-1920-vivid.webp`
+2. `shop-drawings-ultra-hq-scaled.webp`
+3. `rebar-detailing-high-quality-1.webp`
+4. `dowel-rebar-blue-chalkboard.webp`
+5. `spring_build_bonus_offer_sale.webp`
+6. `rebar-stirrups-sale.webp`
+7. `straight-rebar-sale-1.webp`
+8. `custom_rebar_high_quality-1.webp`
 
-### 3. `src/components/brain/InteractiveBrainBg.tsx` — Add safety
-- Wrap the entire render in a try/catch at the component level
-- If any error, return a simple gradient fallback div (no blank)
+### 3. Strategy for the page update
+- Fetch current page content via `GET /pages/13672`
+- Check if `rebar-static-hero` already exists (idempotent)
+- Prepend the static hero HTML **before** the existing content
+- Optionally wrap the Slider Revolution shortcode in a `display:none` div to prevent the empty 900px gap
+- Update via `PUT /pages/13672`
 
-### 4. Create `src/components/landing/LandingSectionBoundary.tsx`
-- Lightweight error boundary component for landing sections
-- On error: renders nothing (section disappears gracefully) instead of crashing the page
-- Logs error to console with clear message
-
-### 5. `src/pages/Landing.tsx` — Skeleton/loading states
-- Replace the full-screen Loader2 spinner with a skeleton layout showing header + hero placeholder
-- This ensures visible content appears immediately even during auth check
+### 4. Add a button/action in the Office or admin UI
+- Add a "Fix Homepage Hero" action in the website management section so it can be triggered when needed
 
 ## Files Changed
-- `src/App.tsx` — wrap Landing route in SmartErrorBoundary
-- `src/pages/Landing.tsx` — auth timeout, wrap sections in LandingSectionBoundary, skeleton loading
-- `src/components/landing/LandingSectionBoundary.tsx` — new lightweight error boundary
-- `src/components/brain/InteractiveBrainBg.tsx` — safe render with fallback
+- `supabase/functions/wp-fix-hero/index.ts` — new edge function to inject static hero
+- One UI file (website management section) — button to trigger the fix
 
-## Result
-Homepage always renders visible content. Individual sections fail silently without taking down the page. No white screen under any condition.
+## Risk Assessment
+- **Safe**: The WP REST API update is reversible (page revisions are kept)
+- **Non-destructive**: Prepends content, does not delete existing slider
+- **Idempotent**: Checks for existing fallback before inserting
 
