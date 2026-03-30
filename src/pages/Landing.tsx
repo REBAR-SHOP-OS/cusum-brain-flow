@@ -367,7 +367,9 @@ export default function Landing() {
       </main>
 
       <LandingFooter />
-      <PublicChatWidget />
+      <LandingSectionBoundary section="PublicChatWidget">
+        <PublicChatWidget />
+      </LandingSectionBoundary>
     </div>
   );
 }
