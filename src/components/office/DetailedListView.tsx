@@ -80,7 +80,14 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
   const saveEdit = async () => {
     if (!editingItemId) return;
     const { bend_dimensions, ...rest } = editValues;
-    const updatePayload: Record<string, any> = { ...rest, bend_dimensions };
+    // Convert cut_length_mm from display unit back to mm
+    const convertedLength = displayModeToMm(rest.cut_length_mm || 0, editUnit);
+    // Convert dimension values from display unit back to mm
+    const convertedDims: Record<string, number | undefined> = {};
+    for (const [k, v] of Object.entries(bend_dimensions || {})) {
+      convertedDims[k] = v ? displayModeToMm(Number(v), editUnit) : undefined;
+    }
+    const updatePayload: Record<string, any> = { ...rest, cut_length_mm: convertedLength, bend_dimensions: convertedDims };
     const { error } = await supabase
       .from("cut_plan_items")
       .update(updatePayload)
