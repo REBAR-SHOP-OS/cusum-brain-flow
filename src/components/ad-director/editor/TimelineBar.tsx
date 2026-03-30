@@ -382,12 +382,10 @@ export function TimelineBar({
   const playheadPct = totalDuration > 0 ? (globalTime / totalDuration) * 100 : 0;
 
   const handleTrackClick = (e: React.MouseEvent) => {
-    if (!trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
+    const rect = (trackRef.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
     const timeSec = pct * totalDuration;
-    const snapped = snapToSceneBoundary(timeSec, totalDuration, cumulativeStarts, storyboard, segments);
-    onSeek(Math.max(0, Math.min(totalDuration, snapped.time)));
+    onSeek(Math.max(0, Math.min(totalDuration, timeSec)));
   };
 
   const getSceneDur = (i: number) => {
@@ -710,7 +708,7 @@ export function TimelineBar({
                       onDragOver={(e) => handleSceneDragOver(e, i)}
                       onDrop={(e) => handleSceneDrop(e, i)}
                       onDragEnd={handleSceneDragEnd}
-                      onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
+                      onClick={(e) => { e.stopPropagation(); onSelectScene(i); if (trackRef.current) { const rect = trackRef.current.getBoundingClientRect(); const pct = (e.clientX - rect.left) / rect.width; onSeek(Math.max(0, Math.min(totalDuration, pct * totalDuration))); } }}
                       className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden rounded-sm
                         ${isSelected ? "ring-2 ring-red-500 ring-inset z-10" : "ring-1 ring-white/[0.06] ring-inset"}
                         ${isDropTarget ? "ring-2 ring-red-500 ring-inset" : ""}
@@ -860,7 +858,7 @@ export function TimelineBar({
             <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
               <Type className="w-3 h-3" /> Text
             </span>
-            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden">
+            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={handleTrackClick}>
               {textOverlays.map((ov) => {
                 const idx = storyboard.findIndex(s => s.id === ov.sceneId);
                 if (idx < 0) return null;
@@ -909,7 +907,7 @@ export function TimelineBar({
             <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
               <Music className="w-3 h-3" /> Audio
             </span>
-            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={() => setSelectedAudioIdx(null)}>
+            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={(e) => { setSelectedAudioIdx(null); handleTrackClick(e); }}>
               {audioTracks.map((track, tIdx) => {
                 let leftPct: number;
                 let widthPct: number;
