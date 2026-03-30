@@ -316,7 +316,7 @@ export function ProVideoEditor({
       toast({ title: "✅ Audio generated successfully" });
     } catch (err: any) {
       console.error("Audio generation error:", err);
-      toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
+      toast({ title: "Audio generation failed", description: err.message, variant: "destructive" });
     } finally {
       setGeneratingAudio(false);
     }
@@ -333,7 +333,7 @@ export function ProVideoEditor({
       globalStartTime: 0,
     }]);
     setAudioPromptOpen(false);
-    toast({ title: "✅ فایل صوتی اضافه شد" });
+    toast({ title: "✅ Audio file added" });
   }, [toast]);
 
   const handleGenerateVoiceover = useCallback(async (result: VoiceoverResult) => {
