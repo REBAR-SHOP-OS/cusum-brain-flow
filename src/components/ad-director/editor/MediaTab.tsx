@@ -175,7 +175,7 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
 
       {/* Replace media */}
       <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Replace media</Label>
+        <Label className="text-xs text-muted-foreground">Add / Replace media</Label>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="text-xs h-7 gap-1 flex-1" onClick={handleUpload}>
             <Upload className="w-3 h-3" /> Upload
