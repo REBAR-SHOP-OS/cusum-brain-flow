@@ -819,7 +819,7 @@ export function TimelineBar({
               return (
                 <div
                   key={itemId}
-                  className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor}`}
+                  className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group ${barColor} ${selectedAudioIdx === tIdx ? 'ring-2 ring-white ring-offset-1 ring-offset-black/50' : ''}`}
                   style={{
                     left: `${leftPct}%`,
                     width: `${Math.max(widthPct, 0.8)}%`,
