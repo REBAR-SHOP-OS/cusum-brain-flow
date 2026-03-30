@@ -313,7 +313,7 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
                       <Input key={c} type="number" className="h-6 text-xs px-1 w-12" value={editValues.bend_dimensions?.[c] || ""} onChange={e => setEditValues(v => ({ ...v, bend_dimensions: { ...v.bend_dimensions, [c]: parseInt(e.target.value) || undefined } }))} />
                     ) : (
                       <span key={c} className="text-xs text-muted-foreground">
-                        {dims[c] ? <span className="text-foreground">{dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">{unitSystem === "imperial" ? "IN" : "MM"}</sub></span> : ""}
+                        {dims[c] ? <span className="text-foreground">{unitSystem === "imperial" ? Math.round(Number(dims[c]) / 25.4) : dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">{unitSystem === "imperial" ? "IN" : "MM"}</sub></span> : ""}
                       </span>
                     )
                   ))}
