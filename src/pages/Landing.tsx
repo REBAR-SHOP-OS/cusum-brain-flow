@@ -1,13 +1,15 @@
+import { useState, useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
 import { ArrowRight, AlertTriangle, Brain, Cpu, Database, BarChart3, Layers, Eye, Gauge, ServerCog, Tablet, Radio, Cloud, Cog, ChevronRight, Check, X } from "lucide-react";
 import { AnimatedCounter } from "@/components/ceo/AnimatedCounter";
 import logoCoin from "@/assets/logo-coin.png";
 import { InteractiveBrainBg } from "@/components/brain/InteractiveBrainBg";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { PublicChatWidget } from "@/components/landing/PublicChatWidget";
+import { LandingSectionBoundary } from "@/components/landing/LandingSectionBoundary";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const STATS = [
   { value: 30, suffix: "%", label: "Waste Reduction", prefix: "" },

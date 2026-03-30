@@ -143,7 +143,7 @@ const App = () => (
                 <WorkspaceProvider>
                   <Routes>
                     {/* Public routes */}
-                    <Route path="/" element={<Landing />} />
+                    <Route path="/" element={<SmartErrorBoundary level="page" maxAutoRetries={2}><Landing /></SmartErrorBoundary>} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
                     {/* Print-only route — zero app layout */}
