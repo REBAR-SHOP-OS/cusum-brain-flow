@@ -160,32 +160,31 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
               )}
             </div>
 
-            {/* Platform-Grouped Cards */}
+            {/* Individual Post Cards */}
             <div className="space-y-2">
-              {groupByPlatform(dayPosts).map(([platform, posts]) => {
+              {sortPosts(dayPosts).map((post) => {
+                const platform = post.platform || "other";
                 const pIcon = platformIcons[platform] || platformIcons.twitter;
-                const groupIds = posts.map(p => p.id);
-                const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selectedPostIds?.has(id));
-                const { dominant: status, label: statusLabel } = statusSummary(posts);
-                const firstPost = posts[0];
-                const isApproved = posts.some(p => p.neel_approved || p.qa_status === "approved");
+                const isSelected = selectedPostIds?.has(post.id) ?? false;
+                const status = post.status;
+                const statusLabel = STATUS_LABELS[status] || status;
+                const isApproved = post.neel_approved || post.qa_status === "approved";
 
                 return (
                   <button
-                    key={platform}
+                    key={post.id}
                     onClick={() => {
                       if (onToggleSelect) {
-                        groupIds.forEach(id => onToggleSelect(id));
+                        onToggleSelect(post.id);
                       } else if (onGroupClick) {
-                        const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))] as string[];
-                        onGroupClick(firstPost, uniquePages);
+                        onGroupClick(post, [post.page_name].filter(Boolean) as string[]);
                       } else {
-                        onPostClick(firstPost);
+                        onPostClick(post);
                       }
                     }}
                     className={cn(
                       "w-full p-2 rounded-lg border text-left transition-all hover:shadow-md relative",
-                      allGroupSelected && "ring-2 ring-primary",
+                      isSelected && "ring-2 ring-primary",
                       status === "published"
                         ? "bg-green-500/10 border-green-500/40"
                         : status === "scheduled" && isApproved
@@ -204,16 +203,16 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         className="absolute top-1.5 right-1.5 z-10"
                         onClick={(e) => {
                           e.stopPropagation();
-                          groupIds.forEach(id => onToggleSelect(id));
+                          onToggleSelect(post.id);
                         }}
                       >
                         <div className={cn(
                           "w-4 h-4 rounded-sm border flex items-center justify-center cursor-pointer",
-                          allGroupSelected
+                          isSelected
                             ? "bg-primary border-primary text-primary-foreground"
                             : "border-muted-foreground/40 hover:border-primary"
                         )}>
-                          {allGroupSelected && (
+                          {isSelected && (
                             <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                           )}
                         </div>
@@ -223,28 +222,23 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       <div className={cn("w-5 h-5 rounded flex items-center justify-center", pIcon.bg)}>
                         {pIcon.icon}
                       </div>
-                      {firstPost.image_url?.match(/\.(mp4|mov|webm)(\?|$)/i) && (
+                      {post.image_url?.match(/\.(mp4|mov|webm)(\?|$)/i) && (
                         <Video className="w-3 h-3 text-muted-foreground" />
                       )}
-                      {posts.length > 1 && (
+                      {post.title === "?" && (
                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          ×{posts.length}
+                          ?
                         </Badge>
                       )}
                     </div>
-                    {(() => {
-                      const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))];
-                      return uniquePages.length > 0 ? (
-                        <p className="text-xs font-medium truncate">{uniquePages.length === 1 ? uniquePages[0] : `${uniquePages.length} pages`}</p>
-                      ) : (
-                        <p className="text-xs font-medium truncate">{platform.charAt(0).toUpperCase() + platform.slice(1)}</p>
-                      );
-                    })()}
+                    <p className="text-xs font-medium truncate">
+                      {post.page_name || (platform.charAt(0).toUpperCase() + platform.slice(1))}
+                    </p>
                     <div className="flex items-center gap-1 mt-0.5 text-[10px]">
-                      {firstPost.scheduled_date && (
-                        <span className="text-muted-foreground">{format(parseISO(firstPost.scheduled_date), "h:mm a")}</span>
+                      {post.scheduled_date && (
+                        <span className="text-muted-foreground">{format(parseISO(post.scheduled_date), "h:mm a")}</span>
                       )}
-                      {firstPost.scheduled_date && <span className="text-muted-foreground">·</span>}
+                      {post.scheduled_date && <span className="text-muted-foreground">·</span>}
                       <span className={cn(
                         status === "published" ? "text-green-600 font-medium"
                           : status === "scheduled" && isApproved ? "text-green-500 font-medium"
