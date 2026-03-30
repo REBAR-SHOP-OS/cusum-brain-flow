@@ -58,13 +58,12 @@ Deno.serve((req) =>
           .select("id")
           .eq("platform", combo.platform)
           .eq("title", fullPost.title)
-          .eq("page_name", combo.page)
           .gte("scheduled_date", `${scheduledDay}T00:00:00`)
           .lte("scheduled_date", `${scheduledDay}T23:59:59`)
           .limit(1);
 
         if (existing && existing.length > 0) {
-          console.log(`[schedule-post] Updating existing post ${existing[0].id} for ${combo.platform}/${combo.page}`);
+          console.log(`[schedule-post] Updating existing post ${existing[0].id} for ${combo.platform}`);
           await serviceClient
             .from("social_posts")
             .update({
@@ -74,6 +73,7 @@ Deno.serve((req) =>
               content: fullPost.content,
               image_url: fullPost.image_url,
               hashtags: fullPost.hashtags,
+              page_name: combo.page,
             })
             .eq("id", existing[0].id);
           cloned.push(existing[0].id);
@@ -99,7 +99,7 @@ Deno.serve((req) =>
           .single();
 
         if (cloneErr) {
-          console.error(`[schedule-post] Clone failed for ${combo.platform}/${combo.page}:`, cloneErr.message);
+          console.error(`[schedule-post] Clone failed for ${combo.platform}:`, cloneErr.message);
         } else if (clone) {
           cloned.push(clone.id);
         }
@@ -172,13 +172,12 @@ Deno.serve((req) =>
           .select("id")
           .eq("platform", combo.platform)
           .eq("title", fullPost.title)
-          .eq("page_name", combo.page)
           .gte("scheduled_date", `${scheduledDay}T00:00:00`)
           .lte("scheduled_date", `${scheduledDay}T23:59:59`)
           .limit(1);
 
         if (existing && existing.length > 0) {
-          console.log(`[schedule-post] Updating existing post ${existing[0].id} for ${combo.platform}/${combo.page}`);
+          console.log(`[schedule-post] Updating existing post ${existing[0].id} for ${combo.platform}`);
           await serviceClient
             .from("social_posts")
             .update({
@@ -188,6 +187,7 @@ Deno.serve((req) =>
               content: fullPost.content,
               image_url: fullPost.image_url,
               hashtags: fullPost.hashtags,
+              page_name: combo.page,
             })
             .eq("id", existing[0].id);
           cloned.push(existing[0].id);
@@ -213,7 +213,7 @@ Deno.serve((req) =>
           .single();
 
         if (cloneErr) {
-          console.error(`[schedule-post] Clone failed for ${combo.platform}/${combo.page}:`, cloneErr.message);
+          console.error(`[schedule-post] Clone failed for ${combo.platform}:`, cloneErr.message);
         } else if (clone) {
           cloned.push(clone.id);
         }

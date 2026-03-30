@@ -231,7 +231,7 @@ export default function SocialMediaManager() {
         page_name: post.page_name,
         delete_original: true,
         title: post.title,
-        extra_combos: post.page_name ? [{ platform: post.platform, page: post.page_name }] : [],
+        extra_combos: [],
       });
       if (!result.success) {
         console.error("[handleSchedule] schedulePost failed for unassigned:", result.error);
