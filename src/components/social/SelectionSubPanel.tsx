@@ -8,6 +8,11 @@ export interface SelectionOption {
   description?: string;
 }
 
+export interface SelectionGroup {
+  label: string;
+  options: SelectionOption[];
+}
+
 interface SingleSelectProps {
   title: string;
   options: SelectionOption[];
@@ -17,6 +22,7 @@ interface SingleSelectProps {
   multiSelect?: false;
   selectedMulti?: never;
   onSaveMulti?: never;
+  groups?: never;
 }
 
 interface MultiSelectProps {
@@ -28,6 +34,7 @@ interface MultiSelectProps {
   onBack: () => void;
   selected?: never;
   onSave?: never;
+  groups?: SelectionGroup[];
 }
 
 type SelectionSubPanelProps = SingleSelectProps | MultiSelectProps;
@@ -35,6 +42,7 @@ type SelectionSubPanelProps = SingleSelectProps | MultiSelectProps;
 export function SelectionSubPanel(props: SelectionSubPanelProps) {
   const { title, options, onBack } = props;
   const isMulti = props.multiSelect === true;
+  const groups = isMulti ? props.groups : undefined;
 
   const [current, setCurrent] = useState(isMulti ? "" : (props.selected ?? ""));
   const [currentMulti, setCurrentMulti] = useState<string[]>(
@@ -73,6 +81,87 @@ export function SelectionSubPanel(props: SelectionSubPanelProps) {
     }
   };
 
+  const renderOption = (opt: SelectionOption, isLast: boolean) => {
+    const isSelected = isMulti
+      ? currentMulti.includes(opt.value)
+      : current === opt.value;
+
+    return (
+      <button
+        key={opt.value}
+        onClick={() =>
+          isMulti ? toggleMulti(opt.value) : setCurrent(opt.value)
+        }
+        className={`w-full flex items-center gap-3 p-3.5 text-left transition-colors hover:bg-muted/50 ${
+          !isLast ? "border-b border-border/50" : ""
+        } ${isSelected ? "bg-muted/30" : ""}`}
+      >
+        {isMulti ? (
+          <div
+            className={`w-5 h-5 rounded-sm border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+              isSelected
+                ? "border-primary bg-primary"
+                : "border-muted-foreground/40"
+            }`}
+          >
+            {isSelected && (
+              <Check className="w-3 h-3 text-primary-foreground" />
+            )}
+          </div>
+        ) : (
+          <div
+            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+              isSelected
+                ? "border-primary bg-primary"
+                : "border-muted-foreground/40"
+            }`}
+          >
+            {isSelected && (
+              <Check className="w-3 h-3 text-primary-foreground" />
+            )}
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{opt.label}</p>
+          {opt.description && (
+            <p className="text-xs text-muted-foreground">
+              {opt.description}
+            </p>
+          )}
+        </div>
+      </button>
+    );
+  };
+
+  const renderGrouped = () => {
+    if (!groups || groups.length === 0) return renderFlat();
+
+    return (
+      <div className="space-y-3">
+        {groups.map((group, gIdx) => (
+          <div key={group.label} className="rounded-lg border bg-card overflow-hidden">
+            <div className="px-3.5 py-2.5 bg-muted/60 border-b">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                {group.label}
+              </p>
+            </div>
+            {group.options.map((opt, idx) =>
+              renderOption(opt, idx === group.options.length - 1)
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderFlat = () => (
+    <div className="rounded-lg border bg-card overflow-hidden">
+      {options.map((opt, idx) =>
+        renderOption(opt, idx === options.length - 1)
+      )}
+    </div>
+  );
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -100,59 +189,7 @@ export function SelectionSubPanel(props: SelectionSubPanelProps) {
             <span>{allSelected ? "Deselect All" : "Select All"}</span>
           </button>
         )}
-        <div className="rounded-lg border bg-card overflow-hidden">
-          {options.map((opt, idx) => {
-            const isSelected = isMulti
-              ? currentMulti.includes(opt.value)
-              : current === opt.value;
-
-            return (
-              <button
-                key={opt.value}
-                onClick={() =>
-                  isMulti ? toggleMulti(opt.value) : setCurrent(opt.value)
-                }
-                className={`w-full flex items-center gap-3 p-3.5 text-left transition-colors hover:bg-muted/50 ${
-                  idx < options.length - 1 ? "border-b border-border/50" : ""
-                } ${isSelected ? "bg-muted/30" : ""}`}
-              >
-                {isMulti ? (
-                  <div
-                    className={`w-5 h-5 rounded-sm border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                      isSelected
-                        ? "border-primary bg-primary"
-                        : "border-muted-foreground/40"
-                    }`}
-                  >
-                    {isSelected && (
-                      <Check className="w-3 h-3 text-primary-foreground" />
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                      isSelected
-                        ? "border-primary bg-primary"
-                        : "border-muted-foreground/40"
-                    }`}
-                  >
-                    {isSelected && (
-                      <Check className="w-3 h-3 text-primary-foreground" />
-                    )}
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{opt.label}</p>
-                  {opt.description && (
-                    <p className="text-xs text-muted-foreground">
-                      {opt.description}
-                    </p>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        {groups && groups.length > 0 ? renderGrouped() : renderFlat()}
       </div>
 
       {/* Save */}

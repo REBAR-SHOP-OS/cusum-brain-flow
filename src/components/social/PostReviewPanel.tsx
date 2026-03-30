@@ -283,6 +283,15 @@ export function PostReviewPanel({
     }
   };
 
+  const groupedPageOptions = useMemo(() => {
+    return localPlatforms
+      .filter(p => PLATFORM_PAGES[p]?.length)
+      .map(p => ({
+        label: p.charAt(0).toUpperCase() + p.slice(1).replace(/_/g, " + "),
+        options: PLATFORM_PAGES[p] || [],
+      }));
+  }, [localPlatforms]);
+
   const filteredPageOptions = useMemo(() => {
     const seen = new Set<string>();
     return localPlatforms.flatMap(p => PLATFORM_PAGES[p] || []).filter(o => {
@@ -526,6 +535,7 @@ export function PostReviewPanel({
             <SelectionSubPanel
               title="Pages"
               options={filteredPageOptions}
+              groups={groupedPageOptions}
               multiSelect
               selectedMulti={localPages}
               onSaveMulti={handlePagesSaveMulti}
