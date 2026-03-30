@@ -1770,16 +1770,16 @@ export function ProVideoEditor({
           </Button>
         </div>
 
-        {/* Generate Voiceovers button */}
+        {/* Auto Music button */}
         <Button
           variant="outline"
           size="sm"
           className="h-7 text-[10px] gap-1 ml-2"
-          onClick={generateAllVoiceovers}
-          disabled={generatingVoiceovers || segments.length === 0}
+          onClick={generateBackgroundMusic}
+          disabled={generatingMusic || segments.length === 0}
         >
-          {generatingVoiceovers ? <Loader2 className="w-3 h-3 animate-spin" /> : <Music className="w-3 h-3" />}
-          {generatingVoiceovers ? "Generating…" : "Auto Voiceover"}
+          {generatingMusic ? <Loader2 className="w-3 h-3 animate-spin" /> : <Music className="w-3 h-3" />}
+          {generatingMusic ? "Generating…" : "Auto Music"}
         </Button>
 
         <div className="flex-1" />
