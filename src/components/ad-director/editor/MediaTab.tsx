@@ -173,32 +173,9 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
       <h4 className="text-sm font-semibold">Media</h4>
       <input ref={fileInputRef} type="file" accept="video/*,image/*" className="hidden" onChange={handleFileChange} />
 
-      {/* Replace media */}
-      <div className="space-y-2">
-        <Label className="text-xs text-muted-foreground">Add / Replace media</Label>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="text-xs h-7 gap-1 flex-1" onClick={handleUpload}>
-            <Upload className="w-3 h-3" /> Upload
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-7 gap-1 flex-1"
-            onClick={() => toast({ title: "Coming soon", description: "Stock media library is under development" })}
-          >
-            <Image className="w-3 h-3" /> Stock
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-7 gap-1 flex-1"
-            onClick={() => scene && onRegenerateScene?.(scene.id)}
-            disabled={!scene || clip?.status === "generating"}
-          >
-            {clip?.status === "generating" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Generate
-          </Button>
-        </div>
-      </div>
+      <Button variant="outline" size="sm" className="text-xs h-7 gap-1 w-full" onClick={handleUpload}>
+        <Upload className="w-3 h-3" /> Upload
+      </Button>
     </div>
   );
 }
