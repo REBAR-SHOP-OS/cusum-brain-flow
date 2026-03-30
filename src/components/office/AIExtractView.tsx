@@ -831,10 +831,16 @@ export function AIExtractView() {
         if (fields.quantity !== undefined) updateData.quantity = Number(fields.quantity) || 0;
         if (fields.bar_size !== undefined) updateData.bar_size = fields.bar_size || null;
         if (fields.shape_type !== undefined) updateData.shape_type = fields.shape_type || null;
-        if (fields.total_length_mm !== undefined) updateData.total_length_mm = Number(fields.total_length_mm) || null;
+        if (fields.total_length_mm !== undefined) {
+          const raw = Number(fields.total_length_mm) || null;
+          updateData.total_length_mm = raw != null ? displayModeToMm(raw, displayUnit as LengthDisplayMode) : null;
+        }
         dimCols.forEach(d => {
           const key = `dim_${d.toLowerCase()}`;
-          if (fields[key] !== undefined) updateData[key] = fields[key] !== "" ? Number(fields[key]) : null;
+          if (fields[key] !== undefined) {
+            const raw = fields[key] !== "" ? Number(fields[key]) : null;
+            updateData[key] = raw != null ? displayModeToMm(raw, displayUnit as LengthDisplayMode) : null;
+          }
         });
         return supabase.from("extract_rows").update(updateData).eq("id", rowId);
       });
