@@ -244,6 +244,7 @@ export function AIExtractView() {
   useEffect(() => {
     if (!userSetUnitRef.current && activeSession?.unit_system && activeSession.unit_system !== selectedUnitSystem) {
       setSelectedUnitSystem(activeSession.unit_system);
+      setDisplayUnit(activeSession.unit_system);
       // Once we've loaded the session's unit, lock it so realtime refreshes don't overwrite
       userSetUnitRef.current = true;
     }
