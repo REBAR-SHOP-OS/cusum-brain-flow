@@ -28,18 +28,6 @@ const STATUS_LABELS: Record<string, string> = {
   publishing: "Publishing 🔄",
   failed: "Failed ❌",
 };
-  const counts: Record<string, number> = {};
-  for (const p of posts) {
-    counts[p.status] = (counts[p.status] || 0) + 1;
-  }
-  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  const dominant = entries[0][0];
-  if (entries.length === 1) {
-    return { dominant, label: STATUS_LABELS[dominant] || dominant };
-  }
-  const parts = entries.map(([s, n]) => `${n} ${STATUS_LABELS[s] || s}`);
-  return { dominant, label: parts.join(" · ") };
-}
 
 const platformIcons: Record<string, { bg: string; icon: JSX.Element }> = {
   unassigned: {
