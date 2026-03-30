@@ -258,8 +258,8 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
             <span>Qty</span>
             <span>Size</span>
             <span>Type</span>
-            <span>Length</span>
-            {dimCols.map(c => <span key={c}>{c}</span>)}
+            <span>Length ({unitSystem === "imperial" ? "in" : "mm"})</span>
+            {dimCols.map(c => <span key={c}>{c} ({unitSystem === "imperial" ? "in" : "mm"})</span>)}
             <span>ACT</span>
           </div>
 

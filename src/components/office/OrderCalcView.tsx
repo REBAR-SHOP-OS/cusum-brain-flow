@@ -76,7 +76,8 @@ function parseRows(rows: any[][]): ParsedItem[] {
     const quantity = parseInt(String(row[colMap.pcs] ?? "0")) || 0;
     if (quantity <= 0) continue;
     const rawLen = parseFloat(String(row[colMap.length] ?? "0")) || 0;
-    const cut_length_mm = rawLen > 100 ? rawLen : rawLen * 1000;
+    // Will be converted using sourceUnit factor at calculation time
+    const cut_length_mm = rawLen;
     items.push({ bar_size, quantity, cut_length_mm });
   }
   return items;

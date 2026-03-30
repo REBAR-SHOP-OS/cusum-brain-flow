@@ -2264,7 +2264,7 @@ export function AIExtractView() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Min Remnant (mm)</label>
+                  <label className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase mb-1 block">Min Remnant ({displayUnit === "mm" ? "mm" : "in"})</label>
                   <Input
                     type="number"
                     className="w-24 h-9 text-xs"
