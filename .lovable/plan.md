@@ -1,65 +1,95 @@
 
 
-# Unit System Audit — Remaining Issues
+# Unit System Comprehensive Audit
+
+## Current Architecture Summary
+
+```text
+Source file → extract-manifest (detects unit: mm/in/ft/imperial)
+  → extract_rows (raw values)
+  → BarlistMappingPanel (user selects source unit)
+  → manage-extract apply-mapping (converts raw → mm)
+  → extract_rows (mm values stored)
+  → Display: AIExtractView, TagsExportView, DetailedListView, PrintTags, ZPL labels
+```
+
+All values in DB are stored as mm after mapping. Display should convert mm → user's preferred display unit.
+
+---
 
 ## Issues Found
 
-### Issue 1: DetailedListView Uses Company-Level Unit Instead of Session Unit (HIGH)
-**File**: `src/components/office/DetailedListView.tsx` line 27
+### Issue 1: DetailedListView `startEdit` Loads Raw mm Into Edit Fields (HIGH)
+**File**: `src/components/office/DetailedListView.tsx` line 62-72
 
-`useUnitSystem()` reads from the company profile (metric/imperial). But cut plan items originate from extract sessions that may have a different unit. If company is metric but the barlist was imported as imperial, dimensions show "MM" sub-labels on values that should display as inches.
+When the user clicks Edit, `startEdit` populates `editValues.cut_length_mm` with the raw DB value (mm). But the non-editing display shows `formatLength(item.cut_length_mm, unitSystem)` which converts to ft-in for imperial. So if unit is imperial and the DB has 1372 mm, the display shows `4'-6"` but the edit input shows `1372`. The user sees a confusing jump and might enter `54` thinking inches, but the save logic now converts it via `displayModeToMm(54, editUnit)` → `54 * 25.4 = 1372 mm`. This is actually **correct on save** but **confusing on load** — the edit field should show the display-unit value, not raw mm.
 
-**Fix**: Accept an optional `sessionUnit` prop or resolve the unit from the linked extract session. Fall back to company unit when no session context is available.
+Same issue for `bend_dimensions` — edit fields show raw mm values.
 
-### Issue 2: DetailedListView Inline Edit Saves Raw Input Without Unit Conversion (HIGH)
-**File**: `src/components/office/DetailedListView.tsx` line 268
+**Fix**: Convert mm → display unit when populating edit fields in `startEdit`.
 
-When editing `cut_length_mm` inline, the raw `parseInt(e.target.value)` is saved directly. If the display shows imperial but the user enters "54" (meaning 54 inches), it's stored as 54 mm — a 25.4× error.
+### Issue 2: DetailedListView Table Header Has No Unit Label (MEDIUM)
+**File**: `src/components/office/DetailedListView.tsx` line 247
 
-Same issue for dimension edits on line 275.
+The "Length" column header doesn't indicate the unit. User can't tell if values are mm or inches. Compare with AIExtractView which shows `LENGTH (mm)` or `LENGTH (in)`.
 
-**Fix**: Apply `displayModeToMm()` conversion before saving, matching the pattern already used in `AIExtractView.tsx`.
+**Fix**: Show `Length (mm)` or `Length (in)` based on `unitSystem`.
 
-### Issue 3: Mapping Preview Shows "LENGTH (mm)" in Screenshot Despite Code Saying "LENGTH (raw)" (LOW)
+### Issue 3: DetailedListView Dimension Headers Have No Unit Labels (MEDIUM)
+**File**: `src/components/office/DetailedListView.tsx` line 248
+
+Dim column headers are just `A, B, C...` with no unit indication (unlike the sub-labels inside cells).
+
+**Fix**: Add unit suffix to dim column headers or ensure consistency.
+
+### Issue 4: OrderCalcView Assumes mm Input Without Unit Detection (MEDIUM)
+**File**: `src/components/office/OrderCalcView.tsx` line 78-79
+
+The parser uses a heuristic: `rawLen > 100 ? rawLen : rawLen * 1000`. This assumes values >100 are mm and <100 are meters. But if the uploaded file has inch values (e.g., 54 inches), `54 < 100` → treated as 54 meters → `54000 mm`. This is a 1000× error for imperial barlists.
+
+No unit selection UI exists in OrderCalcView.
+
+**Fix**: Add a source unit selector (mm/in/ft) to OrderCalcView and apply proper conversion.
+
+### Issue 5: Optimization Config Labels Hardcoded as mm (LOW)
+**File**: `src/components/office/AIExtractView.tsx` lines 2240-2273
+
+Stock length dropdown shows `6M (6,000mm)`, `12M (12,000mm)`, `18M (18,000mm)`. Kerf label says `Kerf (mm)`, Min Remnant says `Min Remnant (mm)`. These are correct for metric but could confuse imperial users. Since optimization always works in mm internally, this is cosmetic.
+
+**Fix (optional)**: Show imperial equivalents when session is imperial: `12M (39'-4")`.
+
+### Issue 6: Mapping Preview Header Shows "LENGTH (mm)" in UI Despite Code Saying "LENGTH (raw)" (CONFIRMED NON-ISSUE)
 **File**: `src/components/office/BarlistMappingPanel.tsx` line 349
 
-The code already says `LENGTH (raw)` and `DIMS (raw)` — this was fixed in the previous audit. The screenshot may show a cached version. **No code change needed**, but worth verifying the deployed build is current.
-
-### Issue 4: CSV Export Dimension Columns Have No Unit Labels (LOW)
-**File**: `src/components/office/TagsExportView.tsx` line 118
-
-CSV headers for dimension columns are just `A, B, C, D...` with no unit indication. The length column correctly shows `TOTAL LENGTH (mm)` or `TOTAL LENGTH (ft-in)`, but dimensions don't follow this pattern. Users importing the CSV may not know the unit.
-
-**Fix**: Append `(mm)` or `(in)` to dimension column headers based on session unit.
-
-### Issue 5: `sessionUnitToDisplay` Collapses "in" and "ft" to "metric" — No Way to Display Inches-Only (LOW)
-**File**: `src/lib/unitSystem.ts` line 173
-
-If a session's source unit was `"in"`, after mapping all values are stored as mm. `sessionUnitToDisplay("in")` returns `"metric"` → tags/print show raw mm values. This is technically correct (DB is mm), but if the user imported an inch-based barlist, they likely expect imperial display on tags.
-
-**Fix (optional)**: Map `"in"` → `"imperial"` in `sessionUnitToDisplay` so tags auto-display as ft-in for inch-sourced barlists.
+The code correctly says `LENGTH (raw)`. The screenshot showing "LENGTH (mm)" is from a cached/stale build. No code change needed.
 
 ---
 
 ## Proposed Changes
 
-### Fix 1 + Fix 2: DetailedListView — session unit awareness + inline edit conversion
+### Fix 1: DetailedListView `startEdit` — Show Display-Unit Values in Edit Fields
 **File**: `src/components/office/DetailedListView.tsx`
-- Import `displayModeToMm` and `sessionUnitToDisplay` from `@/lib/unitSystem`
-- Resolve the session's unit system from the linked cut plan's extract session (or accept as prop)
-- Apply `displayModeToMm()` when saving inline edits for `cut_length_mm` and dimension values
-- Update dimension sub-labels to use the resolved session unit
+- In `startEdit`, convert `item.cut_length_mm` from mm to the display unit before setting it as edit value
+- Same for each `bend_dimensions` value
+- This way, what the user sees in the read-only column matches what appears in the edit input
 
-### Fix 3: CSV dimension headers
-**File**: `src/components/office/TagsExportView.tsx`
-- Change dimension headers from `A, B, C...` to `A (mm), B (mm)...` or `A (in), B (in)...` based on session unit
+### Fix 2 + 3: DetailedListView Header Labels
+**File**: `src/components/office/DetailedListView.tsx`
+- Change `<span>Length</span>` → `<span>Length ({unitSystem === "imperial" ? "in" : "mm"})</span>`
+- Optionally add unit to dim headers
 
-### Fix 4 (optional): Map "in" source → imperial display
-**File**: `src/lib/unitSystem.ts`
-- Change `sessionUnitToDisplay` to return `"imperial"` for `"in"` and `"ft"` source units
+### Fix 4: OrderCalcView — Add Unit Selector
+**File**: `src/components/office/OrderCalcView.tsx`
+- Add a source unit toggle (mm / inches / feet) above the file upload
+- Apply proper conversion factor instead of the `>100` heuristic
+- This prevents 1000× errors when uploading inch-based barlists
+
+### Fix 5 (optional): Optimization Config Imperial Labels
+**File**: `src/components/office/AIExtractView.tsx`
+- Show imperial equivalents in stock length dropdown when `displayUnit` is imperial
 
 ## Files to Change
-1. `src/components/office/DetailedListView.tsx` — unit-aware inline editing + correct labels
-2. `src/components/office/TagsExportView.tsx` — CSV dimension headers with unit
-3. `src/lib/unitSystem.ts` — optionally map "in"/"ft" → imperial display
+1. `src/components/office/DetailedListView.tsx` — edit field conversion on load + header labels
+2. `src/components/office/OrderCalcView.tsx` — add source unit selector
+3. `src/components/office/AIExtractView.tsx` — optional: imperial labels in optimizer config
 
