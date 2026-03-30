@@ -168,6 +168,31 @@ Deno.serve((req) =>
           continue;
         }
 
+        // Guard: prevent duplicate content from being published to same platform on same day
+        if (post.title) {
+          const dayStr = post.scheduled_date
+            ? new Date(post.scheduled_date).toISOString().split("T")[0]
+            : new Date().toISOString().split("T")[0];
+          const { data: duplicate } = await supabase
+            .from("social_posts")
+            .select("id")
+            .eq("platform", post.platform)
+            .eq("title", post.title)
+            .eq("page_name", post.page_name || "")
+            .eq("status", "published")
+            .neq("id", post.id)
+            .gte("scheduled_date", `${dayStr}T00:00:00Z`)
+            .lte("scheduled_date", `${dayStr}T23:59:59Z`)
+            .limit(1)
+            .maybeSingle();
+          if (duplicate) {
+            console.warn(`[social-cron-publish] Skipping ${post.id} — duplicate already published: ${duplicate.id}`);
+            await supabase.from("social_posts").update({ status: "failed", last_error: "Duplicate — same content already published today" }).eq("id", post.id);
+            results.push({ postId: post.id, platform: post.platform, success: false, error: "Duplicate content already published" });
+            continue;
+          }
+        }
+
         // Mark publish attempt to prevent retry storms
         await supabase
           .from("social_posts")
