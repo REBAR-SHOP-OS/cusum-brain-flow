@@ -35,6 +35,9 @@ export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function Inte
     }
   };
 
+  // Hard block: ai@rebar.shop must never see Vizzy
+  if (user?.email === "ai@rebar.shop") return null;
+
   if (!intelligencePanelOpen) return null;
 
   return (
