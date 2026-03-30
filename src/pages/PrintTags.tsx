@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useExtractRows } from "@/hooks/useExtractSessions";
 import { useShapeSchematics } from "@/hooks/useShapeSchematics";
 import { RebarTagCard, DIM_COLS, getWeight } from "@/components/office/RebarTagCard";
+import { supabase } from "@/integrations/supabase/client";
 
 /* ═══════════════════════════════════════════
    Print-only page — zero app layout
@@ -15,6 +16,13 @@ export default function PrintTags() {
 
   const { rows, loading } = useExtractRows(sessionId);
   const { getShapeImageUrl } = useShapeSchematics();
+  const [sessionAddress, setSessionAddress] = useState("");
+
+  useEffect(() => {
+    if (!sessionId) return;
+    supabase.from("extract_sessions").select("site_address").eq("id", sessionId).maybeSingle()
+      .then(({ data }) => { if (data?.site_address) setSessionAddress(data.site_address); });
+  }, [sessionId]);
 
   const sortedRows = useMemo(() => {
     if (sortMode === "standard") return rows;
