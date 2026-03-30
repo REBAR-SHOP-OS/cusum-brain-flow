@@ -556,11 +556,8 @@ export function TimelineBar({
                 <Scissors className="w-3 h-3" />
               </Button>
             )}
-            {onStretchScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onStretchScene(selectedSceneIndex)} title="Stretch (+1s)">
-                <Expand className="w-3 h-3" />
-              </Button>
-            )}
+
+
             {onSplitScene && (
               <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onSplitScene(selectedSceneIndex)} title="Split">
                 <SplitSquareHorizontal className="w-3 h-3" />
