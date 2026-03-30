@@ -35,6 +35,7 @@ interface PostReviewPanelProps {
   onClose: () => void;
   onSchedule: () => void;
   onDecline: () => void;
+  onSelectNewPost?: (id: string) => void;
 }
 
 // ── Option lists ──
