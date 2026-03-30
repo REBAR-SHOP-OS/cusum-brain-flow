@@ -155,7 +155,7 @@ export function TimelineBar({
   onDeleteOverlay, onEditOverlay, onRemoveAudioTrack,
   onRegenerateScene, onDeleteScene,
   sidebarTabs = [], activeSidebarTab, onSidebarTabSelect,
-  onTrimScene, onStretchScene, onSplitScene, onDuplicateScene,
+  onTrimScene, onSplitScene, onDuplicateScene,
   onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
