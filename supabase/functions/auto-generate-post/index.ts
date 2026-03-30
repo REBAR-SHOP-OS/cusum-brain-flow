@@ -85,6 +85,8 @@ function stripPersianBlock(text: string): string {
   if (idx !== -1) t = t.slice(0, idx);
   t = t.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
   t = t.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
+  // Remove any remaining lines with Persian/Arabic script (U+0600–U+06FF)
+  t = t.split("\n").filter(line => !/[\u0600-\u06FF]/.test(line)).join("\n");
   return t.trim();
 }
 
