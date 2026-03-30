@@ -1,28 +1,30 @@
 
 
-# Add Company Name and Remark to Ref Section on Rebar Tag
+# Fix Line Items Display Unit Default
 
-## What Changes
+## Problem
+The line items table in the AI Extract view defaults its display unit to `"mm"` regardless of the session's unit system. When a session's data should be viewed in imperial (ft-in), the user must manually click the ft-in toggle every time.
 
-The Ref section on the tag will show three lines:
-1. **Ref:** `reference || "—"`
-2. **Company:** `customer || "—"` (from `extract_rows.customer`)
-3. **Remark:** `address || "—"` (repurposing the existing `address` field)
+## Root Cause
+In `src/components/office/AIExtractView.tsx`:
+- `displayUnit` is initialized as `"mm"` (line 180)
+- The sync effect (lines 244-251) sets `displayUnit` from `activeSession.unit_system`, but only on initial load — and if the session's `unit_system` is `"mm"`, the display stays as mm even when the user's preference is imperial
 
-## File Changes
+## Fix
 
-### `src/components/office/RebarTagCard.tsx`
-- Rename prop `address` to `remark` in `RebarTagCardProps` (or keep `address` internally and label it "Remark" in the UI)
-- Update the Ref section (lines 161-168) to show three compact lines:
-  - `Ref: {reference || "—"}`
-  - `Company: {customer || "—"}`  
-  - `Remark: {address || ""}`  (only shown if non-empty)
-- Reduce text size slightly to fit all three lines in the same space
+### `src/components/office/AIExtractView.tsx`
+1. **Sync `displayUnit` when session changes**: When `activeSessionId` changes and a new session loads, update `displayUnit` to match the session's `unit_system`. If the session has `unit_system = "in"` or `"imperial"`, display should default to that.
+2. **Persist display preference**: When the user toggles the display unit, remember their choice so switching between sessions doesn't reset to mm. Use a `useRef` or `localStorage` to persist the last-selected display unit.
 
-### `src/pages/PrintTags.tsx`
-- No change needed — already passes `customer` and `address` props
+### Alternative (simpler approach)
+If the intent is that **all sessions** should default to imperial display:
+- Change `useState<string>("mm")` to `useState<string>("imperial")` on line 180
+- This makes ft-in the default display format for all sessions
 
-### `src/utils/generateZpl.ts`
-- Add a `customer` field to `ZplRowData` interface
-- Update ZPL output to include `COMPANY:` and `REMARK:` lines alongside `REF:`
+## Clarification Needed
+The values shown (41, 32, 77, 68) are very small for mm measurements of rebar. If these values are actually **inches** that were incorrectly detected as mm during extraction, the fix is different — it would require re-running the mapping with the correct source unit (inches) selected in the mapping panel, not a display-layer change.
+
+Which scenario applies?
+1. Data is correct in mm, just needs to display as ft-in by default
+2. Data was mis-detected as mm when it's actually inches — needs re-extraction/conversion
 
