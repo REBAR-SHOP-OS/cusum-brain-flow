@@ -3,6 +3,9 @@ import brainHero from "@/assets/brain-hero.png";
 
 export function InteractiveBrainBg() {
   const [renderError, setRenderError] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
 
   // Catch errors during effects / rAF callbacks
   useEffect(() => {
@@ -21,9 +24,6 @@ export function InteractiveBrainBg() {
       <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-accent/5 to-transparent" aria-hidden="true" />
     );
   }
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number | null>(null);
 
   const updateOffset = useCallback((clientX: number, clientY: number) => {
     if (rafRef.current) return;
