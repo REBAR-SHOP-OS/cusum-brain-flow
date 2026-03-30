@@ -257,7 +257,7 @@ export function ProVideoEditor({
     setGeneratingAudio(true);
     try {
       // Step 1: Enhance prompt with Gemini AI
-      toast({ title: "🧠 در حال بهینه‌سازی پرامپت با هوش مصنوعی..." });
+      toast({ title: "🧠 Enhancing prompt with AI..." });
       const enhanceUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enhance-music-prompt`;
       const enhanceRes = await fetch(enhanceUrl, {
         method: "POST",
