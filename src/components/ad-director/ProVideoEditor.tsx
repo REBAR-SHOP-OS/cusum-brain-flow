@@ -11,7 +11,7 @@ import {
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
   Music, FileText, Loader2, CalendarClock, Check,
   SkipBack, SkipForward,
-  Palette, Film, LayoutGrid, X, Edit3,
+  Palette, Film, LayoutGrid, X,
   Mic, Captions, Gauge, MessageSquareText,
   RectangleHorizontal, ImagePlus,
 } from "lucide-react";
