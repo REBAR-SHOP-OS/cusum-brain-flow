@@ -858,7 +858,7 @@ export function TimelineBar({
             <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
               <Type className="w-3 h-3" /> Text
             </span>
-            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden">
+            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={handleTrackClick}>
               {textOverlays.map((ov) => {
                 const idx = storyboard.findIndex(s => s.id === ov.sceneId);
                 if (idx < 0) return null;
