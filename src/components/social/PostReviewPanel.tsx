@@ -1235,12 +1235,11 @@ export function PostReviewPanel({
                           toast({ title: "No valid platform", description: "Please select a real platform before scheduling.", variant: "destructive" });
                           return;
                         }
+                        const pagesString = localPages.join(", ");
                         const combos: { platform: string; page: string }[] = [];
                         for (const plat of schedulablePlatforms) {
                           const dbPlat = platformMap[plat] || plat;
-                          for (const page of localPages) {
-                            combos.push({ platform: dbPlat, page });
-                          }
+                          combos.push({ platform: dbPlat, page: pagesString });
                         }
 
                         // Primary post gets first combo

@@ -62,6 +62,7 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
 
     const primaryPlatform = selectedPlatforms[0];
     const extraCombos = selectedPlatforms.slice(1).map(p => ({ platform: p, page: post.page_name || "" }));
+    // Pages are already comma-separated in post.page_name — no cartesian product needed
 
     console.log(`[SchedulePopover] Scheduling post=${post.id} date=${scheduledDateTime.toISOString()} platforms=${selectedPlatforms.join(",")}`);
 
