@@ -1,26 +1,25 @@
 
 
-# Block zahra@rebar.shop from Shop Floor, Show Home Page
+# Show Customer Address on Rebar Tags
 
 ## Problem
-`zahra@rebar.shop` is a super admin, so `RoleGuard.tsx` line 58 returns early before the `blockedFromShopFloor` check on line 122 ever runs. She can freely access the shop floor despite being in the blocked list.
+The Ref section on rebar tags shows the address only if the individual row has an `address` value (extracted from the source spreadsheet). Most rows don't have per-row addresses, but the **session** always has a `site_address` field entered by the user. This fallback isn't being used.
 
 ## Fix
 
-**File: `src/components/auth/RoleGuard.tsx`**
-
-Move the `blockedFromShopFloor` check (lines 122-125) to **before** the super admin bypass (line 58). This ensures blocked users are redirected to `/home` regardless of super admin status.
-
-```text
-BEFORE:
-  if (isSuperAdmin) return children;    // line 58 — zahra exits here
-  ...
-  if (blockedFromShopFloor) → redirect  // line 122 — never reached
-
-AFTER:
-  if (blockedFromShopFloor) → redirect  // runs first
-  if (isSuperAdmin) return children;    // then super admin bypass
+### 1. `src/components/office/TagsExportView.tsx`
+Pass the session's `site_address` as fallback when the row's `address` is empty:
 ```
+address={row.address || selectedSession?.site_address || ""}
+```
+Apply in both the card view (line ~477) and CSV export (line ~115).
 
-One file, one change.
+### 2. `src/pages/PrintTags.tsx`
+The print page only has `sessionId`, not the session object. Fetch the session's `site_address` from `extract_sessions` table and use it as fallback:
+- Query `extract_sessions` for `site_address` using `sessionId`
+- Pass `address={row.address || sessionAddress || ""}` to each `RebarTagCard`
+
+### Files Changed
+- `src/components/office/TagsExportView.tsx` — use session `site_address` as address fallback
+- `src/pages/PrintTags.tsx` — fetch session `site_address`, use as fallback
 
