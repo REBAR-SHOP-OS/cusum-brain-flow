@@ -19,12 +19,6 @@ export function InteractiveBrainBg() {
     return () => window.removeEventListener("error", handler);
   }, []);
 
-  if (renderError) {
-    return (
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-accent/5 to-transparent" aria-hidden="true" />
-    );
-  }
-
   const updateOffset = useCallback((clientX: number, clientY: number) => {
     if (rafRef.current) return;
     rafRef.current = requestAnimationFrame(() => {
@@ -49,6 +43,12 @@ export function InteractiveBrainBg() {
   }, [updateOffset]);
 
   const resetOffset = useCallback(() => setOffset({ x: 0, y: 0 }), []);
+
+  if (renderError) {
+    return (
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-accent/5 to-transparent" aria-hidden="true" />
+    );
+  }
 
   // Neural pathway data (percentage-based for responsiveness)
   const neuralPaths = [
