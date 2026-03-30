@@ -183,6 +183,8 @@ export function TagsExportView() {
         dwg: row.dwg || "",
         row_index: row.row_index,
         reference: row.reference || "",
+        customer: row.customer || "",
+        remark: row.address || "",
         dims,
       };
     });
