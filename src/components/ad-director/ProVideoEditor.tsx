@@ -2065,6 +2065,8 @@ export function ProVideoEditor({
         onEditVoiceover={handleEditVoiceover}
         onMuteScene={handleMuteScene}
         onResizeScene={handleResizeScene}
+        onTrimApply={handleTrimApply}
+        isTrimming={isTrimming}
         mutedScenes={mutedScenes}
         onEditOverlayPosition={handleEditOverlayPosition}
         onResizeOverlay={handleResizeOverlay}
