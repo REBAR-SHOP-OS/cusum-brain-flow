@@ -160,6 +160,7 @@ export function TimelineBar({
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
   onMoveOverlay, onMoveAudioTrack,
+  onTrimApply, isTrimming,
   onRegenerateAll, isRegeneratingAll,
   isPlaying, onTogglePlay, onFrameStep, onSkipScene,
 }: TimelineBarProps) {
