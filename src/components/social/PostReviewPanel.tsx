@@ -1062,7 +1062,7 @@ export function PostReviewPanel({
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                       Approved by Neel ✅
                     </Button>
-                  ) : (currentUserEmail === "neel@rebar.shop" || currentUserEmail === "sattar@rebar.shop") ? (
+                  ) : (currentUserEmail === "neel@rebar.shop" || currentUserEmail === "sattar@rebar.shop" || currentUserEmail === "radin@rebar.shop") ? (
                     <Button
                       variant="outline"
                       className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 gap-1.5"
