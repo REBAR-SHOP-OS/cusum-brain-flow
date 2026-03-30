@@ -181,6 +181,8 @@ export function TimelineBar({
   // ─── Scene drag-to-reorder state ───
   const [sceneDragIdx, setSceneDragIdx] = useState<number | null>(null);
   const [sceneDropIdx, setSceneDropIdx] = useState<number | null>(null);
+  const [contextMenuScene, setContextMenuScene] = useState<number | null>(null);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // ─── Item drag-to-reposition state ───
   const itemDragRef = useRef<{
