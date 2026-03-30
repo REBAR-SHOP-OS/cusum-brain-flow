@@ -1431,13 +1431,13 @@ export function ProVideoEditor({
   const handleMoveAudioTrack = useCallback((index: number, _newSceneId: string, absoluteTime?: number) => {
     setAudioTracks(prev => prev.map((at, i) => {
       if (i !== index || absoluteTime == null) return at;
-      // Calculate track duration from existing data
-      const trackDur = at.duration ?? (at.endTime != null && at.startTime != null ? at.endTime - at.startTime : undefined);
-      // Compute total duration from segments
       const totalDur = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0) || 30;
-      const dur = trackDur ?? totalDur;
-      const clampedStart = Math.max(0, Math.min(absoluteTime, totalDur - dur));
-      return { ...at, globalStartTime: clampedStart, duration: dur };
+      // Preserve existing duration; don't default to totalDur which breaks clamping
+      const trackDur = at.duration
+        ?? (at.endTime != null && at.startTime != null ? at.endTime - at.startTime : undefined);
+      // Clamp to totalDur (allow positioning anywhere), not totalDur - dur
+      const clampedStart = Math.max(0, Math.min(absoluteTime, totalDur));
+      return { ...at, globalStartTime: clampedStart, duration: trackDur };
     }));
   }, [segments]);
 
