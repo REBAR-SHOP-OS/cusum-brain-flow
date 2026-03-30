@@ -326,6 +326,7 @@ export function ProVideoEditor({
       audioUrl,
       kind: result.kind,
       startTime: 0,
+      globalStartTime: 0,
     }]);
     setAudioPromptOpen(false);
     toast({ title: "✅ فایل صوتی اضافه شد" });
@@ -486,7 +487,7 @@ export function ProVideoEditor({
     const url = URL.createObjectURL(file);
     setAudioTracks(prev => [
       ...prev,
-      { kind: "music" as const, audioUrl: url, label: file.name, volume: 0.7, sceneId: storyboard[0]?.id || "", startTime: 0 },
+      { kind: "music" as const, audioUrl: url, label: file.name, volume: 0.7, sceneId: storyboard[0]?.id || "", startTime: 0, globalStartTime: 0 },
     ]);
     e.target.value = "";
   }, []);
@@ -1376,7 +1377,7 @@ export function ProVideoEditor({
         if (voDur && isFinite(voDur)) {
           setVoiceoverDurations(prev => ({ ...prev, [scene.id]: voDur! }));
         }
-        newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover" });
+        newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover", globalStartTime: 0 });
       }
       // Replace voiceover tracks, keep music
       setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
@@ -1406,7 +1407,7 @@ export function ProVideoEditor({
     setAudioTracks(prev => {
       const withoutMusic = prev.filter(a => a.kind !== "music");
       if (url) {
-        return [...withoutMusic, { sceneId: "", label: "Music", audioUrl: url, kind: "music" as const }];
+        return [...withoutMusic, { sceneId: "", label: "Music", audioUrl: url, kind: "music" as const, globalStartTime: 0 }];
       }
       return withoutMusic;
     });
@@ -1431,13 +1432,13 @@ export function ProVideoEditor({
   const handleMoveAudioTrack = useCallback((index: number, _newSceneId: string, absoluteTime?: number) => {
     setAudioTracks(prev => prev.map((at, i) => {
       if (i !== index || absoluteTime == null) return at;
-      // Calculate track duration from existing data
-      const trackDur = at.duration ?? (at.endTime != null && at.startTime != null ? at.endTime - at.startTime : undefined);
-      // Compute total duration from segments
       const totalDur = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0) || 30;
-      const dur = trackDur ?? totalDur;
-      const clampedStart = Math.max(0, Math.min(absoluteTime, totalDur - dur));
-      return { ...at, globalStartTime: clampedStart, duration: dur };
+      // Preserve existing duration; don't default to totalDur which breaks clamping
+      const trackDur = at.duration
+        ?? (at.endTime != null && at.startTime != null ? at.endTime - at.startTime : undefined);
+      // Clamp to totalDur (allow positioning anywhere), not totalDur - dur
+      const clampedStart = Math.max(0, Math.min(absoluteTime, totalDur));
+      return { ...at, globalStartTime: clampedStart, duration: trackDur };
     }));
   }, [segments]);
 
