@@ -1,47 +1,38 @@
 
 
-# Fix Undo/Redo History in Video Editor
+# Finer Timeline Ruler Granularity
 
 ## Problem
-The undo/redo buttons exist but don't work correctly because:
-1. The initial storyboard state is never seeded into the history array
-2. `pushHistory` uses a stale `historyIndex` from its closure (the `useCallback` dependency captures the value at creation time, causing it to slice incorrectly)
-3. After the first change, `historyIndex` is 0 with only 1 entry, so undo (`historyIndex > 0`) fails — there's no "before" state to restore
+The timeline ruler currently shows ticks every 1 second with labels every 2 seconds. The user wants finer granularity to enable more precise dragging and positioning of the playhead and items.
 
-## Fix
+## Change
 
-### File: `src/components/ad-director/ProVideoEditor.tsx`
+### File: `src/components/ad-director/editor/TimelineBar.tsx` (lines 530-542)
 
-1. **Seed initial storyboard into history** — Add a `useEffect` that pushes the initial storyboard when the component mounts (or when storyboard first becomes non-empty), setting `history: [storyboard]` and `historyIndex: 0`.
+Replace the current ruler tick generation with half-second (0.5s) intervals:
 
-2. **Fix stale closure in `pushHistory`** — Change `pushHistory` to use a functional updater for `setHistory` that reads `historyIndex` from a ref instead of the closure. Add a `historyIndexRef` that stays in sync with `historyIndex`.
+- Generate ticks at every 0.5s instead of every 1s
+- Major ticks (tall + labeled) at every 1s instead of every 2s
+- Minor ticks (short, no label) at every 0.5s between major ticks
+- This doubles the precision for visual alignment
 
-3. **Updated logic**:
-```typescript
-const historyIndexRef = useRef(-1);
-const [history, setHistory] = useState<StoryboardScene[][]>([]);
-const [historyIndex, setHistoryIndex] = useState(-1);
-
-// Keep ref in sync
-useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
-
-// Seed initial state
-useEffect(() => {
-  if (storyboard.length > 0 && history.length === 0) {
-    setHistory([storyboard]);
-    setHistoryIndex(0);
-  }
-}, [storyboard]);
-
-const pushHistory = useCallback((snapshot: StoryboardScene[]) => {
-  const idx = historyIndexRef.current;
-  setHistory(prev => [...prev.slice(0, idx + 1), snapshot]);
-  setHistoryIndex(idx + 1);
-}, []);
+```tsx
+{Array.from({ length: Math.ceil(totalDuration * 2) + 1 }, (_, i) => {
+  const sec = i * 0.5;
+  const leftPct = (sec / totalDuration) * 100;
+  if (leftPct > 100) return null;
+  const isMajor = sec % 1 === 0; // every full second is major
+  return (
+    <div key={i} className="absolute top-0 bottom-0" style={{ left: `${leftPct}%` }}>
+      <div className={`absolute bottom-0 w-px ${isMajor ? 'h-3 bg-muted-foreground/50' : 'h-1.5 bg-muted-foreground/25'}`} />
+      {isMajor && (
+        <span className="absolute bottom-3.5 text-[7px] text-muted-foreground font-mono -translate-x-1/2 select-none">{sec}s</span>
+      )}
+    </div>
+  );
+})}
 ```
 
-This ensures: (a) there's always an initial state to undo to, (b) `pushHistory` reads the current index correctly, (c) undo/redo navigate the stack properly.
-
 ## Files Changed
-- `src/components/ad-director/ProVideoEditor.tsx`
+- `src/components/ad-director/editor/TimelineBar.tsx` — finer 0.5s ruler ticks
 
