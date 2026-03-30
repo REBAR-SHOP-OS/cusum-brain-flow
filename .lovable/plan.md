@@ -1,37 +1,33 @@
 
 
-# Add Resize Handles to Image/Logo Overlays on Video Canvas
+# Add Scene Action Buttons to Timeline Toolbar
 
 ## Problem
-When dragging image overlays on the video canvas, users can only move them — there's no way to resize. The user wants resize handles (corners/edges) so they can make images bigger or smaller directly on the canvas.
+The toolbar area between the sidebar tab icons and the Cards/Zoom controls is empty (line 395 — just a `flex-1` spacer). The user wants quick-access scene action buttons placed there, so they don't have to right-click the scene to find Trim, Stretch, Split, etc.
 
-## Changes
+## Change
 
-### File: `src/components/ad-director/ProVideoEditor.tsx`
+### File: `src/components/ad-director/editor/TimelineBar.tsx`
 
-**1. Add resize state tracking**
-- New state: `resizingOverlay: { id: string, handle: string } | null`
-- New ref: `resizeStart` to track initial mouse position and initial overlay size
+Replace the empty `<div className="flex-1" />` spacer (line 395) with a row of icon buttons for the **currently selected scene**, followed by a remaining flex spacer:
 
-**2. Add resize handles to image/logo overlays (lines 1602-1633)**
-- When an overlay is of kind `"logo"` or `"image"`, render 4 corner resize handles (small squares at corners)
-- Each handle triggers `onMouseDown` that sets `resizingOverlay` state instead of `draggingOverlayId`
-- Handles: `nw`, `ne`, `sw`, `se` (northwest, northeast, southwest, southeast)
+**Buttons to add (icon-only, small, with tooltips):**
+- Trim (-1s) — `Scissors`
+- Stretch (+1s) — `Expand`
+- Split — `SplitSquareHorizontal`
+- Duplicate — `Copy`
+- Mute/Unmute — `VolumeOff` / `Volume2`
+- Regenerate — `RefreshCw`
+- Delete — `Trash2` (destructive color)
 
-**3. Update mouse move handler (lines 1541-1547)**
-- If `resizingOverlay` is set, calculate delta from start position and update overlay `size.w` and `size.h` (percentage-based)
-- For corner handles, adjust both width and height proportionally
-- Clamp values to reasonable min (5%) and max (90%)
-- For `nw`/`ne` handles, also adjust position to keep opposite corner anchored
-
-**4. Update mouse up/leave handlers (lines 1548-1549)**
-- Clear `resizingOverlay` state alongside `draggingOverlayId`
-
-**5. Visual styling for resize handles**
-- Small white squares (8x8px) with border at each corner
-- Only visible on hover or when overlay is selected/being dragged
-- `cursor: nwse-resize` / `nesw-resize` depending on corner
+**Logic:**
+- Each button calls the corresponding `onXxxScene?.(selectedSceneIndex)` callback
+- Buttons only render if their callback prop exists
+- Regenerate only enabled if scene clip is completed
+- All buttons disabled if no scene is selected (`selectedSceneIndex < 0`)
+- Buttons use `variant="ghost"` with `h-6 w-6 p-0` sizing (matching zoom buttons)
+- Separated from sidebar tabs with a `border-l border-border/20`
 
 ## Files Changed
-- `src/components/ad-director/ProVideoEditor.tsx` — add resize handles and resize logic to overlay rendering
+- `src/components/ad-director/editor/TimelineBar.tsx` — add scene action buttons in toolbar empty space
 
