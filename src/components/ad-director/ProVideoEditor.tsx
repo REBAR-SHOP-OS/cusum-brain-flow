@@ -9,7 +9,7 @@ import { downloadFile } from "@/lib/downloadUtils";
 import {
   Play, Pause, Volume2, VolumeX, Maximize2,
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
-  Music, FileText, Loader2, CalendarClock, Check,
+  Music, FileText, Loader2, CalendarClock, Check, Save,
   SkipBack, SkipForward,
   Palette, Film, LayoutGrid, X,
   Mic, Captions, Gauge, MessageSquareText,
@@ -760,10 +760,14 @@ export function ProVideoEditor({
     }
   }, [storyboard, history.length]);
 
+  const [hasChanges, setHasChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const pushHistory = useCallback((snapshot: StoryboardScene[]) => {
     const idx = historyIndexRef.current;
     setHistory(prev => [...prev.slice(0, idx + 1), snapshot]);
     setHistoryIndex(idx + 1);
+    setHasChanges(true);
   }, []);
 
   const undo = () => {
@@ -1576,11 +1580,41 @@ export function ProVideoEditor({
 
         <div className="flex-1" />
 
+        {/* Save Changes Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-7 text-[10px] gap-1 relative",
+            hasChanges && !saving && "border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+          )}
+          disabled={saving || exporting}
+          onClick={async () => {
+            setSaving(true);
+            try {
+              await onExport?.();
+              setHasChanges(false);
+              toast({ title: "✅ تغییرات ذخیره شد" });
+            } catch (e: any) {
+              toast({ title: "خطا در ذخیره", description: e?.message, variant: "destructive" });
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+          {saving ? "در حال ذخیره…" : "ذخیره"}
+          {hasChanges && !saving && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />
+          )}
+        </Button>
 
         <Button
           variant="outline"
           size="sm"
           className="h-7 text-[10px] gap-1"
+          disabled={hasChanges}
+          title={hasChanges ? "ابتدا تغییرات را ذخیره کنید" : "دانلود ویدئو"}
           onClick={() => {
             const url = finalVideoUrl || videoSrc;
             if (!url) { toast({ title: "ویدئویی برای دانلود وجود ندارد" }); return; }
