@@ -1,6 +1,5 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ body }) => {
@@ -23,7 +22,7 @@ Deno.serve((req) =>
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          responseModalities: ["AUDIO"],
+          responseModalities: ["AUDIO", "TEXT"],
         },
       }),
     });
@@ -38,11 +37,22 @@ Deno.serve((req) =>
     }
 
     const data = await response.json();
-    const audioBase64 = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    const mimeType = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType || "audio/mp3";
+
+    // Find the audio part — it may not be the first part
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    let audioBase64: string | null = null;
+    let mimeType = "audio/mp3";
+
+    for (const part of parts) {
+      if (part?.inlineData?.data) {
+        audioBase64 = part.inlineData.data;
+        mimeType = part.inlineData.mimeType || "audio/mp3";
+        break;
+      }
+    }
 
     if (!audioBase64) {
-      console.error("No audio data in Lyria response:", JSON.stringify(data).slice(0, 500));
+      console.error("No audio data in Lyria response parts:", JSON.stringify(parts.map((p: any) => Object.keys(p))));
       return new Response(JSON.stringify({ error: "No audio generated" }), {
         status: 502,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
