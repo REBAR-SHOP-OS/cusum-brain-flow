@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from "react";
+// Trim mode state is managed locally in TimelineBar
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
@@ -173,8 +174,9 @@ export function TimelineBar({
   const [viewMode, setViewMode] = useState<"expanded" | "compact">("expanded");
   const [selectedAudioIdx, setSelectedAudioIdx] = useState<number | null>(null);
   const [snapGuidePos, setSnapGuidePos] = useState<number | null>(null);
+  const [trimMode, setTrimMode] = useState(false);
 
-  useEffect(() => { setSelectedAudioIdx(null); }, [selectedSceneIndex]);
+  useEffect(() => { setSelectedAudioIdx(null); setTrimMode(false); }, [selectedSceneIndex]);
 
   // ─── Scene drag-to-reorder state ───
   const [sceneDragIdx, setSceneDragIdx] = useState<number | null>(null);
@@ -512,8 +514,8 @@ export function TimelineBar({
         {/* Scene action buttons */}
         {selectedSceneIndex >= 0 && (
           <div className="flex items-center gap-0.5 ml-1.5 pl-1.5 border-l border-white/[0.06]">
-            {onTrimScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => onTrimScene(selectedSceneIndex)} title="Split at playhead">
+            {onResizeScene && (
+              <Button variant="ghost" size="sm" className={`h-6 w-6 p-0 transition-colors ${trimMode ? 'text-red-400 bg-red-500/20 hover:bg-red-500/30' : 'text-zinc-400 hover:text-white hover:bg-white/10'}`} onClick={() => setTrimMode(prev => !prev)} title={trimMode ? "Exit trim mode" : "Trim scene"}>
                 <Scissors className="w-3 h-3" />
               </Button>
             )}
@@ -714,8 +716,14 @@ export function TimelineBar({
                       {onResizeScene && (
                         <div
                           onMouseDown={(e) => handleDragStart(e, i, "left")}
-                          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-red-500/50 z-20 transition-colors"
-                        />
+                          className={`absolute left-0 top-0 bottom-0 cursor-col-resize z-20 transition-all ${
+                            trimMode && isSelected
+                              ? 'w-3 bg-red-500/40 hover:bg-red-500/70 border-r border-red-400/60 flex items-center justify-center'
+                              : 'w-1.5 hover:bg-red-500/50'
+                          }`}
+                        >
+                          {trimMode && isSelected && <GripVertical className="w-2.5 h-2.5 text-white/80" />}
+                        </div>
                       )}
                       {/* Thumbnails */}
                       {thumbnails[scene.id]?.length ? (
@@ -764,8 +772,14 @@ export function TimelineBar({
                       {onResizeScene && (
                         <div
                           onMouseDown={(e) => handleDragStart(e, i, "right")}
-                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-red-500/50 z-20 transition-colors"
-                        />
+                          className={`absolute right-0 top-0 bottom-0 cursor-col-resize z-20 transition-all ${
+                            trimMode && isSelected
+                              ? 'w-3 bg-red-500/40 hover:bg-red-500/70 border-l border-red-400/60 flex items-center justify-center'
+                              : 'w-1.5 hover:bg-red-500/50'
+                          }`}
+                        >
+                          {trimMode && isSelected && <GripVertical className="w-2.5 h-2.5 text-white/80" />}
+                        </div>
                       )}
                     </div>
                   </PopoverTrigger>
@@ -782,9 +796,9 @@ export function TimelineBar({
                           <FileText className="w-2.5 h-2.5" />Edit Voiceover Text
                         </button>
                       )}
-                      {onTrimScene && (
-                        <button onClick={() => onTrimScene(i)} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
-                          <Scissors className="w-2.5 h-2.5" />Split at playhead
+                      {onResizeScene && (
+                        <button onClick={() => { onSelectScene(i); setTrimMode(true); }} className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-white/10 text-zinc-200 flex items-center gap-1">
+                          <Scissors className="w-2.5 h-2.5" />Trim Scene
                         </button>
                       )}
                       {onStretchScene && (
