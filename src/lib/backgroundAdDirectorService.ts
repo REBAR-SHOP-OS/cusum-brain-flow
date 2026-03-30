@@ -591,9 +591,16 @@ class BackgroundAdDirectorService {
         await Promise.allSettled(retryPromises);
       }
 
-      const stillFailed = this.state.clips.filter(c => c.status === "failed").length;
-      if (stillFailed > 0) {
-        console.warn(`[AdDirector] ${stillFailed} scene(s) still failed after retries`);
+      const unresolvedCount = this.state.clips.filter(c => c.status !== "completed" || !c.videoUrl).length;
+      if (unresolvedCount > 0) {
+        console.warn(`[AdDirector] ${unresolvedCount} scene(s) still without video after retries — staying in editing mode`);
+        toast.error(`${unresolvedCount} scene(s) could not be generated. You can retry them individually in the editor.`);
+        this.update({ flowState: "editing", statusText: "", progressValue: 100 });
+        this.running = false;
+        if (!this.listener) {
+          toast.info("Video generation incomplete — some scenes need attention.");
+        }
+        return;
       }
 
       // Phase 3: Export / stitch
