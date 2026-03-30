@@ -12,6 +12,7 @@ import {
 import { ZebraZplModal } from "@/components/office/ZebraZplModal";
 import { generateZpl } from "@/utils/generateZpl";
 import { supabase } from "@/integrations/supabase/client";
+import { sessionUnitToDisplay } from "@/lib/unitSystem";
 import { toast } from "sonner";
 import {
   LayoutGrid, Table as TableIcon, Download, Printer,
@@ -111,7 +112,7 @@ export function TagsExportView() {
   // CSV export
   const handleExportCSV = () => {
     if (!sortedRows.length) return;
-    const us = (selectedSession as any)?.unit_system || "metric";
+    const us = sessionUnitToDisplay((selectedSession as any)?.unit_system);
     const lengthHeader = us === "imperial" ? "TOTAL LENGTH (ft-in)" : "TOTAL LENGTH (mm)";
     const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", lengthHeader,
       ...DIM_COLS, "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD"];
@@ -143,7 +144,7 @@ export function TagsExportView() {
 
   // Print tags — open dedicated print route in new window
   const handlePrint = useCallback(() => {
-    const us = (selectedSession as any)?.unit_system || "metric";
+    const us = sessionUnitToDisplay((selectedSession as any)?.unit_system);
     const url = `/print-tags?sessionId=${selectedSessionId}&unit=${us}&sort=${sortMode}`;
     window.open(url, "_blank");
   }, [selectedSession, selectedSessionId, sortMode]);
@@ -384,7 +385,7 @@ export function TagsExportView() {
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Size</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Type</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">
-                    Total Length {((selectedSession as any)?.unit_system === "imperial") ? "(ft-in)" : "(mm)"}
+                    Total Length {sessionUnitToDisplay((selectedSession as any)?.unit_system) === "imperial" ? "(ft-in)" : "(mm)"}
                   </th>
                   {DIM_COLS.map((c) => (
                     <th key={c} className="text-[10px] font-bold tracking-widest text-primary uppercase text-right px-3 py-2 whitespace-nowrap">{c}</th>
@@ -407,7 +408,7 @@ export function TagsExportView() {
                     const size = row.bar_size_mapped || row.bar_size || "";
                      const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
                     const weight = getWeight(size, row.total_length_mm, row.quantity);
-                    const us = (selectedSession as any)?.unit_system || "metric";
+                    const us = sessionUnitToDisplay((selectedSession as any)?.unit_system);
                     const unit = dimUnit(us);
 
                     return (
@@ -493,7 +494,7 @@ export function TagsExportView() {
                     address={row.address || (selectedSession as any)?.site_address || projectAddress || ""}
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
-                    unitSystem={(selectedSession as any)?.unit_system || "metric"}
+                    unitSystem={sessionUnitToDisplay((selectedSession as any)?.unit_system)}
                   />
                 );
               })

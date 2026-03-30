@@ -4,6 +4,7 @@ import { useExtractRows } from "@/hooks/useExtractSessions";
 import { useShapeSchematics } from "@/hooks/useShapeSchematics";
 import { RebarTagCard, DIM_COLS, getWeight } from "@/components/office/RebarTagCard";
 import { supabase } from "@/integrations/supabase/client";
+import { sessionUnitToDisplay } from "@/lib/unitSystem";
 
 /* ═══════════════════════════════════════════
    Print-only page — zero app layout
@@ -11,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 export default function PrintTags() {
   const [params] = useSearchParams();
   const sessionId = params.get("sessionId");
-  const unitSystem = params.get("unit") || "metric";
+  const unitSystem = sessionUnitToDisplay(params.get("unit"));
   const sortMode = params.get("sort") || "standard";
 
   const { rows, loading } = useExtractRows(sessionId);
