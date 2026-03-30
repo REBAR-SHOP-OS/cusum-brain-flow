@@ -503,13 +503,16 @@ class BackgroundAdDirectorService {
       await Promise.allSettled(scenePromises);
       clearInterval(progressInterval);
 
-      // Phase 2b: Auto-retry failed scenes (up to 2 rounds)
+      // Phase 2b: Auto-retry unresolved scenes (failed/idle/generating-without-url) — up to 2 rounds
       const MAX_RETRY_ROUNDS = 2;
       for (let retryRound = 1; retryRound <= MAX_RETRY_ROUNDS; retryRound++) {
         if (this.cancelFlag) break;
 
-        const failedClips = this.state.clips.filter(c => c.status === "failed");
-        if (failedClips.length === 0) break;
+        const unresolvedClips = this.state.clips.filter(c =>
+          c.status === "failed" || c.status === "idle" || c.status === "queued" ||
+          (c.status === "generating" && !c.videoUrl)
+        );
+        if (unresolvedClips.length === 0) break;
 
         console.log(`[AdDirector] Retry round ${retryRound}/${MAX_RETRY_ROUNDS}: ${failedClips.length} failed scene(s)`);
         this.update({ statusText: `Retrying failed scenes... attempt ${retryRound}/${MAX_RETRY_ROUNDS} (${failedClips.length} scene${failedClips.length > 1 ? "s" : ""})` });
