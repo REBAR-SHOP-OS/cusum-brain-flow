@@ -1273,6 +1273,15 @@ export function ProVideoEditor({
   const generateAllVoiceovers = async () => {
     setGeneratingVoiceovers(true);
     const newTracks: AudioTrackItem[] = [];
+    const batchedDurations: Record<string, number> = {};
+    // Compute cumulative scene start times
+    let cumStart = 0;
+    const sceneStarts: Record<string, number> = {};
+    for (const scene of storyboard) {
+      sceneStarts[scene.id] = cumStart;
+      const seg = segments.find(s => s.id === scene.segmentId);
+      cumStart += seg ? seg.endTime - seg.startTime : 4;
+    }
     try {
       for (const seg of segments) {
         if (!seg.text.trim()) continue;
