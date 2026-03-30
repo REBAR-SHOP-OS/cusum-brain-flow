@@ -124,10 +124,6 @@ export function RoleGuard({ children }: RoleGuardProps) {
     return <Navigate to="/home" replace />;
   }
 
-  // Block specific emails from shop floor routes
-  if (ACCESS_POLICIES.blockedFromShopFloor.includes(email.toLowerCase()) && (location.pathname.startsWith("/shop-floor") || location.pathname.startsWith("/shopfloor"))) {
-    return <Navigate to="/home" replace />;
-  }
 
   // Accounting: email-only access (overrides all roles including admin)
   if (location.pathname.startsWith("/accounting") && !ACCESS_POLICIES.accountingAccess.includes(email.toLowerCase())) {
