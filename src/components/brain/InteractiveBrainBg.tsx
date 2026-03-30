@@ -1,7 +1,26 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import brainHero from "@/assets/brain-hero.png";
 
 export function InteractiveBrainBg() {
+  const [renderError, setRenderError] = useState(false);
+
+  // Catch errors during effects / rAF callbacks
+  useEffect(() => {
+    const handler = (e: ErrorEvent) => {
+      if (e.filename?.includes("InteractiveBrainBg")) {
+        console.error("[InteractiveBrainBg] Runtime error caught, showing fallback:", e.message);
+        setRenderError(true);
+      }
+    };
+    window.addEventListener("error", handler);
+    return () => window.removeEventListener("error", handler);
+  }, []);
+
+  if (renderError) {
+    return (
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-accent/5 to-transparent" aria-hidden="true" />
+    );
+  }
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
