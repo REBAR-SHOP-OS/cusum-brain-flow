@@ -671,7 +671,7 @@ export function TimelineBar({
                         <button
                           onClick={() => onTrimScene(i)}
                           className="w-full text-left text-[10px] px-2 py-1 rounded hover:bg-accent/50 text-foreground flex items-center gap-1"
-                        ><Scissors className="w-2.5 h-2.5" />Trim (−1s)</button>
+                        ><Scissors className="w-2.5 h-2.5" />Split at playhead</button>
                       )}
                       {onStretchScene && (
                         <button
