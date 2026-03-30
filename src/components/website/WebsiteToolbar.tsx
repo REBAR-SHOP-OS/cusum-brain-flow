@@ -47,6 +47,28 @@ export function WebsiteToolbar({
   onDeviceChange,
   onRefresh,
 }: WebsiteToolbarProps) {
+  const [fixingHero, setFixingHero] = useState(false);
+
+  const handleFixHero = async () => {
+    setFixingHero(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("wp-fix-hero", {
+        method: "POST",
+        body: { action: "inject" },
+      });
+      if (error) throw error;
+      if (data?.alreadyExists) {
+        toast.info("Static hero already exists on the homepage");
+      } else {
+        toast.success("Homepage hero fixed! Refresh the preview to see changes.");
+        onRefresh();
+      }
+    } catch (err: any) {
+      toast.error("Failed to fix hero: " + (err.message || "Unknown error"));
+    } finally {
+      setFixingHero(false);
+    }
+  };
   const deviceButtons: { mode: DeviceMode; icon: React.ElementType; label: string }[] = [
     { mode: "desktop", icon: Monitor, label: "Desktop" },
     { mode: "tablet", icon: Tablet, label: "Tablet" },
