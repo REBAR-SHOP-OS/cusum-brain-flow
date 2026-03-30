@@ -569,7 +569,12 @@ class BackgroundAdDirectorService {
             const provider = result.provider || "wan";
 
             if (result.mode === "slideshow" && result.imageUrls?.length) {
-              this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: result.imageUrls![0], progress: 100 } : c));
+              try {
+                const slideshowBlobUrl = await slideshowToVideo({ imageUrls: result.imageUrls!, durationPerImage: 4, width: 1280, height: 720 });
+                this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: slideshowBlobUrl, progress: 100 } : c));
+              } catch {
+                this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl: result.imageUrls![0], progress: 100 } : c));
+              }
             } else if (videoUrl) {
               this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "completed" as const, videoUrl, progress: 100, generationId: genId } : c));
             } else if (genId) {
