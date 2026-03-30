@@ -525,10 +525,11 @@ export default function AgentWorkspace() {
       const hashtags = post.hashtags ? post.hashtags.split(/\s+/).filter((h: string) => h.startsWith("#")) : [];
       // Clean caption: remove all non-advertising content before saving
       let rawCaption = post.caption || "";
-      // 1. Remove Persian translation block
+      // 1. Extract Persian translation block (preserve for DB, strip from English cleaning)
       const persianIdx = rawCaption.indexOf("---PERSIAN---");
+      const persianBlock = persianIdx !== -1 ? rawCaption.slice(persianIdx) : "";
       if (persianIdx !== -1) rawCaption = rawCaption.slice(0, persianIdx);
-      // Also remove fallback Persian markers
+      // Also remove fallback Persian markers from English portion
       rawCaption = rawCaption.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
       // 2. Remove slot headers (with or without time)
       rawCaption = rawCaption.replace(/^#{1,4}\s*Slot\s*\d+\s*[—\-]\s*(\d{1,2}:\d{2}\s*(AM|PM)\s*\|?\s*)?.*/gm, "");
