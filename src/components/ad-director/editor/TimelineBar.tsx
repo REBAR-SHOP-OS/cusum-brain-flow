@@ -715,8 +715,14 @@ export function TimelineBar({
                       {onResizeScene && (
                         <div
                           onMouseDown={(e) => handleDragStart(e, i, "left")}
-                          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-red-500/50 z-20 transition-colors"
-                        />
+                          className={`absolute left-0 top-0 bottom-0 cursor-col-resize z-20 transition-all ${
+                            trimMode && isSelected
+                              ? 'w-3 bg-red-500/40 hover:bg-red-500/70 border-r border-red-400/60 flex items-center justify-center'
+                              : 'w-1.5 hover:bg-red-500/50'
+                          }`}
+                        >
+                          {trimMode && isSelected && <GripVertical className="w-2.5 h-2.5 text-white/80" />}
+                        </div>
                       )}
                       {/* Thumbnails */}
                       {thumbnails[scene.id]?.length ? (
