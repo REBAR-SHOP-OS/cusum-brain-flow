@@ -1313,6 +1313,11 @@ export function ProVideoEditor({
 
   const generateAllVoiceovers = async () => {
     setGeneratingVoiceovers(true);
+
+    // ── Clear all existing text overlays, voiceover, and music tracks ──
+    setOverlays(prev => prev.filter(o => o.kind !== "text"));
+    setAudioTracks([]);
+
     const newTracks: AudioTrackItem[] = [];
     const batchedDurations: Record<string, number> = {};
     // Compute cumulative scene start times
@@ -1324,6 +1329,7 @@ export function ProVideoEditor({
       cumStart += seg ? seg.endTime - seg.startTime : 4;
     }
     try {
+      // ── Phase 1: Generate voiceovers ──
       for (const seg of segments) {
         if (!seg.text.trim()) continue;
         const scene = storyboard.find(s => s.segmentId === seg.id);
@@ -1403,11 +1409,54 @@ export function ProVideoEditor({
           duration: trackDuration,
         });
       }
+
       // Batch-update durations to trigger text overlay useEffect once
       setVoiceoverDurations(prev => ({ ...prev, ...batchedDurations }));
-      // Replace voiceover tracks, keep music
-      setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
-      toast({ title: "Voiceovers generated", description: `${newTracks.length} audio tracks created` });
+
+      // ── Phase 2: Auto-generate background music ──
+      try {
+        toast({ title: "🎵 در حال تولید موسیقی..." });
+        const allTexts = segments.map(s => s.text).filter(Boolean).join(". ");
+        const musicPrompt = `Cinematic instrumental background music for a professional video about: ${allTexts.slice(0, 300)}`;
+        const totalDuration = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
+
+        const musicResponse = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lyria-music`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ prompt: musicPrompt, duration: Math.min(totalDuration, 60) }),
+          }
+        );
+
+        if (musicResponse.ok) {
+          const musicBlob = await musicResponse.blob();
+          const musicUrl = URL.createObjectURL(musicBlob);
+          setMusicUrl(musicUrl);
+          newTracks.push({
+            sceneId: "",
+            label: "🎵 Background Music",
+            audioUrl: musicUrl,
+            kind: "music" as const,
+            globalStartTime: 0,
+          });
+          toast({ title: "🎵 موسیقی ساخته شد" });
+        } else {
+          console.warn("Music generation failed:", musicResponse.status);
+          toast({ title: "⚠ موسیقی ساخته نشد", description: "ادامه بدون موسیقی", variant: "destructive" });
+        }
+      } catch (musicErr: any) {
+        console.warn("Music generation error:", musicErr.message);
+        toast({ title: "⚠ موسیقی ساخته نشد", variant: "destructive" });
+      }
+
+      // ── Phase 3: Apply all tracks at once ──
+      setAudioTracks(newTracks);
+      toast({ title: "✅ تولید کامل شد", description: `${newTracks.length} ترک صدا و موسیقی ساخته شد` });
     } catch (err: any) {
       toast({ title: "Voiceover generation failed", description: err.message, variant: "destructive" });
     } finally {
