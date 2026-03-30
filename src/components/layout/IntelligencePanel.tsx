@@ -12,6 +12,7 @@ import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ContentActions } from "@/components/shared/ContentActions";
 
 export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function IntelligencePanel(_props, ref) {
+  const { user } = useAuth();
   const { intelligencePanelOpen, setIntelligencePanelOpen } = useWorkspace();
   const { messages, isStreaming, sendMessage, clearChat, cancelStream, deleteMessage } = useAdminChat();
   const [input, setInput] = useState("");
