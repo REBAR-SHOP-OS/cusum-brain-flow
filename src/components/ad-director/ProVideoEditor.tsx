@@ -313,7 +313,7 @@ export function ProVideoEditor({
       }]);
 
       setAudioPromptOpen(false);
-      toast({ title: "✅ صدا با موفقیت تولید شد" });
+      toast({ title: "✅ Audio generated successfully" });
     } catch (err: any) {
       console.error("Audio generation error:", err);
       toast({ title: "خطا در تولید صدا", description: err.message, variant: "destructive" });
