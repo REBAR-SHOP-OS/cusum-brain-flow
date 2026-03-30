@@ -388,12 +388,12 @@ export function PostReviewPanel({
       (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
     );
     const targetSet = new Set(dbPlatforms as string[]);
-    const existingSet = new Set(siblings.map(s => s.platform));
+    const existingSet = new Set(siblings.map(s => s.platform as string));
 
     // Delete siblings whose platform is no longer selected
-    const toDelete = siblings.filter(s => !targetSet.has(s.platform));
+    const toDelete = siblings.filter(s => !targetSet.has(s.platform as string));
     // Platforms that need new rows (ONE row per platform)
-    const toAdd = dbPlatforms.filter(p => !existingSet.has(p as string));
+    const toAdd = dbPlatforms.filter(p => !existingSet.has(p));
 
     const promises: PromiseLike<any>[] = [];
 
