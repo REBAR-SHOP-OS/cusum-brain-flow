@@ -442,7 +442,7 @@ export function ProVideoEditor({
       toast({ title: "✅ Text & voice generated successfully" });
     } catch (err: any) {
       console.error("TextVoice generation error:", err);
-      toast({ title: "خطا در تولید متن و صدا", description: err.message, variant: "destructive" });
+      toast({ title: "Text & voice generation failed", description: err.message, variant: "destructive" });
     } finally {
       setGeneratingTextVoice(false);
     }
