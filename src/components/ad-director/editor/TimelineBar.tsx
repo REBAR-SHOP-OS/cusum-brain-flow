@@ -174,8 +174,9 @@ export function TimelineBar({
   const [viewMode, setViewMode] = useState<"expanded" | "compact">("expanded");
   const [selectedAudioIdx, setSelectedAudioIdx] = useState<number | null>(null);
   const [snapGuidePos, setSnapGuidePos] = useState<number | null>(null);
+  const [trimMode, setTrimMode] = useState(false);
 
-  useEffect(() => { setSelectedAudioIdx(null); }, [selectedSceneIndex]);
+  useEffect(() => { setSelectedAudioIdx(null); setTrimMode(false); }, [selectedSceneIndex]);
 
   // ─── Scene drag-to-reorder state ───
   const [sceneDragIdx, setSceneDragIdx] = useState<number | null>(null);
