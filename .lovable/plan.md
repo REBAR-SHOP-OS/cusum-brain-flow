@@ -1,75 +1,78 @@
 
 
-# Deduplicate Calendar Cards & Prevent Duplicate Publishing
+# Generate Social Media Manager Architecture PDF
 
-## Problem
-1. The calendar still shows many individual cards per platform per day — the grouping change consolidated by platform but each row in the DB is still a separate card. The screenshot shows ~7+ cards per day for Instagram alone because multiple posts exist with the same title/content for the same platform on the same day.
-2. No guard exists to prevent publishing the same content to the same platform twice.
+## Objective
+Create a comprehensive PDF document describing the full architecture and rules governing the Social Media Manager module.
 
-## Two Rules to Enforce
+## Document Structure
 
-### Rule 1: Calendar shows max ONE card per platform per day (already grouped)
-The `groupByPlatform` change is already in place. The screenshot suggests there are genuinely many separate posts per platform per day. The current code correctly groups them into one card with a "×N" badge. If individual cards still appear, it may be a rendering or caching issue. Will verify and ensure the consolidated view works.
+### 1. Overview
+- Module purpose: manage social media content lifecycle (create → review → approve → schedule → publish)
+- Supported platforms: Facebook, Instagram, LinkedIn, Twitter/X, TikTok, YouTube
 
-### Rule 2: Prevent duplicate content from being published to the same platform
+### 2. Database Layer
+- **`social_posts`** table: core entity with fields for platform, status, qa_status, content, engagement metrics, neel_approved, decline_reason
+- **`social_approvals`** table: approval workflow records (pending/approved/rejected, deadline, escalation_count)
+- **`social_strategy_checklist`** table: content strategy tracking
+- **`integration_connections`** table: OAuth tokens per platform
+- **`user_meta_tokens`** table: Facebook/Instagram page tokens
+- Realtime enabled on both social_posts and social_approvals
 
-#### A. Backend Guard — `social-publish/index.ts` (line ~62-83)
-Before publishing, check if a post with the same `title + platform + page_name` and `status = 'published'` already exists for the same day:
-
-```typescript
-// After the existing "already published" check for this specific post_id
-if (post_id) {
-  const { data: postData } = await supabaseAdmin
-    .from("social_posts")
-    .select("title, platform, page_name, scheduled_date")
-    .eq("id", post_id)
-    .maybeSingle();
-
-  if (postData?.title) {
-    const dayStart = postData.scheduled_date 
-      ? new Date(postData.scheduled_date).toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0];
-
-    const { data: duplicate } = await supabaseAdmin
-      .from("social_posts")
-      .select("id")
-      .eq("platform", postData.platform)
-      .eq("title", postData.title)
-      .eq("status", "published")
-      .neq("id", post_id)
-      .gte("scheduled_date", dayStart + "T00:00:00Z")
-      .lte("scheduled_date", dayStart + "T23:59:59Z")
-      .maybeSingle();
-
-    if (duplicate) {
-      return error 409: "Duplicate — this content was already published"
-    }
-  }
-}
+### 3. Post Lifecycle (Status Machine)
+```
+draft → pending_approval → [approved] → scheduled → published
+                         → [rejected] → declined
+                         → [overdue without approval] → failed
 ```
 
-#### B. Backend Guard — `social-cron-publish/index.ts` (line ~63-70)
-Same duplicate check before processing each due post in the cron loop.
+### 4. Rules & Guards
+- **Approval Gate**: `neel_approved = true` required before publishing (bypass only for radin@rebar.shop, zahra@rebar.shop)
+- **Declined Posts**: NEVER publishable (hard 403 block)
+- **Duplicate Prevention**: Same title + platform + page_name cannot be published twice on the same day (409 Conflict)
+- **Calendar Consolidation**: Max 1 card per platform per day, with deduplication of same title+page
+- **Persian Text Strip**: Automatically removes Persian translation blocks before publishing
+- **Overdue Unapproved**: Cron marks as "failed" instead of auto-approving
 
-#### C. Calendar Dedup — `SocialCalendar.tsx`
-Add deduplication within each platform group: if multiple posts share the same `title + page_name`, only show one representative card (with a count). This collapses truly duplicate entries visually:
+### 5. Frontend Architecture
+- **Page**: `SocialMediaManager.tsx` — main orchestrator with week view, filters, tabs
+- **Calendar**: `SocialCalendar.tsx` — 7-day grid with groupByPlatform + deduplicatePosts
+- **Post Review**: `PostReviewPanel.tsx` — edit/approve/schedule/publish individual posts
+- **Approvals**: `ApprovalsPanel.tsx` — pending approvals list with approve/reject actions
+- **Content Strategy**: `ContentStrategyPanel.tsx` — strategy checklist
+- **Brand Kit**: `BrandKitDialog.tsx` — brand assets management
+- **Create Content**: `CreateContentDialog.tsx` — new post creation
+- **Image/Video**: `ImageGeneratorDialog.tsx`, `VideoGeneratorDialog.tsx` — AI media generation
 
-```typescript
-function deduplicatePosts(posts: SocialPost[]): SocialPost[] {
-  const seen = new Set<string>();
-  return posts.filter(p => {
-    const key = `${p.platform}_${p.title}_${p.page_name || ""}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-```
+### 6. Hooks Layer
+- `useSocialPosts` — CRUD + realtime subscription on social_posts
+- `useSocialApprovals` — approval workflow + realtime
+- `usePublishPost` — publish with 120s timeout, duplicate guard, Persian strip
+- `useAutoGenerate` — AI content generation via `auto-generate-post` edge function
+- `useStrategyChecklist` — content strategy tracking
+- `schedulePost` — scheduling with frontend duplicate check + edge function + DB fallback
 
-Apply before rendering in the calendar: filter `dayPosts` through `deduplicatePosts` so duplicate titles on the same platform are collapsed.
+### 7. Backend (Edge Functions)
+- **`social-publish`**: Publishes to Facebook/Instagram/LinkedIn via Graph API / LinkedIn API, with all guards
+- **`social-cron-publish`**: Automated scheduled publishing cron, same guards
+- **`schedule-post`**: Schedule post + clone for multi-platform/page combos
+- **`auto-generate-post`**: AI-powered content generation
+- **`regenerate-post`**: Re-generate content for existing post
+- **`social-intelligence`**: Analytics and insights
+- **`approval-notify`**: Send approval notifications
 
-## Files Changed
-- `src/components/social/SocialCalendar.tsx` — add `deduplicatePosts` filter to remove duplicate title+page+platform entries per day
-- `supabase/functions/social-publish/index.ts` — add duplicate content guard before publishing
-- `supabase/functions/social-cron-publish/index.ts` — add duplicate content guard in cron loop
+### 8. Integration Connections
+- Facebook/Instagram: OAuth via `facebook-oauth`, tokens in `user_meta_tokens` with page-level tokens
+- LinkedIn: OAuth via `linkedin-oauth`, tokens in `integration_connections` with tenant-wide fallback
+- Token refresh: automatic page token refresh before each publish
+
+### 9. Architecture Diagram (included in PDF)
+
+## Implementation
+- Generate PDF using Python reportlab
+- Include flowcharts as text diagrams
+- Write to `/mnt/documents/Social_Media_Architecture.pdf`
+
+## File
+- `/mnt/documents/Social_Media_Architecture.pdf`
 
