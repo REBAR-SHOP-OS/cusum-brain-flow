@@ -121,7 +121,7 @@ export function WebsiteToolbar({
         title="Inject static hero to fix blank homepage"
       >
         {fixingHero ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-        Fix Hero
+        Repair Slider
       </Button>
 
       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onRefresh} title="Refresh">
