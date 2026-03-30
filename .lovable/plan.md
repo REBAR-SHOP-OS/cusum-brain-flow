@@ -1,52 +1,22 @@
 
 
-# Trim Mode for Scene Cards via Scissors Icon
-
-## Current State
-- The scissors icon currently calls `handleTrimScene` which **splits** the scene at the playhead — same as the split button.
-- Resize handles already exist on each scene card (left/right edges, `w-1.5`, nearly invisible).
-- `onResizeScene` and `handleResizeScene` already work to change scene duration.
+# Fix: Edit Subtitle Dialog Opens Only on Double-Click
 
 ## Problem
-The user wants the scissors icon to enable **trimming** (adjusting start/end of the selected card), not splitting. The existing resize handles are too thin to discover.
+The "Edit Subtitle Text" dialog opens on every single click (`onClick`) on the blue/violet text track bar — including after drag operations. This is disruptive when the user just wants to move the text overlay.
 
-## Plan
+## Solution
 
-### 1. Add Trim Mode State — `TimelineBar.tsx`
-- Add `trimMode` boolean state.
-- Clicking the scissors icon toggles `trimMode` on/off (instead of calling `onTrimScene`).
-- When `trimMode` is active, the scissors icon gets a highlight (e.g., `bg-red-500/30`).
+### `src/components/ad-director/editor/TimelineBar.tsx` — line 891
 
-### 2. Enhanced Trim Handles — `TimelineBar.tsx` (scene cards, ~line 713-769)
-- When `trimMode` is true AND the scene is selected:
-  - Left handle: `w-3` with visible red/yellow styling, a grip icon
-  - Right handle: same
-- When `trimMode` is false: keep current thin invisible handles
-
-### 3. Update Scissors Button — `TimelineBar.tsx` (~line 515-519)
-Change from:
+Change:
 ```tsx
-onClick={() => onTrimScene(selectedSceneIndex)}
+onClick={(e) => { e.stopPropagation(); onEditOverlay?.(ov); }}
 ```
 To:
 ```tsx
-onClick={() => setTrimMode(prev => !prev)}
+onDoubleClick={(e) => { e.stopPropagation(); onEditOverlay?.(ov); }}
 ```
-With active state styling when `trimMode` is true.
 
-### 4. Also Update Context Menu — `TimelineBar.tsx` (~line 785-789)
-Change the "Split at playhead" context menu item for `onTrimScene` to toggle trim mode as well, or relabel it to "Trim Scene".
-
-### 5. Auto-exit Trim Mode
-- When selecting a different scene, exit trim mode.
-- When clicking outside the timeline, exit trim mode.
-
-## Files Changed
-- `src/components/ad-director/editor/TimelineBar.tsx` — all changes are here (state + UI)
-
-## Result
-- Clicking scissors shows prominent drag handles on left/right of the selected scene card
-- User drags handles to shorten or extend the scene
-- Clicking scissors again exits trim mode
-- Existing `handleResizeScene` / `onResizeScene` handles the actual duration change
+Single change, one line. The dialog will only appear on double-click; dragging and single clicks will no longer trigger it.
 
