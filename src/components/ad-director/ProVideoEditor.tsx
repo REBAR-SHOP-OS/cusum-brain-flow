@@ -1377,7 +1377,7 @@ export function ProVideoEditor({
         if (voDur && isFinite(voDur)) {
           setVoiceoverDurations(prev => ({ ...prev, [scene.id]: voDur! }));
         }
-        newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover" });
+        newTracks.push({ sceneId: scene.id, label: seg.label, audioUrl: url, kind: "voiceover", globalStartTime: 0 });
       }
       // Replace voiceover tracks, keep music
       setAudioTracks(prev => [...prev.filter(a => a.kind !== "voiceover"), ...newTracks]);
