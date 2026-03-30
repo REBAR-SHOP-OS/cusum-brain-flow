@@ -780,11 +780,24 @@ export function ProVideoEditor({
   // Undo/Redo history
   const [history, setHistory] = useState<StoryboardScene[][]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyIndexRef = useRef(-1);
 
-  const pushHistory = useCallback((newStoryboard: StoryboardScene[]) => {
-    setHistory(prev => [...prev.slice(0, historyIndex + 1), newStoryboard]);
-    setHistoryIndex(prev => prev + 1);
-  }, [historyIndex]);
+  // Keep ref in sync
+  useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
+
+  // Seed initial storyboard into history
+  useEffect(() => {
+    if (storyboard.length > 0 && history.length === 0) {
+      setHistory([storyboard]);
+      setHistoryIndex(0);
+    }
+  }, [storyboard, history.length]);
+
+  const pushHistory = useCallback((snapshot: StoryboardScene[]) => {
+    const idx = historyIndexRef.current;
+    setHistory(prev => [...prev.slice(0, idx + 1), snapshot]);
+    setHistoryIndex(idx + 1);
+  }, []);
 
   const undo = () => {
     if (historyIndex > 0) {
