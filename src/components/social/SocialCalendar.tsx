@@ -10,15 +10,13 @@ const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twit
 function groupByPlatform(posts: SocialPost[]) {
   const map = new Map<string, SocialPost[]>();
   for (const p of posts) {
-    const key = `${p.platform || "other"}_${p.title || p.id}_${p.page_name || ""}`;
+    const key = p.platform || "other";
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(p);
   }
   return [...map.entries()].sort(([a], [b]) => {
-    const aPlatform = a.startsWith("unassigned") ? "unassigned" : a.split("_")[0];
-    const bPlatform = b.startsWith("unassigned") ? "unassigned" : b.split("_")[0];
-    return (PLATFORM_ORDER.indexOf(aPlatform) === -1 ? 99 : PLATFORM_ORDER.indexOf(aPlatform))
-         - (PLATFORM_ORDER.indexOf(bPlatform) === -1 ? 99 : PLATFORM_ORDER.indexOf(bPlatform));
+    return (PLATFORM_ORDER.indexOf(a) === -1 ? 99 : PLATFORM_ORDER.indexOf(a))
+         - (PLATFORM_ORDER.indexOf(b) === -1 ? 99 : PLATFORM_ORDER.indexOf(b));
   });
 }
 
