@@ -970,17 +970,9 @@ export function ProVideoEditor({
 
     pushHistory(storyboard);
 
-    // Shorten current segment to end at split point
-    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.startTime + splitPoint);
-
-    // Create new scene + segment for the second half
+    // Create new segment for the second half
     const newSegId = crypto.randomUUID();
     const newSceneId = crypto.randomUUID();
-    const newScene: StoryboardScene = {
-      ...scene,
-      id: newSceneId,
-      segmentId: newSegId,
-    };
     const newSeg: ScriptSegment = {
       ...seg,
       id: newSegId,
@@ -989,13 +981,23 @@ export function ProVideoEditor({
       label: seg.label + " (2)",
     };
 
+    // Update existing segment to end at split point + add new segment
+    const updatedSegments = segments.map(s => s.id === seg.id ? { ...s, endTime: seg.startTime + splitPoint } : s);
+    updatedSegments.splice(segments.indexOf(seg) + 1, 0, newSeg);
+    onUpdateSegments?.(updatedSegments);
+
+    // Insert new scene after current
+    const newScene: StoryboardScene = {
+      ...scene,
+      id: newSceneId,
+      segmentId: newSegId,
+    };
     const updatedStoryboard = [...storyboard];
     updatedStoryboard.splice(index + 1, 0, newScene);
     onUpdateStoryboard?.(updatedStoryboard);
-    onAddSegment?.(newSeg, index + 1);
 
     toast({ title: "صحنه برش خورد", description: `برش در ${globalTime.toFixed(1)}s` });
-  }, [storyboard, segments, globalTime, cumulativeStarts, toast, pushHistory, onUpdateSegmentTiming, onUpdateStoryboard, onAddSegment]);
+  }, [storyboard, segments, globalTime, cumulativeStarts, toast, pushHistory, onUpdateSegments, onUpdateStoryboard]);
 
   const handleStretchScene = useCallback((index: number) => {
     const scene = storyboard[index];
