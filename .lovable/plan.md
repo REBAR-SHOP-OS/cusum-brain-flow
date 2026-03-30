@@ -1,51 +1,51 @@
 
 
-# Fix: Unassigned "?" Cards Not Updating After Platform/Page Assignment
+# Fix: One Card Per Platform (Pages as Metadata, Not Separate Rows)
 
 ## Problem
 
-When a "?" placeholder card gets a platform and pages assigned, it doesn't properly update because the sibling-matching logic in `handlePlatformsSaveMulti` uses `title + day` to find related posts. Since ALL auto-generated placeholder cards share `title: "?"`, this matches every `?` card on that day (e.g., all 5 cards at different times), instead of only the one at the specific time slot.
-
-This causes the platform assignment to either fail silently or affect the wrong cards.
+When scheduling a post with 2 platforms × 6 pages, the system creates **12 separate DB rows** (one per platform×page combo). The rule is: **1 platform + 1 time slot = 1 card**, with all pages stored as comma-separated `page_name`.
 
 ## Root Cause
 
-**`PostReviewPanel.tsx` line 388-391**: Sibling filter uses `p.title === post.title` + same day. For `?` cards, `title` is always `"?"`, so all `?` cards on the same day are treated as siblings. The code then tries to delete all of them (since they're all `unassigned`) and create new rows, leading to incorrect behavior.
+Two places build a cartesian product of `platform × page`:
+
+1. **`PostReviewPanel.tsx` lines 1238-1244**: The schedule button builds `combos[]` by iterating `for (platform) { for (page) { push } }` — creating one combo per page per platform
+2. **Edge function `schedule-post/index.ts`**: Receives these combos and creates one DB row per combo (lines 55-106 for unassigned, lines 167-220 for normal)
 
 ## Solution
 
-### File: `src/components/social/PostReviewPanel.tsx`
+### 1. `src/components/social/PostReviewPanel.tsx` — Build combos per platform, not per page
 
-**Refine sibling matching** to also compare `scheduled_date` (full timestamp, not just date). For `?` cards, each time slot is a distinct group:
+Replace the platform×page cartesian product (lines 1238-1244) with one combo per platform, where `page` is the comma-separated string of all selected pages:
 
 ```typescript
-// Current (broken for "?" cards):
-const siblings = allPosts.filter(p =>
-  p.title === post.title &&
-  (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
-);
-
-// Fixed — also match on exact scheduled_date (time slot):
-const siblings = allPosts.filter(p =>
-  p.title === post.title &&
-  p.scheduled_date === post.scheduled_date
-);
+const pagesString = localPages.join(", ");
+const combos: { platform: string; page: string }[] = [];
+for (const plat of schedulablePlatforms) {
+  const dbPlat = platformMap[plat] || plat;
+  combos.push({ platform: dbPlat, page: pagesString });
+}
 ```
 
-This ensures:
-- `?` card at 6:30 AM only matches other 6:30 AM cards with same title
-- `?` card at 8:00 AM is treated independently
-- Non-`?` cards (with real titles) still group correctly since they share both title and time
+### 2. `supabase/functions/schedule-post/index.ts` — Match by platform only (not page_name)
 
-Apply the same fix to `handlePagesSaveMulti` (line 478-481) for consistency.
+The duplicate check (line 61) currently matches `eq("page_name", combo.page)`. Since `page_name` is now a comma-separated string, change duplicate detection to match by `platform + title + day` only (not page_name). Update both the unassigned path (line 55-106) and the normal path (line 167-220):
 
-Also apply to `handleContentTypeSave` (line 451-461) which has the same day-only matching pattern.
+- Remove `.eq("page_name", combo.page)` from duplicate checks
+- When inserting/updating, set `page_name: combo.page` (the comma-separated string)
+
+### 3. Also fix `SocialMediaManager.tsx` line 234 and `SchedulePopover.tsx` line 74-76
+
+These also pass `extra_combos` with individual pages — update to use comma-separated page string instead.
 
 ## Result
-- Assigning Instagram to the 8:00 AM `?` card deletes only that one `unassigned` row and creates an Instagram row at 8:00 AM
-- Other `?` cards at different times remain untouched
-- The "Unassigned" card disappears from the calendar after platform assignment
+- 2 platforms × 6 pages → **2 cards** (one per platform), each showing all 6 pages as metadata
+- Calendar stays clean: 1 card per time slot per platform
 
 ## Files Changed
-- `src/components/social/PostReviewPanel.tsx` — fix sibling matching in `handlePlatformsSaveMulti`, `handlePagesSaveMulti`, and `handleContentTypeSave` to use exact `scheduled_date` instead of day-only
+- `src/components/social/PostReviewPanel.tsx` — combos per platform, not per page
+- `supabase/functions/schedule-post/index.ts` — duplicate check by platform+title+day only
+- `src/pages/SocialMediaManager.tsx` — fix extra_combos format
+- `src/components/social/SchedulePopover.tsx` — fix extra_combos format
 
