@@ -290,11 +290,14 @@ export function TimelineBar({
     return { sceneIdx: lastIdx, localTime: Math.max(0, timeSec - (cumulativeStarts[lastIdx] || 0)) };
   }, [storyboard, cumulativeStarts]);
 
+  const textDraggedRef = useRef(false);
+
   const handleItemDragStart = useCallback((
     e: React.MouseEvent, type: "text" | "audio", id: string, leftPct: number, widthPct: number,
   ) => {
     e.stopPropagation();
     e.preventDefault();
+    textDraggedRef.current = false;
     itemDragRef.current = { type, id, startX: e.clientX, origLeftPct: leftPct, origWidthPct: widthPct };
     setItemDragOffsetPx(0);
     setItemDragging(true);
