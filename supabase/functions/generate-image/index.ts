@@ -256,10 +256,22 @@ Instructions:
         }
 
         const data = await resp.json();
-        const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+        let imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
+
+        // Fallback: check if image is embedded as base64 in content
         if (!imageUrl) {
+          const content = data.choices?.[0]?.message?.content || "";
+          const b64Match = typeof content === "string" && content.match(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=]+/);
+          if (b64Match) {
+            imageUrl = b64Match[0];
+            console.log("Edit: extracted base64 image from content text");
+          }
+        }
+
+        if (!imageUrl) {
+          console.error("No edited image in response. Keys:", JSON.stringify(Object.keys(data)), "message keys:", JSON.stringify(Object.keys(data.choices?.[0]?.message || {})), "content preview:", JSON.stringify(data.choices?.[0]?.message?.content || "").slice(0, 300));
           return new Response(
-            JSON.stringify({ error: "No edited image returned" }),
+            JSON.stringify({ error: "No edited image returned. The AI model may have declined the edit request. Try a different prompt." }),
             { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
