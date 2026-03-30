@@ -379,25 +379,21 @@ export function PostReviewPanel({
     setLocalPages(prev => prev.filter(p => validPages.has(p)));
 
     // Map UI platform keys to DB platform values
-    // Deduplicate after mapping (instagram_fb and instagram both map to "instagram")
     const dbPlatforms = [...new Set(sanitized.map(p => platformMap[p] || p))];
 
-    // Reconcile sibling rows: find all siblings for this title + day
+    // Find all siblings for this title + day
     const day = post.scheduled_date?.substring(0, 10);
     const siblings = allPosts.filter(p =>
       p.title === post.title &&
       (day ? p.scheduled_date?.substring(0, 10) === day : p.id === post.id)
     );
-    const existingPlatforms = [...new Set(siblings.map(s => s.platform))] as string[];
     const targetSet = new Set(dbPlatforms as string[]);
+    const existingSet = new Set(siblings.map(s => s.platform));
 
     // Delete siblings whose platform is no longer selected
     const toDelete = siblings.filter(s => !targetSet.has(s.platform));
-    // Platforms that need new rows
-    const existingSet = new Set(existingPlatforms);
+    // Platforms that need new rows (ONE row per platform)
     const toAdd = dbPlatforms.filter(p => !existingSet.has(p));
-    // Update existing siblings to keep them (in case platform value changed)
-    const toUpdate = siblings.filter(s => targetSet.has(s.platform));
 
     const promises: PromiseLike<any>[] = [];
 
@@ -405,31 +401,27 @@ export function PostReviewPanel({
       promises.push(supabase.from("social_posts").delete().eq("id", sib.id).select());
     }
 
+    // Build comma-separated page_name from currently selected pages
+    const pagesString = localPages.join(", ");
+
     for (const newPlatform of toAdd) {
-      // Clone from first existing sibling for each page
-      const templateSiblings = toUpdate.length > 0 ? toUpdate : [post];
-      const seenPages = new Set<string>();
-      for (const tmpl of templateSiblings) {
-        const pageKey = tmpl.page_name || "";
-        if (seenPages.has(pageKey)) continue;
-        seenPages.add(pageKey);
-        promises.push(
-          supabase.from("social_posts").insert({
-            user_id: post.user_id,
-            platform: newPlatform as SocialPost["platform"],
-            status: post.status,
-            qa_status: post.qa_status,
-            title: post.title,
-            content: post.content,
-            image_url: post.image_url,
-            scheduled_date: post.scheduled_date,
-            hashtags: post.hashtags,
-            page_name: tmpl.page_name,
-            content_type: post.content_type,
-            neel_approved: post.neel_approved,
-          }).select()
-        );
-      }
+      // Create exactly ONE row per new platform with all pages as metadata
+      promises.push(
+        supabase.from("social_posts").insert({
+          user_id: post.user_id,
+          platform: newPlatform as SocialPost["platform"],
+          status: post.status,
+          qa_status: post.qa_status,
+          title: post.title,
+          content: post.content,
+          image_url: post.image_url,
+          scheduled_date: post.scheduled_date,
+          hashtags: post.hashtags,
+          page_name: pagesString || post.page_name,
+          content_type: post.content_type,
+          neel_approved: post.neel_approved,
+        }).select()
+      );
     }
 
     if (promises.length > 0) {
