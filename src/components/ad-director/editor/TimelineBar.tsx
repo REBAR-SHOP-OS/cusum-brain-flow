@@ -827,6 +827,7 @@ export function TimelineBar({
                     zIndex: isBeingDragged ? 30 : 5,
                   }}
                   onMouseDown={(e) => handleItemDragStart(e, "audio", String(tIdx), leftPct, widthPct)}
+                  onClick={(e) => { e.stopPropagation(); setSelectedAudioIdx(tIdx); }}
                 >
                   <span className="text-[8px] text-white truncate select-none">
                     {track.kind === "voiceover" ? "🎙" : "🎵"} {track.label}
