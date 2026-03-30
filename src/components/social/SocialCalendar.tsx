@@ -163,7 +163,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       if (onToggleSelect) {
                         onToggleSelect(post.id);
                       } else if (onGroupClick) {
-                        onGroupClick(post, [post.page_name].filter(Boolean) as string[]);
+                        onGroupClick(post, post.page_name ? post.page_name.split(", ").filter(Boolean) : []);
                       } else {
                         onPostClick(post);
                       }
