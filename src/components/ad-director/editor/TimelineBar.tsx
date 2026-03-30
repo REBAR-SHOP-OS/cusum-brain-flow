@@ -851,25 +851,6 @@ export function TimelineBar({
               </div>
             )}
 
-            {/* ─── Playhead — rAF-driven ─── */}
-            <div
-              ref={playheadRef}
-              className={`absolute top-0 bottom-0 z-20 ${scrubbing ? 'cursor-grabbing' : 'cursor-grab'}`}
-              style={{ left: `${playheadPct}%`, width: '16px', transform: 'translateX(-7px)', willChange: 'left' }}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                scrubbingRef.current = true;
-                setScrubbing(true);
-              }}
-            >
-              {/* Red playhead line */}
-              <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-red-500 -translate-x-1/2" />
-              {/* Triangle head */}
-              <div className="absolute left-1/2 -translate-x-1/2 -top-0.5" style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '6px solid #ef4444' }} />
-              {/* Bottom indicator */}
-              <div className={`absolute left-1/2 -translate-x-1/2 bottom-0 rounded-full bg-red-500 transition-transform ${scrubbing ? 'w-2 h-2' : 'w-1.5 h-1.5'}`} />
-            </div>
           </div>
         </div>
 
