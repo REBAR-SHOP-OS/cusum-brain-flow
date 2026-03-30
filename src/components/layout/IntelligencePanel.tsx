@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useAuth } from "@/lib/auth";
 import { useAdminChat } from "@/hooks/useAdminChat";
 import { cn } from "@/lib/utils";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
