@@ -106,7 +106,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
 
             <div className="flex justify-end">
               <Button onClick={handleSubmit} disabled={!prompt.trim() || loading}>
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> در حال تولید...</> : "تولید موسیقی"}
+                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : "Generate Music"}
               </Button>
             </div>
           </TabsContent>
