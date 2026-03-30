@@ -85,6 +85,8 @@ function stripPersianBlock(text: string): string {
   if (idx !== -1) t = t.slice(0, idx);
   t = t.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
   t = t.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
+  // Remove any remaining lines with Persian/Arabic script (U+0600–U+06FF)
+  t = t.split("\n").filter(line => !/[\u0600-\u06FF]/.test(line)).join("\n");
   return t.trim();
 }
 
@@ -388,8 +390,17 @@ Return an array of 5 objects:
             user_id: userId,
             platform,
             title: post.title || "Untitled",
-            content: stripPersianBlock(post.content || "") +
-              (post.farsi_translation ? "\n\n" + post.farsi_translation : ""),
+            content: (() => {
+              const cleanContent = stripPersianBlock(post.content || "");
+              let persianBlock = "";
+              if (post.farsi_translation) {
+                const ft = post.farsi_translation.trim();
+                persianBlock = ft.startsWith("---PERSIAN---")
+                  ? "\n\n" + ft
+                  : "\n\n---PERSIAN---\n" + ft;
+              }
+              return cleanContent + persianBlock;
+            })(),
             hashtags: post.hashtags || [],
             image_url: null,
             status: "pending_approval",

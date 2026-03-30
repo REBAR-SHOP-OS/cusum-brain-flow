@@ -227,9 +227,25 @@ export function PostReviewPanel({
       setPersianImageText(imgMatch?.[1]?.trim() || pBlock);
       setPersianCaptionText(capMatch?.[1]?.trim() || "");
     } else {
-      setLocalContent(rawC);
-      setPersianImageText("");
-      setPersianCaptionText("");
+      // No separator found — still strip any Persian markers or lines as safety net
+      let cleaned = rawC;
+      const persianMarker = cleaned.match(/🖼️\s*متن روی عکس:([\s\S]*?)(?=📝|$)/);
+      const captionMarker = cleaned.match(/📝\s*ترجمه کپشن:([\s\S]*?)$/);
+      if (persianMarker) {
+        setPersianImageText(persianMarker[1]?.trim() || "");
+        cleaned = cleaned.replace(persianMarker[0], "");
+      } else {
+        setPersianImageText("");
+      }
+      if (captionMarker) {
+        setPersianCaptionText(captionMarker[1]?.trim() || "");
+        cleaned = cleaned.replace(captionMarker[0], "");
+      } else {
+        setPersianCaptionText("");
+      }
+      // Strip any remaining lines with Persian/Arabic characters
+      cleaned = cleaned.split("\n").filter(l => !/[\u0600-\u06FF]/.test(l)).join("\n");
+      setLocalContent(cleaned.trim());
     }
     setLocalHashtags(post.hashtags?.join(", ") || "");
     setSaveStatus("idle");
