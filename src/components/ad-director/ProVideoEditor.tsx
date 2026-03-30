@@ -468,6 +468,10 @@ export function ProVideoEditor({
   const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
+  // ─── Resize overlay state ───
+  const [resizingOverlay, setResizingOverlay] = useState<{ id: string; handle: string } | null>(null);
+  const resizeStart = useRef<{ mouseX: number; mouseY: number; w: number; h: number; x: number; y: number }>({ mouseX: 0, mouseY: 0, w: 0, h: 0, x: 0, y: 0 });
+
   const handleUploadAudio = useCallback(() => {
     audioUploadRef.current?.click();
   }, []);
@@ -1539,14 +1543,36 @@ export function ProVideoEditor({
           {/* Video / Static Card */}
           <div ref={videoContainerRef} className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9" }}
             onMouseMove={(e) => {
-              if (!draggingOverlayId || !videoContainerRef.current) return;
+              if (!videoContainerRef.current) return;
               const rect = videoContainerRef.current.getBoundingClientRect();
+              // ─── Resize logic ───
+              if (resizingOverlay) {
+                const dxPct = ((e.clientX - resizeStart.current.mouseX) / rect.width) * 100;
+                const dyPct = ((e.clientY - resizeStart.current.mouseY) / rect.height) * 100;
+                const { handle } = resizingOverlay;
+                let newW = resizeStart.current.w;
+                let newH = resizeStart.current.h;
+                let newX = resizeStart.current.x;
+                let newY = resizeStart.current.y;
+                if (handle.includes("e")) newW = resizeStart.current.w + dxPct;
+                if (handle.includes("w")) { newW = resizeStart.current.w - dxPct; newX = resizeStart.current.x + dxPct; }
+                if (handle.includes("s")) newH = resizeStart.current.h + dyPct;
+                if (handle.includes("n")) { newH = resizeStart.current.h - dyPct; newY = resizeStart.current.y + dyPct; }
+                newW = Math.max(5, Math.min(90, newW));
+                newH = Math.max(5, Math.min(90, newH));
+                newX = Math.max(0, Math.min(95, newX));
+                newY = Math.max(0, Math.min(95, newY));
+                setOverlays(prev => prev.map(o => o.id === resizingOverlay.id ? { ...o, size: { w: newW, h: newH }, position: { x: newX, y: newY } } : o));
+                return;
+              }
+              // ─── Drag logic ───
+              if (!draggingOverlayId) return;
               const x = ((e.clientX - rect.left) / rect.width) * 100 - dragOffset.current.x;
               const y = ((e.clientY - rect.top) / rect.height) * 100 - dragOffset.current.y;
               setOverlays(prev => prev.map(o => o.id === draggingOverlayId ? { ...o, position: { x: Math.max(0, Math.min(90, x)), y: Math.max(0, Math.min(90, y)) } } : o));
             }}
-            onMouseUp={() => setDraggingOverlayId(null)}
-            onMouseLeave={() => setDraggingOverlayId(null)}
+            onMouseUp={() => { setDraggingOverlayId(null); setResizingOverlay(null); }}
+            onMouseLeave={() => { setDraggingOverlayId(null); setResizingOverlay(null); }}
           >
             {videoSrc ? (
               <>
@@ -1622,7 +1648,31 @@ export function ProVideoEditor({
                     }}
                   >
                     {(ov.kind === "logo" || ov.kind === "image") ? (
-                      <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain pointer-events-none" />
+                      <div className="relative group">
+                        <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain pointer-events-none" />
+                        {/* Resize handles */}
+                        {["nw","ne","sw","se"].map(handle => (
+                          <div
+                            key={handle}
+                            className={`absolute w-2.5 h-2.5 bg-white border-2 border-primary rounded-sm opacity-0 group-hover:opacity-100 transition-opacity ${resizingOverlay?.id === ov.id ? "opacity-100" : ""}`}
+                            style={{
+                              top: handle.includes("n") ? -5 : "auto",
+                              bottom: handle.includes("s") ? -5 : "auto",
+                              left: handle.includes("w") ? -5 : "auto",
+                              right: handle.includes("e") ? -5 : "auto",
+                              cursor: (handle === "nw" || handle === "se") ? "nwse-resize" : "nesw-resize",
+                              zIndex: 30,
+                              pointerEvents: "auto",
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: ov.size.w, h: ov.size.h, x: ov.position.x, y: ov.position.y };
+                              setResizingOverlay({ id: ov.id, handle });
+                            }}
+                          />
+                        ))}
+                      </div>
                     ) : (
                       <div className="flex justify-center">
                         <span className="text-white font-semibold text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] bg-black/50 backdrop-blur-md px-4 py-2 rounded-md text-center leading-relaxed pointer-events-none" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
