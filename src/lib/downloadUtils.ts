@@ -96,3 +96,14 @@ function triggerBlobDownload(blob: Blob, filename: string) {
   document.body.removeChild(a);
   URL.revokeObjectURL(blobUrl);
 }
+
+function triggerAnchorDownload(url: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
