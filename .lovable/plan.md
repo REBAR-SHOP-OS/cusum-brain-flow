@@ -1,26 +1,28 @@
 
 
-# Map Ref to Reference, Remove Address from Tag
+# Add Company Name and Remark to Ref Section on Rebar Tag
 
-## Problem
-The Ref section currently shows `reference || customer` with the address displayed below it. The user wants the Ref field to map strictly to the `reference` value — no address line.
+## What Changes
 
-## Changes
+The Ref section on the tag will show three lines:
+1. **Ref:** `reference || "—"`
+2. **Company:** `customer || "—"` (from `extract_rows.customer`)
+3. **Remark:** `address || "—"` (repurposing the existing `address` field)
 
-### `src/components/office/RebarTagCard.tsx` (lines 161-168)
-- Remove the `{address && ...}` line that displays the address below the Ref
-- Keep `Ref:` showing `reference || customer || "—"` (or just `reference || "—"` if customer fallback is also unwanted)
+## File Changes
 
-### `src/components/office/RebarTagCard.tsx` (props interface)
-- Remove `address` from `RebarTagCardProps` since it's no longer used
+### `src/components/office/RebarTagCard.tsx`
+- Rename prop `address` to `remark` in `RebarTagCardProps` (or keep `address` internally and label it "Remark" in the UI)
+- Update the Ref section (lines 161-168) to show three compact lines:
+  - `Ref: {reference || "—"}`
+  - `Company: {customer || "—"}`  
+  - `Remark: {address || ""}`  (only shown if non-empty)
+- Reduce text size slightly to fit all three lines in the same space
 
-### `src/pages/PrintTags.tsx` (line 130)
-- Remove the `address` prop passed to `RebarTagCard`
+### `src/pages/PrintTags.tsx`
+- No change needed — already passes `customer` and `address` props
 
-### `src/utils/generateZpl.ts` (line 101)
-- Already maps `reference` correctly — no change needed
-
-## Impact
-- Tag layout becomes cleaner — Ref section shows only the reference value
-- Address fetching logic in PrintTags becomes unused but harmless (can be cleaned up)
+### `src/utils/generateZpl.ts`
+- Add a `customer` field to `ZplRowData` interface
+- Update ZPL output to include `COMPANY:` and `REMARK:` lines alongside `REF:`
 
