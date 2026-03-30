@@ -226,7 +226,14 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs font-medium truncate">{firstPost.title || "Untitled"}</p>
+                    {(() => {
+                      const uniquePages = [...new Set(posts.map(p => p.page_name).filter(Boolean))];
+                      return uniquePages.length > 0 ? (
+                        <p className="text-xs font-medium truncate">{uniquePages.length === 1 ? uniquePages[0] : `${uniquePages.length} pages`}</p>
+                      ) : (
+                        <p className="text-xs font-medium truncate">{platform.charAt(0).toUpperCase() + platform.slice(1)}</p>
+                      );
+                    })()}
                     <div className="flex items-center gap-1 mt-0.5 text-[10px]">
                       {firstPost.scheduled_date && (
                         <span className="text-muted-foreground">{format(parseISO(firstPost.scheduled_date), "h:mm a")}</span>
