@@ -412,7 +412,67 @@ export function TimelineBar({
         )}
       </div>
 
-      {/* Tracks */}
+      {/* ─── Compact card view ─── */}
+      {viewMode === "compact" && (
+        <div className="px-3 py-2 overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
+          <div className="flex items-center gap-2">
+            {storyboard.map((scene, i) => {
+              const clip = clips.find(c => c.sceneId === scene.id);
+              const seg = segments.find(s => s.id === scene.segmentId);
+              const isSelected = i === selectedSceneIndex;
+              const isCompleted = clip?.status === "completed";
+              const isGenerating = clip?.status === "generating";
+              const durSec = seg ? (seg.endTime - seg.startTime).toFixed(0) : "--";
+              const isDropTarget = sceneDropIdx === i && sceneDragIdx !== null && sceneDragIdx !== i;
+
+              return (
+                <div
+                  key={scene.id}
+                  draggable={!!onMoveScene}
+                  onDragStart={(e) => handleSceneDragStart(e, i)}
+                  onDragOver={(e) => handleSceneDragOver(e, i)}
+                  onDrop={(e) => handleSceneDrop(e, i)}
+                  onDragEnd={handleSceneDragEnd}
+                  onClick={() => onSelectScene(i)}
+                  className={`relative flex-shrink-0 w-[120px] h-12 rounded-md overflow-hidden cursor-pointer transition-all
+                    ${isSelected ? "ring-2 ring-primary" : "ring-1 ring-border/40"}
+                    ${sceneDragIdx === i ? "opacity-40" : ""}
+                    ${isDropTarget ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}
+                    ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
+                  `}
+                >
+                  {/* Thumbnail */}
+                  {thumbnails[scene.id]?.[0] ? (
+                    <>
+                      <img src={thumbnails[scene.id][0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                    </>
+                  ) : null}
+                  {/* Duration badge */}
+                  <span className="absolute top-0.5 left-0.5 text-[7px] px-1 py-px rounded-full bg-black/50 text-white font-mono z-10">{durSec}s</span>
+                  {/* Status dot */}
+                  <div className="absolute top-1 right-1 z-10">
+                    <div className={`w-2 h-2 rounded-full ${isCompleted ? "bg-emerald-400" : isGenerating ? "bg-blue-400 animate-pulse" : "bg-muted-foreground/40"}`} />
+                  </div>
+                  {/* Drag handle */}
+                  {onMoveScene && (
+                    <GripVertical className="absolute top-1 left-[calc(50%-5px)] w-2.5 h-2.5 text-white/50 z-10" />
+                  )}
+                  {/* Scene title */}
+                  <div className="absolute bottom-0.5 left-1 right-1 z-10">
+                    <div className="text-[8px] text-white font-medium truncate drop-shadow-sm">
+                      {seg?.label || `Scene ${i + 1}`}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Expanded track view ─── */}
+      {viewMode === "expanded" && (
       <div className="px-3 py-2 space-y-1.5 relative overflow-x-auto" style={{ scrollbarWidth: "thin" }}>
         <div style={{ width: `${100 * zoomLevel}%`, minWidth: "100%" }}>
         {/* ─── Time ruler ─── */}
@@ -455,14 +515,22 @@ export function TimelineBar({
               const isCompleted = clip?.status === "completed";
               const isGenerating = clip?.status === "generating";
               const durSec = seg ? (seg.endTime - seg.startTime).toFixed(0) : "--";
+              const isDropTarget = sceneDropIdx === i && sceneDragIdx !== null && sceneDragIdx !== i;
 
               return (
                 <Popover key={scene.id}>
                   <PopoverTrigger asChild>
                     <div
+                      draggable={!!onMoveScene}
+                      onDragStart={(e) => handleSceneDragStart(e, i)}
+                      onDragOver={(e) => handleSceneDragOver(e, i)}
+                      onDrop={(e) => handleSceneDrop(e, i)}
+                      onDragEnd={handleSceneDragEnd}
                       onClick={(e) => { e.stopPropagation(); onSelectScene(i); }}
                       className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden
                         ${isSelected ? "ring-2 ring-primary ring-inset z-10" : ""}
+                        ${isDropTarget ? "ring-2 ring-primary ring-inset" : ""}
+                        ${sceneDragIdx === i ? "opacity-40" : ""}
                         ${isCompleted ? "bg-emerald-900/40" : isGenerating ? "bg-blue-900/30 animate-pulse" : "bg-muted/30"}
                       `}
                       style={{ flex: dur }}
@@ -505,6 +573,10 @@ export function TimelineBar({
                       <div className="absolute top-0.5 left-0.5 z-10">
                         <span className="text-[7px] px-1 py-px rounded-full bg-black/50 text-white font-mono">{durSec}s</span>
                       </div>
+                      {/* Drop indicator line */}
+                      {isDropTarget && (
+                        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-primary z-30" />
+                      )}
                       {/* Scene info */}
                       <div className="relative z-10 px-1 pb-0.5 w-full">
                         <div className="text-[8px] text-white font-semibold truncate drop-shadow-sm">
@@ -724,7 +796,7 @@ export function TimelineBar({
 
       </div>
       </div>
-    </div>
+      )}
   );
 }
 
