@@ -41,14 +41,14 @@ export function ImageOverlayDialog({ open, onClose, storyboard, selectedSceneInd
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="sm:max-w-xs">
         <DialogHeader>
-          <DialogTitle className="text-sm">افزودن تصویر به ویدئو</DialogTitle>
+          <DialogTitle className="text-sm">Add Image to Video</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 text-center">
           <p className="text-[11px] text-muted-foreground">
-            تصویر روی صحنه {selectedSceneIndex + 1} قرار می‌گیرد. پس از افزودن، آن را با درگ جابجا کنید.
+            Image will be placed on scene {selectedSceneIndex + 1}. Drag to reposition after adding.
           </p>
           <Button variant="outline" size="sm" className="w-full" onClick={() => inputRef.current?.click()}>
-            <ImagePlus className="w-4 h-4 mr-2" /> انتخاب تصویر
+            <ImagePlus className="w-4 h-4 mr-2" /> Select Image
           </Button>
           <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
         </div>

@@ -53,22 +53,22 @@ export function TextVoiceDialog({ open, onClose, onGenerate, generating, initial
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
             <MessageSquareText className="w-4 h-4" />
-            ویرایش متن و صدا
+            Edit Text & Voice
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">متن روی ویدئو و صدای گوینده</label>
+            <label className="text-xs text-muted-foreground">Video text overlay & voiceover</label>
             <Textarea
               value={text}
               onChange={e => setText(e.target.value)}
-              placeholder="متن را وارد کنید..."
+              placeholder="Enter text..."
               className="text-sm min-h-[100px]"
               dir="auto"
             />
           </div>
           <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">صدا</label>
+            <label className="text-xs text-muted-foreground">Voice</label>
             <Select value={voiceId} onValueChange={setVoiceId}>
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue />
@@ -82,7 +82,7 @@ export function TextVoiceDialog({ open, onClose, onGenerate, generating, initial
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs text-muted-foreground">سرعت</label>
+              <label className="text-xs text-muted-foreground">Speed</label>
               <span className="text-xs text-muted-foreground">{speed.toFixed(1)}x</span>
             </div>
             <Slider
@@ -94,14 +94,14 @@ export function TextVoiceDialog({ open, onClose, onGenerate, generating, initial
             />
           </div>
           <p className="text-[10px] text-muted-foreground">
-            متن جدید به‌عنوان زیرنویس روی ویدئو و صدای گوینده تولید می‌شود
+            New text will be added as subtitle and voiceover
           </p>
         </div>
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={generating}>انصراف</Button>
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={generating}>Cancel</Button>
           <Button size="sm" onClick={handleGenerate} disabled={!text.trim() || generating}>
             {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <MessageSquareText className="w-3.5 h-3.5 mr-1" />}
-            {generating ? "در حال تولید..." : "تولید متن و صدا"}
+            {generating ? "Generating..." : "Generate Text & Voice"}
           </Button>
         </DialogFooter>
       </DialogContent>

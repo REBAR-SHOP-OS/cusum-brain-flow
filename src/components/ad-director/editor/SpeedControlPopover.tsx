@@ -30,7 +30,7 @@ export function SpeedControlDialog({ open, onOpenChange, speed, onSpeedChange }:
       <DialogContent className="max-w-xs">
         <DialogHeader>
           <DialogTitle className="text-sm flex items-center gap-2">
-            <Gauge className="w-4 h-4" /> سرعت پخش ویدئو
+            <Gauge className="w-4 h-4" /> Video Playback Speed
           </DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-3 gap-2 py-2">

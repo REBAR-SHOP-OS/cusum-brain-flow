@@ -1605,7 +1605,7 @@ export function ProVideoEditor({
               duration: trackDuration,
             },
           ]);
-          toast({ title: "✅ صدای گوینده بازسازی شد" });
+          toast({ title: "✅ Voiceover regenerated" });
         }
       } catch (err: any) {
         console.warn("Single scene VO regen failed:", err.message);

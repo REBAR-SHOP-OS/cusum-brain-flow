@@ -148,7 +148,7 @@ export function AudioPromptDialog({ open, onOpenChange, onGenerate, onUpload, lo
 
             <div className="flex justify-end">
               <Button onClick={handleUploadSubmit} disabled={!selectedFile || !onUpload}>
-                افزودن به تایم‌لاین
+                Add to Timeline
               </Button>
             </div>
           </TabsContent>

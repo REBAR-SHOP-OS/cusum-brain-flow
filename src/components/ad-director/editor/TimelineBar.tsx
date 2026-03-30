@@ -578,7 +578,7 @@ export function TimelineBar({
                 variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10"
                 onClick={() => onRegenerateScene(storyboard[selectedSceneIndex]?.id)}
                 disabled={clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id)?.status !== "completed"}
-                title="بازسازی کامل (فیلم، صدا، متن)"
+                title="Regenerate All (Video, Audio, Text)"
               >
                 <RefreshCw className="w-3 h-3" />
               </Button>
