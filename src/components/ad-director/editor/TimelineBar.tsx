@@ -157,6 +157,7 @@ export function TimelineBar({
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
   onMoveOverlay, onMoveAudioTrack,
+  onRegenerateAll, isRegeneratingAll,
   isPlaying, onTogglePlay, onFrameStep, onSkipScene,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
