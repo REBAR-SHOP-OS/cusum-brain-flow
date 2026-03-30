@@ -119,7 +119,7 @@ interface TimelineBarProps {
   onRegenerateScene?: (sceneId: string) => void;
   onDeleteScene?: (index: number) => void;
   onTrimScene?: (index: number) => void;
-  onStretchScene?: (index: number) => void;
+  
   onSplitScene?: (index: number) => void;
   onDuplicateScene?: (index: number) => void;
   onMoveScene?: (index: number, dir: -1 | 1) => void;
