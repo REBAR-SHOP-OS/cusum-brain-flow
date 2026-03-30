@@ -2082,7 +2082,7 @@ export function ProVideoEditor({
                   segments={segments}
                   selectedSceneIndex={selectedSceneIndex}
                   onSelectScene={setSelectedSceneIndex}
-                  onRegenerateScene={onRegenerateScene}
+        onRegenerateScene={handleRegenerateFullScene}
                   onUpdateClipUrl={onUpdateClipUrl}
                   onAddSceneWithMedia={onAddSceneWithMedia}
                 />
