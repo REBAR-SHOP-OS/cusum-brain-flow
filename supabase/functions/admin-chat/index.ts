@@ -2625,6 +2625,7 @@ INSTEAD: End with a sharp next action, a proactive insight, or just stop talking
         messages: [{ role: "system", content: systemPrompt }, ...buildMultimodalMessages(messages, imageUrls)],
         tools: JARVIS_TOOLS,
         signal: AbortSignal.timeout(55000),
+        fallback: { provider: "gemini", model: "gemini-2.5-flash" },
       });
     } catch (err: any) {
       console.error("AI fetch failed:", err.name, err.message);
