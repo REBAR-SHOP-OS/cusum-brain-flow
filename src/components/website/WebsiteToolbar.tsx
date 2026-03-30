@@ -1,4 +1,5 @@
-import { Monitor, Tablet, Smartphone, ExternalLink, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { Monitor, Tablet, Smartphone, ExternalLink, RefreshCw, ShieldCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -8,6 +9,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export type DeviceMode = "desktop" | "tablet" | "mobile";
 
