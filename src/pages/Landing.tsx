@@ -166,7 +166,9 @@ export default function Landing() {
               {STATS.map((s) => (
                 <div key={s.label} className="text-center">
                   <div className="text-3xl md:text-4xl font-bold text-primary">
-                    <AnimatedCounter value={s.value} prefix={s.prefix} suffix={s.suffix} decimals={0} />
+                    <LandingSectionBoundary section="AnimatedCounter" fallback={<span>{s.prefix}{s.value}{s.suffix}</span>}>
+                      <AnimatedCounter value={s.value} prefix={s.prefix} suffix={s.suffix} decimals={0} />
+                    </LandingSectionBoundary>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">{s.label}</p>
                 </div>
