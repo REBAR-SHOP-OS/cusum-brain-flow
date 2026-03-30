@@ -9,7 +9,7 @@ import { downloadFile } from "@/lib/downloadUtils";
 import {
   Play, Pause, Volume2, VolumeX, Maximize2,
   Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
-  Music, FileText, Loader2, CalendarClock, Check,
+  Music, FileText, Loader2, CalendarClock, Check, Save,
   SkipBack, SkipForward,
   Palette, Film, LayoutGrid, X,
   Mic, Captions, Gauge, MessageSquareText,
