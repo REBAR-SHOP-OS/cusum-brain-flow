@@ -181,6 +181,20 @@ export function lengthUnitLabelByMode(mode: LengthDisplayMode): string {
   }
 }
 
+// ─── Session Unit → Display Normalization ───────────────────
+/**
+ * Maps the 4-mode session unit (mm, in, ft, imperial) to the 2-mode
+ * display system (metric | imperial) used by tags/print components.
+ *
+ * After applyMapping, ALL values in DB are stored as mm regardless of
+ * source unit. The only display question is: show mm as-is ("metric")
+ * or convert mm → ft-in for display ("imperial").
+ */
+export function sessionUnitToDisplay(sessionUnit: string | null | undefined): UnitSystem {
+  if (sessionUnit === "imperial") return "imperial";
+  return "metric"; // mm, in, ft, or unknown → show raw mm
+}
+
 // ─── Hook: read company's unit_system ───────────────────────
 export function useUnitSystem(): UnitSystem {
   const { user } = useAuth();

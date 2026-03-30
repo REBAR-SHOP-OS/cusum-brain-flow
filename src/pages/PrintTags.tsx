@@ -12,7 +12,7 @@ import { sessionUnitToDisplay } from "@/lib/unitSystem";
 export default function PrintTags() {
   const [params] = useSearchParams();
   const sessionId = params.get("sessionId");
-  const unitSystem = params.get("unit") || "metric";
+  const unitSystem = sessionUnitToDisplay(params.get("unit"));
   const sortMode = params.get("sort") || "standard";
 
   const { rows, loading } = useExtractRows(sessionId);

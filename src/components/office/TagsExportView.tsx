@@ -494,7 +494,7 @@ export function TagsExportView() {
                     address={row.address || (selectedSession as any)?.site_address || projectAddress || ""}
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
-                    unitSystem={(selectedSession as any)?.unit_system || "metric"}
+                    unitSystem={sessionUnitToDisplay((selectedSession as any)?.unit_system)}
                   />
                 );
               })
