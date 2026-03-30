@@ -983,7 +983,7 @@ export function TimelineBar({
         </button>
         {/* Skip forward */}
         <button
-          onClick={() => onSkipScene?.(1) || onSeek(totalDuration)}
+          onClick={() => { if (onSkipScene) onSkipScene(1); else onSeek(totalDuration); }}
           className="text-zinc-500 hover:text-white transition-colors"
           title="Skip forward"
         >
