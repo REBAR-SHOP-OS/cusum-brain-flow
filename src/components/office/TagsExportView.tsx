@@ -112,7 +112,7 @@ export function TagsExportView() {
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
           return r[key] != null ? formatDim(Number(r[key]), us) : "";
         }),
-        weight, picture, r.customer || "", r.reference || "", r.address || "",
+        weight, picture, r.customer || "", r.reference || "", r.address || (selectedSession as any)?.site_address || "",
       ].join(",");
     });
     const csv = [headers.join(","), ...csvRows].join("\n");
@@ -474,7 +474,7 @@ export function TagsExportView() {
                     item={row.row_index}
                     customer={row.customer || ""}
                     reference={row.reference || ""}
-                    address={row.address || ""}
+                    address={row.address || (selectedSession as any)?.site_address || ""}
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
                     unitSystem={(selectedSession as any)?.unit_system || "metric"}
