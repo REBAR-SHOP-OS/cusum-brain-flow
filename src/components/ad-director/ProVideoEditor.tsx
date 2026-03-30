@@ -1486,7 +1486,7 @@ export function ProVideoEditor({
             kind: "music" as const,
             globalStartTime: 0,
           });
-          toast({ title: "🎵 موسیقی ساخته شد" });
+          toast({ title: "🎵 Music generated" });
         } else {
           console.warn("Music generation failed:", musicResponse.status);
           toast({ title: "⚠ موسیقی ساخته نشد", description: "ادامه بدون موسیقی", variant: "destructive" });
