@@ -1,57 +1,57 @@
 
 
-# Fix: Click on Video Track Moves Playhead to Click Position
+# Fix: Text Overlay Drag Position & Click-to-Edit
 
-## Problem
-Clicking on the video track scenes calls `onSelectScene(i)` with `e.stopPropagation()`, which prevents the parent `handleTrackClick` from firing. The playhead never moves to where the user clicks. Text and Audio track rows also lack click-to-seek behavior.
+## Problems
+1. **Drag snaps to wrong position**: When dropping a purple text bar, `handleMoveOverlay` converts global time to scene-local time and clamps within scene boundaries. If the overlay's duration exceeds the remaining scene time, it gets pushed back.
+2. **Click-to-edit conflict**: `onMouseDown` (drag) and `onClick` (edit) are on the same element. Because `e.preventDefault()` is called in `handleItemDragStart`, the `onClick` may not fire reliably after a drag attempt. Need to distinguish click (no movement) from drag (movement).
 
-## Solution (1 file)
+## Solution (2 files)
 
-### `src/components/ad-director/editor/TimelineBar.tsx`
+### File 1: `src/components/ad-director/editor/TimelineBar.tsx`
 
-**1. Scene click — also seek playhead (line 713)**
-Change the scene `onClick` to both select the scene AND seek the playhead to the click position:
+**Distinguish click vs drag**: In `onUp` handler, check if `dx` is small (< 3px). If so, treat as click — call `onEditOverlay` for text items instead of moving. Only call `onMoveOverlay` when actual drag occurred.
+
 ```typescript
-onClick={(e) => {
-  e.stopPropagation();
-  onSelectScene(i);
-  // Also move playhead to click position
-  if (trackRef.current) {
-    const rect = trackRef.current.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
-    const timeSec = pct * totalDuration;
-    onSeek(Math.max(0, Math.min(totalDuration, timeSec)));
-  }
-}}
+// In onUp (line 308):
+const dx = e.clientX - itemDragRef.current.startX;
+const isClick = Math.abs(dx) < 3;
+
+if (isClick && itemDragRef.current.type === "text") {
+  // Find overlay and trigger edit
+  const ov = textOverlays.find(o => o.id === itemDragRef.current!.id);
+  if (ov) onEditOverlay?.(ov);
+} else if (itemDragRef.current.type === "text") {
+  // actual drag — move overlay
+  ...
+}
 ```
 
-**2. Text overlay track — add click-to-seek (line 863)**
-Add `onClick={handleTrackClick}` to the text track container `div`. Update existing text bar click to also seek.
+### File 2: `src/components/ad-director/ProVideoEditor.tsx`
 
-**3. Audio track — add click-to-seek (line 912)**
-The audio container already has `onClick={() => setSelectedAudioIdx(null)}`. Change it to also seek:
-```typescript
-onClick={(e) => {
-  setSelectedAudioIdx(null);
-  handleTrackClick(e);
-}}
-```
+**Fix `handleMoveOverlay` clamping**: The current logic clamps `startTime` within the target scene's duration minus the overlay duration. This prevents placing at the end of a scene. Change to use the global absolute time directly and compute scene-relative start/end correctly, allowing the overlay to span or be placed at any position within the scene.
 
-**4. Update `handleTrackClick` to work with any track row (line 384)**
-Currently it uses `trackRef.current` (video track). Change it to use the event target's parent container or accept the element from `e.currentTarget`:
 ```typescript
-const handleTrackClick = (e: React.MouseEvent) => {
-  const rect = (trackRef.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
-  // account for the 14-unit label offset
-  const pct = (e.clientX - rect.left) / rect.width;
-  const timeSec = pct * totalDuration;
-  onSeek(Math.max(0, Math.min(totalDuration, timeSec)));
-};
+// In handleMoveOverlay (line 1402):
+const handleMoveOverlay = useCallback((id: string, newSceneId: string, startTime?: number) => {
+  setOverlays(prev => prev.map(o => {
+    if (o.id !== id) return o;
+    const newSceneIdx = storyboard.findIndex(s => s.id === newSceneId);
+    const seg = newSceneIdx >= 0 ? segments.find(s => s.id === storyboard[newSceneIdx]?.segmentId) : null;
+    const newDur = seg ? seg.endTime - seg.startTime : 4;
+    if (startTime != null) {
+      const itemDuration = (o.endTime != null && o.startTime != null) ? (o.endTime - o.startTime) : 3;
+      // Allow placing anywhere, just clamp so start >= 0
+      const clampedStart = Math.max(0, startTime);
+      return { ...o, sceneId: newSceneId, startTime: clampedStart, endTime: clampedStart + itemDuration };
+    }
+    return { ...o, sceneId: newSceneId };
+  }));
+}, [storyboard, segments]);
 ```
-Remove the `snapToSceneBoundary` call from `handleTrackClick` so the playhead goes exactly where clicked (snap is still used during scrubbing).
 
 ## Result
-- Click anywhere on video, text, or audio track → playhead jumps to that exact position
-- Scene selection still works alongside playhead movement
-- No snapping on click — precise positioning
+- Dragging a purple text bar and releasing places it exactly where dropped
+- Single-clicking a purple text bar opens the edit dialog
+- Text overlays apply to the video at their new timeline position
 
