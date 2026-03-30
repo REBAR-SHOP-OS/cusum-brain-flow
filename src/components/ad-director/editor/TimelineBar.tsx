@@ -382,12 +382,10 @@ export function TimelineBar({
   const playheadPct = totalDuration > 0 ? (globalTime / totalDuration) * 100 : 0;
 
   const handleTrackClick = (e: React.MouseEvent) => {
-    if (!trackRef.current) return;
-    const rect = trackRef.current.getBoundingClientRect();
+    const rect = (trackRef.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
     const timeSec = pct * totalDuration;
-    const snapped = snapToSceneBoundary(timeSec, totalDuration, cumulativeStarts, storyboard, segments);
-    onSeek(Math.max(0, Math.min(totalDuration, snapped.time)));
+    onSeek(Math.max(0, Math.min(totalDuration, timeSec)));
   };
 
   const getSceneDur = (i: number) => {
