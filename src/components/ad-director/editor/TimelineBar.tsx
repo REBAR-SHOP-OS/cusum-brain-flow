@@ -336,6 +336,39 @@ export function TimelineBar({
     return seg ? seg.endTime - seg.startTime : 4;
   };
 
+  // ─── Scene drag-to-reorder handlers ───
+  const handleSceneDragStart = useCallback((e: React.DragEvent, idx: number) => {
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", String(idx));
+    setSceneDragIdx(idx);
+  }, []);
+
+  const handleSceneDragOver = useCallback((e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setSceneDropIdx(idx);
+  }, []);
+
+  const handleSceneDrop = useCallback((e: React.DragEvent, dropIdx: number) => {
+    e.preventDefault();
+    const fromIdx = sceneDragIdx;
+    setSceneDragIdx(null);
+    setSceneDropIdx(null);
+    if (fromIdx === null || fromIdx === dropIdx || !onMoveScene) return;
+    // Move one step at a time to reach the target
+    const dir = dropIdx > fromIdx ? 1 : -1;
+    let current = fromIdx;
+    while (current !== dropIdx) {
+      onMoveScene(current, dir as -1 | 1);
+      current += dir;
+    }
+  }, [sceneDragIdx, onMoveScene]);
+
+  const handleSceneDragEnd = useCallback(() => {
+    setSceneDragIdx(null);
+    setSceneDropIdx(null);
+  }, []);
+
   return (
     <div className="border-t border-border/40 bg-card/80 backdrop-blur-sm">
       {/* Toolbar */}
