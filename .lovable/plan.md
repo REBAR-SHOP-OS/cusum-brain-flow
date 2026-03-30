@@ -1,30 +1,37 @@
 
 
-# Add Audio Upload to Audio Prompt Dialog
+# Add Resize Handles to Image/Logo Overlays on Video Canvas
 
 ## Problem
-The Audio Prompt Dialog only supports AI-generated audio. Users need to manually upload audio/music files too. Additionally, uploaded or generated audio should properly overlay onto the video (this already works via `audioTracks` state — generated audio is added at line 302).
+When dragging image overlays on the video canvas, users can only move them — there's no way to resize. The user wants resize handles (corners/edges) so they can make images bigger or smaller directly on the canvas.
 
 ## Changes
 
-### 1. `src/components/ad-director/editor/AudioPromptDialog.tsx`
-- Add a third tab/mode: "upload" alongside "music" and "voiceover"
-- Add file input (`<input type="file" accept="audio/*">`) for drag-and-drop or click-to-upload
-- When a file is selected, create a blob URL and pass it back via a new `onUpload` callback
-- Show audio preview player after file selection
-- Update the `AudioPromptResult` type to include an optional `audioFile` field, or add a separate `onUpload` callback prop
+### File: `src/components/ad-director/ProVideoEditor.tsx`
 
-### 2. `src/components/ad-director/ProVideoEditor.tsx`
-- Add `onUpload` handler that receives the uploaded audio file
-- Create blob URL from the file and add it to `audioTracks` (same pattern as generated audio at line 302)
-- Pass the handler to `AudioPromptDialog`
+**1. Add resize state tracking**
+- New state: `resizingOverlay: { id: string, handle: string } | null`
+- New ref: `resizeStart` to track initial mouse position and initial overlay size
 
-## Technical Details
-- Upload uses native `<input type="file" accept="audio/*">` — no backend needed
-- Uploaded audio gets the same treatment as generated audio: added to `audioTracks` array with `kind: "music"` or `kind: "voiceover"`
-- The existing `mergeVideoAudio` and timeline playback already handle audio tracks, so uploaded audio will automatically play over the video
+**2. Add resize handles to image/logo overlays (lines 1602-1633)**
+- When an overlay is of kind `"logo"` or `"image"`, render 4 corner resize handles (small squares at corners)
+- Each handle triggers `onMouseDown` that sets `resizingOverlay` state instead of `draggingOverlayId`
+- Handles: `nw`, `ne`, `sw`, `se` (northwest, northeast, southwest, southeast)
+
+**3. Update mouse move handler (lines 1541-1547)**
+- If `resizingOverlay` is set, calculate delta from start position and update overlay `size.w` and `size.h` (percentage-based)
+- For corner handles, adjust both width and height proportionally
+- Clamp values to reasonable min (5%) and max (90%)
+- For `nw`/`ne` handles, also adjust position to keep opposite corner anchored
+
+**4. Update mouse up/leave handlers (lines 1548-1549)**
+- Clear `resizingOverlay` state alongside `draggingOverlayId`
+
+**5. Visual styling for resize handles**
+- Small white squares (8x8px) with border at each corner
+- Only visible on hover or when overlay is selected/being dragged
+- `cursor: nwse-resize` / `nesw-resize` depending on corner
 
 ## Files Changed
-- `src/components/ad-director/editor/AudioPromptDialog.tsx` — add upload tab with file input and preview
-- `src/components/ad-director/ProVideoEditor.tsx` — add upload handler, pass to dialog
+- `src/components/ad-director/ProVideoEditor.tsx` — add resize handles and resize logic to overlay rendering
 
