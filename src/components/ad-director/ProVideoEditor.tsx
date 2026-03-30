@@ -316,6 +316,18 @@ export function ProVideoEditor({
     }
   }, [toast]);
 
+  const handleAudioUpload = useCallback((result: AudioUploadResult) => {
+    const audioUrl = URL.createObjectURL(result.file);
+    setAudioTracks(prev => [...prev, {
+      sceneId: "uploaded",
+      label: result.kind === "music" ? `🎵 ${result.file.name}` : `🎙️ ${result.file.name}`,
+      audioUrl,
+      kind: result.kind,
+    }]);
+    setAudioPromptOpen(false);
+    toast({ title: "✅ فایل صوتی اضافه شد" });
+  }, [toast]);
+
   const handleGenerateVoiceover = useCallback(async (result: VoiceoverResult) => {
     setGeneratingVoiceover(true);
     try {
