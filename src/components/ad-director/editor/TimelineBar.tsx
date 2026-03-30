@@ -320,10 +320,12 @@ export function TimelineBar({
       const dx = e.clientX - itemDragRef.current.startX;
       const isClick = Math.abs(dx) < 3;
 
+      if (!isClick) {
+        textDraggedRef.current = true;
+      }
+
       if (isClick && itemDragRef.current.type === "text") {
-        // Click — open edit dialog
-        const ov = textOverlays.find(o => o.id === itemDragRef.current!.id);
-        if (ov) onEditOverlay?.(ov);
+        // Single click on text — no action (double-click opens editor)
       } else if (isClick && itemDragRef.current.type === "audio") {
         // Click on audio — just deselect
       } else {
