@@ -1838,6 +1838,7 @@ export function ProVideoEditor({
         open={audioPromptOpen}
         onOpenChange={setAudioPromptOpen}
         onGenerate={handleGenerateAudio}
+        onUpload={handleAudioUpload}
         loading={generatingAudio}
       />
 
