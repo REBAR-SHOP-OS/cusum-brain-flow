@@ -177,17 +177,14 @@ export default function SocialMediaManager() {
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleting(true);
 
-    // Filter out protected posts as a safety net
-    const deletableIds = [...selectedPostIds].filter((id) => !isProtectedPost(id));
-
-    for (const id of deletableIds) {
+    for (const id of selectedPostIds) {
       await deletePost.mutateAsync(id);
     }
 
     setBulkDeleting(false);
     setShowDeleteConfirm(false);
     exitSelectionMode();
-  }, [selectedPostIds, deletePost, exitSelectionMode, isProtectedPost]);
+  }, [selectedPostIds, deletePost, exitSelectionMode]);
 
   const weekPosts = useMemo(() => {
     const wEnd = addDays(weekStart, 7);
