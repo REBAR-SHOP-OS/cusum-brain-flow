@@ -760,10 +760,14 @@ export function ProVideoEditor({
     }
   }, [storyboard, history.length]);
 
+  const [hasChanges, setHasChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const pushHistory = useCallback((snapshot: StoryboardScene[]) => {
     const idx = historyIndexRef.current;
     setHistory(prev => [...prev.slice(0, idx + 1), snapshot]);
     setHistoryIndex(idx + 1);
+    setHasChanges(true);
   }, []);
 
   const undo = () => {
