@@ -527,7 +527,12 @@ export default function AgentWorkspace() {
       let rawCaption = post.caption || "";
       // 1. Extract Persian translation block (preserve for DB, strip from English cleaning)
       const persianIdx = rawCaption.indexOf("---PERSIAN---");
-      const persianBlock = persianIdx !== -1 ? rawCaption.slice(persianIdx) : "";
+      let persianBlock = "";
+      if (persianIdx !== -1) {
+        persianBlock = rawCaption.slice(persianIdx);
+      } else if (post.imageTextTranslation || post.captionTranslation) {
+        persianBlock = "---PERSIAN---\n🖼️ متن روی عکس: " + (post.imageTextTranslation || "") + "\n📝 ترجمه کپشن: " + (post.captionTranslation || "");
+      }
       if (persianIdx !== -1) rawCaption = rawCaption.slice(0, persianIdx);
       // Also remove fallback Persian markers from English portion
       rawCaption = rawCaption.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
