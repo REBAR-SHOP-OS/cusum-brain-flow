@@ -1020,7 +1020,7 @@ export function ProVideoEditor({
 
       toast({ title: "✂️ Scene trimmed", description: `New duration: ${newDuration.toFixed(1)}s` });
     } catch (err: any) {
-      toast({ title: "خطا در برش", description: err.message || "برش ویدئو با خطا مواجه شد", variant: "destructive" });
+      toast({ title: "Trim failed", description: err.message || "Video trimming error", variant: "destructive" });
     } finally {
       setIsTrimming(false);
     }
