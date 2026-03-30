@@ -2195,7 +2195,7 @@ export function AIExtractView() {
                               {edit ? (
                                 <div className="flex items-center gap-1">
                                   <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
-                                  <span className="text-[9px] text-muted-foreground whitespace-nowrap">mm</span>
+                                  <span className="text-[9px] text-muted-foreground whitespace-nowrap">{lengthUnitLabelByMode(displayUnit as LengthDisplayMode)}</span>
                                 </div>
                               ) : (row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, displayUnit as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—")}
                             </TableCell>
