@@ -28,8 +28,6 @@ const STATUS_LABELS: Record<string, string> = {
   publishing: "Publishing 🔄",
   failed: "Failed ❌",
 };
-
-function statusSummary(posts: SocialPost[]): { dominant: string; label: string } {
   const counts: Record<string, number> = {};
   for (const p of posts) {
     counts[p.status] = (counts[p.status] || 0) + 1;
