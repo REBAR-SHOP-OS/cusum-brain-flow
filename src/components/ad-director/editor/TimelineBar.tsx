@@ -81,6 +81,8 @@ export interface AudioTrackItem {
   volume?: number; // 0-1, default 1
   startTime?: number; // seconds within the scene
   endTime?: number;   // seconds within the scene
+  globalStartTime?: number; // absolute seconds in timeline (overrides scene-relative positioning)
+  duration?: number; // track duration in seconds
 }
 
 interface SidebarTab {
@@ -260,15 +262,16 @@ export function TimelineBar({
       // Calculate new center position in time
       const newLeftPct = Math.max(0, Math.min(100, itemDragRef.current.origLeftPct + deltaPct));
       const newTimeSec = (newLeftPct / 100) * totalDuration;
-      const { sceneIdx, localTime } = findSceneAtTime(newTimeSec);
-      const targetSceneId = storyboard[sceneIdx]?.id;
 
-      if (targetSceneId) {
-        if (itemDragRef.current.type === "text") {
+      if (itemDragRef.current.type === "text") {
+        const { sceneIdx, localTime } = findSceneAtTime(newTimeSec);
+        const targetSceneId = storyboard[sceneIdx]?.id;
+        if (targetSceneId) {
           onMoveOverlay?.(itemDragRef.current.id, targetSceneId, localTime);
-        } else {
-          onMoveAudioTrack?.(parseInt(itemDragRef.current.id), targetSceneId, localTime);
         }
+      } else {
+        // Audio: pass absolute time directly for global positioning
+        onMoveAudioTrack?.(parseInt(itemDragRef.current.id), "", newTimeSec);
       }
 
       itemDragRef.current = null;
@@ -800,21 +803,28 @@ export function TimelineBar({
           </span>
           <div className="flex-1 h-5 relative rounded bg-muted/20 overflow-hidden" onClick={() => setSelectedAudioIdx(null)}>
             {audioTracks.map((track, tIdx) => {
-              const idx = storyboard.findIndex(s => s.id === track.sceneId);
               let leftPct: number;
               let widthPct: number;
-              if (idx < 0) {
-                leftPct = 0;
-                widthPct = 100;
+              if (track.globalStartTime != null && totalDuration > 0) {
+                // Global absolute positioning
+                const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
+                leftPct = (track.globalStartTime / totalDuration) * 100;
+                widthPct = (trackDur / totalDuration) * 100;
               } else {
-                const sceneStart = cumulativeStarts[idx] || 0;
-                const sceneDur = getSceneDur(idx);
-                const itemStart = track.startTime ?? 0;
-                const itemEnd = track.endTime ?? sceneDur;
-                const absStart = sceneStart + itemStart;
-                const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-                leftPct = (absStart / totalDuration) * 100;
-                widthPct = ((absEnd - absStart) / totalDuration) * 100;
+                const idx = storyboard.findIndex(s => s.id === track.sceneId);
+                if (idx < 0) {
+                  leftPct = 0;
+                  widthPct = 100;
+                } else {
+                  const sceneStart = cumulativeStarts[idx] || 0;
+                  const sceneDur = getSceneDur(idx);
+                  const itemStart = track.startTime ?? 0;
+                  const itemEnd = track.endTime ?? sceneDur;
+                  const absStart = sceneStart + itemStart;
+                  const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
+                  leftPct = (absStart / totalDuration) * 100;
+                  widthPct = ((absEnd - absStart) / totalDuration) * 100;
+                }
               }
               const itemId = `audio-${tIdx}`;
               const isBeingDragged = draggedItemId === itemId;
