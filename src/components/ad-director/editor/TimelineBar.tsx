@@ -399,7 +399,7 @@ export function TimelineBar({
         {selectedSceneIndex >= 0 && (
           <div className="flex items-center gap-0.5 ml-2 pl-2 border-l border-border/20">
             {onTrimScene && (
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onTrimScene(selectedSceneIndex)} title="Trim (-1s)">
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => onTrimScene(selectedSceneIndex)} title="Split at playhead">
                 <Scissors className="w-3 h-3" />
               </Button>
             )}
