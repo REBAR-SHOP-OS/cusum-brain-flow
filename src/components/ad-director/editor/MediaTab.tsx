@@ -57,10 +57,15 @@ export function MediaTab({ storyboard, clips, segments, selectedSceneIndex, onSe
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !scene) return;
+    if (!file) return;
     const url = URL.createObjectURL(file);
-    onUpdateClipUrl?.(scene.id, url);
-    toast({ title: "Media replaced", description: file.name });
+    if (onAddSceneWithMedia) {
+      onAddSceneWithMedia(url, file.name);
+      toast({ title: "Media added", description: `New scene created from ${file.name}` });
+    } else if (scene) {
+      onUpdateClipUrl?.(scene.id, url);
+      toast({ title: "Media replaced", description: file.name });
+    }
     e.target.value = "";
   };
 
