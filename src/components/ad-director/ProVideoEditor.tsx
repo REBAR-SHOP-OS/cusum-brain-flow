@@ -1507,7 +1507,58 @@ export function ProVideoEditor({
     }
   };
 
-  // ─── Regenerate a single scene fully (video + voiceover + text) ───
+  // ─── Generate background music only ───
+  const generateBackgroundMusic = async () => {
+    setGeneratingMusic(true);
+    try {
+      // Remove existing music tracks
+      setAudioTracks(prev => prev.filter(t => t.kind !== "music"));
+
+      const allTexts = segments.map(s => s.text).filter(Boolean).join(". ");
+      const musicPrompt = `Cinematic instrumental advertising background music for: ${allTexts.slice(0, 300)}`;
+      const totalDuration = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
+
+      toast({ title: "🎵 Generating music..." });
+
+      const musicResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lyria-music`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ prompt: musicPrompt, duration: Math.min(totalDuration, 60) }),
+        }
+      );
+
+      if (!musicResponse.ok) {
+        throw new Error(`Music generation failed: ${musicResponse.status}`);
+      }
+
+      const musicBlob = await musicResponse.blob();
+      const musicUrl = URL.createObjectURL(musicBlob);
+      setMusicUrl(musicUrl);
+
+      setAudioTracks(prev => [...prev.filter(t => t.kind !== "music"), {
+        sceneId: "",
+        label: "🎵 Background Music",
+        audioUrl: musicUrl,
+        kind: "music" as const,
+        globalStartTime: 0,
+      }]);
+
+      toast({ title: "🎵 Music generated" });
+    } catch (err: any) {
+      console.error("Music generation error:", err);
+      toast({ title: "Music generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingMusic(false);
+    }
+  };
+
+
   const handleRegenerateFullScene = async (sceneId: string) => {
     const scene = storyboard.find(s => s.id === sceneId);
     if (!scene) return;
