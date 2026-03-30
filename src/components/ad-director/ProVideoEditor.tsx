@@ -1930,6 +1930,8 @@ export function ProVideoEditor({
         onMoveOverlay={handleMoveOverlay}
         onMoveAudioTrack={handleMoveAudioTrack}
         onEditOverlay={(ov) => setEditingOverlay(ov)}
+        onRegenerateAll={generateAllVoiceovers}
+        isRegeneratingAll={generatingVoiceovers}
         isPlaying={isPlaying}
         onTogglePlay={togglePlay}
         onFrameStep={(dir) => {
