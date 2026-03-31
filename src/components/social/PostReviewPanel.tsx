@@ -384,9 +384,7 @@ export function PostReviewPanel({
   const platformMap: Record<string, string> = {
     facebook: "facebook",
     instagram: "instagram",
-    instagram_fb: "instagram",
     linkedin: "linkedin",
-    linkedin_org: "linkedin",
     youtube: "youtube",
     tiktok: "tiktok",
   };
