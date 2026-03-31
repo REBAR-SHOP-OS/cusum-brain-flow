@@ -79,7 +79,9 @@ export default function SocialMediaManager() {
       s.platform === selectedPost.platform &&
       (day ? s.scheduled_date?.substring(0, 10) === day : s.id === selectedPost.id)
     );
-    return [...new Set(siblings.flatMap(s => s.page_name ? s.page_name.split(", ").filter(Boolean) : []))] as string[];
+    const allPages = [...new Set(siblings.flatMap(s => s.page_name ? s.page_name.split(", ").filter(Boolean) : []))] as string[];
+    const validSet = new Set((PLATFORM_PAGES[selectedPost.platform] || []).map(o => o.value));
+    return allPages.filter(p => validSet.has(p));
   }, [selectedPost, posts]);
   const setSelectedPost = useCallback((post: SocialPost | null) => {
     setSelectedPostId(post?.id ?? null);

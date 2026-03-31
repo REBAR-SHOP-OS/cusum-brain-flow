@@ -208,11 +208,14 @@ export function PostReviewPanel({
     if (!post) return;
     // Only use the clicked post's own platform — no sibling aggregation
     setLocalPlatforms([post.platform]);
-    if (groupPages && groupPages.length > 0) {
-      setLocalPages(groupPages);
-    } else {
-      setLocalPages(post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
-    }
+    const rawPages = (groupPages && groupPages.length > 0)
+      ? groupPages
+      : (post.page_name ? post.page_name.split(", ").filter(Boolean) : ["Ontario Steel Detailing"]);
+    const validPagesForPlatform = new Set(
+      (PLATFORM_PAGES[post.platform] || []).map(o => o.value)
+    );
+    const filtered = rawPages.filter(p => validPagesForPlatform.has(p));
+    setLocalPages(filtered.length > 0 ? filtered : rawPages);
     setLocalContentType(post.content_type || "post");
     // Sync text fields from post data — strip Persian block from editable content
     setLocalTitle(post.title || "");
