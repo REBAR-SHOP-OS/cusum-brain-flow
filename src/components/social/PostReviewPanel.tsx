@@ -49,9 +49,7 @@ const CONTENT_TYPE_OPTIONS: SelectionOption[] = [
 const PLATFORM_OPTIONS: SelectionOption[] = [
   { value: "facebook", label: "Facebook", description: "Facebook" },
   { value: "instagram", label: "Instagram", description: "Instagram" },
-  { value: "instagram_fb", label: "Instagram (FB Pages)", description: "Instagram (FB Pages)" },
   { value: "linkedin", label: "LinkedIn", description: "LinkedIn" },
-  { value: "linkedin_org", label: "LinkedIn (Organization)", description: "LinkedIn (Organization)" },
   { value: "youtube", label: "YouTube", description: "Only single video posts supported" },
   { value: "tiktok", label: "TikTok", description: "Only single video posts supported" },
 ];
@@ -184,7 +182,7 @@ export function PostReviewPanel({
   // Check Facebook publish_ready status
   useEffect(() => {
     if (!post) return;
-    const hasFb = localPlatforms.some(p => p === "facebook" || p === "instagram" || p === "instagram_fb");
+    const hasFb = localPlatforms.some(p => p === "facebook" || p === "instagram");
     if (!hasFb) { setFbPublishReady(null); return; }
 
     supabase
@@ -386,9 +384,7 @@ export function PostReviewPanel({
   const platformMap: Record<string, string> = {
     facebook: "facebook",
     instagram: "instagram",
-    instagram_fb: "instagram",
     linkedin: "linkedin",
-    linkedin_org: "linkedin",
     youtube: "youtube",
     tiktok: "tiktok",
   };
