@@ -1,77 +1,75 @@
 
 
-# Generate system-rebuild-blueprint-v2.md — Final Clean Specification
+# Plan: Generate Final Production-Ready System Specification
 
-## What
-Convert the existing v2 blueprint into a FINAL, CLEAN, PRODUCTION-READY specification document with zero duplication, zero narrative, and pure execution-ready SQL/JSON/code.
+## Scope
+Generate `/mnt/documents/system-rebuild-blueprint-v2.md` covering:
+- **193+ edge functions** — full API contracts
+- **40+ realtime channels** — table subscriptions and payload structures
+- **7 external integrations** — QuickBooks, Gmail, RingCentral, Meta/Facebook, LinkedIn, WordPress, ElevenLabs
+- **Validation matrix** — all functions cross-referenced
 
-## Data Confirmed
-- **274 tables** with full column schemas (name, type, nullable, defaults)
-- **780 RLS policies** with full SQL conditions (qual + with_check)
-- **283 database functions** with full CREATE OR REPLACE definitions
-- **~80 triggers** with timing, event, and function mappings
-- **~500 indexes** with full CREATE INDEX statements
-- **1 enum**: `app_role` (admin, sales, accounting, office, workshop, field, shop_supervisor, customer)
-- **9 extensions**: pg_cron, pg_graphql, pg_net, pg_stat_statements, pgcrypto, uuid-ossp, vector, supabase_vault
-- **10 views**: contacts_safe, events, profiles_safe, user_meta_tokens_safe, v_communications_enriched, v_customer_company_map, v_customers_clean, v_deliveries_enriched, v_leads_enriched, v_orders_enriched
-- **193 edge functions** with auth modes and handler options
-- **21 agent prompts** — full system prompt text extracted
-- **Key functions**: has_role, has_any_role, get_user_company_id, handle_new_user, auto_advance_item_phase, block_delivery_without_qc, block_approved_without_price
-- **requestHandler.ts** — full wrapper pattern with authMode, requireCompany, wrapResult, rawResponse, parseBody options
-- **aiRouter.ts** — dual-provider GPT/Gemini with circuit breaker, policy router, shadow logging
+## Data Confirmed (from exploration)
 
-## Output Structure
-A single Python script generates `/mnt/documents/system-rebuild-blueprint-v2.md` with these sections ONLY:
+### Edge Functions (193 total)
+All functions use the shared `handleRequest` wrapper with these config options:
+- `authMode`: "required" (default) | "optional" | "none"
+- `requireCompany`: boolean (default true)
+- `wrapResult`: boolean (default true — wraps in `{ok, data}`)
+- `rawResponse`: boolean (for streaming/binary responses)
+- `parseBody`: boolean (for FormData/multipart)
+- `requireRole` / `requireAnyRole`: role-based access
 
-### 1. DATABASE (FULL DDL)
-- Extensions
-- Enum definitions
-- CREATE TABLE for all 274 tables (columns, types, defaults, nullable, PKs)
-- Foreign keys, unique constraints
-- All indexes
-- All triggers with function references
+### Realtime Tables (from migrations)
+Tables with `ALTER PUBLICATION supabase_realtime ADD TABLE`:
+notifications, inventory_reservations, cut_output_batches, inventory_lots, team_meetings, bend_batches, bundles, machines, machine_runs, cut_plan_items, pickup_orders, clearance_evidence, cut_plans, alert_escalation_queue, call_tasks, vizzy_memory, automation_runs, automation_configs, tasks, communications, events, sales_quotation_items, sales_invoice_items, sales_leads, lead_activities, machine_capabilities, meeting_transcript_entries, leads, social_posts, and more.
 
-### 2. DATABASE FUNCTIONS
-- All 283 functions with full CREATE OR REPLACE SQL
+### Client-Side Channels (from src/hooks)
+39 files with `.channel()` calls covering: station data, bundles, waste bank, time clock, pickup orders, notifications, unread senders, barlists, penny queue, extract sessions, meeting transcription, social approvals, team chat, bender batches, purchasing list, clearance data, cut plans, inventory, deliveries, orders, and more.
 
-### 3. RLS POLICIES
-- ALTER TABLE ... ENABLE ROW LEVEL SECURITY for every table
-- All 780 policies with full SQL (cmd, qual, with_check, roles)
+### Integrations
+- **QuickBooks**: OAuth2 (client_id/secret), HMAC-SHA256 webhook verification, token refresh, realm_id scoping
+- **Gmail**: OAuth2 per-user tokens (user_gmail_tokens), pub/sub watch, encrypted refresh tokens
+- **RingCentral**: OAuth2 dual-app (frontend embeddable + backend), JWT migration, SIP provisioning
+- **Meta/Facebook**: Graph API v21.0, page token refresh, Instagram container publishing
+- **LinkedIn**: OAuth2 for page publishing via social-publish
+- **WordPress**: WP REST API + WooCommerce API via WPClient helper
+- **ElevenLabs**: API key auth for TTS, music, scribe, conversation tokens
 
-### 4. VIEWS
-- All 10 view definitions
-
-### 5. EDGE FUNCTIONS (API CONTRACTS)
-- All 193 functions grouped by domain
-- Route, method, auth mode, handler options
-- Request/response schemas where determinable from code
-
-### 6. AGENT SYSTEM
-- All 21 agents with full system prompts (exact text from code)
-- Tool definitions per agent
-
-### 7. AI ROUTER
-- Provider config, fallback logic, circuit breaker rules, policy router
-
-### 8. INTEGRATIONS
-- QuickBooks, RingCentral, Gmail, Meta/Facebook, LinkedIn, ElevenLabs, WordPress
-- Auth flows, sync patterns
-
-### 9. STATE MACHINES / WORKFLOWS
-- Order lifecycle, lead pipeline stages, delivery states, production phases
-- Trigger-enforced transitions
-
-### 10. REALTIME
-- Tables with realtime enabled, channel patterns
+### Agent System (21 agents)
+Prompt files in: sales.ts, accounting.ts, operations.ts, support.ts, marketing.ts, growth.ts, specialists.ts, empire.ts, purchasing.ts
 
 ## Approach
-- Python script using psql queries to dump full DDL inline
-- All agent prompts embedded verbatim from source files
-- Edge function metadata compiled from directory listing + index.ts patterns
-- Document split into parts if > 1MB
-- Zero narrative, zero duplication, zero "best practice" language
+
+A Python script will:
+
+1. **Query the live database** via `psql` for:
+   - All realtime publication tables
+   - Function source code for triggers referenced by realtime tables
+
+2. **Read all 193 edge function `index.ts` files** to extract:
+   - Handler options (authMode, requireCompany, wrapResult, rawResponse)
+   - Zod schemas (request validation)
+   - Response shapes
+   - Side effects (DB writes, external API calls)
+   - Error responses (status codes + bodies)
+
+3. **Read all 9 agent prompt files** for verbatim system prompts
+
+4. **Read all 39 realtime hook files** for channel patterns and event handling
+
+5. **Compile into structured Markdown** with the exact format specified:
+   - Section 1: Every edge function with route, method, auth, request/response schemas, errors, side effects
+   - Section 2: Every realtime channel with source table, events, payload, RLS behavior
+   - Section 3: Every integration with trigger, request/response, auth, retry logic
+   - Section 4: Validation matrix table
+
+## Output
+- File: `/mnt/documents/system-rebuild-blueprint-v2.md`
+- Estimated size: 800KB-1.2MB
+- Format: Pure structured Markdown, zero narrative
 
 ## Impact
-- 0 codebase files changed
-- 1 comprehensive specification artifact generated
+- 0 codebase files modified
+- 1 artifact generated
 
