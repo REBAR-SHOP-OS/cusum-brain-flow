@@ -702,6 +702,7 @@ export function AIExtractView() {
     setInvoiceDate(session.invoice_date || "");
     const restoredUnit = session.unit_system || "mm";
     setSelectedUnitSystem(restoredUnit);
+    setDisplayUnit(restoredUnit);
     confirmedUnitRef.current = restoredUnit;
     // Lock restored unit so sync effect doesn't overwrite with stale value
     userSetUnitRef.current = true;
@@ -738,6 +739,7 @@ export function AIExtractView() {
     setShowMergedRows(false);
     setMappingConfirmed(false);
     setSelectedUnitSystem("mm");
+    setDisplayUnit("mm");
     userSetUnitRef.current = false;
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
