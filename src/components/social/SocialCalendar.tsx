@@ -274,6 +274,10 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         ? "bg-muted/30 border-dashed border-muted-foreground/30"
                         : status === "declined"
                         ? "bg-destructive/5 border-destructive/30"
+                        : status === "failed"
+                        ? "bg-red-500/10 border-red-500/40"
+                        : status === "publishing"
+                        ? "bg-blue-500/10 border-blue-500/30"
                         : "bg-muted/50 border-border"
                     )}
                   >
