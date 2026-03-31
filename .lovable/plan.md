@@ -1,60 +1,68 @@
 
 
-# Fix: Prevent Duplicate Publishing via Stale Lock Recovery
+# Fix: Facebook "Invalid parameter" Error for Video Posts
 
 ## Root Cause
 
-The duplicate publish happens through this exact sequence:
+The `publishToFacebook()` function in both `social-publish/index.ts` and `social-cron-publish/index.ts` only handles **text** and **photo** posts. When a video URL (e.g., `.mp4`) is passed, it sends it to `/{pageId}/photos` — Facebook's Photos API rejects video files with "Invalid parameter".
+
+Instagram's `publishToInstagram()` already has proper video detection (URL extension check + HEAD request content-type check), but the Facebook function was never updated to handle videos.
 
 ```text
-1. Manual "Publish Now" → acquirePublishLock → status = "publishing"
-2. Edge function times out (video polling takes too long for 5 pages)
-3. Post stays in "publishing" for >10 minutes
-4. Cron runs → recoverStaleLocks() resets post to "scheduled"  ← THE BUG
-5. Same cron run queries scheduled posts → finds this post → publishes AGAIN
-6. Result: video posted TWICE to Instagram
+CURRENT (broken):
+  publishToFacebook(pageId, token, message, videoUrl)
+    → POST /{pageId}/photos  { url: videoUrl }  ← INVALID for video
+    → Facebook returns: "Invalid parameter"
+
+FIXED:
+  publishToFacebook(pageId, token, message, videoUrl, contentType)
+    → Detect video (extension + HEAD content-type)
+    → POST /{pageId}/videos  { file_url: videoUrl, description: message }
+    → Facebook processes video → success
 ```
 
-The critical flaw is in `supabase/functions/_shared/publishLock.ts` — `recoverStaleLocks()` resets stale posts to `"scheduled"`, which makes them eligible for immediate re-publishing by the cron job.
+## Changes
 
-## Fix
+### File 1: `supabase/functions/social-publish/index.ts`
 
-### File: `supabase/functions/_shared/publishLock.ts` — `recoverStaleLocks()`
-
-Change the recovery status from `"scheduled"` to `"failed"` with an error message. This prevents automatic re-publishing and requires manual review.
+**1a.** Update `publishToFacebook` signature to accept `contentType` parameter, add video detection logic (same pattern as Instagram), and route to `/{pageId}/videos` for video content:
 
 ```typescript
-// BEFORE (dangerous):
-status: "scheduled"
-
-// AFTER (safe):
-status: "failed",
-last_error: "Publishing timed out — recovered from stale lock. Review before retrying.",
-qa_status: "needs_review"
+async function publishToFacebook(
+  pageId: string, accessToken: string, message: string, 
+  imageUrl?: string, contentType: string = "post"
+): Promise<{ id?: string; error?: string }> {
+  // Detect video by URL extension + HEAD content-type
+  let isVideo = false;
+  if (imageUrl) {
+    isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
+    if (!isVideo) {
+      try {
+        const head = await fetch(imageUrl, { method: "HEAD" });
+        const ct = head.headers.get("content-type") || "";
+        isVideo = ct.startsWith("video/");
+      } catch { /* ignore */ }
+    }
+  }
+  // Route to correct endpoint
+  if (imageUrl && isVideo) → /{pageId}/videos  (file_url + description)
+  else if (imageUrl)       → /{pageId}/photos  (url + message)  
+  else                     → /{pageId}/feed    (message only)
+}
 ```
 
-Apply this change to both update calls in `recoverStaleLocks()` (the main stale check and the legacy fallback).
-
-### File: `supabase/functions/social-cron-publish/index.ts`
-
-Add a safety guard: after `recoverStaleLocks()` runs, the recovered post IDs should be excluded from the subsequent scheduled posts query. This is a defense-in-depth measure in case the status update hasn't propagated.
-
+**1b.** Update the call site (line 344) to pass `content_type`:
 ```typescript
-// After recoverStaleLocks:
-const recoveredSet = new Set(recovered);
-
-// When processing duePosts, skip any that were just recovered:
-const safePosts = (duePosts || []).filter(p => !recoveredSet.has(p.id));
+result = await publishToFacebook(pageId, pageAccessToken, message, image_url, content_type);
 ```
 
-### Immediate fix for post `21b929c0`
+### File 2: `supabase/functions/social-cron-publish/index.ts`
 
-This post is currently stuck in `status=publishing` with a stale lock. It will be recovered to "failed" on the next cron run after deployment.
+Apply the identical changes to its `publishToFacebook` function (lines 502-527) and the call site (line 375), passing `post.content_type`.
 
 ## Impact
-- 2 files changed (`publishLock.ts`, `social-cron-publish/index.ts`)
-- Stale locks now recover to "failed" instead of "scheduled" — no automatic re-publishing
-- Defense-in-depth: cron excludes just-recovered posts from its publish batch
-- No database schema changes
-- No frontend changes
+- 2 files changed (`social-publish/index.ts`, `social-cron-publish/index.ts`)
+- Facebook videos now publish correctly via the `/videos` endpoint
+- Photo and text-only posts remain unchanged
+- No database or frontend changes
 
