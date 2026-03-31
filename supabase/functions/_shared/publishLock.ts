@@ -106,9 +106,11 @@ export async function recoverStaleLocks(
   const { data: stale } = await supabase
     .from("social_posts")
     .update({
-      status: "scheduled",
+      status: "failed",
       publishing_lock_id: null,
       publishing_started_at: null,
+      last_error: "Publishing timed out — recovered from stale lock. Review before retrying.",
+      qa_status: "needs_review",
     })
     .eq("status", "publishing")
     .lt("publishing_started_at", cutoff)
@@ -118,9 +120,11 @@ export async function recoverStaleLocks(
   const { data: staleLegacy } = await supabase
     .from("social_posts")
     .update({
-      status: "scheduled",
+      status: "failed",
       publishing_lock_id: null,
       publishing_started_at: null,
+      last_error: "Publishing timed out — recovered from stale lock (legacy). Review before retrying.",
+      qa_status: "needs_review",
     })
     .eq("status", "publishing")
     .is("publishing_started_at", null)
