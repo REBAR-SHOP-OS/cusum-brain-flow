@@ -1,44 +1,77 @@
 
 
-# Plan: Generate system-rebuild-blueprint-v2.md
+# Generate system-rebuild-blueprint-v2.md — Final Clean Specification
 
 ## What
-Generate a comprehensive v2 blueprint document by extending the existing v1 with 10 additional deep-technical layers, using all data gathered from the live codebase and database.
+Convert the existing v2 blueprint into a FINAL, CLEAN, PRODUCTION-READY specification document with zero duplication, zero narrative, and pure execution-ready SQL/JSON/code.
 
-## Data Gathered
-- **284 tables** — full column definitions (name, type, nullable, defaults) from `security--get_table_schema`
-- **780 RLS policies** — full SQL conditions from `pg_policies`
-- **~500 indexes** — full CREATE INDEX statements from `pg_indexes`
-- **~80 triggers** — table-to-function mappings from `pg_trigger`
-- **~50 database functions** — full SQL source (has_role, has_any_role, get_user_company_id, all trigger functions, scoring, DM creation, rate limiting, etc.)
+## Data Confirmed
+- **274 tables** with full column schemas (name, type, nullable, defaults)
+- **780 RLS policies** with full SQL conditions (qual + with_check)
+- **283 database functions** with full CREATE OR REPLACE definitions
+- **~80 triggers** with timing, event, and function mappings
+- **~500 indexes** with full CREATE INDEX statements
 - **1 enum**: `app_role` (admin, sales, accounting, office, workshop, field, shop_supervisor, customer)
-- **193 edge functions** — full directory listing with auth modes from index.ts files
-- **9 agent prompt files** — sales (Blitz), accounting (Penny), operations (Forge), and 6 more
-- **AI Router** — dual-provider GPT/Gemini with circuit breaker, policy router, shadow logging
-- **Views**: v_customers_clean, v_customer_company_map, v_communications_enriched, v_deliveries_enriched, v_leads_enriched, v_orders_enriched, contacts_safe, profiles_safe, user_meta_tokens_safe, events
+- **9 extensions**: pg_cron, pg_graphql, pg_net, pg_stat_statements, pgcrypto, uuid-ossp, vector, supabase_vault
+- **10 views**: contacts_safe, events, profiles_safe, user_meta_tokens_safe, v_communications_enriched, v_customer_company_map, v_customers_clean, v_deliveries_enriched, v_leads_enriched, v_orders_enriched
+- **193 edge functions** with auth modes and handler options
+- **21 agent prompts** — full system prompt text extracted
+- **Key functions**: has_role, has_any_role, get_user_company_id, handle_new_user, auto_advance_item_phase, block_delivery_without_qc, block_approved_without_price
+- **requestHandler.ts** — full wrapper pattern with authMode, requireCompany, wrapResult, rawResponse, parseBody options
+- **aiRouter.ts** — dual-provider GPT/Gemini with circuit breaker, policy router, shadow logging
 
-## Output
-A single Python script will generate `/mnt/documents/system-rebuild-blueprint-v2.md` containing all 30 original sections PLUS the 10 new deep-technical sections:
+## Output Structure
+A single Python script generates `/mnt/documents/system-rebuild-blueprint-v2.md` with these sections ONLY:
 
-### New Sections Added
-1. **Full Database DDL** — CREATE TABLE for all 284 tables, all columns with types/defaults/nullability, PKs, FKs, indexes, unique constraints, enum definitions, trigger functions (full SQL), RLS policies (full SQL), helper functions (has_role, has_any_role, get_user_company_id)
-2. **Complete API Spec** — All 193 edge functions grouped by domain, with method, auth mode, request/response schemas, side effects
-3. **Agent System Full Prompt Layer** — All 21 agents with full system prompts, role definitions, tool usage rules, escalation protocols
-4. **Business Logic Zero Ambiguity** — Trigger-enforced rules (block_approved_without_price, block_delivery_without_qc, auto_advance_item_phase, etc.) as deterministic if/else logic
-5. **Data Models Full Field Level** — Every entity field with type, meaning, example value
-6. **Sample Data** — Realistic records for leads, customers, work_orders, quotes, machine_runs, notifications
-7. **UI → Data Binding** — Pages mapped to tables and edge functions they call
-8. **State + Event Flow** — Action → trigger → side-effect chains
-9. **Integration Contracts** — QuickBooks, RingCentral, Gmail, Meta, ElevenLabs auth methods and sync logic
-10. **All Generic Language Removed** — No "best practice", "typically", "may", "could"
+### 1. DATABASE (FULL DDL)
+- Extensions
+- Enum definitions
+- CREATE TABLE for all 274 tables (columns, types, defaults, nullable, PKs)
+- Foreign keys, unique constraints
+- All indexes
+- All triggers with function references
 
-### Approach
-- Python script writes the markdown programmatically using all gathered data
-- The document will be split into logical parts if it exceeds reasonable size
-- Every table, function, trigger, policy, and edge function is included with actual SQL/code
-- Estimated output: 500KB-1MB of structured Markdown
+### 2. DATABASE FUNCTIONS
+- All 283 functions with full CREATE OR REPLACE SQL
 
-### Impact
+### 3. RLS POLICIES
+- ALTER TABLE ... ENABLE ROW LEVEL SECURITY for every table
+- All 780 policies with full SQL (cmd, qual, with_check, roles)
+
+### 4. VIEWS
+- All 10 view definitions
+
+### 5. EDGE FUNCTIONS (API CONTRACTS)
+- All 193 functions grouped by domain
+- Route, method, auth mode, handler options
+- Request/response schemas where determinable from code
+
+### 6. AGENT SYSTEM
+- All 21 agents with full system prompts (exact text from code)
+- Tool definitions per agent
+
+### 7. AI ROUTER
+- Provider config, fallback logic, circuit breaker rules, policy router
+
+### 8. INTEGRATIONS
+- QuickBooks, RingCentral, Gmail, Meta/Facebook, LinkedIn, ElevenLabs, WordPress
+- Auth flows, sync patterns
+
+### 9. STATE MACHINES / WORKFLOWS
+- Order lifecycle, lead pipeline stages, delivery states, production phases
+- Trigger-enforced transitions
+
+### 10. REALTIME
+- Tables with realtime enabled, channel patterns
+
+## Approach
+- Python script using psql queries to dump full DDL inline
+- All agent prompts embedded verbatim from source files
+- Edge function metadata compiled from directory listing + index.ts patterns
+- Document split into parts if > 1MB
+- Zero narrative, zero duplication, zero "best practice" language
+
+## Impact
 - 0 codebase files changed
-- 1 comprehensive artifact generated at `/mnt/documents/system-rebuild-blueprint-v2.md`
+- 1 comprehensive specification artifact generated
 
