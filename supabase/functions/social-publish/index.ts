@@ -197,11 +197,16 @@ Deno.serve((req) =>
       const publishedIgIds = new Set<string>();
 
       for (const targetPageName of targetPages) {
-        let selectedPage = pages[0];
-        if (targetPageName) {
-          const matched = pages.find((p) => p.name === targetPageName);
-          if (matched) selectedPage = matched;
-          else console.warn(`[social-publish] Page "${targetPageName}" not found among [${pages.map(p => p.name).join(", ")}]. Falling back to first page.`);
+        if (!targetPageName) {
+          console.warn(`[social-publish] SKIP — empty page name, no fallback`);
+          pageErrors.push("Empty page name — skipped");
+          continue;
+        }
+        const selectedPage = pages.find((p) => p.name === targetPageName);
+        if (!selectedPage) {
+          console.warn(`[social-publish] SKIP — page "${targetPageName}" not found among [${pages.map(p => p.name).join(", ")}]. Will NOT fall back.`);
+          pageErrors.push(`Page "${targetPageName}": not found in connected pages — skipped`);
+          continue;
         }
         const pageId = selectedPage.id;
 
@@ -273,7 +278,12 @@ Deno.serve((req) =>
             pageErrors.push(`Page "${targetPageName}": No Instagram Business Account found`);
             continue;
           }
-          const selectedIg = igAccounts.find((ig) => ig.pageId === pageId) || igAccounts[0];
+          const selectedIg = igAccounts.find((ig) => ig.pageId === pageId);
+          if (!selectedIg) {
+            console.warn(`[social-publish] SKIP — no IG account linked to FB page ${pageId} ("${targetPageName}")`);
+            pageErrors.push(`Page "${targetPageName}": no linked Instagram account — skipped`);
+            continue;
+          }
           if (publishedIgIds.has(selectedIg.id)) {
             console.log(`[social-publish] Skipping page "${targetPageName}" — IG account ${selectedIg.id} already published`);
             pageSuccesses.push(targetPageName);

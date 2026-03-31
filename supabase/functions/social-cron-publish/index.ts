@@ -275,14 +275,16 @@ Deno.serve((req) =>
 
               for (const targetPageName of targetPages) {
                 // Find matching page from token data
-                let selectedPage = pages[0] as { id: string; name?: string };
-                if (targetPageName) {
-                  const matched = pages.find((p: { id: string; name?: string }) => p.name === targetPageName);
-                  if (matched) {
-                    selectedPage = matched;
-                  } else {
-                    console.warn(`[social-cron-publish] Page "${targetPageName}" not found in token pages [${pages.map(p => p.name).join(", ")}], using first page`);
-                  }
+                if (!targetPageName) {
+                  console.warn(`[social-cron-publish] SKIP — empty page name, no fallback`);
+                  pageErrors.push("Empty page name — skipped");
+                  continue;
+                }
+                const selectedPage = pages.find((p: { id: string; name?: string }) => p.name === targetPageName);
+                if (!selectedPage) {
+                  console.warn(`[social-cron-publish] SKIP — page "${targetPageName}" not found in token pages [${pages.map(p => p.name).join(", ")}]. Will NOT fall back.`);
+                  pageErrors.push(`Page "${targetPageName}": not found in connected pages — skipped`);
+                  continue;
                 }
                 const pageId = selectedPage.id;
 
@@ -365,7 +367,12 @@ Deno.serve((req) =>
                     pageErrors.push(`Page "${targetPageName}": No Instagram Business Account found`);
                     continue;
                   }
-                  const matchedIg = igAccounts.find(ig => ig.pageId === pageId) || igAccounts[0];
+                  const matchedIg = igAccounts.find(ig => ig.pageId === pageId);
+                  if (!matchedIg) {
+                    console.warn(`[social-cron-publish] SKIP — no IG account linked to FB page ${pageId} ("${targetPageName}")`);
+                    pageErrors.push(`Page "${targetPageName}": no linked Instagram account — skipped`);
+                    continue;
+                  }
                   if (publishedIgIds.has(matchedIg.id)) {
                     console.log(`[social-cron-publish] Skipping page "${targetPageName}" — IG account ${matchedIg.id} already published`);
                     pageSuccesses.push(targetPageName);
