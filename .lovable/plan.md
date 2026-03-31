@@ -1,42 +1,68 @@
 
 
-# Fix LENGTH Column Unit Display
+# Fix: Extraction Succeeds But UI Shows "No Rows Found"
 
-## Analysis Summary
+## Root Cause
 
-After thorough investigation, there is **no hardcoded "mm" suffix on bar_size** anywhere in the codebase. The SIZE column correctly displays raw values like "20M", "10M" from the database.
+When `runExtract()` throws (due to HTTP timeout: `connection closed before message completed`), the **catch block overwrites the session status to "error"** (line 493-498). However, the edge function continues processing in the background and successfully inserts all 160 rows, then sets the session back to "extracted".
 
-The confirmed issue is the **LENGTH column header** showing "(mm)" when the source data may actually be in different units (e.g., inches). Two related problems:
+The problem: `useExtractRows` only fetches rows when `sessionId` changes. After the HTTP error, `sessionId` stays the same, so no re-fetch happens. The realtime subscription for rows may miss inserts that occurred during the timeout window. The 2-second retry also fails because rows aren't inserted yet at that point.
 
-### Problem 1: `loadSession()` doesn't sync `displayUnit`
-When loading a session from history (line 696-715), `loadSession()` sets `selectedUnitSystem` but **does not set `displayUnit`**. This means `displayUnit` stays at its default "mm" even if the session was saved with `unit_system = "in"`.
+**Result**: Session shows "extracted" (step 3), but `rows` array is empty → "No extracted rows found."
 
-### Problem 2: No automatic unit validation
-If the user selects "Millimeters" as source but the data is actually in inches (e.g., 78 inches = 1981mm), the system stores 78 as-is and shows "LENGTH (mm)" — which is misleading.
-
-## Fix
+## Fix (2 changes in 1 file)
 
 ### File: `src/components/office/AIExtractView.tsx`
 
-**Fix 1** — In `loadSession()` (around line 703), add `setDisplayUnit(restoredUnit)`:
+**Fix 1 — Don't overwrite status to "error" if extraction already succeeded**
+
+In the catch block (line 492-500), before setting status to "error", check if the session has already transitioned to "extracted" in the background:
 
 ```typescript
-const restoredUnit = session.unit_system || "mm";
-setSelectedUnitSystem(restoredUnit);
-setDisplayUnit(restoredUnit);   // ← ADD THIS LINE
-confirmedUnitRef.current = restoredUnit;
+} catch (err: any) {
+  // Only revert to error if the edge function hasn't already succeeded
+  if (activeSessionId) {
+    const { data: currentSession } = await supabase
+      .from("extract_sessions")
+      .select("status")
+      .eq("id", activeSessionId)
+      .maybeSingle();
+    
+    if (!currentSession || (currentSession as any).status !== "extracted") {
+      await supabase
+        .from("extract_sessions")
+        .update({ status: "error", error_message: err.message || "Extraction failed" } as any)
+        .eq("id", activeSessionId);
+    }
+    await refreshSessions();
+    await refreshRows();  // ← Force row refresh in case rows were inserted
+  }
+  toast({ title: "Extraction failed", description: err.message, variant: "destructive" });
+}
 ```
 
-This ensures that when navigating to a previously saved session with `unit_system = "in"`, the display toggle and LENGTH header correctly show "in" instead of defaulting to "mm".
+**Fix 2 — Re-fetch rows when session status transitions to "extracted"**
 
-**Fix 2** — In `startNew()` (around line 717), reset `displayUnit` as well:
+Add an effect that watches `activeSession?.status` and triggers a row refresh when it becomes "extracted":
 
 ```typescript
-setDisplayUnit("mm");  // ← ADD THIS LINE (reset on new session)
+// After the existing useEffect for unit sync (around line 258)
+useEffect(() => {
+  if (activeSession?.status === "extracted" && rows.length === 0 && !rowsLoading) {
+    refreshRows();
+  }
+}, [activeSession?.status]);
 ```
+
+This ensures that if realtime updates the session to "extracted" after an HTTP timeout, the rows are re-fetched.
+
+### Same fix for retry blocks (lines 1547-1554 and ~1647)
+
+Apply the same "check before overwriting status" pattern to the retry catch blocks.
 
 ## Impact
-- Single file change (`AIExtractView.tsx`), 2 lines added
+- 1 file changed (`AIExtractView.tsx`)
 - No database, edge function, or schema changes
-- The display unit toggle (mm/in/ft/ft-in) already works correctly when clicked manually — this fix just ensures it initializes correctly from the saved session
+- Prevents the race condition where a successful extraction is incorrectly marked as "error"
+- Adds automatic row recovery when session reaches "extracted" state
 
