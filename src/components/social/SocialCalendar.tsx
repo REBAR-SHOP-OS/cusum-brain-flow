@@ -245,11 +245,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs font-medium truncate">
-                      {post.page_name
-                        ? `Pages (${post.page_name.split(", ").filter(Boolean).length})`
-                        : (platform.charAt(0).toUpperCase() + platform.slice(1))}
-                    </p>
+                    <PageStatusDropdown post={post} platform={platform} />
                     <div className="flex items-center gap-1 mt-0.5 text-[10px]">
                       {post.scheduled_date && (
                         <span className="text-muted-foreground">{format(parseISO(post.scheduled_date), "h:mm a")}</span>

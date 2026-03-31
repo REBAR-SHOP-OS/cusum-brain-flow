@@ -31,6 +31,7 @@ export interface SocialPost {
   neel_approved: boolean;
   // Decline
   decline_reason: string | null;
+  last_error: string | null;
 }
 
 export type SocialPostInsert = Omit<SocialPost, "id" | "created_at" | "updated_at">;
