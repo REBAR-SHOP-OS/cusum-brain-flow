@@ -344,6 +344,13 @@ Deno.serve((req) =>
                     console.warn(`[social-cron-publish] Permission check failed for page "${targetPageName}", proceeding:`, permErr);
                   }
 
+                  if (publishedFbPageIds.has(pageId)) {
+                    console.log(`[social-cron-publish] Skipping page "${targetPageName}" — FB page ${pageId} already published`);
+                    pageSuccesses.push(targetPageName);
+                    continue;
+                  }
+                  publishedFbPageIds.add(pageId);
+
                   publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
 
                   // Image fallback: retry text-only if image publish failed
