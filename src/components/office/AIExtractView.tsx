@@ -739,6 +739,7 @@ export function AIExtractView() {
     setShowMergedRows(false);
     setMappingConfirmed(false);
     setSelectedUnitSystem("mm");
+    setDisplayUnit("mm");
     userSetUnitRef.current = false;
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
