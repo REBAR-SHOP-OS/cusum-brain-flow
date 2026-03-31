@@ -561,7 +561,7 @@ async function publishToInstagram(
     console.log(`[cron-IG] Container created: ${containerId}`);
 
     // Poll for ready — videos need much longer
-    const maxPolls = isVideo ? 30 : 10;
+    const maxPolls = isVideo ? 30 : 20;
     const pollInterval = isVideo ? 3000 : 2000;
     for (let i = 0; i < maxPolls; i++) {
       await new Promise((r) => setTimeout(r, pollInterval));
