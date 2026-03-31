@@ -1,32 +1,57 @@
 
 
-# Add Per-Page Publishing Status Dropdown to Post Cards
+# Fix: Per-Page Green/Red Status Icons in Post Cards
 
 ## Problem
-When a post fails on one specific page (e.g., "rebar.shop_on"), the card just shows "Failed" with no way to see which page(s) succeeded or failed.
+When a post fails, all page icons show as neutral gray circles instead of green (success) or red (failed). The current parsing logic only marks a page as failed if it's explicitly mentioned in `last_error` — but many errors don't include per-page details.
 
 ## Solution
-Add a collapsible/expandable chevron icon next to the "Pages (N)" label on post cards in `SocialCalendar.tsx`. When expanded, it shows each page name with a success/fail indicator parsed from `last_error`.
+Update `parsePageStatuses` in `SocialCalendar.tsx` to use correct defaults:
 
-## Changes
+- **`published`** status → all pages green ✅ (already works)
+- **`failed`** with NO "Partial" prefix → all pages red ❌ (full failure)
+- **`failed`** with "Partial" prefix → pages mentioned in error = red, others = green
+- **`scheduled` / `draft` / `pending_approval`** → neutral gray circles
 
-### 1. `src/hooks/useSocialPosts.ts`
-- Add `last_error: string | null` to the `SocialPost` interface
+### File: `src/components/social/SocialCalendar.tsx`
 
-### 2. `src/components/social/SocialCalendar.tsx`
-- Import `ChevronDown` icon and `Collapsible` components
-- On the post card, wrap "Pages (N)" in a collapsible trigger with a small chevron icon
-- The collapsible content shows each page from `page_name` (split by ", ") as a row
-- For failed/partial posts: parse `last_error` string to match page names and mark them red; others show green
-- For published posts: all pages show green checkmarks
-- For scheduled/draft: just list page names neutrally
-- Click on the chevron stops event propagation (doesn't open the post review panel)
+Update `parsePageStatuses` function (lines 17-32):
 
-### Parsing Logic
-The `last_error` field stores errors like: `Partial: Page "Rebar.shop Ontario": Some error; Page "Ontario Steel": Another error` or `Page "X": error message`. Parse page names from error string and match against page_name list to determine per-page status.
+```typescript
+return pages.map((name) => {
+  if (status === "published") return { name, failed: false };
+  
+  const isPartial = lastError.toLowerCase().startsWith("partial");
+  
+  if (status === "failed" && !isPartial && !lastError) {
+    // Full failure, no error details — all pages failed
+    return { name, failed: true };
+  }
+  
+  if (status === "failed" && !isPartial) {
+    // Failed with error but not partial — all pages failed
+    return { name, failed: true };
+  }
+  
+  if (isPartial) {
+    // Partial: pages mentioned in error = failed, rest = success
+    const isFailed = lastError.includes(name);
+    let error: string | undefined;
+    if (isFailed) {
+      const regex = new RegExp(`...escaped name...:\\s*([^;]+)`, "i");
+      error = lastError.match(regex)?.[1]?.trim();
+    }
+    return { name, failed: isFailed, error };
+  }
+  
+  return { name, failed: false };
+});
+```
 
 ## Impact
-- 2 files changed
-- No database or edge function changes
-- Purely UI enhancement
+- 1 file changed (`SocialCalendar.tsx`)
+- Failed posts: all pages show red ❌
+- Partial failures: failed pages red, successful pages green
+- Published posts: all pages green ✅ (unchanged)
+- No backend changes
 
