@@ -182,7 +182,7 @@ export function PostReviewPanel({
   // Check Facebook publish_ready status
   useEffect(() => {
     if (!post) return;
-    const hasFb = localPlatforms.some(p => p === "facebook" || p === "instagram" || p === "instagram_fb");
+    const hasFb = localPlatforms.some(p => p === "facebook" || p === "instagram");
     if (!hasFb) { setFbPublishReady(null); return; }
 
     supabase
