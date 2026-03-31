@@ -1,68 +1,32 @@
 
 
-# Fix: Facebook "Invalid parameter" Error for Video Posts
+# Add Per-Page Publishing Status Dropdown to Post Cards
 
-## Root Cause
+## Problem
+When a post fails on one specific page (e.g., "rebar.shop_on"), the card just shows "Failed" with no way to see which page(s) succeeded or failed.
 
-The `publishToFacebook()` function in both `social-publish/index.ts` and `social-cron-publish/index.ts` only handles **text** and **photo** posts. When a video URL (e.g., `.mp4`) is passed, it sends it to `/{pageId}/photos` — Facebook's Photos API rejects video files with "Invalid parameter".
-
-Instagram's `publishToInstagram()` already has proper video detection (URL extension check + HEAD request content-type check), but the Facebook function was never updated to handle videos.
-
-```text
-CURRENT (broken):
-  publishToFacebook(pageId, token, message, videoUrl)
-    → POST /{pageId}/photos  { url: videoUrl }  ← INVALID for video
-    → Facebook returns: "Invalid parameter"
-
-FIXED:
-  publishToFacebook(pageId, token, message, videoUrl, contentType)
-    → Detect video (extension + HEAD content-type)
-    → POST /{pageId}/videos  { file_url: videoUrl, description: message }
-    → Facebook processes video → success
-```
+## Solution
+Add a collapsible/expandable chevron icon next to the "Pages (N)" label on post cards in `SocialCalendar.tsx`. When expanded, it shows each page name with a success/fail indicator parsed from `last_error`.
 
 ## Changes
 
-### File 1: `supabase/functions/social-publish/index.ts`
+### 1. `src/hooks/useSocialPosts.ts`
+- Add `last_error: string | null` to the `SocialPost` interface
 
-**1a.** Update `publishToFacebook` signature to accept `contentType` parameter, add video detection logic (same pattern as Instagram), and route to `/{pageId}/videos` for video content:
+### 2. `src/components/social/SocialCalendar.tsx`
+- Import `ChevronDown` icon and `Collapsible` components
+- On the post card, wrap "Pages (N)" in a collapsible trigger with a small chevron icon
+- The collapsible content shows each page from `page_name` (split by ", ") as a row
+- For failed/partial posts: parse `last_error` string to match page names and mark them red; others show green
+- For published posts: all pages show green checkmarks
+- For scheduled/draft: just list page names neutrally
+- Click on the chevron stops event propagation (doesn't open the post review panel)
 
-```typescript
-async function publishToFacebook(
-  pageId: string, accessToken: string, message: string, 
-  imageUrl?: string, contentType: string = "post"
-): Promise<{ id?: string; error?: string }> {
-  // Detect video by URL extension + HEAD content-type
-  let isVideo = false;
-  if (imageUrl) {
-    isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
-    if (!isVideo) {
-      try {
-        const head = await fetch(imageUrl, { method: "HEAD" });
-        const ct = head.headers.get("content-type") || "";
-        isVideo = ct.startsWith("video/");
-      } catch { /* ignore */ }
-    }
-  }
-  // Route to correct endpoint
-  if (imageUrl && isVideo) → /{pageId}/videos  (file_url + description)
-  else if (imageUrl)       → /{pageId}/photos  (url + message)  
-  else                     → /{pageId}/feed    (message only)
-}
-```
-
-**1b.** Update the call site (line 344) to pass `content_type`:
-```typescript
-result = await publishToFacebook(pageId, pageAccessToken, message, image_url, content_type);
-```
-
-### File 2: `supabase/functions/social-cron-publish/index.ts`
-
-Apply the identical changes to its `publishToFacebook` function (lines 502-527) and the call site (line 375), passing `post.content_type`.
+### Parsing Logic
+The `last_error` field stores errors like: `Partial: Page "Rebar.shop Ontario": Some error; Page "Ontario Steel": Another error` or `Page "X": error message`. Parse page names from error string and match against page_name list to determine per-page status.
 
 ## Impact
-- 2 files changed (`social-publish/index.ts`, `social-cron-publish/index.ts`)
-- Facebook videos now publish correctly via the `/videos` endpoint
-- Photo and text-only posts remain unchanged
-- No database or frontend changes
+- 2 files changed
+- No database or edge function changes
+- Purely UI enhancement
 
