@@ -1,68 +1,46 @@
 
 
-# Fix Duplicate Instagram Publishing — Deduplicate by Actual Account ID
+# Fix LinkedIn Showing Wrong Page Count
 
 ## Problem
-When a post has multiple pages in `page_name` (e.g., `"Ontario Steel Detailing, Rebar.shop, Ontario Logistics"`), both `social-cron-publish` and `social-publish` split this string and loop through each page name, publishing separately. However, multiple page names can resolve to the **same Instagram Business Account** (via the `igAccounts[0]` fallback when no match is found). This causes the same content to appear 2-3 times on the same Instagram account.
+LinkedIn cards display "Pages (5)" but LinkedIn only has 2 pages (Ontario Steel Detailing, Ontario Logistics). The extra 3 pages (Rebar.shop, Ontario Digital Marketing, Ontario Steels, Rebar.shop Ontario) belong to Facebook/Instagram only.
 
 ## Root Cause
-```text
-page_name: "Ontario Steel Detailing, Rebar.shop, Ontario Logistics"
-                    ↓                    ↓                ↓
-              FB Page A             FB Page B         FB Page C
-                    ↓                    ↓                ↓
-         IG match found?        IG match found?    IG match found?
-              YES → ig1              NO → ig1 (fallback!)   NO → ig1 (fallback!)
-                    ↓                    ↓                ↓
-             PUBLISH ✅          PUBLISH ✅ (DUPLICATE!)   PUBLISH ✅ (DUPLICATE!)
+Two places allow invalid pages to persist:
+
+1. **`SocialMediaManager.tsx` line 81**: `groupPages` collects page names from siblings without filtering against valid pages for the platform. If the DB `page_name` field contains Facebook pages on a LinkedIn record, they pass through.
+
+2. **`PostReviewPanel.tsx` line 211-214**: When `groupPages` or `post.page_name` is loaded, the pages are set directly without filtering against `PLATFORM_PAGES[platform]`.
+
+## Changes
+
+### 1. `src/components/social/PostReviewPanel.tsx` (lines 207-215)
+After setting `localPlatforms`, filter `localPages` to only include pages that exist in `PLATFORM_PAGES` for the current platform:
+
+```typescript
+// After computing pages from groupPages or post.page_name:
+const validPagesForPlatform = new Set(
+  [post.platform].flatMap(p => (PLATFORM_PAGES[p] || []).map(o => o.value))
+);
+const filtered = rawPages.filter(p => validPagesForPlatform.has(p));
+setLocalPages(filtered.length > 0 ? filtered : rawPages);
 ```
 
-The `igAccounts.find(ig => ig.pageId === pageId) || igAccounts[0]` fallback means unmatched pages all default to the first IG account, causing duplicates.
+### 2. `src/components/social/PostReviewPanel.tsx` — `handlePagesSaveMulti` (line 484)
+Already saves to DB correctly. No change needed — but the filtering above ensures only valid pages are shown and selectable.
 
-## Fix — Two Files
+### 3. `src/pages/SocialMediaManager.tsx` (lines 73-82)
+Filter `groupPages` against `PLATFORM_PAGES` for the selected platform before returning:
 
-### 1. `supabase/functions/social-cron-publish/index.ts` (lines ~352-373)
-- Before the Instagram publishing loop, create a `Set<string>` called `publishedIgAccountIds`
-- After resolving `matchedIg`, check if `matchedIg.id` is already in the Set
-- If yes, skip publishing and log `"Skipping — already published to IG account {id} via another page"`
-- If no, add to Set and proceed with publish
-
-### 2. `supabase/functions/social-publish/index.ts` (lines ~260-278)
-- Same deduplication logic: track published IG account IDs across the page loop
-- Skip pages that resolve to an already-published IG account
-
-### Code Change (both files, same pattern)
 ```typescript
-// Add before the page loop (around line 274 in cron, line 197 in publish)
-const publishedIgIds = new Set<string>();
-
-// Inside the Instagram branch, after resolving matchedIg:
-if (publishedIgIds.has(matchedIg.id)) {
-  console.log(`[social-cron-publish] Skipping page "${targetPageName}" — IG account ${matchedIg.id} already published`);
-  pageSuccesses.push(targetPageName); // count as success (already done)
-  continue;
-}
-publishedIgIds.add(matchedIg.id);
-```
-
-Also apply the same pattern for Facebook (`pageId` dedup) to prevent edge cases where multiple page names resolve to the same Facebook Page ID.
-
-### 3. Additional Safety: Facebook dedup
-```typescript
-const publishedFbPageIds = new Set<string>();
-
-// Inside the Facebook branch, after resolving pageId:
-if (publishedFbPageIds.has(pageId)) {
-  console.log(`[...] Skipping page "${targetPageName}" — FB page ${pageId} already published`);
-  pageSuccesses.push(targetPageName);
-  continue;
-}
-publishedFbPageIds.add(pageId);
+import { PLATFORM_PAGES } from "@/lib/socialConstants";
+// ...
+const validSet = new Set((PLATFORM_PAGES[selectedPost.platform] || []).map(o => o.value));
+return allPages.filter(p => validSet.has(p));
 ```
 
 ## Impact
-- No schema changes needed
-- No frontend changes needed
-- Fixes both manual publish and cron-based auto-publish
-- Existing posts are unaffected (already published)
+- LinkedIn cards will correctly show "Pages (2)" with only Ontario Steel Detailing and Ontario Logistics
+- Existing DB data with incorrect pages won't cause display issues — filtered at render time
+- No DB migration or edge function changes needed
 
