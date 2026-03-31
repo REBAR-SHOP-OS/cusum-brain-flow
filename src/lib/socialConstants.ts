@@ -24,6 +24,7 @@ export const PLATFORM_PAGES: Record<string, SelectionOption[]> = {
   linkedin: [
     { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
     { value: "Ontario Logistics", label: "Ontario Logistics" },
+    { value: "Sattar Esmaeili-Oureh", label: "Sattar Esmaeili-Oureh" },
   ],
   youtube: [
     { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },
