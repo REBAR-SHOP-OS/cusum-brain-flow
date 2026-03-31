@@ -258,6 +258,13 @@ Deno.serve((req) =>
             console.warn(`[social-publish] Permission check failed for page "${targetPageName}", proceeding:`, permErr);
           }
 
+          if (publishedFbPageIds.has(pageId)) {
+            console.log(`[social-publish] Skipping page "${targetPageName}" — FB page ${pageId} already published`);
+            pageSuccesses.push(targetPageName);
+            continue;
+          }
+          publishedFbPageIds.add(pageId);
+
           result = await publishToFacebook(pageId, pageAccessToken, message, image_url);
         } else {
           // Instagram
