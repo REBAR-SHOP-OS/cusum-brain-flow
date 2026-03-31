@@ -372,7 +372,7 @@ Deno.serve((req) =>
               }
               publishedFbPageIds.add(pageId);
 
-              publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
+              publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url, post.content_type);
 
               // NO text-only fallback — if image publish fails, propagate the error
               if (publishResult.error && post.image_url) {

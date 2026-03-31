@@ -341,7 +341,7 @@ Deno.serve((req) =>
           }
           publishedFbPageIds.add(pageId);
 
-          result = await publishToFacebook(pageId, pageAccessToken, message, image_url);
+          result = await publishToFacebook(pageId, pageAccessToken, message, image_url, content_type);
         } else {
           // Instagram — collect for parallel publishing below
           const userLongLivedToken = tokenData!.access_token;
