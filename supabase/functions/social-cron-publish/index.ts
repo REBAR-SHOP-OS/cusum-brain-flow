@@ -294,6 +294,7 @@ Deno.serve((req) =>
 
           const publishedFbPageIds = new Set<string>();
           const publishedIgIds = new Set<string>();
+          const igPublishQueue: Array<{ igAccountId: string; pageAccessToken: string; targetPageName: string }> = [];
 
           for (const targetPageName of individualPages) {
             if (!targetPageName) {
