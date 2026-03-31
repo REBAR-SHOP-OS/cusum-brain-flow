@@ -128,7 +128,58 @@ interface SocialCalendarProps {
   onSelectDay?: (dayPostIds: string[]) => void;
 }
 
-export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, selectedPostIds, onToggleSelect, onSelectDay }: SocialCalendarProps) {
+function PageStatusDropdown({ post, platform }: { post: SocialPost; platform: string }) {
+  const [open, setOpen] = useState(false);
+  const pages = post.page_name ? post.page_name.split(", ").filter(Boolean) : [];
+
+  if (pages.length === 0) {
+    return (
+      <p className="text-xs font-medium truncate">
+        {platform.charAt(0).toUpperCase() + platform.slice(1)}
+      </p>
+    );
+  }
+
+  const pageStatuses = parsePageStatuses(post);
+  const hasFailed = pageStatuses?.some((p) => p.failed);
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-1 cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <p className="text-xs font-medium truncate">Pages ({pages.length})</p>
+        <ChevronDown className={cn("w-3 h-3 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </div>
+      {open && pageStatuses && (
+        <div className="mt-1 space-y-0.5" onClick={(e) => e.stopPropagation()}>
+          {pageStatuses.map((ps) => (
+            <div key={ps.name} className="flex items-center gap-1 text-[10px]">
+              {post.status === "published" ? (
+                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+              ) : ps.failed ? (
+                <XCircle className="w-3 h-3 text-destructive shrink-0" />
+              ) : hasFailed ? (
+                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+              ) : (
+                <Circle className="w-3 h-3 text-muted-foreground shrink-0" />
+              )}
+              <span className={cn("truncate", ps.failed && "text-destructive")} title={ps.error || ps.name}>
+                {ps.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   return (
