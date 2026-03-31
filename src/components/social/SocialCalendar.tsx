@@ -1,8 +1,36 @@
+import { useState } from "react";
 import { addDays, format, isSameDay, isToday, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Video } from "lucide-react";
+import { Video, ChevronDown, CheckCircle2, XCircle, Circle } from "lucide-react";
 import type { SocialPost } from "@/hooks/useSocialPosts";
+
+/** Parse last_error to determine which pages failed */
+function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; error?: string }[] | null {
+  if (!post.page_name) return null;
+  const pages = post.page_name.split(", ").filter(Boolean);
+  if (pages.length === 0) return null;
+
+  const lastError = post.last_error || "";
+  const status = post.status;
+
+  return pages.map((name) => {
+    if (status === "published") return { name, failed: false };
+    if (status === "failed" || lastError.toLowerCase().startsWith("partial")) {
+      // Check if this page is mentioned in the error
+      const isFailed = lastError.includes(`Page "${name}"`) || lastError.includes(name);
+      // Extract error snippet for this page
+      let error: string | undefined;
+      if (isFailed) {
+        const regex = new RegExp(`Page "${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}":\\s*([^;]+)`, "i");
+        const match = lastError.match(regex);
+        error = match?.[1]?.trim();
+      }
+      return { name, failed: isFailed, error };
+    }
+    return { name, failed: false };
+  });
+}
 
 const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
 
