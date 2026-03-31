@@ -300,7 +300,7 @@ Deno.serve((req) =>
             await supabaseAdmin
               .from("user_meta_tokens")
               .upsert({
-                user_id: userId,
+                user_id: tokenOwnerUserId,
                 platform: `facebook_page_${pageId}`,
                 access_token: refreshedToken,
               }, { onConflict: "user_id,platform" });
