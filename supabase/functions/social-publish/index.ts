@@ -341,7 +341,7 @@ Deno.serve((req) =>
           }
           publishedFbPageIds.add(pageId);
 
-          result = await publishToFacebook(pageId, pageAccessToken, message, image_url);
+          result = await publishToFacebook(pageId, pageAccessToken, message, image_url, content_type);
         } else {
           // Instagram — collect for parallel publishing below
           const userLongLivedToken = tokenData!.access_token;
@@ -463,17 +463,39 @@ async function publishToFacebook(
   pageId: string,
   accessToken: string,
   message: string,
-  imageUrl?: string
+  imageUrl?: string,
+  contentType: string = "post"
 ): Promise<{ id?: string; error?: string }> {
   try {
     let url: string;
     const params: Record<string, string> = { access_token: accessToken };
 
+    // Detect video content (same pattern as Instagram)
+    let isVideo = false;
     if (imageUrl) {
+      isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
+      if (!isVideo) {
+        try {
+          const head = await fetch(imageUrl, { method: "HEAD" });
+          const ct = head.headers.get("content-type") || "";
+          isVideo = ct.startsWith("video/");
+        } catch { /* ignore HEAD failures */ }
+      }
+    }
+
+    if (imageUrl && isVideo) {
+      // Video → use /videos endpoint
+      url = `${GRAPH_API}/${pageId}/videos`;
+      params.file_url = imageUrl;
+      params.description = message;
+      console.log(`[social-publish] Facebook video detected, using /videos endpoint`);
+    } else if (imageUrl) {
+      // Photo → use /photos endpoint
       url = `${GRAPH_API}/${pageId}/photos`;
       params.url = imageUrl;
       params.message = message;
     } else {
+      // Text only → use /feed endpoint
       url = `${GRAPH_API}/${pageId}/feed`;
       params.message = message;
     }
