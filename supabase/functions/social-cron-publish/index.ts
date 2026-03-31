@@ -366,6 +366,12 @@ Deno.serve((req) =>
                     continue;
                   }
                   const matchedIg = igAccounts.find(ig => ig.pageId === pageId) || igAccounts[0];
+                  if (publishedIgIds.has(matchedIg.id)) {
+                    console.log(`[social-cron-publish] Skipping page "${targetPageName}" — IG account ${matchedIg.id} already published`);
+                    pageSuccesses.push(targetPageName);
+                    continue;
+                  }
+                  publishedIgIds.add(matchedIg.id);
                   publishResult = await publishToInstagram(
                     matchedIg.id, pageAccessToken, message, post.image_url,
                     post.content_type || "post", post.cover_image_url
