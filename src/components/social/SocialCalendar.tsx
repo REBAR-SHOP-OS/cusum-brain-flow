@@ -1,8 +1,36 @@
+import { useState } from "react";
 import { addDays, format, isSameDay, isToday, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Video } from "lucide-react";
+import { Video, ChevronDown, CheckCircle2, XCircle, Circle } from "lucide-react";
 import type { SocialPost } from "@/hooks/useSocialPosts";
+
+/** Parse last_error to determine which pages failed */
+function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; error?: string }[] | null {
+  if (!post.page_name) return null;
+  const pages = post.page_name.split(", ").filter(Boolean);
+  if (pages.length === 0) return null;
+
+  const lastError = post.last_error || "";
+  const status = post.status;
+
+  return pages.map((name) => {
+    if (status === "published") return { name, failed: false };
+    if (status === "failed" || (lastError && lastError.toLowerCase().startsWith("partial"))) {
+      // Check if this page is mentioned in the error
+      const isFailed = lastError.includes(`Page "${name}"`) || lastError.includes(name);
+      // Extract error snippet for this page
+      let error: string | undefined;
+      if (isFailed) {
+        const regex = new RegExp(`Page "${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}":\\s*([^;]+)`, "i");
+        const match = lastError.match(regex);
+        error = match?.[1]?.trim();
+      }
+      return { name, failed: isFailed, error };
+    }
+    return { name, failed: false };
+  });
+}
 
 const PLATFORM_ORDER = ["unassigned", "facebook", "instagram", "linkedin", "twitter", "tiktok", "youtube"];
 
@@ -98,6 +126,57 @@ interface SocialCalendarProps {
   selectedPostIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
   onSelectDay?: (dayPostIds: string[]) => void;
+}
+
+function PageStatusDropdown({ post, platform }: { post: SocialPost; platform: string }) {
+  const [open, setOpen] = useState(false);
+  const pages = post.page_name ? post.page_name.split(", ").filter(Boolean) : [];
+
+  if (pages.length === 0) {
+    return (
+      <p className="text-xs font-medium truncate">
+        {platform.charAt(0).toUpperCase() + platform.slice(1)}
+      </p>
+    );
+  }
+
+  const pageStatuses = parsePageStatuses(post);
+  const hasFailed = pageStatuses?.some((p) => p.failed);
+
+  return (
+    <div>
+      <div
+        className="flex items-center gap-1 cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+      >
+        <p className="text-xs font-medium truncate">Pages ({pages.length})</p>
+        <ChevronDown className={cn("w-3 h-3 text-muted-foreground transition-transform", open && "rotate-180")} />
+      </div>
+      {open && pageStatuses && (
+        <div className="mt-1 space-y-0.5" onClick={(e) => e.stopPropagation()}>
+          {pageStatuses.map((ps) => (
+            <div key={ps.name} className="flex items-center gap-1 text-[10px]">
+              {post.status === "published" ? (
+                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+              ) : ps.failed ? (
+                <XCircle className="w-3 h-3 text-destructive shrink-0" />
+              ) : hasFailed ? (
+                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
+              ) : (
+                <Circle className="w-3 h-3 text-muted-foreground shrink-0" />
+              )}
+              <span className={cn("truncate", ps.failed && "text-destructive")} title={ps.error || ps.name}>
+                {ps.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, selectedPostIds, onToggleSelect, onSelectDay }: SocialCalendarProps) {
@@ -217,11 +296,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs font-medium truncate">
-                      {post.page_name
-                        ? `Pages (${post.page_name.split(", ").filter(Boolean).length})`
-                        : (platform.charAt(0).toUpperCase() + platform.slice(1))}
-                    </p>
+                    <PageStatusDropdown post={post} platform={platform} />
                     <div className="flex items-center gap-1 mt-0.5 text-[10px]">
                       {post.scheduled_date && (
                         <span className="text-muted-foreground">{format(parseISO(post.scheduled_date), "h:mm a")}</span>
