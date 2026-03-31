@@ -413,11 +413,11 @@ Deno.serve((req) =>
         }
       }
     } else if (platform === "linkedin") {
-      const result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url);
+      const result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url, page_name);
       if (result.error) {
         pageErrors.push(result.error);
       } else {
-        pageSuccesses.push("linkedin");
+        pageSuccesses.push(page_name || "linkedin");
       }
     } else if (platform === "twitter") {
       const result = await publishToTwitter(message, image_url);
