@@ -333,10 +333,9 @@ Deno.serve((req) =>
 
               publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
 
-              // Image fallback: retry text-only if image publish failed
+              // NO text-only fallback — if image publish fails, propagate the error
               if (publishResult.error && post.image_url) {
-                console.warn(`[social-cron-publish] Image publish failed for page "${targetPageName}", retrying text-only`);
-                publishResult = await publishToFacebook(pageId, pageAccessToken, message, null);
+                console.error(`[social-cron-publish] Facebook image publish failed for page "${targetPageName}" — will NOT retry without image. Error: ${publishResult.error}`);
               }
             } else {
               // Instagram — MUST refresh page token for IG too
