@@ -16,7 +16,7 @@ function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; e
 
   return pages.map((name) => {
     if (status === "published") return { name, failed: false };
-    if (status === "failed" || lastError.toLowerCase().startsWith("partial")) {
+    if (status === "failed" || (lastError && lastError.toLowerCase().startsWith("partial"))) {
       // Check if this page is mentioned in the error
       const isFailed = lastError.includes(`Page "${name}"`) || lastError.includes(name);
       // Extract error snippet for this page
