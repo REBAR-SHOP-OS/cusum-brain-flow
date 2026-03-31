@@ -13381,6 +13381,8 @@ export type Database = {
           neel_approved: boolean
           page_name: string | null
           platform: string
+          publishing_lock_id: string | null
+          publishing_started_at: string | null
           qa_status: string
           reach: number | null
           saves: number | null
@@ -13409,6 +13411,8 @@ export type Database = {
           neel_approved?: boolean
           page_name?: string | null
           platform: string
+          publishing_lock_id?: string | null
+          publishing_started_at?: string | null
           qa_status?: string
           reach?: number | null
           saves?: number | null
@@ -13437,6 +13441,8 @@ export type Database = {
           neel_approved?: boolean
           page_name?: string | null
           platform?: string
+          publishing_lock_id?: string | null
+          publishing_started_at?: string | null
           qa_status?: string
           reach?: number | null
           saves?: number | null
