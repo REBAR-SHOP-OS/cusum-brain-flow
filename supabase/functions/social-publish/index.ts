@@ -193,6 +193,8 @@ Deno.serve((req) =>
       }
 
       const targetPages = individualPages.length > 0 ? individualPages : [pages[0]?.name || ""];
+      const publishedFbPageIds = new Set<string>();
+      const publishedIgIds = new Set<string>();
 
       for (const targetPageName of targetPages) {
         let selectedPage = pages[0];
@@ -256,6 +258,13 @@ Deno.serve((req) =>
             console.warn(`[social-publish] Permission check failed for page "${targetPageName}", proceeding:`, permErr);
           }
 
+          if (publishedFbPageIds.has(pageId)) {
+            console.log(`[social-publish] Skipping page "${targetPageName}" — FB page ${pageId} already published`);
+            pageSuccesses.push(targetPageName);
+            continue;
+          }
+          publishedFbPageIds.add(pageId);
+
           result = await publishToFacebook(pageId, pageAccessToken, message, image_url);
         } else {
           // Instagram
@@ -265,6 +274,12 @@ Deno.serve((req) =>
             continue;
           }
           const selectedIg = igAccounts.find((ig) => ig.pageId === pageId) || igAccounts[0];
+          if (publishedIgIds.has(selectedIg.id)) {
+            console.log(`[social-publish] Skipping page "${targetPageName}" — IG account ${selectedIg.id} already published`);
+            pageSuccesses.push(targetPageName);
+            continue;
+          }
+          publishedIgIds.add(selectedIg.id);
           result = await publishToInstagram(selectedIg.id, pageAccessToken, message, image_url, content_type, cover_image_url);
         }
 

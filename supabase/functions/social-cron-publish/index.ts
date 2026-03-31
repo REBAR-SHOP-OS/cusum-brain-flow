@@ -270,6 +270,8 @@ Deno.serve((req) =>
             } else {
               // Split page_name into individual pages and publish to EACH
               const targetPages = individualPages.length > 0 ? individualPages : [pages[0]?.name || ""];
+              const publishedFbPageIds = new Set<string>();
+              const publishedIgIds = new Set<string>();
 
               for (const targetPageName of targetPages) {
                 // Find matching page from token data
@@ -342,6 +344,13 @@ Deno.serve((req) =>
                     console.warn(`[social-cron-publish] Permission check failed for page "${targetPageName}", proceeding:`, permErr);
                   }
 
+                  if (publishedFbPageIds.has(pageId)) {
+                    console.log(`[social-cron-publish] Skipping page "${targetPageName}" — FB page ${pageId} already published`);
+                    pageSuccesses.push(targetPageName);
+                    continue;
+                  }
+                  publishedFbPageIds.add(pageId);
+
                   publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url);
 
                   // Image fallback: retry text-only if image publish failed
@@ -357,6 +366,12 @@ Deno.serve((req) =>
                     continue;
                   }
                   const matchedIg = igAccounts.find(ig => ig.pageId === pageId) || igAccounts[0];
+                  if (publishedIgIds.has(matchedIg.id)) {
+                    console.log(`[social-cron-publish] Skipping page "${targetPageName}" — IG account ${matchedIg.id} already published`);
+                    pageSuccesses.push(targetPageName);
+                    continue;
+                  }
+                  publishedIgIds.add(matchedIg.id);
                   publishResult = await publishToInstagram(
                     matchedIg.id, pageAccessToken, message, post.image_url,
                     post.content_type || "post", post.cover_image_url
