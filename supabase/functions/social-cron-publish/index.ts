@@ -270,6 +270,8 @@ Deno.serve((req) =>
             } else {
               // Split page_name into individual pages and publish to EACH
               const targetPages = individualPages.length > 0 ? individualPages : [pages[0]?.name || ""];
+              const publishedFbPageIds = new Set<string>();
+              const publishedIgIds = new Set<string>();
 
               for (const targetPageName of targetPages) {
                 // Find matching page from token data
