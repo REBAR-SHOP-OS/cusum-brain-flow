@@ -342,7 +342,7 @@ Deno.serve((req) =>
 
           result = await publishToFacebook(pageId, pageAccessToken, message, image_url);
         } else {
-          // Instagram — MUST refresh page token for IG too (fixes status=undefined polling)
+          // Instagram — collect for parallel publishing below
           const userLongLivedToken = tokenData!.access_token;
           const refreshedToken = await refreshPageToken(userLongLivedToken, pageId);
           if (refreshedToken) {
@@ -376,7 +376,9 @@ Deno.serve((req) =>
             continue;
           }
           publishedIgIds.add(selectedIg.id);
-          result = await publishToInstagram(selectedIg.id, pageAccessToken, message, image_url, content_type, cover_image_url);
+          // Queue for parallel execution
+          igPublishQueue.push({ igAccountId: selectedIg.id, pageAccessToken, targetPageName });
+          continue; // Don't process result here — handled after parallel publish
         }
 
         if (result.error) {
@@ -385,6 +387,28 @@ Deno.serve((req) =>
         } else {
           console.log(`[social-publish] Published to page "${targetPageName}" (id: ${result.id})`);
           pageSuccesses.push(targetPageName);
+        }
+      }
+
+      // --- Parallel Instagram publishing ---
+      if (igPublishQueue.length > 0) {
+        console.log(`[social-publish] Publishing to ${igPublishQueue.length} IG accounts in parallel`);
+        const igResults = await Promise.allSettled(
+          igPublishQueue.map(({ igAccountId, pageAccessToken: pat, targetPageName: tpn }) =>
+            publishToInstagram(igAccountId, pat, message, image_url, content_type, cover_image_url)
+              .then(r => ({ ...r, targetPageName: tpn }))
+              .catch(e => ({ error: e?.message || String(e), targetPageName: tpn }))
+          )
+        );
+        for (const settled of igResults) {
+          const r = settled.status === "fulfilled" ? settled.value : { error: (settled.reason?.message || String(settled.reason)), targetPageName: "unknown" };
+          if (r.error) {
+            console.error(`[social-publish] IG parallel failed on "${r.targetPageName}": ${r.error}`);
+            pageErrors.push(`Page "${r.targetPageName}": ${r.error}`);
+          } else {
+            console.log(`[social-publish] IG parallel published to "${r.targetPageName}" (id: ${(r as any).id})`);
+            pageSuccesses.push(r.targetPageName);
+          }
         }
       }
     } else if (platform === "linkedin") {
