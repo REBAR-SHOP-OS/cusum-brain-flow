@@ -325,6 +325,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                           : status === "scheduled" && isApproved ? "text-green-500 font-medium"
                           : status === "scheduled" ? "text-yellow-600"
                           : status === "declined" ? "text-destructive"
+                          : status === "failed" ? "text-red-600 font-medium"
                           : status === "pending_approval" ? "text-yellow-600"
                           : "text-muted-foreground"
                       )}>
