@@ -641,7 +641,8 @@ async function publishToLinkedIn(
   supabase: ReturnType<typeof createClient>,
   userId: string,
   text: string,
-  imageUrl?: string
+  imageUrl?: string,
+  pageName?: string
 ): Promise<{ id?: string; error?: string }> {
   try {
     // OWNER-ONLY: no team fallback
@@ -653,18 +654,33 @@ async function publishToLinkedIn(
       .maybeSingle();
 
     if (!connection) return { error: `LinkedIn not connected for your account. Owner-only token policy — please connect it from Settings → Integrations.` };
-    const config = connection.config as { access_token: string; expires_at: number };
+    const config = connection.config as { access_token: string; expires_at: number; organization_ids?: Record<string, string> };
 
     if (config.expires_at < Date.now()) return { error: "LinkedIn token expired. Please reconnect." };
 
-    const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
-      headers: { Authorization: `Bearer ${config.access_token}` },
-    });
-    if (!profileRes.ok) return { error: "Failed to get LinkedIn identity" };
-    const profile = await profileRes.json();
+    // Determine author URN based on page_name
+    const isPersonal = !pageName || pageName === "Sattar Esmaeili-Oureh";
+    let authorUrn: string;
+
+    if (isPersonal) {
+      const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+        headers: { Authorization: `Bearer ${config.access_token}` },
+      });
+      if (!profileRes.ok) return { error: "Failed to get LinkedIn identity" };
+      const profile = await profileRes.json();
+      authorUrn = `urn:li:person:${profile.sub}`;
+    } else {
+      // Company page publishing — look up org ID from config
+      const orgIds = config.organization_ids || {};
+      const orgId = orgIds[pageName];
+      if (!orgId) {
+        return { error: `LinkedIn organization ID not configured for "${pageName}". Please update the LinkedIn integration config with the organization ID.` };
+      }
+      authorUrn = `urn:li:organization:${orgId}`;
+    }
 
     const payload: any = {
-      author: `urn:li:person:${profile.sub}`,
+      author: authorUrn,
       lifecycleState: "PUBLISHED",
       specificContent: {
         "com.linkedin.ugc.ShareContent": {
@@ -686,7 +702,7 @@ async function publishToLinkedIn(
           body: JSON.stringify({
             registerUploadRequest: {
               recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
-              owner: `urn:li:person:${profile.sub}`,
+              owner: authorUrn,
               serviceRelationships: [{ relationshipType: "OWNER", identifier: "urn:li:userGeneratedContent" }],
             },
           }),
