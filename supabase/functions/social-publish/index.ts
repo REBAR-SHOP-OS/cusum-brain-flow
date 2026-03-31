@@ -280,11 +280,11 @@ Deno.serve((req) =>
         }
         const pageId = selectedPage.id;
 
-        // Get page-specific access token (owner only)
+        // Get page-specific access token (use token owner, not post owner)
         const { data: pageTokenData } = await supabaseAdmin
           .from("user_meta_tokens")
           .select("access_token")
-          .eq("user_id", userId)
+          .eq("user_id", tokenOwnerUserId)
           .eq("platform", `${tokenPlatform}_page_${pageId}`)
           .maybeSingle();
         let pageAccessToken = pageTokenData?.access_token || tokenData!.access_token;
