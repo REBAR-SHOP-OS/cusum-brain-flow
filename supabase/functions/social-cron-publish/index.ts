@@ -50,13 +50,14 @@ Deno.serve((req) =>
     const now = new Date().toISOString();
     console.log(`[social-cron-publish] Querying scheduled posts. Current UTC: ${now}`);
 
-    // Recovery: reset posts stuck in "publishing" for >10 minutes back to "scheduled"
+    // Recovery: reset posts stuck in "publishing" for >10 minutes to "failed" (NOT "scheduled")
     const recovered = await recoverStaleLocks(supabase);
+    const recoveredSet = new Set(recovered);
     if (recovered.length > 0) {
-      console.log(`[social-cron-publish] Recovered ${recovered.length} stale publishing posts: ${recovered.join(", ")}`);
+      console.log(`[social-cron-publish] Recovered ${recovered.length} stale publishing posts to FAILED: ${recovered.join(", ")}`);
     }
 
-    const { data: duePosts, error: fetchError } = await supabase
+    const { data: rawDuePosts, error: fetchError } = await supabase
       .from("social_posts")
       .select("*")
       .eq("status", "scheduled")
@@ -64,6 +65,9 @@ Deno.serve((req) =>
       .lte("scheduled_date", now)
       .order("scheduled_date", { ascending: true })
       .limit(20);
+
+    // Defense-in-depth: exclude any just-recovered posts in case status update hasn't propagated
+    const duePosts = (rawDuePosts || []).filter(p => !recoveredSet.has(p.id));
 
     console.log(`[social-cron-publish] Query returned ${duePosts?.length ?? 0} approved posts, error: ${fetchError?.message ?? 'none'}`);
 
