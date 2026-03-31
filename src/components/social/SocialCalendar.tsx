@@ -14,12 +14,24 @@ function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; e
   const lastError = post.last_error || "";
   const status = post.status;
 
+  const isPartial = lastError.toLowerCase().startsWith("partial");
+
   return pages.map((name) => {
+    // Published → all green
     if (status === "published") return { name, failed: false };
-    if (status === "failed" || (lastError && lastError.toLowerCase().startsWith("partial"))) {
-      // Check if this page is mentioned in the error
+
+    // Full failure (no "Partial" prefix) → all pages red
+    if (status === "failed" && !isPartial) {
+      let error: string | undefined;
+      const regex = new RegExp(`Page "${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}":\\s*([^;]+)`, "i");
+      const match = lastError.match(regex);
+      error = match?.[1]?.trim() || (lastError || undefined);
+      return { name, failed: true, error };
+    }
+
+    // Partial failure → mentioned pages red, rest green
+    if (isPartial) {
       const isFailed = lastError.includes(`Page "${name}"`) || lastError.includes(name);
-      // Extract error snippet for this page
       let error: string | undefined;
       if (isFailed) {
         const regex = new RegExp(`Page "${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}":\\s*([^;]+)`, "i");
@@ -28,6 +40,8 @@ function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; e
       }
       return { name, failed: isFailed, error };
     }
+
+    // Scheduled/draft/pending → neutral
     return { name, failed: false };
   });
 }
