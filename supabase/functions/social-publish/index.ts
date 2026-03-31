@@ -165,26 +165,61 @@ Deno.serve((req) =>
       console.log(`[social-publish] Acquired lock for post ${post_id}: lockId=${lock.lockId}`);
     }
 
-    // Get user token for the platform — OWNER-ONLY, no team fallback
+    // Get user token — OWNER-FIRST, team fallback if owner lacks token
     const tokenPlatform = platform === "instagram" ? "instagram" : "facebook";
-    const { data: tokenData } = await supabaseAdmin
+    let tokenData = (await supabaseAdmin
       .from("user_meta_tokens")
-      .select("access_token, pages, instagram_accounts")
+      .select("access_token, pages, instagram_accounts, user_id")
       .eq("user_id", userId)
       .eq("platform", tokenPlatform)
-      .maybeSingle();
+      .maybeSingle()).data;
+
+    let tokenOwnerUserId = userId;
 
     if (!tokenData && (platform === "facebook" || platform === "instagram")) {
-      const errMsg = `${platform} not connected for your account. Owner-only token policy — please connect it from Integrations.`;
-      if (post_id) {
-        // Release lock with failure
-        const lockId = (await supabaseAdmin.from("social_posts").select("publishing_lock_id").eq("id", post_id).maybeSingle()).data?.publishing_lock_id;
-        if (lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
+      // Team fallback: find a teammate in the same company with a valid token
+      const { data: ownerProfile } = await supabaseAdmin
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (ownerProfile?.company_id) {
+        const { data: teammates } = await supabaseAdmin
+          .from("profiles")
+          .select("user_id")
+          .eq("company_id", ownerProfile.company_id)
+          .neq("user_id", userId);
+
+        if (teammates && teammates.length > 0) {
+          for (const tm of teammates) {
+            const { data: tmToken } = await supabaseAdmin
+              .from("user_meta_tokens")
+              .select("access_token, pages, instagram_accounts, user_id")
+              .eq("user_id", tm.user_id)
+              .eq("platform", tokenPlatform)
+              .maybeSingle();
+            if (tmToken && tmToken.access_token) {
+              tokenData = tmToken;
+              tokenOwnerUserId = tm.user_id;
+              console.log(`[social-publish] Team fallback: using ${tokenPlatform} token from user ${tm.user_id}`);
+              break;
+            }
+          }
+        }
       }
-      return new Response(
-        JSON.stringify({ error: errMsg }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+
+      if (!tokenData) {
+        const errMsg = `${platform} not connected for your account or any teammate. Please connect it from Integrations.`;
+        if (post_id) {
+          const lockId = (await supabaseAdmin.from("social_posts").select("publishing_lock_id").eq("id", post_id).maybeSingle()).data?.publishing_lock_id;
+          if (lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
+        }
+        return new Response(
+          JSON.stringify({ error: errMsg }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // ── Multi-Page Publishing Loop ────────────────────────────────
@@ -245,11 +280,11 @@ Deno.serve((req) =>
         }
         const pageId = selectedPage.id;
 
-        // Get page-specific access token (owner only)
+        // Get page-specific access token (use token owner, not post owner)
         const { data: pageTokenData } = await supabaseAdmin
           .from("user_meta_tokens")
           .select("access_token")
-          .eq("user_id", userId)
+          .eq("user_id", tokenOwnerUserId)
           .eq("platform", `${tokenPlatform}_page_${pageId}`)
           .maybeSingle();
         let pageAccessToken = pageTokenData?.access_token || tokenData!.access_token;
@@ -265,7 +300,7 @@ Deno.serve((req) =>
             await supabaseAdmin
               .from("user_meta_tokens")
               .upsert({
-                user_id: userId,
+                user_id: tokenOwnerUserId,
                 platform: `facebook_page_${pageId}`,
                 access_token: refreshedToken,
               }, { onConflict: "user_id,platform" });
@@ -315,7 +350,7 @@ Deno.serve((req) =>
             await supabaseAdmin
               .from("user_meta_tokens")
               .upsert({
-                user_id: userId,
+                user_id: tokenOwnerUserId,
                 platform: `instagram_page_${pageId}`,
                 access_token: refreshedToken,
               }, { onConflict: "user_id,platform" });
@@ -504,7 +539,7 @@ async function publishToInstagram(
     console.log(`[social-publish] Container created: ${containerId}`);
 
     // Poll for ready
-    const maxPolls = isVideo ? 30 : 10;
+    const maxPolls = isVideo ? 30 : 20;
     const pollInterval = isVideo ? 3000 : 2000;
     let ready = false;
     for (let i = 0; i < maxPolls; i++) {

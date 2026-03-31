@@ -221,20 +221,56 @@ Deno.serve((req) =>
         if (post.platform === "facebook" || post.platform === "instagram") {
           const tokenPlatform = post.platform === "instagram" ? "instagram" : "facebook";
 
-          // OWNER-ONLY: only use post owner's token — no team fallback
-          const { data: tokenData } = await supabase
+          // OWNER-FIRST: try post owner's token, then fall back to same-company teammate
+          let tokenData = (await supabase
             .from("user_meta_tokens")
-            .select("access_token, pages, instagram_accounts")
+            .select("access_token, pages, instagram_accounts, user_id")
             .eq("user_id", post.user_id)
             .eq("platform", tokenPlatform)
-            .maybeSingle();
+            .maybeSingle()).data;
+
+          let tokenOwnerUserId = post.user_id;
 
           if (!tokenData) {
-            const errMsg = `${post.platform} not connected for post owner (${post.user_id}). Owner-only token policy — no team fallback.`;
-            console.error(`[social-cron-publish] ${errMsg}`);
-            await releasePublishLock(supabase, post.id, lockId, "failed", { last_error: errMsg, qa_status: "needs_review" });
-            results.push({ postId: post.id, platform: post.platform, success: false, error: errMsg });
-            continue;
+            // Team fallback: find a teammate in the same company with a valid token
+            const { data: ownerProfile } = await supabase
+              .from("profiles")
+              .select("company_id")
+              .eq("user_id", post.user_id)
+              .maybeSingle();
+
+            if (ownerProfile?.company_id) {
+              const { data: teammates } = await supabase
+                .from("profiles")
+                .select("user_id")
+                .eq("company_id", ownerProfile.company_id)
+                .neq("user_id", post.user_id);
+
+              if (teammates && teammates.length > 0) {
+                for (const tm of teammates) {
+                  const { data: tmToken } = await supabase
+                    .from("user_meta_tokens")
+                    .select("access_token, pages, instagram_accounts, user_id")
+                    .eq("user_id", tm.user_id)
+                    .eq("platform", tokenPlatform)
+                    .maybeSingle();
+                  if (tmToken && tmToken.access_token) {
+                    tokenData = tmToken;
+                    tokenOwnerUserId = tm.user_id;
+                    console.log(`[social-cron-publish] Team fallback: using ${tokenPlatform} token from user ${tm.user_id} for post ${post.id}`);
+                    break;
+                  }
+                }
+              }
+            }
+
+            if (!tokenData) {
+              const errMsg = `${post.platform} not connected for post owner or any teammate. Please connect ${post.platform} from Integrations.`;
+              console.error(`[social-cron-publish] ${errMsg}`);
+              await releasePublishLock(supabase, post.id, lockId, "failed", { last_error: errMsg, qa_status: "needs_review" });
+              results.push({ postId: post.id, platform: post.platform, success: false, error: errMsg });
+              continue;
+            }
           }
 
           const pages = (tokenData.pages as Array<{ id: string; name?: string }>) || [];
@@ -275,11 +311,11 @@ Deno.serve((req) =>
             }
             const pageId = selectedPage.id;
 
-            // Get page-specific access token (owner only)
+            // Get page-specific access token (use token owner, not post owner)
             const { data: pageTokenData } = await supabase
               .from("user_meta_tokens")
               .select("access_token")
-              .eq("user_id", post.user_id)
+              .eq("user_id", tokenOwnerUserId)
               .eq("platform", `${tokenPlatform}_page_${pageId}`)
               .maybeSingle();
             let pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
@@ -294,7 +330,7 @@ Deno.serve((req) =>
                 await supabase
                   .from("user_meta_tokens")
                   .upsert({
-                    user_id: post.user_id,
+                    user_id: tokenOwnerUserId,
                     platform: `facebook_page_${pageId}`,
                     access_token: refreshedToken,
                   }, { onConflict: "user_id,platform" });
@@ -345,7 +381,7 @@ Deno.serve((req) =>
                 await supabase
                   .from("user_meta_tokens")
                   .upsert({
-                    user_id: post.user_id,
+                    user_id: tokenOwnerUserId,
                     platform: `instagram_page_${pageId}`,
                     access_token: refreshedToken,
                   }, { onConflict: "user_id,platform" });
@@ -525,7 +561,7 @@ async function publishToInstagram(
     console.log(`[cron-IG] Container created: ${containerId}`);
 
     // Poll for ready — videos need much longer
-    const maxPolls = isVideo ? 30 : 10;
+    const maxPolls = isVideo ? 30 : 20;
     const pollInterval = isVideo ? 3000 : 2000;
     for (let i = 0; i < maxPolls; i++) {
       await new Promise((r) => setTimeout(r, pollInterval));
