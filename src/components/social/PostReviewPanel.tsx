@@ -49,9 +49,7 @@ const CONTENT_TYPE_OPTIONS: SelectionOption[] = [
 const PLATFORM_OPTIONS: SelectionOption[] = [
   { value: "facebook", label: "Facebook", description: "Facebook" },
   { value: "instagram", label: "Instagram", description: "Instagram" },
-  { value: "instagram_fb", label: "Instagram (FB Pages)", description: "Instagram (FB Pages)" },
   { value: "linkedin", label: "LinkedIn", description: "LinkedIn" },
-  { value: "linkedin_org", label: "LinkedIn (Organization)", description: "LinkedIn (Organization)" },
   { value: "youtube", label: "YouTube", description: "Only single video posts supported" },
   { value: "tiktok", label: "TikTok", description: "Only single video posts supported" },
 ];
