@@ -257,6 +257,13 @@ export function AIExtractView() {
     }
   }, [activeSession?.unit_system, activeSessionId]);
 
+  // Auto-recover rows when session transitions to "extracted" but UI has no rows (e.g. after HTTP timeout)
+  useEffect(() => {
+    if (activeSession?.status === "extracted" && rows.length === 0 && !rowsLoading) {
+      refreshRows();
+    }
+  }, [activeSession?.status]);
+
   // Filter out merged rows for display
   const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
   const mergedRows = useMemo(() => rows.filter(r => r.status === "merged"), [rows]);
