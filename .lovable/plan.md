@@ -1,32 +1,38 @@
 
 
-# Fix: Failed posts must show red, Published posts show green
+# Fix Page Names: Rebar.shop → Correct Names + Add Sattar Page
 
 ## Problem
-Cards with `status === "failed"` fall through to the default gray styling (`bg-muted/50 border-border`) instead of showing red. The card background color cases at line 264-278 handle `published`, `scheduled`, `draft`, `declined` but miss `failed`.
+The page names in `PLATFORM_PAGES` constants and existing DB records use incorrect names:
+- `"Rebar.shop"` → should be **"Rebar.Shop Incorporated"**
+- `"Rebar.shop Ontario"` → should be **"Rebar.Shop Ontario"**
+- **"Sattar Esmaeili-Oureh"** missing from LinkedIn pages
 
-Similarly, the status text color (lines 319-326) has no `failed` case — it defaults to gray `text-muted-foreground`.
+## Changes
 
-## Changes — single file: `src/components/social/SocialCalendar.tsx`
+### 1. Update `src/lib/socialConstants.ts`
+- Rename `"Rebar.shop"` → `"Rebar.Shop Incorporated"` in facebook & instagram arrays
+- Rename `"Rebar.shop Ontario"` → `"Rebar.Shop Ontario"` in facebook & instagram arrays
+- Add `"Sattar Esmaeili-Oureh"` to linkedin pages
 
-### 1. Card background: add `failed` case (red)
-After the `declined` case (line 276), before the default fallback:
+### 2. Database migration — fix existing records
+Run SQL to update `page_name` in `social_posts` table:
+```sql
+UPDATE social_posts
+SET page_name = REPLACE(
+  REPLACE(page_name, 'Rebar.shop Ontario', 'Rebar.Shop Ontario'),
+  'Rebar.shop', 'Rebar.Shop Incorporated'
+)
+WHERE page_name LIKE '%Rebar.shop%';
 ```
-status === "failed"
-  ? "bg-red-500/10 border-red-500/40"
-```
+Note: order matters — replace "Rebar.shop Ontario" first to avoid double-replacement.
 
-### 2. Status text color: add `failed` case (red)
-In the status label className (line 319-326), add:
-```
-status === "failed" ? "text-red-600 font-medium"
-```
+### 3. Check edge functions for hardcoded page names
+- `supabase/functions/ai-agent/index.ts` line 157 has `PIXEL_CONTACT_INFO` with `www.rebar.shop` (this is a URL, not a page name — no change needed)
+- No other edge functions reference page names directly
 
-### 3. Also handle `publishing` card background (blue/neutral indicator)
-```
-status === "publishing"
-  ? "bg-blue-500/10 border-blue-500/30"
-```
-
-No other files change. No logic or route changes.
+## Impact
+- 1 source file changed (`socialConstants.ts`)
+- 1 DB migration (UPDATE existing page_name values)
+- All existing and future posts will use correct names
 
