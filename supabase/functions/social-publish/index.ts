@@ -2,6 +2,7 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
@@ -74,6 +75,13 @@ Deno.serve((req) =>
         );
       }
 
+      if (existing?.status === "publishing") {
+        return new Response(
+          JSON.stringify({ error: "This post is currently being published. Please wait." }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // HARD GATE: declined posts can NEVER be published
       if (existing?.status === "declined") {
         console.warn(`[social-publish] BLOCKED — post ${post_id} was declined by ${existing.declined_by}`);
@@ -84,7 +92,6 @@ Deno.serve((req) =>
       }
 
       // ── Enhanced Duplicate Guard ──────────────────────────────────
-      // Check per individual page: same (content+image) OR same title on same platform+day
       if (existing) {
         const dayStr = existing.scheduled_date
           ? new Date(existing.scheduled_date).toISOString().split("T")[0]
@@ -117,7 +124,7 @@ Deno.serve((req) =>
                 || postPages.some((pg: string) => pubPages.includes(pg));
 
               if (hasPageOverlap) {
-                console.warn(`[social-publish] BLOCKED — duplicate content already published: ${pub.id} (content+image=${sameContent}, title=${sameTitle})`);
+                console.warn(`[social-publish] BLOCKED — duplicate content already published: ${pub.id}`);
                 return new Response(
                   JSON.stringify({ error: "Duplicate — this content was already published to this platform today." }),
                   { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -145,64 +152,92 @@ Deno.serve((req) =>
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      // ── Atomic Lock ──────────────────────────────────────────────
+      const lock = await acquirePublishLock(supabaseAdmin, post_id, ["scheduled", "draft"]);
+      if (!lock.locked) {
+        console.warn(`[social-publish] Cannot acquire lock for post ${post_id}: ${lock.reason}`);
+        return new Response(
+          JSON.stringify({ error: `Cannot publish: ${lock.reason}` }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      console.log(`[social-publish] Acquired lock for post ${post_id}: lockId=${lock.lockId}`);
     }
 
-    // Get user token for the platform
+    // Get user token for the platform — OWNER-ONLY, no team fallback
     const tokenPlatform = platform === "instagram" ? "instagram" : "facebook";
-    let { data: tokenData } = await supabaseAdmin
+    const { data: tokenData } = await supabaseAdmin
       .from("user_meta_tokens")
       .select("access_token, pages, instagram_accounts")
       .eq("user_id", userId)
       .eq("platform", tokenPlatform)
       .maybeSingle();
 
-    // Fallback: any user's token for this platform
-    if (!tokenData) {
-      const { data: fallback } = await supabaseAdmin
-        .from("user_meta_tokens")
-        .select("access_token, pages, instagram_accounts")
-        .eq("platform", tokenPlatform)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      tokenData = fallback;
-    }
-
     if (!tokenData && (platform === "facebook" || platform === "instagram")) {
+      const errMsg = `${platform} not connected for your account. Owner-only token policy — please connect it from Integrations.`;
+      if (post_id) {
+        // Release lock with failure
+        const lockId = (await supabaseAdmin.from("social_posts").select("publishing_lock_id").eq("id", post_id).maybeSingle()).data?.publishing_lock_id;
+        if (lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
+      }
       return new Response(
-        JSON.stringify({ error: `${platform} not connected. Please connect it first from Integrations.` }),
+        JSON.stringify({ error: errMsg }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // ── Multi-Page Publishing Loop ────────────────────────────────
-    // Determine target pages from the post record (comma-separated page_name)
     const dbPageName = postRecord?.page_name || page_name || "";
     const individualPages = dbPageName ? dbPageName.split(", ").map((p: string) => p.trim()).filter(Boolean) : [];
 
     const pageErrors: string[] = [];
     const pageSuccesses: string[] = [];
 
+    // Get lock ID for final status update
+    let lockId: string | null = null;
+    if (post_id) {
+      const { data: lockData } = await supabaseAdmin.from("social_posts").select("publishing_lock_id").eq("id", post_id).maybeSingle();
+      lockId = lockData?.publishing_lock_id;
+    }
+
     if (platform === "facebook" || platform === "instagram") {
       const pages = (tokenData!.pages as Array<{ id: string; name: string }>) || [];
       if (pages.length === 0) {
+        const errMsg = "No Facebook Pages found. Make sure your account has at least one Page.";
+        if (post_id && lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
         return new Response(
-          JSON.stringify({ error: "No Facebook Pages found. Make sure your account has at least one Page." }),
+          JSON.stringify({ error: errMsg }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const targetPages = individualPages.length > 0 ? individualPages : [pages[0]?.name || ""];
+      // NO FALLBACK: if no pages assigned, fail explicitly
+      if (individualPages.length === 0) {
+        const errMsg = "No pages assigned to post (page_name is empty). Cannot publish without explicit page assignment.";
+        console.error(`[social-publish] FAIL: ${errMsg}`);
+        if (post_id && lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
+        return new Response(
+          JSON.stringify({ error: errMsg }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      console.log(`[social-publish] target_pages=[${individualPages.join(", ")}], available_pages=[${pages.map(p => p.name).join(", ")}]`);
+
       const publishedFbPageIds = new Set<string>();
       const publishedIgIds = new Set<string>();
 
-      for (const targetPageName of targetPages) {
+      for (const targetPageName of individualPages) {
         if (!targetPageName) {
           console.warn(`[social-publish] SKIP — empty page name, no fallback`);
           pageErrors.push("Empty page name — skipped");
           continue;
         }
-        const selectedPage = pages.find((p) => p.name === targetPageName);
+
+        // Normalized matching
+        const normalizedTarget = normalizePageName(targetPageName);
+        const selectedPage = pages.find((p) => normalizePageName(p.name || "") === normalizedTarget);
         if (!selectedPage) {
           console.warn(`[social-publish] SKIP — page "${targetPageName}" not found among [${pages.map(p => p.name).join(", ")}]. Will NOT fall back.`);
           pageErrors.push(`Page "${targetPageName}": not found in connected pages — skipped`);
@@ -210,7 +245,7 @@ Deno.serve((req) =>
         }
         const pageId = selectedPage.id;
 
-        // Get page-specific access token
+        // Get page-specific access token (owner only)
         const { data: pageTokenData } = await supabaseAdmin
           .from("user_meta_tokens")
           .select("access_token")
@@ -272,8 +307,23 @@ Deno.serve((req) =>
 
           result = await publishToFacebook(pageId, pageAccessToken, message, image_url);
         } else {
-          // Instagram
+          // Instagram — MUST refresh page token for IG too (fixes status=undefined polling)
+          const userLongLivedToken = tokenData!.access_token;
+          const refreshedToken = await refreshPageToken(userLongLivedToken, pageId);
+          if (refreshedToken) {
+            pageAccessToken = refreshedToken;
+            await supabaseAdmin
+              .from("user_meta_tokens")
+              .upsert({
+                user_id: userId,
+                platform: `instagram_page_${pageId}`,
+                access_token: refreshedToken,
+              }, { onConflict: "user_id,platform" });
+            console.log(`[social-publish] Refreshed page token for IG (page ${pageId})`);
+          }
+
           const igAccounts = (tokenData!.instagram_accounts as Array<{ id: string; username: string; pageId: string }>) || [];
+          console.log(`[social-publish] IG accounts available: [${igAccounts.map(ig => `${ig.id}(page=${ig.pageId})`).join(", ")}]`);
           if (igAccounts.length === 0) {
             pageErrors.push(`Page "${targetPageName}": No Instagram Business Account found`);
             continue;
@@ -284,6 +334,7 @@ Deno.serve((req) =>
             pageErrors.push(`Page "${targetPageName}": no linked Instagram account — skipped`);
             continue;
           }
+          console.log(`[social-publish] Matched IG account: id=${selectedIg.id}, username=${selectedIg.username || "unknown"}, for page "${targetPageName}"`);
           if (publishedIgIds.has(selectedIg.id)) {
             console.log(`[social-publish] Skipping page "${targetPageName}" — IG account ${selectedIg.id} already published`);
             pageSuccesses.push(targetPageName);
@@ -316,6 +367,7 @@ Deno.serve((req) =>
         pageSuccesses.push("twitter");
       }
     } else {
+      if (post_id && lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: `Platform ${platform} not supported` });
       return new Response(
         JSON.stringify({ error: `Publishing to ${platform} is not yet supported.` }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -324,13 +376,11 @@ Deno.serve((req) =>
 
     // Determine final result
     if (pageSuccesses.length > 0) {
-      // Update post status to published
-      if (post_id) {
+      if (post_id && lockId) {
         const partialError = pageErrors.length > 0 ? `Partial: ${pageErrors.join("; ")}` : null;
-        await supabaseAdmin
-          .from("social_posts")
-          .update({ status: "published", ...(partialError ? { last_error: partialError } : {}) })
-          .eq("id", post_id);
+        await releasePublishLock(supabaseAdmin, post_id, lockId, "published", {
+          ...(partialError ? { last_error: partialError } : {}),
+        });
       }
       return new Response(
         JSON.stringify({ success: true, platform, pages: pageSuccesses, errors: pageErrors.length > 0 ? pageErrors : undefined }),
@@ -338,6 +388,9 @@ Deno.serve((req) =>
       );
     } else {
       const errMsg = pageErrors.join("; ") || "Unknown publishing error";
+      if (post_id && lockId) {
+        await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
+      }
       return new Response(
         JSON.stringify({ error: errMsg }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -432,6 +485,9 @@ async function publishToInstagram(
       containerBody.image_url = imageUrl;
       containerBody.caption = caption;
     }
+
+    console.log(`[social-publish] Creating container for IG account ${igAccountId}, media_type=${containerBody.media_type || "IMAGE"}`);
+
     const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -445,6 +501,7 @@ async function publishToInstagram(
     }
 
     const containerId = containerData.id;
+    console.log(`[social-publish] Container created: ${containerId}`);
 
     // Poll for ready
     const maxPolls = isVideo ? 30 : 10;
@@ -456,7 +513,13 @@ async function publishToInstagram(
         `${GRAPH_API}/${containerId}?fields=status_code&access_token=${accessToken}`
       );
       const statusData = await statusRes.json();
-      console.log(`[IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}`);
+      console.log(`[IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}, raw=${JSON.stringify(statusData)}`);
+
+      if (statusData.error) {
+        console.error(`[IG] Poll error: ${statusData.error.message}`);
+        return { error: `Instagram polling error: ${statusData.error.message}` };
+      }
+
       if (statusData.status_code === "FINISHED") {
         ready = true;
         break;
@@ -499,27 +562,15 @@ async function publishToLinkedIn(
   imageUrl?: string
 ): Promise<{ id?: string; error?: string }> {
   try {
-    let { data: connection } = await supabase
+    // OWNER-ONLY: no team fallback
+    const { data: connection } = await supabase
       .from("integration_connections")
       .select("config")
       .eq("user_id", userId)
       .eq("integration_id", "linkedin")
       .maybeSingle();
 
-    // Fallback: use any user's LinkedIn connection
-    if (!connection) {
-      const { data: fallback } = await supabase
-        .from("integration_connections")
-        .select("config")
-        .eq("integration_id", "linkedin")
-        .eq("status", "connected")
-        .order("last_sync_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      connection = fallback;
-    }
-
-    if (!connection) return { error: "LinkedIn not connected. Please connect it from Integrations." };
+    if (!connection) return { error: `LinkedIn not connected for your account. Owner-only token policy — please connect it from Settings → Integrations.` };
     const config = connection.config as { access_token: string; expires_at: number };
 
     if (config.expires_at < Date.now()) return { error: "LinkedIn token expired. Please reconnect." };
