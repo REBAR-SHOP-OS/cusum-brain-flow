@@ -500,12 +500,33 @@ Deno.serve((req) =>
 // ── Publishing Functions ──────────────────────────────────────────
 
 async function publishToFacebook(
-  pageId: string, accessToken: string, message: string, imageUrl?: string | null
+  pageId: string, accessToken: string, message: string, imageUrl?: string | null,
+  contentType: string = "post"
 ): Promise<{ id?: string; error?: string }> {
   try {
     const params: Record<string, string> = { access_token: accessToken };
     let url: string;
+
+    // Detect video content (same pattern as Instagram)
+    let isVideo = false;
     if (imageUrl) {
+      isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
+      if (!isVideo) {
+        try {
+          const head = await fetch(imageUrl, { method: "HEAD" });
+          const ct = head.headers.get("content-type") || "";
+          isVideo = ct.startsWith("video/");
+        } catch { /* ignore HEAD failures */ }
+      }
+    }
+
+    if (imageUrl && isVideo) {
+      // Video → use /videos endpoint
+      url = `${GRAPH_API}/${pageId}/videos`;
+      params.file_url = imageUrl;
+      params.description = message;
+      console.log(`[social-cron-publish] Facebook video detected, using /videos endpoint`);
+    } else if (imageUrl) {
       url = `${GRAPH_API}/${pageId}/photos`;
       params.url = imageUrl;
       params.message = message;
@@ -513,6 +534,7 @@ async function publishToFacebook(
       url = `${GRAPH_API}/${pageId}/feed`;
       params.message = message;
     }
+
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
