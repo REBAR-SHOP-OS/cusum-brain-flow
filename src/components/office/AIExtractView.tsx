@@ -257,6 +257,13 @@ export function AIExtractView() {
     }
   }, [activeSession?.unit_system, activeSessionId]);
 
+  // Auto-recover rows when session transitions to "extracted" but UI has no rows (e.g. after HTTP timeout)
+  useEffect(() => {
+    if (activeSession?.status === "extracted" && rows.length === 0 && !rowsLoading) {
+      refreshRows();
+    }
+  }, [activeSession?.status]);
+
   // Filter out merged rows for display
   const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
   const mergedRows = useMemo(() => rows.filter(r => r.status === "merged"), [rows]);
@@ -490,13 +497,22 @@ export function AIExtractView() {
         description: "Items extracted and saved successfully",
       });
     } catch (err: any) {
-      // If a session was created, revert its status to "error" so the UI shows the error card
+      // Only revert to error if the edge function hasn't already succeeded in the background
       if (activeSessionId) {
-        await supabase
+        const { data: currentSession } = await supabase
           .from("extract_sessions")
-          .update({ status: "error", error_message: err.message || "Extraction failed" } as any)
-          .eq("id", activeSessionId);
+          .select("status")
+          .eq("id", activeSessionId)
+          .maybeSingle();
+
+        if (!currentSession || (currentSession as any).status !== "extracted") {
+          await supabase
+            .from("extract_sessions")
+            .update({ status: "error", error_message: err.message || "Extraction failed" } as any)
+            .eq("id", activeSessionId);
+        }
         await refreshSessions();
+        await refreshRows();
       }
       toast({ title: "Extraction failed", description: err.message, variant: "destructive" });
     } finally {
@@ -1545,12 +1561,16 @@ export function AIExtractView() {
                         toast({ title: "Extraction restarted", description: "The AI is re-processing your file." });
                         await refreshSessions();
                       } catch (err: any) {
-                        // Revert session to error so user sees error card immediately instead of stuck "thinking" animation
-                        await supabase
-                          .from("extract_sessions")
-                          .update({ status: "error", error_message: err.message || "Retry failed" } as any)
-                          .eq("id", activeSession.id);
+                        const { data: cs } = await supabase
+                          .from("extract_sessions").select("status").eq("id", activeSession.id).maybeSingle();
+                        if (!cs || (cs as any).status !== "extracted") {
+                          await supabase
+                            .from("extract_sessions")
+                            .update({ status: "error", error_message: err.message || "Retry failed" } as any)
+                            .eq("id", activeSession.id);
+                        }
                         await refreshSessions();
+                        await refreshRows();
                         toast({ title: "Retry failed", description: err.message, variant: "destructive" });
                       } finally {
                         setProcessing(false);
@@ -1660,12 +1680,16 @@ export function AIExtractView() {
                       toast({ title: "Extraction restarted", description: "The AI is re-processing your file." });
                       await refreshSessions();
                     } catch (err: any) {
-                      // Revert session to error so user sees error card immediately instead of stuck "thinking" animation
-                      await supabase
-                        .from("extract_sessions")
-                        .update({ status: "error", error_message: err.message || "Retry failed" } as any)
-                        .eq("id", activeSession.id);
+                      const { data: cs } = await supabase
+                        .from("extract_sessions").select("status").eq("id", activeSession.id).maybeSingle();
+                      if (!cs || (cs as any).status !== "extracted") {
+                        await supabase
+                          .from("extract_sessions")
+                          .update({ status: "error", error_message: err.message || "Retry failed" } as any)
+                          .eq("id", activeSession.id);
+                      }
                       await refreshSessions();
+                      await refreshRows();
                       toast({ title: "Retry failed", description: err.message, variant: "destructive" });
                     } finally {
                       setProcessing(false);
