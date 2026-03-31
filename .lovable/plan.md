@@ -1,68 +1,61 @@
 
 
-# Fix: Extraction Succeeds But UI Shows "No Rows Found"
+# Fix: Video Not Publishing to Last Instagram Page (Rebar.shop Ontario)
 
 ## Root Cause
 
-When `runExtract()` throws (due to HTTP timeout: `connection closed before message completed`), the **catch block overwrites the session status to "error"** (line 493-498). However, the edge function continues processing in the background and successfully inserts all 160 rows, then sets the session back to "extracted".
+The Instagram video publishing loop in `social-publish/index.ts` is **sequential**. For each of the 5 selected pages, the function:
 
-The problem: `useExtractRows` only fetches rows when `sessionId` changes. After the HTTP error, `sessionId` stays the same, so no re-fetch happens. The realtime subscription for rows may miss inserts that occurred during the timeout window. The 2-second retry also fails because rows aren't inserted yet at that point.
+1. Creates a media container (~1-2s)
+2. Polls for video processing status (up to 30 polls * 3s = **90 seconds**)
+3. Publishes the container (~1-2s)
 
-**Result**: Session shows "extracted" (step 3), but `rows` array is empty → "No extracted rows found."
+With 5 pages processed sequentially, worst case = **5 x 90s = 450 seconds**. The Supabase Edge Function times out (default ~60s, max ~150s) before reaching "Rebar.shop Ontario" — which is the **last page** in the list.
 
-## Fix (2 changes in 1 file)
+Evidence:
+- Post `21b929c0` is stuck in `status=publishing` since 14:50 (over 12 min ago, stale lock not yet recovered)
+- `page_name`: "Ontario Steel Detailing, Rebar.shop, Ontario Logistics, Ontario Steels, **Rebar.shop Ontario**" — last in list
+- Token data confirms all 5 pages have valid, separate IG accounts (no dedup issue)
 
-### File: `src/components/office/AIExtractView.tsx`
+## Fix
 
-**Fix 1 — Don't overwrite status to "error" if extraction already succeeded**
+### File: `supabase/functions/social-publish/index.ts`
 
-In the catch block (line 492-500), before setting status to "error", check if the session has already transitioned to "extracted" in the background:
+**Parallelize Instagram video publishing** — instead of a sequential `for` loop, create all IG containers simultaneously and poll them in parallel using `Promise.allSettled`.
 
-```typescript
-} catch (err: any) {
-  // Only revert to error if the edge function hasn't already succeeded
-  if (activeSessionId) {
-    const { data: currentSession } = await supabase
-      .from("extract_sessions")
-      .select("status")
-      .eq("id", activeSessionId)
-      .maybeSingle();
-    
-    if (!currentSession || (currentSession as any).status !== "extracted") {
-      await supabase
-        .from("extract_sessions")
-        .update({ status: "error", error_message: err.message || "Extraction failed" } as any)
-        .eq("id", activeSessionId);
-    }
-    await refreshSessions();
-    await refreshRows();  // ← Force row refresh in case rows were inserted
-  }
-  toast({ title: "Extraction failed", description: err.message, variant: "destructive" });
-}
+```text
+BEFORE (sequential):
+  Page 1: create → poll 90s → publish
+  Page 2: create → poll 90s → publish
+  ...
+  Page 5: create → poll 90s → publish  ← TIMEOUT before reaching here
+  Total: up to 450s
+
+AFTER (parallel):
+  All 5 pages: create containers simultaneously
+  All 5 pages: poll in parallel (max 90s total)
+  All 5 pages: publish simultaneously
+  Total: ~90s max
 ```
 
-**Fix 2 — Re-fetch rows when session status transitions to "extracted"**
+Specifically:
+1. Keep the existing sequential loop for **Facebook** (no polling needed for FB image posts)
+2. For **Instagram** pages, collect all target pages into an array, then use `Promise.allSettled` to run `publishToInstagram()` for each page concurrently
+3. Collect results from settled promises into `pageSuccesses` / `pageErrors` as before
+4. Deduplication (`publishedIgIds`) must happen **before** launching parallel tasks — filter duplicates first, then parallelize
 
-Add an effect that watches `activeSession?.status` and triggers a row refresh when it becomes "extracted":
+### File: `supabase/functions/social-cron-publish/index.ts`
 
-```typescript
-// After the existing useEffect for unit sync (around line 258)
-useEffect(() => {
-  if (activeSession?.status === "extracted" && rows.length === 0 && !rowsLoading) {
-    refreshRows();
-  }
-}, [activeSession?.status]);
-```
+Apply the same parallelization fix to the cron publisher's Instagram loop (lines 377-420).
 
-This ensures that if realtime updates the session to "extracted" after an HTTP timeout, the rows are re-fetched.
+### Stale Lock Recovery
 
-### Same fix for retry blocks (lines 1547-1554 and ~1647)
-
-Apply the same "check before overwriting status" pattern to the retry catch blocks.
+The post `21b929c0` is currently stuck. The `recoverStaleLocks()` function should catch it on next cron run (>10 min old). No code change needed for this — it will self-heal.
 
 ## Impact
-- 1 file changed (`AIExtractView.tsx`)
-- No database, edge function, or schema changes
-- Prevents the race condition where a successful extraction is incorrectly marked as "error"
-- Adds automatic row recovery when session reaches "extracted" state
+- 2 files changed (`social-publish/index.ts`, `social-cron-publish/index.ts`)
+- Video publishing to 5 IG pages goes from ~450s worst case to ~90s
+- No database or schema changes
+- No frontend changes
+- Facebook and LinkedIn publishing remain unchanged (already fast)
 
