@@ -539,7 +539,7 @@ async function publishToInstagram(
     console.log(`[social-publish] Container created: ${containerId}`);
 
     // Poll for ready
-    const maxPolls = isVideo ? 30 : 10;
+    const maxPolls = isVideo ? 30 : 20;
     const pollInterval = isVideo ? 3000 : 2000;
     let ready = false;
     for (let i = 0; i < maxPolls; i++) {
