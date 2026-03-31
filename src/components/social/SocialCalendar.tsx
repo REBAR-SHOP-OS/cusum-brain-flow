@@ -179,7 +179,7 @@ function PageStatusDropdown({ post, platform }: { post: SocialPost; platform: st
   );
 }
 
-
+export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, selectedPostIds, onToggleSelect, onSelectDay }: SocialCalendarProps) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
   return (
