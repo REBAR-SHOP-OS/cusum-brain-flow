@@ -193,6 +193,8 @@ Deno.serve((req) =>
       }
 
       const targetPages = individualPages.length > 0 ? individualPages : [pages[0]?.name || ""];
+      const publishedFbPageIds = new Set<string>();
+      const publishedIgIds = new Set<string>();
 
       for (const targetPageName of targetPages) {
         let selectedPage = pages[0];
