@@ -278,7 +278,12 @@ Deno.serve((req) =>
             pageErrors.push(`Page "${targetPageName}": No Instagram Business Account found`);
             continue;
           }
-          const selectedIg = igAccounts.find((ig) => ig.pageId === pageId) || igAccounts[0];
+          const selectedIg = igAccounts.find((ig) => ig.pageId === pageId);
+          if (!selectedIg) {
+            console.warn(`[social-publish] SKIP — no IG account linked to FB page ${pageId} ("${targetPageName}")`);
+            pageErrors.push(`Page "${targetPageName}": no linked Instagram account — skipped`);
+            continue;
+          }
           if (publishedIgIds.has(selectedIg.id)) {
             console.log(`[social-publish] Skipping page "${targetPageName}" — IG account ${selectedIg.id} already published`);
             pageSuccesses.push(targetPageName);
