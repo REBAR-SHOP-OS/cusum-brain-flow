@@ -1,23 +1,32 @@
 
 
-# Remove Unconnected LinkedIn Pages from Selection
+# Generate REBAR SHOP OS Full System Architecture PDF
 
-## Problem
-"Rebar.Shop Ontario" and "Rebar.Shop Incorporated" are listed as LinkedIn page options but are not actually connected (no OAuth tokens or organization IDs exist). Only "Sattar Esmaeili-Oureh" (personal profile) is authenticated.
+## Objective
+Produce a comprehensive, implementation-ready PDF document covering all 35 sections of the system specification based on deep codebase analysis.
 
-## Change
+## Data Gathered
+- **168+ database tables** from `types.ts` (16,744 lines)
+- **193+ edge functions** across 10 domains
+- **80+ pages/routes** from `App.tsx`
+- **140+ custom hooks**
+- **57 component directories**
+- **8 user roles** with complex routing
+- **40+ shared backend modules**
+- Full auth/RBAC/multi-tenant architecture
+- AI router with GPT + Gemini dual-provider
+- 15+ external integrations
 
-### `src/lib/socialConstants.ts` — Remove unconnected LinkedIn entries
-Replace the LinkedIn array with only the connected account:
-```typescript
-linkedin: [
-  { value: "Sattar Esmaeili-Oureh", label: "Sattar Esmaeili-Oureh" },
-],
-```
+## Approach
+1. Write a Python script using `reportlab` to generate a structured PDF
+2. Include all 35 sections with extracted real data (table names, function names, routes, roles, etc.)
+3. QA the output visually
+4. Deliver as downloadable artifact
 
-This removes "Rebar.Shop Ontario" and "Rebar.Shop Incorporated" from the LinkedIn dropdown until they are properly connected with `w_organization_social` scope and valid organization IDs.
+## Sections Covered
+1-13: System ID, Executive Summary, Feature Inventory, Route Map, User Journeys, Role Matrix, Frontend/Backend Architecture, UI System, Component Inventory, Data Model, API Blueprint, Auth/Authz
+14-35: Business Rules, Forms, Automations, Notifications, Search, File Storage, Error Handling, Security, Performance, DevOps, Env Vars, Testing, File Structure, Rebuild Plan, Missing Info, AI Prompts, Readiness Score, Error Schema, Edge Functions, Realtime, External Integrations, Validation Matrix
 
-## Impact
-- 1 file changed: `src/lib/socialConstants.ts`
-- No database migration needed (existing posts keep their page_name, they just won't appear as options for new posts)
+## Output
+`/mnt/documents/FINAL-SYSTEM-REBUILD-SPEC.pdf` — estimated 100+ pages
 
