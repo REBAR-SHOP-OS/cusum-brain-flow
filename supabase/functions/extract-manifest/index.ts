@@ -486,7 +486,7 @@ Rules:
             const sheet = parsedWorkbook.Sheets[parsedWorkbook.SheetNames[0]];
             const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
             const sampleCells: string[] = [];
-            for (const row of (rawRows as any[][]).slice(0, 15)) {
+            for (const row of (rawRows as any[][]).slice(0, 50)) {
               for (const cell of row) {
                 if (typeof cell === "string") sampleCells.push(cell);
               }
@@ -497,6 +497,25 @@ Rules:
             }
           } catch (e) {
             console.warn("Failed to scan raw XLSX cells for unit detection:", e);
+          }
+        }
+
+        // Tertiary check: inspect XLSX cell number formats for inch marks (e.g. format 0" displays 78 as 78")
+        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "metric") {
+          try {
+            const sheet = parsedWorkbook.Sheets[parsedWorkbook.SheetNames[0]];
+            const cellKeys = Object.keys(sheet).filter(k => !k.startsWith("!"));
+            const inchFmtPattern = /["\u201D]|['\u2019]\s*$/;
+            const hasInchFormat = cellKeys.some(k => {
+              const cell = sheet[k];
+              return cell && typeof cell.z === "string" && inchFmtPattern.test(cell.z);
+            });
+            if (hasInchFormat) {
+              detectedUnitSystem = "in";
+              console.log("Detected inch unit system from XLSX cell number format codes");
+            }
+          } catch (e) {
+            console.warn("Failed to scan XLSX number formats for unit detection:", e);
           }
         }
 
