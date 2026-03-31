@@ -1,61 +1,60 @@
 
 
-# Fix: Video Not Publishing to Last Instagram Page (Rebar.shop Ontario)
+# Fix: Prevent Duplicate Publishing via Stale Lock Recovery
 
 ## Root Cause
 
-The Instagram video publishing loop in `social-publish/index.ts` is **sequential**. For each of the 5 selected pages, the function:
+The duplicate publish happens through this exact sequence:
 
-1. Creates a media container (~1-2s)
-2. Polls for video processing status (up to 30 polls * 3s = **90 seconds**)
-3. Publishes the container (~1-2s)
+```text
+1. Manual "Publish Now" → acquirePublishLock → status = "publishing"
+2. Edge function times out (video polling takes too long for 5 pages)
+3. Post stays in "publishing" for >10 minutes
+4. Cron runs → recoverStaleLocks() resets post to "scheduled"  ← THE BUG
+5. Same cron run queries scheduled posts → finds this post → publishes AGAIN
+6. Result: video posted TWICE to Instagram
+```
 
-With 5 pages processed sequentially, worst case = **5 x 90s = 450 seconds**. The Supabase Edge Function times out (default ~60s, max ~150s) before reaching "Rebar.shop Ontario" — which is the **last page** in the list.
-
-Evidence:
-- Post `21b929c0` is stuck in `status=publishing` since 14:50 (over 12 min ago, stale lock not yet recovered)
-- `page_name`: "Ontario Steel Detailing, Rebar.shop, Ontario Logistics, Ontario Steels, **Rebar.shop Ontario**" — last in list
-- Token data confirms all 5 pages have valid, separate IG accounts (no dedup issue)
+The critical flaw is in `supabase/functions/_shared/publishLock.ts` — `recoverStaleLocks()` resets stale posts to `"scheduled"`, which makes them eligible for immediate re-publishing by the cron job.
 
 ## Fix
 
-### File: `supabase/functions/social-publish/index.ts`
+### File: `supabase/functions/_shared/publishLock.ts` — `recoverStaleLocks()`
 
-**Parallelize Instagram video publishing** — instead of a sequential `for` loop, create all IG containers simultaneously and poll them in parallel using `Promise.allSettled`.
+Change the recovery status from `"scheduled"` to `"failed"` with an error message. This prevents automatic re-publishing and requires manual review.
 
-```text
-BEFORE (sequential):
-  Page 1: create → poll 90s → publish
-  Page 2: create → poll 90s → publish
-  ...
-  Page 5: create → poll 90s → publish  ← TIMEOUT before reaching here
-  Total: up to 450s
+```typescript
+// BEFORE (dangerous):
+status: "scheduled"
 
-AFTER (parallel):
-  All 5 pages: create containers simultaneously
-  All 5 pages: poll in parallel (max 90s total)
-  All 5 pages: publish simultaneously
-  Total: ~90s max
+// AFTER (safe):
+status: "failed",
+last_error: "Publishing timed out — recovered from stale lock. Review before retrying.",
+qa_status: "needs_review"
 ```
 
-Specifically:
-1. Keep the existing sequential loop for **Facebook** (no polling needed for FB image posts)
-2. For **Instagram** pages, collect all target pages into an array, then use `Promise.allSettled` to run `publishToInstagram()` for each page concurrently
-3. Collect results from settled promises into `pageSuccesses` / `pageErrors` as before
-4. Deduplication (`publishedIgIds`) must happen **before** launching parallel tasks — filter duplicates first, then parallelize
+Apply this change to both update calls in `recoverStaleLocks()` (the main stale check and the legacy fallback).
 
 ### File: `supabase/functions/social-cron-publish/index.ts`
 
-Apply the same parallelization fix to the cron publisher's Instagram loop (lines 377-420).
+Add a safety guard: after `recoverStaleLocks()` runs, the recovered post IDs should be excluded from the subsequent scheduled posts query. This is a defense-in-depth measure in case the status update hasn't propagated.
 
-### Stale Lock Recovery
+```typescript
+// After recoverStaleLocks:
+const recoveredSet = new Set(recovered);
 
-The post `21b929c0` is currently stuck. The `recoverStaleLocks()` function should catch it on next cron run (>10 min old). No code change needed for this — it will self-heal.
+// When processing duePosts, skip any that were just recovered:
+const safePosts = (duePosts || []).filter(p => !recoveredSet.has(p.id));
+```
+
+### Immediate fix for post `21b929c0`
+
+This post is currently stuck in `status=publishing` with a stale lock. It will be recovered to "failed" on the next cron run after deployment.
 
 ## Impact
-- 2 files changed (`social-publish/index.ts`, `social-cron-publish/index.ts`)
-- Video publishing to 5 IG pages goes from ~450s worst case to ~90s
-- No database or schema changes
+- 2 files changed (`publishLock.ts`, `social-cron-publish/index.ts`)
+- Stale locks now recover to "failed" instead of "scheduled" — no automatic re-publishing
+- Defense-in-depth: cron excludes just-recovered posts from its publish batch
+- No database schema changes
 - No frontend changes
-- Facebook and LinkedIn publishing remain unchanged (already fast)
 
