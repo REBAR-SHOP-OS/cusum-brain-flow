@@ -129,7 +129,7 @@ Deno.serve((req) =>
               phone: lead.phone,
               customer_id: customerId,
               is_primary: true,
-              company_id: "a0000000-0000-0000-0000-000000000001",
+              company_id: companyId,
             });
           }
         }

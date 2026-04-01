@@ -7,6 +7,7 @@ import { resolveCompanyId } from "../_shared/resolveCompany.ts";
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: svc, body } = ctx;
+    const companyId = await resolveCompanyId(svc, userId);
 
     // Rate limit
     const { data: allowed } = await svc.rpc("check_rate_limit", {
