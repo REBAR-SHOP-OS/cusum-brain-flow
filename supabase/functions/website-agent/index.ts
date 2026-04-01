@@ -946,7 +946,8 @@ serve(async (req) => {
       });
     }
 
-    const { messages, current_page } = await req.json();
+    const { messages, current_page, company_id } = await req.json();
+    const widgetCompanyId = typeof company_id === "string" ? company_id.trim() : "";
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "Messages required" }), {
         status: 400,
