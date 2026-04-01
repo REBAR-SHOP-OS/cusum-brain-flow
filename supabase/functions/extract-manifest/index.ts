@@ -584,6 +584,7 @@ Rules:
           }
           const dedupedRows = Array.from(dedupeMap.values())
             .map((r, idx) => ({ ...r, row_index: idx + 1 }));
+          savedCount = dedupedRows.length;
           console.log(`Dedup: ${rows.length} → ${dedupedRows.length} rows`);
 
           // Batch insert rows (50 at a time) to avoid edge function timeout
