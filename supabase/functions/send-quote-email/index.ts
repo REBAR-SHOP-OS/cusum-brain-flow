@@ -270,7 +270,8 @@ Deno.serve((req) =>
         sq = sqByNum;
       }
 
-      const companyId = sq?.company_id || quote.company_id || "a0000000-0000-0000-0000-000000000001";
+      const companyId = sq?.company_id || quote.company_id;
+      if (!companyId) throw new Error("Cannot determine company_id for this quote/quotation");
       // Store tax-inclusive total for Stripe/email display, pre-tax for invoice record
       const rawTotalWithTax = sq?.amount || totalAmount;
       const invoiceTaxRate = (taxRate) / 100;
