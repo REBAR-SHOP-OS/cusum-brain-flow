@@ -518,5 +518,5 @@ Deno.serve((req) =>
       JSON.stringify({ error: 'Invalid phase. Use "analyze" or "execute"' }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "seo-task-execute", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "seo-task-execute", authMode: "required", requireCompany: false, wrapResult: false })
 );

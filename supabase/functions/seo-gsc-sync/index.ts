@@ -209,5 +209,5 @@ Deno.serve((req) =>
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "seo-gsc-sync", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "seo-gsc-sync", authMode: "required", requireCompany: false, wrapResult: false })
 );

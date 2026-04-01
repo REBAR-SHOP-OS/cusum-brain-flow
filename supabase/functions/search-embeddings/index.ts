@@ -54,5 +54,5 @@ Deno.serve((req) =>
     }
 
     return { results: data || [], count: data?.length || 0, query, domain };
-  }, { functionName: "search-embeddings", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "search-embeddings", authMode: "required", requireCompany: false, wrapResult: false })
 );

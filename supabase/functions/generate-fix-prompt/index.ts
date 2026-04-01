@@ -140,5 +140,5 @@ Deno.serve((req) =>
     });
 
     return { prompt: result.content };
-  }, { functionName: "generate-fix-prompt", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "generate-fix-prompt", authMode: "required", requireCompany: false, wrapResult: false })
 );

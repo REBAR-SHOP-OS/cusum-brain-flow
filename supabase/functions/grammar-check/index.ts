@@ -44,5 +44,5 @@ Deno.serve((req) =>
     const changed = corrected !== text.trim();
 
     return { corrected: changed ? corrected : text, changed };
-  }, { functionName: "grammar-check", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "grammar-check", authMode: "required", requireCompany: false, wrapResult: false })
 );

@@ -309,5 +309,5 @@ Deno.serve((req) =>
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "website-speed-audit", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "website-speed-audit", authMode: "required", requireCompany: false, wrapResult: false })
 );

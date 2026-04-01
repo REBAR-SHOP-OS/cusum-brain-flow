@@ -344,5 +344,5 @@ For each keyword:
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "seo-keyword-harvest", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "seo-keyword-harvest", authMode: "required", requireCompany: false, wrapResult: false })
 );
