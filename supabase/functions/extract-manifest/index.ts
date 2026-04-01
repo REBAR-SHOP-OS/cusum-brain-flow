@@ -562,13 +562,37 @@ Rules:
             };
           });
 
+          // ── Deduplicate rows before insert ──
+          const dedupeMap = new Map<string, typeof rows[0]>();
+          for (const row of rows) {
+            const key = [
+              (row.mark || "").trim().toLowerCase(),
+              (row.bar_size || "").trim().toLowerCase(),
+              (row.shape_type || "straight").trim().toLowerCase(),
+              String(row.total_length_mm || 0),
+              String(row.dim_a || 0), String(row.dim_b || 0),
+              String(row.dim_c || 0), String(row.dim_d || 0),
+            ].join(":");
+
+            if (dedupeMap.has(key)) {
+              const existing = dedupeMap.get(key)!;
+              existing.quantity = (existing.quantity || 0) + (row.quantity || 0);
+              if (!existing.grade && row.grade) existing.grade = row.grade;
+            } else {
+              dedupeMap.set(key, row);
+            }
+          }
+          const dedupedRows = Array.from(dedupeMap.values())
+            .map((r, idx) => ({ ...r, row_index: idx + 1 }));
+          console.log(`Dedup: ${rows.length} → ${dedupedRows.length} rows`);
+
           // Batch insert rows (50 at a time) to avoid edge function timeout
           const BATCH_SIZE = 50;
-          for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-            const batch = rows.slice(i, i + BATCH_SIZE);
+          for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
+            const batch = dedupedRows.slice(i, i + BATCH_SIZE);
             const { error: insertErr } = await svcClient.from("extract_rows").insert(batch);
             if (insertErr) throw new Error(`Failed to save rows batch ${i}: ${insertErr.message}`);
-            const pct = 85 + Math.round(((i + batch.length) / rows.length) * 14);
+            const pct = 85 + Math.round(((i + batch.length) / dedupedRows.length) * 14);
             await svcClient.from("extract_sessions").update({ progress: pct }).eq("id", sessionId);
           }
         }
@@ -583,7 +607,7 @@ Rules:
           })
           .eq("id", sessionId);
 
-        console.log(`Extraction complete for session ${sessionId}: ${items.length} rows saved`);
+        console.log(`Extraction complete for session ${sessionId}: ${dedupedRows.length} rows saved (from ${items.length} raw)`);
 
     return new Response(
       JSON.stringify({ status: "extracted", sessionId }),
