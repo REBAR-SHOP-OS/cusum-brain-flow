@@ -304,7 +304,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       // 4. Audio output — remote track plays automatically
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
-      audioEl.playsInline = true;
+      audioEl.setAttribute("playsinline", "true");
       audioEl.style.display = "none";
       document.body.appendChild(audioEl);
       audioElRef.current = audioEl;
