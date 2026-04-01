@@ -137,6 +137,7 @@ Deno.serve((req) =>
         metadata: { mode },
       });
     } catch (_) {}
+    }
 
     return { ok: true, closed, total_open: openEntries.length, errors };
   }, { functionName: "auto-clockout", requireCompany: false, wrapResult: false })
