@@ -58,9 +58,11 @@ Deno.serve((req) =>
       } catch (_) {}
     }
 
+    const runCompanyId = (expiringQuotes || [])[0]?.company_id || (expiredQuotes || [])[0]?.company_id || (config as any)?.company_id;
+    if (runCompanyId) {
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: defaultCompanyId,
+        company_id: runCompanyId,
         automation_key: "quote_expiry_watchdog", automation_name: "Quote Expiry Watchdog",
         agent_name: "Gauge", trigger_type: "cron", status: "completed",
         items_processed: alerts + expired, items_succeeded: alerts + expired,
