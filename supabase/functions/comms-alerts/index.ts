@@ -238,12 +238,13 @@ function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentN
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { serviceClient: svc } = ctx;
+    const defaultCompanyId = await resolveDefaultCompanyId(svc);
 
     // Load config
     const { data: configRow } = await svc
       .from("comms_config")
       .select("*")
-      .eq("company_id", configRow.company_id)
+      .eq("company_id", defaultCompanyId)
       .maybeSingle();
 
     if (!configRow) throw new Error("No comms_config found");
