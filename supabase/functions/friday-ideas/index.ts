@@ -3,6 +3,7 @@ import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient }) => {
+    const defaultCompanyId = await resolveDefaultCompanyId(serviceClient);
     const [fixRes, taskRes, machineRes, orderRes, deliveryRes] = await Promise.all([
       serviceClient.from("vizzy_fix_requests").select("id, title, severity, status").eq("status", "open").limit(20),
       serviceClient.from("human_tasks").select("id, title, severity, category, status").in("status", ["open", "snoozed"]).limit(20),
