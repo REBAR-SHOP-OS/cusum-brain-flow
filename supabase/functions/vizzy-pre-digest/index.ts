@@ -187,7 +187,7 @@ ${agentAuditContext}`,
 
         // Save today's benchmark
         await supabase.from("vizzy_memory").insert({
-          user_id: user.id,
+          user_id: userId,
           category: "daily_benchmark",
           content: JSON.stringify(benchmarkData),
           metadata: { date: new Date().toISOString().split("T")[0], ...benchmarkData },
