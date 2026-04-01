@@ -198,7 +198,7 @@ ${agentAuditContext}`,
         const { data: oldBenchmarks } = await supabase
           .from("vizzy_memory")
           .select("id, created_at")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("category", "daily_benchmark")
           .order("created_at", { ascending: false });
 

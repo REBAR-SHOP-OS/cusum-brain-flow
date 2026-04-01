@@ -304,8 +304,18 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       // 4. Audio output — remote track plays automatically
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
-      pc.ontrack = (e) => {
+      audioEl.playsInline = true;
+      audioEl.style.display = "none";
+      document.body.appendChild(audioEl);
+      audioElRef.current = audioEl;
+      pc.ontrack = async (e) => {
         audioEl.srcObject = e.streams[0];
+        try {
+          await audioEl.play();
+          console.log("[VoiceEngine] Remote audio playback started");
+        } catch (err) {
+          console.error("[VoiceEngine] Remote audio play failed:", err);
+        }
       };
 
       // 5. Add mic track
