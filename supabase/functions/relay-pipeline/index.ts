@@ -290,7 +290,7 @@ Deno.serve((req) =>
 
       // Log event
       await svc.from("activity_events").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: companyId,
         entity_type: "communication",
         entity_id: communicationId,
         event_type: "thread_resolved",
