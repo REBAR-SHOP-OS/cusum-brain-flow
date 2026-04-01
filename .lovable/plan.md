@@ -1,51 +1,73 @@
 
 
-# Auto-Expand Only Active Customer Sections in StationView
+# Fix SECURITY DEFINER Views + Post-Fix Verification
 
-## Problem
-All customer `Collapsible` sections default to `defaultOpen={false}` (collapsed). The user wants sections containing actively in-progress items to auto-expand while idle sections stay collapsed.
+## Step 1: Apply Migration
 
-## Current Code (lines 419, 443)
-- Customer Collapsible: `defaultOpen={false}` — always collapsed
-- Barlist Collapsible: `defaultOpen={false}` — always collapsed
+Set `security_invoker = true` on the 6 remaining views (`profiles_safe` already done).
 
-## Fix
-
-### File: `src/pages/StationView.tsx`
-
-**1. Add `hasActiveWork` flag to customerGroupedData** (inside the useMemo at ~line 169)
-
-For each customer entry, compute whether any item has `phase === "cutting"` or `phase === "bending"` (indicating active production). Store this as a boolean `hasActiveWork` on each customer object.
-
-**2. Add `hasActiveWork` flag per barlist** (same useMemo)
-
-For each barlist entry, check if any of its items have an active phase. Store as `hasActiveWork`.
-
-**3. Update Collapsible `defaultOpen` props**
-
-- Line 419 (customer): `defaultOpen={cust.hasActiveWork}`
-- Line 443 (barlist): `defaultOpen={bl.hasActiveWork}`
-
-## Exact Changes
-
-In the `useMemo` return block (~line 169), add to each barlist object:
-```typescript
-hasActiveWork: bl.items.some(i => i.phase === "cutting" || i.phase === "bending"),
+```sql
+ALTER VIEW public.v_customers_clean SET (security_invoker = true);
+ALTER VIEW public.v_customer_company_map SET (security_invoker = true);
+ALTER VIEW public.v_orders_enriched SET (security_invoker = true);
+ALTER VIEW public.v_deliveries_enriched SET (security_invoker = true);
+ALTER VIEW public.v_leads_enriched SET (security_invoker = true);
+ALTER VIEW public.v_communications_enriched SET (security_invoker = true);
 ```
 
-And to each customer object (~line 197):
-```typescript
-hasActiveWork: [...cust.barlists.values()].some(bl =>
-  bl.items.some(i => i.phase === "cutting" || i.phase === "bending")
-),
+Note: `profiles_safe` already has `security_invoker = true` — no action needed.
+
+## Step 2: Post-Fix Verification Results (Pre-Determined)
+
+### Grants on all 7 views
+All views grant full privileges (`arwdDxtm`) to `anon`, `authenticated`, `service_role`, and `postgres`. This is a default Supabase schema-level grant — it means the **grant layer does NOT restrict access**. Security relies entirely on base-table RLS.
+
+### Base-Table RLS Summary (anon exposure)
+
+| Base Table | Anon SELECT Policy | Effect After Fix |
+|---|---|---|
+| `customers` | `USING(true)` — wide open | **EXPOSED**: anon can read ALL customers through `v_customers_clean` and `v_customer_company_map` |
+| `leads` | `USING(true)` — wide open | **EXPOSED**: anon can read ALL leads through `v_leads_enriched` |
+| `profiles` | `USING(false)` — deny | **SAFE**: anon blocked |
+| `orders` | No anon policy | **SAFE**: anon blocked by default-deny |
+| `deliveries` | No anon policy | **SAFE**: anon blocked |
+| `communications` | No anon policy | **SAFE**: anon blocked |
+| `contacts` | No anon policy | **SAFE**: anon blocked |
+
+### Base-Table RLS Summary (authenticated exposure)
+All 7 base tables have company-scoped authenticated policies using `get_user_company_id(auth.uid())`. **Authenticated access is properly tenant-isolated.**
+
+## Step 3: Remaining Exposure After security_invoker
+
+Two base-table anon policies create residual cross-tenant exposure through views:
+
+1. **`customers` → `Allow anon read access for customers` (`USING(true)`)** — exposes `v_customers_clean`, `v_customer_company_map`, and through joins: `v_orders_enriched`, `v_deliveries_enriched`
+2. **`leads` → `Allow anon read access for leads` (`USING(true)`)** — exposes `v_leads_enriched`
+
+## Step 4: Next Fix SQL (Do Not Apply Yet)
+
+```sql
+-- Remove unsafe anon SELECT on customers
+DROP POLICY "Allow anon read access for customers" ON public.customers;
+
+-- Remove unsafe anon SELECT on leads
+DROP POLICY "Allow anon read access for leads" ON public.leads;
+
+-- Revoke anon privileges on views (defense in depth)
+REVOKE ALL ON public.v_customers_clean FROM anon;
+REVOKE ALL ON public.v_customer_company_map FROM anon;
+REVOKE ALL ON public.v_orders_enriched FROM anon;
+REVOKE ALL ON public.v_deliveries_enriched FROM anon;
+REVOKE ALL ON public.v_leads_enriched FROM anon;
+REVOKE ALL ON public.v_communications_enriched FROM anon;
+REVOKE ALL ON public.profiles_safe FROM anon;
 ```
 
-Then update:
-- Line 419: `defaultOpen={cust.hasActiveWork}`
-- Line 443: `defaultOpen={bl.hasActiveWork}`
+**WARNING**: Before dropping the anon customer/lead policies, verify whether any public-facing feature (e.g., customer portal widget, lead capture form, IoT device) depends on anonymous access. If so, those features need alternative authentication first.
 
-## Scope
-- 1 file, 4 touch points
-- No runtime behavior change beyond collapse defaults
-- Consistent with existing shop-floor-ui-defaults memory
+## Summary
+
+- **Applied**: 6 views get `security_invoker = true` (1 already done)
+- **Remaining risks**: 2 anon `USING(true)` policies on `customers` and `leads` base tables
+- **Next recommended fix**: Drop those 2 anon policies + revoke anon grants on all 7 views (pending review of public-facing dependencies)
 
