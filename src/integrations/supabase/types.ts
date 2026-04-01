@@ -11295,6 +11295,7 @@ export type Database = {
           created_by: string | null
           customer_id: string | null
           id: string
+          lead_id: string | null
           margin_percent: number | null
           metadata: Json | null
           notes: string | null
@@ -11319,6 +11320,7 @@ export type Database = {
           created_by?: string | null
           customer_id?: string | null
           id?: string
+          lead_id?: string | null
           margin_percent?: number | null
           metadata?: Json | null
           notes?: string | null
@@ -11343,6 +11345,7 @@ export type Database = {
           created_by?: string | null
           customer_id?: string | null
           id?: string
+          lead_id?: string | null
           margin_percent?: number | null
           metadata?: Json | null
           notes?: string | null
@@ -11401,6 +11404,20 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotes_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "v_leads_enriched"
             referencedColumns: ["id"]
           },
         ]
