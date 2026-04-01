@@ -11,7 +11,7 @@
  *   }, { functionName: "my-function", requireCompany: true }));
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, optionalAuthFull } from "./auth.ts";
+import { corsHeaders, requireAuth, optionalAuthFull, AppSupabaseClient } from "./auth.ts";
 import { resolveCompanyId } from "./resolveCompany.ts";
 import { createLogger } from "./structuredLog.ts";
 
