@@ -375,6 +375,7 @@ async function executeTool(
   args: Record<string, any>,
   supabase: any,
   wp: WPClient | null,
+  companyId: string,
 ): Promise<string> {
   try {
     switch (name) {
@@ -683,17 +684,11 @@ async function executeTool(
           return JSON.stringify({ error: "Customer name and email are required" });
         }
 
-        // Create lead
-        // Resolve company_id from automation_configs or companies table
-        const { data: companyRow } = await supabase
-          .from("companies")
-          .select("id")
-          .limit(1)
-          .maybeSingle();
-        const websiteCompanyId = companyRow?.id;
-        if (!websiteCompanyId) {
-          return JSON.stringify({ error: "Could not resolve company for lead creation" });
+        // Use company_id from trusted request body (widget config)
+        if (!companyId) {
+          return JSON.stringify({ error: "company_id is required for lead creation" });
         }
+        const websiteCompanyId = companyId;
 
         const { data: lead, error: leadErr } = await supabase.from("leads").insert({
           title: `Drawing: ${projectName || customerName}`,
@@ -951,7 +946,8 @@ serve(async (req) => {
       });
     }
 
-    const { messages, current_page } = await req.json();
+    const { messages, current_page, company_id } = await req.json();
+    const widgetCompanyId = typeof company_id === "string" ? company_id.trim() : "";
     if (!Array.isArray(messages) || messages.length === 0) {
       return new Response(JSON.stringify({ error: "Messages required" }), {
         status: 400,
@@ -1015,7 +1011,7 @@ serve(async (req) => {
         let args: Record<string, any> = {};
         try { args = JSON.parse(tc.function.arguments); } catch { /* empty args */ }
         console.log(`Tool: ${tc.function.name}`, args);
-        const result = await executeTool(tc.function.name, args, supabase, wp);
+        const result = await executeTool(tc.function.name, args, supabase, wp, widgetCompanyId);
         return { tool_call_id: tc.id, role: "tool" as const, content: result };
       }),
     );
