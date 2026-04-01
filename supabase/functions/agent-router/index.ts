@@ -7,6 +7,7 @@ const AGENT_DESCRIPTIONS: Record<string, string> = {
   accounting: "Invoices, payments, billing, AR/AP, QuickBooks, tax, expenses, P&L, payroll, salaries",
   legal: "Contracts, compliance, regulations, liens, disputes, litigation, permits, insurance, OHSA, ESA",
   estimating: "Estimates, quotes, bids, pricing, takeoffs, rebar barlists, tonnage, RFQs, blueprints",
+  rebuild: "System rebuild, architecture, multi-tenant RLS, company_id scoping, Supabase edge functions, migrations, debugging, integrations, refactor safety",
   shopfloor: "Shop floor production, cutting, bending, fabrication, machines, work orders, inventory",
   delivery: "Deliveries, dispatch, shipping, trucks, drivers, routes, logistics, tracking, packing slips",
   email: "Email inbox, compose, reply, forward, drafts, Gmail, threads, attachments",

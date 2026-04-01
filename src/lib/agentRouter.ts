@@ -229,6 +229,18 @@ const agentRoutes: AgentRoute[] = [
       "تدارکات", "سفارش", "kala",
     ],
   },
+  {
+    id: "rebuild",
+    route: "/agent/rebuild",
+    name: "Rebuild",
+    keywords: [
+      "rebuild", "system rebuild", "architecture", "multi-tenant", "multitenant",
+      "company_id", "rls", "row level security", "row-level security", "supabase",
+      "edge function", "handleRequest", "rbac", "role check", "activity_events",
+      "dedupe_key", "erp flow", "quote to order", "work order", "cut plan",
+      "migration safety", "production-safe", "minimal risk", "zero ambiguity",
+    ],
+  },
 ];
 
 // ─── Route name map (for resolving LLM agent IDs to routes) ───

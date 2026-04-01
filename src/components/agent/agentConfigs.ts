@@ -130,6 +130,15 @@ export const agentConfigs: Record<string, AgentConfig> = {
     placeholder: "Ask about reports, trends, analytics...",
     capabilities: ["Business analytics", "Generate reports", "Trend analysis", "KPI tracking"],
   },
+  rebuild: {
+    name: "Rebuild",
+    role: "System Rebuild & Development",
+    image: assistantHelper,
+    agentType: "rebuild",
+    greeting: "I'm Rebuild, your architecture-safe system rebuild and development specialist.",
+    placeholder: "Ask about migrations, edge functions, RBAC, RLS, or safe module extensions...",
+    capabilities: ["Multi-tenant safe architecture", "RLS/RBAC-first backend changes", "Edge function standards", "Low-risk rebuild planning"],
+  },
   bizdev: {
     name: "Buddy",
     role: "Business Development",

@@ -477,7 +477,7 @@ Deno.serve((req) =>
     
     // Phase 6: Executive dashboard context for data/empire agents
     let execContext: Record<string, unknown> = {};
-    if (agent === "data" || agent === "empire" || agent === "commander" || agent === "assistant") {
+    if (agent === "data" || agent === "empire" || agent === "commander" || agent === "assistant" || agent === "rebuild") {
       execContext = await fetchExecutiveContext(svcClient, companyId);
     }
     
