@@ -589,10 +589,10 @@ Rules:
           // Batch insert rows (50 at a time) to avoid edge function timeout
           const BATCH_SIZE = 50;
           for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
-            const batch = rows.slice(i, i + BATCH_SIZE);
+            const batch = dedupedRows.slice(i, i + BATCH_SIZE);
             const { error: insertErr } = await svcClient.from("extract_rows").insert(batch);
             if (insertErr) throw new Error(`Failed to save rows batch ${i}: ${insertErr.message}`);
-            const pct = 85 + Math.round(((i + batch.length) / rows.length) * 14);
+            const pct = 85 + Math.round(((i + batch.length) / dedupedRows.length) * 14);
             await svcClient.from("extract_sessions").update({ progress: pct }).eq("id", sessionId);
           }
         }
