@@ -1,22 +1,13 @@
 
 
-# Match Print Preview Remark with Tags & Export Cards
+# Collapse Production Queue Items by Default
 
-## Problem
-The `/print-tags` page passes `row.reference` as **Ref** and `row.address` as **Remark** to `RebarTagCard`. The Tags & Export cards were already updated to use session-level fields (`invoice_number` for Invoice/Ref, `session.name` for Remark/Scope). The print preview is out of sync — it shows the old address instead of the scope.
+## Change
+Set all collapsible sections in `ShopFloorProductionQueue.tsx` to start **closed** (`false`) instead of **open** (`true`).
 
-## Changes — `src/pages/PrintTags.tsx`
+### File: `src/components/shopfloor/ShopFloorProductionQueue.tsx`
+- **Line 193**: `useState(true)` → `useState(false)` (CustomerGroup)
+- **Line 228**: `useState(true)` → `useState(false)` (ProjectGroup)
 
-### 1. Fetch session `invoice_number` and `name` (scope)
-Update the `useEffect` query on line 25 to also select `invoice_number` and `name` from `extract_sessions`, and store them in new state variables (`sessionInvoice`, `sessionScope`).
-
-### 2. Pass session-level fields to RebarTagCard
-- Line 129: Change `reference={row.reference || ""}` → `reference={sessionInvoice}`
-- Line 130: Change `address={row.address || sessionAddress || projectAddress || ""}` → `address={sessionScope}`
-
-This makes the print output match the Tags & Export card view exactly.
-
-## Impact
-- 1 file changed: `PrintTags.tsx`
-- Print tags will show session `invoice_number` as Ref and session `name` (scope) as Remark, matching the card view
+This gives the collapsed view shown in screenshot #1 (all customers listed but not expanded) as the default.
 
