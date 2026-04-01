@@ -59,7 +59,7 @@ function StationGroup({ stationName, orders, onUpdateStatus, onStatusChanged }: 
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
   onStatusChanged: (name: string, action: string) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="border border-border rounded-lg bg-card">
