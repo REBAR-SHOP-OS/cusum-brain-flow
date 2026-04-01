@@ -1,7 +1,6 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 interface CommsConfig {
   external_sender: string;
@@ -239,16 +238,23 @@ function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentN
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { serviceClient: svc } = ctx;
-    const defaultCompanyId = await resolveDefaultCompanyId(svc);
 
-    // Load config
-    const { data: configRow } = await svc
+    // Load all comms_config rows (one per company) — iterate per-company
+    const { data: configRows } = await svc
       .from("comms_config")
-      .select("*")
-      .eq("company_id", defaultCompanyId)
-      .maybeSingle();
+      .select("*");
 
-    if (!configRow) throw new Error("No comms_config found");
+    if (!configRows || configRows.length === 0) {
+      return { success: true, skipped: true, reason: "no comms_config rows" };
+    }
+
+    const allResults: any[] = [];
+    let totalAlerts = 0;
+    let totalSkipped = 0;
+
+    for (const configRow of configRows) {
+    const companyId = configRow.company_id;
+    if (!companyId) continue;
 
     const config: CommsConfig = {
       external_sender: configRow.external_sender,
@@ -373,7 +379,7 @@ Deno.serve((req) =>
         alert_type: alert.type,
         communication_id: alert.commId,
         owner_email: alert.owner,
-        company_id: defaultCompanyId,
+        company_id: companyId,
         metadata: { agent_name: alert.agent, subject: alert.comm.subject },
       });
 
@@ -413,7 +419,7 @@ Deno.serve((req) =>
     // Log event
     if (alerts.length > 0 || skippedCount > 0) {
       await svc.from("activity_events").insert({
-        company_id: defaultCompanyId,
+        company_id: companyId,
         entity_type: "comms_alert",
         entity_id: "system",
         event_type: "alerts_processed",
@@ -423,6 +429,11 @@ Deno.serve((req) =>
       });
     }
 
-    return { success: true, alertsProcessed: alerts.length, skipped: skippedCount, results };
+    totalAlerts += alerts.length;
+    totalSkipped += skippedCount;
+    allResults.push(...results);
+    } // end per-company loop
+
+    return { success: true, alertsProcessed: totalAlerts, skipped: totalSkipped, results: allResults };
   }, { functionName: "comms-alerts", authMode: "none", requireCompany: false, wrapResult: false })
 );

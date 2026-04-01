@@ -1,6 +1,5 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 interface OptimizationResult {
@@ -454,7 +453,7 @@ async function createServerTasks(supabase: any, jobId: string | null) {
         status: "todo",
         priority: task.priority,
         assigned_to: RADIN_PROFILE_ID,
-        company_id: await resolveDefaultCompanyId(supabase),
+        company_id: await resolveWpCompanyId(supabase),
         source: "speed-optimizer",
         source_ref: jobId || undefined,
         agent_type: "vizzy",
@@ -469,6 +468,16 @@ async function createServerTasks(supabase: any, jobId: string | null) {
       console.error(`Task creation error: ${e.message}`);
     }
   }
+}
+
+async function resolveWpCompanyId(supabase: any): Promise<string> {
+  const { data: config } = await supabase
+    .from("automation_configs")
+    .select("company_id")
+    .eq("automation_key", "wp_speed_optimizer")
+    .maybeSingle();
+  if (config?.company_id) return config.company_id;
+  throw new Error("No automation_configs row found for wp_speed_optimizer — cannot resolve company_id");
 }
 
 async function logWpChange(

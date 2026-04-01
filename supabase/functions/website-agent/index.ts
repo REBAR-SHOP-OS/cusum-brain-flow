@@ -3,7 +3,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { WPClient } from "../_shared/wpClient.ts";
 import { callAIStream } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 // ─── Rate Limiter ───
 const rateLimitMap = new Map<string, number[]>();
@@ -685,9 +684,20 @@ async function executeTool(
         }
 
         // Create lead
+        // Resolve company_id from automation_configs or companies table
+        const { data: companyRow } = await supabase
+          .from("companies")
+          .select("id")
+          .limit(1)
+          .maybeSingle();
+        const websiteCompanyId = companyRow?.id;
+        if (!websiteCompanyId) {
+          return JSON.stringify({ error: "Could not resolve company for lead creation" });
+        }
+
         const { data: lead, error: leadErr } = await supabase.from("leads").insert({
           title: `Drawing: ${projectName || customerName}`,
-          company_id: await resolveDefaultCompanyId(supabase),
+          company_id: websiteCompanyId,
           stage: "new",
           source: "website_chat",
           expected_value: 0,
@@ -720,7 +730,7 @@ async function executeTool(
 
         // Log activity
         await supabase.from("activity_events").insert({
-          company_id: await resolveDefaultCompanyId(supabase),
+          company_id: websiteCompanyId,
           entity_type: "lead",
           entity_id: lead.id,
           event_type: "lead_created",
