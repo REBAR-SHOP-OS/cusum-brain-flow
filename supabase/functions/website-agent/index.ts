@@ -684,17 +684,11 @@ async function executeTool(
           return JSON.stringify({ error: "Customer name and email are required" });
         }
 
-        // Create lead
-        // Resolve company_id from automation_configs or companies table
-        const { data: companyRow } = await supabase
-          .from("companies")
-          .select("id")
-          .limit(1)
-          .maybeSingle();
-        const websiteCompanyId = companyRow?.id;
-        if (!websiteCompanyId) {
-          return JSON.stringify({ error: "Could not resolve company for lead creation" });
+        // Use company_id from trusted request body (widget config)
+        if (!companyId) {
+          return JSON.stringify({ error: "company_id is required for lead creation" });
         }
+        const websiteCompanyId = companyId;
 
         const { data: lead, error: leadErr } = await supabase.from("leads").insert({
           title: `Drawing: ${projectName || customerName}`,
