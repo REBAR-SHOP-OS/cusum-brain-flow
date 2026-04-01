@@ -77,6 +77,26 @@ export async function handleRequest(
   const log = createLogger(options.functionName);
 
   try {
+    // Internal-only guard — cron/system functions require shared secret
+    if (options.internalOnly) {
+      const expected = Deno.env.get("INTERNAL_FUNCTION_SECRET");
+      const provided = req.headers.get("x-internal-secret");
+      if (!expected) {
+        log.error("INTERNAL_FUNCTION_SECRET not configured");
+        return new Response(
+          JSON.stringify({ ok: false, error: "Server misconfiguration" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      if (!provided || provided !== expected) {
+        log.error("Invalid or missing internal secret", { functionName: options.functionName });
+        return new Response(
+          JSON.stringify({ ok: false, error: "Forbidden" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
+
     // Auth — resolve based on authMode
     const authMode = options.authMode ?? "required";
     let userId = "";
