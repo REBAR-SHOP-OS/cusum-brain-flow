@@ -248,7 +248,8 @@ export function AIExtractView() {
   // Sync selectedUnitSystem from activeSession ONLY on initial load (not after user explicitly sets it)
   useEffect(() => {
     if (!userSetUnitRef.current && activeSession?.unit_system) {
-      const unit = activeSession.unit_system;
+      // Normalize legacy "metric" value to "mm"
+      const unit = activeSession.unit_system === "metric" ? "mm" : activeSession.unit_system;
       setSelectedUnitSystem(unit);
       setDisplayUnit(unit);
       confirmedUnitRef.current = unit;
@@ -716,7 +717,7 @@ export function AIExtractView() {
     setSiteAddress(session.site_address || "");
     setInvoiceNumber(session.invoice_number || "");
     setInvoiceDate(session.invoice_date || "");
-    const restoredUnit = session.unit_system || "mm";
+    const restoredUnit = (session.unit_system === "metric" ? "mm" : session.unit_system) || "mm";
     setSelectedUnitSystem(restoredUnit);
     setDisplayUnit(restoredUnit);
     confirmedUnitRef.current = restoredUnit;
