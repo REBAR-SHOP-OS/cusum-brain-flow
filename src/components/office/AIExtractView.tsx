@@ -248,7 +248,8 @@ export function AIExtractView() {
   // Sync selectedUnitSystem from activeSession ONLY on initial load (not after user explicitly sets it)
   useEffect(() => {
     if (!userSetUnitRef.current && activeSession?.unit_system) {
-      const unit = activeSession.unit_system;
+      // Normalize legacy "metric" value to "mm"
+      const unit = activeSession.unit_system === "metric" ? "mm" : activeSession.unit_system;
       setSelectedUnitSystem(unit);
       setDisplayUnit(unit);
       confirmedUnitRef.current = unit;

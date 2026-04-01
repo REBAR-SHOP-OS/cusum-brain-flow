@@ -502,7 +502,7 @@ Rules:
         }
 
         // Tertiary check: inspect XLSX cell number formats for inch marks (e.g. format 0" displays 78 as 78")
-        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "metric") {
+        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "mm") {
           try {
             const sheet = parsedWorkbook.Sheets[parsedWorkbook.SheetNames[0]];
             const cellKeys = Object.keys(sheet).filter(k => !k.startsWith("!"));
