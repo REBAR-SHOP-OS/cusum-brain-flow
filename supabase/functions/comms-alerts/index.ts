@@ -1,7 +1,6 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 interface CommsConfig {
   external_sender: string;
