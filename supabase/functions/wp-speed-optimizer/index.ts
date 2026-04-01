@@ -23,7 +23,7 @@ interface MediaAuditItem {
 
 // Radin's profile ID for task assignment
 const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
-const COMPANY_ID = "a0000000-0000-0000-0000-000000000001";
+// COMPANY_ID resolved dynamically at runtime
 
 // Server-side tasks to create for radin after optimization
 const SERVER_TASKS = [

@@ -36,7 +36,7 @@ Deno.serve((req) =>
 
     const email = payload.email.toLowerCase();
 
-    let companyId = "a0000000-0000-0000-0000-000000000001";
+    let companyId: string | null = null;
     if (payload.campaign_id) {
       const { data: camp } = await serviceClient
         .from("email_campaigns")

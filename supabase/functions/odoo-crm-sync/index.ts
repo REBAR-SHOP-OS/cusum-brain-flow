@@ -212,7 +212,7 @@ Deno.serve((req) =>
       .limit(1)
       .single();
 
-    const companyId = sampleLead?.company_id || "a0000000-0000-0000-0000-000000000001";
+    const companyId = sampleLead?.company_id;
     const syncRunAt = new Date().toISOString();
 
     // Load ALL existing odoo_sync leads with pagination (Supabase caps at 1000/query)

@@ -747,7 +747,7 @@ Deno.serve((req) =>
           for (const rec of speedData.recommendations) {
             const dedupeKey = `speed:rec:${rec.action}`;
             if (isDuplicate("wp_speed", rec.action, "speed_recommendation")) continue;
-            const companyId = suggestions[0]?.company_id || "a0000000-0000-0000-0000-000000000001";
+            const companyId = suggestions[0]?.company_id;
             const row = {
               company_id: companyId,
               agent_id: agentMap.webbuilder,

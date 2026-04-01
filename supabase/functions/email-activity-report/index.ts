@@ -478,7 +478,7 @@ Deno.serve((req) =>
         const { data: commsConf } = await serviceClient
           .from("comms_config")
           .select("brief_recipients")
-          .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+          .eq("company_id", ctx.companyId)
           .maybeSingle();
         if (commsConf?.brief_recipients?.length) briefRecipients = commsConf.brief_recipients;
       } catch (e) {
