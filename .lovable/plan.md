@@ -1,73 +1,75 @@
 
 
-# Fix SECURITY DEFINER Views + Post-Fix Verification
+# Vizzy Live Session Debug — Root Cause Analysis & Fix Plan
 
-## Step 1: Apply Migration
+## Findings
 
-Set `security_invoker = true` on the 6 remaining views (`profiles_safe` already done).
+### Layer 1: Session Bootstrap — PARTIAL FAILURE
+- `voice-engine-token` edge function works correctly (logs show successful token issuance at 23:40:10Z)
+- `vizzy-pre-digest` **crashes** with `ReferenceError: user is not defined` at line 59
+  - Root cause: Function destructures `{ userId }` from `ctx` (line 20), but references `user.id` in 5 places (lines 59, 185, 190, 201)
+  - Should be `userId` everywhere
+- Fallback to `vizzy-daily-brief` appears to succeed (no errors in logs)
+- Net effect: Context loading works via fallback, session starts. **Not the blocking issue but needs fixing.**
 
-```sql
-ALTER VIEW public.v_customers_clean SET (security_invoker = true);
-ALTER VIEW public.v_customer_company_map SET (security_invoker = true);
-ALTER VIEW public.v_orders_enriched SET (security_invoker = true);
-ALTER VIEW public.v_deliveries_enriched SET (security_invoker = true);
-ALTER VIEW public.v_leads_enriched SET (security_invoker = true);
-ALTER VIEW public.v_communications_enriched SET (security_invoker = true);
+### Layer 2: Realtime Transport — LIKELY ROOT CAUSE
+The WebRTC connection establishes successfully (screenshot shows "LIVE SESSION" green dot, "Live ERP Data Connected"). However, no assistant responses appear. Two probable causes:
+
+**A. Audio autoplay policy (HIGH PROBABILITY)**
+In `useVoiceEngine.ts` line 300-303, a detached `<audio>` element is created:
+```ts
+const audioEl = document.createElement("audio");
+audioEl.autoplay = true;
+pc.ontrack = (e) => { audioEl.srcObject = e.streams[0]; };
 ```
+This element is never appended to the DOM. Modern browsers (especially mobile) silently refuse autoplay on detached audio elements without prior user gesture. If audio output is blocked, the Realtime API may stall or behave unpredictably (it expects the client to consume audio).
 
-Note: `profiles_safe` already has `security_invoker = true` — no action needed.
+**B. Model availability**
+The model `gpt-4o-mini-realtime-preview` is used. If OpenAI has deprecated or rate-limited this model, the session would connect but produce no responses. The data channel would simply never emit `response.audio_transcript.done` events.
 
-## Step 2: Post-Fix Verification Results (Pre-Determined)
+### Layer 3: Audio / Mute State
+Screenshot shows "Muted" — `isMuted = true`. The user transcript visible was captured before muting. Mute correctly disables mic tracks. This is a UX issue (user may have accidentally muted) but is NOT the root cause since the transcript proves audio was captured.
 
-### Grants on all 7 views
-All views grant full privileges (`arwdDxtm`) to `anon`, `authenticated`, `service_role`, and `postgres`. This is a default Supabase schema-level grant — it means the **grant layer does NOT restrict access**. Security relies entirely on base-table RLS.
+### Layer 4: Agent Response Pipeline
+No server-side handler exists — this is a direct WebRTC connection to OpenAI's Realtime API. The "pipeline" is entirely within OpenAI's infrastructure. If the data channel receives `response.audio_transcript.done`, the text appears. The absence of any agent transcript in the UI means either:
+- OpenAI never generated a response (model issue or audio output stall)
+- The response was filtered by `isSelfTalk()` — unlikely for substantive responses in non-translation mode
 
-### Base-Table RLS Summary (anon exposure)
+### Layer 5: UI Rendering
+UI rendering logic is correct. If `response.audio_transcript.done` events arrive with text, they would display. The filtering in `isSelfTalk` is minimal in non-translation mode (only filters dots, "oh/hmm/uh", and echo detection).
 
-| Base Table | Anon SELECT Policy | Effect After Fix |
-|---|---|---|
-| `customers` | `USING(true)` — wide open | **EXPOSED**: anon can read ALL customers through `v_customers_clean` and `v_customer_company_map` |
-| `leads` | `USING(true)` — wide open | **EXPOSED**: anon can read ALL leads through `v_leads_enriched` |
-| `profiles` | `USING(false)` — deny | **SAFE**: anon blocked |
-| `orders` | No anon policy | **SAFE**: anon blocked by default-deny |
-| `deliveries` | No anon policy | **SAFE**: anon blocked |
-| `communications` | No anon policy | **SAFE**: anon blocked |
-| `contacts` | No anon policy | **SAFE**: anon blocked |
+---
 
-### Base-Table RLS Summary (authenticated exposure)
-All 7 base tables have company-scoped authenticated policies using `get_user_company_id(auth.uid())`. **Authenticated access is properly tenant-isolated.**
+## Fix Plan
 
-## Step 3: Remaining Exposure After security_invoker
+### Fix 1: `vizzy-pre-digest` crash (5 references to `user.id` → `userId`)
+**File:** `supabase/functions/vizzy-pre-digest/index.ts`
+- Line 59: `.eq("user_id", user.id)` → `.eq("user_id", userId)`
+- Line 185: `.eq("user_id", user.id)` → `.eq("user_id", userId)`
+- Line 190: `user_id: user.id` → `user_id: userId`
+- Line 201: `.eq("user_id", user.id)` → `.eq("user_id", userId)`
+- Plus any other occurrences found on full scan
 
-Two base-table anon policies create residual cross-tenant exposure through views:
+### Fix 2: Detached audio element (autoplay policy)
+**File:** `src/hooks/useVoiceEngine.ts`
+- Append the `<audio>` element to `document.body` so browsers honor autoplay
+- Remove it on cleanup
+- Add `playsinline` attribute for mobile Safari
 
-1. **`customers` → `Allow anon read access for customers` (`USING(true)`)** — exposes `v_customers_clean`, `v_customer_company_map`, and through joins: `v_orders_enriched`, `v_deliveries_enriched`
-2. **`leads` → `Allow anon read access for leads` (`USING(true)`)** — exposes `v_leads_enriched`
+### Fix 3: Add diagnostic logging
+**File:** `src/hooks/useVoiceEngine.ts`
+- Log all data channel message types received (not just handled ones) to diagnose whether OpenAI is sending response events at all
+- Log when audio element play() is called and whether it succeeds or fails
 
-## Step 4: Next Fix SQL (Do Not Apply Yet)
+### Fix 4: Model fallback consideration
+- Verify `gpt-4o-mini-realtime-preview` is still active. If not, update to `gpt-4o-realtime-preview` or the current equivalent.
+- This would be in both `useVizzyVoiceEngine.ts` (line 434) and `voice-engine-token/index.ts` (line 13 default)
 
-```sql
--- Remove unsafe anon SELECT on customers
-DROP POLICY "Allow anon read access for customers" ON public.customers;
+---
 
--- Remove unsafe anon SELECT on leads
-DROP POLICY "Allow anon read access for leads" ON public.leads;
-
--- Revoke anon privileges on views (defense in depth)
-REVOKE ALL ON public.v_customers_clean FROM anon;
-REVOKE ALL ON public.v_customer_company_map FROM anon;
-REVOKE ALL ON public.v_orders_enriched FROM anon;
-REVOKE ALL ON public.v_deliveries_enriched FROM anon;
-REVOKE ALL ON public.v_leads_enriched FROM anon;
-REVOKE ALL ON public.v_communications_enriched FROM anon;
-REVOKE ALL ON public.profiles_safe FROM anon;
-```
-
-**WARNING**: Before dropping the anon customer/lead policies, verify whether any public-facing feature (e.g., customer portal widget, lead capture form, IoT device) depends on anonymous access. If so, those features need alternative authentication first.
-
-## Summary
-
-- **Applied**: 6 views get `security_invoker = true` (1 already done)
-- **Remaining risks**: 2 anon `USING(true)` policies on `customers` and `leads` base tables
-- **Next recommended fix**: Drop those 2 anon policies + revoke anon grants on all 7 views (pending review of public-facing dependencies)
+## Priority Order
+1. Fix 1 (pre-digest crash) — immediate, clear bug
+2. Fix 2 (audio element) — most likely root cause of no response
+3. Fix 3 (logging) — needed to confirm if Fix 2 resolves the issue
+4. Fix 4 (model) — contingency if Fixes 1-2 don't resolve
 
