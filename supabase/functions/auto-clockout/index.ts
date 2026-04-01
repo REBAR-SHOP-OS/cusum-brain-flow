@@ -120,7 +120,7 @@ Deno.serve((req) =>
     // Log automation run
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: defaultCompanyId,
         automation_key: "auto_clockout",
         automation_name: `Auto Clock-Out (${mode})`,
         agent_name: "System",
