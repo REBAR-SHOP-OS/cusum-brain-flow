@@ -479,19 +479,7 @@ Rules:
           console.log(`[extract-manifest] Applying deterministic dim overlay for ${items.length} items`);
           items = overlaySheetDims(parsedWorkbook, items);
         }
-        const sampleValues: string[] = [];
-        for (const item of items.slice(0, 10)) {
-          for (const key of ["total_length", "A", "B", "C", "D", "E", "F", "G", "H"]) {
-            if (item[key] != null) sampleValues.push(String(item[key]));
-          }
-        }
-        // Match feet-inches (6'-4") OR standalone inches (54") OR feet-only (5')
-        const imperialPattern = /\d+\s*['']\s*-?\s*\d+\s*["""]|\d+(?:\.\d+)?\s*["""]\s*$|\d+(?:\.\d+)?\s*['']\s*$/;
-        if (sampleValues.some((v) => imperialPattern.test(v))) {
-          // parseDimension already normalized ft-in → inches, so effective unit is "in"
-          detectedUnitSystem = "in";
-          console.log("Detected imperial unit system from AI response values — setting unit to 'in' (parseDimension normalizes to inches)");
-        }
+        // Note: primary detection already ran above on raw strings
 
         // Secondary check: scan raw XLSX cells for standalone inch marks (e.g. 54")
         if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "metric") {
