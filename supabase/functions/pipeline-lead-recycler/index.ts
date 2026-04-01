@@ -80,6 +80,7 @@ Deno.serve((req) =>
         metadata: { followed_up: followedUp, marked_lost: markedLost },
       });
     } catch (_) {}
+    }
 
     return { followed_up: followedUp, marked_lost: markedLost };
   }, { functionName: "pipeline-lead-recycler", authMode: "none", requireCompany: false, wrapResult: false })

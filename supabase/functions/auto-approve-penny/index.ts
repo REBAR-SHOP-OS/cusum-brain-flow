@@ -79,6 +79,7 @@ Deno.serve((req) =>
         completed_at: new Date().toISOString(),
       });
     } catch (_) {}
+    }
 
     try {
       await serviceClient.from("automation_configs")

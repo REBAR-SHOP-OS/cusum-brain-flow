@@ -556,7 +556,8 @@ Deno.serve((req) =>
         throw new Error("No customer email found for this quotation");
       }
 
-      const companyId = sqCheck?.company_id || quote.company_id || "a0000000-0000-0000-0000-000000000001";
+      const companyId = sqCheck?.company_id || quote.company_id;
+      if (!companyId) throw new Error("Cannot determine company_id for this quote/quotation");
       // The quotation amount is TAX-INCLUSIVE. Store the pre-tax subtotal as invoice amount
       // so the invoice editor doesn't double-tax it.
       const rawTotalWithTax = sqCheck?.amount || totalAmount;

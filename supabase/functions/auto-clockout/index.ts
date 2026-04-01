@@ -102,7 +102,7 @@ Deno.serve((req) =>
         // Log activity
         try {
           await serviceClient.from("activity_events").insert({
-            company_id: defaultCompanyId,
+            company_id: (entry as any).profiles?.company_id || config?.company_id,
             entity_type: "clock_entry",
             entity_id: entry.id,
             event_type: "auto_clockout",

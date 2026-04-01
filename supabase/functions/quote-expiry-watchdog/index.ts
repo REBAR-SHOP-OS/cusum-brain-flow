@@ -70,6 +70,7 @@ Deno.serve((req) =>
         metadata: { expiring_soon: alerts, already_expired: expired },
       });
     } catch (_) {}
+    }
 
     return { expiring_soon: alerts, already_expired: expired };
   }, { functionName: "quote-expiry-watchdog", authMode: "none", requireCompany: false, wrapResult: false })

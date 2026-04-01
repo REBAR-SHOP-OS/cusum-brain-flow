@@ -98,6 +98,7 @@ Deno.serve((req) =>
         completed_at: new Date().toISOString(),
       });
     } catch (_) {}
+    }
 
     return { processed, actions_queued: actions };
   }, { functionName: "ar-aging-escalation", requireCompany: false, wrapResult: false })
