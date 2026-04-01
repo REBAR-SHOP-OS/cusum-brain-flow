@@ -129,6 +129,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
   const agentTextRef = useRef("");
   const transcriptsRef = useRef<VoiceTranscript[]>([]);
   const configRef = useRef(config);
@@ -165,6 +166,10 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
+    }
+    if (audioElRef.current) {
+      try { audioElRef.current.pause(); audioElRef.current.remove(); } catch {}
+      audioElRef.current = null;
     }
   }, []);
 
@@ -299,8 +304,18 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       // 4. Audio output — remote track plays automatically
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
-      pc.ontrack = (e) => {
+      audioEl.setAttribute("playsinline", "true");
+      audioEl.style.display = "none";
+      document.body.appendChild(audioEl);
+      audioElRef.current = audioEl;
+      pc.ontrack = async (e) => {
         audioEl.srcObject = e.streams[0];
+        try {
+          await audioEl.play();
+          console.log("[VoiceEngine] Remote audio playback started");
+        } catch (err) {
+          console.error("[VoiceEngine] Remote audio play failed:", err);
+        }
       };
 
       // 5. Add mic track

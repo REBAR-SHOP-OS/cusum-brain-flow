@@ -56,7 +56,7 @@ Deno.serve((req) =>
     const { data: prevAudit } = await supabase
       .from("vizzy_memory")
       .select("content, created_at")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("category", "agent_audit")
       .order("created_at", { ascending: false })
       .limit(1)
@@ -182,12 +182,12 @@ ${agentAuditContext}`,
         const { data: profile } = await supabase
           .from("profiles")
           .select("company_id")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .maybeSingle();
 
         // Save today's benchmark
         await supabase.from("vizzy_memory").insert({
-          user_id: user.id,
+          user_id: userId,
           category: "daily_benchmark",
           content: JSON.stringify(benchmarkData),
           metadata: { date: new Date().toISOString().split("T")[0], ...benchmarkData },
@@ -198,7 +198,7 @@ ${agentAuditContext}`,
         const { data: oldBenchmarks } = await supabase
           .from("vizzy_memory")
           .select("id, created_at")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .eq("category", "daily_benchmark")
           .order("created_at", { ascending: false });
 
