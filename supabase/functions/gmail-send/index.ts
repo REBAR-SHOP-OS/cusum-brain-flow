@@ -307,7 +307,7 @@ Deno.serve((req) =>
 
     try {
       await supabaseAdmin.from("activity_events").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: companyId,
         entity_type: "email",
         entity_id: result.id || crypto.randomUUID(),
         event_type: "email_sent",
