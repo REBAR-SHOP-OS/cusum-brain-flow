@@ -524,6 +524,7 @@ Rules:
           .update({ progress: 85, unit_system: detectedUnitSystem } as any)
           .eq("id", sessionId);
 
+        let savedCount = 0;
         if (items.length > 0) {
           const rows = items.map((item: any, idx: number) => {
             // Strip "I" dimension if AI returned it — rebar standards skip "I"
