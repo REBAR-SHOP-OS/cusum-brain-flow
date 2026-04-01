@@ -56,7 +56,7 @@ Deno.serve((req) =>
     const { data: prevAudit } = await supabase
       .from("vizzy_memory")
       .select("content, created_at")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("category", "agent_audit")
       .order("created_at", { ascending: false })
       .limit(1)
