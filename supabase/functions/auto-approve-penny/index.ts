@@ -63,9 +63,11 @@ Deno.serve((req) =>
       }
     }
 
+    const runCompanyId = (items || [])[0]?.company_id || (config as any)?.company_id;
+    if (runCompanyId) {
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: defaultCompanyId,
+        company_id: runCompanyId,
         automation_key: "auto_approve_penny",
         automation_name: "Auto-Approve Collections <$5K",
         agent_name: "Penny",
