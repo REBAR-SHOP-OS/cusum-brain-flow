@@ -21,8 +21,8 @@ export interface RequestContext {
   req: Request;
   userId: string;
   companyId: string;
-  serviceClient: ReturnType<typeof createClient>;
-  userClient: ReturnType<typeof createClient> | null;
+  serviceClient: AppSupabaseClient;
+  userClient: AppSupabaseClient | null;
   body: Record<string, any>;
   log: ReturnType<typeof createLogger>;
 }
