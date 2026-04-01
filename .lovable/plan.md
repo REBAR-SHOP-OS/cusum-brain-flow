@@ -1,64 +1,127 @@
 
 
-# Sales & CRM Standalone Module — Architecture Package
+# Operations & Shop Floor — Standalone Architecture Package (PDF)
 
 ## Objective
-Generate a comprehensive 20-file standalone architecture package for the Sales & CRM module, extracted from the Rebar Shop OS ERP. Output as a single downloadable PDF containing all 20 specification files.
+Generate a comprehensive 20-file standalone architecture package for the **Operations & Shop Floor** module, extracted from the Rebar Shop OS ERP. Output as a single downloadable PDF.
 
 ## Data Gathered from Codebase
 
-### Database Tables (28 tables total)
-**Dual Pipeline System:**
-1. **Legacy/Odoo Pipeline:** `leads`, `lead_activities`, `lead_assignees`, `lead_communications`, `lead_events`, `lead_score_history`, `lead_scoring_rules`, `lead_qualification_memory`, `lead_quote_memory`, `lead_loss_memory`, `lead_outcome_memory`, `pipeline_ai_actions`, `pipeline_automation_rules`
-2. **New Sales Department:** `sales_leads`, `sales_lead_activities`, `sales_lead_assignees`, `sales_contacts`, `sales_quotations`, `sales_quotation_items`, `sales_invoices`, `sales_invoice_items`, `quote_audit_log`, `quote_pricing_configs`
-3. **Shared:** `customers`, `contacts`, `communications`, `companies`, `profiles`, `user_roles`, `prospect_batches`, `prospects`
+### Database Tables (40+ tables)
+**Core Production:**
+- `machines`, `machine_runs`, `machine_capabilities`, `machine_queue_items`
+- `cut_plans`, `cut_plan_items`, `cut_batches`, `cut_output_batches`
+- `bend_batches`, `production_tasks`, `production_events`
+- `rebar_sizes`, `activity_events`
 
-### Frontend Routes (9 routes)
-- `/pipeline` — Legacy Odoo-synced Kanban board (1041-line page)
-- `/lead-scoring` — Scoring engine
-- `/pipeline/intelligence` — Analytics/forecasting
-- `/prospecting` — AI-powered prospect discovery
-- `/customers` — Customer master list
-- `/sales` — Sales Hub (new department)
-- `/sales/pipeline` — Internal pipeline
-- `/sales/quotations` — Quotation management
-- `/sales/invoices` — Invoice management
-- `/sales/contacts` — Contact management
+**Inventory & Material:**
+- `inventory_lots`, `inventory_reservations`, `inventory_scrap`
+- `floor_stock`, `waste_bank_pieces`
+- `purchase_orders`, `purchase_order_lines`
+- `inventory_counts`, `inventory_count_items`
 
-### Components (50+ components)
-- `src/components/pipeline/` — 32 files (Board, Cards, Drawers, AI, Filters, Gates, Intelligence)
-- `src/components/sales/` — 10 files (Lead drawer, Smart buttons, Chatter, Quotation/Invoice drawers)
-- `src/components/crm/` — 1 file (Lead Scoring Engine)
-- `src/components/prospecting/` — Multiple files
+**QC & Clearance:**
+- `clearance_evidence`
 
-### Hooks (25+ hooks)
-- `useSalesLeads`, `useSalesContacts`, `useSalesQuotations`, `useSalesInvoices`, `useSalesLeadActivities`
-- `useLeadScoring`, `useLeadAssignees`, `useLeadRecommendation`
-- `usePipelineAI`, `usePipelineBulkActions`, `usePipelineMemory`, `usePipelineRealtime`, `usePipelineStageOrder`
-- `usePipelineKeyboardShortcuts`, `useCommunications`, `useScheduledActivities`
+**Dispatch & Delivery:**
+- `deliveries`, `delivery_stops`, `delivery_items`
+- `pickup_orders`, `pickup_order_items`
+- `loading_checklists`
 
-### Edge Functions (20+ relevant)
-- `odoo-crm-sync`, `pipeline-ai`, `pipeline-automation-engine`, `pipeline-digest`, `pipeline-lead-recycler`, `pipeline-webhooks`
-- `process-rfq-emails`, `prospect-leads`, `notify-lead-assignees`
-- `quote-engine`, `quote-expiry-watchdog`, `quote-public-view`, `send-quote-email`, `convert-quote-to-order`
-- `import-crm-data`, `relay-pipeline`, `check-sla-breaches`, `comms-alerts`
-- `ai-estimate`, `ai-generate-quotation`
+**Camera Intelligence:**
+- `camera_events`, `cameras`, `camera_zones`
+
+**Supporting:**
+- `companies`, `profiles`, `user_roles`, `work_orders`, `projects`, `customers`, `barlists`
+
+### Frontend Routes (14 routes)
+1. `/shop-floor` — Command Hub (hub card navigation)
+2. `/shopfloor/station` — Station Dashboard (machine grid + filters)
+3. `/shopfloor/station/:machineId` — Station View (cutter/bender controls)
+4. `/shopfloor/cutter` — Cutter Planning (cut plan management)
+5. `/shopfloor/pool` — Material Pool (staging & flow)
+6. `/shopfloor/loading` — Loading Station (bundle checklist + photos)
+7. `/shopfloor/pickup` — Pickup Station (customer collection + signature)
+8. `/shopfloor/clearance` — Clearance Station (QC evidence + AI validation)
+9. `/shopfloor/inventory` — Inventory Counts
+10. `/shopfloor/delivery-ops` — Delivery Operations (scheduling + dispatch)
+11. `/shopfloor/delivery/:stopId` — Delivery Terminal (drop-off proof)
+12. `/shopfloor/camera-intelligence` — Camera AI (vision events)
+13. `/admin/waste-bank` — Waste Bank Admin
+14. `/admin/bend-queue` — Bend Queue Admin
+15. `/admin/bundles` — Bundle Admin
+16. `/admin/production-audit` — Production Audit
+17. `/live-monitor` — Live Monitor
+18. `/print-tags` — Print Tags
+19. `/timeclock` — Time Clock
+
+### Components (28+ components in shopfloor/)
+- `CutterStationView`, `BenderStationView` — Machine-type-specific station UIs
+- `ProductionCard`, `ProductionCardInstructions` — Job card rendering
+- `BarSizeGroup` — Groups items by rebar size
+- `MachineSelector`, `MachineGroupSection`, `MachineSpecsPanel` — Machine grid
+- `StationHeader` — Station identification + pin/unpin
+- `QRJobScanner` — QR scan for auto-navigation
+- `SignaturePad` — Pickup signature capture
+- `InventoryCountView`, `InventoryStatusPanel` — Inventory management
+- `SlotTracker` — Production slot tracking
+- `TransferMachineDialog` — Move jobs between machines
+- `MyJobsCard` — Operator's active jobs
+- `ForemanPanel` — Supervisor overview
+- `MaterialFlowDiagram` — Visual flow
+- `DowntimeAlertBanner` — Stale machine alerts
+- `BenderBatchPanel` — Bend queue per machine
+- `BendingSchematic`, `AsaShapeDiagram` — Shape visualization
+- `CutEngine` — Cut optimization logic
+- `ShopFloorProductionQueue`, `WorkOrderQueueSection`, `ActiveProductionHub` — Queue views
+- `PickupVerification` — Pickup item verification
+
+### Hooks (20+ hooks)
+- `useLiveMonitorData`, `useStationData`, `useCutPlans`, `useCutPlanItems`
+- `useProductionQueues`, `useClearanceData`, `useCompletedBundles`
+- `useLoadingChecklist`, `usePickupOrders`, `usePickupOrderItems`
+- `useWasteBank`, `useBenderBatches`, `useBendBatches`
+- `useInventoryData`, `useInventoryCounts`, `useSlotTracker`
+- `useTabletPin`, `useForemanBrain`, `useShapeSchematics`
+- `useSupabaseWorkOrders`, `useBundles`
+
+### Edge Functions (15+ relevant)
+- `manage-machine` (732 lines) — Start/pause/complete/block/unlock runs, cutter routing, capability validation, self-healing recovery, cut_batch creation, waste bank remnant insertion
+- `manage-bend` — Bend queue CRUD, bend start/pause/complete/cancel, waste bank reserve/consume/release, delivery-from-bundles
+- `smart-dispatch` — AI-scored machine assignment, queue management, task routing
+- `manage-inventory` (533 lines) — PO receiving, stock reservation, consumption, remnant creation, inventory adjustments, scrap recording
+- `validate-clearance-photo` — AI vision QC (Gemini) for tag/material photo validation
+- `log-machine-run` — Machine run event logging
+- `camera-events` — External camera event ingestion (API-key auth)
+- `camera-ping` — Camera health check
+- `shape-vision` — AI shape recognition
+- `extract-manifest` — Barlist extraction (feeds cut plans)
+- `kiosk-lookup`, `kiosk-punch`, `kiosk-register` — Time clock kiosk
+- `timeclock-alerts` — Shift alerts
 
 ### Business Logic Highlights
-- **29-stage Kanban** mirroring Odoo with stage groups (Sales, Estimation, Quotation, Operations, Terminal)
-- **Transition gates:** Qualification, Pricing, Loss, Delivery, Next Activity, Handoff gates
-- **Quotation state machine:** 13 statuses with strict `QUOTE_ALLOWED_TRANSITIONS` map
-- **Lead scoring:** Rule-based engine with field/operator/value/points
-- **AI Autopilot:** Scans pipeline, suggests actions, approve/dismiss workflow
-- **Smart search:** Parses tokens like `stage:won priority:high` from search bar
-- **Contact deduplication:** Merges manual, system (contacts), and customer sources
+- **Self-healing machine recovery:** Stale runs (>30min), orphaned runs, completed-job auto-clear
+- **Cutter routing enforcement:** Cutter-01 = 10M/15M only; Cutter-02 = 20M+ only (403 error)
+- **Capability validation:** bar_code + process + max_bars checked against `machine_capabilities`
+- **Hard job lock:** Prevents job switching mid-run (403)
+- **5s double-tap idempotency:** Prevents duplicate start-run requests
+- **Smart dispatch scoring:** idle+50, running+10, blocked-30, down-100, queue_length*-10, setup_match+25
+- **Cut batch auto-creation on completion** with variance detection
+- **Waste bank remnant insertion** for remnants ≥300mm
+- **Supervisor override** (force-unlock) requires admin/shop_supervisor role
+- **Phase state machine:** queued → cutting → cut_done → bending → bend_done → clearance → complete
+- **Delivery status flow:** pending → staged → scheduled → in-transit → delivered
+- **Pickup release with signature capture** (stored in blob storage)
+- **AI-powered clearance photo validation** using Gemini vision
+- **Inventory deduplication** via `dedupe_key` on activity_events
+- **Realtime subscriptions** on all major tables with 500ms debounce
 
 ## Approach
-1. Write a Python script using `reportlab` to generate a structured PDF
-2. Include all 20 files with full technical content derived from real codebase analysis
-3. QA the output visually
+1. Write Python/reportlab script to generate structured PDF with all 20 files
+2. Populate from real codebase data gathered above
+3. QA output visually
 4. Deliver as downloadable artifact
 
 ## Output
-`/mnt/documents/Sales-CRM-Standalone-Architecture.pdf`
+`/mnt/documents/Operations-ShopFloor-Standalone-Architecture.pdf`
 
