@@ -16462,6 +16462,10 @@ export type Database = {
         Returns: boolean
       }
       cleanup_rate_limit_entries: { Args: never; Returns: undefined }
+      clearance_evidence_company_check: {
+        Args: { p_cut_plan_item_id: string }
+        Returns: string
+      }
       create_dm_channel: {
         Args: { _my_profile_id: string; _target_profile_id: string }
         Returns: string
