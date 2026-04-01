@@ -3,7 +3,7 @@
  * Centralizes JWT verification via getClaims() to eliminate duplication
  * and ensure every protected endpoint validates tokens consistently.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,10 +11,13 @@ export const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Concrete client type matching createClient(url, key) calls in edge functions. */
+export type AppSupabaseClient = SupabaseClient<Record<string, unknown>, "public", Record<string, unknown>>;
+
 export interface AuthResult {
   userId: string;
-  userClient: ReturnType<typeof createClient>;
-  serviceClient: ReturnType<typeof createClient>;
+  userClient: AppSupabaseClient;
+  serviceClient: AppSupabaseClient;
 }
 
 /**
@@ -87,7 +90,7 @@ export async function optionalAuth(req: Request): Promise<string | null> {
  */
 export async function optionalAuthFull(req: Request): Promise<{
   userId: string;
-  userClient: ReturnType<typeof createClient>;
+  userClient: AppSupabaseClient;
 } | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;

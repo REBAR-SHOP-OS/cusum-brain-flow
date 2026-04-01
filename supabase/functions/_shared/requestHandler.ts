@@ -11,7 +11,7 @@
  *   }, { functionName: "my-function", requireCompany: true }));
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, requireAuth, optionalAuthFull } from "./auth.ts";
+import { corsHeaders, requireAuth, optionalAuthFull, AppSupabaseClient } from "./auth.ts";
 import { resolveCompanyId } from "./resolveCompany.ts";
 import { createLogger } from "./structuredLog.ts";
 
@@ -21,8 +21,8 @@ export interface RequestContext {
   req: Request;
   userId: string;
   companyId: string;
-  serviceClient: ReturnType<typeof createClient>;
-  userClient: ReturnType<typeof createClient> | null;
+  serviceClient: AppSupabaseClient;
+  userClient: AppSupabaseClient | null;
   body: Record<string, any>;
   log: ReturnType<typeof createLogger>;
 }
@@ -74,7 +74,7 @@ export async function handleRequest(
     // Auth — resolve based on authMode
     const authMode = options.authMode ?? "required";
     let userId = "";
-    let userClient: ReturnType<typeof createClient> | null = null;
+    let userClient: AppSupabaseClient | null = null;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
