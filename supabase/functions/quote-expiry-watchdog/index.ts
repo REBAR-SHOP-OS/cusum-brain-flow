@@ -73,5 +73,5 @@ Deno.serve((req) =>
     }
 
     return { expiring_soon: alerts, already_expired: expired };
-  }, { functionName: "quote-expiry-watchdog", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "quote-expiry-watchdog", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );

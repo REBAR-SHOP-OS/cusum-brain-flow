@@ -494,7 +494,7 @@ Deno.serve((req) =>
       JSON.stringify({ published, failed, results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "social-cron-publish", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "social-cron-publish", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );
 
 // ── Publishing Functions ──────────────────────────────────────────

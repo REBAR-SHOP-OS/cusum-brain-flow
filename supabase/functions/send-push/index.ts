@@ -213,5 +213,5 @@ Deno.serve((req) =>
     }
 
     return { sent, expired: expired.length };
-  }, { functionName: "send-push", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "send-push", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );

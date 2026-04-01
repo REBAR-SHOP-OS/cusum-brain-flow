@@ -16,7 +16,7 @@ Deno.serve((req) =>
     }
 
     return { ok: true };
-  }, { functionName: "notify-on-message", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "notify-on-message", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );
 
 async function handleTeamMessage(svc: any, record: any) {

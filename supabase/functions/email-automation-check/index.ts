@@ -165,5 +165,5 @@ Deno.serve((req) =>
     }
 
     return { results };
-  }, { functionName: "email-automation-check", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "email-automation-check", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );
