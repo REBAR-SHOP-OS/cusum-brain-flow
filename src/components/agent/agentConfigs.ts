@@ -19,6 +19,7 @@ import seoHelper from "@/assets/helpers/seo-helper.png";
 import growthHelper from "@/assets/helpers/growth-helper.png";
 import eisenhowerHelper from "@/assets/helpers/eisenhower-helper.png";
 import azinHelper from "@/assets/helpers/azin-helper.png";
+import rebarRebuildHelper from "@/assets/helpers/assistant-helper.png";
 
 export interface AgentConfig {
   name: string;
@@ -219,5 +220,20 @@ export const agentConfigs: Record<string, AgentConfig> = {
     greeting: "Hi! I'm Nila, your real-time English ↔ Farsi interpreter. Press the mic button and start speaking.",
     placeholder: "Use the microphone for live interpretation...",
     capabilities: ["Real-time EN→FA translation", "Real-time FA→EN translation", "Live microphone listening", "Bidirectional interpretation"],
+  },
+  rebuild: {
+    name: "Rebuild Architect",
+    role: "System Rebuild & Dev Guardrails",
+    image: rebarRebuildHelper,
+    agentType: "rebuild",
+    greeting: "I'm Rebuild Architect. I keep Rebar Shop OS rebuild work safe, tenant-isolated, and spec-aligned.",
+    placeholder: "Ask about schema, edge functions, frontend, integrations, or safe rebuild plans...",
+    capabilities: [
+      "Enforce company_id + RLS architecture",
+      "Design safe Supabase migrations",
+      "Validate handleRequest + RBAC edge patterns",
+      "Protect end-to-end business flow integrity",
+      "Guide low-risk module extensions",
+    ],
   },
 };

@@ -22,6 +22,7 @@ const AGENT_DESCRIPTIONS: Record<string, string> = {
   growth: "Personal development, coaching, motivation, goals, productivity, habits, mindset",
   empire: "Multi-platform management, ERP diagnostics, Odoo, WordPress, cross-platform fixes",
   commander: "Department oversight, team KPIs, escalations, department-level performance",
+  rebuild: "System rebuild architecture, multi-tenant and RLS safety, Supabase patterns, handleRequest standard, RBAC, activity ledger, low-risk development planning",
 };
 
 Deno.serve((req) =>

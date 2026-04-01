@@ -49,6 +49,7 @@ import seoHelper from "@/assets/helpers/seo-helper.png";
 import growthHelper from "@/assets/helpers/growth-helper.png";
 import eisenhowerHelper from "@/assets/helpers/eisenhower-helper.png";
 import azinHelper from "@/assets/helpers/azin-helper.png";
+import rebarLogo from "@/assets/brand-logo.png";
 
 const agentKeyToSuggestion: Record<string, { code: string; name: string }> = {
   assistant: { code: "vizzy", name: "Vizzy" },
@@ -59,6 +60,7 @@ const agentKeyToSuggestion: Record<string, { code: string; name: string }> = {
   support: { code: "haven", name: "Haven" },
   email: { code: "relay", name: "Relay" },
   social: { code: "pixel", name: "Pixel" },
+  rebuild: { code: "rebuild", name: "Rebuild Architect" },
 };
 
 interface Helper {
@@ -88,6 +90,7 @@ const helpers: Helper[] = [
   { id: "talent", name: "Scouty", role: "Talent & HR", image: talentHelper, gradient: "from-cyan-400 to-cyan-600", route: "/agent/talent" },
   { id: "seo", name: "Seomi", role: "SEO & Search", image: seoHelper, gradient: "from-lime-500 to-green-600", route: "/agent/seo" },
   { id: "growth", name: "Gigi", role: "Personal Development", image: growthHelper, gradient: "from-green-400 to-emerald-600", route: "/agent/growth" },
+  { id: "rebuild", name: "Rebuild Architect", role: "System Rebuild & Development", image: rebarLogo, gradient: "from-slate-500 to-indigo-600", route: "/agent/rebuild" },
   { id: "purchasing", name: "Kala", role: "خرید و تدارکات", image: accountingHelper, gradient: "from-rose-500 to-red-600", route: "/agent/purchasing" },
   { id: "azin", name: "Nila", role: "مترجم همزمان", image: azinHelper, gradient: "from-indigo-500 to-violet-600", route: "/azin-interpreter" },
 ];

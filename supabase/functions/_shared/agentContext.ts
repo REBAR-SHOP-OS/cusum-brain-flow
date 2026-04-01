@@ -324,6 +324,7 @@ ENFORCEMENT RULES:
           assistant: "Vizzy",
           growth: "Buddy",
           webbuilder: "Commet",
+          rebuild: "Rebuild Architect",
         };
 
         const agentPersonaName = agentStrategyMap[agent];

@@ -220,6 +220,18 @@ const agentRoutes: AgentRoute[] = [
     ],
   },
   {
+    id: "rebuild",
+    route: "/agent/rebuild",
+    name: "Rebar Rebuild Architect",
+    keywords: [
+      "rebuild", "system rebuild", "architecture", "multi-tenant", "tenant isolation",
+      "company_id", "rls", "row level security", "supabase", "postgres", "edge function",
+      "handlerequest", "requesthandler", "rbac", "roles", "activity_events", "dedupe_key",
+      "lead to delivery", "quote engine", "shop flow", "migration safety", "production-safe",
+      "rebar shop os", "rebar os",
+    ],
+  },
+  {
     id: "purchasing",
     route: "/agent/purchasing",
     name: "Kala",
