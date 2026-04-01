@@ -7037,6 +7037,7 @@ export type Database = {
       }
       leads: {
         Row: {
+          assigned_estimator: string | null
           assigned_to: string | null
           company_id: string
           computed_score: number | null
@@ -7044,12 +7045,15 @@ export type Database = {
           created_at: string
           customer_id: string | null
           description: string | null
+          disqualification_reason: string | null
           escalated_to: string | null
           expected_close_date: string | null
           expected_value: number | null
           id: string
           last_touched_at: string | null
+          lifecycle_type: string | null
           metadata: Json | null
+          normalized_stage: string | null
           notes: string | null
           odoo_created_at: string | null
           odoo_updated_at: string | null
@@ -7069,6 +7073,7 @@ export type Database = {
           win_prob_score: number | null
         }
         Insert: {
+          assigned_estimator?: string | null
           assigned_to?: string | null
           company_id: string
           computed_score?: number | null
@@ -7076,12 +7081,15 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           description?: string | null
+          disqualification_reason?: string | null
           escalated_to?: string | null
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
           last_touched_at?: string | null
+          lifecycle_type?: string | null
           metadata?: Json | null
+          normalized_stage?: string | null
           notes?: string | null
           odoo_created_at?: string | null
           odoo_updated_at?: string | null
@@ -7101,6 +7109,7 @@ export type Database = {
           win_prob_score?: number | null
         }
         Update: {
+          assigned_estimator?: string | null
           assigned_to?: string | null
           company_id?: string
           computed_score?: number | null
@@ -7108,12 +7117,15 @@ export type Database = {
           created_at?: string
           customer_id?: string | null
           description?: string | null
+          disqualification_reason?: string | null
           escalated_to?: string | null
           expected_close_date?: string | null
           expected_value?: number | null
           id?: string
           last_touched_at?: string | null
+          lifecycle_type?: string | null
           metadata?: Json | null
+          normalized_stage?: string | null
           notes?: string | null
           odoo_created_at?: string | null
           odoo_updated_at?: string | null
@@ -9425,7 +9437,7 @@ export type Database = {
             foreignKeyName: "production_tasks_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
-            referencedRelation: "work_orders"
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -15540,12 +15552,14 @@ export type Database = {
           barlist_id: string | null
           created_at: string
           id: string
+          is_shell: boolean
           notes: string | null
           order_id: string
           priority: number | null
           project_id: string | null
           scheduled_end: string | null
           scheduled_start: string | null
+          shell_reason: string | null
           status: string | null
           updated_at: string
           work_order_number: string
@@ -15558,12 +15572,14 @@ export type Database = {
           barlist_id?: string | null
           created_at?: string
           id?: string
+          is_shell?: boolean
           notes?: string | null
           order_id: string
           priority?: number | null
           project_id?: string | null
           scheduled_end?: string | null
           scheduled_start?: string | null
+          shell_reason?: string | null
           status?: string | null
           updated_at?: string
           work_order_number: string
@@ -15576,12 +15592,14 @@ export type Database = {
           barlist_id?: string | null
           created_at?: string
           id?: string
+          is_shell?: boolean
           notes?: string | null
           order_id?: string
           priority?: number | null
           project_id?: string | null
           scheduled_end?: string | null
           scheduled_start?: string | null
+          shell_reason?: string | null
           status?: string | null
           updated_at?: string
           work_order_number?: string
@@ -16419,6 +16437,15 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      v_workflow_status_map: {
+        Row: {
+          entity_type: string | null
+          lifecycle_type: string | null
+          normalized_status: string | null
+          original_status: string | null
+        }
+        Relationships: []
       }
     }
     Functions: {
