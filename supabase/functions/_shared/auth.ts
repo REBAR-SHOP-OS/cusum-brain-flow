@@ -2,6 +2,9 @@
  * Shared authentication middleware for Edge Functions.
  * Centralizes JWT verification via getClaims() to eliminate duplication
  * and ensure every protected endpoint validates tokens consistently.
+ *
+ * getClaims() performs LOCAL JWT validation (no network round-trip),
+ * improving latency and reliability vs getUser() which hits the auth server.
  */
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -42,9 +45,10 @@ export async function requireAuth(req: Request): Promise<AuthResult> {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const { data: { user }, error: userError } = await userClient.auth.getUser();
+  const token = authHeader.replace("Bearer ", "");
+  const { data, error: claimsError } = await userClient.auth.getClaims(token);
 
-  if (userError || !user) {
+  if (claimsError || !data?.claims?.sub) {
     throw new Response(
       JSON.stringify({ error: "Invalid token" }),
       { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -54,7 +58,7 @@ export async function requireAuth(req: Request): Promise<AuthResult> {
   const serviceClient = createClient(supabaseUrl, serviceKey);
 
   return {
-    userId: user.id,
+    userId: data.claims.sub as string,
     userClient,
     serviceClient,
   };
@@ -76,9 +80,10 @@ export async function optionalAuth(req: Request): Promise<string | null> {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error } = await userClient.auth.getUser();
-    if (error || !user) return null;
-    return user.id;
+    const token = authHeader.replace("Bearer ", "");
+    const { data, error } = await userClient.auth.getClaims(token);
+    if (error || !data?.claims?.sub) return null;
+    return data.claims.sub as string;
   } catch {
     return null;
   }
@@ -103,9 +108,10 @@ export async function optionalAuthFull(req: Request): Promise<{
       global: { headers: { Authorization: authHeader } },
     });
 
-    const { data: { user }, error } = await userClient.auth.getUser();
-    if (error || !user) return null;
-    return { userId: user.id, userClient };
+    const token = authHeader.replace("Bearer ", "");
+    const { data, error } = await userClient.auth.getClaims(token);
+    if (error || !data?.claims?.sub) return null;
+    return { userId: data.claims.sub as string, userClient };
   } catch {
     return null;
   }
