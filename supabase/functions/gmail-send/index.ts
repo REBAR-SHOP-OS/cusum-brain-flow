@@ -170,7 +170,7 @@ interface SendEmailRequest {
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { userId, serviceClient: supabaseAdmin, body: rawBody, req: originalReq } = ctx;
+    const { userId, serviceClient: supabaseAdmin, body: rawBody, req: originalReq, companyId } = ctx;
 
     const sendSchema = z.object({
       to: z.string().email("Invalid recipient email").max(320),
