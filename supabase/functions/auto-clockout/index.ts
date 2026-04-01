@@ -30,7 +30,7 @@ Deno.serve((req) =>
     // Find open clock entries
     const { data: openEntries, error: fetchErr } = await serviceClient
       .from("clock_entries")
-      .select("id, profile_id, clock_in, type, profiles(full_name)")
+      .select("id, profile_id, clock_in, type, profiles(full_name, company_id)")
       .is("clock_out", null)
       .not("clock_in", "is", null);
 
