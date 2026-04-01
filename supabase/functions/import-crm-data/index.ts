@@ -1,5 +1,6 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { resolveCompanyId } from "../_shared/resolveCompany.ts";
 
 interface LeadData {
   title: string;
