@@ -720,7 +720,7 @@ async function executeTool(
 
         // Log activity
         await supabase.from("activity_events").insert({
-          company_id: ctx.companyId || defaultCompanyId,
+          company_id: await resolveDefaultCompanyId(supabase),
           entity_type: "lead",
           entity_id: lead.id,
           event_type: "lead_created",
