@@ -1,39 +1,66 @@
 
 
-# Export: Auth/Login Database Structure as SQL File
+# Apply: Strict SupabaseClient Type Fix
 
-## What
-Generate a single consolidated SQL file documenting the complete authentication and login database structure, written to `/mnt/documents/`.
+## Confirmed Type Alias (no `any`, no lint suppression needed)
 
-## Contents of the SQL File
+```typescript
+export type AppSupabaseClient = SupabaseClient<Record<string, unknown>, "public", Record<string, unknown>>;
+```
 
-The file will consolidate all auth-related schema into one reference document:
+No `deno-lint-ignore` comment — the alias uses `Record<string, unknown>`, not `any`.
 
-### 1. `app_role` Enum
-All role values: `admin`, `sales`, `accounting`, `office`, `workshop`, `field`, `shop_supervisor`, `customer`
+## File 1: `supabase/functions/_shared/auth.ts`
 
-### 2. `user_roles` Table
-- `id`, `user_id` (FK → auth.users), `role` (app_role), `created_at`
-- UNIQUE on (user_id, role)
-- RLS: admins manage all, users view own
+1. **Line 6** — add `SupabaseClient` to import:
+   ```typescript
+   import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+   ```
 
-### 3. `profiles` Table
-- `id`, `user_id` (FK → auth.users, UNIQUE), `full_name`, `title`, `department`, `duties`, `phone`, `email`, `avatar_url`, `is_active`, `preferred_language`, `employee_type`, `company_id`, `manager_id`, `phone_number`, `created_at`, `updated_at`
-- RLS: authenticated read, admin CRUD, user self-update
+2. **After line 12** — add exported type:
+   ```typescript
+   /** Concrete client type matching createClient(url, key) calls in edge functions. */
+   export type AppSupabaseClient = SupabaseClient<Record<string, unknown>, "public", Record<string, unknown>>;
+   ```
 
-### 4. `employee_salaries` Table
-- `profile_id` (FK → profiles), `salary_amount`, `salary_type`, `notes`
-- RLS: admin-only
+3. **Lines 14-18** — update `AuthResult`:
+   ```typescript
+   export interface AuthResult {
+     userId: string;
+     userClient: AppSupabaseClient;
+     serviceClient: AppSupabaseClient;
+   }
+   ```
 
-### 5. Helper Functions
-- `has_role(_user_id, _role)` — SECURITY DEFINER
-- `has_any_role(_user_id, _roles[])` — SECURITY DEFINER
-- `get_my_company_id(_user_id)` — returns company_id from profiles
+4. **Lines 88-91** — update `optionalAuthFull` return type:
+   ```typescript
+   export async function optionalAuthFull(req: Request): Promise<{
+     userId: string;
+     userClient: AppSupabaseClient;
+   } | null> {
+   ```
 
-### 6. Triggers
-- `handle_new_user()` — auto-create profile on auth.users INSERT
-- `update_profiles_updated_at` / `update_salaries_updated_at`
+## File 2: `supabase/functions/_shared/requestHandler.ts`
 
-## Output
-Single file: `/mnt/documents/auth_database_structure.sql`
+1. **Line 14** — import `AppSupabaseClient`:
+   ```typescript
+   import { corsHeaders, requireAuth, optionalAuthFull, AppSupabaseClient } from "./auth.ts";
+   ```
+
+2. **Lines 24-25** — update `RequestContext`:
+   ```typescript
+     serviceClient: AppSupabaseClient;
+     userClient: AppSupabaseClient | null;
+   ```
+
+3. **Line 77** — update local variable type:
+   ```typescript
+     let userClient: AppSupabaseClient | null = null;
+   ```
+
+## Scope
+- 2 files, type-only changes
+- Zero runtime behavior change
+- No `any`, no `unknown` widening, no lint suppression
+- After applying, build/type check will be run and exact result reported before audit
 
