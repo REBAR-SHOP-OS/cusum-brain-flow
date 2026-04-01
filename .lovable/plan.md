@@ -1,28 +1,32 @@
 
 
-# Delivery & Logistics — Standalone Architecture Package (PDF)
+# Map Invoice & Remark Columns to AI Extract Session Fields
 
-## Objective
-Generate the complete 20-file standalone architecture package for the **Delivery & Logistics** module as a single downloadable PDF, populated from real codebase data.
+## Problem
+The **Invoice** column currently displays `row.reference` (per-row data) and **Remark** displays `row.address` (per-row data). The user wants these to come from the AI Extract session-level fields instead:
+- **Invoice** → `selectedSession.invoice_number` (the "INVOICE NUMBER" field from the extract form)
+- **Remark** → `selectedSession.name` (the "SCOPE" field from the extract form)
 
-## Key Data Sources (already gathered from prior analysis)
-- **12 core tables**: deliveries, delivery_stops, delivery_bundles, packing_slips, loading_checklist, loading_evidence, pickup_orders, pickup_order_items, plus supporting tables
-- **6 frontend routes**: loading station, pickup station, delivery-ops, delivery terminal, deliveries list, customer portal
-- **10+ components**: PackingSlipPreview, SignaturePad, ReadyBundleList, PickupVerification
-- **4 hooks**: usePickupOrders, useLoadingChecklist, useCompletedBundles, useCustomerPortalData
-- **Business logic**: delivery state machine, pickup flow, hard gates (block_delivery_delete_unless_pending), 4-step invoice resolution chain, POD capture
+## Changes — `src/components/office/TagsExportView.tsx`
 
-## Approach
-1. Write Python/reportlab script generating structured PDF with all 20 specification files
-2. Use style name `CodeBlock` (not `Code`) to avoid reportlab built-in conflict from prior attempt
-3. QA output visually — check every page for layout issues
-4. Deliver as downloadable artifact
+### 1. Table body cells (lines 448-449)
+- Line 448: `row.reference` → `(selectedSession as any)?.invoice_number`
+- Line 449: `row.address` → `selectedSession?.name`
 
-## Output
-`/mnt/documents/Delivery-Logistics-Standalone-Architecture.pdf`
+### 2. CSV export data (line 133)
+- Change `r.reference || ""` → `(selectedSession as any)?.invoice_number || ""`
+- Change `r.address || (selectedSession as any)?.site_address || projectAddress || ""` → `selectedSession?.name || ""`
 
-## Technical Notes
-- Script writes to `/tmp/gen_delivery.py`, output to `/mnt/documents/`
-- All 20 files rendered as titled sections with full technical content
-- Monospace code blocks for SQL schema, API contracts, file structures
+### 3. Zebra ZPL data (line 185-187)
+- Update `reference` field mapping to use session `invoice_number`
+- Update `remark` field mapping to use session `name`
+
+### 4. Card view props (lines 496-498)
+- Update `reference` prop to use session `invoice_number`
+- Update `address` prop to use session `name`
+
+## Impact
+- 1 file changed: `TagsExportView.tsx`
+- All views (table, cards, CSV, ZPL) will consistently show session-level Invoice Number and Scope
+- No database or schema changes needed
 
