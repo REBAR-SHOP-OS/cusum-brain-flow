@@ -1,9 +1,7 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
-import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient }) => {
-    const defaultCompanyId = await resolveDefaultCompanyId(serviceClient);
     const { data: config } = await serviceClient
       .from("automation_configs")
       .select("enabled")
