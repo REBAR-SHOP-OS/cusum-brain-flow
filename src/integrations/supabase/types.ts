@@ -16452,6 +16452,12 @@ export type Database = {
         Args: { _company_id: string; _lock_uuid: string; _run_id: string }
         Returns: number
       }
+      backfill_production_tasks_from_cut_plans: {
+        Args: never
+        Returns: {
+          inserted_count: number
+        }[]
+      }
       check_rate_limit: {
         Args: {
           _function_name: string
