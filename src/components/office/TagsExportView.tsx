@@ -182,9 +182,9 @@ export function TagsExportView() {
         weight: getWeight(size, row.total_length_mm, row.quantity),
         dwg: row.dwg || "",
         row_index: row.row_index,
-        reference: row.reference || "",
+        reference: (selectedSession as any)?.invoice_number || "",
         customer: row.customer || "",
-        remark: row.address || "",
+        remark: selectedSession?.name || "",
         dims,
       };
     });
