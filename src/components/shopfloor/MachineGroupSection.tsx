@@ -43,7 +43,7 @@ export function MachineGroupSection({
   availableMachines,
   onAssignMachine,
 }: MachineGroupSectionProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(runningPlans.length > 0);
   const totalJobs = runningPlans.length + queuedPlans.length;
 
   if (totalJobs === 0) return null;
