@@ -97,7 +97,7 @@ Deno.serve((req) =>
                 customer_type: "business",
                 status: "active",
                 notes: `Imported from Odoo CRM`,
-                company_id: "a0000000-0000-0000-0000-000000000001",
+                company_id: companyId,
               })
               .select("id")
               .single();
