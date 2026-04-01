@@ -397,8 +397,8 @@ export function TagsExportView() {
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-right px-3 py-2 whitespace-nowrap">Weight</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Picture</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Customer</th>
-                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Ref</th>
-                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Add</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Invoice</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Remark</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Delivery Date</th>
                 </tr>
               </thead>
