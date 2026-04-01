@@ -440,7 +440,7 @@ export default function StationView() {
                           ) : (
                           <div className="space-y-6 pl-2 pt-2 pb-4">
                             {cust.barlists.map((bl) => (
-                              <Collapsible key={bl.planId} defaultOpen={true}>
+                              <Collapsible key={bl.planId} defaultOpen={false}>
                                 <CollapsibleTrigger className="flex items-center gap-2 w-full group/bl py-1.5">
                                   <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
                                     <List className="w-3.5 h-3.5 text-muted-foreground" />

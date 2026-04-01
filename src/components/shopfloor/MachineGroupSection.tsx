@@ -116,7 +116,7 @@ function ProjectFolder({
   availableMachines?: { id: string; name: string }[];
   onAssignMachine?: (planId: string, machineId: string) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(variant === "running");
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="ml-2">
