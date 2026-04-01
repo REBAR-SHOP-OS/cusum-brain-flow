@@ -524,6 +524,7 @@ Rules:
           .update({ progress: 85, unit_system: detectedUnitSystem } as any)
           .eq("id", sessionId);
 
+        let savedCount = 0;
         if (items.length > 0) {
           const rows = items.map((item: any, idx: number) => {
             // Strip "I" dimension if AI returned it — rebar standards skip "I"
@@ -584,6 +585,7 @@ Rules:
           }
           const dedupedRows = Array.from(dedupeMap.values())
             .map((r, idx) => ({ ...r, row_index: idx + 1 }));
+          savedCount = dedupedRows.length;
           console.log(`Dedup: ${rows.length} → ${dedupedRows.length} rows`);
 
           // Batch insert rows (50 at a time) to avoid edge function timeout
@@ -607,7 +609,7 @@ Rules:
           })
           .eq("id", sessionId);
 
-        console.log(`Extraction complete for session ${sessionId}: ${dedupedRows.length} rows saved (from ${items.length} raw)`);
+        console.log(`Extraction complete for session ${sessionId}: ${savedCount} rows saved`);
 
     return new Response(
       JSON.stringify({ status: "extracted", sessionId }),
