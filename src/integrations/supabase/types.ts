@@ -16497,6 +16497,7 @@ export type Database = {
           total_total_tokens: number
         }[]
       }
+      get_internal_function_secret: { Args: never; Returns: string }
       get_my_gmail_status: {
         Args: never
         Returns: {
