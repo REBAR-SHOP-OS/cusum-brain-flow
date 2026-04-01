@@ -687,7 +687,7 @@ async function executeTool(
         // Create lead
         const { data: lead, error: leadErr } = await supabase.from("leads").insert({
           title: `Drawing: ${projectName || customerName}`,
-          company_id: ctx.companyId || defaultCompanyId,
+          company_id: await resolveDefaultCompanyId(supabase),
           stage: "new",
           source: "website_chat",
           expected_value: 0,
