@@ -1,127 +1,60 @@
 
 
-# Operations & Shop Floor — Standalone Architecture Package (PDF)
+# Delivery & Logistics — Standalone Architecture Package (PDF)
 
 ## Objective
-Generate a comprehensive 20-file standalone architecture package for the **Operations & Shop Floor** module, extracted from the Rebar Shop OS ERP. Output as a single downloadable PDF.
+Generate a comprehensive 20-file standalone architecture package for the **Delivery & Logistics** module, extracted from the Rebar Shop OS ERP. Output as a single downloadable PDF.
 
 ## Data Gathered from Codebase
 
-### Database Tables (40+ tables)
-**Core Production:**
-- `machines`, `machine_runs`, `machine_capabilities`, `machine_queue_items`
-- `cut_plans`, `cut_plan_items`, `cut_batches`, `cut_output_batches`
-- `bend_batches`, `production_tasks`, `production_events`
-- `rebar_sizes`, `activity_events`
+### Database Tables (12 core tables)
+1. `deliveries` — Master delivery record (delivery_number, status, scheduled_date, driver_name, vehicle, cut_plan_id, order_id, driver_profile_id)
+2. `delivery_stops` — Per-stop data (address, stop_sequence, pod_photo_url, pod_signature, arrival/departure_time, exception_reason, customer_id, order_id)
+3. `delivery_bundles` — Junction: delivery ↔ bundle linkage
+4. `packing_slips` — Slip documents (slip_number, customer_name, items_json, ship_to, scope, site_address, delivery_date, invoice_number, invoice_date, signature_path, site_photo_path, status)
+5. `loading_checklist` — Per-item loading verification (cut_plan_id, cut_plan_item_id, loaded, loaded_by, loaded_at, photo_path)
+6. `loading_evidence` — Photo evidence for loading (photo_url, project_name, captured_by, notes)
+7. `pickup_orders` — Customer collection orders (customer_id, site_address, bundle_count, status, signature_data, authorized_by, authorized_at)
+8. `pickup_order_items` — Items in pickup orders (mark_number, description, verified)
+9. **Supporting:** `customers`, `companies`, `profiles`, `user_roles`, `orders`, `activity_events`
 
-**Inventory & Material:**
-- `inventory_lots`, `inventory_reservations`, `inventory_scrap`
-- `floor_stock`, `waste_bank_pieces`
-- `purchase_orders`, `purchase_order_lines`
-- `inventory_counts`, `inventory_count_items`
+### Frontend Routes (6 routes)
+1. `/shopfloor/loading` — Loading Station (bundle checklist + photo evidence)
+2. `/shopfloor/pickup` — Pickup Station (customer collection + signature + packing slip)
+3. `/shopfloor/delivery-ops` — Delivery Operations (dispatch scheduling, bulk delete)
+4. `/shopfloor/delivery/:stopId` — Delivery Terminal (driver drop-off proof: checklist, photo, signature, packing slip print)
+5. `/deliveries` — Deliveries list (referenced in routing)
+6. Customer Portal delivery view (embedded)
 
-**QC & Clearance:**
-- `clearance_evidence`
+### Components (10+ components)
+- `src/components/delivery/PackingSlipPreview.tsx` — Packing slip overlay with PDF/signature/email
+- `src/components/delivery/SignaturePad.tsx` — Digital signature capture
+- `src/components/dispatch/ReadyBundleList.tsx` — Bundle selection grid
+- `src/components/shopfloor/PickupVerification.tsx` — Pickup item verification
+- `src/components/shopfloor/SignaturePad.tsx` — Alternate signature pad
 
-**Dispatch & Delivery:**
-- `deliveries`, `delivery_stops`, `delivery_items`
-- `pickup_orders`, `pickup_order_items`
-- `loading_checklists`
+### Hooks (4 hooks)
+- `usePickupOrders` + `usePickupOrderItems` — Pickup CRUD + realtime
+- `useLoadingChecklist` — Loading checklist CRUD + photo upload
+- `useCompletedBundles` — Bundles ready for dispatch (pickupOnly filter)
+- `useCustomerPortalData` — Customer-facing delivery tracking
 
-**Camera Intelligence:**
-- `camera_events`, `cameras`, `camera_zones`
-
-**Supporting:**
-- `companies`, `profiles`, `user_roles`, `work_orders`, `projects`, `customers`, `barlists`
-
-### Frontend Routes (14 routes)
-1. `/shop-floor` — Command Hub (hub card navigation)
-2. `/shopfloor/station` — Station Dashboard (machine grid + filters)
-3. `/shopfloor/station/:machineId` — Station View (cutter/bender controls)
-4. `/shopfloor/cutter` — Cutter Planning (cut plan management)
-5. `/shopfloor/pool` — Material Pool (staging & flow)
-6. `/shopfloor/loading` — Loading Station (bundle checklist + photos)
-7. `/shopfloor/pickup` — Pickup Station (customer collection + signature)
-8. `/shopfloor/clearance` — Clearance Station (QC evidence + AI validation)
-9. `/shopfloor/inventory` — Inventory Counts
-10. `/shopfloor/delivery-ops` — Delivery Operations (scheduling + dispatch)
-11. `/shopfloor/delivery/:stopId` — Delivery Terminal (drop-off proof)
-12. `/shopfloor/camera-intelligence` — Camera AI (vision events)
-13. `/admin/waste-bank` — Waste Bank Admin
-14. `/admin/bend-queue` — Bend Queue Admin
-15. `/admin/bundles` — Bundle Admin
-16. `/admin/production-audit` — Production Audit
-17. `/live-monitor` — Live Monitor
-18. `/print-tags` — Print Tags
-19. `/timeclock` — Time Clock
-
-### Components (28+ components in shopfloor/)
-- `CutterStationView`, `BenderStationView` — Machine-type-specific station UIs
-- `ProductionCard`, `ProductionCardInstructions` — Job card rendering
-- `BarSizeGroup` — Groups items by rebar size
-- `MachineSelector`, `MachineGroupSection`, `MachineSpecsPanel` — Machine grid
-- `StationHeader` — Station identification + pin/unpin
-- `QRJobScanner` — QR scan for auto-navigation
-- `SignaturePad` — Pickup signature capture
-- `InventoryCountView`, `InventoryStatusPanel` — Inventory management
-- `SlotTracker` — Production slot tracking
-- `TransferMachineDialog` — Move jobs between machines
-- `MyJobsCard` — Operator's active jobs
-- `ForemanPanel` — Supervisor overview
-- `MaterialFlowDiagram` — Visual flow
-- `DowntimeAlertBanner` — Stale machine alerts
-- `BenderBatchPanel` — Bend queue per machine
-- `BendingSchematic`, `AsaShapeDiagram` — Shape visualization
-- `CutEngine` — Cut optimization logic
-- `ShopFloorProductionQueue`, `WorkOrderQueueSection`, `ActiveProductionHub` — Queue views
-- `PickupVerification` — Pickup item verification
-
-### Hooks (20+ hooks)
-- `useLiveMonitorData`, `useStationData`, `useCutPlans`, `useCutPlanItems`
-- `useProductionQueues`, `useClearanceData`, `useCompletedBundles`
-- `useLoadingChecklist`, `usePickupOrders`, `usePickupOrderItems`
-- `useWasteBank`, `useBenderBatches`, `useBendBatches`
-- `useInventoryData`, `useInventoryCounts`, `useSlotTracker`
-- `useTabletPin`, `useForemanBrain`, `useShapeSchematics`
-- `useSupabaseWorkOrders`, `useBundles`
-
-### Edge Functions (15+ relevant)
-- `manage-machine` (732 lines) — Start/pause/complete/block/unlock runs, cutter routing, capability validation, self-healing recovery, cut_batch creation, waste bank remnant insertion
-- `manage-bend` — Bend queue CRUD, bend start/pause/complete/cancel, waste bank reserve/consume/release, delivery-from-bundles
-- `smart-dispatch` — AI-scored machine assignment, queue management, task routing
-- `manage-inventory` (533 lines) — PO receiving, stock reservation, consumption, remnant creation, inventory adjustments, scrap recording
-- `validate-clearance-photo` — AI vision QC (Gemini) for tag/material photo validation
-- `log-machine-run` — Machine run event logging
-- `camera-events` — External camera event ingestion (API-key auth)
-- `camera-ping` — Camera health check
-- `shape-vision` — AI shape recognition
-- `extract-manifest` — Barlist extraction (feeds cut plans)
-- `kiosk-lookup`, `kiosk-punch`, `kiosk-register` — Time clock kiosk
-- `timeclock-alerts` — Shift alerts
-
-### Business Logic Highlights
-- **Self-healing machine recovery:** Stale runs (>30min), orphaned runs, completed-job auto-clear
-- **Cutter routing enforcement:** Cutter-01 = 10M/15M only; Cutter-02 = 20M+ only (403 error)
-- **Capability validation:** bar_code + process + max_bars checked against `machine_capabilities`
-- **Hard job lock:** Prevents job switching mid-run (403)
-- **5s double-tap idempotency:** Prevents duplicate start-run requests
-- **Smart dispatch scoring:** idle+50, running+10, blocked-30, down-100, queue_length*-10, setup_match+25
-- **Cut batch auto-creation on completion** with variance detection
-- **Waste bank remnant insertion** for remnants ≥300mm
-- **Supervisor override** (force-unlock) requires admin/shop_supervisor role
-- **Phase state machine:** queued → cutting → cut_done → bending → bend_done → clearance → complete
+### Business Logic
 - **Delivery status flow:** pending → staged → scheduled → in-transit → delivered
-- **Pickup release with signature capture** (stored in blob storage)
-- **AI-powered clearance photo validation** using Gemini vision
-- **Inventory deduplication** via `dedupe_key` on activity_events
-- **Realtime subscriptions** on all major tables with 500ms debounce
+- **Pickup status flow:** pending → ready → released → collected
+- **Hard gate:** Delivery deletion blocked unless status = "pending" (DB trigger: `block_delivery_delete_unless_pending`)
+- **Scheduling gate:** driver_name + vehicle + scheduled_date all required to move to "scheduled"
+- **Signature storage:** Uploaded to `clearance-photos` bucket, path stored in DB
+- **Packing slip creation:** Triggered from Loading/Pickup stations with 4-step invoice resolution chain (cut_plan_items → work_orders → barlists → extract_sessions → orders fallback)
+- **POD (Proof of Delivery):** Photo + signature captured at delivery stop, stored in blob storage
+- **Realtime:** Subscriptions on `pickup_orders` and `pickup_order_items` with company scoping
+- **Bulk operations:** Multi-select delete on DeliveryOps with cascading cleanup (packing_slips → delivery_stops → status reset → delete)
 
 ## Approach
-1. Write Python/reportlab script to generate structured PDF with all 20 files
-2. Populate from real codebase data gathered above
-3. QA output visually
-4. Deliver as downloadable artifact
+1. Write Python/reportlab script with all 20 files populated from real codebase data
+2. QA output visually
+3. Deliver as downloadable artifact
 
 ## Output
-`/mnt/documents/Operations-ShopFloor-Standalone-Architecture.pdf`
+`/mnt/documents/Delivery-Logistics-Standalone-Architecture.pdf`
 
