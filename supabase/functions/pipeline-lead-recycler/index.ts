@@ -68,9 +68,11 @@ Deno.serve((req) =>
       }
     }
 
+    const runCompanyId = (config as any)?.company_id;
+    if (runCompanyId) {
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: runCompanyId,
         automation_key: "pipeline_lead_recycler", automation_name: "Dead Lead Recycler",
         agent_name: "Blitz", trigger_type: "cron", status: "completed",
         items_processed: followedUp + markedLost, items_succeeded: followedUp + markedLost,
