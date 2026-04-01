@@ -482,7 +482,7 @@ Rules:
         // Note: primary detection already ran above on raw strings
 
         // Secondary check: scan raw XLSX cells for standalone inch marks (e.g. 54")
-        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "metric") {
+        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "mm") {
           try {
             const sheet = parsedWorkbook.Sheets[parsedWorkbook.SheetNames[0]];
             const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
