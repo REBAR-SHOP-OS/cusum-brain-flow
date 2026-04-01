@@ -83,9 +83,11 @@ Deno.serve((req) =>
       } catch (_) {}
     }
 
+    const runCompanyId = (invoices || [])[0]?.company_id || (config as any)?.company_id;
+    if (runCompanyId) {
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: defaultCompanyId,
+        company_id: runCompanyId,
         automation_key: "ar_aging_escalation",
         automation_name: "AR Aging Escalation",
         agent_name: "Penny",
