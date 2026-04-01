@@ -1,33 +1,39 @@
 
-Goal: make inch-based files (values like `48"`) auto-detect as inches so the UI shows inches instead of mm.
 
-1) Fix unit-system default and comparisons in extraction
-- File: `supabase/functions/extract-manifest/index.ts`
-- Change default from `detectedUnitSystem = "metric"` to `detectedUnitSystem = "mm"`.
-- Update follow-up checks that currently use `detectedUnitSystem === "metric"` to `=== "mm"` so the fallback detectors still run.
+# Export: Auth/Login Database Structure as SQL File
 
-2) Detect units from raw extracted values before numeric normalization
-- Current issue: unit detection runs after `parseDimension(...)`, which strips inch markers and turns `48"` into `48`, making imperial detection miss.
-- Capture a `rawItems` snapshot from AI output before conversion.
-- Run imperial regex checks against raw strings from `rawItems` (including `total_length`, `A..H`, etc.).
-- Then run the existing numeric normalization pass (`parseDimension`) afterward.
+## What
+Generate a single consolidated SQL file documenting the complete authentication and login database structure, written to `/mnt/documents/`.
 
-3) Keep spreadsheet fallback detection, plus tighten for inch-mark formats
-- Keep XLSX raw-cell and number-format (`cell.z`) checks as secondary/tertiary detectors.
-- Ensure these checks run when unit is still `"mm"` and recognize straight inch notation (`48"`), feet-inch (`6'-4"`), and feet-only (`5'`).
+## Contents of the SQL File
 
-4) Frontend compatibility guard for already-saved legacy sessions
-- File: `src/components/office/AIExtractView.tsx`
-- Add a small fallback mapping so if a session still has legacy `"metric"` value, it is treated as `"mm"` for display state.
-- This prevents ambiguous labels and keeps pipeline badge consistent.
+The file will consolidate all auth-related schema into one reference document:
 
-Validation plan
-- Re-extract with an inch-based file containing values like `48"`, `72"`, `6'-0"`.
-- Confirm pipeline badge shows inches (not mm), and mapping/apply converts correctly to stored mm via existing `apply-mapping` logic.
-- Re-test a true mm file to confirm no regression.
+### 1. `app_role` Enum
+All role values: `admin`, `sales`, `accounting`, `office`, `workshop`, `field`, `shop_supervisor`, `customer`
 
-Technical details
-- Root cause is ordering + sentinel mismatch:
-  - Ordering bug: unit detection after normalization loses inch symbols.
-  - Sentinel bug: backend uses `"metric"` while extraction/mapping flow expects concrete source units (`"mm" | "in" | "ft" | "imperial"`).
-- Scope: 2 files (`extract-manifest/index.ts`, `AIExtractView.tsx`), no schema changes, no migration required.
+### 2. `user_roles` Table
+- `id`, `user_id` (FK → auth.users), `role` (app_role), `created_at`
+- UNIQUE on (user_id, role)
+- RLS: admins manage all, users view own
+
+### 3. `profiles` Table
+- `id`, `user_id` (FK → auth.users, UNIQUE), `full_name`, `title`, `department`, `duties`, `phone`, `email`, `avatar_url`, `is_active`, `preferred_language`, `employee_type`, `company_id`, `manager_id`, `phone_number`, `created_at`, `updated_at`
+- RLS: authenticated read, admin CRUD, user self-update
+
+### 4. `employee_salaries` Table
+- `profile_id` (FK → profiles), `salary_amount`, `salary_type`, `notes`
+- RLS: admin-only
+
+### 5. Helper Functions
+- `has_role(_user_id, _role)` — SECURITY DEFINER
+- `has_any_role(_user_id, _roles[])` — SECURITY DEFINER
+- `get_my_company_id(_user_id)` — returns company_id from profiles
+
+### 6. Triggers
+- `handle_new_user()` — auto-create profile on auth.users INSERT
+- `update_profiles_updated_at` / `update_salaries_updated_at`
+
+## Output
+Single file: `/mnt/documents/auth_database_structure.sql`
+
