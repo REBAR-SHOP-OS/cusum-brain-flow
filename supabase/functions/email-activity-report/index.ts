@@ -503,5 +503,5 @@ Deno.serve((req) =>
       peopleProcessed: people.length,
       sendResults,
     };
-  }, { functionName: "email-activity-report", requireCompany: false, wrapResult: false })
+  }, { functionName: "email-activity-report", wrapResult: false })
 );

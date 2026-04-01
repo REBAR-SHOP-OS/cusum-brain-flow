@@ -212,7 +212,8 @@ Deno.serve((req) =>
       .limit(1)
       .single();
 
-    const companyId = sampleLead?.company_id;
+    if (!sampleLead?.company_id) throw new Error("No company_id found on existing leads — cannot proceed with sync");
+    const companyId = sampleLead.company_id;
     const syncRunAt = new Date().toISOString();
 
     // Load ALL existing odoo_sync leads with pagination (Supabase caps at 1000/query)
