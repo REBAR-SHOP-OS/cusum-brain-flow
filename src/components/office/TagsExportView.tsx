@@ -130,7 +130,7 @@ export function TagsExportView() {
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
           return r[key] != null ? formatDim(Number(r[key]), us) : "";
         }),
-        weight, picture, r.customer || "", r.reference || "", r.address || (selectedSession as any)?.site_address || projectAddress || "",
+        weight, picture, r.customer || "", (selectedSession as any)?.invoice_number || "", selectedSession?.name || "",
       ].join(",");
     });
     const csv = [headers.join(","), ...csvRows].join("\n");
@@ -182,9 +182,9 @@ export function TagsExportView() {
         weight: getWeight(size, row.total_length_mm, row.quantity),
         dwg: row.dwg || "",
         row_index: row.row_index,
-        reference: row.reference || "",
+        reference: (selectedSession as any)?.invoice_number || "",
         customer: row.customer || "",
-        remark: row.address || "",
+        remark: selectedSession?.name || "",
         dims,
       };
     });
@@ -445,8 +445,8 @@ export function TagsExportView() {
                           {shapeType ? (getShapeImageUrl(shapeType) ? "✓" : `TYPE-${shapeType}.PNG`) : "—"}
                         </td>
                         <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.customer || "—"}</td>
-                        <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.reference || "—"}</td>
-                        <td className="text-xs text-muted-foreground px-3 py-2.5">{row.address || "—"}</td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{(selectedSession as any)?.invoice_number || "—"}</td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5">{selectedSession?.name || "—"}</td>
                         <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">
                           {selectedSession?.target_eta
                             ? new Date(selectedSession.target_eta).toLocaleDateString()
@@ -494,8 +494,8 @@ export function TagsExportView() {
                     dwg={row.dwg || ""}
                     item={row.row_index}
                     customer={row.customer || ""}
-                    reference={row.reference || ""}
-                    address={row.address || (selectedSession as any)?.site_address || projectAddress || ""}
+                    reference={(selectedSession as any)?.invoice_number || ""}
+                    address={selectedSession?.name || ""}
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
                     unitSystem={sessionUnitToDisplay((selectedSession as any)?.unit_system)}
