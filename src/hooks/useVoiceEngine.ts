@@ -167,6 +167,10 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
+    if (audioElRef.current) {
+      try { audioElRef.current.pause(); audioElRef.current.remove(); } catch {}
+      audioElRef.current = null;
+    }
   }, []);
 
   const handleDataChannelMessage = useCallback((event: MessageEvent) => {
