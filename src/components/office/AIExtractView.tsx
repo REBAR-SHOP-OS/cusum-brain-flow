@@ -717,7 +717,7 @@ export function AIExtractView() {
     setSiteAddress(session.site_address || "");
     setInvoiceNumber(session.invoice_number || "");
     setInvoiceDate(session.invoice_date || "");
-    const restoredUnit = session.unit_system || "mm";
+    const restoredUnit = (session.unit_system === "metric" ? "mm" : session.unit_system) || "mm";
     setSelectedUnitSystem(restoredUnit);
     setDisplayUnit(restoredUnit);
     confirmedUnitRef.current = restoredUnit;
