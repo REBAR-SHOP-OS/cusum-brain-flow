@@ -87,7 +87,7 @@ Deno.serve((req) =>
 
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: defaultCompanyId,
         automation_key: "ar_aging_escalation",
         automation_name: "AR Aging Escalation",
         agent_name: "Penny",
