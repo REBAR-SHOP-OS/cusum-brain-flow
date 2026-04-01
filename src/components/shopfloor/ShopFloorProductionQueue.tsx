@@ -225,7 +225,7 @@ function ProjectGroup({
   cutPlans: CutPlanForBarlist[];
   machines: MachineOption[];
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
