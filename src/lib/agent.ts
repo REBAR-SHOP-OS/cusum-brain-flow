@@ -47,7 +47,7 @@ export async function sendAgentMessage(
 
     // Check if response contains an error instead of a reply
     if (data && typeof data === "object" && "error" in data && !("reply" in data)) {
-      const errMsg = (data as any).error;
+      const errMsg = data.error;
       if (typeof errMsg === "string" && errMsg.toLowerCase().includes("rate limit")) {
         throw new Error("Rate limit reached — please wait a moment before trying again.");
       }
