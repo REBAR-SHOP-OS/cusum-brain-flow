@@ -103,4 +103,9 @@ export const agentSuggestions: Record<string, AgentSuggestion[]> = {
     { title: "Which team needs attention right now?", category: "Teams" },
     { title: "Escalate a critical issue to ARIA", category: "Escalation" },
   ],
+  rebuild: [
+    { title: "Audit tenant safety for this feature", category: "Architecture" },
+    { title: "Design a safe migration with RLS checks", category: "Database" },
+    { title: "Review edge function for handleRequest compliance", category: "Backend" },
+  ],
 };

@@ -6,7 +6,7 @@ export interface ChatMessage {
 }
 
 export interface AgentRequest {
-  agent: "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal" | "shopfloor" | "delivery" | "email" | "data" | "commander" | "empire";
+  agent: "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal" | "shopfloor" | "delivery" | "email" | "data" | "commander" | "empire" | "rebuild";
   message: string;
   history?: ChatMessage[];
   context?: Record<string, unknown>;
