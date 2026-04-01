@@ -116,7 +116,7 @@ export function TagsExportView() {
     const lengthHeader = us === "imperial" ? "TOTAL LENGTH (ft-in)" : "TOTAL LENGTH (mm)";
     const dimUnit = us === "imperial" ? "in" : "mm";
     const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", lengthHeader,
-      ...DIM_COLS.map(d => `${d} (${dimUnit})`), "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD"];
+      ...DIM_COLS.map(d => `${d} (${dimUnit})`), "WEIGHT", "PICTURE", "CUSTOMER", "INVOICE", "REMARK"];
     const csvRows = sortedRows.map((r) => {
       const size = r.bar_size_mapped || r.bar_size || "";
       const shapeType = r.shape_code_mapped || r.shape_type || "STRAIGHT";
