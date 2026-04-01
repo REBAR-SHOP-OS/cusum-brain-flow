@@ -446,6 +446,22 @@ Rules:
         // Save rows to DB
         let items = extractedData.items || [];
 
+        // ── Unit detection on RAW strings BEFORE parseDimension strips marks ──
+        let detectedUnitSystem = "mm";
+        {
+          const rawSample: string[] = [];
+          for (const item of items.slice(0, 20)) {
+            for (const key of ["total_length", "A", "B", "C", "D", "E", "F", "G", "H"]) {
+              if (item[key] != null) rawSample.push(String(item[key]));
+            }
+          }
+          const imperialRaw = /\d+\s*['']\s*-?\s*\d+\s*["""]|\d+(?:\.\d+)?\s*["""]\s*$|\d+(?:\.\d+)?\s*['']\s*$/;
+          if (rawSample.some((v) => imperialRaw.test(v))) {
+            detectedUnitSystem = "in";
+            console.log("Detected imperial unit system from raw AI values (before normalization)");
+          }
+        }
+
         // Post-AI pass: convert any string values in length/dims to numbers
         items.forEach((item: any) => {
           if (typeof item.total_length === "string") {
@@ -463,25 +479,10 @@ Rules:
           console.log(`[extract-manifest] Applying deterministic dim overlay for ${items.length} items`);
           items = overlaySheetDims(parsedWorkbook, items);
         }
-
-        // Detect unit system from AI response — check if values contain imperial patterns
-        let detectedUnitSystem = "metric";
-        const sampleValues: string[] = [];
-        for (const item of items.slice(0, 10)) {
-          for (const key of ["total_length", "A", "B", "C", "D", "E", "F", "G", "H"]) {
-            if (item[key] != null) sampleValues.push(String(item[key]));
-          }
-        }
-        // Match feet-inches (6'-4") OR standalone inches (54") OR feet-only (5')
-        const imperialPattern = /\d+\s*['']\s*-?\s*\d+\s*["""]|\d+(?:\.\d+)?\s*["""]\s*$|\d+(?:\.\d+)?\s*['']\s*$/;
-        if (sampleValues.some((v) => imperialPattern.test(v))) {
-          // parseDimension already normalized ft-in → inches, so effective unit is "in"
-          detectedUnitSystem = "in";
-          console.log("Detected imperial unit system from AI response values — setting unit to 'in' (parseDimension normalizes to inches)");
-        }
+        // Note: primary detection already ran above on raw strings
 
         // Secondary check: scan raw XLSX cells for standalone inch marks (e.g. 54")
-        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "metric") {
+        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "mm") {
           try {
             const sheet = parsedWorkbook.Sheets[parsedWorkbook.SheetNames[0]];
             const rawRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
@@ -501,7 +502,7 @@ Rules:
         }
 
         // Tertiary check: inspect XLSX cell number formats for inch marks (e.g. format 0" displays 78 as 78")
-        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "metric") {
+        if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "mm") {
           try {
             const sheet = parsedWorkbook.Sheets[parsedWorkbook.SheetNames[0]];
             const cellKeys = Object.keys(sheet).filter(k => !k.startsWith("!"));
