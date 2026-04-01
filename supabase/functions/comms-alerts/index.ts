@@ -1,6 +1,7 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 interface CommsConfig {
   external_sender: string;
@@ -238,12 +239,13 @@ function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentN
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { serviceClient: svc } = ctx;
+    const defaultCompanyId = await resolveDefaultCompanyId(svc);
 
     // Load config
     const { data: configRow } = await svc
       .from("comms_config")
       .select("*")
-      .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+      .eq("company_id", defaultCompanyId)
       .maybeSingle();
 
     if (!configRow) throw new Error("No comms_config found");
@@ -371,7 +373,7 @@ Deno.serve((req) =>
         alert_type: alert.type,
         communication_id: alert.commId,
         owner_email: alert.owner,
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: defaultCompanyId,
         metadata: { agent_name: alert.agent, subject: alert.comm.subject },
       });
 
@@ -411,7 +413,7 @@ Deno.serve((req) =>
     // Log event
     if (alerts.length > 0 || skippedCount > 0) {
       await svc.from("activity_events").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: defaultCompanyId,
         entity_type: "comms_alert",
         entity_id: "system",
         event_type: "alerts_processed",

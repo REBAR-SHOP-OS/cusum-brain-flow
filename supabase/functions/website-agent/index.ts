@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { WPClient } from "../_shared/wpClient.ts";
 import { callAIStream } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 // ─── Rate Limiter ───
 const rateLimitMap = new Map<string, number[]>();
@@ -686,7 +687,7 @@ async function executeTool(
         // Create lead
         const { data: lead, error: leadErr } = await supabase.from("leads").insert({
           title: `Drawing: ${projectName || customerName}`,
-          company_id: "a0000000-0000-0000-0000-000000000001",
+          company_id: await resolveDefaultCompanyId(supabase),
           stage: "new",
           source: "website_chat",
           expected_value: 0,
@@ -719,7 +720,7 @@ async function executeTool(
 
         // Log activity
         await supabase.from("activity_events").insert({
-          company_id: "a0000000-0000-0000-0000-000000000001",
+          company_id: await resolveDefaultCompanyId(supabase),
           entity_type: "lead",
           entity_id: lead.id,
           event_type: "lead_created",

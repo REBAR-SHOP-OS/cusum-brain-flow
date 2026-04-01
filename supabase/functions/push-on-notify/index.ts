@@ -43,7 +43,7 @@ Deno.serve((req) =>
       console.error("Push delivery failed:", { status: resp.status, result });
       try {
         await serviceClient.from("activity_events").insert({
-          company_id: record.company_id || "a0000000-0000-0000-0000-000000000001",
+          company_id: record.company_id,
           entity_type: "notification",
           entity_id: record.id || "unknown",
           event_type: "push_failed",

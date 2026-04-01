@@ -453,7 +453,7 @@ Deno.serve((req) =>
 
     const userFullName = profile?.full_name || user.user_metadata?.full_name || "User";
     const userEmail = profile?.email || user.email || "user@rebar.shop";
-    const companyId = profile?.company_id || "a0000000-0000-0000-0000-000000000001"; // Fallback for dev
+    const companyId = profile?.company_id;
 
     // Fetch roles
     const { data: rolesData } = await svcClient

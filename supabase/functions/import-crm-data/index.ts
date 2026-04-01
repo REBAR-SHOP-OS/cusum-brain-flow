@@ -1,5 +1,6 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { resolveCompanyId } from "../_shared/resolveCompany.ts";
 
 interface LeadData {
   title: string;
@@ -68,7 +69,8 @@ const leadsData: LeadData[] = [
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { serviceClient: supabase } = ctx;
+    const { serviceClient: supabase, userId } = ctx;
+    const companyId = await resolveCompanyId(supabase, userId);
 
     const results = { customers_created: 0, leads_created: 0, errors: [] as string[] };
     const customerCache: Record<string, string> = {};
@@ -95,7 +97,7 @@ Deno.serve((req) =>
                 customer_type: "business",
                 status: "active",
                 notes: `Imported from Odoo CRM`,
-                company_id: "a0000000-0000-0000-0000-000000000001",
+                company_id: companyId,
               })
               .select("id")
               .single();
@@ -127,7 +129,7 @@ Deno.serve((req) =>
               phone: lead.phone,
               customer_id: customerId,
               is_primary: true,
-              company_id: "a0000000-0000-0000-0000-000000000001",
+              company_id: companyId,
             });
           }
         }

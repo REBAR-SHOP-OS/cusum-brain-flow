@@ -1,7 +1,9 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient }) => {
+    const defaultCompanyId = await resolveDefaultCompanyId(serviceClient);
     const { data: config } = await serviceClient
       .from("automation_configs")
       .select("enabled")
@@ -60,7 +62,7 @@ Deno.serve((req) =>
 
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: defaultCompanyId,
         automation_key: "quote_expiry_watchdog", automation_name: "Quote Expiry Watchdog",
         agent_name: "Gauge", trigger_type: "cron", status: "completed",
         items_processed: alerts + expired, items_succeeded: alerts + expired,

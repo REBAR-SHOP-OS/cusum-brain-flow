@@ -680,7 +680,7 @@ Deno.serve((req) =>
           for (const issue of healthData.issues) {
             const agentId = agentMap[issue.assigned_agent];
             if (!agentId) continue;
-            const companyId = suggestions[0]?.company_id || "a0000000-0000-0000-0000-000000000001";
+            const companyId = suggestions[0]?.company_id;
             const dedupeKey = `wp:${issue.issue_type}:${issue.entity_id}`;
             if (isDuplicate(issue.entity_type, issue.entity_id, issue.issue_type)) continue;
 
@@ -720,7 +720,7 @@ Deno.serve((req) =>
           for (const issue of speedData.issues) {
             const agentId = agentMap[issue.assigned_agent];
             if (!agentId) continue;
-            const companyId = suggestions[0]?.company_id || "a0000000-0000-0000-0000-000000000001";
+            const companyId = suggestions[0]?.company_id;
             const dedupeKey = `speed:${issue.type}:${issue.title.slice(0, 40)}`;
             if (isDuplicate("wp_speed", issue.type, issue.type)) continue;
 
@@ -747,7 +747,7 @@ Deno.serve((req) =>
           for (const rec of speedData.recommendations) {
             const dedupeKey = `speed:rec:${rec.action}`;
             if (isDuplicate("wp_speed", rec.action, "speed_recommendation")) continue;
-            const companyId = suggestions[0]?.company_id || "a0000000-0000-0000-0000-000000000001";
+            const companyId = suggestions[0]?.company_id;
             const row = {
               company_id: companyId,
               agent_id: agentMap.webbuilder,

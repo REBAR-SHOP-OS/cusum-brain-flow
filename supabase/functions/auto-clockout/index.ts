@@ -1,8 +1,10 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient, body }) => {
+    const defaultCompanyId = await resolveDefaultCompanyId(serviceClient);
     let mode: string | null = body?.mode || null;
 
     if (!mode || !["morning", "evening"].includes(mode)) {
@@ -102,7 +104,7 @@ Deno.serve((req) =>
         // Log activity
         try {
           await serviceClient.from("activity_events").insert({
-            company_id: "a0000000-0000-0000-0000-000000000001",
+            company_id: defaultCompanyId,
             entity_type: "clock_entry",
             entity_id: entry.id,
             event_type: "auto_clockout",
@@ -118,7 +120,7 @@ Deno.serve((req) =>
     // Log automation run
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: defaultCompanyId,
         automation_key: "auto_clockout",
         automation_name: `Auto Clock-Out (${mode})`,
         agent_name: "System",

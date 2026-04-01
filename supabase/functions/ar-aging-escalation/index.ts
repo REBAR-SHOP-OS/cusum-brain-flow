@@ -1,7 +1,9 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient }) => {
+    const defaultCompanyId = await resolveDefaultCompanyId(serviceClient);
     const { data: config } = await serviceClient
       .from("automation_configs")
       .select("enabled, config")
@@ -85,7 +87,7 @@ Deno.serve((req) =>
 
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: defaultCompanyId,
         automation_key: "ar_aging_escalation",
         automation_name: "AR Aging Escalation",
         agent_name: "Penny",

@@ -1,7 +1,9 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient }) => {
+    const defaultCompanyId = await resolveDefaultCompanyId(serviceClient);
     const [fixRes, taskRes, machineRes, orderRes, deliveryRes] = await Promise.all([
       serviceClient.from("vizzy_fix_requests").select("id, title, severity, status").eq("status", "open").limit(20),
       serviceClient.from("human_tasks").select("id, title, severity, category, status").in("status", ["open", "snoozed"]).limit(20),
@@ -94,7 +96,7 @@ Keep it practical and prioritized by business impact.`;
 
     if (adminProfile) {
       await serviceClient.from("human_tasks").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: defaultCompanyId,
         title: "Review weekly improvement ideas from ARIA",
         description: ideas.slice(0, 1000),
         category: "improvement_idea", severity: "info", status: "open",

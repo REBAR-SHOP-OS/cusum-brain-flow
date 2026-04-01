@@ -170,7 +170,7 @@ interface SendEmailRequest {
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { userId, serviceClient: supabaseAdmin, body: rawBody, req: originalReq } = ctx;
+    const { userId, serviceClient: supabaseAdmin, body: rawBody, req: originalReq, companyId } = ctx;
 
     const sendSchema = z.object({
       to: z.string().email("Invalid recipient email").max(320),
@@ -203,7 +203,7 @@ Deno.serve((req) =>
       const { data: commsConfig } = await supabaseAdmin
         .from("comms_config")
         .select("no_act_global, external_sender, internal_sender, internal_domain")
-        .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+        .eq("company_id", companyId)
         .maybeSingle();
 
       if (commsConfig?.no_act_global) {
@@ -240,7 +240,7 @@ Deno.serve((req) =>
       const { data: commsConfig } = await supabaseAdmin
         .from("comms_config")
         .select("external_sender, internal_sender, internal_domain")
-        .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+        .eq("company_id", companyId)
         .maybeSingle();
 
       if (commsConfig) {
@@ -307,7 +307,7 @@ Deno.serve((req) =>
 
     try {
       await supabaseAdmin.from("activity_events").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: companyId,
         entity_type: "email",
         entity_id: result.id || crypto.randomUUID(),
         event_type: "email_sent",
@@ -324,5 +324,5 @@ Deno.serve((req) =>
       messageId: result.id,
       threadId: result.threadId,
     };
-  }, { functionName: "gmail-send", requireCompany: false, wrapResult: false })
+  }, { functionName: "gmail-send", wrapResult: false })
 );

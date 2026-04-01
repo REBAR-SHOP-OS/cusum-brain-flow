@@ -1,5 +1,6 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 interface OptimizationResult {
@@ -23,7 +24,7 @@ interface MediaAuditItem {
 
 // Radin's profile ID for task assignment
 const RADIN_PROFILE_ID = "5d948a66-619b-4ee1-b5e3-063194db7171";
-const COMPANY_ID = "a0000000-0000-0000-0000-000000000001";
+// COMPANY_ID resolved dynamically at runtime
 
 // Server-side tasks to create for radin after optimization
 const SERVER_TASKS = [
@@ -453,7 +454,7 @@ async function createServerTasks(supabase: any, jobId: string | null) {
         status: "todo",
         priority: task.priority,
         assigned_to: RADIN_PROFILE_ID,
-        company_id: COMPANY_ID,
+        company_id: await resolveDefaultCompanyId(supabase),
         source: "speed-optimizer",
         source_ref: jobId || undefined,
         agent_type: "vizzy",

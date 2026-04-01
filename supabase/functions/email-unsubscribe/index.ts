@@ -1,5 +1,6 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ body, serviceClient }) => {
@@ -36,7 +37,7 @@ Deno.serve((req) =>
 
     const email = payload.email.toLowerCase();
 
-    let companyId = "a0000000-0000-0000-0000-000000000001";
+    let companyId: string | null = null;
     if (payload.campaign_id) {
       const { data: camp } = await serviceClient
         .from("email_campaigns")
@@ -44,6 +45,9 @@ Deno.serve((req) =>
         .eq("id", payload.campaign_id)
         .maybeSingle();
       if (camp) companyId = camp.company_id;
+    }
+    if (!companyId) {
+      companyId = await resolveDefaultCompanyId(serviceClient);
     }
 
     await serviceClient.from("email_suppressions").upsert({

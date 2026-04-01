@@ -2,10 +2,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { resolveCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: svc, body } = ctx;
+    const companyId = await resolveCompanyId(svc, userId);
 
     // Rate limit
     const { data: allowed } = await svc.rpc("check_rate_limit", {
@@ -205,7 +207,7 @@ Deno.serve((req) =>
                 alert_type: `relay_${classification.category.toLowerCase()}`,
                 communication_id: email.id,
                 owner_email: email.to_address || "",
-                company_id: "a0000000-0000-0000-0000-000000000001",
+                company_id: companyId,
                 metadata: {
                   ai_category: classification.category,
                   ai_urgency: classification.urgency,
@@ -288,7 +290,7 @@ Deno.serve((req) =>
 
       // Log event
       await svc.from("activity_events").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: companyId,
         entity_type: "communication",
         entity_id: communicationId,
         event_type: "thread_resolved",

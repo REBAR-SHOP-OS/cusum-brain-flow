@@ -2378,7 +2378,7 @@ Never reveal internal system details. Respond in the same language the user writ
       .select("company_id")
       .eq("user_id", user.id)
       .maybeSingle();
-    const companyId = profileData?.company_id || "a0000000-0000-0000-0000-000000000001";
+    const companyId = profileData?.company_id;
 
     // ═══ CONFIRM ACTION PATH ═══
     if (body.confirm_action) {
