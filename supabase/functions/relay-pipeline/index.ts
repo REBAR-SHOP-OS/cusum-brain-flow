@@ -207,7 +207,7 @@ Deno.serve((req) =>
                 alert_type: `relay_${classification.category.toLowerCase()}`,
                 communication_id: email.id,
                 owner_email: email.to_address || "",
-                company_id: "a0000000-0000-0000-0000-000000000001",
+                company_id: companyId,
                 metadata: {
                   ai_category: classification.category,
                   ai_urgency: classification.urgency,
