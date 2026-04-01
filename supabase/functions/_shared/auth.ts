@@ -3,7 +3,7 @@
  * Centralizes JWT verification via getClaims() to eliminate duplication
  * and ensure every protected endpoint validates tokens consistently.
  */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
