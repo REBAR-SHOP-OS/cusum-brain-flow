@@ -1,47 +1,51 @@
 
 
-# Collapse by Default, Auto-Expand Only Active/Running Sections
+# Auto-Expand Only Active Customer Sections in StationView
 
-## Goal
-All collapsible sections default to **closed**, except sections that contain **running/active** work — those auto-expand.
+## Problem
+All customer `Collapsible` sections default to `defaultOpen={false}` (collapsed). The user wants sections containing actively in-progress items to auto-expand while idle sections stay collapsed.
 
-## Changes
+## Current Code (lines 419, 443)
+- Customer Collapsible: `defaultOpen={false}` — always collapsed
+- Barlist Collapsible: `defaultOpen={false}` — always collapsed
 
-### File 1: `src/components/shopfloor/MachineGroupSection.tsx`
+## Fix
 
-**MachineGroupSection (line 46):**
-- `useState(true)` → `useState(runningPlans.length > 0)`
-- Machine group opens only if it has running plans.
+### File: `src/pages/StationView.tsx`
 
-**ProjectFolder (line 119):**
-- `useState(true)` → `useState(variant === "running")`
-- Project sub-folders expand only if they are in the "running" variant.
+**1. Add `hasActiveWork` flag to customerGroupedData** (inside the useMemo at ~line 169)
 
-### File 2: `src/pages/StationView.tsx`
+For each customer entry, compute whether any item has `phase === "cutting"` or `phase === "bending"` (indicating active production). Store this as a boolean `hasActiveWork` on each customer object.
 
-**Customer Collapsible (line 419):**
-- `defaultOpen={true}` → `defaultOpen={cust.barlists.some(bl => bl.groups.some(g => g.straightItems.some(i => i.status === "running") || g.bendItems.some(i => i.status === "running")))}`
-- Or simpler: check if any item in this customer's barlists has a running/active status. If no items are running → collapsed.
+**2. Add `hasActiveWork` flag per barlist** (same useMemo)
 
-Need to verify the item status field:
+For each barlist entry, check if any of its items have an active phase. Store as `hasActiveWork`.
 
-Actually, the StationView groups items by customer → barlist → bar-size groups. The items don't have a "running" status at that level — running status is on **cut plans** managed in the production queue. So for StationView, the simplest correct approach: **default all to closed** (`defaultOpen={false}`), since the station view shows the cutting queue, not active status.
+**3. Update Collapsible `defaultOpen` props**
 
-**Barlist Collapsible (line 443):**
-- `defaultOpen={true}` → `defaultOpen={false}`
+- Line 419 (customer): `defaultOpen={cust.hasActiveWork}`
+- Line 443 (barlist): `defaultOpen={bl.hasActiveWork}`
 
-### File 3: `src/components/shopfloor/ShopFloorProductionQueue.tsx`
+## Exact Changes
 
-Already collapsed (lines 193, 228 use `useState(false)`). No change needed.
+In the `useMemo` return block (~line 169), add to each barlist object:
+```typescript
+hasActiveWork: bl.items.some(i => i.phase === "cutting" || i.phase === "bending"),
+```
 
-## Summary
+And to each customer object (~line 197):
+```typescript
+hasActiveWork: [...cust.barlists.values()].some(bl =>
+  bl.items.some(i => i.phase === "cutting" || i.phase === "bending")
+),
+```
 
-| File | Component | Current | New |
-|------|-----------|---------|-----|
-| `MachineGroupSection.tsx` | MachineGroupSection (L46) | `useState(true)` | `useState(runningPlans.length > 0)` |
-| `MachineGroupSection.tsx` | ProjectFolder (L119) | `useState(true)` | `useState(variant === "running")` |
-| `StationView.tsx` | Customer collapsible (L419) | `defaultOpen={true}` | `defaultOpen={false}` |
-| `StationView.tsx` | Barlist collapsible (L443) | `defaultOpen={true}` | `defaultOpen={false}` |
+Then update:
+- Line 419: `defaultOpen={cust.hasActiveWork}`
+- Line 443: `defaultOpen={bl.hasActiveWork}`
 
-4 one-line changes across 2 files. Running sections auto-expand; everything else starts collapsed.
+## Scope
+- 1 file, 4 touch points
+- No runtime behavior change beyond collapse defaults
+- Consistent with existing shop-floor-ui-defaults memory
 
