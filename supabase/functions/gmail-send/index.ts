@@ -324,5 +324,5 @@ Deno.serve((req) =>
       messageId: result.id,
       threadId: result.threadId,
     };
-  }, { functionName: "gmail-send", requireCompany: false, wrapResult: false })
+  }, { functionName: "gmail-send", wrapResult: false })
 );

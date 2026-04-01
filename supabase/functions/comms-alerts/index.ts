@@ -411,7 +411,7 @@ Deno.serve((req) =>
     // Log event
     if (alerts.length > 0 || skippedCount > 0) {
       await svc.from("activity_events").insert({
-        company_id: "a0000000-0000-0000-0000-000000000001",
+        company_id: configRow.company_id,
         entity_type: "comms_alert",
         entity_id: "system",
         event_type: "alerts_processed",
