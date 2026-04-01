@@ -16470,6 +16470,10 @@ export type Database = {
         Args: { _my_profile_id: string; _target_profile_id: string }
         Returns: string
       }
+      entity_link_company_check: {
+        Args: { p_thread_id: string }
+        Returns: string
+      }
       execute_readonly_query: { Args: { sql_query: string }; Returns: Json }
       execute_write_fix: { Args: { sql_query: string }; Returns: Json }
       get_ai_usage_daily: {
