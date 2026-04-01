@@ -116,7 +116,7 @@ export function TagsExportView() {
     const lengthHeader = us === "imperial" ? "TOTAL LENGTH (ft-in)" : "TOTAL LENGTH (mm)";
     const dimUnit = us === "imperial" ? "in" : "mm";
     const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", lengthHeader,
-      ...DIM_COLS.map(d => `${d} (${dimUnit})`), "WEIGHT", "PICTURE", "CUSTOMER", "REF", "ADD"];
+      ...DIM_COLS.map(d => `${d} (${dimUnit})`), "WEIGHT", "PICTURE", "CUSTOMER", "INVOICE", "REMARK"];
     const csvRows = sortedRows.map((r) => {
       const size = r.bar_size_mapped || r.bar_size || "";
       const shapeType = r.shape_code_mapped || r.shape_type || "STRAIGHT";
@@ -397,8 +397,8 @@ export function TagsExportView() {
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-right px-3 py-2 whitespace-nowrap">Weight</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Picture</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Customer</th>
-                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Ref</th>
-                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Add</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Invoice</th>
+                  <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Remark</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Delivery Date</th>
                 </tr>
               </thead>
