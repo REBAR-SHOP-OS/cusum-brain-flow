@@ -720,7 +720,7 @@ Deno.serve((req) =>
           for (const issue of speedData.issues) {
             const agentId = agentMap[issue.assigned_agent];
             if (!agentId) continue;
-            const companyId = suggestions[0]?.company_id || "a0000000-0000-0000-0000-000000000001";
+            const companyId = suggestions[0]?.company_id;
             const dedupeKey = `speed:${issue.type}:${issue.title.slice(0, 40)}`;
             if (isDuplicate("wp_speed", issue.type, issue.type)) continue;
 
