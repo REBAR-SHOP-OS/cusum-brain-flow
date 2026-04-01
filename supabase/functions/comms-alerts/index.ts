@@ -419,7 +419,7 @@ Deno.serve((req) =>
     // Log event
     if (alerts.length > 0 || skippedCount > 0) {
       await svc.from("activity_events").insert({
-        company_id: defaultCompanyId,
+        company_id: companyId,
         entity_type: "comms_alert",
         entity_id: "system",
         event_type: "alerts_processed",
@@ -429,6 +429,11 @@ Deno.serve((req) =>
       });
     }
 
-    return { success: true, alertsProcessed: alerts.length, skipped: skippedCount, results };
+    totalAlerts += alerts.length;
+    totalSkipped += skippedCount;
+    allResults.push(...results);
+    } // end per-company loop
+
+    return { success: true, alertsProcessed: totalAlerts, skipped: totalSkipped, results: allResults };
   }, { functionName: "comms-alerts", authMode: "none", requireCompany: false, wrapResult: false })
 );

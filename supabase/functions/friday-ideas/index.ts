@@ -106,7 +106,7 @@ Keep it practical and prioritized by business impact.`;
 
     if (adminProfile) {
       await serviceClient.from("human_tasks").insert({
-        company_id: defaultCompanyId,
+        company_id: companyId,
         title: "Review weekly improvement ideas from ARIA",
         description: ideas.slice(0, 1000),
         category: "improvement_idea", severity: "info", status: "open",

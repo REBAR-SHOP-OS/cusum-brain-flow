@@ -77,7 +77,7 @@ Deno.serve((req) =>
 
     // ---------- Resolve creator info ----------
     let creatorName = "System";
-    let companyId = "a0000000-0000-0000-0000-000000000001";
+    let companyId: string | null = null;
     if (userId) {
       const { data: profile } = await serviceClient
         .from("profiles")
@@ -85,7 +85,19 @@ Deno.serve((req) =>
         .eq("user_id", userId)
         .single();
       creatorName = profile?.full_name ?? "Admin";
-      companyId = profile?.company_id ?? companyId;
+      companyId = profile?.company_id ?? null;
+    }
+    // For scheduled backups without userId, resolve from companies table
+    if (!companyId) {
+      const { data: firstCompany } = await serviceClient
+        .from("companies")
+        .select("id")
+        .limit(1)
+        .maybeSingle();
+      companyId = firstCompany?.id ?? null;
+    }
+    if (!companyId) {
+      return json({ error: "Could not resolve company_id for backup" }, 400);
     }
 
     // ==========================================================

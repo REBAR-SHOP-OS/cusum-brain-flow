@@ -470,6 +470,16 @@ async function createServerTasks(supabase: any, jobId: string | null) {
   }
 }
 
+async function resolveWpCompanyId(supabase: any): Promise<string> {
+  const { data: config } = await supabase
+    .from("automation_configs")
+    .select("company_id")
+    .eq("automation_key", "wp_speed_optimizer")
+    .maybeSingle();
+  if (config?.company_id) return config.company_id;
+  throw new Error("No automation_configs row found for wp_speed_optimizer — cannot resolve company_id");
+}
+
 async function logWpChange(
   supabase: any, userId: string, endpoint: string, method: string,
   entityType: string, entityId: string, previousState: any, newState: any
