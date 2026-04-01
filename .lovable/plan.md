@@ -1,66 +1,47 @@
 
 
-# Apply: Strict SupabaseClient Type Fix
+# Collapse by Default, Auto-Expand Only Active/Running Sections
 
-## Confirmed Type Alias (no `any`, no lint suppression needed)
+## Goal
+All collapsible sections default to **closed**, except sections that contain **running/active** work — those auto-expand.
 
-```typescript
-export type AppSupabaseClient = SupabaseClient<Record<string, unknown>, "public", Record<string, unknown>>;
-```
+## Changes
 
-No `deno-lint-ignore` comment — the alias uses `Record<string, unknown>`, not `any`.
+### File 1: `src/components/shopfloor/MachineGroupSection.tsx`
 
-## File 1: `supabase/functions/_shared/auth.ts`
+**MachineGroupSection (line 46):**
+- `useState(true)` → `useState(runningPlans.length > 0)`
+- Machine group opens only if it has running plans.
 
-1. **Line 6** — add `SupabaseClient` to import:
-   ```typescript
-   import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-   ```
+**ProjectFolder (line 119):**
+- `useState(true)` → `useState(variant === "running")`
+- Project sub-folders expand only if they are in the "running" variant.
 
-2. **After line 12** — add exported type:
-   ```typescript
-   /** Concrete client type matching createClient(url, key) calls in edge functions. */
-   export type AppSupabaseClient = SupabaseClient<Record<string, unknown>, "public", Record<string, unknown>>;
-   ```
+### File 2: `src/pages/StationView.tsx`
 
-3. **Lines 14-18** — update `AuthResult`:
-   ```typescript
-   export interface AuthResult {
-     userId: string;
-     userClient: AppSupabaseClient;
-     serviceClient: AppSupabaseClient;
-   }
-   ```
+**Customer Collapsible (line 419):**
+- `defaultOpen={true}` → `defaultOpen={cust.barlists.some(bl => bl.groups.some(g => g.straightItems.some(i => i.status === "running") || g.bendItems.some(i => i.status === "running")))}`
+- Or simpler: check if any item in this customer's barlists has a running/active status. If no items are running → collapsed.
 
-4. **Lines 88-91** — update `optionalAuthFull` return type:
-   ```typescript
-   export async function optionalAuthFull(req: Request): Promise<{
-     userId: string;
-     userClient: AppSupabaseClient;
-   } | null> {
-   ```
+Need to verify the item status field:
 
-## File 2: `supabase/functions/_shared/requestHandler.ts`
+Actually, the StationView groups items by customer → barlist → bar-size groups. The items don't have a "running" status at that level — running status is on **cut plans** managed in the production queue. So for StationView, the simplest correct approach: **default all to closed** (`defaultOpen={false}`), since the station view shows the cutting queue, not active status.
 
-1. **Line 14** — import `AppSupabaseClient`:
-   ```typescript
-   import { corsHeaders, requireAuth, optionalAuthFull, AppSupabaseClient } from "./auth.ts";
-   ```
+**Barlist Collapsible (line 443):**
+- `defaultOpen={true}` → `defaultOpen={false}`
 
-2. **Lines 24-25** — update `RequestContext`:
-   ```typescript
-     serviceClient: AppSupabaseClient;
-     userClient: AppSupabaseClient | null;
-   ```
+### File 3: `src/components/shopfloor/ShopFloorProductionQueue.tsx`
 
-3. **Line 77** — update local variable type:
-   ```typescript
-     let userClient: AppSupabaseClient | null = null;
-   ```
+Already collapsed (lines 193, 228 use `useState(false)`). No change needed.
 
-## Scope
-- 2 files, type-only changes
-- Zero runtime behavior change
-- No `any`, no `unknown` widening, no lint suppression
-- After applying, build/type check will be run and exact result reported before audit
+## Summary
+
+| File | Component | Current | New |
+|------|-----------|---------|-----|
+| `MachineGroupSection.tsx` | MachineGroupSection (L46) | `useState(true)` | `useState(runningPlans.length > 0)` |
+| `MachineGroupSection.tsx` | ProjectFolder (L119) | `useState(true)` | `useState(variant === "running")` |
+| `StationView.tsx` | Customer collapsible (L419) | `defaultOpen={true}` | `defaultOpen={false}` |
+| `StationView.tsx` | Barlist collapsible (L443) | `defaultOpen={true}` | `defaultOpen={false}` |
+
+4 one-line changes across 2 files. Running sections auto-expand; everything else starts collapsed.
 
