@@ -166,8 +166,14 @@ export default function StationView() {
     }
 
     // Convert to array and build BarSizeGroups per barlist
+    // Determine which customers have in_progress work orders
+    const inProgressCustomers = new Set(
+      (activeWorkOrders || []).filter(wo => wo.status === "in_progress").map(wo => wo.customer_name || "Unknown Customer")
+    );
+
     return [...custMap.entries()].map(([custKey, cust]) => ({
       customerName: cust.name,
+      hasActiveWork: inProgressCustomers.has(custKey),
       barlists: [...cust.barlists.values()].map(bl => {
         // Build bar-size groups from this barlist's items
         const groupMap = new Map<string, { bend: typeof allItemsFlat; straight: typeof allItemsFlat }>();
@@ -187,6 +193,7 @@ export default function StationView() {
           planName: bl.planName,
           projectName: bl.projectName,
           itemCount: bl.items.length,
+          hasActiveWork: inProgressCustomers.has(custKey) && bl.items.length > 0,
           groups: sortedKeys.map(k => ({
             barCode: k,
             bendItems: groupMap.get(k)!.bend,
