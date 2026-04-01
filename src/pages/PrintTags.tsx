@@ -19,11 +19,17 @@ export default function PrintTags() {
   const { getShapeImageUrl } = useShapeSchematics();
   const [sessionAddress, setSessionAddress] = useState("");
   const [projectAddress, setProjectAddress] = useState("");
+  const [sessionInvoice, setSessionInvoice] = useState("");
+  const [sessionScope, setSessionScope] = useState("");
 
   useEffect(() => {
     if (!sessionId) return;
-    supabase.from("extract_sessions").select("site_address").eq("id", sessionId).maybeSingle()
-      .then(({ data }) => { if (data?.site_address) setSessionAddress(data.site_address); });
+    supabase.from("extract_sessions").select("site_address, invoice_number, name").eq("id", sessionId).maybeSingle()
+      .then(({ data }) => {
+        if (data?.site_address) setSessionAddress(data.site_address);
+        if (data?.invoice_number) setSessionInvoice(data.invoice_number);
+        if (data?.name) setSessionScope(data.name);
+      });
     // Fallback: get project address via barlist link
     supabase.from("barlists").select("project:projects(site_address)")
       .eq("extract_session_id", sessionId).limit(1).maybeSingle()
