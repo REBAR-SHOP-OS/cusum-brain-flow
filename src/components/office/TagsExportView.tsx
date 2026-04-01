@@ -445,8 +445,8 @@ export function TagsExportView() {
                           {shapeType ? (getShapeImageUrl(shapeType) ? "✓" : `TYPE-${shapeType}.PNG`) : "—"}
                         </td>
                         <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.customer || "—"}</td>
-                        <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{row.reference || "—"}</td>
-                        <td className="text-xs text-muted-foreground px-3 py-2.5">{row.address || "—"}</td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">{(selectedSession as any)?.invoice_number || "—"}</td>
+                        <td className="text-xs text-muted-foreground px-3 py-2.5">{selectedSession?.name || "—"}</td>
                         <td className="text-xs text-muted-foreground px-3 py-2.5 whitespace-nowrap">
                           {selectedSession?.target_eta
                             ? new Date(selectedSession.target_eta).toLocaleDateString()
