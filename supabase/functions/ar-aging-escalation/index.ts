@@ -1,4 +1,5 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient }) => {
