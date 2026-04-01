@@ -326,5 +326,5 @@ Deno.serve((req) =>
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "seo-site-crawl", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "seo-site-crawl", authMode: "required", requireCompany: false, wrapResult: false })
 );

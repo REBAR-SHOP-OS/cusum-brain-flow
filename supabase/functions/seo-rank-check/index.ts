@@ -95,5 +95,5 @@ Deno.serve((req) =>
     }
 
     return { success: true, checked, total_keywords: keywords.length };
-  }, { functionName: "seo-rank-check", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "seo-rank-check", authMode: "required", requireCompany: false, wrapResult: false })
 );

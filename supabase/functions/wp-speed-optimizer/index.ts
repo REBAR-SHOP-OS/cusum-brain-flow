@@ -187,7 +187,7 @@ Deno.serve((req) =>
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  }, { functionName: "wp-speed-optimizer", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "wp-speed-optimizer", authMode: "required", requireCompany: false, wrapResult: false })
 );
 
 async function runOptimization(

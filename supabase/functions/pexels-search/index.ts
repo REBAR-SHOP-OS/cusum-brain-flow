@@ -44,5 +44,5 @@ Deno.serve((req) =>
     }
 
     return { results, total_results: data.total_results, page: data.page };
-  }, { functionName: "pexels-search", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "pexels-search", authMode: "required", requireCompany: false, wrapResult: false })
 );

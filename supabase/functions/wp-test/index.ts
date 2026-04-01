@@ -57,5 +57,5 @@ Deno.serve((req) =>
     }
 
     return result;
-  }, { functionName: "wp-test", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "wp-test", authMode: "required", requireCompany: false, wrapResult: false })
 );

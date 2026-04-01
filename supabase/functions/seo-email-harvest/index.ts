@@ -251,5 +251,5 @@ Extract CONCRETE data points, not general observations.`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "seo-email-harvest", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "seo-email-harvest", authMode: "required", requireCompany: false, wrapResult: false })
 );

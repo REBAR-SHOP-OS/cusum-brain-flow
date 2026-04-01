@@ -481,5 +481,5 @@ Suggest specific tasks with expected impact.`,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "seo-ai-analyze", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "seo-ai-analyze", authMode: "required", requireCompany: false, wrapResult: false })
 );

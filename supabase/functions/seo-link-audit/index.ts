@@ -29,7 +29,7 @@ Deno.serve((req) =>
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  }, { functionName: "seo-link-audit", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "seo-link-audit", authMode: "required", requireCompany: false, wrapResult: false })
 );
 
 // ─── AI HELPER ───

@@ -39,5 +39,5 @@ Deno.serve((req) =>
     const data = await response.json();
     const enhancedPrompt = data.choices?.[0]?.message?.content?.trim() || prompt;
     return { enhancedPrompt };
-  }, { functionName: "enhance-music-prompt", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "enhance-music-prompt", authMode: "required", requireCompany: false, wrapResult: false })
 );
