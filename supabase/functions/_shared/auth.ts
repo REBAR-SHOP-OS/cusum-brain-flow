@@ -90,7 +90,7 @@ export async function optionalAuth(req: Request): Promise<string | null> {
  */
 export async function optionalAuthFull(req: Request): Promise<{
   userId: string;
-  userClient: ReturnType<typeof createClient>;
+  userClient: AppSupabaseClient;
 } | null> {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;

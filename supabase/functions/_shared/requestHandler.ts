@@ -74,7 +74,7 @@ export async function handleRequest(
     // Auth — resolve based on authMode
     const authMode = options.authMode ?? "required";
     let userId = "";
-    let userClient: ReturnType<typeof createClient> | null = null;
+    let userClient: AppSupabaseClient | null = null;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
