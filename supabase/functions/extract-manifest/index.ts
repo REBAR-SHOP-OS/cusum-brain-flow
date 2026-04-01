@@ -446,6 +446,22 @@ Rules:
         // Save rows to DB
         let items = extractedData.items || [];
 
+        // ── Unit detection on RAW strings BEFORE parseDimension strips marks ──
+        let detectedUnitSystem = "mm";
+        {
+          const rawSample: string[] = [];
+          for (const item of items.slice(0, 20)) {
+            for (const key of ["total_length", "A", "B", "C", "D", "E", "F", "G", "H"]) {
+              if (item[key] != null) rawSample.push(String(item[key]));
+            }
+          }
+          const imperialRaw = /\d+\s*['']\s*-?\s*\d+\s*["""]|\d+(?:\.\d+)?\s*["""]\s*$|\d+(?:\.\d+)?\s*['']\s*$/;
+          if (rawSample.some((v) => imperialRaw.test(v))) {
+            detectedUnitSystem = "in";
+            console.log("Detected imperial unit system from raw AI values (before normalization)");
+          }
+        }
+
         // Post-AI pass: convert any string values in length/dims to numbers
         items.forEach((item: any) => {
           if (typeof item.total_length === "string") {
@@ -463,9 +479,6 @@ Rules:
           console.log(`[extract-manifest] Applying deterministic dim overlay for ${items.length} items`);
           items = overlaySheetDims(parsedWorkbook, items);
         }
-
-        // Detect unit system from AI response — check if values contain imperial patterns
-        let detectedUnitSystem = "metric";
         const sampleValues: string[] = [];
         for (const item of items.slice(0, 10)) {
           for (const key of ["total_length", "A", "B", "C", "D", "E", "F", "G", "H"]) {
