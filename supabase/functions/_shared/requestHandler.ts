@@ -52,6 +52,12 @@ export interface HandlerOptions {
    * - "none": skips auth entirely, only creates serviceClient
    */
   authMode?: "required" | "optional" | "none";
+  /**
+   * If true, the function is internal-only (cron/system).
+   * Requires `x-internal-secret` header matching the INTERNAL_FUNCTION_SECRET env var.
+   * Rejects unauthenticated callers with 403.
+   */
+  internalOnly?: boolean;
 }
 
 /**
