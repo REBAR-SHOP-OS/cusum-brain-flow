@@ -1,39 +1,33 @@
 
+Goal: make inch-based files (values like `48"`) auto-detect as inches so the UI shows inches instead of mm.
 
-# Fix: `dedupedRows is not defined` in extract-manifest
+1) Fix unit-system default and comparisons in extraction
+- File: `supabase/functions/extract-manifest/index.ts`
+- Change default from `detectedUnitSystem = "metric"` to `detectedUnitSystem = "mm"`.
+- Update follow-up checks that currently use `detectedUnitSystem === "metric"` to `=== "mm"` so the fallback detectors still run.
 
-## Root Cause
-In `supabase/functions/extract-manifest/index.ts`, `dedupedRows` is declared with `const` inside a block scope (lines 565-597, inside an `if` or block ending at line 598). Line 610 references `dedupedRows.length` **outside** that block, causing a `ReferenceError`.
+2) Detect units from raw extracted values before numeric normalization
+- Current issue: unit detection runs after `parseDimension(...)`, which strips inch markers and turns `48"` into `48`, making imperial detection miss.
+- Capture a `rawItems` snapshot from AI output before conversion.
+- Run imperial regex checks against raw strings from `rawItems` (including `total_length`, `A..H`, etc.).
+- Then run the existing numeric normalization pass (`parseDimension`) afterward.
 
-## Fix — `supabase/functions/extract-manifest/index.ts`
+3) Keep spreadsheet fallback detection, plus tighten for inch-mark formats
+- Keep XLSX raw-cell and number-format (`cell.z`) checks as secondary/tertiary detectors.
+- Ensure these checks run when unit is still `"mm"` and recognize straight inch notation (`48"`), feet-inch (`6'-4"`), and feet-only (`5'`).
 
-**Line 610**: Replace the `console.log` that references `dedupedRows` with a version that doesn't depend on the block-scoped variable:
+4) Frontend compatibility guard for already-saved legacy sessions
+- File: `src/components/office/AIExtractView.tsx`
+- Add a small fallback mapping so if a session still has legacy `"metric"` value, it is treated as `"mm"` for display state.
+- This prevents ambiguous labels and keeps pipeline badge consistent.
 
-```typescript
-// Before (line 610):
-console.log(`Extraction complete for session ${sessionId}: ${dedupedRows.length} rows saved (from ${items.length} raw)`);
+Validation plan
+- Re-extract with an inch-based file containing values like `48"`, `72"`, `6'-0"`.
+- Confirm pipeline badge shows inches (not mm), and mapping/apply converts correctly to stored mm via existing `apply-mapping` logic.
+- Re-test a true mm file to confirm no regression.
 
-// After:
-console.log(`Extraction complete for session ${sessionId}`);
-```
-
-Alternatively, declare a `savedCount` variable **before** the block, set it inside, and use it on line 610. This preserves the logging detail:
-
-```typescript
-// Before the block (around line 564):
-let savedCount = 0;
-
-// Inside the block (after line 586):
-savedCount = dedupedRows.length;
-
-// Line 610:
-console.log(`Extraction complete for session ${sessionId}: ${savedCount} rows saved`);
-```
-
-**Preferred approach**: The second option (track `savedCount`) — preserves useful debug info.
-
-## Impact
-- 1 edge function changed: `extract-manifest/index.ts`
-- Fixes the crash that prevents extraction from completing
-- No database or frontend changes needed
-
+Technical details
+- Root cause is ordering + sentinel mismatch:
+  - Ordering bug: unit detection after normalization loses inch symbols.
+  - Sentinel bug: backend uses `"metric"` while extraction/mapping flow expects concrete source units (`"mm" | "in" | "ft" | "imperial"`).
+- Scope: 2 files (`extract-manifest/index.ts`, `AIExtractView.tsx`), no schema changes, no migration required.
