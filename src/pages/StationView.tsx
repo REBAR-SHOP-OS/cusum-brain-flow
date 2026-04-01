@@ -166,8 +166,14 @@ export default function StationView() {
     }
 
     // Convert to array and build BarSizeGroups per barlist
+    // Determine which customers have in_progress work orders
+    const inProgressCustomers = new Set(
+      (activeWorkOrders || []).filter(wo => wo.status === "in_progress").map(wo => wo.customer_name || "Unknown Customer")
+    );
+
     return [...custMap.entries()].map(([custKey, cust]) => ({
       customerName: cust.name,
+      hasActiveWork: inProgressCustomers.has(custKey),
       barlists: [...cust.barlists.values()].map(bl => {
         // Build bar-size groups from this barlist's items
         const groupMap = new Map<string, { bend: typeof allItemsFlat; straight: typeof allItemsFlat }>();
@@ -187,6 +193,7 @@ export default function StationView() {
           planName: bl.planName,
           projectName: bl.projectName,
           itemCount: bl.items.length,
+          hasActiveWork: inProgressCustomers.has(custKey) && bl.items.length > 0,
           groups: sortedKeys.map(k => ({
             barCode: k,
             bendItems: groupMap.get(k)!.bend,
@@ -416,7 +423,7 @@ export default function StationView() {
                   ) : customerGroupedData ? (
                     // Grouped by customer → barlist
                     customerGroupedData.map((cust) => (
-                      <Collapsible key={cust.customerName} defaultOpen={false}>
+                      <Collapsible key={cust.customerName} defaultOpen={cust.hasActiveWork}>
                         <CollapsibleTrigger className="flex items-center gap-3 w-full group py-2">
                           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                             <Building2 className="w-4 h-4 text-primary" />
@@ -440,7 +447,7 @@ export default function StationView() {
                           ) : (
                           <div className="space-y-6 pl-2 pt-2 pb-4">
                             {cust.barlists.map((bl) => (
-                              <Collapsible key={bl.planId} defaultOpen={false}>
+                              <Collapsible key={bl.planId} defaultOpen={bl.hasActiveWork}>
                                 <CollapsibleTrigger className="flex items-center gap-2 w-full group/bl py-1.5">
                                   <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
                                     <List className="w-3.5 h-3.5 text-muted-foreground" />
