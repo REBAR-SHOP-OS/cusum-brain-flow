@@ -11,10 +11,13 @@ export const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Concrete client type matching createClient(url, key) calls in edge functions. */
+export type AppSupabaseClient = SupabaseClient<Record<string, unknown>, "public", Record<string, unknown>>;
+
 export interface AuthResult {
   userId: string;
-  userClient: ReturnType<typeof createClient>;
-  serviceClient: ReturnType<typeof createClient>;
+  userClient: AppSupabaseClient;
+  serviceClient: AppSupabaseClient;
 }
 
 /**
