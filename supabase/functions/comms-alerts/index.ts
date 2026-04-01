@@ -243,7 +243,7 @@ Deno.serve((req) =>
     const { data: configRow } = await svc
       .from("comms_config")
       .select("*")
-      .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+      .eq("company_id", configRow.company_id)
       .maybeSingle();
 
     if (!configRow) throw new Error("No comms_config found");
