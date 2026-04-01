@@ -1675,6 +1675,13 @@ export type Database = {
             foreignKeyName: "camera_events_related_order_id_fkey"
             columns: ["related_order_id"]
             isOneToOne: false
+            referencedRelation: "v_active_work_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "camera_events_related_order_id_fkey"
+            columns: ["related_order_id"]
+            isOneToOne: false
             referencedRelation: "work_orders"
             referencedColumns: ["id"]
           },
@@ -3231,6 +3238,13 @@ export type Database = {
             foreignKeyName: "cut_plan_items_work_order_id_fkey"
             columns: ["work_order_id"]
             isOneToOne: false
+            referencedRelation: "v_active_work_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cut_plan_items_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
             referencedRelation: "work_orders"
             referencedColumns: ["id"]
           },
@@ -3412,6 +3426,13 @@ export type Database = {
             referencedRelation: "v_orders_enriched"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_pricing_bottleneck"
+            referencedColumns: ["id"]
+          },
         ]
       }
       delivery_bundles: {
@@ -3567,6 +3588,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "v_orders_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_stops_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_pricing_bottleneck"
             referencedColumns: ["id"]
           },
         ]
@@ -7699,6 +7727,13 @@ export type Database = {
             foreignKeyName: "machine_queue_items_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
+            referencedRelation: "v_active_work_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_queue_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
             referencedRelation: "work_orders"
             referencedColumns: ["id"]
           },
@@ -7707,6 +7742,13 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "production_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_queue_items_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_work_orders"
             referencedColumns: ["id"]
           },
           {
@@ -7806,6 +7848,13 @@ export type Database = {
             columns: ["supervisor_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_runs_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_work_orders"
             referencedColumns: ["id"]
           },
           {
@@ -8316,6 +8365,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "v_orders_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_pricing_bottleneck"
             referencedColumns: ["id"]
           },
         ]
@@ -9434,10 +9490,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "production_tasks_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_pricing_bottleneck"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "production_tasks_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_tasks_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "v_active_work_orders"
             referencedColumns: ["id"]
           },
           {
@@ -15628,6 +15698,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "work_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_pricing_bottleneck"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "work_orders_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
@@ -15955,6 +16032,105 @@ export type Database = {
         }
         Relationships: []
       }
+      v_active_work_orders: {
+        Row: {
+          actual_end: string | null
+          actual_start: string | null
+          assigned_to: string | null
+          barlist_id: string | null
+          created_at: string | null
+          id: string | null
+          is_shell: boolean | null
+          notes: string | null
+          order_id: string | null
+          priority: number | null
+          project_id: string | null
+          scheduled_end: string | null
+          scheduled_start: string | null
+          shell_reason: string | null
+          status: string | null
+          updated_at: string | null
+          work_order_number: string | null
+          workstation: string | null
+        }
+        Insert: {
+          actual_end?: string | null
+          actual_start?: string | null
+          assigned_to?: string | null
+          barlist_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_shell?: boolean | null
+          notes?: string | null
+          order_id?: string | null
+          priority?: number | null
+          project_id?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          shell_reason?: string | null
+          status?: string | null
+          updated_at?: string | null
+          work_order_number?: string | null
+          workstation?: string | null
+        }
+        Update: {
+          actual_end?: string | null
+          actual_start?: string | null
+          assigned_to?: string | null
+          barlist_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          is_shell?: boolean | null
+          notes?: string | null
+          order_id?: string | null
+          priority?: number | null
+          project_id?: string | null
+          scheduled_end?: string | null
+          scheduled_start?: string | null
+          shell_reason?: string | null
+          status?: string | null
+          updated_at?: string | null
+          work_order_number?: string | null
+          workstation?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_orders_barlist_id_fkey"
+            columns: ["barlist_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_orders_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_pricing_bottleneck"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       v_communications_enriched: {
         Row: {
           ai_action_required: boolean | null
@@ -16224,6 +16400,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "deliveries_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "v_pricing_bottleneck"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "orders_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
@@ -16255,6 +16438,7 @@ export type Database = {
       }
       v_leads_enriched: {
         Row: {
+          assigned_estimator: string | null
           assigned_to: string | null
           company_id: string | null
           computed_score: number | null
@@ -16264,11 +16448,14 @@ export type Database = {
           customer_id: string | null
           customer_name: string | null
           description: string | null
+          disqualification_reason: string | null
           escalated_to: string | null
           expected_close_date: string | null
           expected_value: number | null
           id: string | null
+          lifecycle_type: string | null
           metadata: Json | null
+          normalized_stage: string | null
           notes: string | null
           priority: string | null
           priority_score: number | null
@@ -16434,6 +16621,52 @@ export type Database = {
             columns: ["quote_id"]
             isOneToOne: false
             referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_pricing_bottleneck: {
+        Row: {
+          age_bucket: string | null
+          company_id: string | null
+          created_at: string | null
+          customer_id: string | null
+          customer_name: string | null
+          days_waiting: number | null
+          due_date: string | null
+          id: string | null
+          order_kind: string | null
+          order_number: string | null
+          status: string | null
+          total_amount: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customer_company_map"
+            referencedColumns: ["legacy_customer_id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
+            referencedColumns: ["customer_id"]
+          },
+          {
+            foreignKeyName: "orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "v_customers_clean"
             referencedColumns: ["id"]
           },
         ]
