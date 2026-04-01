@@ -416,7 +416,7 @@ export default function StationView() {
                   ) : customerGroupedData ? (
                     // Grouped by customer → barlist
                     customerGroupedData.map((cust) => (
-                      <Collapsible key={cust.customerName} defaultOpen={true}>
+                      <Collapsible key={cust.customerName} defaultOpen={false}>
                         <CollapsibleTrigger className="flex items-center gap-3 w-full group py-2">
                           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                             <Building2 className="w-4 h-4 text-primary" />
