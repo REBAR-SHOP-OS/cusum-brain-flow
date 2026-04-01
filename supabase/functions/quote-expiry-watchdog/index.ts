@@ -1,9 +1,7 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
-import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient }) => {
-    const defaultCompanyId = await resolveDefaultCompanyId(serviceClient);
     const { data: config } = await serviceClient
       .from("automation_configs")
       .select("enabled")
@@ -60,9 +58,11 @@ Deno.serve((req) =>
       } catch (_) {}
     }
 
+    const runCompanyId = (expiringQuotes || [])[0]?.company_id || (expiredQuotes || [])[0]?.company_id || (config as any)?.company_id;
+    if (runCompanyId) {
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: defaultCompanyId,
+        company_id: runCompanyId,
         automation_key: "quote_expiry_watchdog", automation_name: "Quote Expiry Watchdog",
         agent_name: "Gauge", trigger_type: "cron", status: "completed",
         items_processed: alerts + expired, items_succeeded: alerts + expired,
@@ -70,6 +70,7 @@ Deno.serve((req) =>
         metadata: { expiring_soon: alerts, already_expired: expired },
       });
     } catch (_) {}
+    }
 
     return { expiring_soon: alerts, already_expired: expired };
   }, { functionName: "quote-expiry-watchdog", authMode: "none", requireCompany: false, wrapResult: false })

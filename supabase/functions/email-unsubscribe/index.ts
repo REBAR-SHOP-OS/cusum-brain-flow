@@ -1,6 +1,5 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ body, serviceClient }) => {
@@ -47,7 +46,19 @@ Deno.serve((req) =>
       if (camp) companyId = camp.company_id;
     }
     if (!companyId) {
-      companyId = await resolveDefaultCompanyId(serviceClient);
+      // Try to resolve from contact's existing record
+      const { data: existingContact } = await serviceClient
+        .from("contacts")
+        .select("company_id")
+        .ilike("email", email)
+        .not("company_id", "is", null)
+        .maybeSingle();
+      companyId = existingContact?.company_id || null;
+    }
+    if (!companyId) {
+      return new Response(JSON.stringify({ error: "Cannot determine company for this email" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     await serviceClient.from("email_suppressions").upsert({

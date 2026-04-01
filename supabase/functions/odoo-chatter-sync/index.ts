@@ -90,7 +90,8 @@ Deno.serve((req) =>
     // Get company_id
     const { data: sampleLead } = await serviceClient
       .from("leads").select("company_id").eq("source", "odoo_sync").limit(1).single();
-    const companyId = sampleLead?.company_id || "a0000000-0000-0000-0000-000000000001";
+    if (!sampleLead?.company_id) throw new Error("No Odoo-synced leads found — cannot determine company_id for chatter sync");
+    const companyId = sampleLead.company_id;
 
     // === Part 1: Chatter (mail.message) sync ===
     let targetLeads: Array<{ id: string; odoo_id: string }> = [];

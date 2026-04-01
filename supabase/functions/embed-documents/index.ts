@@ -31,7 +31,12 @@ Deno.serve((req) =>
       });
     }
 
-    const company = companyId || "a0000000-0000-0000-0000-000000000001";
+    if (!companyId) {
+      return new Response(JSON.stringify({ error: "companyId is required" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const company = companyId;
 
     const records = await fetchRecordsForDomain(supabase, domain, entityType, company, since);
 

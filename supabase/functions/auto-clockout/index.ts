@@ -1,10 +1,8 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient, body }) => {
-    const defaultCompanyId = await resolveDefaultCompanyId(serviceClient);
     let mode: string | null = body?.mode || null;
 
     if (!mode || !["morning", "evening"].includes(mode)) {
@@ -32,7 +30,7 @@ Deno.serve((req) =>
     // Find open clock entries
     const { data: openEntries, error: fetchErr } = await serviceClient
       .from("clock_entries")
-      .select("id, profile_id, clock_in, type, profiles(full_name)")
+      .select("id, profile_id, clock_in, type, profiles(full_name, company_id)")
       .is("clock_out", null)
       .not("clock_in", "is", null);
 
@@ -104,7 +102,7 @@ Deno.serve((req) =>
         // Log activity
         try {
           await serviceClient.from("activity_events").insert({
-            company_id: defaultCompanyId,
+            company_id: (entry as any).profiles?.company_id || config?.company_id,
             entity_type: "clock_entry",
             entity_id: entry.id,
             event_type: "auto_clockout",
@@ -117,10 +115,15 @@ Deno.serve((req) =>
       }
     }
 
-    // Log automation run
+    // Log automation run — derive company_id from the first processed entry's profile
+    const runCompanyId = openEntries?.[0]
+      ? (openEntries[0] as any).profiles?.company_id
+      : config?.company_id;
+
+    if (runCompanyId) {
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: defaultCompanyId,
+        company_id: runCompanyId,
         automation_key: "auto_clockout",
         automation_name: `Auto Clock-Out (${mode})`,
         agent_name: "System",
@@ -134,6 +137,7 @@ Deno.serve((req) =>
         metadata: { mode },
       });
     } catch (_) {}
+    }
 
     return { ok: true, closed, total_open: openEntries.length, errors };
   }, { functionName: "auto-clockout", requireCompany: false, wrapResult: false })
