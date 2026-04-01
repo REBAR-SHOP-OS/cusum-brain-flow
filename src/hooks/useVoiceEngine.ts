@@ -129,6 +129,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
   const agentTextRef = useRef("");
   const transcriptsRef = useRef<VoiceTranscript[]>([]);
   const configRef = useRef(config);
