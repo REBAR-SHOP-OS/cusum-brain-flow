@@ -115,10 +115,15 @@ Deno.serve((req) =>
       }
     }
 
-    // Log automation run
+    // Log automation run — derive company_id from the first processed entry's profile
+    const runCompanyId = openEntries?.[0]
+      ? (openEntries[0] as any).profiles?.company_id
+      : config?.company_id;
+
+    if (runCompanyId) {
     try {
       await serviceClient.from("automation_runs").insert({
-        company_id: defaultCompanyId,
+        company_id: runCompanyId,
         automation_key: "auto_clockout",
         automation_name: `Auto Clock-Out (${mode})`,
         agent_name: "System",
