@@ -79,5 +79,5 @@ Deno.serve((req) =>
     }
 
     return { ok: true, lang, user_id: submitter.user_id };
-  }, { functionName: "notify-feedback-owner", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "notify-feedback-owner", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );

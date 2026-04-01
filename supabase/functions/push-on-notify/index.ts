@@ -59,5 +59,5 @@ Deno.serve((req) =>
     }
 
     return { ok: true, push: result };
-  }, { functionName: "push-on-notify", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "push-on-notify", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );

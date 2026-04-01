@@ -162,7 +162,7 @@ Deno.serve((req) =>
     }
 
     return { ok: true, check_type: checkType, alerts_created: notifCount, emails_sent: emailCount };
-  }, { functionName: "timeclock-alerts", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "timeclock-alerts", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );
 
 async function sendAlertEmail(to: string, subject: string, body: string) {
