@@ -132,8 +132,8 @@ export default function PrintTags() {
               dwg={row.dwg || ""}
               item={row.row_index}
               customer={row.customer || ""}
-              reference={row.reference || ""}
-              address={row.address || sessionAddress || projectAddress || ""}
+              reference={sessionInvoice}
+              address={sessionScope}
               dims={dims}
               shapeImageUrl={getShapeImageUrl(shapeType)}
               unitSystem={unitSystem}
