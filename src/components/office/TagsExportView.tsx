@@ -494,8 +494,8 @@ export function TagsExportView() {
                     dwg={row.dwg || ""}
                     item={row.row_index}
                     customer={row.customer || ""}
-                    reference={row.reference || ""}
-                    address={row.address || (selectedSession as any)?.site_address || projectAddress || ""}
+                    reference={(selectedSession as any)?.invoice_number || ""}
+                    address={selectedSession?.name || ""}
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
                     unitSystem={sessionUnitToDisplay((selectedSession as any)?.unit_system)}
