@@ -373,7 +373,7 @@ Deno.serve((req) =>
         alert_type: alert.type,
         communication_id: alert.commId,
         owner_email: alert.owner,
-        company_id: configRow.company_id,
+        company_id: defaultCompanyId,
         metadata: { agent_name: alert.agent, subject: alert.comm.subject },
       });
 
