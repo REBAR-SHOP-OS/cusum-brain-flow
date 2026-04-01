@@ -41,3 +41,30 @@ export async function resolveCompanyId(
   cacheSet(cacheKey, data.company_id, CACHE_TTL_MS);
   return data.company_id;
 }
+
+/**
+ * Resolve a default company_id for cron/system functions that have no user context.
+ * Looks up the first active company. Cached for the function lifetime.
+ * Falls back to provided fallback if no companies exist (should never happen in production).
+ */
+export async function resolveDefaultCompanyId(
+  serviceClient: { from: (table: string) => any },
+): Promise<string> {
+  const cacheKey = "company:default";
+  const cached = cacheGet<string>(cacheKey);
+  if (cached) return cached;
+
+  const { data } = await serviceClient
+    .from("companies")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+
+  const companyId = data?.id;
+  if (!companyId) {
+    throw new Error("No company found in system");
+  }
+
+  cacheSet(cacheKey, companyId, CACHE_TTL_MS);
+  return companyId;
+}
