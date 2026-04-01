@@ -1,5 +1,6 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 interface OptimizationResult {
