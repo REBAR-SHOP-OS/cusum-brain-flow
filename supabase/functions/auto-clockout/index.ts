@@ -1,10 +1,8 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { resolveDefaultCompanyId } from "../_shared/resolveCompany.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient, body }) => {
-    const defaultCompanyId = await resolveDefaultCompanyId(serviceClient);
     let mode: string | null = body?.mode || null;
 
     if (!mode || !["morning", "evening"].includes(mode)) {
