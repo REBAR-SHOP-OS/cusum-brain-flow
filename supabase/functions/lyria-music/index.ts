@@ -44,5 +44,5 @@ Deno.serve((req) =>
     return new Response(audioBuffer, {
       headers: { ...corsHeaders, "Content-Type": "audio/mpeg" },
     });
-  }, { functionName: "lyria-music", authMode: "none", requireCompany: false, rawResponse: true })
+  }, { functionName: "lyria-music", authMode: "required", requireCompany: false, rawResponse: true })
 );

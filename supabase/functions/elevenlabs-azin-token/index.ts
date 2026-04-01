@@ -62,5 +62,5 @@ You are a codec. Translate faithfully. Then be silent. Always.`,
       client_secret: clientSecret,
       expires_at: sessionData.client_secret?.expires_at,
     };
-  }, { functionName: "elevenlabs-azin-token", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "elevenlabs-azin-token", authMode: "required", requireCompany: false, wrapResult: false })
 );

@@ -81,7 +81,7 @@ Deno.serve((req) =>
     }
 
     return { embedded, errors, total: records.length };
-  }, { functionName: "embed-documents", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "embed-documents", authMode: "required", requireCompany: false, wrapResult: false })
 );
 
 async function generateEmbeddings(apiKey: string, texts: string[]): Promise<number[][]> {

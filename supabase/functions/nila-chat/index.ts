@@ -48,5 +48,5 @@ Deno.serve((req) =>
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
-  }, { functionName: "nila-chat", authMode: "none", requireCompany: false, rawResponse: true })
+  }, { functionName: "nila-chat", authMode: "required", requireCompany: false, rawResponse: true })
 );

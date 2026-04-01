@@ -682,5 +682,5 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "regenerate-post", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "regenerate-post", authMode: "required", requireCompany: false, wrapResult: false })
 );

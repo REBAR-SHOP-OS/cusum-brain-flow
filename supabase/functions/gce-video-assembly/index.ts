@@ -247,5 +247,5 @@ gcloud compute instances delete "$INSTANCE" --zone="$ZONE" --quiet
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "gce-video-assembly", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "gce-video-assembly", authMode: "required", requireCompany: false, wrapResult: false })
 );

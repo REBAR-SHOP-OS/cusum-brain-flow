@@ -60,5 +60,5 @@ Deno.serve((req) =>
     return new Response(response.body, {
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
-  }, { functionName: "app-help-chat", authMode: "none", requireCompany: false, rawResponse: true })
+  }, { functionName: "app-help-chat", authMode: "required", requireCompany: false, rawResponse: true })
 );
