@@ -46,6 +46,9 @@ Deno.serve((req) =>
         .maybeSingle();
       if (camp) companyId = camp.company_id;
     }
+    if (!companyId) {
+      companyId = await resolveDefaultCompanyId(serviceClient);
+    }
 
     await serviceClient.from("email_suppressions").upsert({
       email, reason: "unsubscribe",
