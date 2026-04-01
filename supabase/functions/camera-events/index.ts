@@ -57,5 +57,5 @@ Deno.serve((req) =>
     }
 
     return { id: data.id, status: "ok" };
-  }, { functionName: "camera-events", authMode: "none", requireCompany: false, rawResponse: true })
+  }, { functionName: "camera-events", authMode: "none", requireCompany: false, rawResponse: true, internalOnly: true })
 );
