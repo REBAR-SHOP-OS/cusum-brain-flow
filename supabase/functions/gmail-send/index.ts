@@ -240,7 +240,7 @@ Deno.serve((req) =>
       const { data: commsConfig } = await supabaseAdmin
         .from("comms_config")
         .select("external_sender, internal_sender, internal_domain")
-        .eq("company_id", "a0000000-0000-0000-0000-000000000001")
+        .eq("company_id", companyId)
         .maybeSingle();
 
       if (commsConfig) {
