@@ -453,7 +453,7 @@ async function createServerTasks(supabase: any, jobId: string | null) {
         status: "todo",
         priority: task.priority,
         assigned_to: RADIN_PROFILE_ID,
-        company_id: await resolveDefaultCompanyId(supabase),
+        company_id: await resolveWpCompanyId(supabase),
         source: "speed-optimizer",
         source_ref: jobId || undefined,
         agent_type: "vizzy",
