@@ -45,5 +45,5 @@ Deno.serve((req) =>
     return new Response(audioBuffer, {
       headers: { ...corsHeaders, "Content-Type": "audio/mpeg" },
     });
-  }, { functionName: "elevenlabs-music", authMode: "none", requireCompany: false, rawResponse: true })
+  }, { functionName: "elevenlabs-music", authMode: "required", requireCompany: false, rawResponse: true })
 );

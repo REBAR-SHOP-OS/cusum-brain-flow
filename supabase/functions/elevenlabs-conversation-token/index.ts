@@ -21,5 +21,5 @@ Deno.serve((req) =>
 
     const { signed_url } = await response.json();
     return { signed_url };
-  }, { functionName: "elevenlabs-conversation-token", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "elevenlabs-conversation-token", authMode: "required", requireCompany: false, wrapResult: false })
 );
