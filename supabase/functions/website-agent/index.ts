@@ -375,6 +375,7 @@ async function executeTool(
   args: Record<string, any>,
   supabase: any,
   wp: WPClient | null,
+  companyId: string,
 ): Promise<string> {
   try {
     switch (name) {
