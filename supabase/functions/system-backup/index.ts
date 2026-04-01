@@ -87,14 +87,9 @@ Deno.serve((req) =>
       creatorName = profile?.full_name ?? "Admin";
       companyId = profile?.company_id ?? null;
     }
-    // For scheduled backups without userId, resolve from companies table
-    if (!companyId) {
-      const { data: firstCompany } = await serviceClient
-        .from("companies")
-        .select("id")
-        .limit(1)
-        .maybeSingle();
-      companyId = firstCompany?.id ?? null;
+    // For scheduled backups without userId, accept body.company_id as trusted input
+    if (!companyId && body.company_id && typeof body.company_id === "string") {
+      companyId = body.company_id;
     }
     if (!companyId) {
       return json({ error: "Could not resolve company_id for backup" }, 400);

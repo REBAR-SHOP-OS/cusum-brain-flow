@@ -1011,7 +1011,7 @@ serve(async (req) => {
         let args: Record<string, any> = {};
         try { args = JSON.parse(tc.function.arguments); } catch { /* empty args */ }
         console.log(`Tool: ${tc.function.name}`, args);
-        const result = await executeTool(tc.function.name, args, supabase, wp);
+        const result = await executeTool(tc.function.name, args, supabase, wp, widgetCompanyId);
         return { tool_call_id: tc.id, role: "tool" as const, content: result };
       }),
     );
