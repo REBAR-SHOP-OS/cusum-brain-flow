@@ -69,7 +69,8 @@ const leadsData: LeadData[] = [
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { serviceClient: supabase } = ctx;
+    const { serviceClient: supabase, userId } = ctx;
+    const companyId = await resolveCompanyId(supabase, userId);
 
     const results = { customers_created: 0, leads_created: 0, errors: [] as string[] };
     const customerCache: Record<string, string> = {};
