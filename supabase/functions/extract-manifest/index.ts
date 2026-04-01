@@ -609,7 +609,7 @@ Rules:
           })
           .eq("id", sessionId);
 
-        console.log(`Extraction complete for session ${sessionId}: ${dedupedRows.length} rows saved (from ${items.length} raw)`);
+        console.log(`Extraction complete for session ${sessionId}: ${savedCount} rows saved`);
 
     return new Response(
       JSON.stringify({ status: "extracted", sessionId }),
