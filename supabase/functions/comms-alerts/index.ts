@@ -192,7 +192,7 @@ async function sendAlertEmail(accessToken: string, to: string, subject: string, 
   return true;
 }
 
-function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentName: string): string {
+function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentName: string, tz: string = "America/Toronto"): string {
   const isMissedCall = alertType === "missed_call";
   const icon = isMissedCall ? "📞" : "⏰";
   const breachLabel = alertType.replace("response_time_", "");
@@ -204,7 +204,7 @@ function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentN
   const ageHours = receivedDate ? Math.round((Date.now() - receivedDate.getTime()) / 3_600_000 * 10) / 10 : null;
   const ageLabel = ageHours != null ? `${ageHours}h ago` : "";
   const receivedFormatted = receivedDate
-    ? receivedDate.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Toronto" })
+    ? receivedDate.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: tz })
     : "N/A";
 
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
@@ -251,6 +251,10 @@ Deno.serve((req) =>
     const allResults: any[] = [];
     let totalAlerts = 0;
     let totalSkipped = 0;
+
+    // Resolve workspace timezone once
+    const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
+    const workspaceTz = await getWorkspaceTimezone(svc);
 
     for (const configRow of configRows) {
     const companyId = configRow.company_id;
@@ -386,7 +390,7 @@ Deno.serve((req) =>
       try {
         if (!accessToken) accessToken = await getInternalSenderToken(svc);
 
-        const html = buildAlertHTML(alert.type, alert.owner, alert.comm, alert.agent);
+        const html = buildAlertHTML(alert.type, alert.owner, alert.comm, alert.agent, workspaceTz);
         const subj = alert.type === "missed_call"
           ? `[Alert] Missed call from ${alert.comm.from_address || "Unknown"}`
           : `[Alert] Unanswered email - ${alert.type.replace("response_time_", "")} - ${alert.comm.subject || ""}`;

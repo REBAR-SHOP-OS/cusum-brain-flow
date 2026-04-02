@@ -463,6 +463,8 @@ Deno.serve((req) =>
     const roles = (rolesData || []).map(r => r.role);
 
     // Context fetching (Moved to shared module)
+    const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
+    const workspaceTz = await getWorkspaceTimezone(svcClient);
     const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient, companyId);
 
     // Inject live QuickBooks context for accounting/collections agents
@@ -606,7 +608,7 @@ Deno.serve((req) =>
 
       if (isScheduleRequest) {
         const scheduleDate = (userContext?.selectedDate as string) ||
-          new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/Toronto" });
+          new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: workspaceTz });
 
         const scheduleReply = `📅 **Content Schedule — ${scheduleDate}**
 
@@ -977,11 +979,11 @@ Deno.serve((req) =>
     // Dynamic suffix (context, history, user message) varies per call
     const todayEST = new Date().toLocaleDateString("en-US", {
       weekday: "long", year: "numeric", month: "long", day: "numeric",
-      timeZone: "America/Toronto",
+      timeZone: workspaceTz,
     });
     const staticSystemPrompt = ONTARIO_CONTEXT + basePrompt + 
       GOVERNANCE_RULES + DRAFT_ONLY_BLOCK + SHARED_TOOL_INSTRUCTIONS + IDEA_GENERATION_INSTRUCTIONS + LANG_INSTRUCTION +
-      `\n\n## Current Date & Time\nToday is: ${todayEST}\nTimezone: Eastern (America/Toronto)` +
+      `\n\n## Current Date & Time\nToday is: ${todayEST}\nTimezone: ${workspaceTz}` +
       `\n\n## Current User\nName: ${userFullName}\nEmail: ${userEmail}`;
 
     // Dynamic content goes in a separate system message to preserve cache boundary
