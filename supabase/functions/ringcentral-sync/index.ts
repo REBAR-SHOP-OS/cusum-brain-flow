@@ -362,6 +362,7 @@ function resolveUserId(record: any, extMap: Map<string, string>, fallbackUserId:
 async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?: boolean; mode?: string }) {
   const LOG = (msg: string, data?: unknown) => console.log(`[rc-sync:cron] ${msg}`, data !== undefined ? JSON.stringify(data) : "");
   LOG("syncAllUsers started");
+  const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
