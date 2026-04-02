@@ -240,6 +240,7 @@ export default function AgentWorkspace() {
     };
     setMessages([welcomeMsg]);
     setSessionFinalized(false);
+    setShowInlineCalendar(true);
 
     const sessionId = await createSession("Eisenhower — " + format(new Date(), "yyyy-MM-dd"), config.name);
     if (sessionId) {
