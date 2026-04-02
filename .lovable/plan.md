@@ -1,63 +1,75 @@
 
-Audit target: the `/settings` integrations tab crash (`Cannot read properties of null (reading 'useState')`) and the safest production fix path.
 
-1) Current state
-- `src/pages/Settings.tsx` lazy-loads the integrations page as `IntegrationsPage` and renders it correctly as JSX:
-  - `const IntegrationsPage = lazy(() => import("@/pages/Integrations"));`
-  - inside the tab panel: `<IntegrationsPage />`
-- `src/pages/Integrations.tsx` is a normal React function component using hooks at top level.
-- The specific “called as plain function in tab config” failure described in the advisor note is not present in the current code shown for `Settings.tsx`.
+# Add Centralized Timezone & Date Format Settings (Toronto, Canada)
 
-2) What is likely broken
-- The prior “fix” was bogus. Adding `useMemo` to the import line in `src/pages/Integrations.tsx` did not address the root cause.
-- The current code does not show an obvious direct invalid-hook-call pattern in `Settings.tsx`, so the crash is likely coming from one of these:
-  - a stale/bad compiled module state around `Integrations.tsx`
-  - a broken import/export shape for the lazy-loaded page at runtime
-  - a second React/runtime duplication issue surfacing only on this route
-  - a child hook path inside `useIntegrations` / toast stack that resolves to a null React dispatcher at runtime
+## Problem
+Timezone is hardcoded across ~7+ files as `"America/New_York"` or `"America/Toronto"`. No user-facing setting exists. Vizzy and other systems have no single source of truth for the business timezone.
 
-3) Grounded findings from code
-- `Settings.tsx` is not invoking `IntegrationsPage()` directly.
-- `App.tsx` also renders the standalone `/integrations` route as `<Integrations />`, which is correct.
-- `Integrations.tsx` imports hooks from `"react"` normally and calls them only inside `useStalenessCheck()` and the component body.
-- `useIntegrations.ts` is also structurally normal from the section inspected.
+## Approach
 
-4) Most probable root cause to verify next
-- The strongest code-level suspicion is not the JSX usage in `Settings.tsx`, but the lazy/runtime boundary around `src/pages/Integrations.tsx` or one of its dependencies.
-- Because the stack points at `Integrations.tsx:105`, the failing dispatcher is inside the component render itself, not at the tab selection code.
+### 1. Create `workspace_settings` table
+Single-row table storing company-wide settings:
+- `timezone` (text, default `'America/Toronto'`)
+- `date_format` (text, default `'MM/dd/yyyy'`)
+- `time_format` (text, default `'12h'` — 12-hour or 24-hour)
 
-5) Recommended implementation plan
-- Step 1: Remove the fake “cache-bust” import noise
-  - Revert `useMemo` from `src/pages/Integrations.tsx` if it is unused.
-- Step 2: Make the settings integrations tab use the same proven route-level wrapper pattern as `/integrations`
-  - Extract the tab body into a tiny wrapper component if needed and render the integrations page through a stable JSX boundary.
-  - Goal: ensure identical render semantics between `/integrations` and `/settings` tab content.
-- Step 3: Audit `Integrations.tsx` dependencies for invalid hook-call sources
-  - prioritize:
-    - `src/hooks/useIntegrations.ts`
-    - `src/hooks/use-toast.ts`
-    - `src/components/integrations/StripeQBSyncPanel.tsx`
-    - `src/components/integrations/ConnectDialog.tsx`
-    - `src/components/integrations/IntegrationSetupDialog.tsx`
-- Step 4: If no dependency misuse exists, temporarily bisect the page
-  - render only a minimal `<div>` in `Integrations.tsx`
-  - then reintroduce:
-    1. `useIntegrations`
-    2. `useStalenessCheck`
-    3. dialogs/panels
-  - This will isolate the exact child causing the null dispatcher.
-- Step 5: Add a strict regression check
-  - `/integrations` route still renders
-  - `/settings` → Integrations tab renders
-  - no hook error in either location
+Migration SQL:
+```sql
+CREATE TABLE public.workspace_settings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  timezone text NOT NULL DEFAULT 'America/Toronto',
+  date_format text NOT NULL DEFAULT 'MM/dd/yyyy',
+  time_format text NOT NULL DEFAULT '12h',
+  company_id text,
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.workspace_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated users can read" ON public.workspace_settings FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated users can update" ON public.workspace_settings FOR UPDATE TO authenticated USING (true);
+INSERT INTO public.workspace_settings (timezone, date_format, time_format) VALUES ('America/Toronto', 'MM/dd/yyyy', '12h');
+```
 
-6) Safest fix to apply first
-- Do not touch routing or React versions first.
-- First apply a real cleanup + isolation pass in the integrations page and its immediate dependencies, because the current `Settings.tsx` render path already looks correct.
+### 2. Create `useWorkspaceSettings` hook
+- Fetches the single row from `workspace_settings`
+- Caches with React Query (long stale time — rarely changes)
+- Exports `timezone`, `dateFormat`, `timeFormat` values
+- Provides `updateSettings` mutation
 
-7) Technical notes
-- The advisor’s suggested fix does not match the current codebase state. It would only be relevant if `Settings.tsx` stored `content: Integrations()` or equivalent, which it currently does not.
-- The previous “HMR/cache” explanation is not trustworthy enough to treat as root cause.
+### 3. Create `src/lib/dateConfig.ts` utility
+- `getTimezone()` — returns stored timezone (with `'America/Toronto'` fallback)
+- `formatAppDate(date)` — formats using the workspace date format
+- `formatAppTime(date)` — formats using the workspace time format
+- `toZonedNow()` — returns current time in the workspace timezone
 
-8) Expected deliverable after approval
-- A targeted repair that removes the bogus import tweak, isolates the actual failing dependency in the integrations page path, and makes both `/integrations` and `/settings` integrations render through the same stable component flow.
+### 4. Add "Date & Time" section to Settings page
+Between the Language and Appearance sections in `src/pages/Settings.tsx`:
+- **Timezone** dropdown — common North American timezones (Toronto, New York, Chicago, Denver, Los Angeles, Vancouver)
+- **Date format** dropdown — `MM/dd/yyyy`, `dd/MM/yyyy`, `yyyy-MM-dd`
+- **Time format** toggle — 12-hour / 24-hour
+- Save button updates `workspace_settings`
+
+### 5. Update key consumers (additive, non-breaking)
+Replace hardcoded timezone strings with the shared utility in these files:
+- `src/lib/shiftUtils.ts` — use configured timezone instead of local time
+- `src/hooks/useTimeClock.ts` — replace `"America/New_York"` literal
+- `supabase/functions/_shared/vizzyFullContext.ts` — read from settings or use default
+- `supabase/functions/comms-alerts/index.ts` — replace `"America/Toronto"` literal
+
+Edge functions that cannot easily query the DB will continue using `"America/Toronto"` as the hardcoded default (same value, just now documented as the canonical default).
+
+### Files changed
+| File | Action |
+|------|--------|
+| Migration SQL | Create `workspace_settings` table + seed row |
+| `src/hooks/useWorkspaceSettings.ts` | New hook |
+| `src/lib/dateConfig.ts` | New utility |
+| `src/pages/Settings.tsx` | Add Date & Time section |
+| `src/lib/shiftUtils.ts` | Use timezone from config |
+| `src/hooks/useTimeClock.ts` | Use timezone from config |
+
+### Safety
+- All changes are additive
+- Hardcoded defaults match current behavior (`America/Toronto`)
+- No existing flows break if the table query fails — fallback is always `America/Toronto`
+- Edge functions keep their hardcoded defaults (cannot query client-side settings at runtime)
+
