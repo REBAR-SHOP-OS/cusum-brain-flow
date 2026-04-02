@@ -390,7 +390,7 @@ Deno.serve((req) =>
       try {
         if (!accessToken) accessToken = await getInternalSenderToken(svc);
 
-        const html = buildAlertHTML(alert.type, alert.owner, alert.comm, alert.agent);
+        const html = buildAlertHTML(alert.type, alert.owner, alert.comm, alert.agent, workspaceTz);
         const subj = alert.type === "missed_call"
           ? `[Alert] Missed call from ${alert.comm.from_address || "Unknown"}`
           : `[Alert] Unanswered email - ${alert.type.replace("response_time_", "")} - ${alert.comm.subject || ""}`;
