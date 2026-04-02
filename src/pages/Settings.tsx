@@ -213,6 +213,9 @@ export default function Settings() {
                 </Button>
               </section>
 
+              {/* Date & Time */}
+              <DateTimeSection />
+
               {/* Language */}
               <section className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground">Language</h3>
