@@ -24,7 +24,7 @@ import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "@/assets/brand-logo.png";
 const BrainPage = lazy(() => import("@/pages/Brain"));
-const IntegrationsPage = lazy(() => import("@/pages/Integrations"));
+import IntegrationsPage from "@/pages/Integrations";
 
 type SettingsTab = "settings" | "brain" | "integrations";
 
@@ -329,9 +329,7 @@ export default function Settings() {
         )}
 
         {activeTab === "integrations" && (
-          <Suspense fallback={<div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>}>
-            <IntegrationsPage />
-          </Suspense>
+          <IntegrationsPage />
         )}
       </div>
     </div>
