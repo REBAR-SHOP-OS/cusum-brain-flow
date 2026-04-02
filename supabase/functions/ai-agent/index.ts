@@ -606,7 +606,7 @@ Deno.serve((req) =>
 
       if (isScheduleRequest) {
         const scheduleDate = (userContext?.selectedDate as string) ||
-          new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "America/Toronto" });
+          new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: workspaceTz });
 
         const scheduleReply = `📅 **Content Schedule — ${scheduleDate}**
 

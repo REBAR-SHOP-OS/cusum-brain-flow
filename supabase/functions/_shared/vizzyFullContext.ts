@@ -13,9 +13,11 @@ export async function buildFullVizzyContext(
   options: VizzyContextOptions = {}
 ): Promise<string> {
   const { includeFinancials = true } = options;
-  // Use ET (America/New_York) for "today" — business operates in Eastern Time
+  // Use workspace timezone (defaults to America/Toronto)
+  const { getWorkspaceTimezone } = await import("./getWorkspaceTimezone.ts");
+  const tz = await getWorkspaceTimezone(supabase);
   const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/New_York",
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

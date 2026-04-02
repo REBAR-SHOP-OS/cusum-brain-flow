@@ -204,7 +204,7 @@ function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentN
   const ageHours = receivedDate ? Math.round((Date.now() - receivedDate.getTime()) / 3_600_000 * 10) / 10 : null;
   const ageLabel = ageHours != null ? `${ageHours}h ago` : "";
   const receivedFormatted = receivedDate
-    ? receivedDate.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Toronto" })
+    ? receivedDate.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: tz })
     : "N/A";
 
   return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">

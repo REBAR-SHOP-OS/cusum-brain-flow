@@ -38,8 +38,10 @@ Deno.serve((req) =>
       await ctx.serviceClient.from("profiles").update({ is_active: false }).eq("id", profileId);
       action = "clock_out";
     } else {
-      // Enforce 6 AM ET restriction
-      const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+      // Enforce 6 AM restriction using workspace timezone
+      const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
+      const tz = await getWorkspaceTimezone(ctx.serviceClient);
+      const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
       if (nowET.getHours() < 6) {
         return new Response(JSON.stringify({ error: "Clock-in is only available from 6:00 AM ET" }), {
           status: 400,
