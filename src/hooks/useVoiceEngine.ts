@@ -176,6 +176,8 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const handleDataChannelMessage = useCallback((event: MessageEvent) => {
     try {
       const msg = JSON.parse(event.data);
+      // Diagnostic: log all incoming event types for debugging
+      console.log("[VoiceEngine] DC event:", msg.type);
 
       switch (msg.type) {
         case "session.created":
