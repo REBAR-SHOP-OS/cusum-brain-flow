@@ -192,7 +192,7 @@ async function sendAlertEmail(accessToken: string, to: string, subject: string, 
   return true;
 }
 
-function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentName: string): string {
+function buildAlertHTML(alertType: string, ownerEmail: string, comm: any, agentName: string, tz: string = "America/Toronto"): string {
   const isMissedCall = alertType === "missed_call";
   const icon = isMissedCall ? "📞" : "⏰";
   const breachLabel = alertType.replace("response_time_", "");
