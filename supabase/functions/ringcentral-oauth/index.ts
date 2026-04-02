@@ -104,8 +104,10 @@ Deno.serve((req) =>
         const hasError = existingConn?.status === "error";
 
         // Only set "connected" if sync is recent OR there's no existing error
-        const resolvedStatus = (hasError && syncIsStale) ? "error" : "connected";
-        const resolvedError = (hasError && syncIsStale) ? existingConn.error_message : null;
+        const resolvedStatus = (syncIsStale || hasError) ? "error" : "connected";
+        const resolvedError = (syncIsStale || hasError)
+          ? (existingConn?.error_message || "Sync has not run in over 12 hours")
+          : null;
 
         await supabaseAdmin.from("integration_connections").upsert({
           user_id: userId,
@@ -117,7 +119,7 @@ Deno.serve((req) =>
         }, { onConflict: "user_id,integration_id" });
 
         return new Response(
-          JSON.stringify({ status: "connected", email: tokenData.rc_email }),
+          JSON.stringify({ status: resolvedStatus, error: resolvedError, email: tokenData.rc_email }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

@@ -176,6 +176,8 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const handleDataChannelMessage = useCallback((event: MessageEvent) => {
     try {
       const msg = JSON.parse(event.data);
+      // Diagnostic: log all incoming event types for debugging
+      console.log("[VoiceEngine] DC event:", msg.type);
 
       switch (msg.type) {
         case "session.created":
@@ -285,7 +287,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         body: {
           instructions: resolvedInstructions,
           voice: cfg.voice ?? "alloy",
-          model: cfg.model ?? "gpt-4o-mini-realtime-preview",
+          model: cfg.model ?? "gpt-4o-realtime-preview-2024-12-17",
           vadThreshold: cfg.vadThreshold ?? 0.4,
           silenceDurationMs: cfg.silenceDurationMs ?? 300,
           prefixPaddingMs: cfg.prefixPaddingMs ?? 200,
@@ -330,7 +332,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       };
 
       // 7. Create and set local SDP offer
-      const model = cfg.model ?? "gpt-4o-mini-realtime-preview";
+      const model = cfg.model ?? "gpt-4o-realtime-preview-2024-12-17";
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 

@@ -9,7 +9,7 @@ Deno.serve((req) =>
     const {
       instructions = "You are a helpful assistant.",
       voice = "alloy",
-      model = "gpt-4o-mini-realtime-preview",
+      model = "gpt-4o-realtime-preview-2024-12-17",
       vadThreshold = 0.4,
       silenceDurationMs = 300,
       prefixPaddingMs = 200,
