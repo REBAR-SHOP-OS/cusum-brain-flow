@@ -234,7 +234,7 @@ export default function AgentWorkspace() {
     const welcomeMsg: Message = {
       id: crypto.randomUUID(),
       role: "agent",
-      content: "سلام! 👋\n\nلطفاً ابتدا **تاریخ مورد نظر** را از تقویم بالای صفحه انتخاب کنید 📅",
+      content: "Hello! 👋\n\nPlease select your **target date** from the calendar at the top of the page 📅",
       agent: "eisenhower" as any,
       timestamp: new Date(),
     };
