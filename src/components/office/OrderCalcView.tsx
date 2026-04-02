@@ -100,16 +100,19 @@ export function OrderCalcView() {
     try {
       const buf = await file.arrayBuffer();
       const wb = read(buf, { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows: any[][] = utils.sheet_to_json(ws, { header: 1 });
-      const parsed = parseRows(rows);
-      if (parsed.length === 0) {
-        toast.warning("No rebar items found in the uploaded file. Please check the file format.");
+      const result = parseWorkbook(wb);
+
+      if (result.items.length === 0) {
+        const msg = diagnosticMessage(result);
+        toast.warning(msg);
+        console.warn("Order Calc parse diagnostics:", result);
         return;
       }
-      setItems(parsed);
+
+      setItems(result.items);
       setFileName(file.name);
-      toast.success(`Parsed ${parsed.length} rebar item(s) from ${file.name}`);
+      const sheetInfo = result.sheetName ? ` (sheet: "${result.sheetName}")` : "";
+      toast.success(`Parsed ${result.items.length} rebar item(s) from ${file.name}${sheetInfo}`);
     } catch (err: any) {
       console.error("Order Calc file parse error:", err);
       toast.error(`Failed to parse file: ${err?.message || "Unknown error"}`);
