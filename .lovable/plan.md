@@ -1,39 +1,33 @@
 
 
-# Fix Eisenhower Agent Language: Default to English
+# Show Inline Calendar After Welcome Message in Eisenhower Agent
 
 ## Problem
-Two issues causing the agent to speak Persian instead of English by default:
-
-1. **Hardcoded Persian welcome message** in `src/pages/AgentWorkspace.tsx` (line 237): `"سلام! 👋\n\nلطفاً ابتدا **تاریخ مورد نظر** را از تقویم بالای صفحه انتخاب کنید 📅"`
-2. **Language rules in system prompt** (`supabase/functions/_shared/agents/growth.ts` lines 175-178): Currently says "match the user's language for all non-report messages" — needs to be updated to default to English unless the user writes in another language.
+1. After the welcome message, the user must find and use the small calendar popover at the top of the page — not intuitive
+2. The date-selected follow-up message (line 644) is still in Persian — missed in the previous language fix
 
 ## Changes
 
-### 1. `src/pages/AgentWorkspace.tsx` — line 237
-Replace the Persian welcome message with English:
-```
-"Hello! 👋\n\nPlease select your **target date** from the calendar at the top of the page 📅"
-```
+### 1. Create `src/components/chat/InlineDatePicker.tsx`
+A chat-embedded calendar component that:
+- Renders a styled `Calendar` (from shadcn/ui) directly in the message flow
+- On date selection, calls a callback with the chosen date
+- After selection, collapses to show the selected date as text
+- Styled to match the chat bubble aesthetic
 
-### 2. `supabase/functions/_shared/agents/growth.ts` — lines 175-178
-Update the language rules to:
-- **Default language is English** for all responses
-- **If the user writes in another language**, switch to that language for conversational responses
-- Final reports always in English (keep existing rule)
+### 2. Update `src/pages/AgentWorkspace.tsx`
+- Add state: `showInlineCalendar` (boolean, default false)
+- In `autoStartEisenhower`: set `showInlineCalendar = true` after the welcome message
+- When inline calendar date is selected: call existing `handleDateChange(date)` and set `showInlineCalendar = false`
+- Pass `showInlineCalendar` and the selection handler to the chat thread area
+- **Fix line 644**: Replace Persian text with English: `📅 Date **${dateStr}** selected.\n\nNow please list the **tasks you've completed** and **tasks you plan to do**.`
 
-Updated rules:
-```
-## LANGUAGE RULES (CRITICAL):
-- **Default language is English.** Always start and respond in English unless the user writes in a different language.
-- If the user writes in another language (Persian, Arabic, Spanish, etc.), switch to THAT language for all conversational responses (questions, clarifications, confirmations, encouragement).
-- **Final Eisenhower Matrix report**: MUST ALWAYS be written in English, regardless of the conversation language.
-- Never refuse or redirect a user for writing in a non-English language.
-```
+### 3. Render the inline calendar in the chat thread
+After the messages list (before the bottom ref), conditionally render `<InlineDatePicker>` when `showInlineCalendar` is true — it appears as the next "message" in the conversation, prompting the user to pick a date.
 
 ### Files changed
-| File | Change |
+| File | Action |
 |------|--------|
-| `src/pages/AgentWorkspace.tsx` | Replace Persian welcome message with English |
-| `supabase/functions/_shared/agents/growth.ts` | Update language rules to default English |
+| `src/components/chat/InlineDatePicker.tsx` | New — inline calendar component |
+| `src/pages/AgentWorkspace.tsx` | Add inline calendar state + fix Persian follow-up text |
 
