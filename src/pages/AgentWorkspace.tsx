@@ -1008,6 +1008,9 @@ export default function AgentWorkspace() {
               agentName={config.name}
               isPixelAgent={agentId === "social"}
             />
+            {showInlineCalendar && agentId === "eisenhower" && (
+              <InlineDatePicker onDateSelect={(date) => handleDateChange(date)} />
+            )}
             {sessionFinalized ? (
               <div className="w-full text-center py-4 px-6">
                 <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-4 py-2.5">
