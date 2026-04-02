@@ -122,12 +122,15 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const [mode, setMode] = useState<VoiceEngineMode>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [outputAudioBlocked, setOutputAudioBlocked] = useState(false);
 
   const idCounter = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
+  /** Latest instructions to send via session.update when the data channel becomes ready */
+  const pendingSessionInstructionsRef = useRef<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const agentTextRef = useRef("");
@@ -171,6 +174,44 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       try { audioElRef.current.pause(); audioElRef.current.remove(); } catch {}
       audioElRef.current = null;
     }
+    pendingSessionInstructionsRef.current = null;
+    setOutputAudioBlocked(false);
+  }, []);
+
+  /** Push new system instructions to OpenAI Realtime after connect (e.g. ERP digest arrived late). */
+  const updateSessionInstructions = useCallback((instructions: string) => {
+    const dc = dcRef.current;
+    if (dc && dc.readyState === "open") {
+      try {
+        dc.send(JSON.stringify({
+          type: "session.update",
+          session: { instructions },
+        }));
+        pendingSessionInstructionsRef.current = null;
+        console.log("[VoiceEngine] session.update (instructions) sent");
+      } catch (e) {
+        console.warn("[VoiceEngine] session.update failed:", e);
+        pendingSessionInstructionsRef.current = instructions;
+      }
+      return;
+    }
+    pendingSessionInstructionsRef.current = instructions;
+  }, []);
+
+  const retryOutputAudio = useCallback(() => {
+    const el = audioElRef.current;
+    if (!el?.srcObject) {
+      toast.error("No voice stream yet — wait until connected.");
+      return;
+    }
+    el.play()
+      .then(() => {
+        setOutputAudioBlocked(false);
+        toast.success("Voice output enabled");
+      })
+      .catch(() => {
+        toast.error("Could not start audio. Try tapping again.");
+      });
   }, []);
 
   const handleDataChannelMessage = useCallback((event: MessageEvent) => {
@@ -314,9 +355,27 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         audioEl.srcObject = e.streams[0];
         try {
           await audioEl.play();
+          setOutputAudioBlocked(false);
           console.log("[VoiceEngine] Remote audio playback started");
         } catch (err) {
           console.error("[VoiceEngine] Remote audio play failed:", err);
+          setOutputAudioBlocked(true);
+          toast.error("Browser blocked voice playback", {
+            id: "voice-output-blocked",
+            description: "Tap Enable sound to hear the assistant.",
+            duration: 20000,
+            action: {
+              label: "Enable sound",
+              onClick: () => {
+                audioEl.play()
+                  .then(() => {
+                    setOutputAudioBlocked(false);
+                    toast.success("Voice output enabled");
+                  })
+                  .catch(() => toast.error("Still blocked — try again."));
+              },
+            },
+          });
         }
       };
 
@@ -329,6 +388,19 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       dc.onmessage = handleDataChannelMessage;
       dc.onopen = () => {
         console.log("Voice engine data channel open");
+        const pending = pendingSessionInstructionsRef.current;
+        if (pending) {
+          try {
+            dc.send(JSON.stringify({
+              type: "session.update",
+              session: { instructions: pending },
+            }));
+            pendingSessionInstructionsRef.current = null;
+            console.log("[VoiceEngine] session.update (flush pending instructions) sent");
+          } catch (e) {
+            console.warn("[VoiceEngine] session.update on open failed:", e);
+          }
+        }
       };
 
       // 7. Create and set local SDP offer
@@ -425,9 +497,12 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     isSpeaking,
     isMuted,
     mode,
+    outputAudioBlocked,
     startSession,
     endSession,
     toggleMute,
     clearTranscripts,
+    updateSessionInstructions,
+    retryOutputAudio,
   };
 }

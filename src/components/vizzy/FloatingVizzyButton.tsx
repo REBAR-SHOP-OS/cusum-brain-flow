@@ -9,6 +9,7 @@ import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { VizzyVoiceChat } from "./VizzyVoiceChat";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { motion, AnimatePresence } from "framer-motion";
+import { primeMobileAudio } from "@/lib/audioPlayer";
 
 const BTN_SIZE = 80;
 
@@ -40,6 +41,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
 
     const onMicClick = useCallback((e: React.MouseEvent) => {
       e.stopPropagation();
+      primeMobileAudio();
       setExpanded(false);
       setShowVoiceChat(true);
     }, []);

@@ -25,6 +25,7 @@ import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
+import { primeMobileAudio } from "@/lib/audioPlayer";
 
 const TOOL_LABELS: Record<string, string> = {
   update_machine_status: "Update Machine Status",
@@ -264,7 +265,16 @@ export default function LiveChat() {
             </p>
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setShowVoiceChat(true)} title="Voice chat">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={() => {
+                primeMobileAudio();
+                setShowVoiceChat(true);
+              }}
+              title="Voice chat"
+            >
               <Mic className="w-4 h-4 text-primary" />
             </Button>
             {messages.length > 0 && (

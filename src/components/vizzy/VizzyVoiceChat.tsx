@@ -70,6 +70,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     endSession,
     toggleMute,
     contextLoading,
+    outputAudioBlocked,
+    retryOutputAudio,
   } = useVizzyVoiceEngine();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -359,6 +361,20 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               }}
             >
               Retry Connection
+            </button>
+          )}
+
+          {isConnected && outputAudioBlocked && (
+            <button
+              type="button"
+              onClick={retryOutputAudio}
+              className="px-5 py-2 rounded-full text-sm font-medium transition-colors animate-pulse"
+              style={{
+                background: "hsl(45 93% 48%)",
+                color: "hsl(210 30% 8%)",
+              }}
+            >
+              Enable sound (tap here)
             </button>
           )}
 
