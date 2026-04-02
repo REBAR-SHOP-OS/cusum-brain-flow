@@ -635,6 +635,7 @@ export default function AgentWorkspace() {
   const handleDateChange = useCallback((date: Date | undefined) => {
     if (date) {
       setSelectedDate(date);
+      setShowInlineCalendar(false);
       if (agentId === "social" && activeSessionId) {
         updateSessionTitle(activeSessionId, format(date, "yyyy-MM-dd"));
       }
