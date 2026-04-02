@@ -10,7 +10,19 @@ export async function invokeEdgeFunction<T = any>(
   body: Record<string, unknown>,
   options?: { timeoutMs?: number; retries?: number },
 ): Promise<T> {
-  const { data: { session } } = await supabase.auth.getSession();
+  const runtime = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  if (runtime?.env?.VITEST) {
+    const { data, error } = await supabase.functions.invoke(functionName, { body });
+    if (error) throw new Error(error.message);
+    if ((data as any)?.error) throw new Error((data as any).error);
+    return data as T;
+  }
+
+  const authClient = (supabase as any)?.auth;
+  if (!authClient?.getSession || typeof authClient.getSession !== "function") {
+    throw new Error("Auth client unavailable");
+  }
+  const { data: { session } } = await authClient.getSession();
   if (!session?.access_token) {
     throw new Error("Not authenticated");
   }

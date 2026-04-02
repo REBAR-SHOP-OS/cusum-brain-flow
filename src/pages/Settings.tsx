@@ -27,7 +27,7 @@ import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "@/assets/brand-logo.png";
 const BrainPage = lazy(() => import("@/pages/Brain"));
-import IntegrationsPage from "@/pages/Integrations";
+const IntegrationsPage = lazy(() => import("@/pages/Integrations"));
 
 type SettingsTab = "settings" | "brain" | "integrations";
 

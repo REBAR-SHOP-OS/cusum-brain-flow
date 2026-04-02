@@ -141,13 +141,27 @@ export async function handleRequest(
       await requireAnyRole(serviceClient, userId, options.requireAnyRole);
     }
 
-    // Parse body (skip if parseBody is false — e.g. FormData functions)
+    // Parse JSON body (skip if parseBody is false — e.g. FormData functions)
     let body: Record<string, any> = {};
     if (options.parseBody !== false && req.method !== "GET" && req.method !== "HEAD") {
-      try {
-        body = await req.json();
-      } catch {
-        body = {};
+      const raw = await req.text();
+      if (raw.trim().length > 0) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+            body = parsed as Record<string, any>;
+          } else {
+            return new Response(
+              JSON.stringify({ ok: false, error: "Invalid JSON body: expected an object" }),
+              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+        } catch {
+          return new Response(
+            JSON.stringify({ ok: false, error: "Invalid JSON body" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
       }
     }
 
@@ -184,7 +198,7 @@ export async function handleRequest(
     log.error("Request failed", err);
 
     return new Response(
-      JSON.stringify({ ok: false, error: message }),
+      JSON.stringify({ ok: false, error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }

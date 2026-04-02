@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
+import { verifyPublicQuoteToken } from "../_shared/publicQuoteToken.ts";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -7,14 +8,18 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { quote_id } = await req.json();
-    console.log(`[quote-public-view] quote_id=${quote_id}`);
+    const { quote_id, public_token } = await req.json();
     if (!quote_id) {
       return new Response(JSON.stringify({ error: "quote_id is required" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    await verifyPublicQuoteToken(
+      typeof public_token === "string" ? public_token : undefined,
+      quote_id,
+      "view",
+    );
 
     const svc = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -48,7 +53,7 @@ Deno.serve(async (req) => {
     const sqStatus = sq?.status || "";
     const quoteStatus = quote.status || "";
 
-    const viewableStatuses = ["sent", "sent_to_customer", "draft", "quote_ready", "internally_approved"];
+    const viewableStatuses = ["sent", "sent_to_customer"];
     const acceptedStatuses = ["accepted", "customer_approved"];
     const rejectedStatuses = ["declined", "customer_rejected", "cancelled", "expired"];
 
@@ -60,6 +65,11 @@ Deno.serve(async (req) => {
       pageState = "rejected";
     } else if (quote.valid_until && new Date(quote.valid_until) < new Date()) {
       pageState = "expired";
+    } else if (!viewableStatuses.includes(quoteStatus) && !viewableStatuses.includes(sqStatus)) {
+      return new Response(JSON.stringify({ error: "This quotation is not publicly viewable" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Return minimal data
@@ -95,6 +105,21 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const tokenErrors = [
+      "Missing public quote token",
+      "Invalid token format",
+      "Invalid token signature",
+      "Invalid token payload",
+      "Token quote mismatch",
+      "Insufficient token scope",
+      "Token expired",
+    ];
+    if (tokenErrors.includes(message)) {
+      return new Response(JSON.stringify({ error: "Unauthorized quote link" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     return new Response(JSON.stringify({ error: message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

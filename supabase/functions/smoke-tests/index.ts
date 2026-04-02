@@ -1,4 +1,5 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
 
 /**
  * Smoke test / health check endpoint.
@@ -146,7 +147,7 @@ Deno.serve((req) =>
 
     return new Response(
       JSON.stringify({ healthy: allPassed, checks: results, ts: new Date().toISOString() }),
-      { status: allPassed ? 200 : 503, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
+      { status: allPassed ? 200 : 503, headers: { "Content-Type": "application/json", ...corsHeaders } },
     );
-  }, { functionName: "smoke-tests", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "smoke-tests", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );

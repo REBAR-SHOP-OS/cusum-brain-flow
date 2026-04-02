@@ -12,6 +12,18 @@ Deno.serve((req) =>
     if (!formattedUrl.startsWith("http://") && !formattedUrl.startsWith("https://")) {
       formattedUrl = `https://${formattedUrl}`;
     }
+    const parsed = new URL(formattedUrl);
+    const allowedDomains = (Deno.env.get("FIRECRAWL_ALLOWED_DOMAINS") || "")
+      .split(",")
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
+    if (allowedDomains.length > 0) {
+      const host = parsed.hostname.toLowerCase();
+      const isAllowed = allowedDomains.some((d) => host === d || host.endsWith(`.${d}`));
+      if (!isAllowed) {
+        throw new Error("URL domain is not allowed");
+      }
+    }
 
     const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",

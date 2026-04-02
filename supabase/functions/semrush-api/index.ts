@@ -2,7 +2,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
 
-const SEMRUSH_API_KEY = "958fa1b9cc655056d7057ddb9b22ae8f";
 const SEMRUSH_BASE = "https://api.semrush.com";
 
 function parseSemrushCsv(text: string): Record<string, string>[] {
@@ -20,6 +19,10 @@ function parseSemrushCsv(text: string): Record<string, string>[] {
 }
 
 async function semrushFetch(endpoint: string, params: Record<string, string>): Promise<Record<string, string>[]> {
+  const SEMRUSH_API_KEY = Deno.env.get("SEMRUSH_API_KEY");
+  if (!SEMRUSH_API_KEY) {
+    throw new Error("SEMRUSH_API_KEY is not configured");
+  }
   const url = new URL(endpoint, SEMRUSH_BASE);
   url.searchParams.set("key", SEMRUSH_API_KEY);
   for (const [k, v] of Object.entries(params)) {

@@ -1,6 +1,7 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { buildBrandedEmail, fetchActorSignature } from "../_shared/brandedEmail.ts";
+import { createPublicQuoteToken, verifyPublicQuoteToken } from "../_shared/publicQuoteToken.ts";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -9,9 +10,20 @@ const sendSchema = z.object({
   quote_id: z.string().uuid(),
   customer_email: z.string().email().optional().or(z.literal("")),
   action: z.enum(["send_quote", "convert_to_invoice", "accept_and_convert", "send_quote_copy"]),
+  public_token: z.string().optional(),
 });
 
 const APP_URL = "https://cusum-brain-flow.lovable.app";
+const PUBLIC_QUOTE_TOKEN_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
+
+async function createQuotePublicToken(quoteId: string, scopes: Array<"view" | "accept" | "copy">): Promise<string> {
+  return await createPublicQuoteToken({
+    quoteId,
+    scopes,
+    exp: Math.floor(Date.now() / 1000) + PUBLIC_QUOTE_TOKEN_TTL_SECONDS,
+    nonce: crypto.randomUUID(),
+  });
+}
 
 /**
  * Send an email directly via Gmail API using any available sender from user_gmail_tokens.
@@ -190,6 +202,7 @@ Deno.serve((req) =>
 
     if (action === "send_quote") {
       // ── Send Quotation Email ──
+      const publicToken = await createQuotePublicToken(quote_id, ["view", "accept", "copy"]);
       const bodyHtml = `
         <p style="font-size:16px;color:#333;">Dear ${customerName},</p>
         <p style="font-size:14px;color:#555;line-height:1.6;">Please find your quotation below. We look forward to working with you.</p>
@@ -203,7 +216,7 @@ Deno.serve((req) =>
         ${lineItemsTable}
         ${notes ? `<div style="margin-top:20px;padding:16px;background:#fafafa;border-radius:6px;border:1px solid #e5e7eb;"><p style="font-size:12px;color:#888;margin:0 0 8px;font-weight:600;">Notes / Terms:</p><pre style="font-size:12px;color:#555;margin:0;white-space:pre-wrap;font-family:inherit;">${notes}</pre></div>` : ""}
         <div style="text-align:center;margin:32px 0;">
-          <a href="${APP_URL}/accept-quote/${quote_id}" style="display:inline-block;background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:0.5px;box-shadow:0 4px 14px rgba(34,197,94,0.4);">✅ Review & Accept Quote</a>
+          <a href="${APP_URL}/accept-quote/${quote_id}?token=${encodeURIComponent(publicToken)}" style="display:inline-block;background:linear-gradient(135deg,#22c55e 0%,#16a34a 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:0.5px;box-shadow:0 4px 14px rgba(34,197,94,0.4);">✅ Review & Accept Quote</a>
           <p style="color:#888;font-size:12px;margin-top:10px;">Click to review terms and confirm your order</p>
         </div>
         <p style="font-size:14px;color:#555;margin-top:24px;">If you have any questions, please don't hesitate to reach out.</p>
@@ -535,6 +548,13 @@ Deno.serve((req) =>
 
     if (action === "accept_and_convert") {
       // ── Public acceptance: convert to invoice (no auth required) ──
+      const publicToken = (rawBody as Record<string, unknown>)?.public_token;
+      await verifyPublicQuoteToken(
+        typeof publicToken === "string" ? publicToken : undefined,
+        quote_id,
+        "accept",
+      );
+
       // Try to find linked sales_quotation by quotation_number
       const { data: sqCheck } = await svc
         .from("sales_quotations")
@@ -543,11 +563,15 @@ Deno.serve((req) =>
         .maybeSingle();
 
       const sqStatus = sqCheck?.status || "";
-      const validStatuses = ["sent", "sent_to_customer", "accepted"];
+      const validStatuses = ["sent", "sent_to_customer"];
       const quoteAccepted = quote.status === "accepted" || sqStatus === "customer_approved";
 
       if (!quoteAccepted && !validStatuses.includes(sqStatus) && !validStatuses.includes(quote.status || "")) {
         throw new Error("This quotation can no longer be accepted. It may have already been processed, expired, or cancelled.");
+      }
+
+      if (quote.valid_until && new Date(quote.valid_until) < new Date()) {
+        throw new Error("This quotation has expired and can no longer be accepted.");
       }
 
       // Resolve customer email
@@ -935,6 +959,16 @@ Deno.serve((req) =>
 
     if (action === "send_quote_copy") {
       // ── Send read-only quote copy to customer (no accept button, no status change) ──
+      const hasUserContext = !!userId;
+      if (!hasUserContext) {
+        const publicToken = (rawBody as Record<string, unknown>)?.public_token;
+        await verifyPublicQuoteToken(
+          typeof publicToken === "string" ? publicToken : undefined,
+          quote_id,
+          "copy",
+        );
+      }
+
       const targetEmail = customer_email;
       if (!targetEmail) {
         throw new Error("Email address is required to send a quote copy");

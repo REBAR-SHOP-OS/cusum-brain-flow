@@ -94,19 +94,17 @@ describe("useOrders — cache invalidation", () => {
   });
 
   it("updateOrderStatus invalidates orders cache", () => {
-    const statusSection = ORDERS_SOURCE.substring(
-      ORDERS_SOURCE.indexOf("updateOrderStatus"),
-      ORDERS_SOURCE.indexOf("updateOrderStatus") + 300
-    );
+    const start = ORDERS_SOURCE.indexOf("const updateOrderStatus");
+    const end = ORDERS_SOURCE.indexOf("const updateOrderFields");
+    const statusSection = ORDERS_SOURCE.slice(start, end > start ? end : start + 1200);
     expect(statusSection).toContain("invalidateQueries");
     expect(statusSection).toContain('"orders"');
   });
 
   it("convertQuote invalidates orders cache", () => {
-    const convertSection = ORDERS_SOURCE.substring(
-      ORDERS_SOURCE.indexOf("convertQuote"),
-      ORDERS_SOURCE.indexOf("convertQuote") + 500
-    );
+    const start = ORDERS_SOURCE.indexOf("const convertQuote");
+    const end = ORDERS_SOURCE.indexOf("const sendToQuickBooks");
+    const convertSection = ORDERS_SOURCE.slice(start, end > start ? end : start + 1200);
     expect(convertSection).toContain("invalidateQueries");
   });
 });

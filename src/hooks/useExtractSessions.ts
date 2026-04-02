@@ -104,7 +104,7 @@ export function useExtractRows(sessionId: string | null) {
     if (!sessionId) return;
     const debounceRef: { current: ReturnType<typeof setTimeout> | null } = { current: null };
     const channel = supabase
-      .channel("extract-rows-changes-" + sessionId)
+      .channel("extract-rows-changes-" + sessionId + "-random-" + Math.random().toString(36).slice(2, 8))
       .on(
         "postgres_changes",
         {

@@ -27,6 +27,12 @@ vi.mock("@/integrations/supabase/client", () => ({
     functions: {
       invoke: mockInvoke,
     },
+    auth: {
+      getSession: vi.fn(async () => ({
+        data: { session: { access_token: "test-token" } },
+        error: null,
+      })),
+    },
     storage: {
       from: vi.fn(() => ({
         upload: vi.fn().mockResolvedValue({ error: null }),

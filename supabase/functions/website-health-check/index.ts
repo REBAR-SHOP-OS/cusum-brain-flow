@@ -18,7 +18,6 @@ Deno.serve((req) =>
   handleRequest(req, async () => {
 
     const wp = new WPClient();
-    const wp = new WPClient();
     const issues: HealthIssue[] = [];
     const now = new Date();
 

@@ -25,7 +25,7 @@ Deno.serve((req) =>
 async function resolveGeo(ip: string): Promise<{ city: string; country: string } | null> {
   if (!ip || ip === "unknown" || ip === "127.0.0.1") return null;
   try {
-    const res = await fetch(`http://ip-api.com/json/${ip}?fields=city,country,countryCode`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`https://ip-api.com/json/${ip}?fields=city,country,countryCode`, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) return null;
     const data = await res.json();
     return data.city ? { city: data.city, country: data.countryCode || data.country } : null;

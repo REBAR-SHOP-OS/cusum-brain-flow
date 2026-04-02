@@ -1,6 +1,8 @@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
+const isDev = import.meta.env.DEV;
+
 /**
  * Programmatically download a file by fetching it as a blob.
  * Falls back to edge-function proxy if direct fetch fails (CORS).
@@ -19,25 +21,25 @@ export async function downloadFile(
   // Supabase storage URLs: use anchor tag to bypass CORS fetch issues
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
   if (supabaseUrl && url.includes(supabaseUrl)) {
-    console.log("[download] Supabase storage URL detected, using anchor download");
+    if (isDev) console.log("[download] Supabase storage URL detected, using anchor download");
     triggerAnchorDownload(url, filename);
     return;
   }
 
   // 1) Try direct fetch
   try {
-    console.log("[download] Attempting direct fetch:", url.slice(0, 80));
+    if (isDev) console.log("[download] Attempting direct fetch:", url.slice(0, 80));
     await directDownload(url, filename);
-    console.log("[download] Direct fetch succeeded");
+    if (isDev) console.log("[download] Direct fetch succeeded");
     return;
   } catch (e) {
-    console.warn("[download] Direct fetch failed, trying proxy:", (e as Error).message);
+    if (isDev) console.warn("[download] Direct fetch failed, trying proxy:", (e as Error).message);
   }
 
   // 2) Try proxy via generate-video edge function
   if (proxyOptions?.provider) {
     try {
-      console.log("[download] Attempting proxy download via", proxyOptions.provider);
+      if (isDev) console.log("[download] Attempting proxy download via", proxyOptions.provider);
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Not authenticated");
 
@@ -66,15 +68,15 @@ export async function downloadFile(
       if (blob.size === 0) throw new Error("Proxy returned empty blob");
 
       triggerBlobDownload(blob, filename);
-      console.log("[download] Proxy download succeeded, size:", blob.size);
+      if (isDev) console.log("[download] Proxy download succeeded, size:", blob.size);
       return;
     } catch (e) {
-      console.warn("[download] Proxy download failed:", (e as Error).message);
+      if (isDev) console.warn("[download] Proxy download failed:", (e as Error).message);
     }
   }
 
   // 3) Final fallback: open in new tab
-  console.log("[download] Falling back to new tab");
+  if (isDev) console.log("[download] Falling back to new tab");
   window.open(url, "_blank");
   toast.info("فایل در تب جدید باز شد — برای ذخیره، کلیک راست کرده و Save As را بزنید");
 }

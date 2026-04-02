@@ -30,6 +30,7 @@ export function useBarlists(projectId?: string) {
 
 export function useBarlistItems(barlistId: string | null) {
   const { user } = useAuth();
+  const userId = user?.id || "anon";
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
@@ -41,12 +42,12 @@ export function useBarlistItems(barlistId: string | null) {
   useEffect(() => {
     if (!user || !barlistId) return;
     const channel = supabase
-      .channel(`barlist-items-${barlistId}`)
+      .channel(`barlist-items-${barlistId}-userId-${userId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "barlist_items" },
         () => queryClient.invalidateQueries({ queryKey: ["barlist-items", barlistId] }))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, barlistId, queryClient]);
+  }, [user, barlistId, userId, queryClient]);
 
   return { items: data ?? [], isLoading, error };
 }

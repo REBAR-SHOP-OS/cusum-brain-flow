@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
@@ -9,6 +9,10 @@ export default function IntegrationCallback() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
   const [message, setMessage] = useState("");
+  const trustedOrigin = useMemo(() => {
+    const envOrigin = import.meta.env.VITE_APP_ORIGIN as string | undefined;
+    return envOrigin && envOrigin.trim() ? envOrigin : window.location.origin;
+  }, []);
 
   useEffect(() => {
     const code = searchParams.get("code");
@@ -23,7 +27,7 @@ export default function IntegrationCallback() {
       const email = searchParams.get("email");
       setMessage(email ? `Connected as ${email}!` : `${integration} connected successfully!`);
       if (window.opener) {
-        try { window.opener.postMessage({ type: "oauth-success" }, "*"); } catch {}
+        try { window.opener.postMessage({ type: "oauth-success" }, trustedOrigin); } catch {}
         setTimeout(() => window.close(), 1500);
       } else {
         setTimeout(() => navigate(integration === "gmail" ? "/home" : "/integrations"), 2000);
@@ -67,15 +71,15 @@ export default function IntegrationCallback() {
         return;
       }
 
-      await exchangeCode(code, state);
+      await exchangeCode(code, state, trustedOrigin);
     };
 
     waitForAuthAndExchange();
-  }, [searchParams, navigate]);
+  }, [searchParams, navigate, trustedOrigin]);
 
-  const exchangeCode = async (code: string, integration: string) => {
+  const exchangeCode = async (code: string, integration: string, origin: string) => {
     try {
-      const redirectUri = "https://erp.rebar.shop/integrations/callback";
+      const redirectUri = `${origin}/integrations/callback`;
 
       // Route to the correct edge function based on integration
       const metaIntegrations = ["facebook", "instagram"];
@@ -108,7 +112,7 @@ export default function IntegrationCallback() {
 
       // If opened as popup, notify opener and close; otherwise redirect
       if (window.opener) {
-        try { window.opener.postMessage({ type: "oauth-success" }, "*"); } catch {}
+        try { window.opener.postMessage({ type: "oauth-success" }, origin); } catch {}
         setTimeout(() => window.close(), 1500);
       } else {
         setTimeout(() => navigate("/integrations"), 2000);

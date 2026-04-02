@@ -19,15 +19,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+    // Bootstrap current session to avoid hanging in loading state.
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!isMounted) return;
+      if (error) {
+        setSession(null);
+        setUser(null);
+      } else {
+        setSession(data.session ?? null);
+        setUser(data.session?.user ?? null);
+      }
+      setLoading(false);
+    }).catch(() => {
+      if (!isMounted) return;
+      setSession(null);
+      setUser(null);
+      setLoading(false);
+    });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (!isMounted) return;
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {

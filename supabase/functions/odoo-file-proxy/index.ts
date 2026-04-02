@@ -76,6 +76,7 @@ Deno.serve((req) =>
     const url = new URL(req.url);
     const odooId = url.searchParams.get("id");
     const odooUrl = url.searchParams.get("url");
+    const hasUrlModeEnabled = Deno.env.get("ODOO_PROXY_ALLOW_URL_MODE") === "true";
 
     if (!odooId && !odooUrl) {
       return new Response(JSON.stringify({ error: "Missing id or url parameter" }), {
@@ -86,10 +87,20 @@ Deno.serve((req) =>
 
     const odoo = await getOdooFileUrl();
 
-    // URL-based proxy
+    // URL-based proxy (disabled by default; id-based attachment mode is safer)
     if (odooUrl) {
+      if (!hasUrlModeEnabled) {
+        return new Response(JSON.stringify({ error: "URL proxy mode is disabled" }), {
+          status: 403, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
       const parsedUrl = new URL(odooUrl);
       const odooOrigin = new URL(odoo.url).origin;
+      if (!parsedUrl.pathname.startsWith("/web/content/")) {
+        return new Response(JSON.stringify({ error: "Only /web/content/* URLs are allowed" }), {
+          status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
+      }
       if (parsedUrl.origin !== odooOrigin) {
         return new Response(JSON.stringify({ error: "URL must point to configured Odoo instance" }), {
           status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },

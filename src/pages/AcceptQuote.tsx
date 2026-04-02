@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,8 @@ interface QuoteData {
 
 export default function AcceptQuote() {
   const { quoteId } = useParams<{ quoteId: string }>();
+  const [searchParams] = useSearchParams();
+  const publicToken = searchParams.get("token") || "";
   const [quote, setQuote] = useState<QuoteData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,11 @@ export default function AcceptQuote() {
   const [emailSent, setEmailSent] = useState(false);
 
   useEffect(() => {
-    if (!quoteId) return;
+    if (!quoteId || !publicToken) {
+      setError("Invalid or missing secure quote link token.");
+      setLoading(false);
+      return;
+    }
     (async () => {
       try {
         const res = await fetch(
@@ -52,7 +58,7 @@ export default function AcceptQuote() {
               "Content-Type": "application/json",
               apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             },
-            body: JSON.stringify({ quote_id: quoteId }),
+            body: JSON.stringify({ quote_id: quoteId, public_token: publicToken }),
           }
         );
         if (!res.ok) {
@@ -67,10 +73,10 @@ export default function AcceptQuote() {
         setLoading(false);
       }
     })();
-  }, [quoteId]);
+  }, [quoteId, publicToken]);
 
   const handleAccept = async () => {
-    if (!quoteId || !quote) return;
+    if (!quoteId || !quote || !publicToken) return;
     setSubmitting(true);
     try {
       const res = await fetch(
@@ -85,6 +91,7 @@ export default function AcceptQuote() {
             quote_id: quoteId,
             customer_email: "",
             action: "accept_and_convert",
+            public_token: publicToken,
           }),
         }
       );
@@ -253,7 +260,7 @@ export default function AcceptQuote() {
   };
 
   const handleSendEmail = async () => {
-    if (!quoteId || !emailInput.trim()) return;
+    if (!quoteId || !emailInput.trim() || !publicToken) return;
     setSendingEmail(true);
     try {
       const res = await fetch(
@@ -268,6 +275,7 @@ export default function AcceptQuote() {
             quote_id: quoteId,
             customer_email: emailInput.trim(),
             action: "send_quote_copy",
+            public_token: publicToken,
           }),
         }
       );

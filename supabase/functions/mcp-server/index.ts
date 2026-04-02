@@ -1143,14 +1143,11 @@ app.use("*", async (c, next) => {
     );
   }
 
-  // Check API key from: header, bearer token, or query parameter
+  // Check API key from secure headers only
   const apiKeyHeader = c.req.header("x-api-key");
   const authHeader = c.req.header("Authorization");
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  const url = new URL(c.req.url);
-  const queryKey = url.searchParams.get("api_key");
-
-  const providedKey = apiKeyHeader || bearerToken || queryKey;
+  const providedKey = apiKeyHeader || bearerToken;
 
   if (providedKey === mcpApiKey) {
     await next();
