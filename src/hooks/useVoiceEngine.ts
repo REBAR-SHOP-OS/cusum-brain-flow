@@ -285,7 +285,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         body: {
           instructions: resolvedInstructions,
           voice: cfg.voice ?? "alloy",
-          model: cfg.model ?? "gpt-4o-mini-realtime-preview",
+          model: cfg.model ?? "gpt-4o-realtime-preview-2024-12-17",
           vadThreshold: cfg.vadThreshold ?? 0.4,
           silenceDurationMs: cfg.silenceDurationMs ?? 300,
           prefixPaddingMs: cfg.prefixPaddingMs ?? 200,
