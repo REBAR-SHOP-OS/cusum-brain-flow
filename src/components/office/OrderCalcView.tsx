@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { toast } from "sonner";
 import { Upload, Download, Package, Calculator } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -167,13 +168,23 @@ export function OrderCalcView() {
   }, [items, stockLength, wastePct, wpm, sourceUnit]);
 
   const handleFile = useCallback(async (file: File) => {
-    const buf = await file.arrayBuffer();
-    const wb = read(buf, { type: "array" });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows: any[][] = utils.sheet_to_json(ws, { header: 1 });
-    const parsed = parseRows(rows);
-    setItems(parsed);
-    setFileName(file.name);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = read(buf, { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[][] = utils.sheet_to_json(ws, { header: 1 });
+      const parsed = parseRows(rows);
+      if (parsed.length === 0) {
+        toast.warning("No rebar items found in the uploaded file. Please check the file format.");
+        return;
+      }
+      setItems(parsed);
+      setFileName(file.name);
+      toast.success(`Parsed ${parsed.length} rebar item(s) from ${file.name}`);
+    } catch (err: any) {
+      console.error("Order Calc file parse error:", err);
+      toast.error(`Failed to parse file: ${err?.message || "Unknown error"}`);
+    }
   }, []);
 
   const onDrop = useCallback((e: React.DragEvent) => {
