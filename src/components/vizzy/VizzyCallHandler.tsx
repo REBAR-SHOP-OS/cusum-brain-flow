@@ -199,7 +199,7 @@ export function VizzyCallHandler() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const sdpResp = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview", {
+      const sdpResp = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${tokenData.client_secret}`,
