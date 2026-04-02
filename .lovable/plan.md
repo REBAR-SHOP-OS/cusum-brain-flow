@@ -1,29 +1,31 @@
 
 
-# Fix: Grant neel@rebar.shop Access to Office Portal
+# Fix: Order Calculator Upload Silent Failure for neel@rebar.shop
 
-## Problem
-`neel@rebar.shop` (user ID: `a94932c5-e873-46fd-9658-dc270f6f5ff3`) has **zero roles** in the `user_roles` table. The Office portal gate requires `isAdmin` or `isOffice` (which checks for `office`, `sales`, or `accounting` roles). Without any role, the user sees "Access Restricted" and never reaches the Order Calculator upload.
+## Analysis
 
-## Fix
-Run a database migration to insert the `sales` role for this user. Based on `src/lib/vizzyContext.ts`, Neel Mahajan is the Sales Manager, so `sales` is the correct role.
+The Order Calculator (`OrderCalcView.tsx`) is 100% client-side — parsing uses `@e965/xlsx` with `FileReader`, no user/role-specific logic. The `rebar_sizes` table has open SELECT for all authenticated users. Since the same file works for `sattar@rebar.shop` but not `neel@rebar.shop`, the most likely cause is a **silent error** in the `handleFile` function (line 169-177), which has **no try/catch**. If `read()` or `parseRows()` throws for any reason (e.g., a subtle browser/session issue), nothing happens — no error, no feedback.
 
-### Migration SQL
-```sql
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('a94932c5-e873-46fd-9658-dc270f6f5ff3', 'sales')
-ON CONFLICT (user_id, role) DO NOTHING;
-```
+## Changes
 
-### Result
-- `useUserRole()` → `isOffice` returns `true` (since `sales` is included)
-- Office portal renders normally
-- Order Calculator upload works (it's client-side FileReader, no server permissions needed)
+### `src/components/office/OrderCalcView.tsx`
+
+1. **Add try/catch with toast feedback** to `handleFile`:
+   - Wrap the xlsx `read()`, `sheet_to_json()`, and `parseRows()` calls in try/catch
+   - Show a toast error with the failure reason so the user (and us) can see what went wrong
+   - Show a toast warning if parsing succeeds but produces 0 items ("No rebar items found")
+
+2. **Add error state** to display inline feedback in the upload zone when parsing fails
+
+3. **Import toast** from sonner
+
+### Expected outcome
+- If the file parses correctly → works as before (image #2)
+- If parsing fails → user sees a clear error message instead of silent nothing
+- This will either fix the issue (if it's a transient error) or surface the real cause
 
 ### Files changed
 | File | Change |
 |------|--------|
-| Database migration | Insert `sales` role for neel@rebar.shop |
-
-No code changes needed — the issue is purely a missing database role assignment.
+| `src/components/office/OrderCalcView.tsx` | Add try/catch + toast to `handleFile`, add error state display |
 
