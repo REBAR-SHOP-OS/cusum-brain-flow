@@ -69,6 +69,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   // Also auto-clears if the active job is already completed (cut_done)
   useEffect(() => {
     if (restoredFromBackend) return;
+    if (userSelectedItem) { setRestoredFromBackend(true); return; }
     if (items.length === 0) return;
     if (
       machine.cut_session_status === "running" &&
