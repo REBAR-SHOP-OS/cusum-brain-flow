@@ -6,6 +6,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { ChatThread } from "@/components/chat/ChatThread";
+import { InlineDatePicker } from "@/components/chat/InlineDatePicker";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Message } from "@/components/chat/ChatMessage";
 import { sendAgentMessage, AgentType, ChatMessage as AgentChatMessage, PixelPost, AttachedFile } from "@/lib/agent";
@@ -99,6 +100,7 @@ export default function AgentWorkspace() {
   const [activePurchasingDateStr, setActivePurchasingDateStr] = useState<string | null>(null);
   const [purchasingKey, setPurchasingKey] = useState(0);
   const [sessionFinalized, setSessionFinalized] = useState(false);
+  const [showInlineCalendar, setShowInlineCalendar] = useState(false);
 
   const { dates: purchasingDates, getConfirmedSnapshot, deleteConfirmedList } = usePurchasingDates();
 
@@ -240,6 +242,7 @@ export default function AgentWorkspace() {
     };
     setMessages([welcomeMsg]);
     setSessionFinalized(false);
+    setShowInlineCalendar(true);
 
     const sessionId = await createSession("Eisenhower — " + format(new Date(), "yyyy-MM-dd"), config.name);
     if (sessionId) {
@@ -632,6 +635,7 @@ export default function AgentWorkspace() {
   const handleDateChange = useCallback((date: Date | undefined) => {
     if (date) {
       setSelectedDate(date);
+      setShowInlineCalendar(false);
       if (agentId === "social" && activeSessionId) {
         updateSessionTitle(activeSessionId, format(date, "yyyy-MM-dd"));
       }
@@ -641,7 +645,7 @@ export default function AgentWorkspace() {
         const dateMsg: Message = {
           id: crypto.randomUUID(),
           role: "agent",
-          content: `📅 تاریخ **${dateStr}** انتخاب شد.\n\nحالا لطفاً لیست **کارهایی که انجام داده‌اید** و **کارهایی که قصد دارید انجام دهید** را بنویسید.`,
+          content: `📅 Date **${dateStr}** selected.\n\nNow please list the **tasks you've completed** and **tasks you plan to do**.`,
           agent: "eisenhower" as any,
           timestamp: new Date(),
         };
@@ -1004,6 +1008,9 @@ export default function AgentWorkspace() {
               agentName={config.name}
               isPixelAgent={agentId === "social"}
             />
+            {showInlineCalendar && agentId === "eisenhower" && (
+              <InlineDatePicker onDateSelect={(date) => handleDateChange(date)} />
+            )}
             {sessionFinalized ? (
               <div className="w-full text-center py-4 px-6">
                 <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-4 py-2.5">
