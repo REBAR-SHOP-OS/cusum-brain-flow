@@ -214,13 +214,10 @@ ${agentAuditContext}`,
     // Remove the benchmark JSON line from the digest (it's internal)
     const cleanDigest = fullDigest.replace(/BENCHMARK_JSON:\{[^}]+\}/, "").trim();
 
-    return new Response(
-      JSON.stringify({
-        digest: cleanDigest,
-        rawContext,
-        generated_at: new Date().toISOString(),
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return {
+      digest: cleanDigest,
+      rawContext,
+      generated_at: new Date().toISOString(),
+    };
   }, { functionName: "vizzy-pre-digest", requireCompany: false, wrapResult: false })
 );
