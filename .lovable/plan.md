@@ -1,76 +1,74 @@
 
 
-# Live-Ops Audit: RingCentral Stale Sync + Vizzy No Response
+# Vizzy Audit — Current State Assessment
 
-## Current State After Previous Fixes
-
-Both Vizzy fixes from the approved plan are **already applied**:
-- `vizzy-pre-digest`: All `user.id` → `userId` — confirmed clean
-- `useVoiceEngine.ts`: Audio element appended to DOM with `playsinline` + explicit `play()` — confirmed applied
-
-Two issues remain open.
+## Overall Status: MOSTLY HEALTHY, 4 issues found
 
 ---
 
-## Issue A: RingCentral — Sync Stale, Badge Misleading
+## Issue 1: VizzyCallHandler is dead code (LOW)
 
-### Root Cause (two bugs)
+**Current state**: `VizzyCallHandler` is mounted in `AppLayout` for internal users. It initializes `useWebPhone`, sets up OpenAI Realtime to auto-answer calls on ext 101.
 
-**Bug 1: Hardcoded "connected" in HTTP response (line 120)**
-`ringcentral-oauth/index.ts` computes `resolvedStatus` correctly and writes it to the DB, but the HTTP response on line 120 always returns `{ status: "connected" }`. The frontend card reads this response, not the DB, so the card always shows "Connected" regardless of actual state.
+**What is broken**: The monitoring `useEffect` (lines 184-199) polls `phoneActions.getCallSession()` every second but **never actually calls `startRealtimeConversation`**. The callback exists but is never invoked — the `if` block at line 191 is empty. The component also uses a stale model string `gpt-4o-mini-realtime-preview` (line 140), inconsistent with the fix applied to the main voice engine.
 
-**Bug 2: Staleness only triggers if status is already "error" (line 107)**
-`const resolvedStatus = (hasError && syncIsStale) ? "error" : "connected"` — this requires BOTH `hasError` (existing DB status is "error") AND `syncIsStale`. If the stored status is "connected" but sync stopped 8 days ago, it stays "connected" forever. Staleness alone should be sufficient to flag an error.
+**Why**: The auto-answer integration was left incomplete. The poll loop detects an active call state but does nothing with it.
 
-**Bug 3: No cron job exists for `ringcentral-sync`**
-No `pg_cron` schedule found in any migration. The sync function exists and supports cron mode, but nothing triggers it. Data goes stale because sync only runs on manual UI triggers.
-
-### Fix Plan
-
-1. **`ringcentral-oauth/index.ts` line 107**: Change condition to `syncIsStale || hasError` (staleness alone is sufficient)
-2. **`ringcentral-oauth/index.ts` line 120**: Return `resolvedStatus` and `resolvedError` instead of hardcoded "connected"
-3. **Create cron schedule**: Add `pg_cron` job to call `ringcentral-sync` every 15 minutes via `net.http_post`
-
-### Files
-- `supabase/functions/ringcentral-oauth/index.ts` (2 line changes)
-- New cron schedule SQL (via insert tool, not migration)
+**Fix**:
+- Wire `startRealtimeConversation` into the poll loop when an inbound call is detected
+- Update model string to `gpt-4o-realtime-preview-2024-12-17`
+- OR: remove the component entirely if auto-answer is not a current priority (it's consuming resources on every page load for internal users)
 
 ---
 
-## Issue B: Vizzy Live — No Assistant Response
+## Issue 2: vizzy-pre-digest returns raw Response instead of object (MEDIUM)
 
-### Already Fixed
-- Audio element DOM attachment — applied
-- `vizzy-pre-digest` crash — applied
+**Current state**: `vizzy-pre-digest` uses `handleRequest` with `wrapResult: false`, but at line 217 it returns `new Response(JSON.stringify({...}))` instead of a plain object.
 
-### Remaining Risk: Model String
+**What is broken**: When `wrapResult: false`, `handleRequest` expects the callback to return either a plain object (which it JSON-serializes) or a `Response`. Returning a `Response` works, but the double-serialization risk exists if `handleRequest` tries to wrap it. Currently functional but fragile — if `handleRequest` changes behavior, this breaks silently.
 
-`useVizzyVoiceEngine.ts` line 434 uses `gpt-4o-mini-realtime-preview`. This model may be deprecated or rate-limited by OpenAI. If the WebRTC session connects but the model refuses to generate responses, the data channel simply never emits `response.audio_transcript.done` events — resulting in exactly the observed behavior (session live, speech captured, no response).
-
-### Fix Plan
-
-1. **Add diagnostic logging** in `useVoiceEngine.ts` data channel handler: log ALL incoming message types (not just handled ones) so we can confirm whether OpenAI is sending any response events at all
-2. **Update model** from `gpt-4o-mini-realtime-preview` to `gpt-4o-realtime-preview-2024-12-17` in `useVizzyVoiceEngine.ts` (line 434) and `voice-engine-token/index.ts` (line 13 default) — this is the current stable realtime model
-
-### Files
-- `src/hooks/useVizzyVoiceEngine.ts` (model string)
-- `supabase/functions/voice-engine-token/index.ts` (default model)
-- `src/hooks/useVoiceEngine.ts` (diagnostic logging in data channel handler)
+**Fix**: Return `{ digest: cleanDigest, rawContext, generated_at: ... }` as a plain object instead of manually constructing a `Response`. The `handleRequest` wrapper handles CORS and serialization.
 
 ---
 
-## Summary
+## Issue 3: Massive instruction payload (WARNING, not broken)
 
-| Issue | Layer | Root Cause | Fix |
-|-------|-------|-----------|-----|
-| RC badge always "connected" | Edge function response | Hardcoded status in HTTP response | Return `resolvedStatus` |
-| RC never flags stale | Edge function logic | Requires both error AND stale | Change to OR condition |
-| RC sync not running | Infrastructure | No cron job | Add pg_cron schedule |
-| Vizzy no response | Transport/Model | Possibly deprecated model + no diagnostics | Update model + add logging |
+**Current state**: `VIZZY_INSTRUCTIONS` in `useVizzyVoiceEngine.ts` is ~395 lines / ~15K+ characters of static prompt text. After `buildInstructions` appends the digest + raw context, the total instruction payload sent to OpenAI Realtime could exceed 20K+ tokens.
 
-## Priority
-1. RingCentral status fix (immediate, clear bugs)
-2. RingCentral cron schedule (root cause of staleness)
-3. Vizzy model update (likely root cause of silence)
-4. Vizzy diagnostic logging (confirms fix or reveals next layer)
+**Risk**: OpenAI Realtime has instruction size limits. Exceeding them causes silent truncation — the model loses context from the end of instructions (which includes the data mapping, anti-hallucination rules, and name directory). The `vizzy-briefing` compressor targets 2000 words but the static instructions alone are already large.
+
+**Fix (Phase 2)**: Consider splitting static behavioral instructions from dynamic data. The behavioral rules are constant and could be trimmed. The pre-digest already handles data compression — the instruction layer should not also carry ~300 lines of examples and banned phrases.
+
+---
+
+## Issue 4: No error recovery on pre-digest timeout (LOW)
+
+**Current state**: `useVizzyVoiceEngine.ts` has a 45s timeout for pre-digest, then a 25s fallback to `vizzy-daily-brief`. If both fail, `instructionsRef` keeps the default (no ERP data), and `originalStartSession()` runs anyway.
+
+**What is broken**: Nothing crashes, but if both calls fail, Vizzy starts with zero business context. The user sees no indication that context loading failed — `contextLoading` goes false and the session starts normally. The CEO gets a Vizzy that knows nothing about the business.
+
+**Fix**: Surface a warning toast when context loading fails entirely, e.g. "Vizzy started without business data — context loading failed."
+
+---
+
+## Summary Table
+
+| # | Issue | Severity | Status | Fix Effort |
+|---|-------|----------|--------|------------|
+| 1 | VizzyCallHandler dead code / stale model | Low | Broken (never calls AI) | Small — wire callback or remove |
+| 2 | Pre-digest returns Response vs object | Medium | Fragile but working | 1-line change |
+| 3 | Instruction payload size risk | Warning | Not broken yet | Medium — prompt refactor |
+| 4 | No warning on context load failure | Low | Silent failure | 1-line toast |
+
+## Previously Fixed (Confirmed Applied)
+- `vizzy-pre-digest` crash (`user.id` → `userId`) — **CLEAN**
+- Audio element DOM attachment + `play()` — **CLEAN**
+- Model updated to `gpt-4o-realtime-preview-2024-12-17` in `useVoiceEngine.ts` and `voice-engine-token` — **CLEAN**
+- Diagnostic logging `[VoiceEngine] DC event:` — **CLEAN**
+
+## Recommended Priority
+1. Fix Issue 2 (pre-digest Response → object) — safest quick win
+2. Fix Issue 4 (context failure toast) — user visibility
+3. Fix Issue 1 (VizzyCallHandler) — decide: wire or remove
+4. Issue 3 deferred to a prompt optimization pass
 
