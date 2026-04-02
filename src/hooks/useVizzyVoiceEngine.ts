@@ -480,6 +480,7 @@ export function useVizzyVoiceEngine() {
           }
         } catch (err2) {
           console.warn("Daily-brief fallback also failed:", err2);
+          toast.warning("Vizzy started without business data — context loading failed.");
         }
       } finally {
         setContextLoading(false);
