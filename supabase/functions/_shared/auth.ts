@@ -15,7 +15,7 @@ export const corsHeaders = {
 };
 
 /** Concrete client type matching createClient(url, key) calls in edge functions. */
-export type AppSupabaseClient = SupabaseClient<Record<string, unknown>, "public", Record<string, unknown>>;
+export type AppSupabaseClient = ReturnType<typeof createClient>;
 
 export interface AuthResult {
   userId: string;
