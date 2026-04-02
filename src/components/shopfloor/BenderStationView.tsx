@@ -26,10 +26,11 @@ interface BenderStationViewProps {
   items: StationItem[];
   canWrite: boolean;
   initialIndex?: number;
+  userSelectedItem?: boolean;
   onBack?: () => void;
 }
 
-export function BenderStationView({ machine, items, canWrite, initialIndex = 0, onBack }: BenderStationViewProps) {
+export function BenderStationView({ machine, items, canWrite, initialIndex = 0, userSelectedItem = false, onBack }: BenderStationViewProps) {
   // ── Project paused detection ──
   const isProjectPaused = items.some(i => i.project_status === 'paused');
   const effectiveCanWrite = canWrite && !isProjectPaused;

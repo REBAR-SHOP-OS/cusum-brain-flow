@@ -30,12 +30,13 @@ interface CutterStationViewProps {
   items: StationItem[];
   canWrite: boolean;
   initialIndex?: number;
+  userSelectedItem?: boolean;
   onBack?: () => void;
 }
 
 const REMNANT_THRESHOLD_MM = 300;
 
-export function CutterStationView({ machine, items, canWrite, initialIndex = 0, onBack }: CutterStationViewProps) {
+export function CutterStationView({ machine, items, canWrite, initialIndex = 0, userSelectedItem = false, onBack }: CutterStationViewProps) {
   // ── Project paused detection ──
   const currentItemForPause = items[0] || null;
   const isProjectPaused = items.some(i => i.project_status === 'paused');
@@ -69,6 +70,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   // Also auto-clears if the active job is already completed (cut_done)
   useEffect(() => {
     if (restoredFromBackend) return;
+    if (userSelectedItem) { setRestoredFromBackend(true); return; }
     if (items.length === 0) return;
     if (
       machine.cut_session_status === "running" &&
