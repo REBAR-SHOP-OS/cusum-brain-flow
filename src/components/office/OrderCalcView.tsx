@@ -5,84 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { read, utils } from "@e965/xlsx";
-
-// --- Parsing logic (ported from rebarCADParser.ts) ---
-
-const BAR_SIZE_MAP: Record<string, string> = {
-  "10": "10M", "10M": "10M", "#3": "10M",
-  "15": "15M", "15M": "15M", "#5": "15M",
-  "20": "20M", "20M": "20M", "#6": "20M",
-  "25": "25M", "25M": "25M", "#8": "25M",
-  "30": "30M", "30M": "30M", "#9": "30M",
-  "35": "35M", "35M": "35M", "#11": "35M",
-};
+import { read } from "@e965/xlsx";
+import { parseWorkbook, diagnosticMessage, type ParsedItem } from "@/lib/rebarCadParser";
 
 const FALLBACK_WPM: Record<string, number> = {
   "10M": 0.785, "15M": 1.570, "20M": 2.355,
   "25M": 3.925, "30M": 5.495, "35M": 7.850,
 };
-
-function normalizeBarSize(raw: string): string {
-  const cleaned = raw?.toString().trim().toUpperCase().replace(/\s/g, "");
-  return BAR_SIZE_MAP[cleaned] ?? cleaned;
-}
-
-interface ParsedItem {
-  bar_size: string;
-  quantity: number;
-  cut_length_mm: number;
-}
-
-function parseRows(rows: any[][]): ParsedItem[] {
-  if (!rows || rows.length < 2) return [];
-
-  let headerIdx = -1;
-  let colMap: Record<string, number> = {};
-
-  for (let i = 0; i < Math.min(10, rows.length); i++) {
-    const row = rows[i];
-    if (!row || !Array.isArray(row)) continue;
-    const cells = row.map((c: any) => String(c ?? "").trim().toLowerCase());
-    const si = (c: string, t: string) => typeof c === "string" && c.includes(t);
-    const se = (c: string, ...ts: string[]) => typeof c === "string" && ts.includes(c);
-    const pcsIdx = cells.findIndex(c => si(c, "pcs") || si(c, "no.") || se(c, "qty", "quantity"));
-    const sizeIdx = cells.findIndex(c => se(c, "size", "bar size"));
-    const lengthIdx = cells.findIndex(c => se(c, "length", "cut length", "total length"));
-    const itemIdx = cells.findIndex(c => se(c, "item", "item no", "item no."));
-
-    if (sizeIdx >= 0 || (itemIdx >= 0 && lengthIdx >= 0)) {
-      headerIdx = i;
-      colMap = {
-        pcs: pcsIdx >= 0 ? pcsIdx : 1,
-        size: sizeIdx >= 0 ? sizeIdx : 3,
-        length: lengthIdx >= 0 ? lengthIdx : 4,
-      };
-      break;
-    }
-  }
-
-  if (headerIdx < 0) {
-    headerIdx = 0;
-    colMap = { pcs: 1, size: 3, length: 4 };
-  }
-
-  const items: ParsedItem[] = [];
-  for (let i = headerIdx + 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row || row.length < 3) continue;
-    const rawSize = String(row[colMap.size] ?? "").trim();
-    if (!rawSize || rawSize === "0") continue;
-    const bar_size = normalizeBarSize(rawSize);
-    const quantity = parseInt(String(row[colMap.pcs] ?? "0")) || 0;
-    if (quantity <= 0) continue;
-    const rawLen = parseFloat(String(row[colMap.length] ?? "0")) || 0;
-    // Will be converted using sourceUnit factor at calculation time
-    const cut_length_mm = rawLen;
-    items.push({ bar_size, quantity, cut_length_mm });
-  }
-  return items;
-}
 
 // --- Calculation ---
 
