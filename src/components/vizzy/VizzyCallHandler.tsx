@@ -237,8 +237,10 @@ export function VizzyCallHandler() {
     const checkInterval = setInterval(() => {
       const session = phoneActions.getCallSession();
       if (session && phoneState.status === "in_call" && !activeRealtimeSession.current) {
-        // An inbound call was answered, connect Realtime
-        // This handles the case where auto-answer already happened
+        // Inbound call detected and not yet connected to AI — start Realtime
+        const from = callerInfoRef.current.from || "Unknown";
+        console.log("[VizzyCallHandler] Inbound call detected, connecting Realtime for", from);
+        startRealtimeConversation(session, from);
       }
     }, 1000);
 
