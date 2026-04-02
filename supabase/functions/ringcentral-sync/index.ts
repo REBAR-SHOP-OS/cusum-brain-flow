@@ -359,9 +359,9 @@ function resolveUserId(record: any, extMap: Map<string, string>, fallbackUserId:
  * CRON MODE: Sync ALL company calls/SMS/voicemail/fax using account-level API.
  * Uses one admin token to fetch data for all extensions, then maps each record to the correct user.
  */
-async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
-  console.log("CRON: syncAllUsers started");
-  const supabaseAdmin = createClient(
+async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?: boolean; mode?: string }) {
+  const LOG = (msg: string, data?: unknown) => console.log(`[rc-sync:cron] ${msg}`, data !== undefined ? JSON.stringify(data) : "");
+  LOG("syncAllUsers started");
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
