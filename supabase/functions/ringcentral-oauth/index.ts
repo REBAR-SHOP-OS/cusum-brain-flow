@@ -271,7 +271,7 @@ Deno.serve((req) =>
       JSON.stringify({ error: "Invalid action" }),
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "ringcentral-oauth", requireCompany: false, wrapResult: false })
+  }, { functionName: "ringcentral-oauth", requireCompany: false, wrapResult: false, authMode: "optional" })
 );
 
 // ─── Server-side OAuth callback handler ─────────────────────────
