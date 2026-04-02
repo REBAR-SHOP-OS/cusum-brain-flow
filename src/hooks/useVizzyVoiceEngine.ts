@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useVoiceEngine } from "./useVoiceEngine";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { toast } from "sonner";
 
 /**
  * Vizzy Voice Engine — wraps useVoiceEngine with executive intelligence prompt
