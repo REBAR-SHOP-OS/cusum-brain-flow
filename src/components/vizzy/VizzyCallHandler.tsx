@@ -139,7 +139,7 @@ export function VizzyCallHandler() {
           body: {
             instructions,
             voice: "alloy",
-            model: "gpt-4o-mini-realtime-preview",
+            model: "gpt-4o-realtime-preview-2024-12-17",
             vadThreshold: 0.4,
             silenceDurationMs: 500,
             prefixPaddingMs: 300,
