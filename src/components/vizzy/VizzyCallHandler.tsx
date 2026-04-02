@@ -139,7 +139,7 @@ export function VizzyCallHandler() {
           body: {
             instructions,
             voice: "alloy",
-            model: "gpt-4o-mini-realtime-preview",
+            model: "gpt-4o-realtime-preview-2024-12-17",
             vadThreshold: 0.4,
             silenceDurationMs: 500,
             prefixPaddingMs: 300,
@@ -199,7 +199,7 @@ export function VizzyCallHandler() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const sdpResp = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview", {
+      const sdpResp = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${tokenData.client_secret}`,
@@ -237,8 +237,10 @@ export function VizzyCallHandler() {
     const checkInterval = setInterval(() => {
       const session = phoneActions.getCallSession();
       if (session && phoneState.status === "in_call" && !activeRealtimeSession.current) {
-        // An inbound call was answered, connect Realtime
-        // This handles the case where auto-answer already happened
+        // Inbound call detected and not yet connected to AI — start Realtime
+        const from = callerInfoRef.current.from || "Unknown";
+        console.log("[VizzyCallHandler] Inbound call detected, connecting Realtime for", from);
+        startRealtimeConversation(session, from);
       }
     }, 1000);
 
