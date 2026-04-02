@@ -642,7 +642,7 @@ export default function AgentWorkspace() {
         const dateMsg: Message = {
           id: crypto.randomUUID(),
           role: "agent",
-          content: `📅 تاریخ **${dateStr}** انتخاب شد.\n\nحالا لطفاً لیست **کارهایی که انجام داده‌اید** و **کارهایی که قصد دارید انجام دهید** را بنویسید.`,
+          content: `📅 Date **${dateStr}** selected.\n\nNow please list the **tasks you've completed** and **tasks you plan to do**.`,
           agent: "eisenhower" as any,
           timestamp: new Date(),
         };
