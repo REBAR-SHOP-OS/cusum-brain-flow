@@ -617,38 +617,51 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number }) {
 }
 
 Deno.serve(async (req) => {
-  console.log("ringcentral-sync invoked", new Date().toISOString());
+  const LOG = (msg: string, data?: unknown) => console.log(`[rc-sync] ${msg}`, data !== undefined ? JSON.stringify(data) : "");
+  LOG("invoked", { method: req.method, ts: new Date().toISOString() });
 
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    
     // Parse body early (needed for both modes)
-    let body: { syncType?: string; daysBack?: number } = {};
+    let body: { syncType?: string; daysBack?: number; cron?: boolean; mode?: string } = {};
     try {
       body = await req.json();
+      LOG("body_parsed", body);
     } catch {
-      // Use defaults
+      LOG("body_empty (using defaults)");
     }
 
-    // Try user JWT auth first
+    // Detect cron mode FIRST — before consuming auth in getUser()
+    const authHeader = req.headers.get("Authorization") || "";
+    const token = authHeader.replace("Bearer ", "");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const isCron = body?.cron === true || body?.mode === "cron" || token === anonKey || token === serviceKey;
+
+    LOG("auth_check", { isCron, hasAuth: !!authHeader, tokenPrefix: token?.slice(0, 20) });
+
+    if (isCron) {
+      LOG("CRON_MODE: entering syncAllUsers");
+      try {
+        return await syncAllUsers(body);
+      } catch (cronErr) {
+        LOG("CRON_FATAL", { error: cronErr instanceof Error ? cronErr.message : String(cronErr), stack: cronErr instanceof Error ? cronErr.stack : undefined });
+        return new Response(
+          JSON.stringify({ error: cronErr instanceof Error ? cronErr.message : "Cron sync failed" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // User-auth mode: verify JWT
+    LOG("USER_MODE: verifying auth");
     const userId = await verifyAuth(req);
+    LOG("USER_MODE: auth result", { userId });
 
     if (!userId) {
-      // No valid user JWT — check if this is a cron call (anon key or service role key)
-      // Cron jobs use the anon key; we escalate internally via service role
-      const authHeader = req.headers.get("Authorization") || "";
-      const token = authHeader.replace("Bearer ", "");
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-      if (token === anonKey || token === serviceKey) {
-        console.log("CRON MODE: Syncing all RC users");
-        return await syncAllUsers(body);
-      }
-
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
