@@ -23,7 +23,6 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { TIMEZONE_OPTIONS, DATE_FORMAT_OPTIONS } from "@/lib/dateConfig";
 import { Switch } from "@/components/ui/switch";
-import { Clock } from "lucide-react";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "@/assets/brand-logo.png";
