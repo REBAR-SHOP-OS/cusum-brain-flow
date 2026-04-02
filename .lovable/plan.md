@@ -1,75 +1,76 @@
 
 
-# Vizzy Live Session Debug — Root Cause Analysis & Fix Plan
+# Live-Ops Audit: RingCentral Stale Sync + Vizzy No Response
 
-## Findings
+## Current State After Previous Fixes
 
-### Layer 1: Session Bootstrap — PARTIAL FAILURE
-- `voice-engine-token` edge function works correctly (logs show successful token issuance at 23:40:10Z)
-- `vizzy-pre-digest` **crashes** with `ReferenceError: user is not defined` at line 59
-  - Root cause: Function destructures `{ userId }` from `ctx` (line 20), but references `user.id` in 5 places (lines 59, 185, 190, 201)
-  - Should be `userId` everywhere
-- Fallback to `vizzy-daily-brief` appears to succeed (no errors in logs)
-- Net effect: Context loading works via fallback, session starts. **Not the blocking issue but needs fixing.**
+Both Vizzy fixes from the approved plan are **already applied**:
+- `vizzy-pre-digest`: All `user.id` → `userId` — confirmed clean
+- `useVoiceEngine.ts`: Audio element appended to DOM with `playsinline` + explicit `play()` — confirmed applied
 
-### Layer 2: Realtime Transport — LIKELY ROOT CAUSE
-The WebRTC connection establishes successfully (screenshot shows "LIVE SESSION" green dot, "Live ERP Data Connected"). However, no assistant responses appear. Two probable causes:
-
-**A. Audio autoplay policy (HIGH PROBABILITY)**
-In `useVoiceEngine.ts` line 300-303, a detached `<audio>` element is created:
-```ts
-const audioEl = document.createElement("audio");
-audioEl.autoplay = true;
-pc.ontrack = (e) => { audioEl.srcObject = e.streams[0]; };
-```
-This element is never appended to the DOM. Modern browsers (especially mobile) silently refuse autoplay on detached audio elements without prior user gesture. If audio output is blocked, the Realtime API may stall or behave unpredictably (it expects the client to consume audio).
-
-**B. Model availability**
-The model `gpt-4o-mini-realtime-preview` is used. If OpenAI has deprecated or rate-limited this model, the session would connect but produce no responses. The data channel would simply never emit `response.audio_transcript.done` events.
-
-### Layer 3: Audio / Mute State
-Screenshot shows "Muted" — `isMuted = true`. The user transcript visible was captured before muting. Mute correctly disables mic tracks. This is a UX issue (user may have accidentally muted) but is NOT the root cause since the transcript proves audio was captured.
-
-### Layer 4: Agent Response Pipeline
-No server-side handler exists — this is a direct WebRTC connection to OpenAI's Realtime API. The "pipeline" is entirely within OpenAI's infrastructure. If the data channel receives `response.audio_transcript.done`, the text appears. The absence of any agent transcript in the UI means either:
-- OpenAI never generated a response (model issue or audio output stall)
-- The response was filtered by `isSelfTalk()` — unlikely for substantive responses in non-translation mode
-
-### Layer 5: UI Rendering
-UI rendering logic is correct. If `response.audio_transcript.done` events arrive with text, they would display. The filtering in `isSelfTalk` is minimal in non-translation mode (only filters dots, "oh/hmm/uh", and echo detection).
+Two issues remain open.
 
 ---
 
-## Fix Plan
+## Issue A: RingCentral — Sync Stale, Badge Misleading
 
-### Fix 1: `vizzy-pre-digest` crash (5 references to `user.id` → `userId`)
-**File:** `supabase/functions/vizzy-pre-digest/index.ts`
-- Line 59: `.eq("user_id", user.id)` → `.eq("user_id", userId)`
-- Line 185: `.eq("user_id", user.id)` → `.eq("user_id", userId)`
-- Line 190: `user_id: user.id` → `user_id: userId`
-- Line 201: `.eq("user_id", user.id)` → `.eq("user_id", userId)`
-- Plus any other occurrences found on full scan
+### Root Cause (two bugs)
 
-### Fix 2: Detached audio element (autoplay policy)
-**File:** `src/hooks/useVoiceEngine.ts`
-- Append the `<audio>` element to `document.body` so browsers honor autoplay
-- Remove it on cleanup
-- Add `playsinline` attribute for mobile Safari
+**Bug 1: Hardcoded "connected" in HTTP response (line 120)**
+`ringcentral-oauth/index.ts` computes `resolvedStatus` correctly and writes it to the DB, but the HTTP response on line 120 always returns `{ status: "connected" }`. The frontend card reads this response, not the DB, so the card always shows "Connected" regardless of actual state.
 
-### Fix 3: Add diagnostic logging
-**File:** `src/hooks/useVoiceEngine.ts`
-- Log all data channel message types received (not just handled ones) to diagnose whether OpenAI is sending response events at all
-- Log when audio element play() is called and whether it succeeds or fails
+**Bug 2: Staleness only triggers if status is already "error" (line 107)**
+`const resolvedStatus = (hasError && syncIsStale) ? "error" : "connected"` — this requires BOTH `hasError` (existing DB status is "error") AND `syncIsStale`. If the stored status is "connected" but sync stopped 8 days ago, it stays "connected" forever. Staleness alone should be sufficient to flag an error.
 
-### Fix 4: Model fallback consideration
-- Verify `gpt-4o-mini-realtime-preview` is still active. If not, update to `gpt-4o-realtime-preview` or the current equivalent.
-- This would be in both `useVizzyVoiceEngine.ts` (line 434) and `voice-engine-token/index.ts` (line 13 default)
+**Bug 3: No cron job exists for `ringcentral-sync`**
+No `pg_cron` schedule found in any migration. The sync function exists and supports cron mode, but nothing triggers it. Data goes stale because sync only runs on manual UI triggers.
+
+### Fix Plan
+
+1. **`ringcentral-oauth/index.ts` line 107**: Change condition to `syncIsStale || hasError` (staleness alone is sufficient)
+2. **`ringcentral-oauth/index.ts` line 120**: Return `resolvedStatus` and `resolvedError` instead of hardcoded "connected"
+3. **Create cron schedule**: Add `pg_cron` job to call `ringcentral-sync` every 15 minutes via `net.http_post`
+
+### Files
+- `supabase/functions/ringcentral-oauth/index.ts` (2 line changes)
+- New cron schedule SQL (via insert tool, not migration)
 
 ---
 
-## Priority Order
-1. Fix 1 (pre-digest crash) — immediate, clear bug
-2. Fix 2 (audio element) — most likely root cause of no response
-3. Fix 3 (logging) — needed to confirm if Fix 2 resolves the issue
-4. Fix 4 (model) — contingency if Fixes 1-2 don't resolve
+## Issue B: Vizzy Live — No Assistant Response
+
+### Already Fixed
+- Audio element DOM attachment — applied
+- `vizzy-pre-digest` crash — applied
+
+### Remaining Risk: Model String
+
+`useVizzyVoiceEngine.ts` line 434 uses `gpt-4o-mini-realtime-preview`. This model may be deprecated or rate-limited by OpenAI. If the WebRTC session connects but the model refuses to generate responses, the data channel simply never emits `response.audio_transcript.done` events — resulting in exactly the observed behavior (session live, speech captured, no response).
+
+### Fix Plan
+
+1. **Add diagnostic logging** in `useVoiceEngine.ts` data channel handler: log ALL incoming message types (not just handled ones) so we can confirm whether OpenAI is sending any response events at all
+2. **Update model** from `gpt-4o-mini-realtime-preview` to `gpt-4o-realtime-preview-2024-12-17` in `useVizzyVoiceEngine.ts` (line 434) and `voice-engine-token/index.ts` (line 13 default) — this is the current stable realtime model
+
+### Files
+- `src/hooks/useVizzyVoiceEngine.ts` (model string)
+- `supabase/functions/voice-engine-token/index.ts` (default model)
+- `src/hooks/useVoiceEngine.ts` (diagnostic logging in data channel handler)
+
+---
+
+## Summary
+
+| Issue | Layer | Root Cause | Fix |
+|-------|-------|-----------|-----|
+| RC badge always "connected" | Edge function response | Hardcoded status in HTTP response | Return `resolvedStatus` |
+| RC never flags stale | Edge function logic | Requires both error AND stale | Change to OR condition |
+| RC sync not running | Infrastructure | No cron job | Add pg_cron schedule |
+| Vizzy no response | Transport/Model | Possibly deprecated model + no diagnostics | Update model + add logging |
+
+## Priority
+1. RingCentral status fix (immediate, clear bugs)
+2. RingCentral cron schedule (root cause of staleness)
+3. Vizzy model update (likely root cause of silence)
+4. Vizzy diagnostic logging (confirms fix or reveals next layer)
 
