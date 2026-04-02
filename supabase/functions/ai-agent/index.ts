@@ -463,6 +463,8 @@ Deno.serve((req) =>
     const roles = (rolesData || []).map(r => r.role);
 
     // Context fetching (Moved to shared module)
+    const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
+    const workspaceTz = await getWorkspaceTimezone(svcClient);
     const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient, companyId);
 
     // Inject live QuickBooks context for accounting/collections agents
