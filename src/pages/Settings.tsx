@@ -97,7 +97,7 @@ function DateTimeSection() {
   );
 }
 
-
+export default function Settings() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { resetTour, restartTour } = useTour();
