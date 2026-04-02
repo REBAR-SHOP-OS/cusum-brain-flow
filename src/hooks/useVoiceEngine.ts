@@ -330,7 +330,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       };
 
       // 7. Create and set local SDP offer
-      const model = cfg.model ?? "gpt-4o-mini-realtime-preview";
+      const model = cfg.model ?? "gpt-4o-realtime-preview-2024-12-17";
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
