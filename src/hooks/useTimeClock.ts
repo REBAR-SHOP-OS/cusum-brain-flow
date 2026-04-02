@@ -113,7 +113,7 @@ export function useTimeClock() {
     if (punching) return;
 
     // Frontend guard: 6 AM ET for all users (backend trigger is the real enforcer)
-    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/New_York" }));
+    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
     if (nowET.getHours() < 6) {
       toast.error("Clock-in is only available from 6:00 AM ET");
       return;

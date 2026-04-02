@@ -1,14 +1,15 @@
 /** Shift boundary utilities for shop floor filtering */
+import { toZonedNow, DEFAULT_TIMEZONE } from "@/lib/dateConfig";
 
 export type ShiftType = "day" | "night" | "all";
 
-/** Day shift: 6:00 AM – 6:00 PM local time */
+/** Day shift: 6:00 AM – 6:00 PM business timezone */
 export const DAY_SHIFT_START_HOUR = 6;
 export const DAY_SHIFT_END_HOUR = 18;
 
-/** Returns the current shift based on local time */
-export function getCurrentShift(): "day" | "night" {
-  const hour = new Date().getHours();
+/** Returns the current shift based on business timezone */
+export function getCurrentShift(tz: string = DEFAULT_TIMEZONE): "day" | "night" {
+  const hour = toZonedNow(tz).getHours();
   return hour >= DAY_SHIFT_START_HOUR && hour < DAY_SHIFT_END_HOUR ? "day" : "night";
 }
 
