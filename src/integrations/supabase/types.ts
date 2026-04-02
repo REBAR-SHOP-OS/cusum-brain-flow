@@ -15730,6 +15730,33 @@ export type Database = {
           },
         ]
       }
+      workspace_settings: {
+        Row: {
+          company_id: string | null
+          date_format: string
+          id: string
+          time_format: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          company_id?: string | null
+          date_format?: string
+          id?: string
+          time_format?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string | null
+          date_format?: string
+          id?: string
+          time_format?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       wp_change_log: {
         Row: {
           created_at: string

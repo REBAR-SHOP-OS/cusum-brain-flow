@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import {
   Lock, Tag, CreditCard, Lightbulb, HelpCircle, LogOut,
   Camera, Settings as SettingsIcon, Users, Loader2, GraduationCap,
-  Brain, Plug,
+  Brain, Plug, Clock,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { useTour } from "@/hooks/useTour";
@@ -20,6 +20,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
 import { useProfiles } from "@/hooks/useProfiles";
+import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
+import { TIMEZONE_OPTIONS, DATE_FORMAT_OPTIONS } from "@/lib/dateConfig";
+import { Switch } from "@/components/ui/switch";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "@/assets/brand-logo.png";
@@ -27,6 +30,72 @@ const BrainPage = lazy(() => import("@/pages/Brain"));
 import IntegrationsPage from "@/pages/Integrations";
 
 type SettingsTab = "settings" | "brain" | "integrations";
+
+function DateTimeSection() {
+  const { timezone, dateFormat, timeFormat, updateSettings } = useWorkspaceSettings();
+  const [tz, setTz] = useState(timezone);
+  const [df, setDf] = useState(dateFormat);
+  const [tf, setTf] = useState(timeFormat);
+  const [saving, setSaving] = useState(false);
+
+  // Sync local state when settings load
+  useEffect(() => { setTz(timezone); }, [timezone]);
+  useEffect(() => { setDf(dateFormat); }, [dateFormat]);
+  useEffect(() => { setTf(timeFormat); }, [timeFormat]);
+
+  const dirty = tz !== timezone || df !== dateFormat || tf !== timeFormat;
+
+  const handleSave = async () => {
+    setSaving(true);
+    await updateSettings.mutateAsync({ timezone: tz, date_format: df, time_format: tf });
+    setSaving(false);
+  };
+
+  return (
+    <section className="space-y-4">
+      <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+        <Clock className="w-4 h-4" /> Date & Time
+      </h3>
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Timezone</Label>
+          <Select value={tz} onValueChange={setTz}>
+            <SelectTrigger className="bg-secondary/50 border-0 h-12"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TIMEZONE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Date format</Label>
+          <Select value={df} onValueChange={setDf}>
+            <SelectTrigger className="bg-secondary/50 border-0 h-12"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {DATE_FORMAT_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
+          <div>
+            <p className="font-medium text-sm">24-hour time</p>
+            <p className="text-xs text-muted-foreground">{tf === "24h" ? "Using 24-hour format" : "Using 12-hour format (AM/PM)"}</p>
+          </div>
+          <Switch checked={tf === "24h"} onCheckedChange={(c) => setTf(c ? "24h" : "12h")} />
+        </div>
+      </div>
+      {dirty && (
+        <Button onClick={handleSave} disabled={saving} className="w-full h-12">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+          Save date & time settings
+        </Button>
+      )}
+    </section>
+  );
+}
 
 export default function Settings() {
   const { user, signOut } = useAuth();
@@ -208,6 +277,9 @@ export default function Settings() {
                   Save changes
                 </Button>
               </section>
+
+              {/* Date & Time */}
+              <DateTimeSection />
 
               {/* Language */}
               <section className="space-y-4">
