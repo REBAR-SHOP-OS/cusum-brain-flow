@@ -1,37 +1,39 @@
 
 
-# Fix Vizzy & Edge Functions to Use Workspace Timezone Setting
+# Fix Eisenhower Agent Language: Default to English
 
 ## Problem
-Vizzy and 5 edge functions have hardcoded `"America/New_York"` or `"America/Toronto"` timezone strings. The new `workspace_settings` table exists but edge functions don't read from it.
+Two issues causing the agent to speak Persian instead of English by default:
 
-## Approach
+1. **Hardcoded Persian welcome message** in `src/pages/AgentWorkspace.tsx` (line 237): `"سلام! 👋\n\nلطفاً ابتدا **تاریخ مورد نظر** را از تقویم بالای صفحه انتخاب کنید 📅"`
+2. **Language rules in system prompt** (`supabase/functions/_shared/agents/growth.ts` lines 175-178): Currently says "match the user's language for all non-report messages" — needs to be updated to default to English unless the user writes in another language.
 
-### Create a shared timezone helper for edge functions
-New file: `supabase/functions/_shared/getWorkspaceTimezone.ts`
-- Accepts a Supabase service client
-- Queries `workspace_settings` for the timezone value
-- Returns the timezone string, falling back to `"America/Toronto"` on any error
-- Single query, cached per request
+## Changes
 
-### Update 5 edge function files to use dynamic timezone
+### 1. `src/pages/AgentWorkspace.tsx` — line 237
+Replace the Persian welcome message with English:
+```
+"Hello! 👋\n\nPlease select your **target date** from the calendar at the top of the page 📅"
+```
 
-| File | Current hardcoded value | Change |
-|------|------------------------|--------|
-| `supabase/functions/vizzy-context/index.ts` | `"America/New_York"` (line 34) | Read from workspace_settings |
-| `supabase/functions/_shared/vizzyFullContext.ts` | `"America/New_York"` (line 18) | Read from workspace_settings |
-| `supabase/functions/comms-alerts/index.ts` | `"America/Toronto"` (line 207) | Read from workspace_settings |
-| `supabase/functions/ai-agent/index.ts` | `"America/Toronto"` (lines 609, 980, 984) | Read from workspace_settings |
-| `supabase/functions/kiosk-punch/index.ts` | `"America/New_York"` (line 42) | Read from workspace_settings |
+### 2. `supabase/functions/_shared/agents/growth.ts` — lines 175-178
+Update the language rules to:
+- **Default language is English** for all responses
+- **If the user writes in another language**, switch to that language for conversational responses
+- Final reports always in English (keep existing rule)
 
-### Implementation detail
-- Each function already has a Supabase service client available
-- The helper does one lightweight query: `SELECT timezone FROM workspace_settings LIMIT 1`
-- If the query fails or returns null, falls back to `"America/Toronto"`
-- No migration needed — table and seed row already exist
+Updated rules:
+```
+## LANGUAGE RULES (CRITICAL):
+- **Default language is English.** Always start and respond in English unless the user writes in a different language.
+- If the user writes in another language (Persian, Arabic, Spanish, etc.), switch to THAT language for all conversational responses (questions, clarifications, confirmations, encouragement).
+- **Final Eisenhower Matrix report**: MUST ALWAYS be written in English, regardless of the conversation language.
+- Never refuse or redirect a user for writing in a non-English language.
+```
 
-### Safety
-- Fallback matches current Toronto behavior
-- Single additional DB query per function invocation (lightweight)
-- No breaking changes — same timezone value unless user changes it in Settings
+### Files changed
+| File | Change |
+|------|--------|
+| `src/pages/AgentWorkspace.tsx` | Replace Persian welcome message with English |
+| `supabase/functions/_shared/agents/growth.ts` | Update language rules to default English |
 
