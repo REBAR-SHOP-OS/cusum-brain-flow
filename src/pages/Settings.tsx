@@ -31,7 +31,73 @@ import IntegrationsPage from "@/pages/Integrations";
 
 type SettingsTab = "settings" | "brain" | "integrations";
 
-export default function Settings() {
+function DateTimeSection() {
+  const { timezone, dateFormat, timeFormat, updateSettings } = useWorkspaceSettings();
+  const [tz, setTz] = useState(timezone);
+  const [df, setDf] = useState(dateFormat);
+  const [tf, setTf] = useState(timeFormat);
+  const [saving, setSaving] = useState(false);
+
+  // Sync local state when settings load
+  useEffect(() => { setTz(timezone); }, [timezone]);
+  useEffect(() => { setDf(dateFormat); }, [dateFormat]);
+  useEffect(() => { setTf(timeFormat); }, [timeFormat]);
+
+  const dirty = tz !== timezone || df !== dateFormat || tf !== timeFormat;
+
+  const handleSave = async () => {
+    setSaving(true);
+    await updateSettings.mutateAsync({ timezone: tz, date_format: df, time_format: tf });
+    setSaving(false);
+  };
+
+  return (
+    <section className="space-y-4">
+      <h3 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+        <Clock className="w-4 h-4" /> Date & Time
+      </h3>
+      <div className="space-y-3">
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Timezone</Label>
+          <Select value={tz} onValueChange={setTz}>
+            <SelectTrigger className="bg-secondary/50 border-0 h-12"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {TIMEZONE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Date format</Label>
+          <Select value={df} onValueChange={setDf}>
+            <SelectTrigger className="bg-secondary/50 border-0 h-12"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {DATE_FORMAT_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
+          <div>
+            <p className="font-medium text-sm">24-hour time</p>
+            <p className="text-xs text-muted-foreground">{tf === "24h" ? "Using 24-hour format" : "Using 12-hour format (AM/PM)"}</p>
+          </div>
+          <Switch checked={tf === "24h"} onCheckedChange={(c) => setTf(c ? "24h" : "12h")} />
+        </div>
+      </div>
+      {dirty && (
+        <Button onClick={handleSave} disabled={saving} className="w-full h-12">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+          Save date & time settings
+        </Button>
+      )}
+    </section>
+  );
+}
+
+
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { resetTour, restartTour } = useTour();
