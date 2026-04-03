@@ -355,6 +355,7 @@ export async function buildFullVizzyContext(
     new Date(iso).toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
+      timeZone: tz,
     });
   const onNow = clockEntries.filter((t: any) => !t.clock_out);
   const doneToday = clockEntries.filter((t: any) => !!t.clock_out);
