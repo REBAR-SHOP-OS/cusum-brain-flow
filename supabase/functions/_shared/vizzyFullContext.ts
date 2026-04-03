@@ -1026,7 +1026,7 @@ export async function buildFullVizzyContext(
   } else {
     parts.push(callSummaries.slice(0, 10).map((cs: any) => {
       const meta = (cs.metadata || {}) as any;
-      const time = cs.created_at ? new Date(cs.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+      const time = cs.created_at ? new Date(cs.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
       const caller = meta.contact_name || meta.from_number || "Unknown";
       const taskStr = (meta.tasks || []).length > 0
         ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
