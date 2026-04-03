@@ -202,7 +202,7 @@ export async function buildFullVizzyContext(
     supabase
       .from("agent_action_log")
       .select("user_id, action_type, entity_type, created_at")
-      .gte("created_at", today + "T00:00:00")
+      .gte("created_at", todayStart)
       .order("created_at", { ascending: false })
       .limit(200),
     // Machine operators currently assigned
