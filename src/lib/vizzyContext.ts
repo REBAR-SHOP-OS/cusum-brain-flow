@@ -117,7 +117,7 @@ You have FULL access to live business data. Use ONLY these numbers. NEVER make u
 You have FULL access to business emails listed in the EMAIL INBOX section below. When asked about emails, search by sender, subject, or content. NEVER say you cannot read emails — the data is right here in your context.
 Log every question the CEO asks mentally — you are building their daily journey.
 
-${qbWarning}═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
+${qbWarning}═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString("en-US", { timeZone: snap.timezone || "America/Toronto" })}) ═══
 
 📊 FINANCIALS
   Accounts Receivable: ${fmt(f.totalReceivable)}
