@@ -196,7 +196,7 @@ export async function buildFullVizzyContext(
     supabase
       .from("work_orders")
       .select("id, work_order_number, status, assigned_to, actual_start, actual_end")
-      .gte("updated_at", today + "T00:00:00")
+      .gte("updated_at", todayStart)
       .limit(200),
     // Employee performance: agent actions today
     supabase
