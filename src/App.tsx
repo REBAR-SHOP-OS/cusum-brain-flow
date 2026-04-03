@@ -275,7 +275,10 @@ const App = () => (
                     <Route path="/bills/*" element={<Navigate to="/accounting" replace />} />
                     <Route path="/invoices/*" element={<Navigate to="/accounting" replace />} />
                     <Route path="/intelligence" element={<Navigate to="/brain" replace />} />
-                    <Route path="/inventory" element={<Navigate to="/shop-floor" replace />} />
+                    <Route path="/inventory" element={<Navigate to="/shopfloor/inventory" replace />} />
+                    <Route path="/deliveries" element={<Navigate to="/shopfloor/delivery-ops" replace />} />
+                    <Route path="/deliveries/*" element={<Navigate to="/shopfloor/delivery-ops" replace />} />
+                    <Route path="/social" element={<Navigate to="/social-media-manager" replace />} />
                     <Route path="/emails/*" element={<Navigate to="/home" replace />} />
 
                     <Route path="*" element={<NotFound />} />

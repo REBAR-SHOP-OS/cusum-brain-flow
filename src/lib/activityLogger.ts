@@ -59,6 +59,7 @@ export function logNavigation(path: string): void {
     "/orders": "Orders",
     "/leads": "Leads",
     "/deliveries": "Deliveries",
+    "/shopfloor/delivery-ops": "Deliveries",
     "/accounting": "Accounting",
     "/customers": "Customers",
     "/projects": "Projects",

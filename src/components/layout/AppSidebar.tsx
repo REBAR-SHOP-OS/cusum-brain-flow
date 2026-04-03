@@ -179,7 +179,7 @@ export function AppSidebar() {
     {
       label: "Logistics",
       items: [
-        { name: "Inventory", href: "/office", icon: Package, roles: ["admin", "office", "workshop"], lockReason: "Requires Office or Workshop role", tourId: "nav-inventory" },
+        { name: "Inventory", href: "/shopfloor/inventory", icon: Package, roles: ["admin", "office", "workshop"], lockReason: "Requires Office or Workshop role", tourId: "nav-inventory" },
       ],
     },
     {
