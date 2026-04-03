@@ -1,8 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/lib/auth";
 import { useMyProfile } from "@/hooks/useTeamChat";
 import { toast } from "sonner";
+
+type TeamChannelInsert = Database["public"]["Tables"]["team_channels"]["Insert"];
+type TeamChannelMemberInsert = Database["public"]["Tables"]["team_channel_members"]["Insert"];
+type TeamChannelRow = Database["public"]["Tables"]["team_channels"]["Row"];
 
 /**
  * Reusable helper: get the current user's company_id from their profile.
@@ -47,20 +52,22 @@ export function useCreateChannel() {
           "Your profile is not set up yet. Please ask an admin to link your account."
         );
 
-      const companyId = await resolveCompanyId(user.id, myProfile as any);
+      const companyId = await resolveCompanyId(user.id, myProfile);
 
       // Create the channel
-      const { data: channel, error: channelErr } = await (supabase as any)
+      const channelPayload: TeamChannelInsert = {
+        name,
+        description: description || null,
+        channel_type: "group",
+        created_by: user.id,
+        company_id: companyId,
+      };
+
+      const { data: channel, error: channelErr } = await supabase
         .from("team_channels")
-        .insert({
-          name,
-          description: description || null,
-          channel_type: "group",
-          created_by: user.id,
-          company_id: companyId,
-        })
+        .insert(channelPayload)
         .select("id")
-        .single();
+        .single<Pick<TeamChannelRow, "id">>();
 
       if (channelErr) throw channelErr;
 
@@ -68,12 +75,12 @@ export function useCreateChannel() {
       const allMemberIds = new Set(memberIds);
       allMemberIds.add(myProfile.id);
 
-      const memberRows = [...allMemberIds].map((profileId) => ({
+      const memberRows: TeamChannelMemberInsert[] = [...allMemberIds].map((profileId) => ({
         channel_id: channel.id,
         profile_id: profileId,
       }));
 
-      const { error: membersErr } = await (supabase as any)
+      const { error: membersErr } = await supabase
         .from("team_channel_members")
         .insert(memberRows);
 
@@ -107,14 +114,14 @@ export function useOpenDM() {
           "Your profile is not set up yet. Please ask an admin to link your account."
         );
 
-      const { data, error } = await supabase.rpc("create_dm_channel" as any, {
+      const { data, error } = await supabase.rpc("create_dm_channel", {
         _my_profile_id: myProfile.id,
         _target_profile_id: targetProfileId,
       });
 
       if (error) {
         const correlationId = Math.random().toString(36).substring(2, 9);
-        const companyId = (myProfile as any)?.company_id ?? "unknown";
+        const companyId = myProfile.company_id ?? "unknown";
 
         console.error("[DM Creation Failed]", {
           correlationId,
@@ -146,7 +153,7 @@ export function useOpenDM() {
 
       if (!data) {
         const correlationId = Math.random().toString(36).substring(2, 9);
-        const companyId = (myProfile as any)?.company_id ?? "unknown";
+        const companyId = myProfile.company_id ?? "unknown";
         console.error("[DM Creation] RPC returned null", {
           correlationId,
           authUserId: user.id,
@@ -178,19 +185,19 @@ export function useDeleteChannel() {
       if (!user) throw new Error("Not logged in");
 
       // Delete members, messages, then channel
-      const { error: membersErr } = await (supabase as any)
+      const { error: membersErr } = await supabase
         .from("team_channel_members")
         .delete()
         .eq("channel_id", channelId);
       if (membersErr) throw membersErr;
 
-      const { error: msgsErr } = await (supabase as any)
+      const { error: msgsErr } = await supabase
         .from("team_messages")
         .delete()
         .eq("channel_id", channelId);
       if (msgsErr) throw msgsErr;
 
-      const { error: chErr } = await (supabase as any)
+      const { error: chErr } = await supabase
         .from("team_channels")
         .delete()
         .eq("id", channelId);

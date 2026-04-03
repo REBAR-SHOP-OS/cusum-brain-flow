@@ -1,8 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/lib/auth";
 import { useMyProfile } from "@/hooks/useTeamChat";
 import { useEffect } from "react";
+
+type TeamMeetingsRow = Database["public"]["Tables"]["team_meetings"]["Row"];
+type TeamMeetingsInsert = Database["public"]["Tables"]["team_meetings"]["Insert"];
 
 export interface TeamMeeting {
   id: string;
@@ -25,14 +29,14 @@ export function useActiveMeetings(channelId: string | null) {
     queryKey: ["team-meetings", user?.id, channelId],
     enabled: !!user && !!channelId,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("team_meetings")
         .select("*")
         .eq("channel_id", channelId)
         .eq("status", "active")
         .order("started_at", { ascending: false });
       if (error) throw error;
-      return (data || []) as TeamMeeting[];
+      return (data || []) as TeamMeetingsRow[];
     },
   });
 
@@ -96,17 +100,19 @@ export function useStartMeeting() {
       }
 
       // Insert meeting record with join URL
-      const { data, error } = await (supabase as any)
+      const payload: TeamMeetingsInsert = {
+        channel_id: channelId,
+        title,
+        room_code: roomCode,
+        started_by: myProfile.id,
+        meeting_type: meetingType,
+        status: "active",
+        notes: joinUrl ? JSON.stringify({ joinUrl, provider: "ringcentral" }) : JSON.stringify({ provider: "jitsi" }),
+      };
+
+      const { data, error } = await supabase
         .from("team_meetings")
-        .insert({
-          channel_id: channelId,
-          title,
-          room_code: roomCode,
-          started_by: myProfile.id,
-          meeting_type: meetingType,
-          status: "active",
-          notes: joinUrl ? JSON.stringify({ joinUrl, provider: "ringcentral" }) : JSON.stringify({ provider: "jitsi" }),
-        })
+        .insert(payload)
         .select("*")
         .single();
 
@@ -128,7 +134,7 @@ export function useEndMeeting() {
   return useMutation({
     mutationFn: async (meetingId: string) => {
       // End the meeting
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("team_meetings")
         .update({ status: "ended", ended_at: new Date().toISOString() })
         .eq("id", meetingId);
