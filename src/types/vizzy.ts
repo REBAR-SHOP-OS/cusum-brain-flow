@@ -39,4 +39,5 @@ export interface VizzyBusinessSnapshot {
     perEmployee: Record<string, { outbound: number; inbound: number; missed: number; talkTimeSec: number }>;
     details: { direction: string; from: string; to: string; duration: number; result: string; received_at: string }[];
   };
+  timezone?: string;
 }
