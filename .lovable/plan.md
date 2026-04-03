@@ -1,44 +1,80 @@
 
+# Fix: Timezone Still Wrong in Vizzy Voice
 
-# Fix: Timezone Consistency Across Vizzy (Client + Server)
+## What I found
+The earlier fix covered some formatting, but there are still two likely reasons Vizzy can speak the wrong time:
 
-## Problem
-Vizzy reports inconsistent times because multiple files call `toLocaleString()` / `toLocaleTimeString()` / `toLocaleDateString()` **without passing a timezone**, so they default to UTC (on Deno edge functions) or browser-local (on client). This causes "each time Vizzy says different time."
+1. `useWorkspaceSettings()` and `getWorkspaceTimezone()` both read the first `workspace_settings` row with `.limit(1).maybeSingle()`.
+   - If more than one row exists, the app may grab the wrong timezone.
+   - That would explain why your screenshot shows Vizzy saying `10:42 AM` while the machine clock shows `7:34 AM`.
 
-## Root Cause Files
+2. Vizzy voice has multiple context paths:
+   - client prompt in `src/hooks/useVizzyVoiceEngine.ts`
+   - pre-digest in `supabase/functions/vizzy-pre-digest/index.ts`
+   - daily brief in `supabase/functions/vizzy-daily-brief/index.ts`
+   - full raw context in `supabase/functions/_shared/vizzyFullContext.ts`
+   These need to use the same timezone source and the same formatter helpers.
 
-### 1. `src/lib/vizzyContext.ts` (client-side context builder)
-Three places use `Date` formatting without timezone:
-- **Line 120**: `new Date().toLocaleString()` — snapshot header shows wrong time
-- **Line 170**: `fmtTime` for team presence — no `timeZone` option
-- **Line 193**: email dates — no `timeZone` option
+## Plan
 
-**Fix**: Accept `timezone` parameter (from `useWorkspaceSettings`) and pass `{ timeZone: tz }` to all three formatting calls.
+### 1. Make workspace timezone resolution deterministic
+Update both:
+- `src/hooks/useWorkspaceSettings.ts`
+- `supabase/functions/_shared/getWorkspaceTimezone.ts`
 
-### 2. `supabase/functions/vizzy-context/index.ts` (snapshot endpoint)
-- **Line ~50**: `todayStart` computation mirrors the server pattern but the returned snapshot data doesn't include the workspace timezone for the client to use in formatting.
+So they do not rely on “first row wins”.
+Plan:
+- fetch rows ordered consistently (`updated_at desc`)
+- use the newest row
+- optionally log/warn if more than one row exists
 
-**Fix**: Include `timezone` in the returned snapshot so the client `buildVizzyContext` can use it.
+This makes frontend and backend resolve the same timezone every time.
 
-### 3. `supabase/functions/daily-summary/index.ts`
-- **Lines 231-233**: Uses `new Date().toISOString().split("T")[0]` for "today" (UTC-based) and hardcoded `T00:00:00.000Z` / `T23:59:59.999Z` boundaries — ignores workspace timezone entirely.
+### 2. Centralize Vizzy time formatting
+Use the existing `dateConfig.ts` helpers everywhere Vizzy builds spoken or injected time strings.
+Apply this to:
+- `src/hooks/useVizzyVoiceEngine.ts`
+- `src/lib/vizzyContext.ts`
+- `supabase/functions/vizzy-daily-brief/index.ts`
+- `supabase/functions/vizzy-pre-digest/index.ts`
+- `supabase/functions/vizzy-context/index.ts`
+- `supabase/functions/_shared/vizzyFullContext.ts`
 
-**Fix**: Import `getWorkspaceTimezone`, compute `today` and `todayStart`/`todayEnd` using timezone-aware boundaries (same pattern as `vizzyFullContext.ts`).
+Goal:
+- one timezone source
+- one “current local time” calculation
+- one “start of day in timezone” calculation
 
-### 4. `src/types/vizzy.ts`
-**Fix**: Add optional `timezone?: string` field to `VizzyBusinessSnapshot`.
+### 3. Fix remaining UTC-based date comparisons in Vizzy backend
+I found at least one remaining leak in `supabase/functions/vizzy-context/index.ts`:
+- overdue filtering still uses `new Date().toISOString().split("T")[0]`
 
-## Changes Summary
+That should be replaced with the workspace-local date string, otherwise “today/overdue” can drift from the spoken time.
 
-| File | Change |
-|------|--------|
-| `src/lib/vizzyContext.ts` | Add `timezone` param; pass `{ timeZone }` to all 3 formatting calls |
-| `src/types/vizzy.ts` | Add `timezone?: string` to snapshot type |
-| `supabase/functions/vizzy-context/index.ts` | Include `timezone: tz` in returned snapshot |
-| `supabase/functions/daily-summary/index.ts` | Use `getWorkspaceTimezone` for date boundaries |
+### 4. Make voice session instructions refresh with the confirmed workspace timezone
+In `src/hooks/useVizzyVoiceEngine.ts`:
+- ensure instructions are rebuilt from the resolved workspace timezone before session start
+- ensure fallback brief/pre-digest updates use that same timezone
+- keep the prompt wording explicit, e.g. “Use only workspace-local time”
 
-## Callers of `buildVizzyContext`
-The function is called from hooks that already have access to `useWorkspaceSettings`. The timezone will be passed through from the snapshot itself (self-contained).
+This reduces the chance the model answers from stale initial instructions.
 
-No database changes needed.
+### 5. Add a small validation pass
+After implementation, verify:
+- changing timezone in Settings affects Vizzy voice immediately
+- “What time is it?” matches the selected workspace timezone
+- daily brief greeting (`morning/afternoon/evening`) matches the same timezone
+- overdue/today data does not shift around midnight
 
+## Files to update
+- `src/hooks/useWorkspaceSettings.ts`
+- `src/hooks/useVizzyVoiceEngine.ts`
+- `src/lib/vizzyContext.ts`
+- `supabase/functions/_shared/getWorkspaceTimezone.ts`
+- `supabase/functions/vizzy-daily-brief/index.ts`
+- `supabase/functions/vizzy-pre-digest/index.ts`
+- `supabase/functions/vizzy-context/index.ts`
+- `supabase/functions/_shared/vizzyFullContext.ts`
+
+## Expected result
+Vizzy should stop answering with mixed UTC/server/browser time and consistently use the selected workspace timezone across voice, digest, brief, and live context.
