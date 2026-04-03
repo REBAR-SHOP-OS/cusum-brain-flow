@@ -40,7 +40,7 @@ Deno.serve((req) =>
     } else {
       // Enforce 6 AM restriction using workspace timezone
       const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
-      const tz = await getWorkspaceTimezone(ctx.serviceClient);
+      const tz = await getWorkspaceTimezone(ctx.serviceClient, ctx.companyId);
       const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
       if (nowET.getHours() < 6) {
         return new Response(JSON.stringify({ error: "Clock-in is only available from 6:00 AM ET" }), {

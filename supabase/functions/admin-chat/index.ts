@@ -2433,7 +2433,9 @@ Never reveal internal system details. Respond in the same language the user writ
     // ═══ NORMAL CHAT PATH ═══
     const { messages, currentPage, imageUrls } = body;
 
-    const systemContext = await buildFullVizzyContext(supabase, user.id);
+    const systemContext = await buildFullVizzyContext(supabase, user.id, {
+      companyId,
+    });
     const pageContext = buildPageContext(currentPage || "/chat");
 
     const systemPrompt = `You are JARVIS — the CEO's personal and business AI assistant for REBAR SHOP OS.

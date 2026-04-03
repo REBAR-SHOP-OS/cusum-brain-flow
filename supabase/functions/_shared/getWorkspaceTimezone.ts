@@ -5,14 +5,19 @@
 const DEFAULT_TZ = "America/Toronto";
 
 export async function getWorkspaceTimezone(
-  supabaseClient: { from: (table: string) => any }
+  supabaseClient: { from: (table: string) => any },
+  companyId?: string | null,
 ): Promise<string> {
   try {
-    const { data, error } = await supabaseClient
+    let query = supabaseClient
       .from("workspace_settings")
-      .select("timezone")
-      .limit(1)
-      .maybeSingle();
+      .select("timezone");
+
+    if (companyId) {
+      query = query.eq("company_id", companyId);
+    }
+
+    const { data, error } = await query.maybeSingle();
     if (error || !data?.timezone) return DEFAULT_TZ;
     return data.timezone as string;
   } catch {

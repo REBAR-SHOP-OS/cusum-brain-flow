@@ -24,6 +24,7 @@ import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { TIMEZONE_OPTIONS, DATE_FORMAT_OPTIONS } from "@/lib/dateConfig";
 import { Switch } from "@/components/ui/switch";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "@/assets/brand-logo.png";
 const BrainPage = lazy(() => import("@/pages/Brain"));
@@ -33,10 +34,12 @@ type SettingsTab = "settings" | "brain" | "integrations";
 
 function DateTimeSection() {
   const { timezone, dateFormat, timeFormat, updateSettings } = useWorkspaceSettings();
+  const { isAdmin, isOffice, isLoading: rolesLoading } = useUserRole();
   const [tz, setTz] = useState(timezone);
   const [df, setDf] = useState(dateFormat);
   const [tf, setTf] = useState(timeFormat);
   const [saving, setSaving] = useState(false);
+  const canManageWorkspaceSettings = isAdmin || isOffice;
 
   // Sync local state when settings load
   useEffect(() => { setTz(timezone); }, [timezone]);
@@ -46,6 +49,7 @@ function DateTimeSection() {
   const dirty = tz !== timezone || df !== dateFormat || tf !== timeFormat;
 
   const handleSave = async () => {
+    if (!canManageWorkspaceSettings) return;
     setSaving(true);
     await updateSettings.mutateAsync({ timezone: tz, date_format: df, time_format: tf });
     setSaving(false);
@@ -59,7 +63,7 @@ function DateTimeSection() {
       <div className="space-y-3">
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Timezone</Label>
-          <Select value={tz} onValueChange={setTz}>
+          <Select value={tz} onValueChange={setTz} disabled={!canManageWorkspaceSettings}>
             <SelectTrigger className="bg-secondary/50 border-0 h-12"><SelectValue /></SelectTrigger>
             <SelectContent>
               {TIMEZONE_OPTIONS.map((o) => (
@@ -70,7 +74,7 @@ function DateTimeSection() {
         </div>
         <div className="space-y-1.5">
           <Label className="text-xs text-muted-foreground">Date format</Label>
-          <Select value={df} onValueChange={setDf}>
+          <Select value={df} onValueChange={setDf} disabled={!canManageWorkspaceSettings}>
             <SelectTrigger className="bg-secondary/50 border-0 h-12"><SelectValue /></SelectTrigger>
             <SelectContent>
               {DATE_FORMAT_OPTIONS.map((o) => (
@@ -84,10 +88,19 @@ function DateTimeSection() {
             <p className="font-medium text-sm">24-hour time</p>
             <p className="text-xs text-muted-foreground">{tf === "24h" ? "Using 24-hour format" : "Using 12-hour format (AM/PM)"}</p>
           </div>
-          <Switch checked={tf === "24h"} onCheckedChange={(c) => setTf(c ? "24h" : "12h")} />
+          <Switch
+            checked={tf === "24h"}
+            onCheckedChange={(c) => setTf(c ? "24h" : "12h")}
+            disabled={!canManageWorkspaceSettings}
+          />
         </div>
+        {!rolesLoading && !canManageWorkspaceSettings && (
+          <p className="text-xs text-muted-foreground">
+            Only office and admin roles can change workspace-wide date and time settings.
+          </p>
+        )}
       </div>
-      {dirty && (
+      {dirty && canManageWorkspaceSettings && (
         <Button onClick={handleSave} disabled={saving} className="w-full h-12">
           {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
           Save date & time settings

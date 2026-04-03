@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 export interface WorkspaceSettings {
   id: string;
@@ -18,14 +19,17 @@ const DEFAULTS: Omit<WorkspaceSettings, "id" | "updated_at"> = {
 
 export function useWorkspaceSettings() {
   const qc = useQueryClient();
+  const { companyId, isLoading: companyLoading } = useCompanyId();
+  const settingsQueryKey = ["workspace_settings", companyId];
 
   const { data: settings, isLoading } = useQuery({
-    queryKey: ["workspace_settings"],
+    queryKey: settingsQueryKey,
+    enabled: !!companyId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workspace_settings")
         .select("*")
-        .limit(1)
+        .eq("company_id", companyId)
         .maybeSingle();
       if (error) {
         console.error("[WorkspaceSettings] fetch error:", error);
@@ -38,15 +42,19 @@ export function useWorkspaceSettings() {
 
   const updateSettings = useMutation({
     mutationFn: async (patch: Partial<Omit<WorkspaceSettings, "id" | "updated_at">>) => {
-      if (!settings?.id) throw new Error("No workspace settings row found");
+      if (!companyId) throw new Error("No company found");
+      const payload = {
+        ...patch,
+        updated_at: new Date().toISOString(),
+        company_id: companyId,
+      };
       const { error } = await supabase
         .from("workspace_settings")
-        .update({ ...patch, updated_at: new Date().toISOString() } as any)
-        .eq("id", settings.id);
+        .upsert(payload as any, { onConflict: "company_id" });
       if (error) throw error;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["workspace_settings"] });
+      qc.invalidateQueries({ queryKey: settingsQueryKey });
       toast.success("Settings saved");
     },
     onError: (err: any) => {
@@ -59,7 +67,7 @@ export function useWorkspaceSettings() {
     dateFormat: settings?.date_format ?? DEFAULTS.date_format,
     timeFormat: settings?.time_format ?? DEFAULTS.time_format,
     settings,
-    isLoading,
+    isLoading: isLoading || companyLoading,
     updateSettings,
   };
 }

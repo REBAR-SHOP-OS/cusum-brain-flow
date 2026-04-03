@@ -36,6 +36,7 @@ Deno.serve((req) =>
     // Step 1: Load raw ERP context
     const rawContext = await buildFullVizzyContext(supabase, userId, {
       includeFinancials: true,
+      companyId: ctx.companyId,
     });
 
     // Step 2: Load previous benchmarks from vizzy_memory

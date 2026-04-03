@@ -10,12 +10,12 @@ export interface VizzyContextOptions {
 export async function buildFullVizzyContext(
   supabase: any,
   userId: string,
-  options: VizzyContextOptions = {}
+  options: VizzyContextOptions & { companyId?: string | null } = {}
 ): Promise<string> {
-  const { includeFinancials = true } = options;
+  const { includeFinancials = true, companyId } = options;
   // Use workspace timezone (defaults to America/Toronto)
   const { getWorkspaceTimezone } = await import("./getWorkspaceTimezone.ts");
-  const tz = await getWorkspaceTimezone(supabase);
+  const tz = await getWorkspaceTimezone(supabase, companyId ?? null);
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
     year: "numeric",

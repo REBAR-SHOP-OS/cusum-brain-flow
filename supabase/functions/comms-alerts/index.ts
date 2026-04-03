@@ -252,13 +252,12 @@ Deno.serve((req) =>
     let totalAlerts = 0;
     let totalSkipped = 0;
 
-    // Resolve workspace timezone once
     const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
-    const workspaceTz = await getWorkspaceTimezone(svc);
 
     for (const configRow of configRows) {
     const companyId = configRow.company_id;
     if (!companyId) continue;
+    const workspaceTz = await getWorkspaceTimezone(svc, companyId);
 
     const config: CommsConfig = {
       external_sender: configRow.external_sender,

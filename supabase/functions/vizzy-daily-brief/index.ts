@@ -20,6 +20,7 @@ Deno.serve((req) =>
 
     const context = await buildFullVizzyContext(ctx.serviceClient, ctx.userId, {
       includeFinancials: true,
+      companyId: ctx.companyId,
     });
 
     const hour = new Date().getHours();
