@@ -949,7 +949,7 @@ export async function buildFullVizzyContext(
   if ((rcCallNoteEmails || []).length > 0) {
     parts.push(
       (rcCallNoteEmails || []).map((note: any) => {
-        const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+        const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
         const recipient = note.to_address || "unknown";
         const recipientName = emailProfileMap.get(recipient?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "") || recipient;
         const preview = note.body_preview ? note.body_preview.replace(/\n/g, " ").slice(0, 500) : "(no preview)";
