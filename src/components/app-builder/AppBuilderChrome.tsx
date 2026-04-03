@@ -4,6 +4,7 @@ import {
   Bell,
   Boxes,
   BriefcaseBusiness,
+  Camera,
   CircleHelp,
   CreditCard,
   Headphones,
@@ -155,8 +156,8 @@ function FloatingActionButtons() {
         <MessageSquare className="h-[19px] w-[19px]" />
       </button>
 
-      <button type="button" aria-label="Open camera help" className="app-builder-fab app-builder-fab--camera">
-        <Search className="h-[19px] w-[19px]" />
+          <button type="button" aria-label="Open camera help" className="app-builder-fab app-builder-fab--camera">
+        <Camera className="h-[19px] w-[19px]" />
       </button>
     </>
   );

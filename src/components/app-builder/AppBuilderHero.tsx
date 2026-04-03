@@ -1,5 +1,6 @@
 import { ArrowRight, Sparkles, ToggleLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import vizzyAvatar from "@/assets/vizzy-avatar.png";
 
 export function AppBuilderHero() {
   const navigate = useNavigate();
@@ -37,7 +38,7 @@ export function AppBuilderHero() {
         </button>
 
         <div className="app-builder-hero__assistant" aria-hidden="true">
-          <div className="app-builder-hero__assistant-face">AI</div>
+          <img src={vizzyAvatar} alt="" className="app-builder-hero__assistant-image" />
           <span className="app-builder-hero__assistant-dot" />
         </div>
       </div>
