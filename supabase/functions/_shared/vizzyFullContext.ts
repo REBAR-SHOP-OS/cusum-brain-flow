@@ -401,6 +401,7 @@ export async function buildFullVizzyContext(
         ? new Date(e.received_at).toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
+            timeZone: tz,
           })
         : "unknown";
       const threadId = e.thread_id ? ` [thread:${e.thread_id}]` : "";
