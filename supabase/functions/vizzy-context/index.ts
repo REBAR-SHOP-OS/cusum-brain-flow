@@ -142,6 +142,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
   }
 
   return {
+    timezone: tz,
     financials: {
       totalReceivable: invoices.reduce((s: number, i: any) => s + (i.Balance || 0), 0),
       totalPayable: bills.reduce((s: number, b: any) => s + (b.Balance || 0), 0),

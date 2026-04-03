@@ -190,7 +190,7 @@ ${eventsList || "  No recent events"}
 ${snap.inboundEmails.length > 0
   ? snap.inboundEmails.map((e) => {
       const preview = e.body_preview ? e.body_preview.slice(0, 80).replace(/\n/g, " ") : "";
-      const date = e.received_at ? new Date(e.received_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "unknown";
+      const date = e.received_at ? new Date(e.received_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: snap.timezone || "America/Toronto" }) : "unknown";
       return `  • [${e.subject || "No subject"}] from ${e.from_address || "unknown"} to ${e.to_address || "unknown"} — ${preview} (${date})`;
     }).join("\n")
   : "  No emails available"}
