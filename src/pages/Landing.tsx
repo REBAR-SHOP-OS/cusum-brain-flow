@@ -7,7 +7,7 @@ import { AnimatedCounter } from "@/components/ceo/AnimatedCounter";
 import logoCoin from "@/assets/logo-coin.png";
 import { InteractiveBrainBg } from "@/components/brain/InteractiveBrainBg";
 import { LandingFooter } from "@/components/landing/LandingFooter";
-import { PublicChatWidget } from "@/components/landing/PublicChatWidget";
+import { InteractiveSalesConcierge } from "@/components/landing/InteractiveSalesConcierge";
 import { LandingSectionBoundary } from "@/components/landing/LandingSectionBoundary";
 import { Skeleton } from "@/components/ui/skeleton";
 
