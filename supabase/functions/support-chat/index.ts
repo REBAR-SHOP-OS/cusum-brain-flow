@@ -51,7 +51,7 @@ async function handleWidgetJs(url: URL, supabase: any, supabaseUrl: string) {
   });
 
   return new Response(generateWidgetJs(config, supabaseUrl), {
-    headers: { ...corsHeaders, "Content-Type": "application/javascript", "Cache-Control": "public, max-age=300" },
+    headers: { ...corsHeaders, "Content-Type": "application/javascript", "Cache-Control": "no-cache, no-store, must-revalidate" },
   });
 }
 
