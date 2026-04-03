@@ -65,6 +65,17 @@
 
     --chat-user: 220 14% 94%;
     --chat-agent: 0 0% 100%;
+
+    --dashboard-reference-bg: 229 41% 7%;
+    --dashboard-reference-surface: 226 36% 10%;
+    --dashboard-reference-sidebar: 228 40% 6%;
+    --dashboard-reference-border: 221 29% 18%;
+    --dashboard-reference-header: 174 68% 52%;
+    --dashboard-reference-muted: 218 19% 66%;
+    --dashboard-reference-hero-start: 26 100% 49%;
+    --dashboard-reference-hero-end: 37 100% 58%;
+    --dashboard-reference-fab: 174 67% 50%;
+    --dashboard-reference-ready: 150 72% 42%;
   }
 
   .dark {
@@ -119,6 +130,17 @@
 
     --chat-user: 222 30% 16%;
     --chat-agent: 222 47% 10%;
+
+    --dashboard-reference-bg: 229 41% 7%;
+    --dashboard-reference-surface: 226 36% 10%;
+    --dashboard-reference-sidebar: 228 40% 6%;
+    --dashboard-reference-border: 221 29% 18%;
+    --dashboard-reference-header: 174 68% 52%;
+    --dashboard-reference-muted: 218 19% 66%;
+    --dashboard-reference-hero-start: 26 100% 49%;
+    --dashboard-reference-hero-end: 37 100% 58%;
+    --dashboard-reference-fab: 174 67% 50%;
+    --dashboard-reference-ready: 150 72% 42%;
   }
 }
 

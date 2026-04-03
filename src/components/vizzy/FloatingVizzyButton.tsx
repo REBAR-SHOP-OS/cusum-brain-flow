@@ -22,13 +22,17 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
     const [expanded, setExpanded] = useState(false);
     const [showVoiceChat, setShowVoiceChat] = useState(false);
     const [pulseActive] = useState(false);
+    const isAppBuilderDashboard = location.pathname === "/app-builder";
 
     const { pos, handlers, wasDragged } = useDraggablePosition({
       storageKey: "vizzy-btn-pos",
       btnSize: BTN_SIZE,
       defaultPos: (mobile) => ({
-        x: typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - 20 : 300,
-        y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - (mobile ? 100 : 28) : 300,
+        x: typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - (isAppBuilderDashboard ? 28 : 20) : 300,
+        y:
+          typeof window !== "undefined"
+            ? window.innerHeight - BTN_SIZE - (mobile ? 100 : isAppBuilderDashboard ? 208 : 28)
+            : 300,
       }),
     });
 
@@ -130,8 +134,12 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
               style={{
                 width: BTN_SIZE,
                 height: BTN_SIZE,
-                boxShadow: "0 0 18px 2px hsl(172 66% 50% / 0.25), 0 4px 12px hsl(0 0% 0% / 0.35)",
-                border: "2.5px solid hsl(172 66% 50% / 0.6)",
+                boxShadow: isAppBuilderDashboard
+                  ? "0 0 0 4px hsl(175 74% 50% / 0.22), 0 10px 22px hsl(0 0% 0% / 0.4)"
+                  : "0 0 18px 2px hsl(172 66% 50% / 0.25), 0 4px 12px hsl(0 0% 0% / 0.35)",
+                border: isAppBuilderDashboard
+                  ? "2.5px solid hsl(175 74% 56% / 0.7)"
+                  : "2.5px solid hsl(172 66% 50% / 0.6)",
               }}
             >
               <img

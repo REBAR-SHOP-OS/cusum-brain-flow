@@ -15,6 +15,7 @@ import { useCustomerPortalData } from "@/hooks/useCustomerPortalData";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { useMemo } from "react";
 
 interface NavGroup {
   label: string;
@@ -43,6 +44,26 @@ export function AppSidebar() {
   const isInternal = email.endsWith("@rebar.shop");
   const { hasAccess: isLinkedCustomer } = useCustomerPortalData();
   const isExternalEmployee = !isInternal && !!email && !isLinkedCustomer;
+  const isAppBuilderRoute = location.pathname === "/app-builder" || location.pathname.startsWith("/app-builder/");
+  const sidebarClasses = useMemo(
+    () =>
+      cn(
+        "group/sidebar shrink-0 border-r flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden",
+        isAppBuilderRoute
+          ? "bg-[hsl(var(--dashboard-reference-sidebar))] border-[hsl(var(--dashboard-reference-border))]"
+          : "bg-sidebar border-sidebar-border",
+        pinned ? "w-48" : "w-14 hover:w-48",
+      ),
+    [isAppBuilderRoute, pinned],
+  );
+  const sectionLabelClasses = isAppBuilderRoute
+    ? "text-[8px] font-bold tracking-[0.2em] text-white/28 uppercase whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200"
+    : "text-[8px] font-bold tracking-[0.2em] text-sidebar-foreground/40 uppercase whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200";
+  const inactiveItemClasses = isAppBuilderRoute ? "text-white/72 hover:bg-white/5" : "text-sidebar-foreground hover:bg-sidebar-accent";
+  const activeItemClasses = isAppBuilderRoute
+    ? "bg-white/8 text-white shadow-[inset_0_0_0_1px_hsl(var(--dashboard-reference-border))]"
+    : "bg-sidebar-accent text-sidebar-accent-foreground";
+  const lockedItemClasses = isAppBuilderRoute ? "text-white/25" : "text-sidebar-foreground/30";
 
   // AI bot account: only Dashboard + Shop Floor
   if (email === "ai@rebar.shop") {
@@ -51,7 +72,7 @@ export function AppSidebar() {
       { name: "Shop Floor", href: "/shop-floor", icon: Factory },
     ];
     return (
-      <aside data-tour="sidebar" className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
+      <aside data-tour="sidebar" className={cn("group/sidebar w-14 hover:w-48 shrink-0 border-r flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden", isAppBuilderRoute ? "bg-[hsl(var(--dashboard-reference-sidebar))] border-[hsl(var(--dashboard-reference-border))]" : "bg-sidebar border-sidebar-border")}>
         <ScrollArea className="flex-1 py-2">
           <div className="flex flex-col gap-0.5 px-2 mt-2">
             {aiNav.map((item) => {
@@ -63,8 +84,7 @@ export function AppSidebar() {
                       to={item.href}
                       className={cn(
                         "relative h-10 rounded-lg flex items-center gap-3 px-2 transition-colors whitespace-nowrap",
-                        "hover:bg-sidebar-accent",
-                        isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground"
+                        isActive ? activeItemClasses : inactiveItemClasses
                       )}
                     >
                       <item.icon className="w-[18px] h-[18px] shrink-0" />
@@ -116,7 +136,7 @@ export function AppSidebar() {
       ];
     }
     return (
-      <aside data-tour="sidebar" className="group/sidebar w-14 hover:w-48 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden">
+      <aside data-tour="sidebar" className={cn("group/sidebar w-14 hover:w-48 shrink-0 border-r flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden", isAppBuilderRoute ? "bg-[hsl(var(--dashboard-reference-sidebar))] border-[hsl(var(--dashboard-reference-border))]" : "bg-sidebar border-sidebar-border")}>
         <ScrollArea className="flex-1 py-2">
           <div className="flex flex-col gap-0.5 px-2 mt-2">
             {externalNav.map((item) => {
@@ -128,8 +148,7 @@ export function AppSidebar() {
                       to={item.href}
                       className={cn(
                         "relative h-10 rounded-lg flex items-center gap-3 px-2 transition-colors whitespace-nowrap",
-                        "hover:bg-sidebar-accent",
-                        isActive ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground"
+                        isActive ? activeItemClasses : inactiveItemClasses
                       )}
                     >
                       <item.icon className="w-[18px] h-[18px] shrink-0" />
@@ -224,10 +243,7 @@ export function AppSidebar() {
   };
 
   return (
-    <aside data-tour="sidebar" className={cn(
-      "group/sidebar shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden",
-      pinned ? "w-48" : "w-14 hover:w-48"
-    )}>
+    <aside data-tour="sidebar" className={sidebarClasses}>
       <ScrollArea className="flex-1 py-2">
         {navGroups.map((group) => {
           // Show group if at least one item exists (locked or not)
@@ -236,7 +252,7 @@ export function AppSidebar() {
           return (
             <div key={group.label} className="mb-3">
               <div className="px-2 mb-1">
-                <span className="text-[8px] font-bold tracking-[0.2em] text-sidebar-foreground/40 uppercase whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200">
+                <span className={sectionLabelClasses}>
                   {group.label}
                 </span>
               </div>
@@ -256,7 +272,7 @@ export function AppSidebar() {
                           <button
                             onClick={() => handleLockedClick(item)}
                             data-tour={item.tourId}
-                            className="relative h-10 rounded-lg flex items-center gap-3 px-2 transition-colors whitespace-nowrap text-sidebar-foreground/30 cursor-not-allowed"
+                            className={cn("relative h-10 rounded-lg flex items-center gap-3 px-2 transition-colors whitespace-nowrap cursor-not-allowed", lockedItemClasses)}
                           >
                             <item.icon className="w-[18px] h-[18px] shrink-0" />
                             <span className="text-sm opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-200 overflow-hidden flex items-center gap-1.5">
@@ -280,10 +296,7 @@ export function AppSidebar() {
                           data-tour={item.tourId}
                           className={cn(
                             "relative h-10 rounded-lg flex items-center gap-3 px-2 transition-colors whitespace-nowrap",
-                            "hover:bg-sidebar-accent",
-                            isActive
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : "text-sidebar-foreground"
+                            isActive ? activeItemClasses : inactiveItemClasses
                           )}
                         >
                           <item.icon className="w-[18px] h-[18px] shrink-0" />
@@ -308,12 +321,15 @@ export function AppSidebar() {
           );
         })}
       </ScrollArea>
-      <div className="px-2 py-2 border-t border-sidebar-border">
+      <div className={cn("px-2 py-2 border-t", isAppBuilderRoute ? "border-[hsl(var(--dashboard-reference-border))]" : "border-sidebar-border")}>
         <Tooltip delayDuration={200}>
           <TooltipTrigger asChild>
             <button
               onClick={togglePin}
-              className="h-10 w-full rounded-lg flex items-center gap-3 px-2 transition-colors hover:bg-sidebar-accent text-sidebar-foreground"
+              className={cn(
+                "h-10 w-full rounded-lg flex items-center gap-3 px-2 transition-colors",
+                isAppBuilderRoute ? "text-white/72 hover:bg-white/5" : "hover:bg-sidebar-accent text-sidebar-foreground",
+              )}
             >
               {pinned ? <PanelLeftClose className="w-[18px] h-[18px] shrink-0" /> : <PanelLeft className="w-[18px] h-[18px] shrink-0" />}
               <span className={cn("text-sm overflow-hidden transition-opacity duration-200", pinned ? "opacity-100" : "opacity-0 group-hover/sidebar:opacity-100")}>

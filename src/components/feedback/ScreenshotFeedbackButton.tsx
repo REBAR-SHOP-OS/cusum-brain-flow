@@ -7,11 +7,13 @@ import html2canvas from "html2canvas";
 import { AnnotationOverlay, SpeechControls } from "./AnnotationOverlay";
 import { FloatingMicButton } from "./FloatingMicButton";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
+import { useLocation } from "react-router-dom";
 
 const THROTTLE_MS = 3000;
 const BTN_SIZE = 40;
 
 export function ScreenshotFeedbackButton() {
+  const location = useLocation();
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [screenshot, setScreenshot] = useState("");
   const [capturing, setCapturing] = useState(false);
@@ -28,6 +30,7 @@ export function ScreenshotFeedbackButton() {
       y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - 96 : 300,
     }),
   });
+  const isAppBuilderDashboard = location.pathname === "/app-builder";
 
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -255,8 +258,17 @@ export function ScreenshotFeedbackButton() {
         onPointerDown={handlers.onPointerDown}
         onPointerMove={handlers.onPointerMove}
         onPointerUp={handlePointerUp}
-        className="fixed z-[9999] w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-lg ring-1 ring-white/30 flex items-center justify-center hover:scale-110 transition-transform cursor-grab active:cursor-grabbing select-none"
-        style={{ left: pos.x, top: pos.y, touchAction: "none", pointerEvents: "auto" }}
+        className={`fixed z-[9999] flex items-center justify-center rounded-full shadow-lg transition-transform cursor-grab active:cursor-grabbing select-none hover:scale-110 ${
+          isAppBuilderDashboard
+            ? "w-12 h-12 bg-[hsl(var(--dashboard-reference-fab))] text-[#08252f] ring-1 ring-black/15"
+            : "w-10 h-10 bg-primary text-primary-foreground ring-1 ring-white/30"
+        }`}
+        style={{
+          left: isAppBuilderDashboard ? window.innerWidth - 54 : pos.x,
+          top: isAppBuilderDashboard ? window.innerHeight - 112 : pos.y,
+          touchAction: "none",
+          pointerEvents: "auto",
+        }}
         aria-label="Report a change"
         title="Screenshot Feedback"
       >
