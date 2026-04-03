@@ -56,6 +56,39 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+async function createNarrationAudio(segments: ScriptSegment[], storyboard: StoryboardScene[]): Promise<string | undefined> {
+  const narrationText = storyboard
+    .map((scene) => scene.voiceover?.trim())
+    .filter((line): line is string => !!line)
+    .join(" ")
+    || segments.map((segment) => segment.text.trim()).filter(Boolean).join(" ");
+
+  if (!narrationText) return undefined;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Authentication required for narration audio.");
+  }
+
+  const ttsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+  const ttsResponse = await fetch(ttsUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({ text: narrationText }),
+  });
+
+  if (!ttsResponse.ok) {
+    throw new Error(`Narration generation failed (${ttsResponse.status}).`);
+  }
+
+  const audioBlob = await ttsResponse.blob();
+  return URL.createObjectURL(audioBlob);
+}
+
 export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (editing: boolean) => void }) {
   const { toast } = useToast();
   const { savedBrand, isLoading: brandLoading } = useAdDirectorBrandKit();
@@ -156,29 +189,18 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
       let audioUrl: string | undefined;
       try {
-        const fullNarration = currentSegments.map(s => s.text).join(" ");
-        if (fullNarration.trim().length > 0) {
-          const ttsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
-          const ttsResponse = await fetch(ttsUrl, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: JSON.stringify({ text: fullNarration }),
-          });
-          if (ttsResponse.ok) {
-            const audioBlob = await ttsResponse.blob();
-            audioUrl = URL.createObjectURL(audioBlob);
-          }
-        }
+        audioUrl = await createNarrationAudio(currentSegments, currentStoryboard);
       } catch (e) { console.warn("TTS failed:", e); }
+
+      const hasClosingScene = currentStoryboard.some((scene) => {
+        const segment = currentSegments.find((candidate) => candidate.id === scene.segmentId);
+        return scene.generationMode === "static-card" || segment?.type === "closing";
+      });
 
       const finalUrl = await stitchClips(orderedClips, {
         logo: { url: currentBrand.logoUrl || "", enabled: !!currentBrand.logoUrl, size: 80 },
         endCard: {
-          enabled: true, brandName: currentBrand.name, tagline: currentBrand.tagline,
+          enabled: !hasClosingScene, brandName: currentBrand.name, tagline: currentBrand.tagline,
           website: currentBrand.website, primaryColor: currentBrand.primaryColor,
           bgColor: currentBrand.secondaryColor, logoUrl: currentBrand.logoUrl,
         },
@@ -186,6 +208,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         audioUrl,
         musicUrl: service.getState().musicTrackUrl || undefined,
         musicVolume: 0.15,
+        crossfadeDuration: 0,
       });
 
       // Upload to storage for permanent URL

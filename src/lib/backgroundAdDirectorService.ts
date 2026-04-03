@@ -45,6 +45,32 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+async function buildNarrationAudioUrl(lines: string[]): Promise<string | undefined> {
+  const narrationText = lines.map((line) => line.trim()).filter(Boolean).join(" ");
+  if (!narrationText) return undefined;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Not authenticated");
+
+  const ttsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+  const response = await fetch(ttsUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+    },
+    body: JSON.stringify({ text: narrationText }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`TTS generation failed (${response.status})`);
+  }
+
+  const audioBlob = await response.blob();
+  return URL.createObjectURL(audioBlob);
+}
+
 function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
@@ -745,29 +771,53 @@ class BackgroundAdDirectorService {
       const latestClips = this.state.clips;
       const completedClips = latestClips.filter(c => c.status === "completed" && c.videoUrl);
       if (completedClips.length === 0) { console.warn("No completed clips for export"); return; }
+      const hasClosingScene = sb.some((scene) => {
+        const segment = segs.find((candidate) => candidate.id === scene.segmentId);
+        return scene.generationMode === "static-card" || segment?.type === "closing";
+      });
 
       const orderedClips = sb
-        .map(scene => {
+        .map((scene, index) => {
           const clip = latestClips.find(c => c.sceneId === scene.id);
           const segment = segs.find(s => s.id === scene.segmentId);
           const targetDur = segment ? segment.endTime - segment.startTime : 5;
           return clip?.status === "completed" && clip.videoUrl
-            ? { videoUrl: clip.videoUrl, targetDuration: targetDur } : null;
+            ? {
+                videoUrl: clip.videoUrl,
+                targetDuration: targetDur,
+                isClosingScene: scene.generationMode === "static-card" || segment?.type === "closing",
+                transitionNote: index < sb.length - 1 ? scene.transitionNote : undefined,
+              }
+            : null;
         })
-        .filter(Boolean) as { videoUrl: string; targetDuration: number }[];
+        .filter(Boolean) as { videoUrl: string; targetDuration: number; isClosingScene?: boolean; transitionNote?: string }[];
 
       if (orderedClips.length === 0) return;
+
+      let audioUrl: string | undefined;
+      try {
+        audioUrl = await buildNarrationAudioUrl(
+          sb.map((scene) => {
+            const segment = segs.find((candidate) => candidate.id === scene.segmentId);
+            return scene.voiceover || segment?.text || "";
+          })
+        );
+      } catch (error) {
+        console.warn("[bgService] Narration generation failed:", error);
+      }
 
       const finalUrl = await stitchClips(orderedClips, {
         logo: { url: brand.logoUrl || "", enabled: !!brand.logoUrl, size: 80 },
         endCard: {
-          enabled: true, brandName: brand.name, tagline: brand.tagline,
+          enabled: !hasClosingScene, brandName: brand.name, tagline: brand.tagline,
           website: brand.website, primaryColor: brand.primaryColor,
           bgColor: brand.secondaryColor, logoUrl: brand.logoUrl,
         },
         subtitles: { enabled: false, segments: [] },
+        audioUrl,
         musicUrl: this.state.musicTrackUrl || undefined,
         musicVolume: 0.15,
+        crossfadeDuration: 0,
       });
 
       // Upload to storage for permanent URL

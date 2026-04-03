@@ -32,6 +32,7 @@ export interface StitchOverlayOptions {
   musicUrl?: string;
   musicVolume?: number; // 0-1, default 0.3
   crossfadeDuration?: number; // seconds, default 0.5
+  skipLogoOnLastClip?: boolean;
 }
 
 export interface StitchProgress {
@@ -159,9 +160,11 @@ function drawSubtitle(ctx: CanvasRenderingContext2D, w: number, h: number, text:
   ctx.shadowOffsetY = 0;
   ctx.fillStyle = "#ffffff";
 
-  // Apply letter spacing via manual character rendering would be heavy;
-  // use (letterSpacing) if supported, otherwise just render normally
-  try { (ctx as any).letterSpacing = "0.5px"; } catch {}
+  // Apply letter spacing if the browser context supports it.
+  const subtitleCtxWithLetterSpacing = ctx as CanvasRenderingContext2D & { letterSpacing?: string };
+  if ("letterSpacing" in subtitleCtxWithLetterSpacing) {
+    subtitleCtxWithLetterSpacing.letterSpacing = "0.5px";
+  }
 
   lines.forEach((ln, i) => {
     ctx.fillText(ln, w / 2, pillY + padY + i * lineHeight);
@@ -170,7 +173,9 @@ function drawSubtitle(ctx: CanvasRenderingContext2D, w: number, h: number, text:
   // Reset
   ctx.shadowColor = "transparent";
   ctx.shadowBlur = 0;
-  try { (ctx as any).letterSpacing = "0px"; } catch {}
+  if ("letterSpacing" in subtitleCtxWithLetterSpacing) {
+    subtitleCtxWithLetterSpacing.letterSpacing = "0px";
+  }
   ctx.restore();
   ctx.textAlign = "start";
   ctx.textBaseline = "alphabetic";
@@ -501,7 +506,7 @@ export async function stitchClips(
     // Phase 2: Render clips with crossfade transitions
     let clipIndex = 0;
     let clipStartCumulativeTime = 0;
-    const crossfadeDur = overlays?.crossfadeDuration ?? 0.5;
+    const crossfadeDur = overlays?.crossfadeDuration ?? 0;
     let clipPreStartedByCrossfade = false;
 
     // Pre-seek next clip for crossfade readiness
@@ -641,7 +646,9 @@ export async function stitchClips(
             if (activeSub) drawSubtitle(ctx, W, H, activeSub.text);
           }
 
-          if (logoImg) drawLogo(ctx, W, H, logoImg, logoSize);
+          const shouldDrawLogo =
+            !!logoImg && !(overlays?.skipLogoOnLastClip && clipIndex === validatedClips.length - 1);
+          if (shouldDrawLogo) drawLogo(ctx, W, H, logoImg, logoSize);
         }
 
         animFrame = requestAnimationFrame(drawFrame);
