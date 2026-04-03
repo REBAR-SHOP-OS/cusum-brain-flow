@@ -640,8 +640,8 @@ export async function buildFullVizzyContext(
     }
     const activeHrs = (activeMs / 3600000).toFixed(1);
     const clockedHrs = hoursWorked[name]?.toFixed(1) || "?";
-    const firstAction = new Date(timestamps[0]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    const lastAction = new Date(timestamps[timestamps.length - 1]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const firstAction = new Date(timestamps[0]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz });
+    const lastAction = new Date(timestamps[timestamps.length - 1]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz });
     const density = (timestamps.length / (activeMs / 3600000 || 1)).toFixed(0);
 
     footprintLines.push(`  • ${name}: ${activeHrs}hrs active / ${clockedHrs}hrs clocked | ${timestamps.length} actions | ${firstAction}–${lastAction} | ${gapCount} idle gaps (longest: ${longestGapMin}min) | ${density} actions/hr`);
