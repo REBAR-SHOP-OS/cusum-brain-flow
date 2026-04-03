@@ -117,7 +117,7 @@ export function useOpenDM() {
 
       if (error) {
         const correlationId = Math.random().toString(36).substring(2, 9);
-        const companyId = myProfile.company_id ?? "unknown";
+        const companyId = (myProfile as any).company_id ?? "unknown";
 
         console.error("[DM Creation Failed]", {
           correlationId,
@@ -149,7 +149,7 @@ export function useOpenDM() {
 
       if (!data) {
         const correlationId = Math.random().toString(36).substring(2, 9);
-        const companyId = myProfile.company_id ?? "unknown";
+        const companyId = (myProfile as any).company_id ?? "unknown";
         console.error("[DM Creation] RPC returned null", {
           correlationId,
           authUserId: user.id,

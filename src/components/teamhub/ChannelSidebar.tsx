@@ -196,7 +196,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
             >
               <Hash className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
               <span className="truncate flex-1 text-left">{ch.name}</span>
-              {isAdmin && !TEAM_HUB_PROTECTED_CHANNELS.includes(ch.name) && (
+              {isAdmin && !(TEAM_HUB_PROTECTED_CHANNELS as readonly string[]).includes(ch.name) && (
                 <Trash2
                   className="w-3.5 h-3.5 shrink-0 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={(e) => { e.stopPropagation(); setChannelToDelete(ch); }}
@@ -237,7 +237,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
               >
                 <Users className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
                 <span className="truncate flex-1 text-left">{ch.name}</span>
-                {isAdmin && !TEAM_HUB_PROTECTED_CHANNELS.includes(ch.name) && (
+                {isAdmin && !(TEAM_HUB_PROTECTED_CHANNELS as readonly string[]).includes(ch.name) && (
                   <Trash2
                     className="w-3.5 h-3.5 shrink-0 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => { e.stopPropagation(); setChannelToDelete(ch); }}
