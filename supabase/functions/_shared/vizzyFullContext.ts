@@ -1008,7 +1008,7 @@ export async function buildFullVizzyContext(
   } else {
     parts.push(voicemails.map((vm: any) => {
       const meta = (vm.metadata || {}) as any;
-      const time = vm.created_at ? new Date(vm.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+      const time = vm.created_at ? new Date(vm.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
       const caller = meta.contact_name || meta.from_number || "Unknown";
       const taskStr = (meta.tasks || []).length > 0
         ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
