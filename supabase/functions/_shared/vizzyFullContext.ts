@@ -760,7 +760,7 @@ export async function buildFullVizzyContext(
 
     // Detail line
     const durationStr = duration > 0 ? `${Math.floor(duration / 60)}m ${duration % 60}s` : "0s";
-    const timeStr = call.received_at ? new Date(call.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+    const timeStr = call.received_at ? new Date(call.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
     rcCallDetails.push(`  • [${dir.toUpperCase()}] ${call.from_address || "?"} → ${call.to_address || "?"}: ${durationStr}, ${result} (${timeStr})`);
   }
 
