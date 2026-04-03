@@ -1,5 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { MessageCircle, X, Send, Loader2, Trash2, SpellCheck } from "lucide-react";
+import {
+  Bot,
+  ChevronRight,
+  Loader2,
+  MessageCircle,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  SpellCheck,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -15,6 +26,15 @@ interface Msg {
   role: "user" | "assistant";
   content: string;
 }
+
+const STARTER_PROMPTS = [
+  "I need a quote for a project",
+  "Show me product pricing",
+  "Can you help with custom bending?",
+];
+
+const WELCOME_MESSAGE =
+  "Welcome to REBAR SHOP support. I can help with quotes, product guidance, fabrication workflows, and next steps for your project.";
 
 export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
   function PublicChatWidget(_props, _ref) {
@@ -48,7 +68,7 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
         setMessages([{
           id: crypto.randomUUID(),
           role: "assistant",
-          content: "G'day! Welcome to Rebar Shop. How can I help you today? Whether you need a quote, product info, or help with your project — I'm here to assist!"
+          content: WELCOME_MESSAGE,
         }]);
       }
     }
@@ -66,8 +86,10 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
     setOpen(false);
   };
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
+  const sendPrompt = useCallback(async (prompt: string) => {
+    setInput(prompt);
+    await Promise.resolve();
+    const text = prompt.trim();
     if (!text || isStreaming) return;
 
     const userMsg: Msg = { id: crypto.randomUUID(), role: "user", content: text };
@@ -126,7 +148,9 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
                 return [...prev, { id: assistantId, role: "assistant", content }];
               });
             }
-          } catch { break; }
+          } catch {
+            break;
+          }
         }
       }
 
@@ -141,7 +165,11 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
       setIsStreaming(false);
       abortRef.current = null;
     }
-  }, [input, messages, isStreaming]);
+  }, [isStreaming, messages]);
+
+  const sendMessage = useCallback(async () => {
+    await sendPrompt(input);
+  }, [input, sendPrompt]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -158,10 +186,15 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
   }, [handlers, wasDragged]);
 
   // Position chat panel above the bubble
+  const panelWidth = typeof window !== "undefined" && window.innerWidth < 640 ? Math.min(window.innerWidth - 24, 380) : 400;
   const panelStyle: React.CSSProperties = {
     position: "fixed",
-    left: Math.min(pos.x - 350 + BTN_SIZE, window.innerWidth - 360),
-    top: Math.max(pos.y - 530, 8),
+    left: typeof window !== "undefined"
+      ? Math.max(12, Math.min(pos.x - panelWidth + BTN_SIZE, window.innerWidth - panelWidth - 12))
+      : 12,
+    top: typeof window !== "undefined"
+      ? Math.max(12, Math.min(pos.y - 620, window.innerHeight - 140))
+      : 12,
     zIndex: 50,
   };
 
@@ -169,49 +202,67 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
     <>
       {/* Chat panel */}
       {open && (
-        <div style={panelStyle} className="w-[350px] sm:w-[400px] max-h-[520px] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200 border border-border/50 bg-card">
+        <div
+          style={{ ...panelStyle, width: panelWidth }}
+          className="flex max-h-[640px] flex-col overflow-hidden rounded-[30px] border border-border/60 bg-card shadow-[0_28px_80px_rgba(15,23,42,0.28)] animate-in slide-in-from-bottom-4 fade-in duration-200"
+        >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-primary-foreground/20 flex items-center justify-center">
-                <MessageCircle className="w-4 h-4" />
+          <div className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(135deg,hsl(var(--primary))_0%,rgba(14,165,233,0.92)_100%)] px-5 py-4 text-primary-foreground">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.22),transparent_30%)]" />
+            <div className="relative flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/16 backdrop-blur">
+                  <Bot className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold leading-tight">AI chat concierge</p>
+                    <span className="rounded-full bg-white/14 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide">
+                      Live
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-primary-foreground/82">
+                    Modern website support for quotes, products, and project guidance.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-primary-foreground/85">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/12 px-2.5 py-1">
+                      <Sparkles className="h-3 w-3" />
+                      AI-assisted
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-white/12 px-2.5 py-1">
+                      <ShieldCheck className="h-3 w-3" />
+                      Fast replies
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm font-semibold leading-tight">Support</p>
-                <p className="text-[10px] opacity-80">Typically replies instantly</p>
-              </div>
+              <button onClick={handleClose} className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20">
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <button onClick={handleClose} className="w-7 h-7 rounded-full hover:bg-primary-foreground/20 transition-colors flex items-center justify-center">
-              <X className="w-4 h-4" />
-            </button>
           </div>
 
           {/* Messages */}
-          <ScrollArea className="flex-1 max-h-[360px] overflow-hidden">
-            <div className="p-4 space-y-3 overflow-hidden">
+          <ScrollArea className="flex-1 overflow-hidden bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.07),transparent_22%),transparent]">
+            <div className="space-y-4 p-4">
               {messages.length === 0 && (
-                <div className="text-center py-6">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
-                    <MessageCircle className="w-6 h-6 text-primary" />
+                <div className="rounded-[28px] border border-border/60 bg-background/85 p-5 text-center shadow-sm">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-[22px] bg-primary/10 text-primary">
+                    <MessageCircle className="h-6 w-6" />
                   </div>
-                  <p className="text-sm font-medium">Welcome to Rebar Shop</p>
-                  <p className="text-xs text-muted-foreground mt-1 max-w-[260px] mx-auto">
-                    Ask about pricing, products, estimating, or anything rebar related.
+                  <p className="text-sm font-semibold text-foreground">Ask anything about your next rebar order</p>
+                  <p className="mx-auto mt-1 max-w-[280px] text-xs leading-5 text-muted-foreground">
+                    Get product help, request a quote, or start a conversation about fabrication requirements.
                   </p>
-                  <div className="flex flex-wrap gap-1.5 justify-center mt-4">
-                    {["Product pricing", "Custom bending", "Get a quote"].map((q) => (
+                  <div className="mt-4 flex flex-wrap justify-center gap-2">
+                    {STARTER_PROMPTS.map((q) => (
                       <button
                         key={q}
-                        onClick={() => {
-                          setInput(q);
-                          setTimeout(() => {
-                            setInput(q);
-                            sendMessage();
-                          }, 50);
-                        }}
-                        className="text-[11px] px-3 py-1.5 rounded-full border border-primary/30 text-primary hover:bg-primary/10 transition-colors"
+                        onClick={() => sendPrompt(q)}
+                        className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
                       >
                         {q}
+                        <ChevronRight className="h-3 w-3" />
                       </button>
                     ))}
                   </div>
@@ -227,17 +278,17 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
                 >
                   <button
                     onClick={() => deleteMessage(msg.id)}
-                    className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
+                    className="absolute -right-1.5 -top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow-sm transition-opacity group-hover/msg:opacity-100"
                     title="Delete"
                   >
-                    <Trash2 className="w-2.5 h-2.5" />
+                    <Trash2 className="h-2.5 w-2.5" />
                   </button>
                   <div
                     className={cn(
-                      "rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed break-words min-w-0 [overflow-wrap:anywhere]",
+                      "min-w-0 break-words rounded-[24px] border px-4 py-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]",
                       msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-br-md"
-                        : "bg-muted text-foreground rounded-bl-md"
+                        ? "rounded-br-md border-primary/20 bg-primary text-primary-foreground shadow-sm"
+                        : "rounded-bl-md border-border/60 bg-background/90 text-foreground shadow-sm"
                     )}
                   >
                     {msg.role === "assistant" ? (
@@ -250,8 +301,8 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
               ))}
               {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
                 <div className="mr-auto max-w-[85%]">
-                  <div className="bg-muted rounded-2xl rounded-bl-md px-3.5 py-2.5 text-[13px] flex items-center gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                  <div className="flex items-center gap-2 rounded-[24px] rounded-bl-md border border-border/60 bg-background/90 px-4 py-3 text-[13px] shadow-sm">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                     <span className="text-muted-foreground">Typing...</span>
                   </div>
                 </div>
@@ -261,39 +312,49 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
           </ScrollArea>
 
           {/* Input */}
-          <div className="border-t border-border p-3 bg-card">
-            <div className="flex gap-2 items-end">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Type a message..."
-                className="flex-1 min-h-[40px] max-h-[100px] min-w-0 text-sm resize-none bg-muted rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground"
-                rows={1}
-                disabled={isStreaming}
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!input.trim()) return;
-                  const result = await grammar.check(input);
-                  if (result.changed) setInput(result.corrected);
-                }}
-                disabled={grammar.checking || !input.trim() || isStreaming}
-                title="Check spelling"
-                className="h-10 w-10 p-0 shrink-0 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {grammar.checking ? <Loader2 className="w-4 h-4 animate-spin" /> : <SpellCheck className="w-4 h-4" />}
-              </button>
-              <Button
-                size="sm"
-                className="h-10 w-10 p-0 shrink-0 rounded-xl"
-                onClick={sendMessage}
-                disabled={!input.trim() || isStreaming}
-              >
-                {isStreaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              </Button>
+          <div className="border-t border-border/60 bg-card p-4">
+            <div className="rounded-[26px] border border-border/60 bg-background/90 p-3 shadow-sm">
+              <div className="flex gap-2 items-end">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Tell us what you need help with..."
+                  className="min-h-[54px] max-h-[120px] min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
+                  rows={2}
+                  disabled={isStreaming}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!input.trim()) return;
+                    const result = await grammar.check(input);
+                    if (result.changed) setInput(result.corrected);
+                  }}
+                  disabled={grammar.checking || !input.trim() || isStreaming}
+                  title="Check spelling"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {grammar.checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <SpellCheck className="h-4 w-4" />}
+                </button>
+                <Button
+                  size="sm"
+                  className="h-11 shrink-0 rounded-2xl px-4"
+                  onClick={sendMessage}
+                  disabled={!input.trim() || isStreaming}
+                >
+                  {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                  Send
+                </Button>
+              </div>
+              <div className="mt-2 flex flex-col gap-2 px-2 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <span>Ask about pricing, delivery, product options, or custom fabrication.</span>
+                <span className="inline-flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-primary" />
+                  AI-guided website support
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -305,15 +366,16 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
         onPointerMove={handlers.onPointerMove}
         onPointerUp={handleBubblePointerUp}
         className={cn(
-          "fixed z-50 w-14 h-14 rounded-full shadow-lg hover:shadow-xl transition-all flex items-center justify-center cursor-grab active:cursor-grabbing select-none",
+          "fixed z-50 flex h-16 w-16 items-center justify-center rounded-full shadow-[0_18px_50px_rgba(14,165,233,0.38)] transition-all cursor-grab select-none active:cursor-grabbing",
           open
             ? "bg-muted text-muted-foreground hover:bg-muted/80"
-            : "bg-primary text-primary-foreground hover:scale-105"
+            : "bg-[linear-gradient(135deg,hsl(var(--primary))_0%,rgba(14,165,233,0.92)_100%)] text-primary-foreground hover:scale-105"
         )}
         style={{ left: pos.x, top: pos.y, touchAction: "none" }}
         aria-label="Open chat"
       >
-        {open ? <X className="w-5 h-5 pointer-events-none" /> : <MessageCircle className="w-6 h-6 pointer-events-none" />}
+        <span className="pointer-events-none absolute inset-1 rounded-full border border-white/15" />
+        {open ? <X className="pointer-events-none h-5 w-5" /> : <MessageCircle className="pointer-events-none h-6 w-6" />}
       </button>
     </>
   );
