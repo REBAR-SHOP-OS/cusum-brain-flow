@@ -840,7 +840,7 @@ export async function buildFullVizzyContext(
 
   parts.push(factsBlock);
   parts.push("");
-  parts.push(`═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══`);
+  parts.push(`═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString("en-US", { timeZone: tz })}) ═══`);
   parts.push("");
 
   if (includeFinancials) {
