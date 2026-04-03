@@ -1,48 +1,97 @@
 
 
-# Fix Website Support Widget — Not Starting Conversations
+# Interactive All-in-One Sales Bot for Both Platforms
 
-## Problem
-The support widget on rebar.shop shows "We could not start the conversation right now" error. Investigation reveals:
+## Vision
+Create a visually striking, multi-mode sales concierge that goes far beyond a chat bubble. The bot combines three experiences in one widget: **Guided Quote Builder**, **AI Sales Chat**, and **Live Handoff** — with inline product cards, animated transitions, and a proactive engagement system.
 
-1. The `support-chat` edge function works correctly — tested directly, returns valid `conversation_id`
-2. The current `generateWidgetJs` produces a **simple widget** with no error message display and silent failure handling
-3. The website is serving a **cached older version** of the widget (via BunnyCDN/optimizer) that has a fancier UI with the error text
-4. The widget JS on rebar.shop is loaded via a deferred script loader (`bv-dl-scripts-list`) which may interfere with execution timing
+## What Gets Built
 
-## Root Causes
-- **Cache staleness**: The website's CDN optimizer cached an older widget JS version that has different error handling
-- **Script loader interference**: The widget script is loaded through BunnyCDN's deferred script loader, which may cause timing issues with the `async` IIFE pattern
-- **Silent failures**: The current simple widget has `catch(e){ started=false; }` with zero user feedback
+### 1. New Edge Function: `sales-concierge` 
+A dedicated AI-powered sales agent with structured tool calling for:
+- **Product recommendation** — returns inline product cards with images, specs, pricing tiers
+- **Instant quote estimation** — calculates rough pricing based on bar size, quantity, bending type
+- **Lead capture** — collects name, email, project details and saves to `sales_contacts`
+- **Live handoff** — flags conversation for human follow-up and notifies the sales team
 
-## Plan
+The AI uses Lovable AI (gemini-3-flash-preview) with a specialized sales prompt that makes it behave like a top-performing salesperson — warm, knowledgeable, and goal-oriented (convert visitors to quote requests).
 
-### 1. Upgrade `generateWidgetJs` to a modern, robust widget
-Replace the simple widget generator in `supabase/functions/support-chat/index.ts` (lines 676-822) with a production-grade widget that:
+### 2. New Component: `InteractiveSalesConcierge.tsx`
+A rich widget on the **Lovable landing page** with three tabs/modes:
 
-- Has the modern UI matching the app's design language (gradient header, branded styling, "LIVE" badge)
-- Shows clear error messages when conversation start fails (with retry button)
-- Handles network timeouts gracefully
-- Adds a retry mechanism for the `start` action
-- Displays the welcome message from config immediately while the conversation initializes
-- Works correctly when loaded via deferred script loaders
+**Mode A — Quick Quote (Visual Wizard)**
+- Step 1: Select rebar type (visual cards with icons)
+- Step 2: Choose size & quantity (sliders + inputs)  
+- Step 3: Bending type (straight, L-shape, U-shape, stirrup — illustrated)
+- Step 4: Delivery zone (map or dropdown)
+- → Instant ballpark estimate + "Get Exact Quote" CTA
 
-### 2. Add `Cache-Control: no-cache` to widget JS response
-Change line 54 from `max-age=300` to `no-cache, no-store, must-revalidate` temporarily to force cache busting, ensuring websites pick up the new version immediately. Can be reverted to a short cache later.
+**Mode B — AI Sales Chat**
+- Full streaming chat with the sales-concierge agent
+- Inline rich cards: product recommendations appear as interactive cards within the chat
+- Quick-reply chips: "Get a Quote", "See Products", "Talk to Someone"
+- Typing indicators, smooth animations
 
-### 3. Add error recovery in the widget
-- If `start` fails, show a friendly message with a "Retry" button
-- Add a 10-second timeout on the fetch call
-- Retry automatically once before showing error
-- When conversation starts successfully, show the proactive greeting normally
+**Mode C — Contact / Handoff**
+- Simple form: Name, Email, Phone, Project Description
+- "Request Callback" button
+- Saves lead to database and triggers notification
 
-### Files changed
-| File | Change |
-|------|--------|
-| `supabase/functions/support-chat/index.ts` | Replace `generateWidgetJs` function with modern widget + fix cache headers |
+**UI Design:**
+- Glassmorphism card with gradient accent matching brand (#E97F0F orange)
+- Animated entrance (slide-up + scale)
+- Floating action button with attention-grabbing pulse + proactive teaser message
+- Smooth tab transitions between modes
+- Mobile-responsive (full-screen on mobile)
 
-### Safety
-- Edge function logic (start, send, poll, AI reply) is unchanged — only the generated widget JS output changes
-- Fallback behavior preserved: widget still works if AI greeting fails
-- No database changes needed
+### 3. Updated Widget JS: `website-chat-widget` 
+Update the existing WordPress widget to include the same sales concierge capabilities:
+- Add quick-quote wizard as the **default first screen** (not just chat)
+- Product card rendering in chat responses
+- Quick-reply suggestion chips
+- Lead capture form accessible via a tab
+- Same AI sales agent backend
+
+### 4. Landing Page Integration
+Add the `InteractiveSalesConcierge` to `Landing.tsx`, replacing or enhancing the existing `PublicChatWidget` with the richer sales experience.
+
+## Technical Architecture
+
+```text
+┌─────────────────────────┐
+│   rebar.shop (WordPress) │
+│   website-chat-widget JS │
+└──────────┬──────────────┘
+           │
+           ▼
+┌─────────────────────────┐     ┌──────────────────┐
+│  sales-concierge (Edge) │────▶│ Lovable AI       │
+│  - AI chat + tools      │     │ gemini-3-flash   │
+│  - quote estimation     │     └──────────────────┘
+│  - lead capture (DB)    │
+│  - product catalog      │
+└──────────┬──────────────┘
+           │
+           ▼
+┌─────────────────────────┐
+│  Lovable App (Landing)   │
+│  InteractiveSalesConcierge│
+└─────────────────────────┘
+```
+
+## Files Changed
+
+| File | Action | Description |
+|------|--------|-------------|
+| `supabase/functions/sales-concierge/index.ts` | **New** | AI sales agent with tool calling for quotes, products, leads |
+| `src/components/landing/InteractiveSalesConcierge.tsx` | **New** | Multi-mode sales widget (wizard + chat + contact) |
+| `src/pages/Landing.tsx` | **Edit** | Replace PublicChatWidget with InteractiveSalesConcierge |
+| `supabase/functions/website-chat-widget/index.ts` | **Edit** | Add quick-quote wizard + product cards + lead capture to WordPress widget |
+
+## Key Differentiators (What Makes It Unique)
+- **Not just a chatbot** — it's a guided sales experience with visual product selection
+- **Instant ballpark pricing** — visitors get rough estimates before committing to a quote request
+- **Rich inline cards** — products appear as beautiful cards within the conversation, not plain text
+- **Proactive engagement** — teaser messages based on page context ("Looking at stirrups? Get 10% off bulk orders!")
+- **Seamless handoff** — AI knows when to pass to a human and captures all context
 
