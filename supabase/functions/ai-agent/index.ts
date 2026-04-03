@@ -462,6 +462,13 @@ Deno.serve((req) =>
       .eq("user_id", user.id);
     const roles = (rolesData || []).map(r => r.role);
 
+    if (agent === "rebuild" && !roles.includes("admin")) {
+      return new Response(
+        JSON.stringify({ error: "Forbidden: Rebuild agent is restricted to admins" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Context fetching (Moved to shared module)
     const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
     const workspaceTz = await getWorkspaceTimezone(svcClient);
@@ -479,7 +486,10 @@ Deno.serve((req) =>
     
     // Phase 6: Executive dashboard context for data/empire agents
     let execContext: Record<string, unknown> = {};
-    if (agent === "data" || agent === "empire" || agent === "commander" || agent === "assistant" || agent === "rebuild") {
+    if (agent === "data" || agent === "empire" || agent === "commander" || agent === "assistant") {
+      execContext = await fetchExecutiveContext(svcClient, companyId);
+    }
+    if (agent === "rebuild") {
       execContext = await fetchExecutiveContext(svcClient, companyId);
     }
     

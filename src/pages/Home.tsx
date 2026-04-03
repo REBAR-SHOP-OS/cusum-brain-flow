@@ -128,6 +128,9 @@ export default function Home() {
     if (!hasRole("admin") && !hasRole("accounting")) {
       filtered = filtered.filter((h) => h.id !== "accounting");
     }
+    if (!hasRole("admin")) {
+      filtered = filtered.filter((h) => h.id !== "rebuild");
+    }
     if (!mapping) return filtered;
     const primary = filtered.find((h) => h.id === mapping.agentKey);
     if (!primary) return filtered;
