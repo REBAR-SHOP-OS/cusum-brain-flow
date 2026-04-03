@@ -31,7 +31,7 @@ Deno.serve((req) =>
 // Build a minimal snapshot for client-side buildVizzyContext compatibility
 async function buildSnapshotFromContext(supabase: any, userId: string) {
   const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
-  const tz = await getWorkspaceTimezone(supabaseAdmin);
+  const tz = await getWorkspaceTimezone(supabase);
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: tz,
     year: "numeric",
