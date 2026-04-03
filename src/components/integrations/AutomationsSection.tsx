@@ -259,7 +259,7 @@ const ADMIN_ONLY_IDS = new Set([
   "website-manager", "app-builder", "seo-manager",
 ]);
 
-export const AutomationsSection = React.forwardRef<HTMLElement, {}>(function AutomationsSection(_props, ref) {
+export const AutomationsSection = React.forwardRef<HTMLElement, Record<string, never>>(function AutomationsSection(_props, ref) {
   const navigate = useNavigate();
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
