@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   Sparkles,
   SpellCheck,
-  Trash2,
   X,
 } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
@@ -42,7 +41,6 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, Record<string, 
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const grammar = useGrammarCheck();
-  const deleteMessage = useCallback((id: string) => setMessages((prev) => prev.filter((m) => m.id !== id)), []);
   const [isStreaming, setIsStreaming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -273,17 +271,10 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, Record<string, 
                 <div
                   key={msg.id}
                   className={cn(
-                    "group/msg relative max-w-[85%] min-w-0",
+                    "max-w-[85%] min-w-0",
                     msg.role === "user" ? "ml-auto" : "mr-auto"
                   )}
                 >
-                  <button
-                    onClick={() => deleteMessage(msg.id)}
-                    className="absolute -right-1.5 -top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground opacity-0 shadow-sm transition-opacity group-hover/msg:opacity-100"
-                    title="Delete"
-                  >
-                    <Trash2 className="h-2.5 w-2.5" />
-                  </button>
                   <div
                     className={cn(
                       "min-w-0 break-words rounded-[24px] border px-4 py-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]",
