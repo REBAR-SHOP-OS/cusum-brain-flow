@@ -38,6 +38,10 @@ Deno.serve((req) =>
       includeFinancials: true,
     });
 
+    // Resolve workspace timezone for consistent date formatting
+    const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
+    const tz = await getWorkspaceTimezone(supabase);
+
     // Step 2: Load previous benchmarks from vizzy_memory
     const { data: prevBenchmarks } = await supabase
       .from("vizzy_memory")
