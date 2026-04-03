@@ -22,7 +22,7 @@ const STARTER_PROMPTS = [
   "Compare product pricing",
 ] as const;
 
-export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
+export const PublicChatWidget = React.forwardRef<HTMLDivElement, Record<string, never>>(
   function PublicChatWidget(_props, _ref) {
     const [open, setOpen] = useState(false);
     const [input, setInput] = useState("");
@@ -142,8 +142,8 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
         if (!content) {
           setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "Hi! Ask me anything about rebar fabrication, estimating, or our platform." }]);
         }
-      } catch (e: any) {
-        if (e.name !== "AbortError") {
+      } catch (error: unknown) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
           setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "Connection error. Please try again." }]);
         }
       } finally {

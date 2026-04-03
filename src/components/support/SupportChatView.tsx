@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { useAuth } from "@/lib/auth";
@@ -30,7 +30,12 @@ interface ConvoDetails {
   status: string;
   assigned_to: string | null;
   created_at: string;
-  metadata: any;
+  metadata: {
+    last_seen_at?: string;
+    city?: string;
+    country?: string;
+    current_page?: string;
+  } | null;
 }
 
 interface Props {
@@ -80,6 +85,33 @@ export function SupportChatView({ conversationId }: Props) {
     return { label: "Offline", color: "bg-muted-foreground/30" };
   }, [convo?.metadata?.last_seen_at]);
 
+  const fetchConversation = useCallback(async () => {
+    if (!conversationId) {
+      setConvo(null);
+      setMessages([]);
+      return;
+    }
+
+    const [conversationResult, messagesResult] = await Promise.all([
+      supabase
+        .from("support_conversations")
+        .select("id, visitor_name, visitor_email, status, assigned_to, created_at, metadata")
+        .eq("id", conversationId)
+        .single(),
+      supabase
+        .from("support_messages")
+        .select("id, sender_type, sender_id, content, content_type, is_internal_note, created_at")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true })
+        .limit(200),
+    ]);
+
+    if (conversationResult.data) {
+      setConvo(conversationResult.data as ConvoDetails);
+    }
+    setMessages((messagesResult.data as Message[]) || []);
+  }, [conversationId]);
+
   // Get profile ID + team members
   useEffect(() => {
     if (!user) return;
@@ -96,23 +128,8 @@ export function SupportChatView({ conversationId }: Props) {
 
   // Fetch conversation details
   useEffect(() => {
-    if (!conversationId) { setConvo(null); setMessages([]); return; }
-
-    supabase
-      .from("support_conversations")
-      .select("id, visitor_name, visitor_email, status, assigned_to, created_at, metadata")
-      .eq("id", conversationId)
-      .single()
-      .then(({ data }) => { if (data) setConvo(data as ConvoDetails); });
-
-    supabase
-      .from("support_messages")
-      .select("id, sender_type, sender_id, content, content_type, is_internal_note, created_at")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true })
-      .limit(200)
-      .then(({ data }) => { setMessages((data as Message[]) || []); });
-  }, [conversationId]);
+    fetchConversation();
+  }, [fetchConversation]);
 
   // Real-time messages
   useEffect(() => {
@@ -221,7 +238,7 @@ export function SupportChatView({ conversationId }: Props) {
         is_internal_note: false,
       });
       if (error) throw error;
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error("Failed to upload image");
       console.error(err);
     } finally {
@@ -261,8 +278,8 @@ export function SupportChatView({ conversationId }: Props) {
       } else {
         toast.info("No suggestion generated");
       }
-    } catch (e: any) {
-      toast.error(e.message || "Failed to get suggestion");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to get suggestion");
     } finally {
       setSuggesting(false);
     }

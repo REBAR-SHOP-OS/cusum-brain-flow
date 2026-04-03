@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,15 @@ interface Conversation {
   created_at: string;
   assigned_to: string | null;
   tags: string[];
-  metadata: any;
+  metadata: ConversationMetadata | null;
+}
+
+interface ConversationMetadata {
+  last_seen_at?: string | null;
+  city?: string | null;
+  country?: string | null;
+  current_page?: string | null;
+  [key: string]: unknown;
 }
 
 interface Props {
@@ -23,7 +31,7 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
-function getPresenceStatus(metadata: any): "online" | "away" | "offline" {
+function getPresenceStatus(metadata: ConversationMetadata | null | undefined): "online" | "away" | "offline" {
   if (!metadata?.last_seen_at) return "offline";
   const lastSeen = new Date(metadata.last_seen_at).getTime();
   const now = Date.now();
@@ -40,7 +48,7 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
   const [loading, setLoading] = useState(true);
   const { companyId } = useCompanyId();
 
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     let query = supabase
       .from("support_conversations")
       .select("id, visitor_name, visitor_email, status, last_message_at, created_at, assigned_to, tags, metadata")
@@ -53,11 +61,11 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
     const { data } = await query;
     setConversations((data as Conversation[]) || []);
     setLoading(false);
-  };
+  }, [filter]);
 
   useEffect(() => {
     fetchConversations();
-  }, [filter]);
+  }, [fetchConversations]);
 
   // Real-time updates
   useEffect(() => {
@@ -72,13 +80,13 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [filter, companyId]);
+  }, [companyId, fetchConversations]);
 
   // Refresh presence every 30s
   useEffect(() => {
     const interval = setInterval(fetchConversations, 30000);
     return () => clearInterval(interval);
-  }, [filter]);
+  }, [fetchConversations]);
 
   const statusColor = (s: string) => {
     switch (s) {
