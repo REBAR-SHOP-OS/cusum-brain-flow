@@ -17,6 +17,11 @@ import { MessageSquare, Globe, Users, Sparkles, Menu, Loader2 } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { toast } from "sonner";
+import {
+  TEAM_HUB_SELF_NOTES_ID,
+  canWriteToTeamHubChannel,
+  formatForwardPrefix,
+} from "@/components/teamhub/teamHubConfig";
 
 export default function TeamHub() {
   const { channels, isLoading: channelsLoading } = useTeamChannels();
@@ -40,7 +45,7 @@ export default function TeamHub() {
   const [selfChannelId, setSelfChannelId] = useState<string | null>(null);
   const { themeId, theme, setTheme } = useTeamHubTheme();
 
-  const isNotesView = selectedChannelId === "__my_notes__";
+  const isNotesView = selectedChannelId === TEAM_HUB_SELF_NOTES_ID;
 
   // Resolve self-DM channel for My Notes
   useEffect(() => {
@@ -65,7 +70,9 @@ export default function TeamHub() {
     return () => { cancelled = true; };
   }, [isNotesView, myProfile?.id]);
 
-  const resolvedChannelId = isNotesView ? selfChannelId : (selectedChannelId || (channelsLoading ? null : channels[0]?.id || null));
+  const resolvedChannelId = isNotesView
+    ? selfChannelId
+    : selectedChannelId || (channelsLoading ? null : channels[0]?.id || null);
   const activeChannelId = resolvedChannelId;
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
@@ -75,10 +82,7 @@ export default function TeamHub() {
   const [activeLang, setActiveLang] = useState<string | null>(null);
   const myLang = activeLang || myProfile?.preferred_language || "en";
 
-  // Channel write restrictions
-  const CHANNEL_WRITERS = ["sattar@rebar.shop", "radin@rebar.shop", "neel@rebar.shop"];
-  const isOfficialChannel = activeChannel?.name === "Official Channel";
-  const canWrite = !isOfficialChannel || CHANNEL_WRITERS.includes(myProfile?.email ?? "");
+  const canWrite = canWriteToTeamHubChannel(activeChannel?.name, myProfile?.email);
 
   const targetLangs = useMemo(() => {
     const langs = new Set<string>();
@@ -114,8 +118,7 @@ export default function TeamHub() {
 
   const handleForward = async (targetChannelId: string, msg: TeamMessage) => {
     if (!myProfile) return;
-    const forwardPrefix = `↪ Forwarded from ${msg.sender?.full_name || "Unknown"}:\n`;
-    const text = forwardPrefix + msg.original_text;
+    const text = formatForwardPrefix(msg.sender?.full_name) + msg.original_text;
     try {
       await sendMutation.mutateAsync({
         channelId: targetChannelId,
@@ -136,11 +139,10 @@ export default function TeamHub() {
     try {
       const result = await openDMMutation.mutateAsync({ targetProfileId: profileId });
       if (result?.id) {
-        const forwardPrefix = `↪ Forwarded from ${msg.sender?.full_name || "Unknown"}:\n`;
         await sendMutation.mutateAsync({
           channelId: result.id,
           senderProfileId: myProfile.id,
-          text: forwardPrefix + msg.original_text,
+          text: formatForwardPrefix(msg.sender?.full_name) + msg.original_text,
           senderLang: myLang,
           targetLangs,
           attachments: msg.attachments || [],
@@ -206,7 +208,7 @@ export default function TeamHub() {
   const sidebarContent = (
     <ChannelSidebar
       channels={channels}
-      selectedId={isNotesView ? "__my_notes__" : activeChannelId}
+      selectedId={isNotesView ? TEAM_HUB_SELF_NOTES_ID : activeChannelId}
       onSelect={setSelectedChannelId}
       onlineCount={onlineCount}
       profiles={profiles}
