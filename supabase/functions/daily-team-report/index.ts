@@ -8,23 +8,15 @@ Deno.serve((req) =>
     const { serviceClient: supabase } = ctx;
 
     const tz = await getWorkspaceTimezone(supabase);
-    // Compute "today" in the workspace timezone
-    const nowParts = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-    const today = nowParts; // YYYY-MM-DD format from en-CA locale
-    // Compute UTC boundaries for "today" in the workspace timezone
-    const midnightLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }).replace(/,/, ""));
-    midnightLocal.setHours(0, 0, 0, 0);
-    const offsetMs = midnightLocal.getTime() - new Date(new Intl.DateTimeFormat("en-US", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(midnightLocal)).getTime();
-    // Simpler approach: compute start/end via Intl
-    const startOfDayLocal = new Date(`${today}T00:00:00`);
-    const tzOffset = (() => {
-      const utcDate = new Date(`${today}T12:00:00Z`);
-      const localStr = utcDate.toLocaleString("en-US", { timeZone: tz });
-      const localDate = new Date(localStr);
-      return localDate.getTime() - utcDate.getTime();
-    })();
-    const dayStart = new Date(new Date(`${today}T00:00:00Z`).getTime() - tzOffset).toISOString();
-    const dayEnd = new Date(new Date(`${today}T23:59:59.999Z`).getTime() - tzOffset).toISOString();
+    // "today" in workspace timezone (en-CA gives YYYY-MM-DD)
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+    // Compute UTC boundaries for the local "today"
+    // Offset = local time - UTC time (in ms)
+    const probe = new Date(`${today}T12:00:00Z`);
+    const localNoon = new Date(probe.toLocaleString("en-US", { timeZone: tz }));
+    const offsetMs = localNoon.getTime() - probe.getTime();
+    const dayStart = new Date(new Date(`${today}T00:00:00Z`).getTime() - offsetMs).toISOString();
+    const dayEnd = new Date(new Date(`${today}T23:59:59.999Z`).getTime() - offsetMs).toISOString();
 
     // 1. Get all active employees with their profiles
     const { data: profiles } = await supabase
