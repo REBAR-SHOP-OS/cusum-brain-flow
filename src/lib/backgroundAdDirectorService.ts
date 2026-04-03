@@ -28,6 +28,23 @@ const QUALITY_THRESHOLD = 7.0;
 const MAX_IMPROVE_ATTEMPTS = 1;
 const EDGE_TIMEOUT_MS = 180_000;
 
+type SaveProjectInput = {
+  id?: string;
+  name: string;
+  brandName?: string;
+  script?: string;
+  segments?: ScriptSegment[];
+  storyboard?: StoryboardScene[];
+  clips?: ClipOutput[];
+  continuity?: ContinuityProfile | null;
+  finalVideoUrl?: string | null;
+  status?: string;
+};
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function withTimeout<T>(promise: Promise<T>, ms = EDGE_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
@@ -43,6 +60,7 @@ export interface AdDirectorPipelineState {
   userRatio: string;
   statusText: string;
   progressValue: number;
+  sourceFootageCount: number;
   segments: ScriptSegment[];
   storyboard: StoryboardScene[];
   continuity: ContinuityProfile | null;
@@ -72,6 +90,7 @@ class BackgroundAdDirectorService {
       userRatio: "16:9",
       statusText: "",
       progressValue: 0,
+      sourceFootageCount: 0,
       segments: [],
       storyboard: [],
       continuity: null,
@@ -144,7 +163,7 @@ class BackgroundAdDirectorService {
   async startPipeline(
     prompt: string,
     ratio: string,
-    images: File[],
+    sourceMedia: File[],
     introImage: File | null,
     outroImage: File | null,
     duration: string,
@@ -152,7 +171,7 @@ class BackgroundAdDirectorService {
     brand: BrandProfile,
     videoParams: VideoParams,
     modelOverrides: ModelOverrides,
-    saveProject: (data: any) => Promise<string>,
+    saveProject: (data: SaveProjectInput) => Promise<string>,
     videoModel?: string,
     videoProvider?: string,
     selectedProducts?: string[],
@@ -165,6 +184,7 @@ class BackgroundAdDirectorService {
       flowState: "analyzing",
       userPrompt: prompt,
       userRatio: ratio,
+      sourceFootageCount: sourceMedia.length,
       brand,
       videoParams,
       finalVideoUrl: null,
@@ -196,6 +216,7 @@ class BackgroundAdDirectorService {
     // Upload intro/outro reference images
     let introImageUrl: string | undefined;
     let outroImageUrl: string | undefined;
+    let sourceMediaUrls: string[] = [];
     const { uploadToStorage: uploadFn } = await import("@/lib/storageUpload");
     if (introImage) {
       try {
@@ -222,6 +243,26 @@ class BackgroundAdDirectorService {
       }
     }
 
+    if (sourceMedia.length > 0) {
+      const uploadedSourceMedia = await Promise.all(
+        sourceMedia.map(async (mediaFile) => {
+          try {
+            const folder = mediaFile.type.startsWith("video/") ? "source-videos" : "source-images";
+            const path = `${folder}/${Date.now()}-${crypto.randomUUID()}-${mediaFile.name}`;
+            const { error: uploadError } = await uploadFn("ad-assets", path, mediaFile);
+            if (!uploadError) {
+              const { data: urlData } = supabase.storage.from("ad-assets").getPublicUrl(path);
+              return urlData?.publicUrl ?? null;
+            }
+          } catch (error) {
+            console.warn("Source media upload failed, continuing without it", error);
+          }
+          return null;
+        })
+      );
+      sourceMediaUrls = uploadedSourceMedia.filter((url): url is string => !!url);
+    }
+
     try {
       // Phase 1: Analyze
       const analyzeResult = await withTimeout(invokeEdgeFunction<{
@@ -233,7 +274,12 @@ class BackgroundAdDirectorService {
         brand,
         targetDuration: videoParams.duration,
         sceneCount: videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15),
-        assetDescriptions: images.length > 0 ? images.map(f => f.name).join(", ") : undefined,
+        assetDescriptions: sourceMedia.length > 0
+          ? sourceMedia.map((file) => `${file.type.startsWith("video/") ? "video clip" : "image"}: ${file.name}`).join(", ")
+          : undefined,
+        sourceClipDescriptions: sourceMedia.map((file) =>
+          `${file.name} (${file.type.startsWith("video/") ? "video clip" : "image asset"})`
+        ),
         characterImageUrl,
         introImageUrl,
         outroImageUrl,
@@ -242,7 +288,8 @@ class BackgroundAdDirectorService {
         selectedStyles,
       }, { timeoutMs: 90_000 }));
 
-      let { segments: newSegments, storyboard: rawStoryboard, continuityProfile } = analyzeResult.result;
+      let { segments: newSegments, storyboard: rawStoryboard } = analyzeResult.result;
+      const continuityProfile = analyzeResult.result.continuityProfile;
 
       // ── Enforce scene count based on duration ──────────────────────
       const expectedSceneCount = videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15);
@@ -352,7 +399,7 @@ class BackgroundAdDirectorService {
         prompt: finalPrompts[idx].prompt,
         continuityLock: true,
         locked: false,
-        referenceAssetUrl: null,
+        referenceAssetUrl: sourceMediaUrls[idx] ?? sourceMediaUrls[0] ?? null,
         sceneIntelligence: {
           plannedBy: analyzeResult.modelUsed,
           promptWrittenBy: finalPrompts[idx].modelUsed,
@@ -437,7 +484,7 @@ class BackgroundAdDirectorService {
           return;
         }
 
-        const motionPrompt = continuityPrefix + scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+        const motionPrompt = continuityPrefix + scene.prompt + " Shape this into a post-ready ad shot with premium after-effects-style transitions, polished pacing, and a strong intro/outro rhythm. Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
         this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "generating" as const, progress: 10 } : c));
 
         try {
@@ -486,8 +533,8 @@ class BackgroundAdDirectorService {
           } else {
             this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "failed" as const, error: "No video URL returned", progress: 0 } : c));
           }
-        } catch (err: any) {
-          this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "failed" as const, error: err.message, progress: 0 } : c));
+        } catch (error) {
+          this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "failed" as const, error: getErrorMessage(error, "Scene generation failed"), progress: 0 } : c));
         }
       });
 
@@ -533,7 +580,7 @@ class BackgroundAdDirectorService {
           const segment = newSegments.find(seg => seg.id === scene.segmentId);
           if (scene.generationMode === "static-card" || segment?.type === "closing") return;
 
-          const motionPrompt = continuityPrefix + scene.prompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+          const motionPrompt = continuityPrefix + scene.prompt + " Shape this into a post-ready ad shot with premium after-effects-style transitions, polished pacing, and a strong intro/outro rhythm. Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
           this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "generating" as const, error: null, progress: 10 } : c));
 
           try {
@@ -583,8 +630,8 @@ class BackgroundAdDirectorService {
             } else {
               this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "failed" as const, error: "No video URL returned (retry)", progress: 0 } : c));
             }
-          } catch (err: any) {
-            this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "failed" as const, error: err.message, progress: 0 } : c));
+          } catch (error) {
+            this.updateClips(clips => clips.map(c => c.sceneId === scene.id ? { ...c, status: "failed" as const, error: getErrorMessage(error, "Scene retry failed"), progress: 0 } : c));
           }
         });
 
@@ -617,14 +664,14 @@ class BackgroundAdDirectorService {
       if (!this.listener) {
         toast.success("AI Video Director finished generating your video!");
       }
-    } catch (err: any) {
+    } catch (error) {
       this.update({ flowState: "idle", statusText: "", progressValue: 0 });
       this.running = false;
       if (this.listener) {
         // Component is mounted, it can handle the error
-        throw err;
+        throw error;
       } else {
-        toast.error(`Video generation failed: ${err.message}`);
+        toast.error(`Video generation failed: ${getErrorMessage(error, "Unknown error")}`);
       }
     }
   }
@@ -680,10 +727,10 @@ class BackgroundAdDirectorService {
           return;
         }
         this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, progress: Math.min(90, 30 + (i / maxAttempts) * 60) } : c));
-      } catch (err: any) {
+      } catch (error) {
         consecutiveErrors++;
         if (consecutiveErrors >= 3) {
-          this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: err?.message || "Polling failed", progress: 0 } : c));
+          this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: getErrorMessage(error, "Polling failed"), progress: 0 } : c));
           return;
         }
       }
@@ -741,8 +788,8 @@ class BackgroundAdDirectorService {
       } catch (e) { console.warn("[bgService] Upload to storage failed:", e); }
 
       this.update({ finalVideoUrl: permanentUrl });
-    } catch (err: any) {
-      console.warn("Export failed:", err);
+    } catch (error) {
+      console.warn("Export failed:", error);
     } finally {
       this.update({ exporting: false });
     }

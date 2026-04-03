@@ -485,7 +485,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                       Modernize your ad idea into a polished video without changing the message.
                     </h2>
                     <p className="max-w-2xl text-sm leading-7 text-white/70 md:text-base">
-                      Start with a sales script, a rough concept, or a few reference images. The workflow still centers on your original goal: turning one idea into a professional video ad you can refine and export.
+                      Start with a sales script, a rough concept, source footage, or a few reference images. The workflow still centers on your original goal: turning one idea into a professional video ad you can refine, AI edit, and prep for posting.
                     </p>
                   </div>
                 </div>
@@ -536,8 +536,8 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                 <div className="space-y-3">
                   {[
                     "Describe the product, audience, and offer in plain language.",
-                    "Optionally add intro, character, and outro references for stronger direction.",
-                    "Generate scenes, review the composition, then edit or export.",
+                    "Optionally add source clips plus intro, character, and outro references for stronger direction.",
+                    "Generate scenes, AI edit the composition, then export a polished post-ready cut.",
                   ].map((step, index) => (
                     <div key={step} className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-950">
