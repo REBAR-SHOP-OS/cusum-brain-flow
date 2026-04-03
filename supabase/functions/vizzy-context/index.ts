@@ -72,7 +72,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     supabase.from("cut_plans").select("id, status").in("status", ["queued", "running"]),
     supabase.from("cut_plan_items").select("id, phase, completed_pieces, total_pieces").in("phase", ["queued", "cutting", "bending"]).limit(500),
     Promise.resolve({ data: [] }),
-    supabase.from("machine_runs").select("id, machine_id, process, status, started_at, output_qty, operator_profile_id").gte("started_at", today + "T00:00:00").order("started_at", { ascending: false }).limit(100),
+    supabase.from("machine_runs").select("id, machine_id, process, status, started_at, output_qty, operator_profile_id").gte("started_at", todayStart).order("started_at", { ascending: false }).limit(100),
     supabase.from("machines").select("id, name").limit(100),
     supabase.from("machines").select("id, name, status, type").eq("status", "running"),
     supabase.from("leads").select("id, title, stage, expected_value, probability").in("stage", ["new", "contacted", "qualified", "proposal"]).order("probability", { ascending: false }).limit(20),
@@ -81,12 +81,12 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     supabase.from("profiles").select("id, full_name, user_id, email").not("full_name", "is", null),
     supabase.from("activity_events").select("id, event_type, entity_type, description, created_at").order("created_at", { ascending: false }).limit(20),
     supabase.from("knowledge").select("title, category, content").order("created_at", { ascending: false }).limit(50),
-    supabase.from("chat_sessions").select("id, title, agent_name, user_id, created_at").gte("created_at", today + "T00:00:00").order("created_at", { ascending: false }).limit(100),
-    supabase.from("time_clock_entries").select("id, profile_id, clock_in, clock_out").gte("clock_in", today + "T00:00:00").order("clock_in", { ascending: false }).limit(100),
+    supabase.from("chat_sessions").select("id, title, agent_name, user_id, created_at").gte("created_at", todayStart).order("created_at", { ascending: false }).limit(100),
+    supabase.from("time_clock_entries").select("id, profile_id, clock_in, clock_out").gte("clock_in", todayStart).order("clock_in", { ascending: false }).limit(100),
     supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Invoice").gt("balance", 0).limit(50),
     supabase.from("accounting_mirror").select("balance, entity_type, data").eq("entity_type", "Vendor").gt("balance", 0).limit(50),
     supabase.from("communications").select("subject, from_address, to_address, body_preview, received_at").eq("direction", "inbound").ilike("to_address", "%@rebar.shop%").order("received_at", { ascending: false }).limit(50),
-    supabase.from("communications").select("from_address, to_address, direction, received_at, metadata, source").eq("source", "ringcentral").gte("received_at", today + "T00:00:00").order("received_at", { ascending: false }).limit(500),
+    supabase.from("communications").select("from_address, to_address, direction, received_at, metadata, source").eq("source", "ringcentral").gte("received_at", todayStart).order("received_at", { ascending: false }).limit(500),
   ]);
 
   const invoices = (accountingInv || []).map((r: any) => ({ Balance: r.balance, DueDate: r.data?.DueDate, CustomerRef: r.data?.CustomerRef }));
