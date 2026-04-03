@@ -2,7 +2,7 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const CHAT_ENDPOINT = `${SUPABASE_URL}/functions/v1/website-agent`;
+const CHAT_ENDPOINT = `${SUPABASE_URL}/functions/v1/sales-concierge`;
 
 const widgetJS = `
 (function() {
