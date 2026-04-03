@@ -1,109 +1,48 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
-import { Progress } from "@/components/ui/progress";
 import { CameraLoader } from "./CameraLoader";
-import { Loader2, Check, Download, Pencil, Sparkles, Film, Play, AlertCircle, Home, RefreshCw, Send, CalendarDays, BookmarkCheck } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { Loader2, Check, Pencil, Sparkles, Film, Play, AlertCircle, Home, RefreshCw, Send, BookmarkCheck, Wand2, Layers3, Clock3, Library, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 // ExportDialog removed — scheduling now handled inside ProVideoEditor
 import { ChatPromptBar } from "./ChatPromptBar";
 import {
-  type BrandProfile, type ScriptSegment, type StoryboardScene,
-  type ContinuityProfile, type ClipOutput, type ModelOverrides,
+  type ScriptSegment, type StoryboardScene,
+  type ClipOutput, type ModelOverrides,
   DEFAULT_BRAND,
 } from "@/types/adDirector";
-import { usePromptHistory } from "@/hooks/usePromptHistory";
 import { stitchClips } from "@/lib/videoStitch";
 import { VideoHistory } from "./VideoHistory";
 import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
-import { useAdProjectHistory } from "@/hooks/useAdProjectHistory";
+import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_VIDEO_PARAMS, type VideoParams } from "./VideoParameters";
 import {
   backgroundAdDirectorService,
   type AdDirectorPipelineState,
-  type FlowState,
 } from "@/lib/backgroundAdDirectorService";
 
 const EDGE_TIMEOUT_MS = 180_000;
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (editing: boolean) => void }) {
   const { toast } = useToast();
-  const { savedBrand, isLoading: brandLoading, saveBrandKit } = useAdDirectorBrandKit();
+  const { savedBrand, isLoading: brandLoading } = useAdDirectorBrandKit();
   const { projects, saveProject, deleteProject } = useAdProjectHistory();
-  const promptHistory = usePromptHistory();
   const service = backgroundAdDirectorService;
 
   // Local UI-only state
-  // exportDialogOpen removed — scheduling is handled inside ProVideoEditor
   const [showIntro, setShowIntro] = useState(true);
   const [modelOverrides] = useState<ModelOverrides>({});
   const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
   const [scenePrompts, setScenePrompts] = useState<Record<string, string>>({});
   const [approved, setApproved] = useState(false);
-
-  // Schedule-to-social state
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [scheduleDate, setScheduleDate] = useState<Date | undefined>();
-  const [scheduleHour, setScheduleHour] = useState("09");
-  const [scheduleMinute, setScheduleMinute] = useState("00");
-  const [scheduling, setScheduling] = useState(false);
-
-  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-  const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
-
-  const handleScheduleToSocial = async () => {
-    if (!scheduleDate || !finalVideoUrl) return;
-    const scheduledDateTime = new Date(scheduleDate);
-    scheduledDateTime.setHours(parseInt(scheduleHour), parseInt(scheduleMinute), 0, 0);
-
-    if (scheduledDateTime <= new Date()) {
-      toast({ title: "Invalid Time", description: "Cannot schedule in the past.", variant: "destructive" });
-      return;
-    }
-
-    setScheduling(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast({ title: "Authentication required", variant: "destructive" });
-        return;
-      }
-
-      const { error } = await supabase.from("social_posts").insert({
-        platform: "instagram",
-        status: "scheduled",
-        qa_status: "scheduled",
-        content_type: "reel",
-        image_url: finalVideoUrl,
-        scheduled_date: scheduledDateTime.toISOString(),
-        title: pipelineState.brand?.name || "AI Video",
-        content: pipelineState.userPrompt || "",
-        user_id: user.id,
-        neel_approved: false,
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Scheduled ✅",
-        description: `Video scheduled for ${format(scheduledDateTime, "PPP")} at ${scheduleHour}:${scheduleMinute}`,
-      });
-      setScheduleOpen(false);
-    } catch (err: any) {
-      toast({ title: "Scheduling failed", description: err.message, variant: "destructive" });
-    } finally {
-      setScheduling(false);
-    }
-  };
 
   // Pipeline state — driven by singleton service
   const [pipelineState, setPipelineState] = useState<AdDirectorPipelineState>(service.getState());
@@ -127,7 +66,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const {
     flowState, userPrompt, userRatio, statusText, progressValue,
     segments, storyboard, continuity, clips, finalVideoUrl,
-    exporting, musicTrackUrl, brand, videoParams, projectId,
+    exporting, brand, videoParams,
   } = pipelineState;
 
   // Notify parent when editing state changes
@@ -158,8 +97,8 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         videoModel, videoProvider,
         selectedProducts, selectedStyles,
       );
-    } catch (err: any) {
-      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Failed", description: getErrorMessage(error, "Pipeline failed"), variant: "destructive" });
     }
   }, [modelOverrides, toast, savedBrand, saveProject]);
 
@@ -209,7 +148,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
             audioUrl = URL.createObjectURL(audioBlob);
           }
         }
-      } catch (e) { console.warn("TTS failed:", e); }
+      } catch (error) { console.warn("TTS failed:", error); }
 
       const finalUrl = await stitchClips(orderedClips, {
         logo: { url: currentBrand.logoUrl || "", enabled: !!currentBrand.logoUrl, size: 80 },
@@ -241,7 +180,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
             console.warn("[AdDirector] Storage upload failed:", upErr.message);
           }
         }
-      } catch (e) { console.warn("[AdDirector] Upload to storage failed:", e); }
+      } catch (error) { console.warn("[AdDirector] Upload to storage failed:", error); }
 
       service.patchState({ finalVideoUrl: finalUrl.blobUrl });
       // Save permanent URL to project history
@@ -255,20 +194,12 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         });
       }
       toast({ title: "Ad assembled!", description: `${orderedClips.length} scenes stitched` });
-    } catch (err: any) {
-      toast({ title: "Export failed", description: err.message, variant: "destructive" });
+    } catch (error: unknown) {
+      toast({ title: "Export failed", description: getErrorMessage(error, "Export failed"), variant: "destructive" });
     } finally {
       service.patchState({ exporting: false });
     }
   }, [toast]);
-
-  const handleDownload = () => {
-    if (!finalVideoUrl) return;
-    const a = document.createElement("a");
-    a.href = finalVideoUrl;
-    a.download = `${brand.name?.replace(/\s+/g, "-") || "video"}-ad.webm`;
-    a.click();
-  };
 
   const handleCancel = () => {
     service.cancel();
@@ -355,9 +286,9 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: "No video URL or job ID returned", progress: 0 } : c),
         });
       }
-    } catch (err: any) {
+    } catch (error: unknown) {
       service.patchState({
-        clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: err.message, progress: 0 } : c),
+        clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: getErrorMessage(error, "Generation failed"), progress: 0 } : c),
       });
     }
   }, []);
@@ -463,81 +394,186 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
               />
             </div>
            ) : (
-            <div className="w-full max-w-4xl mx-auto rounded-3xl bg-black/60 backdrop-blur-md border border-white/10 p-8 space-y-6">
-              <div className="text-center space-y-3 animate-in fade-in duration-500">
-                <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center mx-auto">
-                  <Film className="w-8 h-8 text-white" />
+            <div className="w-full max-w-6xl mx-auto space-y-6 px-1">
+              <div className="relative overflow-hidden rounded-[36px] border border-white/10 bg-black/55 p-6 shadow-[0_35px_120px_-55px_rgba(0,0,0,0.9)] backdrop-blur-xl sm:p-8">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.14),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(12,226,201,0.16),transparent_30%)]" />
+                <div className="relative z-10 grid gap-6 xl:grid-cols-[1.2fr_0.8fr] xl:items-start">
+                  <div className="space-y-6">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em] text-white/60">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      Idea studio
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex h-16 w-16 items-center justify-center rounded-[22px] border border-white/10 bg-white/[0.06] shadow-[0_18px_40px_-25px_rgba(255,255,255,0.4)]">
+                        <Film className="h-8 w-8 text-white" />
+                      </div>
+                      <div className="space-y-3">
+                        <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                          Turn a raw idea into a polished video ad plan.
+                        </h2>
+                        <p className="max-w-2xl text-sm leading-7 text-white/68 sm:text-base">
+                          Modernize the creative workflow without changing the goal: define the concept, lock the references, and generate a sharper multi-scene ad from the same core idea.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      {[
+                        {
+                          icon: Wand2,
+                          title: "Sharper briefs",
+                          description: "Write the hook, proof, and CTA in one focused canvas.",
+                        },
+                        {
+                          icon: Layers3,
+                          title: "Guided references",
+                          description: "Anchor intro, character, and outro frames before generation.",
+                        },
+                        {
+                          icon: Clock3,
+                          title: "Faster iteration",
+                          description: "Reuse drafts and previous renders without leaving the screen.",
+                        },
+                      ].map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <div
+                            key={item.title}
+                            className="rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
+                          >
+                            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05]">
+                              <Icon className="h-4 w-4 text-primary" />
+                            </div>
+                            <h3 className="text-sm font-semibold text-white">{item.title}</h3>
+                            <p className="mt-1 text-xs leading-6 text-white/58">{item.description}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[30px] border border-white/10 bg-white/[0.04] p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-[0.24em] text-white/45">Workflow</p>
+                        <h3 className="mt-2 text-lg font-semibold text-white">How this idea becomes a video</h3>
+                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.05]">
+                        <ChevronRight className="h-4 w-4 text-white/75" />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                      {[
+                        { step: "01", title: "Define the concept", description: "Set the audience, pain point, product focus, and final action." },
+                        { step: "02", title: "Add creative direction", description: "Choose style, format, duration, model, and any visual references." },
+                        { step: "03", title: "Generate and refine", description: "Create the plan, review scenes, and reuse drafts or previous outputs." },
+                      ].map((item) => (
+                        <div
+                          key={item.step}
+                          className="flex gap-3 rounded-[22px] border border-white/8 bg-black/20 p-4"
+                        >
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/12 text-xs font-semibold text-primary">
+                            {item.step}
+                          </div>
+                          <div className="space-y-1">
+                            <h4 className="text-sm font-semibold text-white">{item.title}</h4>
+                            <p className="text-xs leading-6 text-white/56">{item.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <h2 className="text-xl font-semibold text-white">What video do you want to create?</h2>
-                <p className="text-sm text-white/70 max-w-md mx-auto">
-                  Describe your idea and we'll generate a professional video ad for you.
-                </p>
               </div>
+
               <ChatPromptBar onSubmit={handleSubmit} />
-              <VideoHistory
-                projects={projects.data ?? []}
-                onSelect={(url) => {
-                  service.patchState({ finalVideoUrl: url, flowState: "result" });
-                }}
-                onSelectDraft={(project) => {
-                  const clips = (project.clips ?? []) as any[];
-                  const storyboard = (project.storyboard ?? []) as any[];
-                  // Check if all scenes have completed clips with video
-                  const allComplete = storyboard.every((scene: any) => {
-                    const clip = clips.find((c: any) => c.sceneId === scene.id);
-                    return clip && clip.status === "completed" && clip.videoUrl && typeof clip.videoUrl === "string";
-                  });
-                  
-                  if (allComplete) {
-                    service.patchState({
-                      segments: project.segments ?? [],
-                      storyboard: project.storyboard ?? [],
-                      clips: project.clips ?? [],
-                      continuity: project.continuity ?? null,
-                      flowState: "result",
+
+              <div className="rounded-[32px] border border-white/10 bg-black/45 p-5 shadow-[0_28px_90px_-56px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.22em] text-white/55">
+                      <Library className="h-3.5 w-3.5 text-primary" />
+                      Previous ideas
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">Resume drafts or review finished videos</h3>
+                      <p className="mt-1 text-sm text-white/60">
+                        Your latest outputs stay close to the composer so iteration feels continuous.
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-white/42">
+                    Recent projects: {(projects.data ?? []).length}
+                  </p>
+                </div>
+
+                <VideoHistory
+                  projects={projects.data ?? []}
+                  onSelect={(url) => {
+                    service.patchState({ finalVideoUrl: url, flowState: "result" });
+                  }}
+                  onSelectDraft={(project: AdProjectRow) => {
+                    const clips = project.clips ?? [];
+                    const storyboard = project.storyboard ?? [];
+                    const allComplete = storyboard.every((scene) => {
+                      const clip = clips.find((candidate) => candidate.sceneId === scene.id);
+                      return clip && clip.status === "completed" && clip.videoUrl && typeof clip.videoUrl === "string";
                     });
-                  } else {
-                    // Mark incomplete clips as failed so pipeline retries them
-                    const fixedClips = clips.map((c: any) => {
-                      if (c.status !== "completed" || !c.videoUrl) {
-                        return { ...c, status: "failed", error: "Missing video — auto-retry" };
-                      }
-                      return c;
-                    });
-                    service.patchState({
-                      segments: project.segments ?? [],
-                      storyboard: project.storyboard ?? [],
-                      clips: fixedClips,
-                      continuity: project.continuity ?? null,
-                      flowState: "generating",
-                      statusText: "Recovering missing scenes...",
-                      progressValue: 10,
-                    });
-                    toast({ title: "Recovering missing scenes", description: "Re-generating incomplete video clips..." });
-                  }
-                }}
-                onDelete={(id) => deleteProject.mutate(id)}
-                onRename={async (id, newName) => {
-                  const proj = (projects.data ?? []).find((p) => p.id === id);
-                  if (!proj) return;
-                  try {
-                    await saveProject.mutateAsync({
-                      id,
-                      name: newName,
-                      brandName: proj.brand_name ?? undefined,
-                      script: proj.script ?? undefined,
-                      segments: proj.segments ?? [],
-                      storyboard: proj.storyboard ?? [],
-                      clips: proj.clips ?? [],
-                      continuity: proj.continuity ?? null,
-                      finalVideoUrl: proj.final_video_url ?? null,
-                      status: proj.status,
-                    });
-                  } catch {
-                    toast({ title: "Failed to rename", variant: "destructive" });
-                  }
-                }}
-              />
+
+                    if (allComplete) {
+                      service.patchState({
+                        segments: project.segments ?? [],
+                        storyboard: project.storyboard ?? [],
+                        clips: project.clips ?? [],
+                        continuity: project.continuity ?? null,
+                        flowState: "result",
+                      });
+                    } else {
+                      const fixedClips = clips.map((clip) => {
+                        const hasVideo = typeof clip.videoUrl === "string" && clip.videoUrl.length > 0;
+
+                        if (clip.status !== "completed" || !hasVideo) {
+                          return { ...clip, status: "failed" as const, error: "Missing video - auto-retry" };
+                        }
+                        return clip;
+                      });
+                      service.patchState({
+                        segments: project.segments ?? [],
+                        storyboard: project.storyboard ?? [],
+                        clips: fixedClips,
+                        continuity: project.continuity ?? null,
+                        flowState: "generating",
+                        statusText: "Recovering missing scenes...",
+                        progressValue: 10,
+                      });
+                      toast({ title: "Recovering missing scenes", description: "Re-generating incomplete video clips..." });
+                    }
+                  }}
+                  onDelete={(id) => deleteProject.mutate(id)}
+                  onRename={async (id, newName) => {
+                    const proj = (projects.data ?? []).find((p) => p.id === id);
+                    if (!proj) return;
+                    try {
+                      await saveProject.mutateAsync({
+                        id,
+                        name: newName,
+                        brandName: proj.brand_name ?? undefined,
+                        script: proj.script ?? undefined,
+                        segments: proj.segments ?? [],
+                        storyboard: proj.storyboard ?? [],
+                        clips: proj.clips ?? [],
+                        continuity: proj.continuity ?? null,
+                        finalVideoUrl: proj.final_video_url ?? null,
+                        status: proj.status,
+                      });
+                    } catch {
+                      toast({ title: "Failed to rename", variant: "destructive" });
+                    }
+                  }}
+                />
+              </div>
             </div>
            )}
          </>

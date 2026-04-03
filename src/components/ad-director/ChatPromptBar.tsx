@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Sparkles, Loader2 } from "lucide-react";
+import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Sparkles, Loader2, Wand2, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Smile, Clapperboard, Palette } from "lucide-react";
@@ -50,6 +50,30 @@ const PRODUCT_ICONS = [
   { key: "straight", label: "Rebar Straight", icon: StraightRebarIcon, color: "#6b7280", shape: "rounded-xl" },
 ] as const;
 
+const PROMPT_STARTERS = [
+  "Show the biggest pain point in the first 3 seconds, then reveal the product advantage.",
+  "Make it feel premium, fast-moving, and built for B2B buyers who need confidence quickly.",
+  "Close with a clear action the viewer should take after seeing the ad.",
+] as const;
+
+function useObjectUrl(file: File | null) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+
+  return url;
+}
+
 interface ChatPromptBarProps {
   onSubmit: (
     prompt: string,
@@ -82,9 +106,23 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   const outroRef = useRef<HTMLInputElement>(null);
   const characterRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const introPreview = useObjectUrl(introImage);
+  const characterPreview = useObjectUrl(characterImage);
+  const outroPreview = useObjectUrl(outroImage);
 
   const hasImages = !!(introImage || outroImage || characterImage);
   const canAutoGenerate = (selectedStyles.length > 0 && selectedProducts.length > 0) || hasImages;
+  const selectedStyleLabels = selectedStyles.map((key) => IMAGE_STYLES.find((style) => style.key === key)?.label || key);
+  const selectedProductLabels = selectedProducts.map((key) => PRODUCT_ICONS.find((product) => product.key === key)?.label || key);
+  const selectedDurationLabel = DURATIONS.find((item) => item.value === duration)?.label || `${duration}s`;
+  const selectionSummary = [
+    `Format ${ratio}`,
+    `Length ${selectedDurationLabel}`,
+    selectedStyleLabels.length > 0 ? `Styles ${selectedStyleLabels.join(", ")}` : null,
+    selectedProductLabels.length > 0 ? `Products ${selectedProductLabels.join(", ")}` : null,
+    hasImages ? "Reference frames added" : null,
+    `Model ${selectedVideoModel.label}`,
+  ].filter(Boolean) as string[];
 
   const handleAutoGenerate = async () => {
     if (!canAutoGenerate || isAutoGenerating) return;
@@ -139,9 +177,10 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
         setPrompt(rawResult.trim());
         toast({ title: "✨ Prompt ready", description: `${sceneCount} scenes with voiceover generated. Review and edit.` });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Auto-generate prompt error:", err);
-      toast({ title: "Prompt generation failed", description: err.message || "Please try again", variant: "destructive" });
+      const message = err instanceof Error ? err.message : "Please try again";
+      toast({ title: "Prompt generation failed", description: message, variant: "destructive" });
     } finally {
       setIsAutoGenerating(false);
     }
@@ -178,112 +217,172 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
     e.target.value = "";
   };
 
+  const referenceSlots = [
+    {
+      key: "intro",
+      title: "Intro frame",
+      description: "Anchor the opening shot.",
+      emptyLabel: "Add intro image",
+      icon: ImagePlus,
+      file: introImage,
+      previewUrl: introPreview,
+      openPicker: () => introRef.current?.click(),
+      clear: () => setIntroImage(null),
+    },
+    {
+      key: "character",
+      title: "Character",
+      description: "Keep one person consistent.",
+      emptyLabel: "Add character image",
+      icon: UserRound,
+      file: characterImage,
+      previewUrl: characterPreview,
+      openPicker: () => characterRef.current?.click(),
+      clear: () => setCharacterImage(null),
+    },
+    {
+      key: "outro",
+      title: "Outro frame",
+      description: "Guide the closing scene.",
+      emptyLabel: "Add outro image",
+      icon: ImagePlus,
+      file: outroImage,
+      previewUrl: outroPreview,
+      openPicker: () => outroRef.current?.click(),
+      clear: () => setOutroImage(null),
+    },
+  ] as const;
+
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-4">
-      {/* Intro / Character / Outro upload boxes */}
-      <div className="flex gap-4 justify-center">
-        {/* Intro */}
-        <input ref={introRef} type="file" accept="image/*" hidden onChange={handleIntroChange} />
-        <button
-          onClick={() => introRef.current?.click()}
-          disabled={disabled}
-          className={cn(
-            "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
-            "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            introImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
-          )}
-        >
-          {introImage ? (
-            <>
-              <img src={URL.createObjectURL(introImage)} alt="Intro" className="absolute inset-0 w-full h-full object-cover rounded-xl" />
-              <div className="absolute inset-0 bg-background/40 rounded-xl" />
-              <button onClick={(e) => { e.stopPropagation(); setIntroImage(null); }} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-background/80 flex items-center justify-center z-10 hover:bg-destructive/20">
-                <X className="w-3 h-3" />
-              </button>
-              <span className="relative z-10 text-[10px] font-medium text-foreground">Intro</span>
-            </>
-          ) : (
-            <>
-              <ImagePlus className="w-7 h-7 text-white/70" />
-              <span className="text-[10px] font-medium text-white/80">Intro Image</span>
-            </>
-          )}
-        </button>
+    <div className="w-full max-w-5xl mx-auto space-y-5">
+      <input ref={introRef} type="file" accept="image/*" hidden onChange={handleIntroChange} />
+      <input ref={characterRef} type="file" accept="image/*" hidden onChange={handleCharacterChange} />
+      <input ref={outroRef} type="file" accept="image/*" hidden onChange={handleOutroChange} />
 
-        {/* Character */}
-        <input ref={characterRef} type="file" accept="image/*" hidden onChange={handleCharacterChange} />
-        <button
-          onClick={() => characterRef.current?.click()}
-          disabled={disabled}
-          className={cn(
-            "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
-            "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            characterImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
-          )}
-        >
-          {characterImage ? (
-            <>
-              <img src={URL.createObjectURL(characterImage)} alt="Character" className="absolute inset-0 w-full h-full object-cover rounded-xl" />
-              <div className="absolute inset-0 bg-background/40 rounded-xl" />
-              <button onClick={(e) => { e.stopPropagation(); setCharacterImage(null); }} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-background/80 flex items-center justify-center z-10 hover:bg-destructive/20">
-                <X className="w-3 h-3" />
-              </button>
-              <span className="relative z-10 text-[10px] font-medium text-foreground">Character</span>
-            </>
-          ) : (
-            <>
-              <UserRound className="w-7 h-7 text-white/70" />
-              <span className="text-[10px] font-medium text-white/80">Character 👤</span>
-            </>
-          )}
-        </button>
+      <div className="grid gap-3 md:grid-cols-3">
+        {referenceSlots.map((slot) => {
+          const Icon = slot.icon;
 
-        {/* Outro */}
-        <input ref={outroRef} type="file" accept="image/*" hidden onChange={handleOutroChange} />
-        <button
-          onClick={() => outroRef.current?.click()}
-          disabled={disabled}
-          className={cn(
-            "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
-            "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            outroImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
-          )}
-        >
-          {outroImage ? (
-            <>
-              <img src={URL.createObjectURL(outroImage)} alt="Outro" className="absolute inset-0 w-full h-full object-cover rounded-xl" />
-              <div className="absolute inset-0 bg-background/40 rounded-xl" />
-              <button onClick={(e) => { e.stopPropagation(); setOutroImage(null); }} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-background/80 flex items-center justify-center z-10 hover:bg-destructive/20">
-                <X className="w-3 h-3" />
-              </button>
-              <span className="relative z-10 text-[10px] font-medium text-foreground">Outro</span>
-            </>
-          ) : (
-            <>
-              <ImagePlus className="w-7 h-7 text-white/70" />
-              <span className="text-[10px] font-medium text-white/80">Outro Image</span>
-            </>
-          )}
-        </button>
+          return (
+            <div
+              key={slot.key}
+              role="button"
+              tabIndex={disabled ? -1 : 0}
+              onClick={() => !disabled && slot.openPicker()}
+              onKeyDown={(e) => {
+                if (disabled) return;
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  slot.openPicker();
+                }
+              }}
+              className={cn(
+                "group relative min-h-[168px] overflow-hidden rounded-[24px] border border-white/10 bg-white/5 p-4 text-left transition-all duration-200",
+                "hover:border-white/25 hover:bg-white/[0.08] hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary/40",
+                slot.file && "border-primary/40 bg-primary/10 shadow-[0_18px_60px_-36px_hsl(var(--primary))]",
+                disabled && "cursor-not-allowed opacity-40"
+              )}
+            >
+              {slot.previewUrl && (
+                <>
+                  <img src={slot.previewUrl} alt={slot.title} className="absolute inset-0 h-full w-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-black/15 via-black/40 to-black/70" />
+                </>
+              )}
+
+              <div className="relative z-10 flex h-full flex-col">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md">
+                    <Icon className="h-5 w-5 text-white/85" />
+                  </div>
+                  {slot.file && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        slot.clear();
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-full border border-white/10 bg-black/40 text-white/80 transition-colors hover:bg-destructive/20 hover:text-white"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-auto space-y-1">
+                  <p className="text-xs uppercase tracking-[0.24em] text-white/55">
+                    {slot.file ? "Reference locked" : "Optional input"}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-semibold text-white">{slot.title}</h3>
+                    {slot.file && <CheckCircle2 className="h-4 w-4 text-emerald-300" />}
+                  </div>
+                  <p className="text-sm leading-relaxed text-white/70">
+                    {slot.file ? slot.file.name : slot.description}
+                  </p>
+                  {!slot.file && (
+                    <p className="text-xs text-white/45">{slot.emptyLabel}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Main input area */}
-      <div className="rounded-2xl border border-white/20 bg-black/50 backdrop-blur-md shadow-lg overflow-hidden transition-shadow focus-within:shadow-xl focus-within:border-white/40">
-        <textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Describe your video idea..."
-          disabled={disabled}
-          rows={5}
-          className="w-full resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-white placeholder:text-white/40 focus:outline-none disabled:opacity-50"
-        />
+      <div className="overflow-hidden rounded-[30px] border border-white/12 bg-black/45 shadow-[0_28px_80px_-40px_rgba(0,0,0,0.85)] backdrop-blur-xl transition-shadow focus-within:shadow-[0_32px_90px_-36px_rgba(10,214,196,0.32)]">
+        <div className="border-b border-white/10 px-5 py-5 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-[0.28em] text-white/45">Idea brief</p>
+              <div className="space-y-1">
+                <h3 className="text-xl font-semibold text-white">Shape the concept before you render</h3>
+                <p className="max-w-2xl text-sm leading-relaxed text-white/65">
+                  Describe the hook, audience, proof point, and CTA. The goal stays the same: generate a polished video ad from your idea.
+                </p>
+              </div>
+            </div>
 
-        {/* Bottom bar */}
-        <div className="flex items-center justify-between px-3 pb-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleAutoGenerate}
+              disabled={!canAutoGenerate || isAutoGenerating || disabled}
+              className="h-10 rounded-full border border-primary/25 bg-primary/10 px-4 text-primary hover:bg-primary/15 disabled:bg-white/5 disabled:text-white/40"
+            >
+              {isAutoGenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+              Draft from selections
+            </Button>
+          </div>
+        </div>
+
+        <div className="px-5 pt-5 sm:px-6">
+          <textarea
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Describe your video idea, the customer pain, the proof, and the final action..."
+            disabled={disabled}
+            rows={7}
+            className="min-h-[200px] w-full resize-none rounded-[24px] border border-white/8 bg-white/[0.03] px-5 py-4 text-sm leading-7 text-white placeholder:text-white/35 focus:outline-none disabled:opacity-50"
+          />
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {PROMPT_STARTERS.map((starter) => (
+              <button
+                key={starter}
+                type="button"
+                disabled={disabled}
+                onClick={() => setPrompt((current) => (current.trim() ? `${current.trim()}\n${starter}` : starter))}
+                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-left text-xs text-white/72 transition-colors hover:border-white/20 hover:bg-white/[0.08] disabled:opacity-50"
+              >
+                {starter}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="px-5 pb-4 pt-5 sm:px-6">
           <div className="flex items-center gap-2 flex-wrap">
             {/* Ratio Popover */}
             <Popover>
@@ -292,10 +391,10 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                   type="button"
                   disabled={disabled}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    "flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium transition-all",
                     ratio !== "16:9"
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
+                      : "bg-white/[0.06] border-white/12 text-white/80 hover:bg-white/10"
                   )}
                 >
                   <RatioIcon className="w-3.5 h-3.5" />
@@ -330,10 +429,10 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                   type="button"
                   disabled={disabled}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    "flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium transition-all",
                     duration !== "15"
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
+                      : "bg-white/[0.06] border-white/12 text-white/80 hover:bg-white/10"
                   )}
                 >
                   <Timer className="w-3.5 h-3.5" />
@@ -368,10 +467,10 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                   type="button"
                   disabled={disabled}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    "flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium transition-all",
                     selectedStyles.length > 0
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
+                      : "bg-white/[0.06] border-white/12 text-white/80 hover:bg-white/10"
                   )}
                 >
                   <Paintbrush className="w-3.5 h-3.5" />
@@ -426,10 +525,10 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                   type="button"
                   disabled={disabled}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    "flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium transition-all",
                     selectedProducts.length > 0
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
+                      : "bg-white/[0.06] border-white/12 text-white/80 hover:bg-white/10"
                   )}
                 >
                   <Hash className="w-3.5 h-3.5" />
@@ -485,10 +584,10 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                   type="button"
                   disabled={disabled}
                   className={cn(
-                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all border",
+                    "flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-medium transition-all",
                     selectedVideoModel.key !== "wan2.6-t2v"
                       ? "bg-primary/10 border-primary/30 text-primary"
-                      : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
+                      : "bg-white/[0.06] border-white/12 text-white/80 hover:bg-white/10"
                   )}
                 >
                   <Clapperboard className="w-3.5 h-3.5" />
@@ -518,42 +617,42 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
               </PopoverContent>
             </Popover>
           </div>
+        </div>
 
-          <div className="flex items-center gap-1.5">
-            {/* Auto-generate prompt */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={handleAutoGenerate}
-                  disabled={!canAutoGenerate || isAutoGenerating || disabled}
-                  className={cn(
-                    "h-8 w-8 rounded-xl flex items-center justify-center transition-all border",
-                    canAutoGenerate && !isAutoGenerating
-                      ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 hover:scale-105"
-                      : "bg-white/5 border-white/10 text-white/40 cursor-not-allowed"
-                  )}
-                >
-                  {isAutoGenerating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                {canAutoGenerate ? "Auto-generate prompt" : "Select a style and product, or upload an image"}
-              </TooltipContent>
-            </Tooltip>
+        <div className="border-t border-white/10 px-5 py-4 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {selectionSummary.map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] text-white/68"
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="inline-flex cursor-help items-center gap-1 text-xs text-white/46">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {canAutoGenerate ? "Auto-draft is ready." : "Add styles + products or upload a reference to unlock auto-draft."}
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {canAutoGenerate ? "Selections will be turned into a multi-scene prompt." : "Auto-draft needs product/style context or at least one reference frame."}
+                </TooltipContent>
+              </Tooltip>
+            </div>
 
-            {/* Send */}
             <Button
-              size="sm"
+              size="lg"
               onClick={handleSubmit}
               disabled={!prompt.trim() || disabled}
-              className="h-8 w-8 rounded-xl p-0"
+              className="h-11 rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90"
             >
-              <Send className="w-4 h-4" />
+              Generate video plan
+              <Send className="ml-2 h-4 w-4" />
             </Button>
           </div>
         </div>
