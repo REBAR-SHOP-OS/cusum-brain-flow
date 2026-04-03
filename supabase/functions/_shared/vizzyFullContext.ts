@@ -183,7 +183,7 @@ export async function buildFullVizzyContext(
     supabase
       .from("time_clock_entries")
       .select("id, profile_id, clock_in, clock_out")
-      .gte("clock_in", today + "T00:00:00")
+      .gte("clock_in", todayStart)
       .order("clock_in", { ascending: false })
       .limit(100),
     supabase
