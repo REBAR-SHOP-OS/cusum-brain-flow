@@ -22,6 +22,21 @@ export async function buildFullVizzyContext(
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+
+  // Compute UTC ISO boundary for "start of today" in workspace timezone
+  // e.g. if tz=America/Toronto (UTC-4), midnight local = 04:00 UTC
+  const todayStart = (() => {
+    const nowUtc = new Date();
+    const localStr = nowUtc.toLocaleString("en-US", { timeZone: tz });
+    const localNow = new Date(localStr);
+    // Midnight today in local tz
+    localNow.setHours(0, 0, 0, 0);
+    // Difference between real UTC and local interpretation gives us the offset
+    const offsetMs = nowUtc.getTime() - new Date(nowUtc.toLocaleString("en-US", { timeZone: tz })).getTime();
+    const midnightUtc = new Date(localNow.getTime() + offsetMs);
+    return midnightUtc.toISOString();
+  })();
+
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
