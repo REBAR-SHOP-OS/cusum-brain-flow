@@ -214,7 +214,7 @@ export async function buildFullVizzyContext(
     supabase
       .from("activity_events")
       .select("actor_id, event_type, entity_type, created_at")
-      .gte("created_at", today + "T00:00:00")
+      .gte("created_at", todayStart)
       .not("actor_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(500),
