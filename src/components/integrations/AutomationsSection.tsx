@@ -3,7 +3,7 @@ import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search, Video, Camera } from "lucide-react";
+import { ArrowRight, Bot, Mail, FileText, MessageCircle, Sparkles, Send, Globe, Code, Search, Video, Camera } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,8 @@ const defaultAutomations: Automation[] = [
     enabled: true,
     color: "blue",
     icon: "inbox",
-    route: "/home",
+    route: "/inbox-manager",
+    highlights: ["Prioritize hot leads", "Draft replies faster"],
   },
   {
     id: "daily-summarizer",
@@ -163,52 +164,90 @@ interface AutomationCardProps {
 
 const AutomationCard = React.forwardRef<HTMLDivElement, AutomationCardProps>(function AutomationCard({ automation, onToggle, onClick }, ref) {
   const Icon = iconComponents[automation.icon];
+  const statusLabel = automation.enabled ? "Enabled" : "Paused";
+  const actionLabel = automation.route ? "Open" : "View";
 
   return (
     <div
       ref={ref}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick?.();
+        }
+      }}
+      role="button"
+      tabIndex={0}
       className={cn(
-        "relative overflow-hidden rounded-2xl p-4 text-white transition-transform hover:scale-[1.02] cursor-pointer min-h-[140px]",
+        "group relative isolate min-h-[190px] cursor-pointer overflow-hidden rounded-3xl border border-white/10 p-5 text-white transition-all duration-200 hover:-translate-y-1 hover:shadow-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
         colorGradients[automation.color]
       )}
     >
-      <div className="relative z-10 flex flex-col h-full">
-        <h3 className="text-lg font-bold leading-tight mb-1">{automation.name}</h3>
-        <p className="text-sm text-white/70 mb-2">{automation.description}</p>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.26),transparent_36%)] opacity-90" />
+      <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/12 blur-3xl" />
+
+      <div className="relative z-10 flex h-full flex-col">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/14 ring-1 ring-white/15 backdrop-blur-sm">
+            <Icon className="h-5 w-5" strokeWidth={2} />
+          </div>
+          <div className="flex items-center gap-2">
+            {automation.beta && (
+              <Badge
+                variant="secondary"
+                className="border-0 bg-white/20 text-white hover:bg-white/30"
+              >
+                Beta
+              </Badge>
+            )}
+            <span className="rounded-full border border-white/15 bg-black/10 px-2.5 py-1 text-[11px] font-medium text-white/90 backdrop-blur-sm">
+              {statusLabel}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-2">
+          <h3 className="text-xl font-bold leading-tight">{automation.name}</h3>
+          <p className="max-w-[30ch] text-sm leading-relaxed text-white/80">{automation.description}</p>
+        </div>
 
         {automation.highlights && automation.highlights.length > 0 && (
-          <ul className="mb-2 space-y-0.5">
+          <ul className="mt-4 flex flex-wrap gap-2">
             {automation.highlights.map((h) => (
-              <li key={h} className="text-xs text-white/60 flex items-center gap-1.5">
-                <span className="w-1 h-1 rounded-full bg-white/50 shrink-0" />
+              <li
+                key={h}
+                className="rounded-full bg-white/12 px-2.5 py-1 text-[11px] text-white/80 ring-1 ring-inset ring-white/10"
+              >
                 {h}
               </li>
             ))}
           </ul>
         )}
 
-        <div className="flex items-center gap-3 mt-auto">
-          <Switch
-            checked={automation.enabled}
-            onCheckedChange={(checked) => onToggle(automation.id, checked)}
-            onClick={(e) => e.stopPropagation()}
-            className="data-[state=checked]:bg-white/30 data-[state=unchecked]:bg-white/20"
-          />
-          {automation.beta && (
-            <Badge
-              variant="secondary"
-              className="bg-white/20 text-white border-0 hover:bg-white/30"
-            >
-              Beta
-            </Badge>
-          )}
+        <div className="mt-auto flex items-end justify-between gap-4 pt-6">
+          <div className="flex items-center gap-3 rounded-full bg-black/15 px-3 py-2 ring-1 ring-inset ring-white/10 backdrop-blur-sm">
+            <Switch
+              checked={automation.enabled}
+              onCheckedChange={(checked) => onToggle(automation.id, checked)}
+              onClick={(e) => e.stopPropagation()}
+              aria-label={`Toggle ${automation.name}`}
+              className="data-[state=checked]:bg-white/35 data-[state=unchecked]:bg-black/25"
+            />
+            <span className="text-sm font-medium text-white/95">
+              {automation.enabled ? "Live" : "Off"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-sm font-semibold text-white/95 transition-transform duration-200 group-hover:translate-x-0.5">
+            <span>{actionLabel}</span>
+            <ArrowRight className="h-4 w-4" />
+          </div>
         </div>
       </div>
 
-      {/* Decorative Icon — reduced size & opacity */}
-      <div className="absolute right-4 bottom-4 opacity-10">
-        <Icon className="w-10 h-10" strokeWidth={1} />
+      <div className="absolute bottom-5 right-5 opacity-[0.16]">
+        <Icon className="h-12 w-12" strokeWidth={1.4} />
       </div>
     </div>
   );
