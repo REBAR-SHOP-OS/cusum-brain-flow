@@ -59,8 +59,10 @@ export function useTeamChannels() {
   // Realtime
   useEffect(() => {
     if (!user || !companyId) return;
+
+    const channelId = `team-channels-live-${companyId}-${user.id}-${crypto.randomUUID()}`;
     const channel = supabase
-      .channel(`team-channels-live-${companyId}-${user.id}`)
+      .channel(channelId)
       .on(
         "postgres_changes",
         {
@@ -72,7 +74,10 @@ export function useTeamChannels() {
         () => queryClient.invalidateQueries({ queryKey: ["team-channels", companyId] }),
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [companyId, user, queryClient]);
 
   return { channels: data ?? [], isLoading };
