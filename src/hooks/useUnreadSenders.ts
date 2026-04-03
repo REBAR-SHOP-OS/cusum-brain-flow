@@ -27,8 +27,9 @@ export function useUnreadSenders() {
 
     fetch();
 
+    const channelId = `unread-senders-${user.id}-${crypto.randomUUID()}`;
     const channel = supabase
-      .channel("unread-senders")
+      .channel(channelId)
       .on("postgres_changes", {
         event: "*",
         schema: "public",
