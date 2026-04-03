@@ -1041,7 +1041,7 @@ export async function buildFullVizzyContext(
   if ((openHumanTasks || []).length > 0) {
     parts.push((openHumanTasks || []).map((t: any) => {
       const assignee = t.assigned_to ? (profileIdMap.get(t.assigned_to) || "Unassigned") : "Unassigned";
-      const created = new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const created = new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
       return "  • [" + (t.priority || "medium") + '] "' + t.title + '" → ' + assignee + " (" + t.status + ", created " + created + ")" + (t.category ? " [" + t.category + "]" : "");
     }).join("\n"));
   } else {
