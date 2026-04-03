@@ -1,97 +1,91 @@
 import { useNavigate } from "react-router-dom";
-import { Plus, Clock, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Clock3, Plus, ShoppingCart } from "lucide-react";
 import { SAMPLE_PROJECT, TEMPLATE_PROJECTS } from "@/data/appBuilderMockData";
-
-const statusColors: Record<string, string> = {
-  draft: "bg-muted text-muted-foreground",
-  planning: "bg-amber-500/20 text-amber-400",
-  ready: "bg-emerald-500/20 text-emerald-400",
-  exported: "bg-blue-500/20 text-blue-400",
-};
 
 export function AppBuilderDashboard() {
   const navigate = useNavigate();
 
   return (
-    <div className="space-y-8">
-      {/* Project Cards */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-foreground">Recent Projects</h2>
-          <Button
+    <div className="app-builder-dashboard">
+      <section className="app-builder-section">
+        <div className="app-builder-section__header">
+          <h2 className="app-builder-section__title">Recent Projects</h2>
+
+          <button
+            type="button"
+            className="app-builder-primary-button"
             onClick={() => navigate("/app-builder/new")}
-            className="bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white gap-2"
           >
-            <Plus className="w-4 h-4" /> Create New App
-          </Button>
+            <Plus className="h-[16px] w-[16px]" />
+            <span>Create New App</span>
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Sample project card */}
-          <div
+        <div className="app-builder-project-grid">
+          <button
+            type="button"
             onClick={() => navigate("/app-builder/contractor-crm")}
-            className="group rounded-2xl border border-border bg-card p-5 cursor-pointer transition-all hover:border-orange-500/30 hover:shadow-lg hover:shadow-orange-500/5"
+            className="app-builder-project-card app-builder-project-card--filled"
           >
-            <div className="flex items-start justify-between mb-3">
-              <h3 className="font-semibold text-foreground group-hover:text-orange-400 transition-colors">{SAMPLE_PROJECT.name}</h3>
-              <Badge className={statusColors[SAMPLE_PROJECT.status]}>{SAMPLE_PROJECT.status}</Badge>
+            <div className="app-builder-project-card__top">
+              <h3 className="app-builder-project-card__title">{SAMPLE_PROJECT.name}</h3>
+              <span className="app-builder-status-pill">ready</span>
             </div>
-            <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{SAMPLE_PROJECT.description}</p>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="w-3 h-3" />
-              <span>Updated {new Date(SAMPLE_PROJECT.updatedAt).toLocaleDateString()}</span>
-            </div>
-          </div>
 
-          {/* Empty state / create new */}
-          <div
+            <p className="app-builder-project-card__description">{SAMPLE_PROJECT.description}</p>
+
+            <div className="app-builder-project-card__meta">
+              <Clock3 className="h-[13px] w-[13px]" />
+              <span>Updated 3/17/2026</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
             onClick={() => navigate("/app-builder/new")}
-            className="group rounded-2xl border border-dashed border-border bg-card/50 p-5 cursor-pointer transition-all hover:border-orange-500/30 flex flex-col items-center justify-center min-h-[160px]"
+            className="app-builder-project-card app-builder-project-card--empty"
           >
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mb-3 group-hover:bg-orange-500/20 transition-colors">
-              <Plus className="w-5 h-5 text-muted-foreground group-hover:text-orange-400" />
+            <div className="app-builder-project-card__plus">
+              <Plus className="h-[24px] w-[24px]" />
             </div>
-            <span className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">Start from scratch</span>
-          </div>
+            <span className="app-builder-project-card__empty-label">Start from scratch</span>
+          </button>
         </div>
-      </div>
+      </section>
 
-      {/* Templates */}
-      <div>
-        <h2 className="text-xl font-semibold text-foreground mb-4">Quick Templates</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {TEMPLATE_PROJECTS.map((t) => (
-            <div
-              key={t.name}
-              onClick={() => navigate("/app-builder/new")}
-              className="group rounded-2xl border border-border bg-card p-5 cursor-pointer transition-all hover:border-orange-500/30"
-            >
-              <div className="text-2xl mb-3">{t.icon}</div>
-              <h3 className="font-semibold text-foreground mb-1">{t.name}</h3>
-              <p className="text-sm text-muted-foreground">{t.description}</p>
-              <div className="mt-3 flex items-center gap-1 text-xs text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                Use template <ArrowRight className="w-3 h-3" />
-              </div>
-            </div>
-          ))}
+      <section className="app-builder-section">
+        <h2 className="app-builder-section__title">Quick Templates</h2>
+
+        <div className="app-builder-template-grid">
+          {TEMPLATE_PROJECTS.map((template, index) => {
+            const icon =
+              index === 0 ? (
+                <span className="app-builder-template-card__emoji" aria-hidden="true">
+                  {template.icon}
+                </span>
+              ) : index === 1 ? (
+                <ShoppingCart className="h-[22px] w-[22px] text-[#aebad5]" aria-hidden="true" />
+              ) : (
+                <span className="app-builder-template-card__emoji" aria-hidden="true">
+                  {template.icon}
+                </span>
+              );
+
+            return (
+              <button
+                key={template.name}
+                type="button"
+                onClick={() => navigate("/app-builder/new")}
+                className="app-builder-template-card"
+              >
+                <div className="app-builder-template-card__icon">{icon}</div>
+                <h3 className="app-builder-template-card__title">{template.name}</h3>
+                <p className="app-builder-template-card__description">{template.description}</p>
+              </button>
+            );
+          })}
         </div>
-      </div>
-
-      {/* Feature highlights */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[
-          { title: "Plan First", desc: "Generate structured app plans before writing any code" },
-          { title: "AI-Powered", desc: "Describe your app in plain English — AI handles the architecture" },
-          { title: "Export Ready", desc: "Export to React, Next.js, or Supabase schema when ready" },
-        ].map((f) => (
-          <div key={f.title} className="rounded-xl border border-border bg-card/50 p-5">
-            <h4 className="font-semibold text-foreground mb-1">{f.title}</h4>
-            <p className="text-sm text-muted-foreground">{f.desc}</p>
-          </div>
-        ))}
-      </div>
+      </section>
     </div>
   );
 }

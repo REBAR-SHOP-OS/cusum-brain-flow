@@ -160,7 +160,7 @@ const App = () => (
                     <Route path="/website" element={<P><AdminRoute><WebsiteManager /></AdminRoute></P>} />
                     <Route path="/seo" element={<P><AdminRoute><SeoModule /></AdminRoute></P>} />
                     <Route path="/empire" element={<P><AdminRoute><EmpireBuilder /></AdminRoute></P>} />
-                    <Route path="/app-builder" element={<P><AppBuilder /></P>} />
+                    <Route path="/app-builder" element={<ProtectedRoute><SmartErrorBoundary level="page" maxAutoRetries={2}><AppBuilder /></SmartErrorBoundary></ProtectedRoute>} />
                     <Route path="/app-builder/:projectId" element={<P><AppBuilderWorkspace /></P>} />
                     <Route path="/autopilot" element={<P><AutopilotDashboard /></P>} />
                     <Route path="/support-inbox" element={<P><SupportInbox /></P>} />
