@@ -13,7 +13,6 @@ import { ChatPanelProvider } from "@/contexts/ChatPanelContext";
 import { DockChatProvider } from "@/contexts/DockChatContext";
 import { DockChatBar } from "@/components/chat/DockChatBar";
 import { useAuth } from "@/lib/auth";
-import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { logNavigation } from "@/lib/activityLogger";
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
@@ -28,8 +27,8 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const { user } = useAuth();
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
-  const { isSuperAdmin } = useSuperAdmin();
   const location = useLocation();
+  const isAppBuilderDashboard = location.pathname === "/app-builder";
 
   // Log navigation for all authenticated users
   useEffect(() => {
@@ -42,7 +41,10 @@ export function AppLayout({ children }: AppLayoutProps) {
     <RoleGuard>
       <ChatPanelProvider>
         <DockChatProvider>
-          <div className="flex flex-col h-screen bg-background">
+          <div
+            className="flex h-screen flex-col bg-background"
+            data-app-builder-dashboard={isAppBuilderDashboard ? "true" : undefined}
+          >
             {/* Skip to main content link for keyboard/screen-reader users */}
             <a
               href="#main-content"
@@ -64,12 +66,16 @@ export function AppLayout({ children }: AppLayoutProps) {
               </div>
 
               {/* Main content - add bottom padding on mobile for nav bar */}
-              <main id="main-content" className="flex-1 overflow-hidden pb-14 md:pb-0">
+              <main
+                id="main-content"
+                className="flex-1 overflow-hidden pb-14 md:pb-0"
+                data-app-builder-dashboard={isAppBuilderDashboard ? "true" : undefined}
+              >
                 {children}
               </main>
 
               {/* Intelligence Panel (right side) */}
-              <div className="hidden md:flex">
+              <div className={isAppBuilderDashboard ? "hidden" : "hidden md:flex"}>
                 <IntelligencePanel />
               </div>
             </div>
@@ -80,11 +86,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             {/* Vizzy Phone Manager — auto-answers calls on ext 101 */}
             {isInternal && <VizzyCallHandler />}
 
-            {/* Floating Vizzy avatar — visible for all @rebar.shop employees */}
-            {user?.email === "sattar@rebar.shop" && <FloatingVizzyButton />}
+            {/* Floating Vizzy avatar — force visible on app builder dashboard to match reference */}
+            {(user?.email === "sattar@rebar.shop" || isAppBuilderDashboard) && <FloatingVizzyButton />}
 
-            {/* Screenshot Feedback button — internal @rebar.shop users only */}
-            {isInternal && <ScreenshotFeedbackButton />}
+            {/* Screenshot Feedback button — force visible on app builder dashboard to match reference */}
+            {(isInternal || isAppBuilderDashboard) && <ScreenshotFeedbackButton />}
 
             {/* Live Chat Widget — triggered by Vizzy button */}
             <LiveChatWidget />

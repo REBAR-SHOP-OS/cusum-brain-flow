@@ -8,6 +8,7 @@ interface ActiveModule {
 
 const ROUTE_MAP: Record<string, { module: string; moduleRoute: string; page?: string }> = {
   "/home": { module: "Dashboard", moduleRoute: "/home" },
+  "/app-builder": { module: "Dashboard", moduleRoute: "/app-builder" },
   "/pipeline": { module: "CRM", moduleRoute: "/pipeline", page: "Pipeline" },
   "/prospecting": { module: "CRM", moduleRoute: "/pipeline", page: "Prospecting" },
   "/customers": { module: "CRM", moduleRoute: "/pipeline", page: "Customers" },
