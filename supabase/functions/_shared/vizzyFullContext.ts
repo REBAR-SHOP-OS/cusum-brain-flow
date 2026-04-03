@@ -442,7 +442,7 @@ export async function buildFullVizzyContext(
     ? activeMemories
         .map(
           (m: any) =>
-            `  • [${m.category}] ${m.content}${m.expires_at ? ` (expires ${new Date(m.expires_at).toLocaleDateString()})` : ""}`
+            `  • [${m.category}] ${m.content}${m.expires_at ? ` (expires ${new Date(m.expires_at).toLocaleDateString("en-US", { timeZone: tz })})` : ""}`
         )
         .join("\n")
     : "  No saved memories yet";
