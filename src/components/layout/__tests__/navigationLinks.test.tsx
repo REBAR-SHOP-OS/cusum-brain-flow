@@ -10,7 +10,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 function renderWithProviders(ui: React.ReactElement) {
   return render(
     <TooltipProvider>
-      <MemoryRouter initialEntries={["/home"]}>
+      <MemoryRouter
+        initialEntries={["/home"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         {ui}
       </MemoryRouter>
     </TooltipProvider>,
