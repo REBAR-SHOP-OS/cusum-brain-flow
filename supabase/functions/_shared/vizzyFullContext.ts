@@ -171,7 +171,7 @@ export async function buildFullVizzyContext(
     supabase
       .from("communications")
       .select("from_address, to_address, direction, received_at, thread_id, user_id, subject, body_preview, source, metadata")
-      .gte("received_at", today + "T00:00:00")
+      .gte("received_at", todayStart)
       .order("received_at", { ascending: false })
       .limit(500),
     supabase
