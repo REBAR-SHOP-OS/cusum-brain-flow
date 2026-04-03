@@ -69,9 +69,8 @@ describe("CEO Dashboard — company_id scoping", () => {
 
 // ── Known schema limitations ─────────────────────────────────
 
-describe("CEO Dashboard — known schema limitations", () => {
-  it("social_posts query does NOT have company_id (known limitation)", () => {
-    // This test documents the known limitation — social_posts lacks company_id column
+describe("CEO Dashboard — previously known schema limitations (now fixed)", () => {
+  it("social_posts query now includes company_id scoping", () => {
     const hasSocialPostsQuery = DASHBOARD_SOURCE.includes('.from("social_posts")');
     if (hasSocialPostsQuery) {
       const lines = DASHBOARD_SOURCE.split("\n");
@@ -79,13 +78,12 @@ describe("CEO Dashboard — known schema limitations", () => {
       if (socialLine >= 0) {
         const context = lines.slice(socialLine, socialLine + 5).join(" ");
         const hasCompanyFilter = context.includes("company_id");
-        // Documenting: this SHOULD have company_id but table lacks the column
-        expect(hasCompanyFilter).toBe(false); // Known limitation
+        expect(hasCompanyFilter).toBe(true);
       }
     }
   });
 
-  it("time_clock_entries query does NOT have company_id (known limitation)", () => {
+  it("time_clock_entries query now includes company_id scoping", () => {
     const hasTimeClockQuery = DASHBOARD_SOURCE.includes('.from("time_clock_entries")');
     if (hasTimeClockQuery) {
       const lines = DASHBOARD_SOURCE.split("\n");
@@ -93,7 +91,7 @@ describe("CEO Dashboard — known schema limitations", () => {
       if (timeLine >= 0) {
         const context = lines.slice(timeLine, timeLine + 5).join(" ");
         const hasCompanyFilter = context.includes("company_id");
-        expect(hasCompanyFilter).toBe(false); // Known limitation
+        expect(hasCompanyFilter).toBe(true);
       }
     }
   });

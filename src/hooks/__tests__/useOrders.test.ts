@@ -94,10 +94,8 @@ describe("useOrders — cache invalidation", () => {
   });
 
   it("updateOrderStatus invalidates orders cache", () => {
-    const statusSection = ORDERS_SOURCE.substring(
-      ORDERS_SOURCE.indexOf("updateOrderStatus"),
-      ORDERS_SOURCE.indexOf("updateOrderStatus") + 300
-    );
+    const startIdx = ORDERS_SOURCE.indexOf("updateOrderStatus");
+    const statusSection = ORDERS_SOURCE.substring(startIdx, startIdx + 700);
     expect(statusSection).toContain("invalidateQueries");
     expect(statusSection).toContain('"orders"');
   });

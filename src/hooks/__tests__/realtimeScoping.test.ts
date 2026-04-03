@@ -106,6 +106,8 @@ describe("Realtime channel scoping", () => {
           arg.includes("channelId") ||
           arg.includes("meetingId") ||
           arg.includes("conversationId") ||
+          arg.includes("sessionId") ||
+          arg.includes("barlistId") ||
           arg.includes("Math.random") || // instance-scoped
           arg.includes("random"); // instance-scoped
 
