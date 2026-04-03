@@ -467,58 +467,86 @@ export function MessageThread({
   const myLangInfo = getLang(myLang);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full flex-col bg-transparent">
       {/* Channel Header - hidden on mobile */}
-      <div className="hidden md:flex border-b border-border px-4 lg:px-5 py-3 items-center justify-between bg-card/50 backdrop-blur-sm">
+      <div className="hidden md:flex items-center justify-between border-b border-white/10 bg-[rgba(15,23,42,0.38)] px-5 py-4 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Hash className="w-4 h-4 text-primary" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <Hash className="h-4 w-4 text-primary" />
           </div>
-          <div>
-            <h2 className="font-bold text-foreground text-sm">{channelName}</h2>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h2 className="truncate text-sm font-semibold text-white">#{channelName}</h2>
+              <Badge className="border-white/10 bg-white/5 text-[10px] font-medium text-slate-300 hover:bg-white/5">
+                {memberCount} online
+              </Badge>
+            </div>
             {channelDescription && (
-              <p className="text-[11px] text-muted-foreground">{channelDescription}</p>
+              <p className="mt-1 text-[11px] text-slate-400">{channelDescription}</p>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-2">
           {headerExtra}
-          <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-primary" onClick={onStartMeeting}>
-            <Video className="w-4 h-4 text-muted-foreground" />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+            onClick={onStartMeeting}
+          >
+            <Video className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
       {/* Mobile action bar */}
-      <div className="flex md:hidden items-center px-3 py-1.5 border-b border-border bg-card/30">
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onStartMeeting}>
-          <Video className="w-4 h-4 text-muted-foreground" />
+      <div className="flex items-center justify-between border-b border-white/10 bg-[rgba(15,23,42,0.32)] px-3 py-2 backdrop-blur-sm md:hidden">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-white">#{channelName}</p>
+          {channelDescription && (
+            <p className="truncate text-[11px] text-slate-400">{channelDescription}</p>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-9 w-9 rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white"
+          onClick={onStartMeeting}
+        >
+          <Video className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Active Meeting Banner */}
       {activeMeetings.length > 0 && (
-        <div className="border-b border-border bg-primary/5 px-5 py-2">
+        <div className="border-b border-white/10 bg-[linear-gradient(90deg,rgba(45,212,191,0.12),rgba(15,23,42,0.18))] px-4 py-3 md:px-5">
           {activeMeetings.map((m) => (
-            <div key={m.id} className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-xs font-semibold text-foreground">{m.title}</span>
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1">
-                  {m.meeting_type === "video" && <Video className="w-2.5 h-2.5" />}
-                  {m.meeting_type === "audio" && <Phone className="w-2.5 h-2.5" />}
-                  {m.meeting_type === "screen_share" && <MonitorUp className="w-2.5 h-2.5" />}
-                  LIVE
-                </Badge>
+            <div key={m.id} className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-2xl border border-red-400/20 bg-red-500/10">
+                  <div className="h-2.5 w-2.5 rounded-full bg-red-400 animate-pulse" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{m.title}</p>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Badge variant="outline" className="gap-1 border-white/10 bg-white/5 px-1.5 py-0 text-[9px] text-slate-200">
+                      {m.meeting_type === "video" && <Video className="w-2.5 h-2.5" />}
+                      {m.meeting_type === "audio" && <Phone className="w-2.5 h-2.5" />}
+                      {m.meeting_type === "screen_share" && <MonitorUp className="w-2.5 h-2.5" />}
+                      {m.meeting_type.replace("_", " ")}
+                    </Badge>
+                    <span className="text-[11px] text-emerald-300">Live now</span>
+                  </div>
+                </div>
               </div>
               <Button
                 size="sm"
                 variant="default"
-                className="h-7 text-xs gap-1.5 rounded-full"
+                className="h-8 gap-1.5 rounded-full px-4 shadow-[0_10px_30px_-12px_rgba(45,212,191,0.65)]"
                 onClick={() => onJoinMeeting?.(m)}
               >
                 <Video className="w-3 h-3" />
-                Join
+                Join meeting
               </Button>
             </div>
           ))}
@@ -527,26 +555,26 @@ export function MessageThread({
 
       {/* Messages */}
       <ScrollArea className="flex-1" ref={scrollRef}>
-        <div className="px-5 py-4">
+        <div className="mx-auto w-full max-w-5xl px-3 py-4 md:px-5 md:py-5">
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <Loader2 className="w-8 h-8 animate-spin text-primary/40" />
-              <span className="text-xs text-muted-foreground">Loading messages...</span>
+            <div className="flex flex-col items-center justify-center gap-3 py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary/40" />
+              <span className="text-xs text-slate-400">Loading messages...</span>
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <MessageSquare className="w-7 h-7 text-primary/60" />
+            <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-[26px] border border-white/10 bg-white/5">
+                <MessageSquare className="h-7 w-7 text-primary/70" />
               </div>
               <div>
-                <h3 className="font-bold text-foreground">Start the conversation!</h3>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  Messages are automatically translated to each team member's preferred language.
+                <h3 className="font-semibold text-white">Start the conversation</h3>
+                <p className="mt-1 max-w-xs text-xs text-slate-400">
+                  Messages are automatically translated to each team member&apos;s preferred language.
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[10px] gap-1">
-                  <Globe className="w-3 h-3" />
+                <Badge variant="outline" className="gap-1 border-white/10 bg-white/5 text-[10px] text-slate-200">
+                  <Globe className="h-3 w-3" />
                   {profiles.filter((p) => p.is_active).map((p) => getLang(p.preferred_language || "en").flag).filter((v, i, a) => a.indexOf(v) === i).join(" ")}
                 </Badge>
               </div>
@@ -556,12 +584,12 @@ export function MessageThread({
               {groupedMessages.map((item, idx) => {
                 if (item.type === "date" && item.date) {
                   return (
-                    <div key={`date-${idx}`} className="flex items-center gap-3 py-4">
-                      <div className="flex-1 h-px bg-border" />
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2">
+                    <div key={`date-${idx}`} className="flex items-center gap-3 py-5">
+                      <div className="h-px flex-1 bg-white/10" />
+                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400">
                         {formatDateSeparator(item.date)}
                       </span>
-                      <div className="flex-1 h-px bg-border" />
+                      <div className="h-px flex-1 bg-white/10" />
                     </div>
                   );
                 }
@@ -579,14 +607,14 @@ export function MessageThread({
                     <div
                       key={msg.id}
                       className={cn(
-                        "group flex gap-3 rounded-lg px-2 py-1 -mx-2 transition-colors hover:bg-muted/30",
-                        item.isGrouped ? "mt-0" : "mt-3"
+                        "group -mx-2 flex gap-3 rounded-2xl px-2 py-2 transition-colors hover:bg-white/[0.03] md:-mx-3 md:px-3",
+                        item.isGrouped ? "mt-0" : "mt-4"
                       )}
                     >
                       {/* Avatar */}
-                      <div className="w-9 shrink-0">
+                      <div className="w-10 shrink-0">
                         {!item.isGrouped && (
-                          <Avatar className="w-9 h-9">
+                          <Avatar className="h-10 w-10 border border-white/10 shadow-[0_12px_24px_-18px_rgba(15,23,42,0.9)]">
                             <AvatarImage src={msg.sender?.avatar_url || ""} />
                             <AvatarFallback
                               className={cn("text-[11px] font-bold text-white", getAvatarColor(msg.sender?.full_name || "?"))}
@@ -597,19 +625,22 @@ export function MessageThread({
                         )}
                       </div>
 
-                      <div className="flex-1 min-w-0 overflow-hidden">
+                      <div className="min-w-0 flex-1 overflow-hidden">
                         {/* Header */}
                         {!item.isGrouped && (
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="font-bold text-sm text-foreground">
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-white">
                               {msg.sender?.full_name || "Unknown"}
                             </span>
-                            <span className="text-[10px] text-muted-foreground">
+                            <span className="text-[10px] uppercase tracking-[0.18em] text-slate-500">
                               {format(new Date(msg.created_at), "h:mm a")}
                             </span>
-                            {isMine && (
-                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-0.5">
-                                {senderLangInfo.flag}
+                            <Badge variant="outline" className="gap-1 border-white/10 bg-white/5 px-1.5 py-0 text-[9px] text-slate-300">
+                              {senderLangInfo.flag} {getLang(displayLang).name}
+                            </Badge>
+                            {isTranslated && (
+                              <Badge variant="outline" className="border-primary/20 bg-primary/10 px-1.5 py-0 text-[9px] text-primary">
+                                translated
                               </Badge>
                             )}
                           </div>
@@ -629,15 +660,16 @@ export function MessageThread({
                           const replyImages = uniqueReplyAtts.filter(a => isImageType(a.type) || isImageUrl(a.url) || isImageUrl(a.name));
                           const previewText = replyClean.trim() || (replyImages.length > 0 ? "📷 Photo" : repliedMsg.original_text.slice(0, 80));
                           return (
-                            <div className="mb-1.5 pl-3 border-l-2 border-primary/40 py-1 rounded-sm bg-muted/30 flex items-center gap-2">
+                            <div className="mb-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2">
+                              <div className="w-1 self-stretch rounded-full bg-primary/40" />
                               {replyImages.length > 0 && (
-                                <img src={replyImages[0].url} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0 border border-border" />
+                                <img src={replyImages[0].url} alt="" className="h-9 w-9 flex-shrink-0 rounded-xl border border-white/10 object-cover" />
                               )}
                               <div className="min-w-0">
-                                <span className="text-[10px] font-semibold text-primary/80">
+                                <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/80">
                                   {repliedMsg.sender?.full_name || "Unknown"}
                                 </span>
-                                <p className="text-[11px] text-muted-foreground truncate max-w-[300px]">
+                                <p className="max-w-[320px] truncate text-[11px] text-slate-400">
                                   {previewText.slice(0, 80)}{previewText.length > 80 ? "…" : ""}
                                 </p>
                               </div>
@@ -661,11 +693,11 @@ export function MessageThread({
                           });
 
                           return (
-                            <div className="relative">
+                            <div className="relative rounded-3xl border border-white/8 bg-[rgba(15,23,42,0.42)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                               {cleanText && (
                                 <p
                                   className={cn(
-                                    "text-sm font-medium text-foreground whitespace-pre-wrap break-words leading-relaxed",
+                                    "whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-slate-100",
                                     detectRtl(cleanText) && "text-right"
                                   )}
                                   dir={detectRtl(cleanText) ? "rtl" : "ltr"}
@@ -676,7 +708,7 @@ export function MessageThread({
 
                               {/* Attachments: images, videos, files */}
                               {uniqueAttachments.length > 0 && (
-                                <div className="flex flex-wrap gap-2 mt-2">
+                                <div className="mt-3 flex flex-wrap gap-2">
                                   {uniqueAttachments.map((att, i) => {
                                     const isImg = isImageFile(att.type) || isImageUrl(att.url) || isImageUrl(att.name);
                                     const isVid = isVideoFile(att.type) || isVideoUrl(att.url) || isVideoUrl(att.name);
@@ -684,16 +716,16 @@ export function MessageThread({
 
                                     if (isImg) {
                                       return (
-                                        <div key={i} className="flex flex-col gap-1">
+                                        <div key={i} className="flex flex-col gap-1.5">
                                           <img
                                             src={att.url}
                                             alt={att.name}
-                                            className="rounded-lg border border-border max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                            className="max-h-[220px] max-w-[280px] cursor-pointer rounded-2xl border border-white/10 object-cover transition-opacity hover:opacity-90"
                                             onClick={() => window.open(att.url, "_blank")}
                                           />
                                           <button
                                             onClick={() => downloadFile(att.url, att.name)}
-                                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors w-fit"
+                                            className="inline-flex w-fit items-center gap-1 text-[10px] text-slate-400 transition-colors hover:text-primary"
                                             title="Download"
                                           >
                                             <Download className="w-3 h-3" />
@@ -705,16 +737,16 @@ export function MessageThread({
 
                                     if (isVid) {
                                       return (
-                                        <div key={i} className="flex flex-col gap-1">
+                                        <div key={i} className="flex flex-col gap-1.5">
                                           <video
                                             src={att.url}
                                             controls
                                             preload="metadata"
-                                            className="rounded-lg border border-border max-w-[320px] max-h-[240px]"
+                                            className="max-h-[240px] max-w-[320px] rounded-2xl border border-white/10"
                                           />
                                           <button
                                             onClick={() => downloadFile(att.url, att.name)}
-                                            className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary transition-colors w-fit"
+                                            className="inline-flex w-fit items-center gap-1 text-[10px] text-slate-400 transition-colors hover:text-primary"
                                             title="Download"
                                           >
                                             <Download className="w-3 h-3" />
@@ -726,15 +758,15 @@ export function MessageThread({
 
                                     if (isAud) {
                                       return (
-                                        <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20 max-w-[300px]">
-                                          <Mic className="w-4 h-4 text-primary shrink-0" />
+                                        <div key={i} className="flex max-w-[300px] items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.03] p-2">
+                                          <Mic className="h-4 w-4 shrink-0 text-primary" />
                                           <audio controls preload="metadata" className="h-8 w-full min-w-0" src={att.url} />
                                           <button
                                             onClick={() => downloadFile(att.url, att.name || "voice-message.webm")}
-                                            className="shrink-0 p-1 rounded hover:bg-muted/60 transition-colors"
+                                            className="shrink-0 rounded-md p-1 transition-colors hover:bg-white/10"
                                             title="Download"
                                           >
-                                            <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                                            <Download className="h-3.5 w-3.5 text-slate-400" />
                                           </button>
                                         </div>
                                       );
@@ -744,11 +776,11 @@ export function MessageThread({
                                       <button
                                         key={i}
                                         onClick={() => downloadFile(att.url, att.name)}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80 cursor-pointer"
+                                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-slate-200 transition-colors hover:bg-white/[0.06]"
                                       >
-                                        <FileText className="w-3.5 h-3.5 text-primary" />
-                                        <span className="truncate max-w-[120px]">{att.name}</span>
-                                        <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                                        <FileText className="h-3.5 w-3.5 text-primary" />
+                                        <span className="max-w-[140px] truncate">{att.name}</span>
+                                        <Download className="h-3.5 w-3.5 text-slate-400" />
                                       </button>
                                     );
                                   })}
@@ -759,9 +791,9 @@ export function MessageThread({
                               {!isMine && msg.original_language !== myLang && msg.translations[myLang] && (
                                 <button
                                   onClick={() => toggleOriginal(msg.id)}
-                                  className="inline-flex items-center gap-1 mt-1 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                                  className="mt-2 inline-flex items-center gap-1 text-[10px] text-slate-400 transition-colors hover:text-primary"
                                 >
-                                  <Languages className="w-3 h-3" />
+                                  <Languages className="h-3 w-3" />
                                   {showOriginal.has(msg.id) ? (
                                     <span>Showing original ({senderLangInfo.flag} {senderLangInfo.name}) · Show translation</span>
                                   ) : (
@@ -773,49 +805,49 @@ export function MessageThread({
                           );
                         })()}
 
-                      {/* Message actions (on hover) */}
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-start gap-0.5 pt-1">
-                        <button
-                          onClick={() => handleTTS(displayText, msg.id)}
-                          className={cn(
-                            "p-1 rounded-md transition-colors",
-                            playingMsgId === msg.id
-                              ? "text-primary bg-primary/10"
-                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        {/* Message actions (on hover) */}
+                        <div className="flex items-start gap-0.5 pt-2 opacity-0 transition-opacity group-hover:opacity-100">
+                          <button
+                            onClick={() => handleTTS(displayText, msg.id)}
+                            className={cn(
+                              "rounded-lg p-1.5 transition-colors",
+                              playingMsgId === msg.id
+                                ? "bg-primary/10 text-primary"
+                                : "text-slate-400 hover:bg-white/10 hover:text-white"
+                            )}
+                            title={playingMsgId === msg.id ? "Stop" : "Listen"}
+                          >
+                            <Volume2 className="h-3.5 w-3.5" />
+                          </button>
+                          {!readOnly && (
+                            <button
+                              onClick={() => { setReplyTo(msg); textareaRef.current?.focus(); }}
+                              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                              title="Reply"
+                            >
+                              <Reply className="h-3.5 w-3.5" />
+                            </button>
                           )}
-                          title={playingMsgId === msg.id ? "Stop" : "Listen"}
-                        >
-                          <Volume2 className="w-3.5 h-3.5" />
-                        </button>
-                        {!readOnly && (
-                          <button
-                            onClick={() => { setReplyTo(msg); textareaRef.current?.focus(); }}
-                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                            title="Reply"
-                          >
-                            <Reply className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        {onForward && (
-                          <button
-                            onClick={() => onForward(msg)}
-                            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-                            title="Forward"
-                          >
-                            <Forward className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                        <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
-                        {canDelete && (
-                          <button
-                            onClick={() => handleDeleteMessage(msg.id)}
-                            className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                            title="Delete for everyone"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
+                          {onForward && (
+                            <button
+                              onClick={() => onForward(msg)}
+                              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                              title="Forward"
+                            >
+                              <Forward className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          <ContentActions content={msg.original_text} size="xs" source="teamhub" sourceRef={msg.id} />
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDeleteMessage(msg.id)}
+                              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                              title="Delete for everyone"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -830,23 +862,23 @@ export function MessageThread({
 
       {/* Composer */}
       {readOnly ? (
-        <div className="border-t border-border p-3 md:p-4 bg-card/50 backdrop-blur-sm safe-area-bottom">
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground py-2">
-            <Hash className="w-3.5 h-3.5" />
+        <div className="border-t border-white/10 bg-[rgba(15,23,42,0.38)] p-3 backdrop-blur-sm md:p-4 safe-area-bottom">
+          <div className="flex items-center justify-center gap-2 py-2 text-xs text-slate-400">
+            <Hash className="h-3.5 w-3.5" />
             <span>This channel is read-only</span>
           </div>
         </div>
       ) : (
-      <div className="border-t border-border p-2 md:p-4 bg-card/50 backdrop-blur-sm safe-area-bottom">
+      <div className="border-t border-white/10 bg-[rgba(15,23,42,0.42)] p-2 backdrop-blur-sm md:p-4 safe-area-bottom">
         {/* Pending file previews */}
         {pendingFiles.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-2 px-1">
+          <div className="mb-2 flex flex-wrap gap-2 px-1">
             {pendingFiles.map((f, i) => (
-              <div key={i} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border border-border bg-muted/30 text-xs">
-                {isImageFile(f.type) ? <ImageIcon className="w-3 h-3 text-primary" /> : <FileText className="w-3 h-3 text-primary" />}
-                <span className="truncate max-w-[100px]">{f.name}</span>
-                <button onClick={() => removePendingFile(i)} className="text-muted-foreground hover:text-destructive">
-                  <X className="w-3 h-3" />
+              <div key={i} className="inline-flex items-center gap-1.5 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-slate-200">
+                {isImageFile(f.type) ? <ImageIcon className="h-3 w-3 text-primary" /> : <FileText className="h-3 w-3 text-primary" />}
+                <span className="max-w-[110px] truncate">{f.name}</span>
+                <button onClick={() => removePendingFile(i)} className="text-slate-400 hover:text-destructive">
+                  <X className="h-3 w-3" />
                 </button>
               </div>
             ))}
@@ -855,20 +887,20 @@ export function MessageThread({
 
         {/* Reply banner */}
         {replyTo && (
-          <div className="flex items-center gap-2 px-3 py-1.5 mb-1 rounded-lg bg-muted/40 border border-border/50">
-            <Reply className="w-3.5 h-3.5 text-primary shrink-0" />
+          <div className="mb-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
+            <Reply className="h-3.5 w-3.5 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
-              <span className="text-[10px] font-semibold text-primary">{replyTo.sender?.full_name || "Unknown"}</span>
-              <p className="text-[11px] text-muted-foreground truncate">{replyTo.original_text.slice(0, 80)}</p>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">{replyTo.sender?.full_name || "Unknown"}</span>
+              <p className="truncate text-[11px] text-slate-400">{replyTo.original_text.slice(0, 80)}</p>
             </div>
-            <button onClick={() => setReplyTo(null)} className="text-muted-foreground hover:text-foreground shrink-0">
-              <X className="w-3.5 h-3.5" />
+            <button onClick={() => setReplyTo(null)} className="shrink-0 text-slate-400 hover:text-white">
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
 
         {/* Input area */}
-        <div className="relative rounded-xl border border-border bg-background focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20 transition-all">
+        <div className="relative rounded-[24px] border border-white/10 bg-[rgba(2,6,23,0.45)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all focus-within:border-primary/40 focus-within:ring-1 focus-within:ring-primary/20">
           {/* Mention menu */}
           <MentionMenu
             isOpen={mentionOpen}
@@ -883,7 +915,7 @@ export function MessageThread({
             value={input}
             onChange={handleInputChange}
             placeholder={`Message #${channelName}...`}
-            className="min-h-[40px] md:min-h-[44px] max-h-32 resize-none border-0 focus-visible:ring-0 bg-transparent px-3 py-2 md:py-2.5 pb-10 text-sm overflow-y-auto"
+            className="min-h-[42px] max-h-32 resize-none border-0 bg-transparent px-4 py-3 pb-11 text-sm text-slate-100 placeholder:text-slate-500 focus-visible:ring-0 md:min-h-[46px]"
             rows={1}
             dir="auto"
             onKeyDown={(e) => {
@@ -907,32 +939,32 @@ export function MessageThread({
           />
 
           {/* Bottom bar */}
-          <div className="flex items-center justify-between px-2 pb-1.5 md:pb-2">
+          <div className="flex items-center justify-between px-2 pb-2">
             {voiceRecorder.isRecording ? (
               /* Recording state UI */
               <>
-                <div className="flex items-center gap-2 flex-1">
+                <div className="flex flex-1 items-center gap-2">
                   <div className="flex items-center gap-1.5 text-destructive animate-pulse">
-                    <div className="w-2 h-2 rounded-full bg-destructive" />
+                    <div className="h-2 w-2 rounded-full bg-destructive" />
                     <span className="text-xs font-medium">{formatVoiceDuration(voiceRecorder.duration)}</span>
                   </div>
-                  <span className="text-xs text-muted-foreground">Recording...</span>
+                  <span className="text-xs text-slate-400">Recording...</span>
                   <button
                     type="button"
                     onClick={voiceRecorder.cancelRecording}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-destructive/10 hover:text-destructive"
                     title="Cancel"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
                 <Button
                   size="sm"
-                  className="h-8 gap-1.5 rounded-lg px-3"
+                  className="h-9 gap-1.5 rounded-full px-3"
                   onClick={handleVoiceSend}
                   disabled={isUploading}
                 >
-                  {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Square className="w-3.5 h-3.5" />}
+                  {isUploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}
                   <span className="hidden md:inline">Stop & Send</span>
                 </Button>
               </>
@@ -955,12 +987,12 @@ export function MessageThread({
                     onClick={() => voiceRecorder.startRecording()}
                     disabled={isSending || isUploading}
                     className={cn(
-                      "p-2.5 md:p-2 rounded-md transition-colors bg-primary/10 text-primary hover:bg-primary/20 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
-                      (isSending || isUploading) && "opacity-50 cursor-not-allowed"
+                      "flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl bg-primary/10 p-2.5 text-primary transition-colors hover:bg-primary/20 md:min-h-0 md:min-w-0 md:p-2",
+                      (isSending || isUploading) && "cursor-not-allowed opacity-50"
                     )}
                     title="Record voice message"
                   >
-                    <AudioLines className="w-5 h-5" />
+                    <AudioLines className="h-5 w-5" />
                   </button>
                   <input
                     ref={fileInputRef}
@@ -974,35 +1006,35 @@ export function MessageThread({
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isSending || isUploading}
                     className={cn(
-                      "p-2.5 md:p-2 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-muted/50 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 flex items-center justify-center",
-                      (isSending || isUploading) && "opacity-50 cursor-not-allowed"
+                      "flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl p-2.5 text-slate-400 transition-colors hover:bg-white/10 hover:text-white md:min-h-0 md:min-w-0 md:p-2",
+                      (isSending || isUploading) && "cursor-not-allowed opacity-50"
                     )}
                     title="Attach file"
                   >
-                    {isUploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
+                    {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Paperclip className="h-5 w-5" />}
                   </button>
                   <Popover>
                     <PopoverTrigger asChild>
                       <button
                         type="button"
-                        className="hidden sm:inline-flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full border border-border text-[10px] font-medium bg-muted/40 hover:bg-muted/70 transition-colors cursor-pointer"
+                        className="ml-1 hidden items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-medium text-slate-300 transition-colors hover:bg-white/[0.08] sm:inline-flex"
                         title="Select language"
                       >
                         <span className="text-sm leading-none">{myLangInfo.flag}</span>
                         <span>{myLangInfo.name}</span>
-                        <ChevronDown className="w-2.5 h-2.5 text-muted-foreground" />
+                        <ChevronDown className="h-2.5 w-2.5 text-slate-500" />
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent side="top" align="end" className="w-48 p-1 max-h-64 overflow-y-auto">
+                    <PopoverContent side="top" align="end" className="max-h-64 w-48 overflow-y-auto p-1">
                       {Object.entries(LANG_LABELS).map(([code, info]) => (
                         <button
                           key={code}
                           onClick={() => onLangChange?.(code)}
                           className={cn(
-                            "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors",
+                            "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
                             code === myLang
-                              ? "bg-primary/10 text-primary font-medium"
-                              : "hover:bg-muted/60 text-foreground"
+                              ? "bg-primary/10 font-medium text-primary"
+                              : "text-foreground hover:bg-muted/60"
                           )}
                         >
                           <span className="text-base leading-none">{info.flag}</span>
@@ -1015,14 +1047,14 @@ export function MessageThread({
 
                 <Button
                   size="sm"
-                  className="h-8 w-8 md:w-auto md:px-3 gap-1.5 rounded-lg p-0 md:p-2"
+                  className="h-9 gap-1.5 rounded-full px-3 shadow-[0_12px_30px_-16px_rgba(45,212,191,0.6)] md:w-auto"
                   onClick={handleSubmit}
                   disabled={(!input.trim() && pendingFiles.length === 0) || isSending}
                 >
                   {isSending ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Send className="w-3.5 h-3.5" />
+                    <Send className="h-3.5 w-3.5" />
                   )}
                   <span className="hidden md:inline">Send</span>
                 </Button>
@@ -1032,11 +1064,11 @@ export function MessageThread({
         </div>
 
         {/* Status area */}
-        <div className="h-3 md:h-4 mt-0.5 md:mt-1">
-          <p className="text-[10px] text-muted-foreground/60">
+        <div className="mt-1 h-4">
+          <p className="text-[10px] text-slate-500">
             {isSending && "Translating & sending..."}
-            {voiceRecorder.isRecording && !isSending && "🔴 Recording voice message..."}
-            {speech.isListening && !isSending && !voiceRecorder.isRecording && "🎙️ Listening..."}
+            {voiceRecorder.isRecording && !isSending && "Recording voice message..."}
+            {speech.isListening && !isSending && !voiceRecorder.isRecording && "Listening..."}
             {speech.interimText && !isSending && ` ${speech.interimText}`}
           </p>
         </div>

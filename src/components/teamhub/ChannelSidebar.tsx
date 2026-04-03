@@ -21,7 +21,6 @@ import {
   Hash,
   Plus,
   Search,
-  MessageSquare as _MessageSquare,
   Globe,
   ChevronDown,
   StickyNote,
@@ -87,6 +86,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const activeProfiles = profiles.filter((p) => 
     p.email?.endsWith("@rebar.shop")
   );
+  const totalChannels = groupChannels.length + officialGroup.length + userGroups.length;
 
   const filteredMembers = searchTerm
     ? activeProfiles.filter((p) => p.full_name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -109,94 +109,131 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   return (
     <div
       className={cn(
-        "flex flex-col h-full border-r border-border bg-card/30 backdrop-blur-sm shrink-0 transition-all duration-300 ease-in-out overflow-hidden",
-        onClose ? "w-full" : "w-64 lg:w-72"
+        "flex h-full shrink-0 flex-col overflow-hidden border-r border-white/10 bg-[linear-gradient(180deg,rgba(2,6,23,0.94),rgba(15,23,42,0.88))] text-slate-100 backdrop-blur-xl transition-all duration-300 ease-in-out",
+        onClose ? "w-full" : "w-72 lg:w-80"
       )}
     >
       {/* Workspace Header */}
-      <div className="p-3 md:p-4 border-b border-border">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+      <div className="border-b border-white/10 px-4 pb-4 pt-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
             <button type="button" className="rounded-full" onClick={() => myProfile && setProfileEditOpen(true)}>
-              <Avatar className="w-8 h-8 md:w-9 md:h-9 border border-primary/20 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all">
+              <Avatar className="h-10 w-10 cursor-pointer border border-white/10 shadow-[0_0_0_4px_rgba(15,23,42,0.35)] transition-all hover:ring-2 hover:ring-primary/40">
                 <AvatarImage src={myProfile?.avatar_url || ""} />
                 <AvatarFallback className={cn("text-xs font-bold text-white", getAvatarColor(myProfile?.full_name || ""))}>
                   {getInitials(myProfile?.full_name || "?")}
                 </AvatarFallback>
               </Avatar>
             </button>
-            <div>
-              <h2 className="text-sm font-bold text-foreground tracking-tight whitespace-nowrap">Team Hub</h2>
-              <div className="flex items-center gap-1.5">
-                <Globe className="w-3 h-3 text-primary" />
-                <span className="text-[10px] text-primary font-medium whitespace-nowrap">Auto-translated</span>
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.22em] text-slate-300">
+                <Globe className="h-3 w-3 text-primary" />
+                Team Hub
+              </div>
+              <h2 className="mt-2 text-base font-semibold tracking-tight text-white whitespace-nowrap">Official Channel</h2>
+              <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-400">
+                <span>{onlineCount} online</span>
+                <span className="h-1 w-1 rounded-full bg-slate-600" />
+                <span>{totalChannels} spaces</span>
               </div>
             </div>
           </div>
           {onClose && (
-            <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={onClose}>
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10 md:hidden" onClick={onClose}>
               <X className="w-4 h-4" />
             </Button>
           )}
         </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Members</p>
+            <p className="mt-1 text-sm font-semibold text-white">{onlineCount} active</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Translation</p>
+            <p className="mt-1 text-sm font-semibold text-primary">Always on</p>
+          </div>
+        </div>
       </div>
 
       {/* Search */}
-      <div className="px-3 py-2">
+      <div className="px-4 py-3">
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
           <Input
             placeholder="Search..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="h-8 pl-8 text-xs bg-muted/50 border-transparent focus:border-primary/30"
+            className="h-10 rounded-2xl border-white/10 bg-white/5 pl-9 text-xs text-slate-100 placeholder:text-slate-500 focus:border-primary/40 focus:ring-primary/20"
           />
         </div>
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-auto py-1 px-2">
+      <div className="flex-1 overflow-auto px-3 pb-4">
         {/* My Notes */}
         <button
           onClick={() => handleSelect("__my_notes__")}
           className={cn(
-            "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all mb-2",
+            "mb-3 flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-sm transition-all",
             selectedId === "__my_notes__"
-              ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+              ? "border-primary/30 bg-primary/15 text-white shadow-[0_16px_30px_-22px_rgba(45,212,191,0.95)]"
+              : "border-transparent bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white"
           )}
         >
-          <StickyNote className={cn("w-4 h-4 shrink-0", selectedId === "__my_notes__" ? "text-primary" : "text-muted-foreground/60")} />
-          <span className="truncate flex-1 text-left">My Notes</span>
+          <div className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
+            selectedId === "__my_notes__"
+              ? "border-primary/30 bg-primary/20 text-primary"
+              : "border-white/10 bg-white/5 text-slate-400"
+          )}>
+            <StickyNote className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1 text-left">
+            <span className="block truncate font-medium">My Notes</span>
+            <span className="block text-[11px] text-slate-500">Personal drafts and saved thoughts</span>
+          </div>
         </button>
 
         {/* Channels Section */}
-        <div className="flex items-center justify-between pr-1">
-          <span className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground">
+        <div className="mb-2 flex items-center justify-between pr-1">
+          <span className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500">
             Channels
           </span>
-          <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-foreground" onClick={onCreateChannel}>
+          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white" onClick={onCreateChannel}>
             <Plus className="w-3.5 h-3.5" />
           </Button>
         </div>
 
-        <div className="space-y-0.5 mb-3">
+        <div className="mb-4 space-y-1">
           {groupChannels.map((ch) => (
             <button
               key={ch.id}
               onClick={() => handleSelect(ch.id)}
               className={cn(
-                "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all group",
+                "group flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm transition-all",
                 selectedId === ch.id
-                  ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  ? "border-primary/25 bg-primary/12 text-white shadow-[0_18px_32px_-22px_rgba(45,212,191,0.85)]"
+                  : "border-transparent bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white"
               )}
             >
-              <Hash className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
-              <span className="truncate flex-1 text-left">{ch.name}</span>
+              <div className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border",
+                selectedId === ch.id
+                  ? "border-primary/25 bg-primary/15 text-primary"
+                  : "border-white/10 bg-white/5 text-slate-500"
+              )}>
+                <Hash className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1 text-left">
+                <span className="block truncate font-medium">{ch.name}</span>
+                <span className="block text-[11px] text-slate-500">
+                  {ch.name === "Official Channel" ? "Company-wide announcements" : "Shared workspace"}
+                </span>
+              </div>
               {isAdmin && !PROTECTED_CHANNELS.includes(ch.name) && (
                 <Trash2
-                  className="w-3.5 h-3.5 shrink-0 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-3.5 w-3.5 shrink-0 text-destructive/60 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                   onClick={(e) => { e.stopPropagation(); setChannelToDelete(ch); }}
                 />
               )}
@@ -205,39 +242,49 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
         </div>
 
         {/* Groups Section */}
-        <div className="flex items-center justify-between mt-2">
+        <div className="mt-1 flex items-center justify-between">
           <button
             onClick={() => setGroupsOpen(!groupsOpen)}
-            className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors"
+            className="flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500 transition-colors hover:text-white"
           >
             {groupsOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             Groups
           </button>
           {onCreateGroup && (
-            <Button variant="ghost" size="icon" className="h-5 w-5 text-muted-foreground hover:text-foreground mr-1" onClick={onCreateGroup}>
+            <Button variant="ghost" size="icon" className="mr-1 h-7 w-7 rounded-xl border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white" onClick={onCreateGroup}>
               <Plus className="w-3.5 h-3.5" />
             </Button>
           )}
         </div>
 
         {groupsOpen && (
-          <div className="space-y-0.5 mb-3">
+          <div className="mb-4 space-y-1">
             {officialGroup.map((ch) => (
               <button
                 key={ch.id}
                 onClick={() => handleSelect(ch.id)}
                 className={cn(
-                  "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all group",
+                  "group flex w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-sm transition-all",
                   selectedId === ch.id
-                    ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    ? "border-primary/25 bg-primary/12 text-white shadow-[0_18px_32px_-22px_rgba(45,212,191,0.85)]"
+                    : "border-transparent bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white"
                 )}
               >
-                <Users className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
-                <span className="truncate flex-1 text-left">{ch.name}</span>
+                <div className={cn(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border",
+                  selectedId === ch.id
+                    ? "border-primary/25 bg-primary/15 text-primary"
+                    : "border-white/10 bg-white/5 text-slate-500"
+                )}>
+                  <Users className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1 text-left">
+                  <span className="block truncate font-medium">{ch.name}</span>
+                  <span className="block text-[11px] text-slate-500">Group collaboration room</span>
+                </div>
                 {isAdmin && !PROTECTED_CHANNELS.includes(ch.name) && (
                   <Trash2
-                    className="w-3.5 h-3.5 shrink-0 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="h-3.5 w-3.5 shrink-0 text-destructive/60 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
                     onClick={(e) => { e.stopPropagation(); setChannelToDelete(ch); }}
                   />
                 )}
@@ -249,40 +296,43 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
         {/* Team Members */}
         <button
           onClick={() => setMembersOpen(!membersOpen)}
-          className="w-full flex items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold tracking-wider uppercase text-muted-foreground hover:text-foreground transition-colors mt-2"
+          className="mt-1 flex w-full items-center gap-1.5 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.24em] text-slate-500 transition-colors hover:text-white"
         >
           {membersOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
           Team Members
-          <Badge variant="secondary" className="ml-auto text-[9px] px-1 py-0 h-4">
+          <Badge variant="secondary" className="ml-auto h-5 rounded-full border border-white/10 bg-white/5 px-2 text-[9px] text-slate-200">
             {onlineCount}
           </Badge>
         </button>
 
         {membersOpen && (
-          <div className="space-y-0.5 mb-3">
+          <div className="mb-3 mt-1 space-y-1">
             {filteredMembers.map((p) => (
               <button
                 key={p.id}
                 onClick={() => handleClickMember(p.id, p.full_name)}
-                className="w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer text-left"
+                className="flex w-full items-center gap-3 rounded-2xl border border-transparent bg-white/[0.03] px-3 py-2.5 text-left transition-colors hover:border-white/10 hover:bg-white/[0.06]"
               >
                 <div className="relative cursor-pointer" onClick={(e) => { e.stopPropagation(); setPreviewProfile(p); }}>
-                  <Avatar className="w-6 h-6">
+                  <Avatar className="h-9 w-9 border border-white/10">
                     <AvatarImage src={p.avatar_url || ""} />
                     <AvatarFallback className={cn("text-[9px] font-bold text-white", getAvatarColor(p.full_name))}>
                       {getInitials(p.full_name)}
                     </AvatarFallback>
                   </Avatar>
-                  <Circle className="w-2 h-2 text-emerald-500 fill-emerald-500 absolute -bottom-0 -right-0" />
+                  <Circle className="absolute -bottom-0 -right-0 h-2.5 w-2.5 fill-emerald-400 text-emerald-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs text-foreground truncate block">{p.full_name}</span>
+                  <span className="block truncate text-sm font-medium text-slate-100">{p.full_name}</span>
+                  <span className="block truncate text-[11px] text-slate-500">{p.title || "Team member"}</span>
                 </div>
                 {unreadSenderIds.has(p.id) && (
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                  <div className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 animate-pulse" />
                 )}
                 {p.preferred_language && p.preferred_language !== "en" && (
-                  <span className="text-[9px] text-muted-foreground/60">{p.preferred_language.toUpperCase()}</span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] text-slate-400">
+                    {p.preferred_language.toUpperCase()}
+                  </span>
                 )}
               </button>
             ))}
