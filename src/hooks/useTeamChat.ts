@@ -59,8 +59,10 @@ export function useTeamChannels() {
   // Realtime
   useEffect(() => {
     if (!user || !companyId) return;
+
+    const channelId = `team-channels-live-${companyId}-${user.id}-${crypto.randomUUID()}`;
     const channel = supabase
-      .channel(`team-channels-live-${companyId}-${user.id}`)
+      .channel(channelId)
       .on(
         "postgres_changes",
         {
@@ -72,7 +74,10 @@ export function useTeamChannels() {
         () => queryClient.invalidateQueries({ queryKey: ["team-channels", companyId] }),
       )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [companyId, user, queryClient]);
 
   return { channels: data ?? [], isLoading };
@@ -115,13 +120,25 @@ export function useTeamMessages(channelId: string | null) {
   // Realtime
   useEffect(() => {
     if (!user || !channelId) return;
+
+    const realtimeId = `team-msgs-${channelId}-${user.id}-${crypto.randomUUID()}`;
     const channel = supabase
-      .channel(`team-msgs-${channelId}-${user.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "team_messages",
-        filter: `channel_id=eq.${channelId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["team-messages", channelId] }))
+      .channel(realtimeId)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "team_messages",
+          filter: `channel_id=eq.${channelId}`,
+        },
+        () => queryClient.invalidateQueries({ queryKey: ["team-messages", channelId] }),
+      )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, channelId, queryClient]);
 
   return { messages, isLoading };
