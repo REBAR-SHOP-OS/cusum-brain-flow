@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import {
   Clock3,
@@ -10,9 +10,18 @@ import {
   User,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+
+type ConversationMetadata = {
+  last_seen_at?: string;
+  city?: string;
+  country?: string;
+  current_page?: string;
+  [key: string]: Json | undefined;
+};
 
 interface Conversation {
   id: string;
@@ -22,8 +31,8 @@ interface Conversation {
   last_message_at: string | null;
   created_at: string;
   assigned_to: string | null;
-  tags: string[];
-  metadata: any;
+  tags: string[] | null;
+  metadata: ConversationMetadata | null;
 }
 
 interface Props {
@@ -31,7 +40,7 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
-function getPresenceStatus(metadata: any): "online" | "away" | "offline" {
+function getPresenceStatus(metadata: ConversationMetadata | null | undefined): "online" | "away" | "offline" {
   if (!metadata?.last_seen_at) return "offline";
   const lastSeen = new Date(metadata.last_seen_at).getTime();
   const now = Date.now();
@@ -48,7 +57,7 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
   const [loading, setLoading] = useState(true);
   const { companyId } = useCompanyId();
 
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     setLoading(true);
     let query = supabase
       .from("support_conversations")
@@ -63,12 +72,12 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
     const { data } = await query;
     setConversations((data as Conversation[]) || []);
     setLoading(false);
-  };
+  }, [companyId, filter]);
 
   useEffect(() => {
     if (!companyId) return;
     fetchConversations();
-  }, [filter, companyId]);
+  }, [companyId, fetchConversations]);
 
   // Real-time updates
   useEffect(() => {
@@ -83,13 +92,15 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [filter, companyId]);
+  }, [companyId, fetchConversations]);
 
   // Refresh presence every 30s
   useEffect(() => {
-    const interval = setInterval(fetchConversations, 30000);
+    const interval = setInterval(() => {
+      void fetchConversations();
+    }, 30000);
     return () => clearInterval(interval);
-  }, [filter, companyId]);
+  }, [companyId, fetchConversations]);
 
   const statusColor = (s: string) => {
     switch (s) {
@@ -107,6 +118,7 @@ export function SupportConversationList({ selectedId, onSelect }: Props) {
       case "online": return "bg-green-500";
       case "away": return "bg-yellow-500";
       case "offline": return "bg-muted-foreground/30";
+      default: return "bg-muted-foreground/30";
     }
   };
 

@@ -36,7 +36,7 @@ const STARTER_PROMPTS = [
 const WELCOME_MESSAGE =
   "Welcome to REBAR SHOP support. I can help with quotes, product guidance, fabrication workflows, and next steps for your project.";
 
-export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
+export const PublicChatWidget = React.forwardRef<HTMLDivElement, Record<string, never>>(
   function PublicChatWidget(_props, _ref) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -64,13 +64,14 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
   useEffect(() => {
     if (open) {
       inputRef.current?.focus();
-      if (messages.length === 0) {
-        setMessages([{
+      setMessages((prev) => {
+        if (prev.length > 0) return prev;
+        return [{
           id: crypto.randomUUID(),
           role: "assistant",
           content: WELCOME_MESSAGE,
-        }]);
-      }
+        }];
+      });
     }
   }, [open]);
 
@@ -157,8 +158,8 @@ export const PublicChatWidget = React.forwardRef<HTMLDivElement, {}>(
       if (!content) {
         setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "Hi! Ask me anything about rebar fabrication, estimating, or our platform." }]);
       }
-    } catch (e: any) {
-      if (e.name !== "AbortError") {
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
         setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "Connection error. Please try again." }]);
       }
     } finally {

@@ -19,6 +19,7 @@ import {
   UserCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { useAuth } from "@/lib/auth";
 import { Badge } from "@/components/ui/badge";
@@ -46,16 +47,28 @@ interface ConvoDetails {
   status: string;
   assigned_to: string | null;
   created_at: string;
-  metadata: any;
+  metadata: Json;
 }
 
 interface Props {
   conversationId: string | null;
 }
 
-function getPresenceStatus(metadata: any): "online" | "away" | "offline" {
-  if (!metadata?.last_seen_at) return "offline";
-  const diffSec = (Date.now() - new Date(metadata.last_seen_at).getTime()) / 1000;
+function getMetadataRecord(metadata: Json): Record<string, Json | undefined> | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  return metadata as Record<string, Json | undefined>;
+}
+
+function getMetadataString(metadata: Json, key: string): string | null {
+  const record = getMetadataRecord(metadata);
+  const value = record?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+function getPresenceStatus(metadata: Json): "online" | "away" | "offline" {
+  const lastSeenAt = getMetadataString(metadata, "last_seen_at");
+  if (!lastSeenAt) return "offline";
+  const diffSec = (Date.now() - new Date(lastSeenAt).getTime()) / 1000;
   if (diffSec < 60) return "online";
   if (diffSec < 300) return "away";
   return "offline";
@@ -168,12 +181,14 @@ export function SupportChatView({ conversationId }: Props) {
   }, [messages]);
 
   const presence = convo ? getPresenceStatus(convo.metadata) : "offline";
-  const currentPage = convo?.metadata?.current_page;
+  const currentPage = convo ? getMetadataString(convo.metadata, "current_page") : null;
   const currentPageLabel =
     typeof currentPage === "string" ? currentPage.replace(/^https?:\/\//, "") : null;
-  const visitorLocation = convo?.metadata?.city
-    ? `${convo.metadata.city}${convo.metadata.country ? `, ${convo.metadata.country}` : ""}`
-    : convo?.metadata?.country || null;
+  const visitorCity = convo ? getMetadataString(convo.metadata, "city") : null;
+  const visitorCountry = convo ? getMetadataString(convo.metadata, "country") : null;
+  const visitorLocation = visitorCity
+    ? `${visitorCity}${visitorCountry ? `, ${visitorCountry}` : ""}`
+    : visitorCountry || null;
   const assigneeName = useMemo(() => {
     if (!convo?.assigned_to) return "Unassigned";
     return teamMembers.find((member) => member.id === convo.assigned_to)?.full_name || "Assigned";
@@ -263,7 +278,7 @@ export function SupportChatView({ conversationId }: Props) {
         is_internal_note: false,
       });
       if (error) throw error;
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error("Failed to upload image");
       console.error(err);
     } finally {
@@ -303,8 +318,8 @@ export function SupportChatView({ conversationId }: Props) {
       } else {
         toast.info("No suggestion generated");
       }
-    } catch (e: any) {
-      toast.error(e.message || "Failed to get suggestion");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to get suggestion");
     } finally {
       setSuggesting(false);
     }
