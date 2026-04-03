@@ -568,7 +568,7 @@ export function SupportChatView({ conversationId }: Props) {
               </div>
             );
           })}
-          {isStreaming && (
+          {sending && (
             <div className="flex justify-end">
               <div className="max-w-[78%] rounded-[24px] border border-primary/20 bg-primary px-4 py-3 text-primary-foreground shadow-sm">
                 <div className="flex items-center gap-2 text-sm">
