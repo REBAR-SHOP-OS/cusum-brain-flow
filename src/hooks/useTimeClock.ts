@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useProfiles } from "@/hooks/useProfiles";
+import {
+  getHourInTimezone,
+  getStartOfDayIsoInTimezone,
+  getTimezoneLocationLabel,
+} from "@/lib/dateConfig";
+import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { toast } from "sonner";
 
 export interface TimeClockEntry {
@@ -15,9 +21,23 @@ export interface TimeClockEntry {
   created_at: string;
 }
 
+type TimeClockPatch = {
+  clock_out?: string;
+  notes?: string;
+};
+
+function asTimeClockEntries(data: unknown): TimeClockEntry[] {
+  return Array.isArray(data) ? (data as TimeClockEntry[]) : [];
+}
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "unknown error";
+}
+
 export function useTimeClock() {
   const { user } = useAuth();
   const { profiles } = useProfiles();
+  const { timezone } = useWorkspaceSettings();
   const [entries, setEntries] = useState<TimeClockEntry[]>([]);
   const [allEntries, setAllEntries] = useState<TimeClockEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,15 +51,13 @@ export function useTimeClock() {
   const fetchEntries = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStartIso = getStartOfDayIsoInTimezone(timezone);
 
     try {
       const { data, error } = await supabase
         .from("time_clock_entries")
         .select("*")
-        .gte("clock_in", todayStart.toISOString())
+        .gte("clock_in", todayStartIso)
         .order("clock_in", { ascending: false });
 
       if (error) {
@@ -58,13 +76,15 @@ export function useTimeClock() {
         console.error("[TimeClock] fetchEntries open shifts error:", openErr);
       }
 
-      const todayIds = new Set((data || []).map((e: any) => e.id));
-      const extraOpen = ((allOpenShifts as TimeClockEntry[]) || []).filter(e => !todayIds.has(e.id));
-      setAllEntries([...extraOpen, ...(data as TimeClockEntry[])]);
+      const todayEntries = asTimeClockEntries(data);
+      const openEntries = asTimeClockEntries(allOpenShifts);
+      const todayIds = new Set(todayEntries.map((entry) => entry.id));
+      const extraOpen = openEntries.filter((entry) => !todayIds.has(entry.id));
+      setAllEntries([...extraOpen, ...todayEntries]);
 
       const profile = myProfileRef.current;
       if (profile) {
-        const todayMyEntries = (data || []).filter((e: any) => e.profile_id === profile.id) as TimeClockEntry[];
+        const todayMyEntries = todayEntries.filter((entry) => entry.profile_id === profile.id);
 
         const { data: openShifts } = await supabase
           .from("time_clock_entries")
@@ -72,19 +92,19 @@ export function useTimeClock() {
           .eq("profile_id", profile.id)
           .is("clock_out", null);
 
-        const myTodayIds = new Set(todayMyEntries.map(e => e.id));
-        const staleOpen = ((openShifts as TimeClockEntry[]) || []).filter(e => !myTodayIds.has(e.id));
+        const myTodayIds = new Set(todayMyEntries.map((entry) => entry.id));
+        const staleOpen = asTimeClockEntries(openShifts).filter((entry) => !myTodayIds.has(entry.id));
         setEntries([...staleOpen, ...todayMyEntries]);
       }
     } catch (err) {
       console.error("[TimeClock] fetchEntries exception:", err);
     }
     setLoading(false);
-  }, [user]); // Only depends on user, not myProfile
+  }, [timezone, user]); // Only depends on user and workspace timezone, not myProfile
 
   useEffect(() => {
     fetchEntries();
-  }, [fetchEntries]);
+  }, [fetchEntries, user?.id]);
 
   // Re-fetch when myProfile first becomes available
   useEffect(() => {
@@ -101,7 +121,7 @@ export function useTimeClock() {
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [fetchEntries]);
+  }, [fetchEntries, user?.id]);
 
   // activeEntry = most recent open shift (sorted by clock_in desc)
   const activeEntry = entries
@@ -112,10 +132,10 @@ export function useTimeClock() {
     if (!myProfile) { toast.error("No profile found"); return; }
     if (punching) return;
 
-    // Frontend guard: 6 AM ET for all users (backend trigger is the real enforcer)
-    const nowET = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
-    if (nowET.getHours() < 6) {
-      toast.error("Clock-in is only available from 6:00 AM ET");
+    // Frontend guard mirrors the backend's workspace timezone-based rule.
+    if (getHourInTimezone(timezone) < 6) {
+      const timezoneLocation = getTimezoneLocationLabel(timezone);
+      toast.error(`Clock-in is only available from 6:00 AM ${timezoneLocation} time`);
       return;
     }
 
@@ -125,7 +145,7 @@ export function useTimeClock() {
       // Close ALL stale open shifts before clocking in
       const { error: closeErr } = await supabase
         .from("time_clock_entries")
-        .update({ clock_out: new Date().toISOString(), notes: "[auto-closed: stale shift]" } as any)
+        .update({ clock_out: new Date().toISOString(), notes: "[auto-closed: stale shift]" } as TimeClockPatch)
         .eq("profile_id", myProfile.id)
         .is("clock_out", null);
 
@@ -137,19 +157,19 @@ export function useTimeClock() {
 
       const { error } = await supabase
         .from("time_clock_entries")
-        .insert({ profile_id: myProfile.id } as any);
+        .insert({ profile_id: myProfile.id });
 
       if (error) {
         console.error("[TimeClock] clockIn insert error:", error);
         toast.error("Failed to clock in: " + error.message);
       } else {
-        await supabase.from("profiles").update({ is_active: true } as any).eq("id", myProfile.id);
+        await supabase.from("profiles").update({ is_active: true }).eq("id", myProfile.id);
         toast.success("Clocked in!");
       }
       await fetchEntries();
-    } catch (err: any) {
+    } catch (err) {
       console.error("[TimeClock] clockIn exception:", err);
-      toast.error("Failed to clock in: " + (err?.message || "unknown error"));
+      toast.error("Failed to clock in: " + getErrorMessage(err));
     } finally {
       setPunching(false);
     }
@@ -174,7 +194,7 @@ export function useTimeClock() {
       // Close ALL open shifts for this profile
       const { error } = await supabase
         .from("time_clock_entries")
-        .update({ clock_out: new Date().toISOString() } as any)
+        .update({ clock_out: new Date().toISOString() } as TimeClockPatch)
         .eq("profile_id", myProfile.id)
         .is("clock_out", null);
 
@@ -185,7 +205,7 @@ export function useTimeClock() {
         await fetchEntries();
       } else {
         // Set profile inactive
-        await supabase.from("profiles").update({ is_active: false } as any).eq("id", myProfile.id);
+        await supabase.from("profiles").update({ is_active: false }).eq("id", myProfile.id);
         toast.success("Clocked out!");
         // Confirm from DB
         await fetchEntries();
@@ -204,7 +224,7 @@ export function useTimeClock() {
     try {
       const { error } = await supabase
         .from("time_clock_entries")
-        .update({ clock_out: new Date().toISOString(), notes: "[admin clock-out]" } as any)
+        .update({ clock_out: new Date().toISOString(), notes: "[admin clock-out]" } as TimeClockPatch)
         .eq("profile_id", profileId)
         .is("clock_out", null);
 
@@ -212,7 +232,7 @@ export function useTimeClock() {
         console.error("[TimeClock] adminClockOut error:", error);
         toast.error("Failed to clock out user");
       } else {
-        await supabase.from("profiles").update({ is_active: false } as any).eq("id", profileId);
+        await supabase.from("profiles").update({ is_active: false }).eq("id", profileId);
         toast.success("User clocked out successfully");
         await fetchEntries();
       }
