@@ -11,6 +11,7 @@ export async function getWorkspaceTimezone(
     const { data, error } = await supabaseClient
       .from("workspace_settings")
       .select("timezone")
+      .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (error || !data?.timezone) return DEFAULT_TZ;

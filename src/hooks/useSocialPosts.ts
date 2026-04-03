@@ -42,8 +42,9 @@ export function useSocialPosts() {
 
   // Realtime: auto-refresh when any team member changes posts
   useEffect(() => {
+    const channelName = `social_posts_realtime_${crypto.randomUUID()}`;
     const channel = supabase
-      .channel("social_posts_realtime")
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "social_posts" },

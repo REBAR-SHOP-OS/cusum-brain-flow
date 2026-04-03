@@ -25,6 +25,7 @@ export function useWorkspaceSettings() {
       const { data, error } = await supabase
         .from("workspace_settings")
         .select("*")
+        .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (error) {

@@ -91,7 +91,7 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
 
   const invoices = (accountingInv || []).map((r: any) => ({ Balance: r.balance, DueDate: r.data?.DueDate, CustomerRef: r.data?.CustomerRef }));
   const bills = (accountingBill || []).map((r: any) => ({ Balance: r.balance, DueDate: r.data?.DueDate, VendorRef: r.data?.VendorRef }));
-  const todayDate = new Date().toISOString().split("T")[0];
+  const todayDate = today; // use timezone-aware "today" computed above
   const overdueInvoices = invoices.filter((inv: any) => inv.Balance > 0 && inv.DueDate && inv.DueDate < todayDate);
   const overdueBills = bills.filter((b: any) => b.Balance > 0 && b.DueDate && b.DueDate < todayDate);
 

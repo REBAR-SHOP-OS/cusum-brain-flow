@@ -38,6 +38,10 @@ Deno.serve((req) =>
       includeFinancials: true,
     });
 
+    // Resolve workspace timezone for consistent date formatting
+    const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
+    const tz = await getWorkspaceTimezone(supabase);
+
     // Step 2: Load previous benchmarks from vizzy_memory
     const { data: prevBenchmarks } = await supabase
       .from("vizzy_memory")
@@ -48,7 +52,7 @@ Deno.serve((req) =>
       .limit(7); // Last 7 sessions for trend analysis
 
     const benchmarkHistory = (prevBenchmarks || []).map((b: any) => {
-      const date = new Date(b.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const date = new Date(b.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
       return `[${date}] ${b.content}`;
     }).join("\n");
 
@@ -63,7 +67,7 @@ Deno.serve((req) =>
       .maybeSingle();
 
     const agentAuditContext = prevAudit
-      ? `\n═══ PREVIOUS AGENT AUDIT (${new Date(prevAudit.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}) ═══\n${prevAudit.content}`
+      ? `\n═══ PREVIOUS AGENT AUDIT (${new Date(prevAudit.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz })}) ═══\n${prevAudit.content}`
       : "\nNo previous agent audit available.";
 
     // Step 3: AI pre-digestion — produce a concise intelligence briefing
