@@ -52,7 +52,7 @@ Deno.serve((req) =>
       .limit(7); // Last 7 sessions for trend analysis
 
     const benchmarkHistory = (prevBenchmarks || []).map((b: any) => {
-      const date = new Date(b.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const date = new Date(b.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
       return `[${date}] ${b.content}`;
     }).join("\n");
 
