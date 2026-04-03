@@ -27,6 +27,11 @@ vi.mock("@/integrations/supabase/client", () => ({
     functions: {
       invoke: mockInvoke,
     },
+    auth: {
+      getSession: vi.fn().mockResolvedValue({
+        data: { session: { access_token: "test-token" } },
+      }),
+    },
     storage: {
       from: vi.fn(() => ({
         upload: vi.fn().mockResolvedValue({ error: null }),
@@ -37,6 +42,11 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 vi.mock("@/lib/storageUtils", () => ({
   getSignedFileUrl: vi.fn().mockResolvedValue("https://example.com/signed-url"),
+}));
+
+const mockInvokeEdgeFn = vi.fn();
+vi.mock("@/lib/invokeEdgeFunction", () => ({
+  invokeEdgeFunction: (...args: any[]) => mockInvokeEdgeFn(...args),
 }));
 
 beforeEach(() => {
@@ -75,9 +85,9 @@ describe("Extract Service - End to End Flow", () => {
   });
 
   it("2. runExtract invokes edge function with sessionId and returns", async () => {
-    mockInvoke.mockResolvedValue({
-      data: { status: "processing", sessionId: "session-123" },
-      error: null,
+    mockInvokeEdgeFn.mockResolvedValue({
+      status: "processing",
+      sessionId: "session-123",
     });
 
     const { runExtract } = await import("@/lib/extractService");
@@ -94,8 +104,9 @@ describe("Extract Service - End to End Flow", () => {
       },
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith("extract-manifest", {
-      body: {
+    expect(mockInvokeEdgeFn).toHaveBeenCalledWith(
+      "extract-manifest",
+      {
         sessionId: "session-123",
         fileUrl: "https://example.com/file.xlsx",
         fileName: "test.xlsx",
@@ -106,13 +117,14 @@ describe("Extract Service - End to End Flow", () => {
           type: "delivery",
         },
       },
-    });
+      { timeoutMs: 120_000, retries: 1 },
+    );
   });
 
   it("3. runExtract throws when edge function returns error", async () => {
-    mockInvoke.mockResolvedValue({
-      data: { error: "Rate limit exceeded" },
-      error: null,
+    mockInvokeEdgeFn.mockResolvedValue({
+      status: "error",
+      error: "Rate limit exceeded",
     });
 
     const { runExtract } = await import("@/lib/extractService");
