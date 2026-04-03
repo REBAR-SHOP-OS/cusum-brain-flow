@@ -177,7 +177,7 @@ export async function buildFullVizzyContext(
     supabase
       .from("chat_sessions")
       .select("id, title, agent_name, user_id, created_at")
-      .gte("created_at", today + "T00:00:00")
+      .gte("created_at", todayStart)
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
