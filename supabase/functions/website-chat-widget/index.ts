@@ -297,23 +297,42 @@ const widgetJS = `
   // --- Panel ---
   var panel = document.createElement('div');
   panel.id = 'rebar-chat-panel';
-  panel.innerHTML =
-    '<div id="rebar-chat-header">' +
+
+  // Tab state
+  var activeTab = 'chat'; // chat | quote | contact
+
+  function buildPanelHTML() {
+    return '<div id="rebar-chat-header">' +
       '<div class="rc-header-avatar">' + BOT_SVG + '</div>' +
-      '<div class="rc-header-info"><div class="rc-header-title">Rebar Shop</div><div class="rc-header-status"><span class="rc-online-dot"></span>Online &middot; replies in seconds</div></div>' +
+      '<div class="rc-header-info"><div class="rc-header-title">Rebar Shop</div><div class="rc-header-status"><span class="rc-online-dot"></span>Sales concierge &middot; instant quotes</div></div>' +
       '<button id="rebar-chat-close">&times;</button>' +
     '</div>' +
-    '<div id="rebar-chat-messages">' +
-      '<div class="rc-welcome"><div class="rc-welcome-emoji">\\u{1F44B}</div><strong>Hey there!</strong><p>We\\'re here to help with rebar, mesh, quotes &amp; delivery. Ask us anything!</p></div>' +
+    '<div id="rebar-chat-tabs">' +
+      '<button class="rc-tab active" data-tab="chat">💬 AI Chat</button>' +
+      '<button class="rc-tab" data-tab="quote">📊 Quick Quote</button>' +
+      '<button class="rc-tab" data-tab="contact">📞 Contact</button>' +
     '</div>' +
-    '<div class="rc-chips" id="rebar-chat-chips">' +
-      '<button class="rc-chip" data-msg="I\\'d like to get a quote">Get a Quote</button>' +
-      '<button class="rc-chip" data-msg="Can you check stock availability?">Check Stock</button>' +
-      '<button class="rc-chip" data-msg="What areas do you deliver to?">Delivery Areas</button>' +
-      '<button class="rc-chip" data-msg="I\\'d like to talk to a sales person">Talk to Sales</button>' +
+    '<div id="rebar-tab-chat">' +
+      '<div id="rebar-chat-messages">' +
+        '<div class="rc-welcome"><div class="rc-welcome-emoji">\\u{1F44B}</div><strong>Hey there!</strong><p>We\\'re here to help with rebar, mesh, quotes &amp; delivery. Ask us anything!</p></div>' +
+      '</div>' +
+      '<div class="rc-chips" id="rebar-chat-chips">' +
+        '<button class="rc-chip" data-msg="I\\'d like to get a quote">Get a Quote</button>' +
+        '<button class="rc-chip" data-msg="Can you check stock availability?">Check Stock</button>' +
+        '<button class="rc-chip" data-msg="What areas do you deliver to?">Delivery Areas</button>' +
+        '<button class="rc-chip" data-msg="I\\'d like to talk to a sales person">Talk to Sales</button>' +
+      '</div>' +
+      '<div id="rebar-chat-input-area"><textarea id="rebar-chat-input" placeholder="Type your message..." rows="1"></textarea><button id="rebar-chat-send" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button></div>' +
     '</div>' +
-    '<div id="rebar-chat-input-area"><textarea id="rebar-chat-input" placeholder="Type your message..." rows="1"></textarea><button id="rebar-chat-send" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button></div>' +
+    '<div id="rebar-tab-quote" style="display:none;padding:16px;">' +
+      '<div id="rc-quote-wizard"></div>' +
+    '</div>' +
+    '<div id="rebar-tab-contact" style="display:none;padding:16px;">' +
+      '<div id="rc-contact-form"></div>' +
+    '</div>' +
     '<div class="rc-footer">Powered by <span>Rebar Shop AI</span></div>';
+  }
+  panel.innerHTML = buildPanelHTML();
   document.body.appendChild(panel);
 
   var msgContainer = document.getElementById('rebar-chat-messages');
