@@ -84,6 +84,8 @@ function isIgnoredError(message: string): boolean {
     "denied permission",
     "Permission denied",
     "push subscription",
+    "NotSupportedError",
+    "no supported sources",
   ];
   return ignored.some((pattern) => message.includes(pattern));
 }
