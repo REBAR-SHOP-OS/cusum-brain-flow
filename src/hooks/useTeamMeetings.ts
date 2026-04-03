@@ -22,7 +22,7 @@ export function useActiveMeetings(channelId: string | null) {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["team-meetings", channelId],
+    queryKey: ["team-meetings", user?.id, channelId],
     enabled: !!user && !!channelId,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -46,7 +46,7 @@ export function useActiveMeetings(channelId: string | null) {
         schema: "public",
         table: "team_meetings",
         filter: `channel_id=eq.${channelId}`,
-      }, () => queryClient.invalidateQueries({ queryKey: ["team-meetings", channelId] }))
+      }, () => queryClient.invalidateQueries({ queryKey: ["team-meetings", user.id, channelId] }))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, channelId, queryClient]);
@@ -55,6 +55,7 @@ export function useActiveMeetings(channelId: string | null) {
 }
 
 export function useStartMeeting() {
+  const { user } = useAuth();
   const myProfile = useMyProfile();
   const queryClient = useQueryClient();
 
@@ -113,12 +114,15 @@ export function useStartMeeting() {
       return data as TeamMeeting;
     },
     onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["team-meetings", vars.channelId] });
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: ["team-meetings", user.id, vars.channelId] });
+      }
     },
   });
 }
 
 export function useEndMeeting() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -138,7 +142,9 @@ export function useEndMeeting() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team-meetings"] });
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: ["team-meetings", user.id] });
+      }
     },
   });
 }

@@ -32,12 +32,51 @@ export interface TeamMessage {
   sender?: Profile;
 }
 
+/** Coerce DB rows so UI never throws on null/legacy shapes. Exported for unit tests. */
+export function normalizeTeamMessageRow(m: Record<string, unknown>): TeamMessage {
+  const rawTranslations = m.translations;
+  const translations: Record<string, string> = {};
+  if (rawTranslations && typeof rawTranslations === "object" && !Array.isArray(rawTranslations)) {
+    for (const [k, v] of Object.entries(rawTranslations as Record<string, unknown>)) {
+      if (typeof v === "string") translations[k] = v;
+    }
+  }
+
+  const rawAttachments = m.attachments;
+  const attachments: ChatAttachment[] = Array.isArray(rawAttachments)
+    ? (rawAttachments as ChatAttachment[]).filter(
+        (a) => a && typeof a === "object" && typeof (a as ChatAttachment).url === "string"
+      )
+    : [];
+
+  const originalText =
+    m.original_text == null ? "" : typeof m.original_text === "string" ? m.original_text : String(m.original_text);
+
+  return {
+    id: String(m.id ?? ""),
+    channel_id: String(m.channel_id ?? ""),
+    sender_profile_id: String(m.sender_profile_id ?? ""),
+    original_text: originalText,
+    original_language:
+      m.original_language == null
+        ? "en"
+        : typeof m.original_language === "string"
+          ? m.original_language
+          : String(m.original_language),
+    translations,
+    attachments,
+    reply_to_id: m.reply_to_id == null ? null : String(m.reply_to_id),
+    created_at:
+      m.created_at == null ? new Date(0).toISOString() : typeof m.created_at === "string" ? m.created_at : String(m.created_at),
+  };
+}
+
 export function useTeamChannels() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["team-channels"],
+    queryKey: ["team-channels", user?.id],
     enabled: !!user,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -55,7 +94,7 @@ export function useTeamChannels() {
     const channel = supabase
       .channel(`team-channels-live-${user?.id || "global"}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "team_channels" },
-        () => queryClient.invalidateQueries({ queryKey: ["team-channels"] }))
+        () => queryClient.invalidateQueries({ queryKey: ["team-channels", user.id] }))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, queryClient]);
@@ -75,7 +114,7 @@ export function useTeamMessages(channelId: string | null) {
   }, [profiles]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["team-messages", channelId],
+    queryKey: ["team-messages", user?.id, channelId],
     enabled: !!user && !!channelId,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
@@ -85,7 +124,7 @@ export function useTeamMessages(channelId: string | null) {
         .order("created_at", { ascending: true })
         .limit(200);
       if (error) throw error;
-      return (data || []) as TeamMessage[];
+      return ((data || []) as Record<string, unknown>[]).map(normalizeTeamMessageRow);
     },
   });
 
@@ -104,7 +143,7 @@ export function useTeamMessages(channelId: string | null) {
       .channel(`team-msgs-${channelId}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "team_messages",
         filter: `channel_id=eq.${channelId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["team-messages", channelId] }))
+        () => queryClient.invalidateQueries({ queryKey: ["team-messages", user.id, channelId] }))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, channelId, queryClient]);
@@ -113,6 +152,7 @@ export function useTeamMessages(channelId: string | null) {
 }
 
 export function useSendMessage() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -166,7 +206,9 @@ export function useSendMessage() {
       if (insertError) throw insertError;
     },
     onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["team-messages", vars.channelId] });
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: ["team-messages", user.id, vars.channelId] });
+      }
     },
   });
 }

@@ -82,7 +82,9 @@ export function useCreateChannel() {
       return channel;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team-channels"] });
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: ["team-channels", user.id] });
+      }
     },
   });
 }
@@ -160,7 +162,9 @@ export function useOpenDM() {
       return { id: data as string, existed: false };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team-channels"] });
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: ["team-channels", user.id] });
+      }
     },
   });
 }
@@ -193,7 +197,9 @@ export function useDeleteChannel() {
       if (chErr) throw chErr;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["team-channels"] });
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: ["team-channels", user.id] });
+      }
     },
   });
 }
