@@ -2,6 +2,19 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 
+function getHourInTimezone(date: Date, timezone: string): number {
+  const hourPart = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    hour12: false,
+  })
+    .formatToParts(date)
+    .find((part) => part.type === "hour");
+
+  const hour = Number(hourPart?.value);
+  return Number.isNaN(hour) ? date.getUTCHours() : hour;
+}
+
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     // Rate limit: 10 per 5 minutes
@@ -24,7 +37,8 @@ Deno.serve((req) =>
 
     const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
     const tz = await getWorkspaceTimezone(ctx.serviceClient);
-    const hour = new Date(new Date().toLocaleString("en-US", { timeZone: tz })).getHours();
+    const generatedAt = new Date();
+    const hour = getHourInTimezone(generatedAt, tz);
     const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
     const result = await callAI({
@@ -73,7 +87,8 @@ Always respond in English for the daily briefing.`,
     return {
       briefing: result.content || "No briefing available.",
       rawContext: context,
-      generated_at: new Date().toISOString(),
+      generated_at: generatedAt.toISOString(),
+      timezone: tz,
     };
   }, { functionName: "vizzy-daily-brief", requireCompany: false, wrapResult: false })
 );

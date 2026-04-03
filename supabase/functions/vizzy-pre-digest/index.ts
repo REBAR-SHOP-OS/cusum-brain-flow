@@ -3,6 +3,7 @@ import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 import { callAI } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 
 /**
  * Vizzy Pre-Digest: Before a voice session starts, this function:
@@ -32,6 +33,8 @@ Deno.serve((req) =>
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const timezone = await getWorkspaceTimezone(supabase);
 
     // Step 1: Load raw ERP context
     const rawContext = await buildFullVizzyContext(supabase, userId, {
@@ -214,10 +217,13 @@ ${agentAuditContext}`,
     // Remove the benchmark JSON line from the digest (it's internal)
     const cleanDigest = fullDigest.replace(/BENCHMARK_JSON:\{[^}]+\}/, "").trim();
 
+    const generatedAt = new Date().toISOString();
+
     return {
       digest: cleanDigest,
       rawContext,
-      generated_at: new Date().toISOString(),
+      generated_at: generatedAt,
+      timezone,
     };
   }, { functionName: "vizzy-pre-digest", requireCompany: false, wrapResult: false })
 );

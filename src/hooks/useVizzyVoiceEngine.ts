@@ -1,6 +1,10 @@
 import { useCallback, useRef, useState } from "react";
 import { useVoiceEngine } from "./useVoiceEngine";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import {
+  resolveVizzyTimeContext,
+  type VizzyInstructionTimeContext,
+} from "@/lib/vizzyTimeContext";
 import { toast } from "sonner";
 
 /**
@@ -397,28 +401,36 @@ When reporting agent status:
 export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVoiceEngine";
 export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
 
-function buildInstructions(digest: string | null, rawContext: string | null): string {
+export function buildInstructions(
+  digest: string | null,
+  rawContext: string | null,
+  timeContext?: VizzyInstructionTimeContext | null
+): string {
   if (!digest && !rawContext) return VIZZY_INSTRUCTIONS;
 
-  const now = new Date();
-  const hour = now.getHours();
-  const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
-  const nowStr = now.toLocaleString();
+  const resolvedTime = resolveVizzyTimeContext(timeContext);
+  const fallbackNow = new Date();
+  const fallbackHour = fallbackNow.getHours();
+  const fallbackTimeOfDay =
+    fallbackHour < 12 ? "morning" : fallbackHour < 17 ? "afternoon" : "evening";
+  const timeOfDay = resolvedTime?.timeOfDay ?? fallbackTimeOfDay;
+  const nowStr = resolvedTime?.nowStr ?? fallbackNow.toLocaleString();
+  const timezoneSuffix = resolvedTime ? ` ${resolvedTime.timezone}` : "";
 
   if (digest) {
     // Pre-digested mode: digest is self-sufficient — omit rawContext to prevent token overflow
     return `${VIZZY_INSTRUCTIONS}
 
-CURRENT TIME CONTEXT: It is currently ${timeOfDay} (${nowStr}). Greet the CEO with "Good ${timeOfDay}!" or a natural variation.
+CURRENT TIME CONTEXT: It is currently ${timeOfDay} (${nowStr}${timezoneSuffix}). Greet the CEO with "Good ${timeOfDay}!" or a natural variation.
 
-═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${nowStr}) ═══
+═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${nowStr}${timezoneSuffix}) ═══
 You have ALREADY gone through all the raw data, analyzed every employee, read every call note, checked every email, compared benchmarks. The analysis below is YOUR OWN work. Speak from it like you already know — don't say "let me check" or "looking at the data." You KNOW.
 
 ${digest}`;
   }
 
   // Fallback: raw context only (no digest available)
-  return `${VIZZY_INSTRUCTIONS}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} (${nowStr}). Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n\n═══ LIVE BUSINESS DATA (as of ${nowStr}) ═══\n${rawContext}`;
+  return `${VIZZY_INSTRUCTIONS}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} (${nowStr}${timezoneSuffix}). Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n\n═══ LIVE BUSINESS DATA (as of ${nowStr}${timezoneSuffix}) ═══\n${rawContext}`;
 }
 
 export function useVizzyVoiceEngine() {
@@ -454,35 +466,56 @@ export function useVizzyVoiceEngine() {
           const data = await invokeEdgeFunction<{
             digest: string;
             rawContext?: string;
+            generated_at?: string;
+            timezone?: string;
           }>("vizzy-pre-digest", {}, { timeoutMs: 45000 });
 
           if (data?.digest) {
-            instructionsRef.current = buildInstructions(data.digest, data.rawContext || null);
+            instructionsRef.current = buildInstructions(data.digest, data.rawContext || null, {
+              generatedAt: data.generated_at ?? new Date().toISOString(),
+              timezone: data.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+            });
             updateSessionInstructions(instructionsRef.current);
             return;
           }
 
-          const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
+          const fallback = await invokeEdgeFunction<{
+            briefing: string;
+            rawContext?: string;
+            generated_at?: string;
+            timezone?: string;
+          }>(
             "vizzy-daily-brief",
             {},
             { timeoutMs: 25000 }
           );
           const contextData = fallback?.rawContext || fallback?.briefing;
           if (contextData) {
-            instructionsRef.current = buildInstructions(null, contextData);
+            instructionsRef.current = buildInstructions(null, contextData, {
+              generatedAt: fallback.generated_at ?? new Date().toISOString(),
+              timezone: fallback.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+            });
             updateSessionInstructions(instructionsRef.current);
           }
         } catch (err) {
           console.warn("Pre-digest failed, trying daily-brief fallback:", err);
           try {
-            const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
+            const fallback = await invokeEdgeFunction<{
+              briefing: string;
+              rawContext?: string;
+              generated_at?: string;
+              timezone?: string;
+            }>(
               "vizzy-daily-brief",
               {},
               { timeoutMs: 25000 }
             );
             const contextData = fallback?.rawContext || fallback?.briefing;
             if (contextData) {
-              instructionsRef.current = buildInstructions(null, contextData);
+              instructionsRef.current = buildInstructions(null, contextData, {
+                generatedAt: fallback.generated_at ?? new Date().toISOString(),
+                timezone: fallback.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+              });
               updateSessionInstructions(instructionsRef.current);
             }
           } catch (err2) {
