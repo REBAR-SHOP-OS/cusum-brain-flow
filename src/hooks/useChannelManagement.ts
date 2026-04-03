@@ -117,7 +117,7 @@ export function useOpenDM() {
 
       if (error) {
         const correlationId = Math.random().toString(36).substring(2, 9);
-        const companyId = myProfile.company_id ?? "unknown";
+        const companyId = (myProfile as any).company_id ?? "unknown";
 
         console.error("[DM Creation Failed]", {
           correlationId,
