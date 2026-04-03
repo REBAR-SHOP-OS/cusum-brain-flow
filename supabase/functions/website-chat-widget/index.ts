@@ -270,6 +270,74 @@ const widgetJS = `
     }
     .rc-footer span { color: #E97F0F; font-weight: 600; }
 
+    /* Tabs */
+    #rebar-chat-tabs {
+      display: flex; border-bottom: 1px solid rgba(255,255,255,0.06);
+      background: rgba(17,24,39,0.95);
+    }
+    .rc-tab {
+      flex: 1; padding: 10px 4px; font-size: 11px; font-weight: 600;
+      color: #6b7280; background: none; border: none; cursor: pointer;
+      border-bottom: 2px solid transparent; transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+    }
+    .rc-tab:hover { color: #d1d5db; }
+    .rc-tab.active { color: #F59E0B; border-bottom-color: #F59E0B; background: rgba(233,127,15,0.05); }
+
+    /* Quote wizard */
+    .rc-quote-sizes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .rc-size-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 2px;
+      padding: 12px 8px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04); color: #e5e7eb; cursor: pointer;
+      transition: all 0.2s; font-family: 'Inter', sans-serif;
+    }
+    .rc-size-btn:hover { border-color: rgba(233,127,15,0.4); background: rgba(233,127,15,0.08); }
+    .rc-size-btn.selected { border-color: #E97F0F; background: rgba(233,127,15,0.15); }
+    .rc-size-btn strong { font-size: 16px; color: #F59E0B; }
+    .rc-size-btn span { font-size: 10px; color: #6b7280; }
+
+    .rc-bend-opts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .rc-bend-btn {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04); color: #e5e7eb; cursor: pointer;
+      transition: all 0.2s; font-family: 'Inter', sans-serif;
+    }
+    .rc-bend-btn:hover { border-color: rgba(233,127,15,0.4); }
+    .rc-bend-btn.selected { border-color: #E97F0F; background: rgba(233,127,15,0.15); }
+    .rc-bend-btn .icon { font-size: 18px; font-family: monospace; }
+    .rc-bend-btn .label { font-size: 11px; font-weight: 600; }
+
+    .rc-estimate-box {
+      border: 2px solid rgba(233,127,15,0.3); background: rgba(233,127,15,0.05);
+      border-radius: 12px; padding: 16px; text-align: center; margin: 12px 0;
+    }
+    .rc-estimate-price { font-size: 22px; font-weight: 800; color: #F59E0B; margin: 8px 0; }
+    .rc-estimate-note { font-size: 11px; color: #6b7280; font-style: italic; }
+
+    .rc-cta-btn {
+      display: block; width: 100%; padding: 12px; border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #E97F0F, #F59E0B); color: #fff;
+      font-size: 14px; font-weight: 700; cursor: pointer; transition: opacity 0.2s;
+      font-family: 'Inter', sans-serif; margin-top: 8px;
+    }
+    .rc-cta-btn:hover { opacity: 0.9; }
+    .rc-cta-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Contact form */
+    .rc-form-input {
+      display: block; width: 100%; padding: 10px 12px; margin-bottom: 8px;
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+      background: rgba(255,255,255,0.04); color: #f3f4f6; font-size: 13px;
+      font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.2s;
+      box-sizing: border-box;
+    }
+    .rc-form-input:focus { border-color: rgba(233,127,15,0.4); }
+    .rc-form-input::placeholder { color: #4b5563; }
+    .rc-form-label { font-size: 12px; font-weight: 600; color: #9ca3af; margin-bottom: 4px; display: block; }
+    .rc-success-box { text-align: center; padding: 24px; color: #22C55E; }
+
     @media (max-width: 480px) {
       #rebar-chat-panel {
         width: calc(100vw - 16px); right: 8px; bottom: 96px;
