@@ -81,6 +81,7 @@ import AutopilotDashboard from "./pages/AutopilotDashboard";
 import PipelineIntelligence from "./pages/PipelineIntelligence";
 import SupportInbox from "./pages/SupportInbox";
 import KnowledgeBasePublic from "./pages/KnowledgeBasePublic";
+import SupportWidgetPreview from "./pages/SupportWidgetPreview";
 import Estimation from "./pages/Estimation";
 import QuoteEngine from "./pages/QuoteEngine";
 import AutomationsHub from "./pages/AutomationsHub";
@@ -146,6 +147,7 @@ const App = () => (
                     <Route path="/" element={<SmartErrorBoundary level="page" maxAutoRetries={2}><Landing /></SmartErrorBoundary>} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
+                    <Route path="/support-widget-preview" element={<SmartErrorBoundary level="page" maxAutoRetries={2}><SupportWidgetPreview /></SmartErrorBoundary>} />
                     {/* Print-only route — zero app layout */}
                     <Route path="/print-tags" element={<ProtectedRoute><Suspense fallback={<div>Loading...</div>}><PrintTags /></Suspense></ProtectedRoute>} />
 
