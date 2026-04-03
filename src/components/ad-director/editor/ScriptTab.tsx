@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Image, Mic, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import type { ScriptSegment } from "@/types/adDirector";
 
 interface ScriptTabProps {
@@ -30,6 +31,7 @@ export function ScriptTab({ segments, onUpdateSegment }: ScriptTabProps) {
   const handleVoiceover = async (seg: ScriptSegment) => {
     setVoiceoverId(seg.id);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
@@ -37,7 +39,7 @@ export function ScriptTab({ segments, onUpdateSegment }: ScriptTabProps) {
           headers: {
             "Content-Type": "application/json",
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            Authorization: `Bearer ${session?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({ text: seg.text }),
         }

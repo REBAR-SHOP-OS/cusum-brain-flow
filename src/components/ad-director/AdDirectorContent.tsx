@@ -257,7 +257,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
     const fixedClips = projectClips.map((clip) => {
       if (clip.status !== "completed" || !clip.videoUrl) {
-        return { ...clip, status: "failed", error: "Missing video - auto-retry" };
+        return { ...clip, status: "failed" as const, error: "Missing video - auto-retry" };
       }
       return clip;
     });
