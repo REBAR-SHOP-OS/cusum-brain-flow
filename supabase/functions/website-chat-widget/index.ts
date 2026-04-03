@@ -408,6 +408,146 @@ const widgetJS = `
   var sendBtn = document.getElementById('rebar-chat-send');
   var chipsContainer = document.getElementById('rebar-chat-chips');
 
+  // --- Tab switching ---
+  panel.addEventListener('click', function(e) {
+    var tab = e.target.closest('.rc-tab');
+    if (!tab) return;
+    var t = tab.getAttribute('data-tab');
+    if (!t) return;
+    activeTab = t;
+    panel.querySelectorAll('.rc-tab').forEach(function(el) { el.classList.remove('active'); });
+    tab.classList.add('active');
+    document.getElementById('rebar-tab-chat').style.display = t === 'chat' ? '' : 'none';
+    document.getElementById('rebar-tab-quote').style.display = t === 'quote' ? '' : 'none';
+    document.getElementById('rebar-tab-contact').style.display = t === 'contact' ? '' : 'none';
+    if (t === 'quote') initQuoteWizard();
+    if (t === 'contact') initContactForm();
+  });
+
+  // --- Quote Wizard ---
+  var quoteState = { step: 0, size: '', qty: 5, bend: 'straight' };
+  function initQuoteWizard() {
+    quoteState = { step: 0, size: '', qty: 5, bend: 'straight' };
+    renderQuoteStep();
+  }
+  function renderQuoteStep() {
+    var wiz = document.getElementById('rc-quote-wizard');
+    if (!wiz) return;
+    if (quoteState.step === 0) {
+      wiz.innerHTML = '<p style="color:#f9fafb;font-size:14px;font-weight:700;margin-bottom:12px;">Select Bar Size</p>' +
+        '<div class="rc-quote-sizes">' +
+        ['10M','15M','20M','25M','30M','35M'].map(function(s) {
+          return '<button class="rc-size-btn" data-size="' + s + '"><strong>' + s + '</strong><span>' + ({
+            '10M':'11.3mm','15M':'16.0mm','20M':'19.5mm','25M':'25.2mm','30M':'29.9mm','35M':'35.7mm'
+          })[s] + '</span></button>';
+        }).join('') + '</div>';
+      wiz.querySelectorAll('.rc-size-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          quoteState.size = btn.getAttribute('data-size');
+          quoteState.step = 1;
+          renderQuoteStep();
+        });
+      });
+    } else if (quoteState.step === 1) {
+      wiz.innerHTML = '<button class="rc-chip" id="rc-back1" style="margin-bottom:12px;">← Back</button>' +
+        '<p style="color:#f9fafb;font-size:14px;font-weight:700;margin-bottom:12px;">Quantity (tonnes)</p>' +
+        '<input type="range" min="1" max="50" value="' + quoteState.qty + '" id="rc-qty-slider" style="width:100%;accent-color:#E97F0F;">' +
+        '<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:#6b7280;"><span>1t</span><span id="rc-qty-val" style="font-size:18px;font-weight:800;color:#F59E0B;">' + quoteState.qty + 't</span><span>50t</span></div>' +
+        '<button class="rc-cta-btn" id="rc-next-bend" style="margin-top:16px;">Next: Bending Type →</button>';
+      document.getElementById('rc-back1').addEventListener('click', function() { quoteState.step = 0; renderQuoteStep(); });
+      var slider = document.getElementById('rc-qty-slider');
+      slider.addEventListener('input', function() { quoteState.qty = parseInt(slider.value); document.getElementById('rc-qty-val').textContent = quoteState.qty + 't'; });
+      document.getElementById('rc-next-bend').addEventListener('click', function() { quoteState.step = 2; renderQuoteStep(); });
+    } else if (quoteState.step === 2) {
+      wiz.innerHTML = '<button class="rc-chip" id="rc-back2" style="margin-bottom:12px;">← Back</button>' +
+        '<p style="color:#f9fafb;font-size:14px;font-weight:700;margin-bottom:12px;">Bending Type</p>' +
+        '<div class="rc-bend-opts">' +
+        [['straight','━━━','Straight'],['L-shape','━━┛','L-Shape'],['U-shape','┗━━┛','Stirrup'],['custom','~━~','Custom']].map(function(b) {
+          return '<button class="rc-bend-btn" data-bend="' + b[0] + '"><span class="icon">' + b[1] + '</span><span class="label">' + b[2] + '</span></button>';
+        }).join('') + '</div>';
+      document.getElementById('rc-back2').addEventListener('click', function() { quoteState.step = 1; renderQuoteStep(); });
+      wiz.querySelectorAll('.rc-bend-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          quoteState.bend = btn.getAttribute('data-bend');
+          quoteState.step = 3;
+          renderQuoteStep();
+        });
+      });
+    } else if (quoteState.step === 3) {
+      wiz.innerHTML = '<button class="rc-chip" id="rc-back3" style="margin-bottom:12px;">← Back</button>' +
+        '<p style="color:#f9fafb;font-size:14px;font-weight:700;margin-bottom:12px;">Your Selection</p>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">' +
+        '<div style="text-align:center;padding:8px;background:rgba(255,255,255,0.04);border-radius:8px;"><span style="font-size:10px;color:#6b7280;">Size</span><br><span style="font-weight:800;color:#F59E0B;">' + quoteState.size + '</span></div>' +
+        '<div style="text-align:center;padding:8px;background:rgba(255,255,255,0.04);border-radius:8px;"><span style="font-size:10px;color:#6b7280;">Qty</span><br><span style="font-weight:800;color:#F59E0B;">' + quoteState.qty + 't</span></div>' +
+        '<div style="text-align:center;padding:8px;background:rgba(255,255,255,0.04);border-radius:8px;"><span style="font-size:10px;color:#6b7280;">Bend</span><br><span style="font-weight:800;color:#F59E0B;">' + quoteState.bend + '</span></div>' +
+        '</div>' +
+        '<button class="rc-cta-btn" id="rc-get-estimate">⚡ Get Instant Estimate</button>';
+      document.getElementById('rc-back3').addEventListener('click', function() { quoteState.step = 2; renderQuoteStep(); });
+      document.getElementById('rc-get-estimate').addEventListener('click', async function() {
+        var btn = document.getElementById('rc-get-estimate');
+        btn.disabled = true; btn.textContent = 'Calculating...';
+        try {
+          var resp = await fetch(CHAT_URL, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: 'quick-quote', messages: [{ role: 'user', content: 'Estimate quote for ' + quoteState.qty + ' tonnes of ' + quoteState.size + ' rebar, bending type: ' + quoteState.bend }] })
+          });
+          var data = await resp.json();
+          var priceMatch = (data.reply || '').match(/\\$[\\d,]+ - \\$[\\d,]+ CAD/);
+          var price = priceMatch ? priceMatch[0] : 'Contact for pricing';
+          wiz.innerHTML = '<div class="rc-estimate-box"><p style="font-size:12px;color:#9ca3af;font-weight:600;">⚡ Ballpark Estimate</p>' +
+            '<div class="rc-estimate-price">' + price + '</div>' +
+            '<p style="font-size:11px;color:#6b7280;">' + quoteState.size + ' • ' + quoteState.qty + 't • ' + quoteState.bend + '</p>' +
+            '<p class="rc-estimate-note">Estimate only. Market rates fluctuate daily.</p></div>' +
+            '<button class="rc-cta-btn" id="rc-formal-quote">Get Exact Quote</button>' +
+            '<button class="rc-cta-btn" id="rc-new-estimate" style="background:rgba(255,255,255,0.06);color:#e5e7eb;margin-top:4px;">New Estimate</button>';
+          document.getElementById('rc-formal-quote').addEventListener('click', function() {
+            // Switch to chat tab with pre-filled message
+            activeTab = 'chat';
+            panel.querySelectorAll('.rc-tab').forEach(function(el) { el.classList.remove('active'); });
+            panel.querySelector('[data-tab="chat"]').classList.add('active');
+            document.getElementById('rebar-tab-chat').style.display = '';
+            document.getElementById('rebar-tab-quote').style.display = 'none';
+            document.getElementById('rebar-tab-contact').style.display = 'none';
+            input.value = 'I\\'d like a formal quote for ' + quoteState.qty + ' tonnes of ' + quoteState.size + ', ' + quoteState.bend + ' bending.';
+            sendMessage();
+          });
+          document.getElementById('rc-new-estimate').addEventListener('click', function() { initQuoteWizard(); });
+        } catch(e) {
+          btn.disabled = false; btn.textContent = '⚡ Get Instant Estimate';
+        }
+      });
+    }
+  }
+
+  // --- Contact Form ---
+  function initContactForm() {
+    var form = document.getElementById('rc-contact-form');
+    if (!form) return;
+    form.innerHTML = '<p style="color:#f9fafb;font-size:14px;font-weight:700;margin-bottom:4px;">Request a Callback</p>' +
+      '<p style="color:#6b7280;font-size:12px;margin-bottom:12px;">Fill in your details and our team will reach out.</p>' +
+      '<input class="rc-form-input" id="rc-cname" placeholder="Your name *">' +
+      '<input class="rc-form-input" id="rc-cemail" placeholder="Email" type="email">' +
+      '<input class="rc-form-input" id="rc-cphone" placeholder="Phone">' +
+      '<input class="rc-form-input" id="rc-ccompany" placeholder="Company">' +
+      '<textarea class="rc-form-input" id="rc-cdesc" placeholder="Describe your project..." rows="3" style="resize:none;min-height:60px;"></textarea>' +
+      '<button class="rc-cta-btn" id="rc-contact-submit">📞 Request Callback</button>';
+    document.getElementById('rc-contact-submit').addEventListener('click', async function() {
+      var name = document.getElementById('rc-cname').value.trim();
+      if (!name) { alert('Name is required'); return; }
+      var btn = document.getElementById('rc-contact-submit');
+      btn.disabled = true; btn.textContent = 'Submitting...';
+      try {
+        await fetch(CHAT_URL, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'quick-quote', messages: [{ role: 'user', content: 'Save my contact info: name=' + name + ', email=' + (document.getElementById('rc-cemail').value || '') + ', phone=' + (document.getElementById('rc-cphone').value || '') + ', company=' + (document.getElementById('rc-ccompany').value || '') + ', project=' + (document.getElementById('rc-cdesc').value || '') }] })
+        });
+        form.innerHTML = '<div class="rc-success-box"><p style="font-size:36px;margin-bottom:12px;">✅</p><p style="font-size:16px;font-weight:700;color:#f9fafb;">Request Received!</p><p style="font-size:12px;color:#6b7280;margin-top:4px;">Our sales team will contact you within 2 hours during business hours.</p></div>';
+      } catch(e) {
+        btn.disabled = false; btn.textContent = '📞 Request Callback';
+      }
+    });
+  }
+
   // --- Quick chips ---
   chipsContainer.addEventListener('click', function(e) {
     var chip = e.target.closest('.rc-chip');
