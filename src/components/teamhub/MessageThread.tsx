@@ -195,7 +195,7 @@ export function MessageThread({
   const canDelete = DELETE_ADMINS.includes(myProfile?.email ?? "");
 
   const handleDeleteMessage = async (msgId: string) => {
-    const { error } = await (supabase as any)
+    const { error } = await supabase
       .from("team_messages")
       .delete()
       .eq("id", msgId);

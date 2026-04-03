@@ -18,6 +18,10 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
 export default function TeamHub() {
   const { channels, isLoading: channelsLoading } = useTeamChannels();
   const { profiles } = useProfiles();
@@ -41,29 +45,30 @@ export default function TeamHub() {
   const { themeId, theme, setTheme } = useTeamHubTheme();
 
   const isNotesView = selectedChannelId === "__my_notes__";
+  const myProfileId = myProfile?.id;
 
   // Resolve self-DM channel for My Notes
   useEffect(() => {
-    if (!isNotesView || !myProfile) {
+    if (!isNotesView || !myProfileId) {
       setSelfChannelId(null);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const { data, error } = await supabase.rpc("create_dm_channel" as any, {
-          _my_profile_id: myProfile.id,
-          _target_profile_id: myProfile.id,
+        const { data, error } = await supabase.rpc("create_dm_channel", {
+          _my_profile_id: myProfileId,
+          _target_profile_id: myProfileId,
         });
         if (!cancelled && !error && data) {
-          setSelfChannelId(data as string);
+          setSelfChannelId(data);
         }
       } catch (e) {
         console.error("Failed to resolve self-notes channel", e);
       }
     })();
     return () => { cancelled = true; };
-  }, [isNotesView, myProfile?.id]);
+  }, [isNotesView, myProfileId]);
 
   const resolvedChannelId = isNotesView ? selfChannelId : (selectedChannelId || (channelsLoading ? null : channels[0]?.id || null));
   const activeChannelId = resolvedChannelId;
@@ -114,8 +119,8 @@ export default function TeamHub() {
         attachments,
         replyToId,
       });
-    } catch (err: any) {
-      toast.error("Failed to send message", { description: err.message });
+    } catch (err: unknown) {
+      toast.error("Failed to send message", { description: getErrorMessage(err) });
     }
   };
 
@@ -133,8 +138,8 @@ export default function TeamHub() {
         attachments: msg.attachments || [],
       });
       toast.success("Message forwarded");
-    } catch (err: any) {
-      toast.error("Failed to forward", { description: err.message });
+    } catch (err: unknown) {
+      toast.error("Failed to forward", { description: getErrorMessage(err) });
     }
   };
 
@@ -154,8 +159,8 @@ export default function TeamHub() {
         });
         toast.success("Message forwarded");
       }
-    } catch (err: any) {
-      toast.error("Failed to forward", { description: err.message });
+    } catch (err: unknown) {
+      toast.error("Failed to forward", { description: getErrorMessage(err) });
     }
   };
 
@@ -171,8 +176,8 @@ export default function TeamHub() {
         setSelectedChannelId(result.id);
       }
       toast.success(`Channel #${data.name} created!`);
-    } catch (err: any) {
-      toast.error("Failed to create channel", { description: err.message });
+    } catch (err: unknown) {
+      toast.error("Failed to create channel", { description: getErrorMessage(err) });
     }
   };
 
@@ -187,8 +192,8 @@ export default function TeamHub() {
       setShowMeetingDialog(false);
       setActiveMeeting(meeting);
       toast.success("Meeting started!");
-    } catch (err: any) {
-      toast.error("Failed to start meeting", { description: err.message });
+    } catch (err: unknown) {
+      toast.error("Failed to start meeting", { description: getErrorMessage(err) });
     }
   };
 
@@ -201,8 +206,8 @@ export default function TeamHub() {
       toast.success("Meeting ended — AI is summarizing...");
       // Show report dialog after a short delay to allow AI processing
       setTimeout(() => setReportMeetingId(meetingId), 3000);
-    } catch (err: any) {
-      toast.error("Failed to end meeting", { description: err.message });
+    } catch (err: unknown) {
+      toast.error("Failed to end meeting", { description: getErrorMessage(err) });
     }
   };
 
@@ -230,8 +235,8 @@ export default function TeamHub() {
           if (result?.id) {
             setSelectedChannelId(result.id);
           }
-        } catch (err: any) {
-          toast.error("Failed to open DM", { description: err.message });
+        } catch (err: unknown) {
+          toast.error("Failed to open DM", { description: getErrorMessage(err) });
         }
       }}
       onDeleteChannel={async (id) => {
@@ -239,8 +244,8 @@ export default function TeamHub() {
           await deleteChannelMutation.mutateAsync(id);
           if (selectedChannelId === id) setSelectedChannelId(null);
           toast.success("Channel deleted");
-        } catch (err: any) {
-          toast.error("Failed to delete", { description: err.message });
+        } catch (err: unknown) {
+          toast.error("Failed to delete", { description: getErrorMessage(err) });
         }
       }}
       onClose={() => setSidebarOpen(false)}
