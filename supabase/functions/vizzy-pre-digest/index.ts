@@ -67,7 +67,7 @@ Deno.serve((req) =>
       .maybeSingle();
 
     const agentAuditContext = prevAudit
-      ? `\n═══ PREVIOUS AGENT AUDIT (${new Date(prevAudit.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}) ═══\n${prevAudit.content}`
+      ? `\n═══ PREVIOUS AGENT AUDIT (${new Date(prevAudit.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz })}) ═══\n${prevAudit.content}`
       : "\nNo previous agent audit available.";
 
     // Step 3: AI pre-digestion — produce a concise intelligence briefing
