@@ -120,13 +120,25 @@ export function useTeamMessages(channelId: string | null) {
   // Realtime
   useEffect(() => {
     if (!user || !channelId) return;
+
+    const realtimeId = `team-msgs-${channelId}-${user.id}-${crypto.randomUUID()}`;
     const channel = supabase
-      .channel(`team-msgs-${channelId}-${user.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "team_messages",
-        filter: `channel_id=eq.${channelId}` },
-        () => queryClient.invalidateQueries({ queryKey: ["team-messages", channelId] }))
+      .channel(realtimeId)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "team_messages",
+          filter: `channel_id=eq.${channelId}`,
+        },
+        () => queryClient.invalidateQueries({ queryKey: ["team-messages", channelId] }),
+      )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user, channelId, queryClient]);
 
   return { messages, isLoading };
