@@ -1,13 +1,11 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Mic, MessageSquare } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
-import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { VizzyVoiceChat } from "./VizzyVoiceChat";
-import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { motion, AnimatePresence } from "framer-motion";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 
@@ -121,44 +119,48 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
             )}
           </AnimatePresence>
 
-          {/* Main orbital button */}
+          {/* Main floating button */}
           <button
             ref={ref}
-            onClick={handleAvatarClick}
+            onClick={isAppBuilderDashboard ? onChatClick : handleAvatarClick}
             className="relative cursor-grab active:cursor-grabbing group"
             aria-label="Open Vizzy AI Assistant"
           >
-            {/* Avatar container — face IS the button */}
-            <div
-              className="relative rounded-full overflow-hidden shadow-xl transition-transform duration-200 group-hover:scale-105"
-              style={{
-                width: BTN_SIZE,
-                height: BTN_SIZE,
-                boxShadow: isAppBuilderDashboard
-                  ? "0 0 0 4px hsl(175 74% 50% / 0.22), 0 10px 22px hsl(0 0% 0% / 0.4)"
-                  : "0 0 18px 2px hsl(172 66% 50% / 0.25), 0 4px 12px hsl(0 0% 0% / 0.35)",
-                border: isAppBuilderDashboard
-                  ? "2.5px solid hsl(175 74% 56% / 0.7)"
-                  : "2.5px solid hsl(172 66% 50% / 0.6)",
-              }}
-            >
-              <img
-                src={vizzyAvatar}
-                alt="Vizzy AI"
-                className="w-full h-full object-cover pointer-events-none"
-                draggable={false}
-              />
-            </div>
+            {isAppBuilderDashboard ? (
+              <div
+                className="flex h-[64px] w-[64px] items-center justify-center rounded-full text-[#032523] shadow-[0_12px_28px_rgba(23,212,191,0.3)] transition-transform duration-200 group-hover:scale-105"
+                style={{
+                  background: "hsl(var(--dashboard-reference-fab))",
+                }}
+              >
+                <MessageSquare size={26} strokeWidth={2.1} />
+              </div>
+            ) : (
+              <>
+                <div
+                  className="relative rounded-full overflow-hidden shadow-xl transition-transform duration-200 group-hover:scale-105"
+                  style={{
+                    width: BTN_SIZE,
+                    height: BTN_SIZE,
+                    boxShadow: "0 0 18px 2px hsl(172 66% 50% / 0.25), 0 4px 12px hsl(0 0% 0% / 0.35)",
+                    border: "2.5px solid hsl(172 66% 50% / 0.6)",
+                  }}
+                >
+                  <div className="flex h-full w-full items-center justify-center bg-[linear-gradient(135deg,#ffc99b_0%,#ffd9b8_100%)] text-[#16373d]">
+                    <MessageSquare size={28} strokeWidth={2.1} />
+                  </div>
+                </div>
 
-            {/* Status dot */}
-            <span
-              className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full border-2"
-              style={{
-                background: "hsl(152 69% 53%)",
-                borderColor: "hsl(var(--background))",
-                boxShadow: "0 0 6px hsl(152 69% 53% / 0.6)",
-              }}
-            />
+                <span
+                  className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full border-2"
+                  style={{
+                    background: "hsl(152 69% 53%)",
+                    borderColor: "hsl(var(--background))",
+                    boxShadow: "0 0 6px hsl(152 69% 53% / 0.6)",
+                  }}
+                />
+              </>
+            )}
           </button>
         </div>
       </>,
