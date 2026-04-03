@@ -685,13 +685,13 @@ function generateWidgetJs(config: any, supabaseUrl: string): string {
 if(window.__support_widget_loaded) return;
 window.__support_widget_loaded = true;
 var cfg = ${cfgJson};
-var state = { open:false, convoId:null, visitorToken:null, messages:[], lastTs:null, polling:null, heartbeat:null, currentPage:window.location.href };
+var state = { open:false, convoId:null, visitorToken:null, messages:[], lastTs:null, polling:null, heartbeat:null, currentPage:window.location.href, starting:false, error:false };
 function getCurrentPage(){ return window.location.href; }
 setInterval(function(){ state.currentPage = getCurrentPage(); }, 2000);
 window.addEventListener('popstate', function(){ state.currentPage = getCurrentPage(); });
 
 var style = document.createElement('style');
-style.textContent = '#sw-bubble{position:fixed;bottom:20px;right:20px;z-index:99999;width:56px;height:56px;border-radius:50%;background:'+cfg.brandColor+';color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:transform 0.2s}#sw-bubble:hover{transform:scale(1.1)}#sw-bubble svg{width:24px;height:24px;fill:currentColor}#sw-panel{position:fixed;bottom:84px;right:20px;z-index:99999;width:360px;max-height:500px;background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.15);display:none;flex-direction:column;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif}#sw-panel.open{display:flex;animation:sw-slide-in 0.2s ease-out}@keyframes sw-slide-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}#sw-header{padding:14px 16px;background:'+cfg.brandColor+';color:#fff;display:flex;align-items:center;justify-content:space-between}#sw-header h3{margin:0;font-size:15px;font-weight:600}#sw-header button{background:none;border:none;color:#fff;cursor:pointer;font-size:20px;line-height:1}#sw-messages{flex:1;overflow-y:auto;padding:12px;max-height:320px;min-height:200px}.sw-msg{margin-bottom:8px;max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.4;word-wrap:break-word}.sw-msg.visitor{margin-left:auto;background:'+cfg.brandColor+';color:#fff;border-bottom-right-radius:4px}.sw-msg.agent,.sw-msg.bot{background:#f0f0f0;color:#333;border-bottom-left-radius:4px}.sw-msg img{max-width:200px;border-radius:8px;display:block;margin:4px 0;cursor:pointer}.sw-msg-actions{display:flex;gap:6px;margin-top:4px}.sw-msg-actions button{background:none;border:none;cursor:pointer;font-size:11px;color:#888;display:flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px}.sw-msg-actions button:hover{background:#e8e8e8;color:#333}#sw-input-area{padding:10px;border-top:1px solid #eee;display:flex;gap:6px;align-items:end}#sw-input{flex:1;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-size:13px;outline:none;resize:none;font-family:inherit}#sw-input:focus{border-color:'+cfg.brandColor+'}#sw-send{background:'+cfg.brandColor+';color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:500}#sw-send:disabled{opacity:0.5;cursor:not-allowed}#sw-attach{background:none;border:1px solid #ddd;border-radius:8px;padding:8px;cursor:pointer;font-size:16px;color:#666;line-height:1}#sw-attach:hover{background:#f5f5f5}@media(max-width:420px){#sw-panel{width:calc(100vw - 24px);right:12px;bottom:80px}}';
+style.textContent = '#sw-bubble{position:fixed;bottom:20px;right:20px;z-index:99999;width:56px;height:56px;border-radius:50%;background:'+cfg.brandColor+';color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,0.2);transition:transform 0.2s}#sw-bubble:hover{transform:scale(1.1)}#sw-bubble svg{width:24px;height:24px;fill:currentColor}#sw-panel{position:fixed;bottom:84px;right:20px;z-index:99999;width:360px;max-height:500px;background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.15);display:none;flex-direction:column;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif}#sw-panel.open{display:flex;animation:sw-slide-in 0.2s ease-out}@keyframes sw-slide-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}#sw-header{padding:14px 16px;background:linear-gradient(135deg,'+cfg.brandColor+','+cfg.brandColor+'dd);color:#fff;display:flex;align-items:center;justify-content:space-between}#sw-header h3{margin:0;font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}#sw-live-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.2);padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;letter-spacing:0.5px}#sw-live-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:sw-pulse 2s infinite}@keyframes sw-pulse{0%,100%{opacity:1}50%{opacity:0.4}}#sw-header button{background:none;border:none;color:#fff;cursor:pointer;font-size:20px;line-height:1}#sw-messages{flex:1;overflow-y:auto;padding:12px;max-height:320px;min-height:200px}.sw-msg{margin-bottom:8px;max-width:85%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.4;word-wrap:break-word}.sw-msg.visitor{margin-left:auto;background:'+cfg.brandColor+';color:#fff;border-bottom-right-radius:4px}.sw-msg.agent,.sw-msg.bot{background:#f0f0f0;color:#333;border-bottom-left-radius:4px}.sw-msg img{max-width:200px;border-radius:8px;display:block;margin:4px 0;cursor:pointer}.sw-msg-actions{display:flex;gap:6px;margin-top:4px}.sw-msg-actions button{background:none;border:none;cursor:pointer;font-size:11px;color:#888;display:flex;align-items:center;gap:3px;padding:2px 6px;border-radius:4px}.sw-msg-actions button:hover{background:#e8e8e8;color:#333}#sw-status{padding:16px;text-align:center;font-size:13px;color:#666}#sw-status .sw-spinner{display:inline-block;width:20px;height:20px;border:2px solid #ddd;border-top-color:'+cfg.brandColor+';border-radius:50%;animation:sw-spin 0.8s linear infinite;margin-bottom:8px}@keyframes sw-spin{to{transform:rotate(360deg)}}#sw-retry-btn{display:inline-block;margin-top:8px;padding:6px 16px;background:'+cfg.brandColor+';color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500}#sw-retry-btn:hover{opacity:0.9}#sw-input-area{padding:10px;border-top:1px solid #eee;display:flex;gap:6px;align-items:end}#sw-input{flex:1;border:1px solid #ddd;border-radius:8px;padding:8px 12px;font-size:13px;outline:none;resize:none;font-family:inherit}#sw-input:focus{border-color:'+cfg.brandColor+'}#sw-send{background:'+cfg.brandColor+';color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:500}#sw-send:disabled{opacity:0.5;cursor:not-allowed}#sw-attach{background:none;border:1px solid #ddd;border-radius:8px;padding:8px;cursor:pointer;font-size:16px;color:#666;line-height:1}#sw-attach:hover{background:#f5f5f5}@media(max-width:420px){#sw-panel{width:calc(100vw - 24px);right:12px;bottom:80px}}';
 document.head.appendChild(style);
 
 var bubble = document.createElement('button');
@@ -702,25 +702,53 @@ document.body.appendChild(bubble);
 
 var panel = document.createElement('div');
 panel.id = 'sw-panel';
-panel.innerHTML = '<div id="sw-header"><h3>'+esc(cfg.brandName)+'</h3><button onclick="document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')">&times;</button></div><div id="sw-messages"></div><div id="sw-input-area"><button id="sw-attach" title="Send image">📎</button><input type="file" id="sw-file" accept="image/*" style="display:none"><textarea id="sw-input" rows="1" placeholder="Type a message..."></textarea><button id="sw-send" disabled>Send</button></div>';
+panel.innerHTML = '<div id="sw-header"><h3>'+esc(cfg.brandName)+' <span id="sw-live-badge"><span id="sw-live-dot"></span>LIVE</span></h3><button onclick="document.getElementById(\\'sw-panel\\').classList.remove(\\'open\\')">&times;</button></div><div id="sw-messages"><div id="sw-status"><div class="sw-spinner"></div><div>Connecting...</div></div></div><div id="sw-input-area"><button id="sw-attach" title="Send image">\\u{1F4CE}</button><input type="file" id="sw-file" accept="image/*" style="display:none"><textarea id="sw-input" rows="1" placeholder="Type a message..." disabled></textarea><button id="sw-send" disabled>Send</button></div>';
 document.body.appendChild(panel);
 
-var started = false;
-bubble.onclick = async function(){
+function showStatus(html){ var s=document.getElementById('sw-status'); if(s) s.innerHTML=html; else { var m=document.getElementById('sw-messages'); var d=document.createElement('div'); d.id='sw-status'; d.innerHTML=html; m.appendChild(d); } }
+function clearStatus(){ var s=document.getElementById('sw-status'); if(s) s.remove(); }
+function enableInput(){ var inp=document.getElementById('sw-input'); if(inp){inp.disabled=false; inp.placeholder='Type a message...';} }
+
+async function startConversation(retryCount){
+  if(state.convoId) return;
+  state.starting = true;
+  state.error = false;
+  showStatus('<div class="sw-spinner"></div><div>Connecting...</div>');
+  try {
+    var controller = new AbortController();
+    var timeout = setTimeout(function(){ controller.abort(); }, 10000);
+    var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:'Visitor', visitor_email:null, current_page:state.currentPage}), signal:controller.signal });
+    clearTimeout(timeout);
+    var d = await r.json();
+    if(d.conversation_id) {
+      state.convoId = d.conversation_id;
+      state.visitorToken = d.visitor_token;
+      state.error = false;
+      clearStatus();
+      if(cfg.welcomeMessage){ addMsg('bot', cfg.welcomeMessage); }
+      enableInput();
+      startPolling();
+      startHeartbeat();
+    } else {
+      throw new Error('No conversation_id');
+    }
+  } catch(e){
+    state.starting = false;
+    if(!retryCount || retryCount < 1){
+      return startConversation((retryCount||0)+1);
+    }
+    state.error = true;
+    showStatus('<div style="color:#ef4444;font-weight:500">Could not connect</div><div style="font-size:12px;color:#999;margin-top:4px">Please check your connection and try again</div><button id="sw-retry-btn" onclick="window.__sw_retry()">Retry</button>');
+  }
+}
+
+window.__sw_retry = function(){ startConversation(0); };
+
+bubble.onclick = function(){
   var wasOpen = panel.classList.contains('open');
   panel.classList.toggle('open');
-  if(!wasOpen && !started){
-    started = true;
-    try {
-      var r = await fetch(cfg.chatUrl+'?action=start', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({widget_key:cfg.widgetKey, visitor_name:'Visitor', visitor_email:null, current_page:state.currentPage}) });
-      var d = await r.json();
-      if(d.conversation_id) {
-        state.convoId = d.conversation_id;
-        state.visitorToken = d.visitor_token;
-        startPolling();
-        startHeartbeat();
-      }
-    } catch(e){ started=false; }
+  if(!wasOpen && !state.convoId && !state.starting){
+    startConversation(0);
   }
 };
 
@@ -766,7 +794,7 @@ function addMsg(type, text, imageUrl){
     var actions = document.createElement('div');
     actions.className = 'sw-msg-actions';
     var dlBtn = document.createElement('button');
-    dlBtn.innerHTML = '⬇ Download';
+    dlBtn.innerHTML = '\\u2B07 Download';
     dlBtn.onclick = function(){ var a=document.createElement('a');a.href=imageUrl;a.download='image';a.target='_blank';a.click(); };
     actions.appendChild(dlBtn);
     el.appendChild(actions);
@@ -775,8 +803,8 @@ function addMsg(type, text, imageUrl){
     var actions = document.createElement('div');
     actions.className = 'sw-msg-actions';
     var cpBtn = document.createElement('button');
-    cpBtn.innerHTML = '📋 Copy';
-    cpBtn.onclick = function(){ navigator.clipboard.writeText(text).then(function(){cpBtn.innerHTML='✅ Copied';setTimeout(function(){cpBtn.innerHTML='📋 Copy';},2000);}); };
+    cpBtn.innerHTML = '\\u{1F4CB} Copy';
+    cpBtn.onclick = function(){ navigator.clipboard.writeText(text).then(function(){cpBtn.innerHTML='\\u2705 Copied';setTimeout(function(){cpBtn.innerHTML='\\u{1F4CB} Copy';},2000);}); };
     actions.appendChild(cpBtn);
     el.appendChild(actions);
   }
@@ -819,4 +847,5 @@ function startHeartbeat(){
 
 function esc(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 })();`;
+}
 }
