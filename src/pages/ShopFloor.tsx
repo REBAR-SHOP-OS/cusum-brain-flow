@@ -7,6 +7,7 @@ import {
   ClipboardList,
   Truck,
   Camera,
+  Scissors,
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 
@@ -55,6 +56,12 @@ const hubCards: HubCard[] = [
     subtitle: "COUNTS & ADJUSTMENTS",
     icon: <ClipboardList className="w-7 h-7" />,
     to: "/shopfloor/inventory",
+  },
+  {
+    label: "CUTTER PLAN",
+    subtitle: "CUT LIST & MACHINE QUEUE",
+    icon: <Scissors className="w-7 h-7" />,
+    to: "/shopfloor/cutter",
   },
   {
     label: "DELIVERY OPS",

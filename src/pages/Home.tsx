@@ -155,7 +155,8 @@ export default function Home() {
       { label: "SHOP FLOOR", subtitle: "MACHINES & STATIONS", icon: <Factory className="w-7 h-7" />, to: "/shopfloor/station" },
       { label: "CLEARANCE", subtitle: "QC & EVIDENCE", icon: <ShieldCheck className="w-7 h-7" />, to: "/shopfloor/clearance" },
       { label: "LOADING ST.", subtitle: "LOAD & EVIDENCE", icon: <PackageCheck className="w-7 h-7" />, to: "/shopfloor/loading" },
-      { label: "DELIVERY", subtitle: "DISPATCH & LOADING", icon: <Send className="w-7 h-7" />, to: "/deliveries" },
+      { label: "DELIVERY", subtitle: "DISPATCH & LOADING", icon: <Send className="w-7 h-7" />, to: "/shopfloor/delivery-ops" },
+      { label: "CUTTER", subtitle: "PLANS & QUEUE", icon: <ClipboardList className="w-7 h-7" />, to: "/shopfloor/cutter" },
       { label: "PICKUP ST.", subtitle: "CUSTOMER COLLECTION", icon: <PackageCheck className="w-7 h-7" />, to: "/shopfloor/pickup" },
       { label: "INVENTORY", subtitle: "COUNTS & ADJUSTMENTS", icon: <ClipboardList className="w-7 h-7" />, to: "/shopfloor/inventory" },
       
