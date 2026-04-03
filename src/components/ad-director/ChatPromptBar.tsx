@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Sparkles, Loader2 } from "lucide-react";
+import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Sparkles, Loader2, Video } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Smile, Clapperboard, Palette } from "lucide-react";
@@ -65,15 +65,120 @@ interface ChatPromptBarProps {
     videoProvider?: string,
   ) => void;
   disabled?: boolean;
+  starterPrompt?: string;
+  starterPromptSeed?: number;
 }
 
-export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function usePreviewUrl(file: File | null) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return previewUrl;
+}
+
+interface ReferenceUploadCardProps {
+  label: string;
+  hint: string;
+  file: File | null;
+  previewUrl: string | null;
+  icon: typeof ImagePlus;
+  disabled?: boolean;
+  onPick: () => void;
+  onClear: () => void;
+}
+
+function ReferenceUploadCard({
+  label,
+  hint,
+  file,
+  previewUrl,
+  icon: Icon,
+  disabled,
+  onPick,
+  onClear,
+}: ReferenceUploadCardProps) {
+  return (
+    <div
+      className={cn(
+        "group relative min-h-[132px] flex-1 overflow-hidden rounded-2xl border border-white/12 bg-white/[0.06] p-4 text-left transition-all",
+        "hover:border-white/25 hover:bg-white/[0.08] hover:-translate-y-0.5",
+        "disabled:opacity-40 disabled:cursor-not-allowed"
+      )}
+    >
+      <button
+        type="button"
+        onClick={onPick}
+        disabled={disabled}
+        className="absolute inset-0 z-0"
+        aria-label={`Upload ${label}`}
+      />
+      {file && previewUrl ? (
+        <>
+          <img src={previewUrl} alt={label} className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/15" />
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onClear();
+            }}
+            className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white transition-colors hover:bg-black/70"
+            aria-label={`Remove ${label}`}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+          <div className="relative z-10 flex h-full flex-col justify-end gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
+              {label}
+            </span>
+            <span className="line-clamp-2 text-sm font-medium text-white">
+              {file.name}
+            </span>
+          </div>
+        </>
+      ) : (
+        <div className="relative z-10 flex h-full flex-col justify-between gap-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-white/80">
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="space-y-1">
+            <div className="text-sm font-semibold text-white">{label}</div>
+            <div className="text-xs leading-5 text-white/55">{hint}</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPromptSeed }: ChatPromptBarProps) {
   const [prompt, setPrompt] = useState("");
   const [ratio, setRatio] = useState<string>("16:9");
   const [duration, setDuration] = useState<string>("15");
   const [introImage, setIntroImage] = useState<File | null>(null);
   const [outroImage, setOutroImage] = useState<File | null>(null);
   const [characterImage, setCharacterImage] = useState<File | null>(null);
+  const [sourceClips, setSourceClips] = useState<File[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedVideoModel, setSelectedVideoModel] = useState(VIDEO_MODELS[0]);
@@ -81,10 +186,26 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
   const characterRef = useRef<HTMLInputElement>(null);
+  const sourceClipRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const introPreviewUrl = usePreviewUrl(introImage);
+  const characterPreviewUrl = usePreviewUrl(characterImage);
+  const outroPreviewUrl = usePreviewUrl(outroImage);
 
   const hasImages = !!(introImage || outroImage || characterImage);
-  const canAutoGenerate = (selectedStyles.length > 0 && selectedProducts.length > 0) || hasImages;
+  const canAutoGenerate = (selectedStyles.length > 0 && selectedProducts.length > 0) || hasImages || sourceClips.length > 0;
+  const selectedStyleLabels = selectedStyles
+    .map((key) => IMAGE_STYLES.find((style) => style.key === key)?.label)
+    .filter(Boolean) as string[];
+  const selectedProductLabels = selectedProducts
+    .map((key) => PRODUCT_ICONS.find((product) => product.key === key)?.label)
+    .filter(Boolean) as string[];
+
+  useEffect(() => {
+    if (starterPrompt?.trim()) {
+      setPrompt(starterPrompt.trim());
+    }
+  }, [starterPrompt, starterPromptSeed]);
 
   const handleAutoGenerate = async () => {
     if (!canAutoGenerate || isAutoGenerating) return;
@@ -93,11 +214,13 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
       const productLabels = selectedProducts.map(k => PRODUCT_ICONS.find(p => p.key === k)?.label || k).join(", ");
       const styleLabels = selectedStyles.map(k => IMAGE_STYLES.find(s => s.key === k)?.label || k).join(", ");
       const dur = DURATIONS.find(d => d.value === duration)?.label || duration + "s";
+      const sourceClipLabels = sourceClips.map((clip) => `${clip.name} (${clip.type.startsWith("video/") ? "video clip" : "media asset"})`).join(", ");
 
       // Build context lines
       const contextLines: string[] = [];
       if (selectedProducts.length > 0) contextLines.push(`Products: ${productLabels}`);
       if (selectedStyles.length > 0) contextLines.push(`Styles: ${styleLabels}`);
+      if (sourceClips.length > 0) contextLines.push(`Source Footage: ${sourceClipLabels}`);
       contextLines.push(`Duration: ${dur}`);
       contextLines.push(`Aspect Ratio: ${ratio}`);
       if (introImage) contextLines.push("Intro Image: YES — use as opening reference frame, start the video matching this image");
@@ -111,6 +234,8 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
         "You are a cinematic video ad prompt writer for a construction/rebar company.",
         `Write exactly ${sceneCount} scene(s) for a ${dur} video ad.`,
         "Each scene is exactly 15 seconds.",
+        "If source footage is provided, structure the ad as an AI-edited post-ready sequence built around those uploaded clips.",
+        "Make the ad feel polished and social-ready, with motion-design transitions, a strong intro beat, and a branded outro.",
         "Format each scene EXACTLY as follows:",
         "",
         "Scene X – Ys to Zs",
@@ -139,9 +264,13 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
         setPrompt(rawResult.trim());
         toast({ title: "✨ Prompt ready", description: `${sceneCount} scenes with voiceover generated. Review and edit.` });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Auto-generate prompt error:", err);
-      toast({ title: "Prompt generation failed", description: err.message || "Please try again", variant: "destructive" });
+      toast({
+        title: "Prompt generation failed",
+        description: getErrorMessage(err, "Please try again"),
+        variant: "destructive",
+      });
     } finally {
       setIsAutoGenerating(false);
     }
@@ -149,11 +278,12 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
-    onSubmit(prompt.trim(), ratio, [], introImage, outroImage, duration, characterImage, selectedProducts, selectedStyles, selectedVideoModel.key, selectedVideoModel.provider);
+    onSubmit(prompt.trim(), ratio, sourceClips, introImage, outroImage, duration, characterImage, selectedProducts, selectedStyles, selectedVideoModel.key, selectedVideoModel.provider);
     setPrompt("");
     setIntroImage(null);
     setOutroImage(null);
     setCharacterImage(null);
+    setSourceClips([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -178,114 +308,172 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
     e.target.value = "";
   };
 
+  const handleSourceClipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []).filter((file) => file.type.startsWith("video/"));
+    if (files.length > 0) {
+      setSourceClips((current) => [...current, ...files]);
+    }
+    e.target.value = "";
+  };
+
+  const removeSourceClip = (index: number) => {
+    setSourceClips((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  };
+
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
-      {/* Intro / Character / Outro upload boxes */}
-      <div className="flex gap-4 justify-center">
-        {/* Intro */}
+      <div className="grid gap-3 md:grid-cols-3">
         <input ref={introRef} type="file" accept="image/*" hidden onChange={handleIntroChange} />
-        <button
-          onClick={() => introRef.current?.click()}
+        <ReferenceUploadCard
+          label="Intro reference"
+          hint="Set the opening frame, visual setting, or product reveal."
+          file={introImage}
+          previewUrl={introPreviewUrl}
+          icon={ImagePlus}
           disabled={disabled}
-          className={cn(
-            "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
-            "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            introImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
-          )}
-        >
-          {introImage ? (
-            <>
-              <img src={URL.createObjectURL(introImage)} alt="Intro" className="absolute inset-0 w-full h-full object-cover rounded-xl" />
-              <div className="absolute inset-0 bg-background/40 rounded-xl" />
-              <button onClick={(e) => { e.stopPropagation(); setIntroImage(null); }} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-background/80 flex items-center justify-center z-10 hover:bg-destructive/20">
-                <X className="w-3 h-3" />
-              </button>
-              <span className="relative z-10 text-[10px] font-medium text-foreground">Intro</span>
-            </>
-          ) : (
-            <>
-              <ImagePlus className="w-7 h-7 text-white/70" />
-              <span className="text-[10px] font-medium text-white/80">Intro Image</span>
-            </>
-          )}
-        </button>
+          onPick={() => introRef.current?.click()}
+          onClear={() => setIntroImage(null)}
+        />
 
-        {/* Character */}
         <input ref={characterRef} type="file" accept="image/*" hidden onChange={handleCharacterChange} />
-        <button
-          onClick={() => characterRef.current?.click()}
+        <ReferenceUploadCard
+          label="Character reference"
+          hint="Keep a narrator or spokesperson consistent across scenes."
+          file={characterImage}
+          previewUrl={characterPreviewUrl}
+          icon={UserRound}
           disabled={disabled}
-          className={cn(
-            "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
-            "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            characterImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
-          )}
-        >
-          {characterImage ? (
-            <>
-              <img src={URL.createObjectURL(characterImage)} alt="Character" className="absolute inset-0 w-full h-full object-cover rounded-xl" />
-              <div className="absolute inset-0 bg-background/40 rounded-xl" />
-              <button onClick={(e) => { e.stopPropagation(); setCharacterImage(null); }} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-background/80 flex items-center justify-center z-10 hover:bg-destructive/20">
-                <X className="w-3 h-3" />
-              </button>
-              <span className="relative z-10 text-[10px] font-medium text-foreground">Character</span>
-            </>
-          ) : (
-            <>
-              <UserRound className="w-7 h-7 text-white/70" />
-              <span className="text-[10px] font-medium text-white/80">Character 👤</span>
-            </>
-          )}
-        </button>
+          onPick={() => characterRef.current?.click()}
+          onClear={() => setCharacterImage(null)}
+        />
 
-        {/* Outro */}
         <input ref={outroRef} type="file" accept="image/*" hidden onChange={handleOutroChange} />
-        <button
-          onClick={() => outroRef.current?.click()}
+        <ReferenceUploadCard
+          label="Outro reference"
+          hint="Anchor the final frame, CTA, or branded closing shot."
+          file={outroImage}
+          previewUrl={outroPreviewUrl}
+          icon={ImagePlus}
           disabled={disabled}
-          className={cn(
-            "relative w-28 h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-all",
-            "hover:border-primary/50 hover:bg-primary/5 active:scale-[0.97]",
-            outroImage ? "border-primary/40 bg-primary/5" : "border-white/30 bg-white/10 backdrop-blur-sm",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
-          )}
-        >
-          {outroImage ? (
-            <>
-              <img src={URL.createObjectURL(outroImage)} alt="Outro" className="absolute inset-0 w-full h-full object-cover rounded-xl" />
-              <div className="absolute inset-0 bg-background/40 rounded-xl" />
-              <button onClick={(e) => { e.stopPropagation(); setOutroImage(null); }} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-background/80 flex items-center justify-center z-10 hover:bg-destructive/20">
-                <X className="w-3 h-3" />
-              </button>
-              <span className="relative z-10 text-[10px] font-medium text-foreground">Outro</span>
-            </>
-          ) : (
-            <>
-              <ImagePlus className="w-7 h-7 text-white/70" />
-              <span className="text-[10px] font-medium text-white/80">Outro Image</span>
-            </>
-          )}
-        </button>
+          onPick={() => outroRef.current?.click()}
+          onClear={() => setOutroImage(null)}
+        />
       </div>
 
-      {/* Main input area */}
-      <div className="rounded-2xl border border-white/20 bg-black/50 backdrop-blur-md shadow-lg overflow-hidden transition-shadow focus-within:shadow-xl focus-within:border-white/40">
+      <input ref={sourceClipRef} type="file" accept="video/*" multiple hidden onChange={handleSourceClipChange} />
+      <div className="rounded-[28px] border border-white/12 bg-white/[0.05] p-4 backdrop-blur-md">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-sm font-semibold text-white">
+              <div className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
+                <Video className="h-4 w-4" />
+              </div>
+              Source footage
+            </div>
+            <p className="max-w-2xl text-xs leading-5 text-white/55">
+              Upload raw video clips and let AI shape them into a post-ready ad with polished transitions, a stronger intro, and a branded outro.
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08]"
+            onClick={() => sourceClipRef.current?.click()}
+            disabled={disabled}
+          >
+            <Video className="h-4 w-4" />
+            Add video clips
+          </Button>
+        </div>
+
+        {sourceClips.length > 0 ? (
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            {sourceClips.map((clip, index) => (
+              <div
+                key={`${clip.name}-${clip.lastModified}-${index}`}
+                className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-white">{clip.name}</p>
+                  <p className="text-[11px] text-white/45">
+                    Source clip · {formatFileSize(clip.size)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeSourceClip(index)}
+                  className="rounded-full border border-white/10 bg-white/[0.04] p-1.5 text-white/70 transition-colors hover:bg-white/[0.1] hover:text-white"
+                  aria-label={`Remove ${clip.name}`}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-dashed border-white/10 bg-black/15 px-4 py-4 text-xs leading-5 text-white/45">
+            No source clips yet. Add jobsite footage, product demos, or talking-head videos and AI will build the edit plan around them.
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {selectedStyleLabels.map((label) => (
+          <span
+            key={`style-${label}`}
+            className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-medium text-cyan-100"
+          >
+            Style: {label}
+          </span>
+        ))}
+        {selectedProductLabels.map((label) => (
+          <span
+            key={`product-${label}`}
+            className="rounded-full border border-amber-300/20 bg-amber-300/10 px-3 py-1 text-xs font-medium text-amber-50"
+          >
+            Product: {label}
+          </span>
+        ))}
+        {sourceClips.length > 0 && (
+          <span className="rounded-full border border-violet-300/20 bg-violet-300/10 px-3 py-1 text-xs font-medium text-violet-100">
+            Footage: {sourceClips.length} clip{sourceClips.length > 1 ? "s" : ""}
+          </span>
+        )}
+        {!selectedStyleLabels.length && !selectedProductLabels.length && !hasImages && sourceClips.length === 0 && (
+          <p className="px-1 text-xs text-white/45">
+            Add references, source clips, or pick styles and products to guide the generated draft.
+          </p>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-[28px] border border-white/15 bg-black/45 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-shadow focus-within:border-white/30 focus-within:shadow-[0_28px_90px_rgba(0,0,0,0.45)]">
+        <div className="border-b border-white/10 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Describe the ad or how AI should edit your footage</p>
+              <p className="text-xs text-white/55">
+                Include audience, product, offer, tone, and the outcome the viewer should remember. If you uploaded clips, describe how they should be edited into the final post.
+              </p>
+            </div>
+            <div className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
+              Idea to post-ready cut
+            </div>
+          </div>
+        </div>
+
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Describe your video idea..."
+          placeholder="Example: Edit these uploaded jobsite clips into a 30 second contractor ad with an energetic intro, After Effects-style transitions, clear product proof, and a strong closing CTA to request a quote."
           disabled={disabled}
-          rows={5}
-          className="w-full resize-none bg-transparent px-4 pt-4 pb-2 text-sm text-white placeholder:text-white/40 focus:outline-none disabled:opacity-50"
+          rows={6}
+          className="w-full resize-none bg-transparent px-4 pt-4 text-sm leading-6 text-white placeholder:text-white/35 focus:outline-none disabled:opacity-50"
         />
 
-        {/* Bottom bar */}
-        <div className="flex items-center justify-between px-3 pb-3">
+        <div className="space-y-3 px-3 pb-3 pt-2">
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Ratio Popover */}
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -322,8 +510,6 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                 </div>
               </PopoverContent>
             </Popover>
-
-            {/* Duration Popover */}
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -360,8 +546,6 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                 </div>
               </PopoverContent>
             </Popover>
-
-            {/* Style Popover */}
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -418,8 +602,6 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                 </div>
               </PopoverContent>
             </Popover>
-
-            {/* Products Popover */}
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -477,8 +659,6 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
                 </div>
               </PopoverContent>
             </Popover>
-
-            {/* Video Model Popover */}
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -519,42 +699,47 @@ export function ChatPromptBar({ onSubmit, disabled }: ChatPromptBarProps) {
             </Popover>
           </div>
 
-          <div className="flex items-center gap-1.5">
-            {/* Auto-generate prompt */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={handleAutoGenerate}
-                  disabled={!canAutoGenerate || isAutoGenerating || disabled}
-                  className={cn(
-                    "h-8 w-8 rounded-xl flex items-center justify-center transition-all border",
-                    canAutoGenerate && !isAutoGenerating
-                      ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20 hover:scale-105"
-                      : "bg-white/5 border-white/10 text-white/40 cursor-not-allowed"
-                  )}
-                >
-                  {isAutoGenerating ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                {canAutoGenerate ? "Auto-generate prompt" : "Select a style and product, or upload an image"}
-              </TooltipContent>
-            </Tooltip>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className="text-xs leading-5 text-white/45">
+              Want help writing the brief? Generate a structured draft from your references or source footage first, then edit before creating the video.
+            </p>
 
-            {/* Send */}
-            <Button
-              size="sm"
-              onClick={handleSubmit}
-              disabled={!prompt.trim() || disabled}
-              className="h-8 w-8 rounded-xl p-0"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-2 self-end">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={handleAutoGenerate}
+                    disabled={!canAutoGenerate || isAutoGenerating || disabled}
+                    className={cn(
+                      "inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition-all",
+                      canAutoGenerate && !isAutoGenerating
+                        ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
+                        : "cursor-not-allowed border-white/10 bg-white/[0.04] text-white/40"
+                    )}
+                  >
+                    {isAutoGenerating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    Draft with AI
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {canAutoGenerate ? "Build a structured ad brief from your references or uploaded footage" : "Select a style and product, upload an image, or add source footage"}
+                </TooltipContent>
+              </Tooltip>
+
+              <Button
+                onClick={handleSubmit}
+                disabled={!prompt.trim() || disabled}
+                className="h-10 rounded-xl bg-white px-4 text-sm font-semibold text-slate-950 hover:bg-white/90"
+              >
+                Create video
+                <Send className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>

@@ -543,7 +543,7 @@ function buildProductStyleDirective(selectedProducts?: string[], selectedStyles?
 // ─── Action Handlers ────────────────────────────────────────────
 
 async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: string) {
-  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl, sceneCount, selectedProducts, selectedStyles } = body;
+  const { script, brand, assetDescriptions, characterImageUrl, introImageUrl, outroImageUrl, sceneCount, selectedProducts, selectedStyles, sourceClipDescriptions } = body;
   if (!script) throw new Error("Script is required");
 
   const characterBlock = characterImageUrl
@@ -563,10 +563,19 @@ async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: st
     ? `\n\nOUTRO REFERENCE IMAGE: A reference image has been provided for the closing visual scene. The LAST visual scene (before any end-card) MUST visually match and be inspired by this image — same composition, color palette, and visual style. Set generationMode to "image-to-video" for that scene.`
     : "";
 
+  const sourceClipBlock = sourceClipDescriptions?.length
+    ? `\n\nSOURCE VIDEO FOOTAGE: The user uploaded source clips that should be treated as editable material, not just inspiration. When planning the storyboard:
+- Use these source clips wherever possible as the foundation for scenes, trims, cutaways, or transitions.
+- Prefer sequences that feel like an AI-edited social post or ad assembled from existing footage.
+- Write scenes so they can be polished with post-production style transitions, intro/outro moments, text overlays, and branded finishing.
+- If a scene should clearly derive from uploaded footage, set generationMode to "reference-continuation" so downstream tools preserve that footage-led intent.
+Uploaded clips:\n${sourceClipDescriptions.map((clip: string, index: number) => `${index + 1}. ${clip}`).join("\n")}`
+    : "";
+
   const productStyleDirective = buildProductStyleDirective(selectedProducts, selectedStyles);
 
   const userPrompt = `Brand: ${brand?.name || "Rebar.Shop"} | Website: ${brand?.website || "Rebar.Shop"} | CTA: ${brand?.cta || "Upload your drawings and get fast rebar shop drawings delivered."} | Tagline: ${brand?.tagline || "Fast, precise rebar detailing when time matters."} | Audience: ${brand?.targetAudience || "Construction contractors and engineers"} | Colors: ${brand?.primaryColor || "#ef4444"} / ${brand?.secondaryColor || "#1e293b"} | Aesthetic: ${brand?.referenceAesthetic || "Premium cinematic industrial B2B"}
-${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}${introBlock}${outroBlock}${productStyleDirective}
+${assetDescriptions ? `Assets: ${assetDescriptions}` : "No reference assets — use text-to-video."}${characterBlock}${introBlock}${outroBlock}${sourceClipBlock}${productStyleDirective}
 
 Script:
 ${script}
@@ -584,7 +593,7 @@ ${sceneCount ? `\nCRITICAL: You MUST create exactly ${sceneCount} scene(s), each
 }
 
 async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverride?: string) {
-  const { scene, brand, continuityProfile, previousScene, characterImageUrl, introImageUrl, outroImageUrl, sceneIndex, totalScenes, selectedProducts, selectedStyles } = body;
+  const { scene, brand, continuityProfile, previousScene, characterImageUrl, introImageUrl, outroImageUrl, sceneIndex, totalScenes, selectedProducts, selectedStyles, sourceClipDescriptions } = body;
   if (!scene) throw new Error("Scene data is required");
 
   const continuityBlock = continuityProfile ? `
@@ -610,6 +619,10 @@ You MUST weave ALL of these visual anchors into the rewritten prompt so the vide
     ? `\nOUTRO REFERENCE: A reference image is provided for this closing visual scene. The prompt MUST describe visuals that closely match the composition, colors, subjects, and style of this reference image. This scene should feel like the image has come alive.`
     : "";
 
+  const sourceClipPromptBlock = sourceClipDescriptions?.length
+    ? `\nSOURCE FOOTAGE CONTEXT: The final video can include uploaded source clips. If this scene uses generationMode "reference-continuation", write the prompt so it feels like premium post-production applied to existing footage: cleaner pacing, stronger motion design, more polished transitions, and a social-ready intro/outro rhythm.\nUploaded clips:\n${sourceClipDescriptions.map((clip: string, index: number) => `${index + 1}. ${clip}`).join("\n")}`
+    : "";
+
   const productStyleDirective = buildProductStyleDirective(selectedProducts, selectedStyles);
 
   const userPrompt = `Rewrite this scene's prompt into a premium cinematic video generation prompt.
@@ -630,7 +643,7 @@ Original Prompt: ${scene.prompt}
 Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
 ${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the FIRST scene — establish the visual identity that ALL subsequent scenes must follow."}
 ${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}
-${characterImageUrl ? `\nCHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person. Ensure the person's appearance matches across all scenes.` : ""}${introRefBlock}${outroRefBlock}${productStyleDirective}`;
+${characterImageUrl ? `\nCHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person. Ensure the person's appearance matches across all scenes.` : ""}${introRefBlock}${outroRefBlock}${sourceClipPromptBlock}${productStyleDirective}`;
 
   return await callAIAndExtract(
     apiKey,

@@ -116,12 +116,12 @@ const defaultAutomations: Automation[] = [
   {
     id: "ad-director",
     name: "AI Video Director",
-    description: "Turn sales scripts into polished 30s B2B ads in minutes",
+    description: "Shape rough concepts into polished B2B video ads with guided references",
     enabled: true,
     color: "red",
     icon: "video",
     route: "/ad-director",
-    highlights: ["Auto voice, edit & subtitle", "Export share-ready ads"],
+    highlights: ["Guided idea-to-storyboard flow", "Editable scenes and export-ready ads"],
   },
   {
     id: "camera-intelligence",
