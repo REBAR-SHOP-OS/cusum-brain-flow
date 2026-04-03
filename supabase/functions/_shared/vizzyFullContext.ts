@@ -238,7 +238,7 @@ export async function buildFullVizzyContext(
       .from("communications")
       .select("from_address, to_address, direction, received_at, metadata, source")
       .eq("source", "ringcentral")
-      .gte("received_at", today + "T00:00:00")
+      .gte("received_at", todayStart)
       .order("received_at", { ascending: false })
       .limit(500),
     // RingCentral call note emails — last 7 days (not just today) for richer context
