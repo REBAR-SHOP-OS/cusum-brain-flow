@@ -448,29 +448,61 @@ export function useVizzyVoiceEngine() {
   const updateSessionInstructions = engine.updateSessionInstructions;
 
   const startSession = useCallback(async () => {
-    if (!contextFetched.current) {
-      contextFetched.current = true;
-      instructionsRef.current = buildInstructions(null, null, timezone);
-      setContextLoading(true);
+    // Always refresh time context before every session to prevent stale time
+    if (contextFetched.current) {
+      // Context already loaded from a previous session — just refresh the time portion
+      const { timeOfDay, formattedNow, timezoneLabel } = getTimeContextInTimezone(timezone);
+      const freshTimeContext = `It is currently ${timeOfDay} in the workspace timezone (${timezoneLabel}) — ${formattedNow}.`;
+      // Replace the CURRENT TIME CONTEXT line in existing instructions
+      instructionsRef.current = instructionsRef.current.replace(
+        /CURRENT TIME CONTEXT: .+?Greet the CEO/,
+        `CURRENT TIME CONTEXT: ${freshTimeContext} Greet the CEO`
+      );
+      // Also update the "as of" timestamps
+      instructionsRef.current = instructionsRef.current.replace(
+        /as of [^)]+\)/g,
+        `as of ${formattedNow})`
+      );
+      updateSessionInstructions(instructionsRef.current);
       originalStartSession();
+      return;
+    }
 
-      void (async () => {
+    contextFetched.current = true;
+    instructionsRef.current = buildInstructions(null, null, timezone);
+    setContextLoading(true);
+    originalStartSession();
+
+    void (async () => {
+      try {
+        const data = await invokeEdgeFunction<{
+          digest: string;
+          rawContext?: string;
+        }>("vizzy-pre-digest", {}, { timeoutMs: 45000 });
+
+        if (data?.digest) {
+          instructionsRef.current = buildInstructions(
+            data.digest,
+            data.rawContext || null,
+            timezone
+          );
+          updateSessionInstructions(instructionsRef.current);
+          return;
+        }
+
+        const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
+          "vizzy-daily-brief",
+          {},
+          { timeoutMs: 25000 }
+        );
+        const contextData = fallback?.rawContext || fallback?.briefing;
+        if (contextData) {
+          instructionsRef.current = buildInstructions(null, contextData, timezone);
+          updateSessionInstructions(instructionsRef.current);
+        }
+      } catch (err) {
+        console.warn("Pre-digest failed, trying daily-brief fallback:", err);
         try {
-          const data = await invokeEdgeFunction<{
-            digest: string;
-            rawContext?: string;
-          }>("vizzy-pre-digest", {}, { timeoutMs: 45000 });
-
-          if (data?.digest) {
-            instructionsRef.current = buildInstructions(
-              data.digest,
-              data.rawContext || null,
-              timezone
-            );
-            updateSessionInstructions(instructionsRef.current);
-            return;
-          }
-
           const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
             "vizzy-daily-brief",
             {},
@@ -481,32 +513,14 @@ export function useVizzyVoiceEngine() {
             instructionsRef.current = buildInstructions(null, contextData, timezone);
             updateSessionInstructions(instructionsRef.current);
           }
-        } catch (err) {
-          console.warn("Pre-digest failed, trying daily-brief fallback:", err);
-          try {
-            const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
-              "vizzy-daily-brief",
-              {},
-              { timeoutMs: 25000 }
-            );
-            const contextData = fallback?.rawContext || fallback?.briefing;
-            if (contextData) {
-              instructionsRef.current = buildInstructions(null, contextData, timezone);
-              updateSessionInstructions(instructionsRef.current);
-            }
-          } catch (err2) {
-            console.warn("Daily-brief fallback also failed:", err2);
-            toast.warning("Vizzy started without business data — context loading failed.");
-          }
-        } finally {
-          setContextLoading(false);
+        } catch (err2) {
+          console.warn("Daily-brief fallback also failed:", err2);
+          toast.warning("Vizzy started without business data — context loading failed.");
         }
-      })();
-
-      return;
-    }
-
-    originalStartSession();
+      } finally {
+        setContextLoading(false);
+      }
+    })();
   }, [originalStartSession, timezone, updateSessionInstructions]);
 
   return {
