@@ -167,7 +167,7 @@ ${hotLeadsList || "    None"}
 ${(() => {
   const onNow = teamPresence.filter((t) => !t.clocked_out);
   const doneToday = teamPresence.filter((t) => !!t.clocked_out);
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: snap.timezone || "America/Toronto" });
   const lines: string[] = [];
   if (onNow.length > 0) {
     lines.push("  Currently Clocked In:");
