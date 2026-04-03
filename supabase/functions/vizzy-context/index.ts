@@ -39,6 +39,16 @@ async function buildSnapshotFromContext(supabase: any, userId: string) {
     day: "2-digit",
   }).format(new Date());
 
+  // Compute UTC ISO boundary for "start of today" in workspace timezone
+  const todayStart = (() => {
+    const nowUtc = new Date();
+    const localStr = nowUtc.toLocaleString("en-US", { timeZone: tz });
+    const localNow = new Date(localStr);
+    localNow.setHours(0, 0, 0, 0);
+    const offsetMs = nowUtc.getTime() - new Date(nowUtc.toLocaleString("en-US", { timeZone: tz })).getTime();
+    return new Date(localNow.getTime() + offsetMs).toISOString();
+  })();
+
   const [
     { data: cutPlans },
     { data: cutItems },
