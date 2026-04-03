@@ -1,80 +1,37 @@
 
-# Fix: Timezone Still Wrong in Vizzy Voice
 
-## What I found
-The earlier fix covered some formatting, but there are still two likely reasons Vizzy can speak the wrong time:
+# Fix: Vizzy Time Inconsistency + Social Media Realtime Collision
 
-1. `useWorkspaceSettings()` and `getWorkspaceTimezone()` both read the first `workspace_settings` row with `.limit(1).maybeSingle()`.
-   - If more than one row exists, the app may grab the wrong timezone.
-   - That would explain why your screenshot shows Vizzy saying `10:42 AM` while the machine clock shows `7:34 AM`.
+## Issue 1: Vizzy Says Different Time Each Session
 
-2. Vizzy voice has multiple context paths:
-   - client prompt in `src/hooks/useVizzyVoiceEngine.ts`
-   - pre-digest in `supabase/functions/vizzy-pre-digest/index.ts`
-   - daily brief in `supabase/functions/vizzy-daily-brief/index.ts`
-   - full raw context in `supabase/functions/_shared/vizzyFullContext.ts`
-   These need to use the same timezone source and the same formatter helpers.
+**Root cause**: `useVizzyVoiceEngine.ts` uses a `contextFetched` ref that is set to `true` on the first voice session and never reset. On subsequent sessions, the time context from the original session is reused (stale). The AI model receives "It is currently morning ... 7:42 AM" from the first session even if it's now afternoon.
 
-## Plan
+**Fix in `src/hooks/useVizzyVoiceEngine.ts`**:
+- Always rebuild the time context portion of instructions before each session start, even if `contextFetched.current` is already true
+- When `contextFetched` is true and the user starts a new session, update the time context in `instructionsRef.current` using `getTimeContextInTimezone(timezone)` before calling `originalStartSession()`
+- This ensures every voice session gets the current time, not a cached one from hours ago
 
-### 1. Make workspace timezone resolution deterministic
-Update both:
-- `src/hooks/useWorkspaceSettings.ts`
-- `supabase/functions/_shared/getWorkspaceTimezone.ts`
+**Additional fix in `supabase/functions/daily-team-report/index.ts`**:
+- Replace `new Date().toISOString().split("T")[0]` with timezone-aware date using `getWorkspaceTimezone`
+- Replace hardcoded `T00:00:00.000Z` / `T23:59:59.999Z` with computed UTC boundaries
 
-So they do not rely on “first row wins”.
-Plan:
-- fetch rows ordered consistently (`updated_at desc`)
-- use the newest row
-- optionally log/warn if more than one row exists
+## Issue 2: Social Media Realtime Collision
 
-This makes frontend and backend resolve the same timezone every time.
+**Root cause**: `useSocialApprovals.ts` uses a static channel name `"social_approvals_realtime"`. When `SocialMediaManager` mounts both `useSocialPosts` (already fixed with UUID) and `useSocialApprovals` (still static), and the `ApprovalsPanel` also calls `useSocialApprovals`, channel collisions can cause the realtime subscription to fail silently, preventing data refresh.
 
-### 2. Centralize Vizzy time formatting
-Use the existing `dateConfig.ts` helpers everywhere Vizzy builds spoken or injected time strings.
-Apply this to:
-- `src/hooks/useVizzyVoiceEngine.ts`
-- `src/lib/vizzyContext.ts`
-- `supabase/functions/vizzy-daily-brief/index.ts`
-- `supabase/functions/vizzy-pre-digest/index.ts`
-- `supabase/functions/vizzy-context/index.ts`
-- `supabase/functions/_shared/vizzyFullContext.ts`
+**Fix in `src/hooks/useSocialApprovals.ts`**:
+- Change channel name from `"social_approvals_realtime"` to `` `social_approvals_realtime_${crypto.randomUUID()}` `` (same pattern applied to all other hooks)
 
-Goal:
-- one timezone source
-- one “current local time” calculation
-- one “start of day in timezone” calculation
+## Files Changed
 
-### 3. Fix remaining UTC-based date comparisons in Vizzy backend
-I found at least one remaining leak in `supabase/functions/vizzy-context/index.ts`:
-- overdue filtering still uses `new Date().toISOString().split("T")[0]`
+| File | Change |
+|------|--------|
+| `src/hooks/useVizzyVoiceEngine.ts` | Refresh time context on every session start, not just the first |
+| `src/hooks/useSocialApprovals.ts` | Unique channel name with UUID |
+| `supabase/functions/daily-team-report/index.ts` | Timezone-aware date boundaries |
 
-That should be replaced with the workspace-local date string, otherwise “today/overdue” can drift from the spoken time.
+## Safety
+- No database changes
+- No schema changes
+- Minimal code changes following established patterns
 
-### 4. Make voice session instructions refresh with the confirmed workspace timezone
-In `src/hooks/useVizzyVoiceEngine.ts`:
-- ensure instructions are rebuilt from the resolved workspace timezone before session start
-- ensure fallback brief/pre-digest updates use that same timezone
-- keep the prompt wording explicit, e.g. “Use only workspace-local time”
-
-This reduces the chance the model answers from stale initial instructions.
-
-### 5. Add a small validation pass
-After implementation, verify:
-- changing timezone in Settings affects Vizzy voice immediately
-- “What time is it?” matches the selected workspace timezone
-- daily brief greeting (`morning/afternoon/evening`) matches the same timezone
-- overdue/today data does not shift around midnight
-
-## Files to update
-- `src/hooks/useWorkspaceSettings.ts`
-- `src/hooks/useVizzyVoiceEngine.ts`
-- `src/lib/vizzyContext.ts`
-- `supabase/functions/_shared/getWorkspaceTimezone.ts`
-- `supabase/functions/vizzy-daily-brief/index.ts`
-- `supabase/functions/vizzy-pre-digest/index.ts`
-- `supabase/functions/vizzy-context/index.ts`
-- `supabase/functions/_shared/vizzyFullContext.ts`
-
-## Expected result
-Vizzy should stop answering with mixed UTC/server/browser time and consistently use the selected workspace timezone across voice, digest, brief, and live context.
