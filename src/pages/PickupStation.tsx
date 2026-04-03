@@ -186,7 +186,7 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
             const { data: orderRow } = await supabase
               .from("orders")
               .select("order_number, order_date")
-              .eq("project_id", (planData as any).project_id)
+              .eq("project_id" as any, (planData as any).project_id)
               .order("created_at", { ascending: false } as any)
               .limit(1)
               .maybeSingle();
