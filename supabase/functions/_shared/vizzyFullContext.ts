@@ -681,7 +681,7 @@ export async function buildFullVizzyContext(
     const name = resolveCommEmployee(e);
     if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0, emails: [] };
 
-    const timeStr = e.received_at ? new Date(e.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+    const timeStr = e.received_at ? new Date(e.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
     const emailDetail = {
       subject: e.subject || "(no subject)",
       preview: (e.body_preview || "").replace(/\n/g, " ").slice(0, 500),
