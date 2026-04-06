@@ -482,10 +482,10 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
         {/* User avatar bar */}
         {rebarProfiles.length > 0 && (
-          <div className="px-5 py-3 border-b border-border flex items-center gap-3 overflow-x-auto">
+          <div className="px-5 py-4 border-b border-border flex items-center gap-4 overflow-x-auto">
             <button
               onClick={() => setSelectedProfileId(null)}
-              className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              className={`shrink-0 px-5 py-2.5 rounded-full text-base font-semibold transition-colors ${
                 !selectedProfileId
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -501,19 +501,19 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 <button
                   key={p.id}
                   onClick={() => setSelectedProfileId(isSelected ? null : p.id)}
-                  className={`shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-full text-sm transition-all ${
+                  className={`shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-full text-base transition-all ${
                     isSelected
                       ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
                       : "bg-muted hover:bg-muted/80"
                   } ${!p.is_active ? "opacity-50" : ""}`}
                   title={`${p.full_name} (${p.email})`}
                 >
-                  <span className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                  <span className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
                     isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"
                   }`}>
                     {initial}
                   </span>
-                  <span className="text-sm font-semibold">{firstName}</span>
+                  <span className="text-base font-bold">{firstName}</span>
                 </button>
               );
             })}
