@@ -11,6 +11,8 @@ import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
+import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
+import { Bot as BotIcon } from "lucide-react";
 
 interface Props {
   onClose: () => void;
@@ -248,6 +250,75 @@ function PerformanceCard({ profileId, userId, name, timezone }: { profileId: str
   );
 }
 
+/** Agent sessions accordion for selected user */
+function UserAgentsSections({ userId, name }: { userId: string; name: string }) {
+  const { data: agents, isLoading } = useUserAgentSessions(userId);
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin mr-2 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Loading agents...</span>
+      </div>
+    );
+  }
+
+  if (!agents?.length) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+        <span className="text-xs text-muted-foreground italic">No AI agent sessions found</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5 mb-2">
+        <Bot className="w-4 h-4 text-primary" />
+        {name}'s Agents
+      </h3>
+      <Accordion type="multiple" className="w-full space-y-1">
+        {agents.map((agent) => (
+          <AccordionItem
+            key={agent.agentName}
+            value={`agent-${agent.agentName}`}
+            className="border border-border rounded-lg px-3"
+          >
+            <AccordionTrigger className="text-sm font-medium hover:no-underline">
+              <span className="flex items-center gap-2">
+                🤖 {agent.agentName}
+                <span className="text-xs text-muted-foreground font-normal">
+                  ({agent.sessionCount} session{agent.sessionCount !== 1 ? "s" : ""})
+                </span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 pt-1">
+                {agent.recentMessages.map((msg, i) => (
+                  <div key={i} className="rounded border border-border bg-card p-2">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`text-[10px] font-semibold ${msg.role === "user" ? "text-primary" : "text-muted-foreground"}`}>
+                        {msg.role === "user" ? "👤 You" : `🤖 ${agent.agentName}`}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {format(new Date(msg.created_at), "MMM d, HH:mm")}
+                      </span>
+                    </div>
+                    <p className="text-xs text-foreground line-clamp-2">{msg.content}</p>
+                  </div>
+                ))}
+                {agent.recentMessages.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic text-center py-2">No messages</p>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    </div>
+  );
+}
+
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
   const { timezone } = useWorkspaceSettings();
@@ -268,16 +339,28 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
   const selectedProfile = rebarProfiles.find((p) => p.id === selectedProfileId);
 
+  // Filter entries by selected user name if applicable
+  const filteredEntries = useMemo(() => {
+    if (!selectedProfile) return entries;
+    const firstName = selectedProfile.full_name?.split(" ")[0]?.toLowerCase();
+    const fullName = selectedProfile.full_name?.toLowerCase();
+    const email = selectedProfile.email?.toLowerCase();
+    if (!firstName) return entries;
+    return entries.filter((e) => {
+      const c = e.content.toLowerCase();
+      return c.includes(firstName) || (fullName && c.includes(fullName)) || (email && c.includes(email));
+    });
+  }, [entries, selectedProfile]);
+
   const grouped = useMemo(() => {
     const map: Record<string, VizzyMemoryEntry[]> = {};
-    for (const e of entries) {
+    for (const e of filteredEntries) {
       const groupKey = CATEGORY_TO_GROUP[e.category] || "dashboard";
       if (!map[groupKey]) map[groupKey] = [];
       map[groupKey].push(e);
     }
-    // Return ALL groups in sidebar order, even if empty
     return SIDEBAR_GROUPS.map((g) => ({ key: g.key, label: g.label, items: map[g.key] || [] }));
-  }, [entries]);
+  }, [filteredEntries]);
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
@@ -368,7 +451,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
           <div className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-foreground">Vizzy Brain</h2>
-            <span className="text-xs text-muted-foreground">({entries.length})</span>
+            <span className="text-xs text-muted-foreground">({filteredEntries.length})</span>
             <span className="text-muted-foreground/50 mx-1">|</span>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="w-3.5 h-3.5" />
@@ -437,6 +520,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
               userId={selectedProfile.user_id}
               name={selectedProfile.full_name?.split(" ")[0] || "User"}
               timezone={timezone}
+            />
+          )}
+          {/* Agent sessions for selected user */}
+          {selectedProfile?.user_id && (
+            <UserAgentsSections
+              userId={selectedProfile.user_id}
+              name={selectedProfile.full_name?.split(" ")[0] || "User"}
             />
           )}
           {renderContent()}
