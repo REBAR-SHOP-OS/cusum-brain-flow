@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Trash2, Check, Pencil, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users } from "lucide-react";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users } from "lucide-react";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
