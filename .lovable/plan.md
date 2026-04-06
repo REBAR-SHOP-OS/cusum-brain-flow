@@ -1,66 +1,84 @@
 
 
-# Vizzy Brain Panel — Real-time System Intelligence & Editable Memory
+# Vizzy Brain Panel — Department-Based Accordion Layout
 
-## Overview
+## Problem
+Currently the Brain Panel shows a flat list of memory cards with category filter chips. The user wants a structured, department-based view where each system section is a collapsible accordion, showing all related knowledge inside it.
 
-Add a "Brain" icon button to the FloatingVizzyButton menu. Clicking it opens a full panel showing Vizzy's knowledge (from `vizzy_memory` table), lets the user edit/delete entries, and triggers a live system analysis that populates new insights.
+## Design
 
-## Architecture
+Replace the flat card list + category chips with an **Accordion** layout. Each accordion section represents a department/system area. Memory entries are grouped into their department accordion.
 
 ```text
-FloatingVizzyButton
-  ├─ 🎤 Voice (existing)
-  ├─ 💬 Chat (existing)
-  └─ 🧠 Brain (NEW) → opens VizzyBrainPanel
+┌─────────────────────────────────┐
+│ 🧠 Vizzy Brain (45 memories)   │  [Analyze Now]  ✕
+├─────────────────────────────────┤
+│ ▼ 💰 Revenue & Sales (8)       │
+│   ├─ [Insight card - editable]  │
+│   ├─ [Insight card - editable]  │
+│   └─ ...                        │
+│ ▶ 🏭 Operations & Production(12)│
+│ ▶ 📞 Support & Communications(6)│
+│ ▶ 📈 Growth & Marketing (5)     │
+│ ▶ 🤖 AI & System Audits (9)    │
+│ ▶ 📌 General (5)               │
+└─────────────────────────────────┘
 ```
 
-**VizzyBrainPanel** — a slide-in overlay panel (similar to IntelligencePanel) with:
+## Department Mapping
 
-1. **Memory Browser**: Fetches all `vizzy_memory` entries for the user's company, grouped by category (general, benchmark, call_summary, voicemail_summary, agent_audit, auto_fix, etc.). Each entry is editable (content field) and deletable.
+Map existing `category` values to departments:
 
-2. **Live Analyze Button**: Calls the existing `admin-chat` edge function with a system analysis prompt. The AI response is parsed and saved as new `vizzy_memory` entries (category: `brain_insight`). Results stream into the panel.
+| Department | Icon | Categories |
+|---|---|---|
+| Revenue & Sales | 💰 | `benchmark`, `brain_insight` (sales-related) |
+| Operations & Production | 🏭 | `auto_fix`, `pre_digest` |
+| Support & Communications | 📞 | `call_summary`, `voicemail_summary`, `feedback_patch` |
+| Growth & Marketing | 📈 | (social/growth entries) |
+| AI & System Audits | 🤖 | `agent_audit`, `brain_insight` |
+| General | 📌 | `general`, and any unmatched |
 
-3. **Category Tabs/Filters**: Filter memories by category for quick navigation.
+Since `brain_insight` entries cover multiple departments and we can't reliably split them by content, we'll group by **category directly** as the accordion sections — each category becomes its own collapsible section. This is accurate and doesn't require guessing.
 
-## Files to Create/Modify
+## Changes
 
-| File | Action |
-|------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | **Create** — Main panel component with memory list, edit, delete, and analyze |
-| `src/components/vizzy/FloatingVizzyButton.tsx` | **Modify** — Add Brain icon button to the expanded menu (3rd action button) |
-| `src/hooks/useVizzyMemory.ts` | **Create** — Hook to CRUD `vizzy_memory` entries with React Query |
+### `src/components/vizzy/VizzyBrainPanel.tsx`
+- Remove the category filter chips row
+- Replace flat memory list with `Accordion` (from `src/components/ui/accordion.tsx`)
+- Group entries by category using `CATEGORY_LABELS`
+- Each `AccordionItem`: trigger shows icon + label + count, content shows the MemoryCard list
+- Use `type="multiple"` so multiple sections can be open
+- Keep MemoryCard component as-is (edit/delete)
+- Keep header with Analyze Now button
 
-## Implementation Details
+### No changes to `useVizzyMemory.ts`
+The hook already returns entries and categories — just need to group them in the UI.
 
-### FloatingVizzyButton Changes
-- Add a third action button with `Brain` icon from lucide-react
-- Position at `{ x: 50, y: -50 }` (opposite of voice button)
-- On click: toggle `showBrainPanel` state
+## Technical Detail
 
-### useVizzyMemory Hook
-- `useQuery` to fetch all `vizzy_memory` for user's company, ordered by `created_at desc`
-- `useMutation` for update (content field) and delete
-- `analyzeSystem` function: calls `sendAgentMessage("assistant", "Analyze the entire system...")` or invokes `admin-chat` with a system scan prompt, then inserts results as `vizzy_memory` entries with category `brain_insight`
+```tsx
+// Group entries by category
+const grouped = entries.reduce((acc, entry) => {
+  const cat = entry.category;
+  if (!acc[cat]) acc[cat] = [];
+  acc[cat].push(entry);
+  return acc;
+}, {} as Record<string, VizzyMemoryEntry[]>);
 
-### VizzyBrainPanel Component
-- Full-screen overlay (like VizzyVoiceChat) or side panel
-- Header with close button and "Analyze Now" button
-- Category filter chips at top
-- Scrollable list of memory cards, each showing:
-  - Category badge
-  - Content (editable textarea on click)
-  - Timestamp
-  - Delete button
-- Loading state during analysis with streaming feel
+// Render
+<Accordion type="multiple" className="w-full">
+  {Object.entries(grouped).map(([cat, items]) => (
+    <AccordionItem key={cat} value={cat}>
+      <AccordionTrigger>
+        {getCategoryLabel(cat)} ({items.length})
+      </AccordionTrigger>
+      <AccordionContent>
+        {items.map(entry => <MemoryCard ... />)}
+      </AccordionContent>
+    </AccordionItem>
+  ))}
+</Accordion>
+```
 
-### Live Analysis Flow
-1. User clicks "Analyze Now"
-2. Calls edge function with prompt to scan projects, orders, production, financials, emails
-3. Response is parsed into individual insight entries
-4. Each saved to `vizzy_memory` with category `brain_insight`
-5. Panel refreshes to show new insights at top
-
-## No Database Changes
-Uses existing `vizzy_memory` table — no migration needed. New category value `brain_insight` is just a string, no enum constraint.
+Single file change, ~30 lines modified.
 
