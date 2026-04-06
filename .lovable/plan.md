@@ -1,66 +1,60 @@
 
 
-# تغییر دسته‌بندی Vizzy Brain مطابق منوی سایدبار
+# اصلاح عناوین Vizzy Brain — تطبیق دقیق با لیست کاربر
 
 ## مشکل
-دسته‌بندی‌های فعلی Brain (Clarifications, Business, Feedback Fixes, Insights, Escalations) با ساختار منوی اصلی اپلیکیشن همخوانی ندارد. کاربر می‌خواهد دسته‌بندی‌ها دقیقاً مطابق بخش‌های سایدبار باشد.
+عناوین فعلی Brain دقیقاً مطابق لیست درخواستی نیست. کاربر لیست مشخصی داده:
 
-## نقشه‌بندی جدید
-
-دسته‌بندی‌های موجود در دیتابیس را به بخش‌های سایدبار مپ می‌کنیم:
-
-```text
-سایدبار                    ←  دسته‌بندی‌های دیتابیس
-─────────────────────────────────────────────────
-📊 Dashboard               ←  brain_insight, general, benchmark, daily_benchmark
-📥 Inbox                   ←  email
-💬 Team Hub                ←  feedback_clarification, feedback_patch
-📋 Business Tasks          ←  auto_fix, feedback_fix
-📡 Live Monitor            ←  agent_audit, pre_digest
-🏢 CEO Portal              ←  business
-🎧 Support                 ←  feedback_escalation, call_summary, voicemail_summary
-📈 Pipeline                ←  leads
-🎯 Lead Scoring            ←  leads (merged with Pipeline)
-👥 Customers               ←  crm, orders
-💰 Accounting              ←  accounting
-📈 Sales                   ←  (sales-related entries)
-🏭 Shop Floor (Production) ←  production
-⏰ Time Clock              ←  timeclock
-🛠️ Office Tools            ←  (general tools)
 ```
+Dashboard, Inbox, Team Hub, Business Tasks, Live Monitor, CEO Portal,
+Support, Pipeline, Lead Scoring, Customers, Accounting, Sales,
+Production, Shop Floor, Time Clock, Office Tools
+```
+
+تفاوت‌ها با وضع فعلی:
+- "Pipeline & Leads" باید به دو بخش جدا تقسیم شود: **Pipeline** و **Lead Scoring**
+- **Sales** وجود ندارد
+- **Production** به‌عنوان گروه جداگانه وجود ندارد (فقط Shop Floor هست)
+- **Office Tools** وجود ندارد
+- ترتیب نمایش باید دقیقاً مطابق لیست باشد
+- **همه بخش‌ها باید همیشه نمایش داده شوند** (حتی اگر داده‌ای نداشته باشند)
 
 ## تغییرات
 
 ### فایل: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-1. **تغییر `CATEGORY_LABELS`** — لیبل‌ها مطابق نام‌های سایدبار
-2. **اضافه کردن `CATEGORY_GROUP_MAP`** — هر category دیتابیس به یک گروه سایدبار مپ می‌شود
-3. **تغییر grouping logic** — به‌جای گروه‌بندی بر اساس `category` خام، بر اساس گروه سایدبار دسته‌بندی شود
+1. **بازنویسی `SIDEBAR_GROUPS`** با ترتیب و نام‌های دقیق:
 
 ```typescript
-const SIDEBAR_GROUPS: Record<string, { label: string; categories: string[] }> = {
-  dashboard:    { label: "📊 Dashboard",       categories: ["brain_insight", "general", "benchmark", "daily_benchmark"] },
-  inbox:        { label: "📥 Inbox",            categories: ["email"] },
-  team_hub:     { label: "💬 Team Hub",         categories: ["feedback_clarification", "feedback_patch"] },
-  tasks:        { label: "📋 Business Tasks",   categories: ["auto_fix", "feedback_fix"] },
-  monitor:      { label: "📡 Live Monitor",     categories: ["agent_audit", "pre_digest"] },
-  ceo:          { label: "🏢 CEO Portal",       categories: ["business"] },
-  support:      { label: "🎧 Support",          categories: ["feedback_escalation", "call_summary", "voicemail_summary"] },
-  pipeline:     { label: "📈 Pipeline & Leads", categories: ["leads"] },
-  customers:    { label: "👥 Customers",        categories: ["crm", "orders"] },
-  accounting:   { label: "💰 Accounting",       categories: ["accounting"] },
-  shop_floor:   { label: "🏭 Shop Floor",       categories: ["production"] },
-  timeclock:    { label: "⏰ Time Clock",       categories: ["timeclock"] },
-};
+const SIDEBAR_GROUPS = [
+  { key: "dashboard",    label: "📊 Dashboard",      categories: ["brain_insight", "general", "benchmark", "daily_benchmark"] },
+  { key: "inbox",        label: "📥 Inbox",           categories: ["email"] },
+  { key: "team_hub",     label: "💬 Team Hub",        categories: ["feedback_clarification", "feedback_patch"] },
+  { key: "tasks",        label: "📋 Business Tasks",  categories: ["auto_fix", "feedback_fix"] },
+  { key: "monitor",      label: "📡 Live Monitor",    categories: ["agent_audit", "pre_digest"] },
+  { key: "ceo",          label: "🏢 CEO Portal",      categories: ["business"] },
+  { key: "support",      label: "🎧 Support",         categories: ["feedback_escalation", "call_summary", "voicemail_summary"] },
+  { key: "pipeline",     label: "📈 Pipeline",        categories: ["leads"] },
+  { key: "lead_scoring", label: "🎯 Lead Scoring",    categories: ["lead_scoring"] },
+  { key: "customers",    label: "👥 Customers",       categories: ["crm"] },
+  { key: "accounting",   label: "💰 Accounting",      categories: ["accounting"] },
+  { key: "sales",        label: "🛒 Sales",           categories: ["sales", "orders"] },
+  { key: "production",   label: "🏭 Production",      categories: ["production"] },
+  { key: "shop_floor",   label: "🔧 Shop Floor",      categories: ["shop_floor"] },
+  { key: "timeclock",    label: "⏰ Time Clock",      categories: ["timeclock"] },
+  { key: "office_tools", label: "🛠️ Office Tools",    categories: ["office_tools"] },
+];
 ```
 
-4. **تغییر `useMemo` گروه‌بندی** — entries را بر اساس `SIDEBAR_GROUPS` گروه‌بندی کنم (نه بر اساس category خام). دسته‌هایی که ورودی ندارند نمایش داده نمی‌شوند.
+2. **حذف فیلتر گروه‌های خالی** — خط `.filter(...)` برداشته شود تا همه بخش‌ها همیشه نمایش داده شوند، با نمایش "No data yet" برای بخش‌های بدون داده.
+
+3. **اضافه کردن پیام خالی** — وقتی گروهی ورودی ندارد، به‌جای مخفی شدن، متن `No insights yet` نمایش داده شود.
 
 ### فایل: `src/hooks/useVizzyMemory.ts`
-بدون تغییر — ساختار ذخیره‌سازی همان می‌ماند، فقط نمایش تغییر می‌کند.
+بدون تغییر.
 
 ### نتیجه
-- دسته‌بندی‌های Brain دقیقاً مطابق منوی سایدبار
-- چند category مرتبط در یک گروه ادغام می‌شوند
-- ترتیب نمایش مطابق ترتیب سایدبار
+- دقیقاً ۱۶ بخش مطابق لیست کاربر
+- همه بخش‌ها همیشه قابل مشاهده
+- بخش‌های بدون داده با پیام مناسب
 
