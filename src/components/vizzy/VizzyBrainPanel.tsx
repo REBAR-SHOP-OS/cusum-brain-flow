@@ -203,6 +203,7 @@ function DateGroupedEntries({
 
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
+  const { timezone } = useWorkspaceSettings();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
 
