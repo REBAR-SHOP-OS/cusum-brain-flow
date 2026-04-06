@@ -1,54 +1,50 @@
 
 
-# حل مشکل روشن ماندن صفحه تبلت در Face ID Kiosk
+# Stabilize Vizzy Voice Session
 
-## مشکل
-وقتی کیوسک فعال است، دوربین به‌صورت دائم استریم ویدیو دارد. مرورگرها وقتی یک `MediaStream` فعال روی `<video>` وجود دارد، صفحه را خاموش نمی‌کنند. نتیجه: تبلت هرگز به خواب نمی‌رود و باتری آسیب می‌بیند.
+## Current Stability Issues
 
-## راه‌حل: Sleep Timer برای کیوسک
+1. **Single auto-reconnect** — only retries once on disconnect, then gives up permanently
+2. **No ICE state monitoring** — only watches `connectionstatechange`, misses ICE failures
+3. **No data channel close detection** — if DC closes silently, session hangs with no recovery
+4. **No network change detection** — switching WiFi or losing connectivity causes silent death
+5. **No keepalive/heartbeat** — stale connections not detected until OpenAI drops them
+6. **Error state is terminal** — requires manual "Retry" tap; no auto-recovery
 
-وقتی کیوسک بی‌استفاده بماند (مثلاً ۵ دقیقه بدون اسکن یا لمس صفحه)، دوربین خاموش شود و صفحه به حالت خواب (sleep screen) برود. با لمس صفحه دوباره بیدار شود.
+## Plan
 
-### تغییرات
+### File: `src/hooks/useVoiceEngine.ts`
 
-#### 1. `src/pages/TimeClock.tsx`
+**a) Exponential auto-reconnect (up to 3 attempts)**
+- Replace the single `hasAutoReconnected` boolean with a counter (`reconnectAttempts`)
+- On disconnect: wait 1.5s, 3s, 6s between retries (exponential backoff)
+- After 3 failures, show error state
+- Reset counter on successful `session.created`
 
-**a) Idle Timer (5 دقیقه)**
-- هر بار که `handleScan` زده می‌شود یا صفحه لمس می‌شود، تایمر ریست شود
-- بعد از ۵ دقیقه بی‌فعالیتی:
-  - `face.stopCamera()` → استریم ویدیو قطع شود → مرورگر اجازه خواب دارد
-  - یک overlay تاریک نمایش داده شود با پیام "Tap to wake / لمس کنید"
+**b) ICE connection state monitoring**
+- Add `pc.oniceconnectionstatechange` handler
+- On `"failed"` → trigger reconnect flow
+- On `"disconnected"` → start a 5s grace timer; if not recovered, reconnect
 
-**b) Wake on Touch**
-- وقتی کاربر overlay را لمس کند:
-  - `face.startCamera()` دوباره اجرا شود
-  - overlay حذف شود
-  - تایمر idle ریست شود
+**c) Data channel close/error detection**
+- Add `dc.onclose` and `dc.onerror` handlers
+- On unexpected close → trigger reconnect
 
-**c) فقط در Kiosk Mode**
-- این منطق فقط وقتی `kioskMode === true` فعال باشد
+**d) Network change listener**
+- Listen to `window.addEventListener("online", ...)` 
+- When network comes back online after being offline → auto-reconnect
 
-### ساختار کد
+**e) Keepalive ping every 30s**
+- Send a small `input_audio_buffer.clear` message on the data channel every 30s to keep the connection alive and detect stale connections early
+- If send throws → trigger reconnect
 
-```text
-[Kiosk Active]
-     │
-     ▼
- Activity detected? ──yes──► Reset 5-min timer
-     │ no (5 min)
-     ▼
- Stop camera stream
- Show dark overlay: "Tap to wake"
-     │
-     ▼
- Touch detected → startCamera() → hide overlay → reset timer
-```
+### File: `src/components/vizzy/VizzyVoiceChat.tsx`
 
-### فایل‌های تغییر
-- `src/pages/TimeClock.tsx` — اضافه کردن idle timer، sleep overlay، و wake handler
+**f) Auto-retry on error state**
+- When `voiceState === "error"`, auto-retry after 3s (up to 2 times) before showing manual retry button
+- Show "Reconnecting..." status during auto-retry
 
-### نتیجه
-- تبلت بعد از ۵ دقیقه بی‌فعالیتی اجازه خواب دارد
-- باتری محافظت می‌شود
-- با یک لمس فوری دوباره آماده اسکن است
+## Files Changed
+- `src/hooks/useVoiceEngine.ts`
+- `src/components/vizzy/VizzyVoiceChat.tsx`
 
