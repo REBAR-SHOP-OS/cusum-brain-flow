@@ -411,9 +411,22 @@ export function VizzyBrainPanel({ onClose }: Props) {
       );
     }
 
+    const sectionsToShow = selectedProfile
+      ? grouped.filter((group) => group.items.length > 0)
+      : grouped;
+
+    if (selectedProfile && sectionsToShow.length === 0) {
+      return (
+        <div className="text-center py-12 text-muted-foreground">
+          <p className="text-sm font-medium">No activity found</p>
+          <p className="text-xs mt-1">This user has no recorded entries in any section.</p>
+        </div>
+      );
+    }
+
     return (
       <Accordion type="multiple" className="w-full space-y-1">
-        {grouped.map((group) => (
+        {sectionsToShow.map((group) => (
           <AccordionItem key={group.key} value={group.key} className="border border-border rounded-lg px-3">
             <AccordionTrigger className="text-sm font-medium hover:no-underline">
               <span className="flex items-center gap-2">
@@ -422,15 +435,11 @@ export function VizzyBrainPanel({ onClose }: Props) {
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              {group.items.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-3 text-center italic">No insights yet</p>
-              ) : (
-                <DateGroupedEntries
-                  items={group.items}
-                  onUpdate={(id, content) => updateEntry({ id, content })}
-                  onDelete={deleteEntry}
-                />
-              )}
+              <DateGroupedEntries
+                items={group.items}
+                onUpdate={(id, content) => updateEntry({ id, content })}
+                onDelete={deleteEntry}
+              />
             </AccordionContent>
           </AccordionItem>
         ))}
