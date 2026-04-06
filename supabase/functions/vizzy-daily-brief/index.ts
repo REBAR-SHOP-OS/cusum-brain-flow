@@ -24,7 +24,11 @@ Deno.serve((req) =>
 
     const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
     const tz = await getWorkspaceTimezone(ctx.serviceClient);
-    const hour = new Date(new Date().toLocaleString("en-US", { timeZone: tz })).getHours();
+    // Timezone-safe hour calculation
+    const hourStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, hour: "2-digit", hourCycle: "h23",
+    }).format(new Date());
+    const hour = parseInt(hourStr, 10);
     const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
     const result = await callAI({
