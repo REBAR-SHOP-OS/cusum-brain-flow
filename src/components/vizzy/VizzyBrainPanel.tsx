@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users } from "lucide-react";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -255,7 +255,7 @@ function UserAgentsSections({ userId, name }: { userId: string; name: string }) 
 }
 
 export function VizzyBrainPanel({ onClose }: Props) {
-  const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
+  const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, analyzeSystem } = useVizzyMemory();
   const { timezone } = useWorkspaceSettings();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
