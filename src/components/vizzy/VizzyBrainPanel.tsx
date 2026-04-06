@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Trash2, Check, Pencil, Loader2, AlertTriangle, Clock } from "lucide-react";
+import { X, Brain, Zap, Trash2, Check, Pencil, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users } from "lucide-react";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
+import { useProfiles } from "@/hooks/useProfiles";
+import { useUserPerformance } from "@/hooks/useUserPerformance";
 
 interface Props {
   onClose: () => void;
