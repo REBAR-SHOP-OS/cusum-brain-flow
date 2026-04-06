@@ -1,38 +1,30 @@
 
 
-# Fix: voice-engine-token RUNTIME_ERROR — Unknown Parameter `eagerness`
+# Add Team Hub to ai@rebar.shop Sidebar
 
-## Root Cause
-
-The edge function logs show the exact error:
-
-```
-OpenAI Realtime session error: 400
-"Unknown parameter: 'turn_detection.eagerness'."
-```
-
-The `eagerness` parameter is being sent to OpenAI's `/v1/realtime/sessions` endpoint, but the model `gpt-4o-realtime-preview-2024-12-17` does not support it. OpenAI returns 400, the function returns `{ error: "Failed to create realtime session" }`, the frontend gets no `client_secret`, and throws — crashing the page.
-
-The repeated "shutdown" logs with no "booted" suggest the function is also hitting a stale deployment state from repeated failures.
+## Current State
+- `ai@rebar.shop` sidebar only shows **Kiosk** and **Shop Floor** (AppSidebar.tsx line 70-73)
+- RoleGuard already allows `/team-hub` for this account (line 138) and redirects to `/shopfloor` for non-allowed routes — so the default landing page is already shop-floor
+- No changes needed for default page — it already works
 
 ## Fix
 
-### 1. Remove `eagerness` from the OpenAI API request body (`supabase/functions/voice-engine-token/index.ts`)
+### File: `src/components/layout/AppSidebar.tsx` (lines 70-73)
 
-- Remove `eagerness` from destructured body params (line 18)
-- Remove `eagerness` from the `turn_detection` object sent to OpenAI (line 38)
-- Keep accepting it from the frontend (backward compat) but simply don't forward it
+Add Team Hub to the `aiNav` array:
 
-### 2. Redeploy the edge function
+```typescript
+const aiNav: NavItem[] = [
+  { name: "Kiosk", href: "/timeclock?kiosk=1", icon: Maximize },
+  { name: "Shop Floor", href: "/shop-floor", icon: Factory },
+  { name: "Team Hub", href: "/team-hub", icon: Users },
+];
+```
 
-Force a fresh deployment to clear the stale shutdown state.
-
-## No other files need changes
-
-The frontend (`useVoiceEngine.ts` line 406) still sends `eagerness` — that's fine, the edge function will just ignore it. No frontend change needed.
+Import `Users` from lucide-react (likely already imported).
 
 ## Impact
-- Fixes the 400 error from OpenAI, restoring Vizzy voice functionality
-- No behavior change for any other feature
-- Backward compatible — older clients sending `eagerness` won't break
+- Only adds one nav item to the ai@rebar.shop sidebar
+- No other users or routes affected
+- Team Hub access is already permitted by RoleGuard
 
