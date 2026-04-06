@@ -1,60 +1,60 @@
 
+هدف نهایی: خطای Publish را ریشه‌ای حل کنم، نه فقط Duplicate check را شل‌تر کنم.
 
-# Investigation: Why Posts Fail to Publish ("Duplicate")
+آنچه دقیقاً خراب است:
+1. مشکل اصلی از خود Duplicate guard نیست؛ از تداخل دو لایه publish است.
+2. در `src/components/social/PostReviewPanel.tsx` دکمه `Publish Now` خودش برای هر page/platform یک combo می‌سازد، برای combo اول روی همان post اصلی publish می‌زند، و برای بقیه clone می‌سازد.
+3. اما در `supabase/functions/social-publish/index.ts` خود backend دوباره `page_name` را از خود رکورد DB می‌خواند و روی همه pageهای آن row publish می‌کند:
+   - الان کد این است: `const dbPageName = postRecord?.page_name || page_name || ""`
+   - یعنی اگر row اصلی در DB هنوز 5 page داشته باشد، حتی اگر UI فقط یک page فرستاده باشد، backend باز هم هر 5 page را publish می‌کند.
+4. بعد از اینکه همان row اصلی روی همه pageها publish شد، cloneهای تک-page که UI بلافاصله می‌سازد واقعاً duplicate می‌شوند و با 409 block می‌شوند.
+5. شواهد همین را نشان می‌دهد:
+   - لاگ backend چند بار پشت‌سرهم همان published post را به‌عنوان duplicate نشان می‌دهد.
+   - در DB، post منتشرشده هنوز `page_name` چندتایی دارد.
+   - cloneهای جدید هرکدام `page_name` تک‌صفحه‌ای دارند و draft مانده‌اند.
 
-## Root Cause Found
+نتیجه: ریشه مشکل این است که manual publish هم در frontend fan-out می‌کند، هم در backend fan-out می‌شود.
 
-The duplicate guard in both `social-publish/index.ts` (line 94-136) and `social-cron-publish/index.ts` (line 167-212) is **too aggressive**. Three specific flaws:
+برنامه اصلاح:
+1. اصلاح backend در `supabase/functions/social-publish/index.ts`
+   - `page_name` ارسالی از request را برای manual publish در اولویت قرار می‌دهم.
+   - منطق را به این شکل می‌برم:
+     - اگر `force_publish=true` و `page_name` آمده، فقط همان page publish شود.
+     - فقط وقتی `page_name` نیامده باشد، از `postRecord.page_name` استفاده شود.
+   - این تغییر باعث می‌شود backend در publish دستی دیگر بی‌اجازه روی همه pageهای DB نرود.
 
-### Flaw 1 — Title-only match triggers false positives
-```typescript
-const sameTitle = pub.title && post.title && pub.title === post.title;
-if (sameContent || sameTitle) { // ← title alone blocks!
-```
-Your auto-generated posts likely share generic titles (e.g. "Daily Rebar Post") across platforms. Two posts with the same title but **different content and images** are incorrectly flagged as duplicates.
+2. اصلاح orchestration در `src/components/social/PostReviewPanel.tsx`
+   - قبل از publish کردن combo اول، row اصلی را به همان `platform` و همان `single page_name` combo اول sync می‌کنم.
+   - برای comboهای بعدی همچنان clone ساخته می‌شود، ولی هر row دقیقاً فقط یک page خواهد داشت.
+   - یعنی هر row = یک publish target.
+   - این ساختار deterministic است و جلوی publish دوباره روی pageهای دیگر را می‌گیرد.
 
-### Flaw 2 — Empty page_name = universal overlap
-```typescript
-const hasPageOverlap = postPages.length === 0 || pubPages.length === 0
-  || postPages.some(pg => pubPages.includes(pg));
-```
-If either post has no `page_name`, the guard assumes overlap — blocking publication even when they target different pages.
+3. سخت‌کردن رفتار manual publish
+   - در `social-publish` اگر `force_publish=true` باشد، duplicate guard فقط برای publish دستی bypass بماند و صرفاً cron/auto publish تحت guard بماند.
+   - علاوه بر این، لاگ واضح برای `force_publish` و `resolved page list` اضافه می‌شود تا اگر دوباره mismatch رخ داد فوراً معلوم شود.
 
-### Flaw 3 — UTC date boundaries vs workspace timezone
-```typescript
-const dayStr = new Date(post.scheduled_date).toISOString().split("T")[0];
-// queries with T00:00:00Z / T23:59:59Z
-```
-For `America/Toronto` (UTC-4), a post scheduled at 11 PM local time falls into the "next day" in UTC. This can cause:
-- Posts not finding their actual duplicates (false negatives at edges)
-- Posts matching against wrong-day posts (false positives)
+4. حفظ رفتار cron
+   - `supabase/functions/social-cron-publish/index.ts` را دست نمی‌زنم مگر برای هم‌راستا کردن logها.
+   - cron باید همچنان duplicate واقعی را block کند، چون آنجا publish دستی admin نیست.
 
-## Fix Plan
+5. اعتبارسنجی بعد از پیاده‌سازی
+   - تست publish دستی با 1 page
+   - تست publish دستی با چند page روی Instagram/Facebook
+   - بررسی اینکه row اصلی فقط همان page انتخابی را publish کند
+   - بررسی اینکه cloneها دیگر 409 Duplicate نگیرند
+   - بررسی اینکه cron هنوز duplicate واقعی را block کند
 
-### 1. Relax duplicate guard — require content+image match, not title alone
-In both `social-publish/index.ts` and `social-cron-publish/index.ts`:
-- Change `sameContent || sameTitle` → `sameContent` (content + image must both match)
-- Title-only match should be a **warning log**, not a block
-- This is the primary fix that unblocks the user immediately
+فایل‌هایی که باید تغییر کنند:
+- `supabase/functions/social-publish/index.ts`
+- `src/components/social/PostReviewPanel.tsx`
 
-### 2. Fix empty page_name overlap logic
-- Change: if either side has no pages, treat as **no overlap** (not universal overlap)
-- Only block when there's actual page intersection
+نکته فنی مهم:
+- این یک bug معماری flow است، نه صرفاً bug شرط duplicate.
+- تا وقتی backend از `postRecord.page_name` جلوتر از `request.page_name` استفاده کند، هر fix سطحی روی duplicate فقط symptom را جابه‌جا می‌کند، نه علت را.
+- هیچ تغییر دیتابیسی لازم نیست.
 
-### 3. Use timezone-aware date boundaries
-- Import `getWorkspaceTimezone` 
-- Compute local "today" string and UTC boundaries using timezone offset
-- Same pattern already applied in `daily-team-report`
-
-## Files to Change
-
-| File | Change |
-|------|--------|
-| `supabase/functions/social-publish/index.ts` | Fix duplicate guard logic (lines 94-136) |
-| `supabase/functions/social-cron-publish/index.ts` | Fix duplicate guard logic (lines 167-212) |
-
-## Safety
-- No database changes
-- Only relaxes an overly strict guard — no risk of actual duplicates since content+image match is still enforced
-- Posts that were incorrectly blocked can be retried immediately after deploy
-
+خروجی مورد انتظار بعد از این اصلاح:
+- `Publish Now` برای هر page فقط یک‌بار publish می‌کند
+- row اصلی دیگر ناخواسته روی همه pageها publish نمی‌شود
+- cloneهای بعدی duplicate کاذب نمی‌خورند
+- 409 فقط برای duplicate واقعی در مسیر خودکار باقی می‌ماند
