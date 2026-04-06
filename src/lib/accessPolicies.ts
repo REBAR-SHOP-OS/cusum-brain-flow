@@ -48,6 +48,5 @@ export const ACCESS_POLICIES = {
     "ai@rebar.shop",
     "swapnil.m183@gmail.com",
     "tariq0001010@gmail.com",
-    "ontariorebars6@gmail.com",
   ] as string[],
 };
