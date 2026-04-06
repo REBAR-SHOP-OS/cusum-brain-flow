@@ -157,9 +157,6 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
       .from("machine_runs").select("id, status, started_at")
       .eq("id", machine.current_run_id).maybeSingle();
 
-    const STALE_THRESHOLD_MS = 30 * 60 * 1000;
-    const isStale = existingRun?.started_at &&
-      (Date.now() - new Date(existingRun.started_at).getTime()) > STALE_THRESHOLD_MS;
     const isOrphan = !existingRun;
     const isInactive = existingRun && ["paused", "completed", "canceled", "rejected"].includes(existingRun.status);
 
@@ -182,8 +179,8 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
       }
     }
 
-    if (isStale || isOrphan || isInactive || activeJobDone) {
-      const reason = isOrphan ? "orphan" : isInactive ? `inactive (${existingRun!.status})` : activeJobDone ? "active_job_done" : "stale";
+    if (isOrphan || isInactive || activeJobDone) {
+      const reason = isOrphan ? "orphan" : isInactive ? `inactive (${existingRun!.status})` : "active_job_done";
       console.warn(`[startRun] Auto-recovering ${reason} run ${machine.current_run_id} on ${machine.name}`);
       if (existingRun && !["completed", "canceled", "rejected"].includes(existingRun.status)) {
         await supabaseService.from("machine_runs")
@@ -354,9 +351,6 @@ async function handleStartQueuedRun(ctx: ActionContext): Promise<{ response?: Re
       .from("machine_runs").select("id, status, started_at")
       .eq("id", machine.current_run_id).maybeSingle();
 
-    const STALE_THRESHOLD_MS = 30 * 60 * 1000;
-    const isStale = existingRun?.started_at &&
-      (Date.now() - new Date(existingRun.started_at).getTime()) > STALE_THRESHOLD_MS;
     const isOrphan = !existingRun;
     const isInactive = existingRun && ["paused", "completed", "canceled", "rejected"].includes(existingRun.status);
 
@@ -367,8 +361,8 @@ async function handleStartQueuedRun(ctx: ActionContext): Promise<{ response?: Re
       return { machineRunId: existingRun.id };
     }
 
-    if (isStale || isOrphan || isInactive) {
-      const reason = isOrphan ? "orphan" : isInactive ? `inactive (${existingRun!.status})` : "stale";
+    if (isOrphan || isInactive) {
+      const reason = isOrphan ? "orphan" : `inactive (${existingRun!.status})`;
       console.warn(`[startQueuedRun] Auto-recovering ${reason} run ${machine.current_run_id}`);
       if (existingRun && !["completed", "canceled", "rejected"].includes(existingRun.status)) {
         await supabaseService.from("machine_runs")
