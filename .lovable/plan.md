@@ -1,67 +1,29 @@
 
 
-# Redesign: Multi-Layer Interactive Architecture Flow
+# Fix: External Services Layer Edges Not Visually Connected
 
 ## Problem
-Current Architecture page shows only 5 generic nodes (People, Signals, Core, Partners, You). The user wants to see the **full system architecture** with all real components organized in multiple layers with interactive transitions.
+The Backend → External Services edges are technically present in the data (e50-e58) but appear nearly invisible on screen. This is caused by:
+1. **Low base opacity** (0.55) combined with gradient stop opacity (0.5) = effective ~0.275 opacity
+2. **Blue gradient** on dark background has poor contrast
+3. Edges blend into the dark canvas making External Services look "unwired"
 
-## Design
+## Solution
 
-A multi-layer, zoomable architecture canvas with **6 horizontal layers**, each containing real system components. Nodes are interactive — click to expand details. Edges show data flow with animated transitions.
+### File: `src/pages/Architecture.tsx`
 
-```text
-Layer 1: ENTRY POINTS
-  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
-  │ Web App  │ │ Webhooks │ │  Crons   │ │  OAuth   │ │  Kiosk   │
-  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘
-       │             │            │             │             │
-Layer 2: AUTH & ROUTING
-  ┌──────────┐ ┌──────────┐ ┌──────────┐
-  │ Auth     │ │RoleGuard │ │Agent Rtr │
-  └────┬─────┘ └────┬─────┘ └────┬─────┘
-       │             │            │
-Layer 3: CORE MODULES (pages/features)
-  ┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐
-  │CRM ││Shop││Team││Acct││SEO ││Video││Email││Chat│
-  └──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘
-     │      │     │      │     │      │     │      │
-Layer 4: AI & AUTOMATION
-  ┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐
-  │Vizzy││Pipeline││Autopilot││QA War││Ad Dir││Nila│
-  └──┬─┘└──┬─┘└────┬──┘└──┬─┘└──┬─┘└──┬─┘
-     │      │       │       │      │      │
-Layer 5: EDGE FUNCTIONS (backend)
-  ┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐
-  │social││stripe││ring ││gmail││odoo ││qb  ││seo │
-  └──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘
-     │      │      │      │      │      │      │
-Layer 6: EXTERNAL SERVICES
-  ┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐
-  │Meta ││Stripe││RC  ││Google││Odoo ││QB  ││OpenAI│
-  └────┘└────┘└────┘└────┘└────┘└────┘└────┘
-```
+1. **Increase edge base opacity** from 0.55 to 0.7 for non-highlighted edges (line ~352)
+2. **Increase gradient stop opacity** — raise the start/end from 0.5 to 0.7, and mid from 0.9 to 1.0 (lines ~324-326)
+3. **Increase edge stroke width** from 1.5 to 2 for non-highlighted state (line ~349)
 
-### Features
-- **Layer filter sidebar**: Toggle layers on/off to focus on specific areas
-- **Animated edges**: Bezier curves with flowing particle animation showing data direction
-- **Node groups**: Nodes are color-coded by layer (cyan=entry, emerald=auth, orange=modules, violet=AI, blue=backend, red=external)
-- **Click to expand**: Each node shows its sub-components, related files, and connections
-- **Search**: Filter nodes by name
-- **Zoom/Pan**: Existing controls enhanced
-- **Layer labels**: Vertical labels on the left showing each layer name
+These three changes make ALL edges more visible, especially the backend→external ones.
 
-### Technical Approach
-- Keep using the custom canvas (no React Flow dependency needed for this)
-- Define all nodes with layer, position, connections in a data file
-- Render with SVG edges + positioned HTML nodes
-- Add layer filter state to show/hide layers
-- Animated edge particles via CSS keyframes on SVG
+### File: `src/lib/architectureGraphData.ts`
 
-## Files Changed
-- `src/pages/Architecture.tsx` — complete rewrite with multi-layer canvas, ~50+ nodes organized in 6 layers, layer filter, search, animated edges
-- `src/lib/architectureGraphData.ts` — expand with full system node/edge definitions
+No changes needed — all 9 backend→external edges (e50-e58) already exist and are correct.
 
 ## Impact
-- Only the Architecture page changes
-- No other pages, routes, or functionality affected
+- All edges become more visible, especially the lower layers
+- No layout, data, or interaction changes
+- Only visual enhancement to edge rendering
 
