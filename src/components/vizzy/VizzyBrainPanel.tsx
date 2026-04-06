@@ -389,7 +389,56 @@ export function VizzyBrainPanel({ onClose }: Props) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        {/* User avatar bar */}
+        {rebarProfiles.length > 0 && (
+          <div className="px-5 py-2 border-b border-border flex items-center gap-2 overflow-x-auto">
+            <button
+              onClick={() => setSelectedProfileId(null)}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                !selectedProfileId
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              All
+            </button>
+            {rebarProfiles.map((p) => {
+              const initial = p.full_name?.charAt(0)?.toUpperCase() || "?";
+              const firstName = p.full_name?.split(" ")[0] || "?";
+              const isSelected = selectedProfileId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedProfileId(isSelected ? null : p.id)}
+                  className={`shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-full text-xs transition-all ${
+                    isSelected
+                      ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
+                      : "bg-muted hover:bg-muted/80"
+                  } ${!p.is_active ? "opacity-50" : ""}`}
+                  title={`${p.full_name} (${p.email})`}
+                >
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"
+                  }`}>
+                    {initial}
+                  </span>
+                  <span className="font-medium">{firstName}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Performance card for selected user */}
+          {selectedProfile && (
+            <PerformanceCard
+              profileId={selectedProfile.id}
+              userId={selectedProfile.user_id}
+              name={selectedProfile.full_name?.split(" ")[0] || "User"}
+              timezone={timezone}
+            />
+          )}
           {renderContent()}
         </div>
       </motion.div>
