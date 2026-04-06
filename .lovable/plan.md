@@ -1,75 +1,38 @@
 
 
-# Fix: Instagram Pages Failing Due to Transient API Errors
+# Fix: voice-engine-token RUNTIME_ERROR — Unknown Parameter `eagerness`
 
 ## Root Cause
 
-From the edge function logs, the problem is clear: when publishing to Instagram, all 5 IG accounts are called **simultaneously via `Promise.allSettled`**. Instagram's API rate-limits concurrent requests from the same user token and returns transient errors:
+The edge function logs show the exact error:
 
 ```
-Instagram container error: {
-  message: "An unexpected error has occurred. Please retry your request later.",
-  type: "OAuthException",
-  is_transient: true,   ← Instagram explicitly says "retry"
-  code: 2
-}
+OpenAI Realtime session error: 400
+"Unknown parameter: 'turn_detection.eagerness'."
 ```
 
-- First publish: Rebar.shop **failed**, other 4 succeeded
-- Second publish: Rebar.shop Ontario **failed**, other 4 succeeded
+The `eagerness` parameter is being sent to OpenAI's `/v1/realtime/sessions` endpoint, but the model `gpt-4o-realtime-preview-2024-12-17` does not support it. OpenAI returns 400, the function returns `{ error: "Failed to create realtime session" }`, the frontend gets no `client_secret`, and throws — crashing the page.
 
-Each time, one random account fails because of concurrent API pressure.
+The repeated "shutdown" logs with no "booted" suggest the function is also hitting a stale deployment state from repeated failures.
 
 ## Fix
 
-### File: `supabase/functions/social-publish/index.ts`
+### 1. Remove `eagerness` from the OpenAI API request body (`supabase/functions/voice-engine-token/index.ts`)
 
-**Add retry logic with staggered delays in `publishToInstagram`** (around lines 614-625):
+- Remove `eagerness` from destructured body params (line 18)
+- Remove `eagerness` from the `turn_detection` object sent to OpenAI (line 38)
+- Keep accepting it from the frontend (backward compat) but simply don't forward it
 
-When the container creation returns a transient error (`is_transient: true` or error code 2), retry up to 2 times with a 3-second delay between attempts. This is the standard approach recommended by Meta's API docs for transient errors.
+### 2. Redeploy the edge function
 
-```typescript
-// In publishToInstagram(), around the container creation (line 615-625):
-// Wrap container creation in a retry loop
-let containerData: any;
-for (let attempt = 0; attempt < 3; attempt++) {
-  const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(containerBody),
-  });
-  containerData = await containerRes.json();
-  
-  if (containerData.error?.is_transient && attempt < 2) {
-    console.warn(`[IG] Transient error on attempt ${attempt + 1}, retrying in 3s...`);
-    await new Promise(r => setTimeout(r, 3000));
-    continue;
-  }
-  break;
-}
+Force a fresh deployment to clear the stale shutdown state.
 
-if (containerData.error) {
-  return { error: `Instagram: ${containerData.error.message}` };
-}
-```
+## No other files need changes
 
-Additionally, **stagger the parallel IG publish calls** (around lines 432-450) by adding a small delay between each account to reduce concurrent API pressure:
-
-```typescript
-// Instead of firing all at once, stagger by 1s each
-igPublishQueue.map(({ ... }, index) =>
-  new Promise(r => setTimeout(r, index * 1000)).then(() =>
-    publishToInstagram(...)
-  )
-)
-```
+The frontend (`useVoiceEngine.ts` line 406) still sends `eagerness` — that's fine, the edge function will just ignore it. No frontend change needed.
 
 ## Impact
-
-- Only modifies Instagram publishing retry behavior — no other platform or flow affected
-- Facebook publishing (already sequential and working) is untouched
-- Staggering + retry should eliminate the random transient failures completely
-
-## Files Changed
-- `supabase/functions/social-publish/index.ts` — add retry loop for transient IG errors + stagger parallel calls
+- Fixes the 400 error from OpenAI, restoring Vizzy voice functionality
+- No behavior change for any other feature
+- Backward compatible — older clients sending `eagerness` won't break
 
