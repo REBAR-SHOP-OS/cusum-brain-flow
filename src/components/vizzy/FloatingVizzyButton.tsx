@@ -129,6 +129,19 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
                 >
                   <MessageSquare size={18} className="text-primary-foreground" />
                 </motion.button>
+
+                {/* Brain button */}
+                <motion.button
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1, x: 50, y: -50 }}
+                  exit={{ scale: 0, opacity: 0, x: 0, y: 0 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20, delay: 0.1 }}
+                  onClick={onBrainClick}
+                  className="absolute top-0 left-0 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-accent/30 cursor-pointer bg-accent text-accent-foreground"
+                  aria-label="Open Vizzy Brain"
+                >
+                  <Brain size={18} />
+                </motion.button>
               </>
             )}
           </AnimatePresence>
