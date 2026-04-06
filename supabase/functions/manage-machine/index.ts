@@ -197,7 +197,7 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
       }).eq("id", machineId);
 
       await logProductionEvent(supabaseService, machine.company_id, "stale_run_auto_recovered", {
-        machineId, machineName: machine.name, staleRunId: machine.current_run_id, isOrphan, isStale, isInactive, activeJobDone, reason,
+        machineId, machineName: machine.name, staleRunId: machine.current_run_id, isOrphan, isInactive, activeJobDone, reason,
       }, `Auto-recovered ${reason} run on ${machine.name}`, machineId, userId);
 
       machine.current_run_id = null;
@@ -382,7 +382,7 @@ async function handleStartQueuedRun(ctx: ActionContext): Promise<{ response?: Re
       }).eq("id", machineId);
 
       await logProductionEvent(supabaseService, machine.company_id, "stale_run_auto_recovered", {
-        machineId, machineName: machine.name, staleRunId: machine.current_run_id, isOrphan, isStale, isInactive, reason,
+        machineId, machineName: machine.name, staleRunId: machine.current_run_id, isOrphan, isInactive, reason,
       }, `Auto-recovered ${reason} run on ${machine.name}`, machineId, userId);
 
       machine.current_run_id = null;
