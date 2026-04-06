@@ -265,6 +265,24 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
             // Repetition filter
             const uniqueWords = new Set(words.map(w => w.toLowerCase()));
             if (uniqueWords.size <= 2 && words.length >= 3) break;
+            // Non-target language filter: block Korean, Japanese, Chinese, Thai, Bengali, Devanagari, etc.
+            const FOREIGN_SCRIPT = /[\u3000-\u9FFF\uAC00-\uD7AF\u1100-\u11FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0D7F\u0E00-\u0E7F\u1000-\u109F]/;
+            if (FOREIGN_SCRIPT.test(text)) {
+              console.log("[voice-engine] blocked foreign-script transcript:", text.slice(0, 40));
+              break;
+            }
+            // Must contain at least some Farsi or Latin letters
+            const HAS_TARGET_LANG = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
+            if (!HAS_TARGET_LANG.test(text)) {
+              console.log("[voice-engine] blocked non-target transcript:", text.slice(0, 40));
+              break;
+            }
+            // TV/media noise pattern filter
+            const MEDIA_NOISE = /\b(MBC|KBS|SBS|CNN|BBC|channel|subtitle|broadcast|breaking news)\b/i;
+            if (MEDIA_NOISE.test(text)) {
+              console.log("[voice-engine] blocked media-noise transcript:", text.slice(0, 40));
+              break;
+            }
             setTranscripts(prev => [
               ...prev,
               { id: String(++idCounter.current), role: "user", text, timestamp: Date.now() },
@@ -361,7 +379,13 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
 
     try {
       // 1. Get microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
 
       // 2. Resolve instructions (support lazy getter to avoid stale closures)
