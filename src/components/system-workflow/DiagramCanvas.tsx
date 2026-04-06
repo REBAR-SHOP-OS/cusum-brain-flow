@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -31,6 +31,7 @@ export type DiagramCanvasProps = {
 
 export function DiagramCanvas(props: DiagramCanvasProps) {
   const { nodes, edges, onNodesChange, onEdgesChange, onNodeClick, onNodeDoubleClick, onPaneClick, className } = props;
+  const ignoreNextPaneClickRef = useRef(false);
 
   const miniMapNodeColor = useCallback((n: Node) => {
     const s = (n.data as any)?.status;
@@ -56,9 +57,21 @@ export function DiagramCanvas(props: DiagramCanvasProps) {
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onPaneClick={onPaneClick}
-        onNodeClick={(_, node) => onNodeClick(node.id)}
-        onNodeDoubleClick={(_, node) => onNodeDoubleClick(node.id)}
+        onPaneClick={() => {
+          if (ignoreNextPaneClickRef.current) {
+            ignoreNextPaneClickRef.current = false;
+            return;
+          }
+          onPaneClick();
+        }}
+        onNodeClick={(_, node) => {
+          ignoreNextPaneClickRef.current = true;
+          onNodeClick(node.id);
+        }}
+        onNodeDoubleClick={(_, node) => {
+          ignoreNextPaneClickRef.current = true;
+          onNodeDoubleClick(node.id);
+        }}
         fitView
         fitViewOptions={fitViewOptions}
         proOptions={{ hideAttribution: true }}

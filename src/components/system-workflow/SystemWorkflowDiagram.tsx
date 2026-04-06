@@ -39,6 +39,7 @@ export function SystemWorkflowDiagram() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [suppressNextPaneClick, setSuppressNextPaneClick] = useState(false);
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<Set<WorkflowFilterKey>>(new Set());
 
@@ -68,6 +69,7 @@ export function SystemWorkflowDiagram() {
   }, [graphWithPositions.nodes, registry.modules, selectedNodeId]);
 
   const onNodeClick = useCallback((nodeId: string) => {
+    setSuppressNextPaneClick(true);
     setSelectedNodeId(nodeId);
     setInspectorOpen(true);
   }, []);
@@ -102,9 +104,13 @@ export function SystemWorkflowDiagram() {
   }, []);
 
   const onPaneClick = useCallback(() => {
+    if (suppressNextPaneClick) {
+      setSuppressNextPaneClick(false);
+      return;
+    }
     setSelectedNodeId(null);
     setInspectorOpen(false);
-  }, []);
+  }, [suppressNextPaneClick]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
