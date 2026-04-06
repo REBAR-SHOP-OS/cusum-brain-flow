@@ -33,7 +33,28 @@ const SIDEBAR_GROUPS: { key: string; label: string; categories: string[] }[] = [
   { key: "office_tools", label: "🛠️ Office Tools",     categories: ["office_tools"] },
 ];
 
-// Build a reverse map: category -> group key
+/** Live clock component that updates every second */
+function LiveClock({ timezone }: { timezone: string }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const timeStr = formatDateInTimezone(now, timezone, {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+
+  const tzShort = getTimezoneLabel(timezone);
+  const abbr = tzShort.match(/\(([^)]+)\)/)?.[1] ?? "";
+
+  return <span>{timeStr}{abbr ? ` ${abbr}` : ""}</span>;
+}
+
+
 const CATEGORY_TO_GROUP: Record<string, string> = {};
 for (const g of SIDEBAR_GROUPS) {
   for (const c of g.categories) {
