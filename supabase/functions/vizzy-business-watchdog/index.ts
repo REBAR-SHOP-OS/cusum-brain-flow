@@ -76,6 +76,60 @@ Deno.serve((req) =>
       await supabase.from("notifications").insert(rows);
     }
 
+    // Save critical findings to vizzy_memory so Vizzy's Brain stays up-to-date
+    if (newAlerts.length > 0) {
+      const highPriorityAlerts = newAlerts.filter((a) => a.priority === "high");
+      if (highPriorityAlerts.length > 0) {
+        const summaryContent = highPriorityAlerts
+          .map((a) => `⚠️ ${a.title}: ${a.description}`)
+          .join("\n");
+
+        // Get company_id from the first admin's profile
+        const { data: adminProfile } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("user_id", adminUserIds[0])
+          .maybeSingle();
+
+        if (adminProfile?.company_id) {
+          // Dedupe: only write one watchdog memory per 15-min cycle
+          const fifteenMinAgo = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
+          const { data: recentWatchdogMemory } = await supabase
+            .from("vizzy_memory")
+            .select("id")
+            .eq("company_id", adminProfile.company_id)
+            .eq("category", "watchdog_alert")
+            .gte("created_at", fifteenMinAgo)
+            .limit(1);
+
+          if (!recentWatchdogMemory || recentWatchdogMemory.length === 0) {
+            for (const uid of adminUserIds) {
+              await supabase.from("vizzy_memory").insert({
+                user_id: uid,
+                company_id: adminProfile.company_id,
+                category: "watchdog_alert",
+                content: `[Watchdog ${now.toISOString().split("T")[0]}] ${highPriorityAlerts.length} critical findings:\n${summaryContent}`,
+                metadata: { source: "watchdog", alert_count: highPriorityAlerts.length, timestamp: now.toISOString() },
+              });
+            }
+          }
+
+          // Cleanup: keep only last 20 watchdog_alert memories
+          const { data: oldWatchdogMemories } = await supabase
+            .from("vizzy_memory")
+            .select("id, created_at")
+            .eq("company_id", adminProfile.company_id)
+            .eq("category", "watchdog_alert")
+            .order("created_at", { ascending: false });
+
+          if (oldWatchdogMemories && oldWatchdogMemories.length > 20) {
+            const idsToDelete = oldWatchdogMemories.slice(20).map((m: any) => m.id);
+            await supabase.from("vizzy_memory").delete().in("id", idsToDelete);
+          }
+        }
+      }
+    }
+
     console.log(`[watchdog] Scanned: ${alerts.length} anomalies found, ${newAlerts.length} new alerts created`);
 
       return new Response(

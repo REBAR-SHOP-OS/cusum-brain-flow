@@ -49,6 +49,7 @@ import { toast } from "sonner";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 import { getPublicFileUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
+import { isTeamHubAdmin } from "./teamHubConfig";
 
 const LANG_LABELS: Record<string, { name: string; flag: string }> = {
   en: { name: "English", flag: "🇬🇧" },
@@ -191,8 +192,7 @@ export function MessageThread({
     setIsUploading(false);
   };
 
-  const DELETE_ADMINS = ["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"];
-  const canDelete = DELETE_ADMINS.includes(myProfile?.email ?? "");
+  const canDelete = isTeamHubAdmin(myProfile?.email);
 
   const handleDeleteMessage = async (msgId: string) => {
     const { error } = await (supabase as any)

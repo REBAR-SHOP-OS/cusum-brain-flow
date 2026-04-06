@@ -1138,58 +1138,74 @@ export function PostReviewPanel({
                         return;
                       }
 
-                      const combos: { platform: string; page: string }[] = [];
+                      // Group by PLATFORM only — each platform gets all selected pages comma-joined.
+                      // Backend already handles multi-page via page_name.split(", ").
+                      const platformGroups: Record<string, string[]> = {};
                       for (const plat of publishablePlatforms) {
                         const dbPlat = platformMap[plat] || plat;
+                        if (!platformGroups[dbPlat]) platformGroups[dbPlat] = [];
                         for (const page of localPages) {
-                          combos.push({ platform: dbPlat, page });
+                          if (!platformGroups[dbPlat].includes(page)) {
+                            platformGroups[dbPlat].push(page);
+                          }
                         }
                       }
 
-                      const isUnassigned = post.platform === "unassigned";
+                      const platformEntries = Object.entries(platformGroups);
                       let allOk = true;
 
-                      // Publish first combo using original post ID
-                      const firstCombo = combos[0];
+                      // First platform: use original row
+                      const [firstPlatform, firstPages] = platformEntries[0];
+                      const firstPageName = firstPages.join(", ");
+
+                      // Sync original row to first platform + all its pages
+                      await supabase
+                        .from("social_posts")
+                        .update({
+                          platform: firstPlatform,
+                          page_name: firstPageName,
+                        })
+                        .eq("id", post.id);
+
                       const firstOk = await publishPost({
                         id: post.id,
-                        platform: firstCombo.platform,
+                        platform: firstPlatform,
                         content: post.content,
                         title: post.title,
                         hashtags: post.hashtags,
                         image_url: post.image_url,
-                        page_name: firstCombo.page,
+                        page_name: firstPageName,
                         content_type: localContentType,
                         cover_image_url: (post as any).cover_image_url,
                       });
                       if (!firstOk) allOk = false;
 
-                      // For additional combos, clone and publish
-                      for (let i = 1; i < combos.length; i++) {
-                        const combo = combos[i];
-                        // Create a clone for this combo
+                      // Additional platforms: clone once per platform (NOT per page)
+                      for (let i = 1; i < platformEntries.length; i++) {
+                        const [platform, pages] = platformEntries[i];
+                        const pageName = pages.join(", ");
                         const cloneResult = await createPost.mutateAsync({
                           user_id: post.user_id,
-                          platform: combo.platform as any,
+                          platform: platform as any,
                           status: "draft",
                           qa_status: "approved",
                           title: post.title,
                           content: post.content,
                           image_url: post.image_url,
                           hashtags: post.hashtags,
-                          page_name: combo.page,
+                          page_name: pageName,
                           content_type: localContentType,
                           scheduled_date: post.scheduled_date,
                         });
                         if (cloneResult?.id) {
                           const ok = await publishPost({
                             id: cloneResult.id,
-                            platform: combo.platform,
+                            platform,
                             content: post.content,
                             title: post.title,
                             hashtags: post.hashtags,
                             image_url: post.image_url,
-                            page_name: combo.page,
+                            page_name: pageName,
                             content_type: localContentType,
                             cover_image_url: (post as any).cover_image_url,
                           });
@@ -1197,15 +1213,6 @@ export function PostReviewPanel({
                         } else {
                           allOk = false;
                         }
-                      }
-
-                      // If original was unassigned and first combo changed it, update platform
-                      // Then if there were extra combos the original is now the first combo's platform
-                      // If unassigned, delete original after cloning (first combo already used original ID)
-                      if (isUnassigned && allOk && combos.length > 0) {
-                        // The first publishPost already updated the original row's platform,
-                        // so it's no longer "unassigned" — no extra delete needed.
-                        // But if first combo failed, don't delete.
                       }
 
                       if (allOk) onClose();

@@ -1001,13 +1001,6 @@ export default function Pipeline() {
             gateStep={currentGateIndex}
             gateTotalSteps={activeGates.length}
           />
-          <LossGateModal
-            open={currentGate === "loss"}
-            onOpenChange={(open) => { if (!open) handleGateCancel(); }}
-            leadId={pendingTransition.leadId}
-            companyId={pendingCompanyId}
-            onComplete={handleGateComplete}
-          />
           <NextActivityGateModal
             open={currentGate === "next_activity"}
             onOpenChange={(open) => { if (!open) handleGateCancel(); }}

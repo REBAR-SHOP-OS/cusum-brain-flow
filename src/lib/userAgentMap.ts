@@ -53,14 +53,14 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
     ],
   },
   "radin@rebar.shop": {
-    agentKey: "social",
-    userRole: "ai_manager",
-    heroText: "How can **Pixel** assist you today?",
+    agentKey: "assistant",
+    userRole: "ceo",
+    heroText: "How can **Vizzy** help you today?",
     quickActions: [
-      { title: "System status", prompt: "Give me a system health overview — any errors, failed syncs, or agent issues in the last 24 hours.", icon: "Activity", category: "Systems" },
+      { title: "Business Health Score", prompt: "Give me the full business health score — production, revenue, AR, team attendance, and machine status. Highlight anything that needs my attention.", icon: "Activity", category: "Executive" },
+      { title: "Today's exceptions", prompt: "Show me today's exceptions only — anything overdue, blocked, or flagged across all departments.", icon: "AlertTriangle", category: "Executive" },
       { title: "AI agent activity", prompt: "Show me a summary of all AI agent sessions today — who used which agent, and what actions were taken.", icon: "Bot", category: "AI" },
-      { title: "Integration health", prompt: "Check the status of all integrations — Gmail, RingCentral, QuickBooks. Flag any that need attention.", icon: "Plug", category: "Systems" },
-      { title: "Team comms overview", prompt: "Show me today's communication summary — emails sent/received, calls made, and any gaps.", icon: "MessageSquare", category: "Comms" },
+      { title: "Team attendance", prompt: "Show me today's team attendance — who's clocked in, who's absent, and any patterns to watch.", icon: "Users", category: "HR" },
     ],
   },
   "zahra@rebar.shop": {

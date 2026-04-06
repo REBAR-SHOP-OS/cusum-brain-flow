@@ -228,9 +228,26 @@ Deno.serve((req) =>
 
     const { date, userEmail } = ctx.body;
 
-    const targetDate = date || new Date().toISOString().split("T")[0];
-    const dayStart = `${targetDate}T00:00:00.000Z`;
-    const dayEnd = `${targetDate}T23:59:59.999Z`;
+    const { getWorkspaceTimezone } = await import("../_shared/getWorkspaceTimezone.ts");
+    const tz = await getWorkspaceTimezone(supabase);
+    const targetDate = date || new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    // Compute UTC boundaries for the workspace-local day
+    const dayStart = (() => {
+      const nowUtc = new Date();
+      const localStr = nowUtc.toLocaleString("en-US", { timeZone: tz });
+      const localNow = new Date(localStr);
+      localNow.setHours(0, 0, 0, 0);
+      const offsetMs = nowUtc.getTime() - new Date(nowUtc.toLocaleString("en-US", { timeZone: tz })).getTime();
+      return new Date(localNow.getTime() + offsetMs).toISOString();
+    })();
+    const dayEnd = (() => {
+      const nowUtc = new Date();
+      const localStr = nowUtc.toLocaleString("en-US", { timeZone: tz });
+      const localNow = new Date(localStr);
+      localNow.setHours(23, 59, 59, 999);
+      const offsetMs = nowUtc.getTime() - new Date(nowUtc.toLocaleString("en-US", { timeZone: tz })).getTime();
+      return new Date(localNow.getTime() + offsetMs).toISOString();
+    })();
 
     // ── Ben-specific personalized digest ─────────────────────────────
     if (userEmail === "ben@rebar.shop") {

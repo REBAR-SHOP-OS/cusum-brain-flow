@@ -117,7 +117,7 @@ You have FULL access to live business data. Use ONLY these numbers. NEVER make u
 You have FULL access to business emails listed in the EMAIL INBOX section below. When asked about emails, search by sender, subject, or content. NEVER say you cannot read emails — the data is right here in your context.
 Log every question the CEO asks mentally — you are building their daily journey.
 
-${qbWarning}═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══
+${qbWarning}═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString("en-US", { timeZone: snap.timezone || "America/Toronto" })}) ═══
 
 📊 FINANCIALS
   Accounts Receivable: ${fmt(f.totalReceivable)}
@@ -167,7 +167,7 @@ ${hotLeadsList || "    None"}
 ${(() => {
   const onNow = teamPresence.filter((t) => !t.clocked_out);
   const doneToday = teamPresence.filter((t) => !!t.clocked_out);
-  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: snap.timezone || "America/Toronto" });
   const lines: string[] = [];
   if (onNow.length > 0) {
     lines.push("  Currently Clocked In:");
@@ -190,7 +190,7 @@ ${eventsList || "  No recent events"}
 ${snap.inboundEmails.length > 0
   ? snap.inboundEmails.map((e) => {
       const preview = e.body_preview ? e.body_preview.slice(0, 80).replace(/\n/g, " ") : "";
-      const date = e.received_at ? new Date(e.received_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "unknown";
+      const date = e.received_at ? new Date(e.received_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: snap.timezone || "America/Toronto" }) : "unknown";
       return `  • [${e.subject || "No subject"}] from ${e.from_address || "unknown"} to ${e.to_address || "unknown"} — ${preview} (${date})`;
     }).join("\n")
   : "  No emails available"}

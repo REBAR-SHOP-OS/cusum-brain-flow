@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { AnimatePresence } from "framer-motion";
 import { useRingCentralWidget } from "@/hooks/useRingCentralWidget";
 import { useNavigate, useLocation, useSearchParams, Navigate } from "react-router-dom";
@@ -26,6 +26,8 @@ import { TooltipProvider, Tooltip, TooltipContent, TooltipTrigger } from "@/comp
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { primeMobileAudio } from "@/lib/audioPlayer";
+import { VizzyBrainPanel } from "@/components/vizzy/VizzyBrainPanel";
+import { useVizzyMemory } from "@/hooks/useVizzyMemory";
 
 const TOOL_LABELS: Record<string, string> = {
   update_machine_status: "Update Machine Status",
@@ -49,6 +51,8 @@ export default function LiveChat() {
 
   const [input, setInput] = useState("");
   const [showVoiceChat, setShowVoiceChat] = useState(false);
+  const [showBrainPanel, setShowBrainPanel] = useState(false);
+  const { entries: memoryEntries } = useVizzyMemory();
   const { makeCall: widgetMakeCall } = useRingCentralWidget();
 
   const handleBrowserAction = useCallback((action: string, data: Record<string, any>) => {
@@ -265,6 +269,20 @@ export default function LiveChat() {
             </p>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 relative"
+              onClick={() => setShowBrainPanel(true)}
+              title="Vizzy Brain"
+            >
+              <Brain className="w-4 h-4" style={{ color: "hsl(270 60% 50%)" }} />
+              {memoryEntries.length > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                  {memoryEntries.length}
+                </span>
+              )}
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -513,6 +531,7 @@ export default function LiveChat() {
       <AnimatePresence>
         {showVoiceChat && <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />}
       </AnimatePresence>
+      {showBrainPanel && <VizzyBrainPanel onClose={() => setShowBrainPanel(false)} />}
     </TooltipProvider>
   );
 }

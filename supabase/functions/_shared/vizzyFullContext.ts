@@ -22,6 +22,21 @@ export async function buildFullVizzyContext(
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+
+  // Compute UTC ISO boundary for "start of today" in workspace timezone
+  // e.g. if tz=America/Toronto (UTC-4), midnight local = 04:00 UTC
+  const todayStart = (() => {
+    const nowUtc = new Date();
+    const localStr = nowUtc.toLocaleString("en-US", { timeZone: tz });
+    const localNow = new Date(localStr);
+    // Midnight today in local tz
+    localNow.setHours(0, 0, 0, 0);
+    // Difference between real UTC and local interpretation gives us the offset
+    const offsetMs = nowUtc.getTime() - new Date(nowUtc.toLocaleString("en-US", { timeZone: tz })).getTime();
+    const midnightUtc = new Date(localNow.getTime() + offsetMs);
+    return midnightUtc.toISOString();
+  })();
+
   const fmt = (n: number) =>
     n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
@@ -156,19 +171,19 @@ export async function buildFullVizzyContext(
     supabase
       .from("communications")
       .select("from_address, to_address, direction, received_at, thread_id, user_id, subject, body_preview, source, metadata")
-      .gte("received_at", today + "T00:00:00")
+      .gte("received_at", todayStart)
       .order("received_at", { ascending: false })
       .limit(500),
     supabase
       .from("chat_sessions")
       .select("id, title, agent_name, user_id, created_at")
-      .gte("created_at", today + "T00:00:00")
+      .gte("created_at", todayStart)
       .order("created_at", { ascending: false })
       .limit(100),
     supabase
       .from("time_clock_entries")
       .select("id, profile_id, clock_in, clock_out")
-      .gte("clock_in", today + "T00:00:00")
+      .gte("clock_in", todayStart)
       .order("clock_in", { ascending: false })
       .limit(100),
     supabase
@@ -181,13 +196,13 @@ export async function buildFullVizzyContext(
     supabase
       .from("work_orders")
       .select("id, work_order_number, status, assigned_to, actual_start, actual_end")
-      .gte("updated_at", today + "T00:00:00")
+      .gte("updated_at", todayStart)
       .limit(200),
     // Employee performance: agent actions today
     supabase
       .from("agent_action_log")
       .select("user_id, action_type, entity_type, created_at")
-      .gte("created_at", today + "T00:00:00")
+      .gte("created_at", todayStart)
       .order("created_at", { ascending: false })
       .limit(200),
     // Machine operators currently assigned
@@ -199,7 +214,7 @@ export async function buildFullVizzyContext(
     supabase
       .from("activity_events")
       .select("actor_id, event_type, entity_type, created_at")
-      .gte("created_at", today + "T00:00:00")
+      .gte("created_at", todayStart)
       .not("actor_id", "is", null)
       .order("created_at", { ascending: false })
       .limit(500),
@@ -223,7 +238,7 @@ export async function buildFullVizzyContext(
       .from("communications")
       .select("from_address, to_address, direction, received_at, metadata, source")
       .eq("source", "ringcentral")
-      .gte("received_at", today + "T00:00:00")
+      .gte("received_at", todayStart)
       .order("received_at", { ascending: false })
       .limit(500),
     // RingCentral call note emails — last 7 days (not just today) for richer context
@@ -340,6 +355,7 @@ export async function buildFullVizzyContext(
     new Date(iso).toLocaleTimeString("en-US", {
       hour: "numeric",
       minute: "2-digit",
+      timeZone: tz,
     });
   const onNow = clockEntries.filter((t: any) => !t.clock_out);
   const doneToday = clockEntries.filter((t: any) => !!t.clock_out);
@@ -385,6 +401,7 @@ export async function buildFullVizzyContext(
         ? new Date(e.received_at).toLocaleDateString("en-US", {
             month: "short",
             day: "numeric",
+            timeZone: tz,
           })
         : "unknown";
       const threadId = e.thread_id ? ` [thread:${e.thread_id}]` : "";
@@ -425,7 +442,7 @@ export async function buildFullVizzyContext(
     ? activeMemories
         .map(
           (m: any) =>
-            `  • [${m.category}] ${m.content}${m.expires_at ? ` (expires ${new Date(m.expires_at).toLocaleDateString()})` : ""}`
+            `  • [${m.category}] ${m.content}${m.expires_at ? ` (expires ${new Date(m.expires_at).toLocaleDateString("en-US", { timeZone: tz })})` : ""}`
         )
         .join("\n")
     : "  No saved memories yet";
@@ -623,8 +640,8 @@ export async function buildFullVizzyContext(
     }
     const activeHrs = (activeMs / 3600000).toFixed(1);
     const clockedHrs = hoursWorked[name]?.toFixed(1) || "?";
-    const firstAction = new Date(timestamps[0]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-    const lastAction = new Date(timestamps[timestamps.length - 1]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const firstAction = new Date(timestamps[0]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz });
+    const lastAction = new Date(timestamps[timestamps.length - 1]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz });
     const density = (timestamps.length / (activeMs / 3600000 || 1)).toFixed(0);
 
     footprintLines.push(`  • ${name}: ${activeHrs}hrs active / ${clockedHrs}hrs clocked | ${timestamps.length} actions | ${firstAction}–${lastAction} | ${gapCount} idle gaps (longest: ${longestGapMin}min) | ${density} actions/hr`);
@@ -664,7 +681,7 @@ export async function buildFullVizzyContext(
     const name = resolveCommEmployee(e);
     if (!emailsByEmployee[name]) emailsByEmployee[name] = { sent: 0, received: 0, emails: [] };
 
-    const timeStr = e.received_at ? new Date(e.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+    const timeStr = e.received_at ? new Date(e.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
     const emailDetail = {
       subject: e.subject || "(no subject)",
       preview: (e.body_preview || "").replace(/\n/g, " ").slice(0, 500),
@@ -743,7 +760,7 @@ export async function buildFullVizzyContext(
 
     // Detail line
     const durationStr = duration > 0 ? `${Math.floor(duration / 60)}m ${duration % 60}s` : "0s";
-    const timeStr = call.received_at ? new Date(call.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+    const timeStr = call.received_at ? new Date(call.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
     rcCallDetails.push(`  • [${dir.toUpperCase()}] ${call.from_address || "?"} → ${call.to_address || "?"}: ${durationStr}, ${result} (${timeStr})`);
   }
 
@@ -823,7 +840,7 @@ export async function buildFullVizzyContext(
 
   parts.push(factsBlock);
   parts.push("");
-  parts.push(`═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString()}) ═══`);
+  parts.push(`═══ LIVE BUSINESS SNAPSHOT (${new Date().toLocaleString("en-US", { timeZone: tz })}) ═══`);
   parts.push("");
 
   if (includeFinancials) {
@@ -932,7 +949,7 @@ export async function buildFullVizzyContext(
   if ((rcCallNoteEmails || []).length > 0) {
     parts.push(
       (rcCallNoteEmails || []).map((note: any) => {
-        const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+        const time = note.received_at ? new Date(note.received_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
         const recipient = note.to_address || "unknown";
         const recipientName = emailProfileMap.get(recipient?.toLowerCase()?.match(/[^<\s]+@[^>\s]+/)?.[0] || "") || recipient;
         const preview = note.body_preview ? note.body_preview.replace(/\n/g, " ").slice(0, 500) : "(no preview)";
@@ -991,7 +1008,7 @@ export async function buildFullVizzyContext(
   } else {
     parts.push(voicemails.map((vm: any) => {
       const meta = (vm.metadata || {}) as any;
-      const time = vm.created_at ? new Date(vm.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+      const time = vm.created_at ? new Date(vm.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
       const caller = meta.contact_name || meta.from_number || "Unknown";
       const taskStr = (meta.tasks || []).length > 0
         ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
@@ -1009,7 +1026,7 @@ export async function buildFullVizzyContext(
   } else {
     parts.push(callSummaries.slice(0, 10).map((cs: any) => {
       const meta = (cs.metadata || {}) as any;
-      const time = cs.created_at ? new Date(cs.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "?";
+      const time = cs.created_at ? new Date(cs.created_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz }) : "?";
       const caller = meta.contact_name || meta.from_number || "Unknown";
       const taskStr = (meta.tasks || []).length > 0
         ? " | Actions: " + (meta.tasks || []).map((t: any) => t.title).join(", ")
@@ -1024,7 +1041,7 @@ export async function buildFullVizzyContext(
   if ((openHumanTasks || []).length > 0) {
     parts.push((openHumanTasks || []).map((t: any) => {
       const assignee = t.assigned_to ? (profileIdMap.get(t.assigned_to) || "Unassigned") : "Unassigned";
-      const created = new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const created = new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
       return "  • [" + (t.priority || "medium") + '] "' + t.title + '" → ' + assignee + " (" + t.status + ", created " + created + ")" + (t.category ? " [" + t.category + "]" : "");
     }).join("\n"));
   } else {

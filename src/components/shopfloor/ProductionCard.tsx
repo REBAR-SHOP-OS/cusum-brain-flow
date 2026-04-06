@@ -158,12 +158,17 @@ export function ProductionCard({
 
           {/* Center: shape image or length display */}
           <div className="flex items-center justify-center min-h-[110px] bg-muted/20 rounded-lg border border-border/50">
-            {isBend && item.asa_shape_code && (item.phase === "bending" || item.bend_completed_pieces > 0) ? (
-              <AsaShapeDiagram
-                shapeCode={item.asa_shape_code}
-                dimensions={item.bend_dimensions}
-                size="sm"
-              />
+            {item.asa_shape_code ? (
+              <div className="flex flex-col items-center gap-1">
+                <AsaShapeDiagram
+                  shapeCode={item.asa_shape_code}
+                  dimensions={item.bend_dimensions}
+                  size="sm"
+                />
+                <p className="text-xs font-mono text-muted-foreground">
+                  {item.cut_length_mm} mm
+                </p>
+              </div>
             ) : (
               <div className="text-center py-4">
                 <p className="text-5xl font-black font-mono text-muted-foreground/50 tracking-tight">

@@ -1,25 +1,42 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { formatDistanceToNow } from "date-fns";
+import {
+  Bot,
+  Check,
+  Clock3,
+  Copy,
+  Download,
+  ExternalLink,
+  Globe,
+  Loader2,
+  MapPin,
+  MessageSquare,
+  Paperclip,
+  Send,
+  Sparkles,
+  StickyNote,
+  User,
+  UserCheck,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { useAuth } from "@/lib/auth";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Send, User, UserCheck, CheckCircle, MessageSquare, StickyNote, Sparkles, Loader2, MapPin, Globe, ExternalLink, Paperclip, Download, Copy, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { playMockingjayWhistle } from "@/lib/notificationSound";
-import { showBrowserNotification } from "@/lib/browserNotification";
-import { formatDistanceToNow } from "date-fns";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface Message {
   id: string;
   sender_type: string;
   sender_id: string | null;
   content: string;
-  content_type: string;
-  is_internal_note: boolean;
+  content_type: string | null;
+  is_internal_note: boolean | null;
   created_at: string;
 }
 
@@ -30,11 +47,59 @@ interface ConvoDetails {
   status: string;
   assigned_to: string | null;
   created_at: string;
-  metadata: any;
+  metadata: Json;
 }
 
 interface Props {
   conversationId: string | null;
+}
+
+function getMetadataRecord(metadata: Json): Record<string, Json | undefined> | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  return metadata as Record<string, Json | undefined>;
+}
+
+function getMetadataString(metadata: Json, key: string): string | null {
+  const record = getMetadataRecord(metadata);
+  const value = record?.[key];
+  return typeof value === "string" ? value : null;
+}
+
+function getPresenceStatus(metadata: Json): "online" | "away" | "offline" {
+  const lastSeenAt = getMetadataString(metadata, "last_seen_at");
+  if (!lastSeenAt) return "offline";
+  const diffSec = (Date.now() - new Date(lastSeenAt).getTime()) / 1000;
+  if (diffSec < 60) return "online";
+  if (diffSec < 300) return "away";
+  return "offline";
+}
+
+function getPresenceDot(status: "online" | "away" | "offline") {
+  switch (status) {
+    case "online":
+      return "bg-emerald-500";
+    case "away":
+      return "bg-amber-500";
+    default:
+      return "bg-muted-foreground/30";
+  }
+}
+
+function getStatusBadge(status: string) {
+  switch (status) {
+    case "open":
+      return "border-emerald-500/20 bg-emerald-500/10 text-emerald-600";
+    case "assigned":
+      return "border-blue-500/20 bg-blue-500/10 text-blue-600";
+    case "pending":
+      return "border-amber-500/20 bg-amber-500/10 text-amber-600";
+    case "resolved":
+      return "border-border/70 bg-muted text-muted-foreground";
+    case "closed":
+      return "border-border/70 bg-muted text-muted-foreground";
+    default:
+      return "border-border/70 bg-muted text-muted-foreground";
+  }
 }
 
 export function SupportChatView({ conversationId }: Props) {
@@ -115,6 +180,26 @@ export function SupportChatView({ conversationId }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const presence = convo ? getPresenceStatus(convo.metadata) : "offline";
+  const currentPage = convo ? getMetadataString(convo.metadata, "current_page") : null;
+  const currentPageLabel =
+    typeof currentPage === "string" ? currentPage.replace(/^https?:\/\//, "") : null;
+  const visitorCity = convo ? getMetadataString(convo.metadata, "city") : null;
+  const visitorCountry = convo ? getMetadataString(convo.metadata, "country") : null;
+  const visitorLocation = visitorCity
+    ? `${visitorCity}${visitorCountry ? `, ${visitorCountry}` : ""}`
+    : visitorCountry || null;
+  const assigneeName = useMemo(() => {
+    if (!convo?.assigned_to) return "Unassigned";
+    return teamMembers.find((member) => member.id === convo.assigned_to)?.full_name || "Assigned";
+  }, [convo?.assigned_to, teamMembers]);
+  const visitorInitials = ((convo?.visitor_name || "Visitor")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part[0])
+    .join("") || "V").toUpperCase();
+
   const sendMessage = async () => {
     const text = input.trim();
     if (!text || !conversationId || !profileId || sending) return;
@@ -193,7 +278,7 @@ export function SupportChatView({ conversationId }: Props) {
         is_internal_note: false,
       });
       if (error) throw error;
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error("Failed to upload image");
       console.error(err);
     } finally {
@@ -233,8 +318,8 @@ export function SupportChatView({ conversationId }: Props) {
       } else {
         toast.info("No suggestion generated");
       }
-    } catch (e: any) {
-      toast.error(e.message || "Failed to get suggestion");
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Failed to get suggestion");
     } finally {
       setSuggesting(false);
     }
@@ -242,49 +327,110 @@ export function SupportChatView({ conversationId }: Props) {
 
   if (!conversationId) {
     return (
-      <div className="flex-1 flex items-center justify-center text-muted-foreground">
-        <div className="text-center">
-          <MessageSquare className="w-12 h-12 mx-auto mb-3 text-muted-foreground/20" />
-          <p className="text-sm">Select a conversation to view</p>
+      <div className="flex flex-1 items-center justify-center bg-[radial-gradient(circle_at_top,rgba(45,212,191,0.10),transparent_28%),transparent] p-6">
+        <div className="max-w-md rounded-[32px] border border-border/60 bg-background/85 p-8 text-center shadow-[0_24px_70px_rgba(15,23,42,0.14)]">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-[24px] bg-primary/10 text-primary">
+            <MessageSquare className="h-7 w-7" />
+          </div>
+          <h3 className="mt-5 text-xl font-semibold text-foreground">Select a conversation</h3>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Pick a visitor from the queue to see live context, AI reply suggestions, and modern agent controls.
+          </p>
+          <div className="mt-6 grid gap-2 text-left sm:grid-cols-2">
+            {[
+              "Review visitor context instantly",
+              "Draft replies with AI",
+              "Switch between notes and replies",
+              "Share images without leaving the inbox",
+            ].map((item) => (
+              <div key={item} className="rounded-2xl border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {item}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Header */}
+    <div className="flex flex-1 flex-col overflow-hidden">
       {convo && (
-        <div className="border-b border-border px-4 py-3 flex flex-col gap-2 bg-muted/20">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <User className="w-4 h-4 text-primary" />
+        <div className="border-b border-border/60 bg-background/85 px-5 py-4 backdrop-blur-xl">
+          <div className="flex flex-col gap-4 2xl:flex-row 2xl:items-start 2xl:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-start gap-4">
+                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] bg-primary/10 text-base font-semibold text-primary">
+                  {visitorInitials}
+                  <span
+                    className={cn(
+                      "absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-[3px] border-background",
+                      getPresenceDot(presence)
+                    )}
+                  />
                 </div>
-                {(() => {
-                  const lastSeen = convo.metadata?.last_seen_at;
-                  if (!lastSeen) return null;
-                  const diffSec = (Date.now() - new Date(lastSeen).getTime()) / 1000;
-                  const color = diffSec < 60 ? "bg-green-500" : diffSec < 300 ? "bg-yellow-500" : "bg-muted-foreground/30";
-                  return <div className={cn("absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background", color)} />;
-                })()}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium">{convo.visitor_name || "Visitor"}</p>
-                  {convo.metadata?.city && (
-                    <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                      <MapPin className="w-3 h-3" />
-                      {convo.metadata.city}{convo.metadata.country ? `, ${convo.metadata.country}` : ""}
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-lg font-semibold tracking-tight text-foreground">
+                      {convo.visitor_name || "Visitor"}
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={cn("rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-wide", getStatusBadge(convo.status))}
+                    >
+                      {convo.status}
+                    </Badge>
+                    <Badge variant="outline" className="rounded-full border-border/70 bg-background px-2.5 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {assigneeName}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    {convo.visitor_email && <span>{convo.visitor_email}</span>}
+                    <span className="inline-flex items-center gap-1">
+                      <Clock3 className="h-3.5 w-3.5" />
+                      Started {formatDistanceToNow(new Date(convo.created_at), { addSuffix: true })}
                     </span>
-                  )}
+                    <span className="inline-flex items-center gap-1 capitalize">
+                      <span className={cn("h-2 w-2 rounded-full", getPresenceDot(presence))} />
+                      {presence}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {visitorLocation && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground">
+                        <MapPin className="h-3 w-3" />
+                        {visitorLocation}
+                      </span>
+                    )}
+                    {currentPageLabel && (
+                      <a
+                        href={currentPage}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-[11px] text-primary transition-colors hover:border-primary/30 hover:bg-primary/5"
+                      >
+                        <Globe className="h-3 w-3" />
+                        <span className="max-w-[260px] truncate">{currentPageLabel}</span>
+                        <ExternalLink className="h-3 w-3 shrink-0" />
+                      </a>
+                    )}
+                    <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground">
+                      <Bot className="h-3 w-3" />
+                      AI reply suggestions ready
+                    </span>
+                  </div>
                 </div>
-                {convo.visitor_email && <p className="text-xs text-muted-foreground">{convo.visitor_email}</p>}
               </div>
-              <Badge variant="outline" className="text-[10px]">{convo.status}</Badge>
             </div>
-            <div className="flex items-center gap-2">
+
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+              {profileId && convo.assigned_to !== profileId && (
+                <Button variant="outline" size="sm" className="h-10 rounded-2xl px-4" onClick={assignToMe}>
+                  <UserCheck className="mr-2 h-4 w-4" />
+                  Assign to me
+                </Button>
+              )}
               <Select
                 value={convo.assigned_to || "__unassigned__"}
                 onValueChange={async (val) => {
@@ -301,9 +447,9 @@ export function SupportChatView({ conversationId }: Props) {
                   }
                 }}
               >
-                <SelectTrigger className="w-36 h-8 text-xs">
-                  <div className="flex items-center gap-1">
-                    <UserCheck className="w-3 h-3" />
+                <SelectTrigger className="h-10 min-w-[180px] rounded-2xl border-border/70 bg-background text-xs">
+                  <div className="flex items-center gap-2">
+                    <UserCheck className="h-3.5 w-3.5" />
                     <SelectValue placeholder="Assign to..." />
                   </div>
                 </SelectTrigger>
@@ -315,7 +461,7 @@ export function SupportChatView({ conversationId }: Props) {
                 </SelectContent>
               </Select>
               <Select value={convo.status} onValueChange={updateStatus}>
-                <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectTrigger className="h-10 min-w-[140px] rounded-2xl border-border/70 bg-background text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -328,30 +474,15 @@ export function SupportChatView({ conversationId }: Props) {
               </Select>
             </div>
           </div>
-          {convo.metadata?.current_page && (
-            <div className="flex items-center gap-1.5 pl-11">
-              <Globe className="w-3 h-3 text-muted-foreground/60" />
-              <a
-                href={convo.metadata.current_page}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[11px] text-primary/80 hover:text-primary truncate max-w-[300px] flex items-center gap-1"
-              >
-                {convo.metadata.current_page.replace(/^https?:\/\//, "")}
-                <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-              </a>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Messages */}
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-3">
+      <ScrollArea className="flex-1 bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.06),transparent_24%),radial-gradient(circle_at_bottom,rgba(45,212,191,0.08),transparent_28%),transparent]">
+        <div className="mx-auto flex max-w-4xl flex-col gap-4 p-5">
           {messages.map((msg) => {
             if (msg.content_type === "system") {
               return (
-                <div key={msg.id} className="text-center text-[10px] text-muted-foreground/50 py-1">
+                <div key={msg.id} className="py-1 text-center text-[10px] text-muted-foreground/60">
                   {msg.content} · {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })}
                 </div>
               );
@@ -360,127 +491,193 @@ export function SupportChatView({ conversationId }: Props) {
             const isAgent = msg.sender_type === "agent";
             return (
               <div key={msg.id} className={cn("flex", isAgent ? "justify-end" : "justify-start")}>
-                <div className={cn(
-                  "max-w-[75%] rounded-xl px-3 py-2 text-sm",
-                  msg.is_internal_note
-                    ? "bg-accent/50 border border-accent text-accent-foreground"
-                    : isAgent
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground"
-                )}>
-                  {msg.is_internal_note && (
-                    <div className="flex items-center gap-1 text-[10px] font-medium mb-1 text-accent-foreground/70">
-                      <StickyNote className="w-3 h-3" /> Internal Note
-                    </div>
-                  )}
-                  {msg.content_type === "image" ? (
-                    <div>
-                      <img
-                        src={msg.content}
-                        alt="Shared image"
-                        className="max-w-[200px] rounded-lg cursor-pointer"
-                        onClick={() => window.open(msg.content, "_blank")}
-                      />
-                      <button
-                        onClick={() => handleDownloadImage(msg.content)}
-                        className={cn(
-                          "mt-1.5 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors",
-                          isAgent ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                        )}
-                      >
-                        <Download className="w-3 h-3" /> Download
-                      </button>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
-                      <button
-                        onClick={() => handleCopyText(msg.id, msg.content)}
-                        className={cn(
-                          "mt-1.5 flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors",
-                          isAgent ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/10" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                        )}
-                      >
-                        {copiedId === msg.id ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
-                      </button>
-                    </div>
-                  )}
-                  <p className={cn(
-                    "text-[10px] mt-1",
-                    isAgent ? "text-primary-foreground/60" : "text-muted-foreground/60"
-                  )}>
-                    {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })}
-                  </p>
+                <div className={cn("max-w-[78%]", isAgent ? "items-end" : "items-start")}>
+                  <div className={cn("mb-1 flex items-center gap-2 px-1 text-[11px]", isAgent ? "justify-end text-right" : "justify-start")}>
+                    <span className="font-medium text-foreground/80">
+                      {msg.is_internal_note ? "Internal note" : isAgent ? "You" : convo?.visitor_name || "Visitor"}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      "rounded-[24px] border px-4 py-3 text-sm shadow-sm",
+                      msg.is_internal_note
+                        ? "border-amber-500/20 bg-amber-500/10 text-amber-950 dark:text-amber-100"
+                        : isAgent
+                          ? "border-primary/20 bg-primary text-primary-foreground"
+                          : "border-border/60 bg-background/90 text-foreground"
+                    )}
+                  >
+                    {msg.is_internal_note && (
+                      <div className="mb-2 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                        <StickyNote className="h-3 w-3" />
+                        Internal note
+                      </div>
+                    )}
+                    {msg.content_type === "image" ? (
+                      <div>
+                        <img
+                          src={msg.content}
+                          alt="Shared image"
+                          className="max-h-[280px] max-w-[240px] rounded-2xl border border-border/60 object-cover shadow-sm"
+                          onClick={() => window.open(msg.content, "_blank")}
+                        />
+                        <button
+                          onClick={() => handleDownloadImage(msg.content)}
+                          className={cn(
+                            "mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] transition-colors",
+                            isAgent
+                              ? "bg-primary-foreground/10 text-primary-foreground/80 hover:bg-primary-foreground/20 hover:text-primary-foreground"
+                              : "bg-muted text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          <Download className="h-3 w-3" />
+                          Download
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="whitespace-pre-wrap leading-6">{msg.content}</p>
+                        <button
+                          onClick={() => handleCopyText(msg.id, msg.content)}
+                          className={cn(
+                            "mt-2 inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] transition-colors",
+                            isAgent
+                              ? "bg-primary-foreground/10 text-primary-foreground/80 hover:bg-primary-foreground/20 hover:text-primary-foreground"
+                              : "bg-muted text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {copiedId === msg.id ? (
+                            <>
+                              <Check className="h-3 w-3" />
+                              Copied
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-3 w-3" />
+                              Copy
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
+          {sending && (
+            <div className="flex justify-end">
+              <div className="max-w-[78%] rounded-[24px] border border-primary/20 bg-primary px-4 py-3 text-primary-foreground shadow-sm">
+                <div className="flex items-center gap-2 text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Sending reply...
+                </div>
+              </div>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       </ScrollArea>
 
-      {/* Input */}
-      <div className="border-t border-border p-3">
-        <div className="flex items-center gap-2 mb-2">
-          <button
-            onClick={() => setIsNote(false)}
-            className={cn(
-              "text-xs px-2 py-1 rounded-md transition-colors",
-              !isNote ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Reply
-          </button>
-          <button
-            onClick={() => setIsNote(true)}
-            className={cn(
-              "text-xs px-2 py-1 rounded-md transition-colors flex items-center gap-1",
-              isNote ? "bg-accent/50 text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <StickyNote className="w-3 h-3" /> Note
-          </button>
-          <div className="ml-auto">
+      <div className="border-t border-border/60 bg-background/90 p-4 backdrop-blur-xl">
+        <div className="mx-auto max-w-4xl rounded-[28px] border border-border/60 bg-background/85 p-4 shadow-sm">
+          <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsNote(false)}
+                className={cn(
+                  "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                  !isNote
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Reply
+              </button>
+              <button
+                onClick={() => setIsNote(true)}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
+                  isNote
+                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-200"
+                    : "bg-muted/60 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <StickyNote className="h-3 w-3" />
+                Internal note
+              </button>
+            </div>
+
             <Button
               variant="ghost"
               size="sm"
               onClick={suggestReply}
               disabled={suggesting}
-              className="text-xs gap-1 h-7 text-primary"
+              className="h-9 rounded-full px-4 text-xs text-primary"
             >
-              {suggesting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-              {suggesting ? "Thinking…" : "Suggest Reply"}
+              {suggesting ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-2 h-3.5 w-3.5" />}
+              {suggesting ? "Thinking..." : "Suggest reply"}
             </Button>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleImageUpload}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="self-end h-10 w-10 p-0 shrink-0"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-          >
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
-          </Button>
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder={isNote ? "Add an internal note..." : "Type your reply..."}
-            className="flex-1 min-h-[40px] max-h-[100px] text-sm resize-none bg-secondary rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary/30"
-            rows={1}
-          />
-          <Button size="sm" onClick={sendMessage} disabled={!input.trim() || sending} className="self-end gap-1">
-            <Send className="w-3.5 h-3.5" />
-          </Button>
+
+          <div className="flex gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleImageUpload}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-12 w-12 shrink-0 rounded-2xl p-0"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+            </Button>
+
+            <div className="flex-1 rounded-[24px] border border-border/70 bg-muted/30 px-3 py-2">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }}
+                placeholder={isNote ? "Add internal guidance for the team..." : "Write a clear reply to the visitor..."}
+                className="min-h-[72px] w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                rows={3}
+              />
+              <div className="mt-2 flex flex-col gap-2 text-[11px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  {isNote
+                    ? "Notes stay internal and are never sent to the visitor."
+                    : "Press Enter to send quickly. Use Shift+Enter for a new line."}
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <Sparkles className="h-3 w-3 text-primary" />
+                  AI-powered support workflow
+                </span>
+              </div>
+            </div>
+
+            <Button
+              size="sm"
+              onClick={sendMessage}
+              disabled={!input.trim() || sending}
+              className="h-12 shrink-0 rounded-2xl px-4"
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              Send
+            </Button>
+          </div>
         </div>
       </div>
     </div>

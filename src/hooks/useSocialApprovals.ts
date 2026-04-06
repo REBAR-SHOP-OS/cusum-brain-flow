@@ -24,7 +24,7 @@ export function useSocialApprovals() {
   // Realtime: auto-refresh when any team member changes approvals
   useEffect(() => {
     const channel = supabase
-      .channel("social_approvals_realtime")
+      .channel(`social_approvals_realtime_${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "social_approvals" },

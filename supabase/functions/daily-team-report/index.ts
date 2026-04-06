@@ -1,14 +1,22 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { callAI } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { serviceClient: supabase } = ctx;
 
-    const today = new Date().toISOString().split("T")[0];
-    const dayStart = `${today}T00:00:00.000Z`;
-    const dayEnd = `${today}T23:59:59.999Z`;
+    const tz = await getWorkspaceTimezone(supabase);
+    // "today" in workspace timezone (en-CA gives YYYY-MM-DD)
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date());
+    // Compute UTC boundaries for the local "today"
+    // Offset = local time - UTC time (in ms)
+    const probe = new Date(`${today}T12:00:00Z`);
+    const localNoon = new Date(probe.toLocaleString("en-US", { timeZone: tz }));
+    const offsetMs = localNoon.getTime() - probe.getTime();
+    const dayStart = new Date(new Date(`${today}T00:00:00Z`).getTime() - offsetMs).toISOString();
+    const dayEnd = new Date(new Date(`${today}T23:59:59.999Z`).getTime() - offsetMs).toISOString();
 
     // 1. Get all active employees with their profiles
     const { data: profiles } = await supabase

@@ -15,7 +15,8 @@ export const corsHeaders = {
 };
 
 /** Concrete client type matching createClient(url, key) calls in edge functions. */
-export type AppSupabaseClient = SupabaseClient<Record<string, unknown>, "public", Record<string, unknown>>;
+// deno-lint-ignore no-explicit-any
+export type AppSupabaseClient = SupabaseClient<any, any, any>;
 
 export interface AuthResult {
   userId: string;

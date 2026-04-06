@@ -20,8 +20,10 @@ import { supabase } from "@/integrations/supabase/client";
 import brandLogo from "@/assets/brand-logo.png";
 import type { MachineType, MachineStatus } from "@/types/machine";
 import { getCurrentShift, getShiftLabel, type ShiftType } from "@/lib/shiftUtils";
+import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 
 export default function StationDashboard() {
+  const { timezone } = useWorkspaceSettings();
   const { machines, isLoading, error } = useLiveMonitorData();
   const { data: workOrders, loading: woLoading, updateStatus } = useSupabaseWorkOrders();
   const { projectLanes } = useProductionQueues();
@@ -35,7 +37,11 @@ export default function StationDashboard() {
   // Filter state
   const [typeFilter, setTypeFilter] = useState<MachineType | "all">("all");
   const [statusFilters, setStatusFilters] = useState<Set<MachineStatus>>(new Set());
-  const [shiftFilter, setShiftFilter] = useState<ShiftType>(getCurrentShift());
+  const [shiftFilter, setShiftFilter] = useState<ShiftType>(() => getCurrentShift(timezone));
+
+  useEffect(() => {
+    setShiftFilter(getCurrentShift(timezone));
+  }, [timezone]);
 
   const filteredMachines = useMemo(() => {
     return machines.filter((m) => {

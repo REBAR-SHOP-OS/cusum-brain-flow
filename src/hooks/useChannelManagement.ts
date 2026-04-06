@@ -4,13 +4,18 @@ import { useAuth } from "@/lib/auth";
 import { useMyProfile } from "@/hooks/useTeamChat";
 import { toast } from "sonner";
 
+type TeamHubProfile = {
+  id: string;
+  company_id?: string | null;
+};
+
 /**
  * Reusable helper: get the current user's company_id from their profile.
  * Uses the already-loaded myProfile when available, falls back to a DB query.
  */
 async function resolveCompanyId(
   userId: string,
-  myProfile: { company_id?: string } | null
+  myProfile: TeamHubProfile | null
 ): Promise<string> {
   if (myProfile?.company_id) return myProfile.company_id;
 
@@ -47,7 +52,7 @@ export function useCreateChannel() {
           "Your profile is not set up yet. Please ask an admin to link your account."
         );
 
-      const companyId = await resolveCompanyId(user.id, myProfile as any);
+      const companyId = await resolveCompanyId(user.id, myProfile);
 
       // Create the channel
       const { data: channel, error: channelErr } = await (supabase as any)
@@ -112,7 +117,7 @@ export function useOpenDM() {
 
       if (error) {
         const correlationId = Math.random().toString(36).substring(2, 9);
-        const companyId = (myProfile as any)?.company_id ?? "unknown";
+        const companyId = (myProfile as any).company_id ?? "unknown";
 
         console.error("[DM Creation Failed]", {
           correlationId,
@@ -144,7 +149,7 @@ export function useOpenDM() {
 
       if (!data) {
         const correlationId = Math.random().toString(36).substring(2, 9);
-        const companyId = (myProfile as any)?.company_id ?? "unknown";
+        const companyId = (myProfile as any).company_id ?? "unknown";
         console.error("[DM Creation] RPC returned null", {
           correlationId,
           authUserId: user.id,

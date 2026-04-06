@@ -34,6 +34,11 @@ import {
 import type { TeamChannel } from "@/hooks/useTeamChat";
 import type { Profile } from "@/hooks/useProfiles";
 import { useUnreadSenders } from "@/hooks/useUnreadSenders";
+import {
+  TEAM_HUB_PROTECTED_CHANNELS,
+  TEAM_HUB_SELF_NOTES_ID,
+  isTeamHubAdmin,
+} from "./teamHubConfig";
 
 interface ChannelSidebarProps {
   channels: TeamChannel[];
@@ -64,9 +69,6 @@ function getAvatarColor(name: string) {
   return avatarColors[Math.abs(hash) % avatarColors.length];
 }
 
-const PROTECTED_CHANNELS = ["Official Channel", "Official Group", "My Notes"];
-const ADMIN_EMAILS = ["radin@rebar.shop", "neel@rebar.shop", "sattar@rebar.shop"];
-
 export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, profiles, onCreateChannel, onCreateGroup, onClickMember, onClose, myProfile, onDeleteChannel }: ChannelSidebarProps) {
   const { user } = useAuth();
   const [membersOpen, setMembersOpen] = useState(true);
@@ -76,7 +78,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [previewProfile, setPreviewProfile] = useState<Profile | null>(null);
   const [channelToDelete, setChannelToDelete] = useState<TeamChannel | null>(null);
   const { unreadSenderIds } = useUnreadSenders();
-  const isAdmin = ADMIN_EMAILS.includes(user?.email ?? "");
+  const isAdmin = isTeamHubAdmin(user?.email);
 
   const officialChannel = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
   const userChannels = channels.filter((c) => c.channel_type === "group" && c.name !== "Official Channel" && c.name !== "Official Group" && c.name !== "My Notes");
@@ -99,7 +101,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
 
   const handleClickMember = (profileId: string, name: string) => {
     if (myProfile && profileId === myProfile.id) {
-      onSelect("__my_notes__");
+      onSelect(TEAM_HUB_SELF_NOTES_ID);
     } else {
       onClickMember(profileId, name);
     }
@@ -158,15 +160,15 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
       <div className="flex-1 overflow-auto py-1 px-2">
         {/* My Notes */}
         <button
-          onClick={() => handleSelect("__my_notes__")}
+          onClick={() => handleSelect(TEAM_HUB_SELF_NOTES_ID)}
           className={cn(
             "w-full flex items-center gap-2 px-2.5 py-2 md:py-1.5 text-sm rounded-lg transition-all mb-2",
-            selectedId === "__my_notes__"
+            selectedId === TEAM_HUB_SELF_NOTES_ID
               ? "bg-primary/10 text-primary font-semibold shadow-sm shadow-primary/5"
               : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           )}
         >
-          <StickyNote className={cn("w-4 h-4 shrink-0", selectedId === "__my_notes__" ? "text-primary" : "text-muted-foreground/60")} />
+          <StickyNote className={cn("w-4 h-4 shrink-0", selectedId === TEAM_HUB_SELF_NOTES_ID ? "text-primary" : "text-muted-foreground/60")} />
           <span className="truncate flex-1 text-left">My Notes</span>
         </button>
 
@@ -194,7 +196,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
             >
               <Hash className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
               <span className="truncate flex-1 text-left">{ch.name}</span>
-              {isAdmin && !PROTECTED_CHANNELS.includes(ch.name) && (
+              {isAdmin && !(TEAM_HUB_PROTECTED_CHANNELS as readonly string[]).includes(ch.name) && (
                 <Trash2
                   className="w-3.5 h-3.5 shrink-0 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={(e) => { e.stopPropagation(); setChannelToDelete(ch); }}
@@ -235,7 +237,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
               >
                 <Users className={cn("w-4 h-4 shrink-0", selectedId === ch.id ? "text-primary" : "text-muted-foreground/60")} />
                 <span className="truncate flex-1 text-left">{ch.name}</span>
-                {isAdmin && !PROTECTED_CHANNELS.includes(ch.name) && (
+                {isAdmin && !(TEAM_HUB_PROTECTED_CHANNELS as readonly string[]).includes(ch.name) && (
                   <Trash2
                     className="w-3.5 h-3.5 shrink-0 text-destructive/60 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                     onClick={(e) => { e.stopPropagation(); setChannelToDelete(ch); }}

@@ -3,10 +3,12 @@ import { AppBuilderDashboard } from "@/components/app-builder/AppBuilderDashboar
 
 export default function AppBuilder() {
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto p-6 space-y-8">
-        <AppBuilderHero />
-        <AppBuilderDashboard />
+    <div className="h-full overflow-y-auto bg-[hsl(var(--dashboard-reference-bg))]">
+      <div className="mx-auto flex min-h-full max-w-[1100px] flex-col px-5 pb-10 pt-6 md:px-6 md:pb-12 md:pt-7">
+        <div className="space-y-9">
+          <AppBuilderHero />
+          <AppBuilderDashboard />
+        </div>
       </div>
     </div>
   );

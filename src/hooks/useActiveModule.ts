@@ -8,13 +8,15 @@ interface ActiveModule {
 
 const ROUTE_MAP: Record<string, { module: string; moduleRoute: string; page?: string }> = {
   "/home": { module: "Dashboard", moduleRoute: "/home" },
+  "/app-builder": { module: "Dashboard", moduleRoute: "/app-builder" },
   "/pipeline": { module: "CRM", moduleRoute: "/pipeline", page: "Pipeline" },
   "/prospecting": { module: "CRM", moduleRoute: "/pipeline", page: "Prospecting" },
   "/customers": { module: "CRM", moduleRoute: "/pipeline", page: "Customers" },
   "/shop-floor": { module: "Manufacturing", moduleRoute: "/shop-floor", page: "Shop Floor" },
   "/shopfloor/station": { module: "Manufacturing", moduleRoute: "/shop-floor", page: "Station" },
   "/shopfloor/camera-intelligence": { module: "Manufacturing", moduleRoute: "/shop-floor", page: "Camera Intelligence" },
-  "/deliveries": { module: "Logistics", moduleRoute: "/deliveries", page: "Deliveries" },
+  "/shopfloor/delivery-ops": { module: "Logistics", moduleRoute: "/shopfloor/delivery-ops", page: "Deliveries" },
+  "/deliveries": { module: "Logistics", moduleRoute: "/shopfloor/delivery-ops", page: "Deliveries" },
   "/office": { module: "Office Portal", moduleRoute: "/office" },
   "/admin": { module: "Administration", moduleRoute: "/admin" },
   "/settings": { module: "Settings", moduleRoute: "/settings" },

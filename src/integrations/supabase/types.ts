@@ -6129,6 +6129,50 @@ export type Database = {
           },
         ]
       }
+      invite_tokens: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          created_by: string | null
+          email: string | null
+          expires_at: string | null
+          id: string
+          role: string | null
+          token: string
+          used_at: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          expires_at?: string | null
+          id?: string
+          role?: string | null
+          token?: string
+          used_at?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          email?: string | null
+          expires_at?: string | null
+          id?: string
+          role?: string | null
+          token?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_tokens_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_applicants: {
         Row: {
           company_id: string

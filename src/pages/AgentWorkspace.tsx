@@ -38,6 +38,7 @@ import { usePurchasingDates } from "@/hooks/usePurchasingDates";
 // Agents restricted to specific roles (all others are open)
 const RESTRICTED_AGENTS: Record<string, AppRole[]> = {
   accounting: ["admin", "accounting"],
+  rebuild: ["admin"],
 };
 
 // Pixel slot publish times (matches PIXEL_SLOTS 1-5)

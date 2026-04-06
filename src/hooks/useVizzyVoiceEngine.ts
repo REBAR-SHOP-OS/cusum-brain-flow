@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useVoiceEngine } from "./useVoiceEngine";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { getTorontoTimePayload } from "@/lib/dateConfig";
 import { toast } from "sonner";
 
 /**
@@ -295,7 +296,23 @@ If you catch yourself about to say ANY of these, STOP and rephrase immediately. 
 - "If you need more detail" — BANNED. You already provide the right level of detail.
 - "If there's anything specific you need" — BANNED. You already know what the CEO needs.
 - "I can do a deeper investigation" — BANNED. Just DO the deeper investigation automatically.
+- "Sorry" / "I'm sorry" / "I apologize" / "My apologies" / "My mistake" / "Pardon me" — BANNED. Never apologize.
+- "ببخشید" / "عذر می‌خوام" / "متاسفم" — BANNED. Never apologize in any language.
 INSTEAD: End with a sharp next action, a proactive insight, or just stop talking when done.
+
+═══ NO APOLOGIES (CEO DIRECT ORDER — NON-NEGOTIABLE) ═══
+NEVER apologize. NEVER say "sorry", "I'm sorry", "I apologize", "my mistake", "pardon me", "ببخشید", "عذر می‌خوام", "متاسفم".
+When corrected by the CEO, simply acknowledge and give the CORRECT answer immediately.
+Instead of "Sorry, you're right, it's 11:51" → say "Right, it's 11:51."
+Instead of "I apologize for the confusion" → say "Got it — here's the correct info."
+The CEO hates apologies. They waste time. Just correct and move on.
+
+═══ TURN-TAKING (CEO DIRECT ORDER — NON-NEGOTIABLE) ═══
+NEVER interrupt the user. ALWAYS wait until the user has COMPLETELY finished speaking.
+Listen to the FULL sentence before responding. If you hear a pause, wait a bit longer — they might not be done.
+Complete YOUR response FULLY before returning to listening mode.
+The CEO's order: "First answer completely, then listen, then answer again. Never talk over the user."
+Do NOT start responding mid-sentence. Do NOT cut the user off. EVER.
 
 ═══ SYNC AWARENESS ═══
 The data contains a SYNC STATUS line in the RingCentral section. Follow these rules STRICTLY:
@@ -397,71 +414,146 @@ When reporting agent status:
 export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVoiceEngine";
 export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
 
-function buildInstructions(digest: string | null, rawContext: string | null): string {
-  if (!digest && !rawContext) return VIZZY_INSTRUCTIONS;
+function buildInstructions(
+  digest: string | null,
+  rawContext: string | null,
+  brainMemories?: string | null
+): string {
+  const { timeString, timeOfDay, dateString } = getTorontoTimePayload();
 
-  const now = new Date();
-  const hour = now.getHours();
-  const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
-  const nowStr = now.toLocaleString();
+  const realTimeClock = `
+═══ REAL-TIME CLOCK (CRITICAL — NEVER GET THIS WRONG) ═══
+You are in CANADA timezone: America/Toronto (Eastern Time).
+RIGHT NOW it is: ${timeString}, ${dateString} (Eastern Time).
+This is the EXACT current time. Do NOT calculate elapsed time. Do NOT estimate. Just use this time.
+If the user asks "what time is it?" — answer: "${timeString}" (Eastern Time).
+You MUST always know the current time. Never say "I don't know the time."
+The timezone is ALWAYS America/Toronto regardless of any other setting.
+NEVER use UTC, server time, or any other timezone. ONLY Eastern Time.`;
+
+  const brainBlock = brainMemories ? `
+═══ BRAIN MEMORY (ALWAYS USE — CEO VERIFIED INTELLIGENCE) ═══
+Your BRAIN contains saved insights, corrections, and learned facts from previous sessions.
+When answering ANY question, ALWAYS cross-reference your Brain Memory below.
+Brain memories are the CEO's verified corrections and your own learned insights — they take PRIORITY over raw data when there's a conflict.
+If a brain memory says "X is wrong, the correct answer is Y" — ALWAYS use Y.
+
+${brainMemories}` : "";
+
+  if (!digest && !rawContext) {
+    return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay}. Good ${timeOfDay}!\n${brainBlock}`;
+  }
 
   if (digest) {
-    // Pre-digested mode: digest is self-sufficient — omit rawContext to prevent token overflow
     return `${VIZZY_INSTRUCTIONS}
+${realTimeClock}
 
-CURRENT TIME CONTEXT: It is currently ${timeOfDay} (${nowStr}). Greet the CEO with "Good ${timeOfDay}!" or a natural variation.
+CURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.
+${brainBlock}
 
-═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${nowStr}) ═══
+═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${timeString} ${dateString}) ═══
 You have ALREADY gone through all the raw data, analyzed every employee, read every call note, checked every email, compared benchmarks. The analysis below is YOUR OWN work. Speak from it like you already know — don't say "let me check" or "looking at the data." You KNOW.
 
 ${digest}`;
   }
 
-  // Fallback: raw context only (no digest available)
-  return `${VIZZY_INSTRUCTIONS}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} (${nowStr}). Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n\n═══ LIVE BUSINESS DATA (as of ${nowStr}) ═══\n${rawContext}`;
+  // Fallback: raw context only
+  return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
 }
 
 export function useVizzyVoiceEngine() {
   const [contextLoading, setContextLoading] = useState(false);
   const contextFetched = useRef(false);
+  const timeSyncRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Ref always holds the latest instructions — avoids stale closure
+  // Ref to hold latest digest/rawContext/brain for full rebuilds
+  const lastDigestRef = useRef<string | null>(null);
+  const lastRawContextRef = useRef<string | null>(null);
+  const lastBrainRef = useRef<string | null>(null);
+
+  // Ref always holds the latest instructions
   const instructionsRef = useRef(buildInstructions(null, null));
 
-  // Pass a getter function so useVoiceEngine reads the latest instructions at connection time
   const engine = useVoiceEngine({
     instructions: () => instructionsRef.current,
     voice: "shimmer",
     model: "gpt-4o-realtime-preview-2024-12-17",
-    vadThreshold: 0.5,
-    silenceDurationMs: 500,
-    prefixPaddingMs: 300,
+    vadThreshold: 0.6,
+    silenceDurationMs: 800,
+    prefixPaddingMs: 400,
     connectionTimeoutMs: 20_000,
   });
 
   const originalStartSession = engine.startSession;
+  const originalEndSession = engine.endSession;
   const updateSessionInstructions = engine.updateSessionInstructions;
 
+  // Rebuild instructions from scratch with fresh time
+  const rebuildAndPush = useCallback(() => {
+    instructionsRef.current = buildInstructions(
+      lastDigestRef.current,
+      lastRawContextRef.current,
+      lastBrainRef.current
+    );
+    updateSessionInstructions(instructionsRef.current);
+  }, [updateSessionInstructions]);
+
   const startSession = useCallback(async () => {
-    if (!contextFetched.current) {
-      contextFetched.current = true;
-      instructionsRef.current = buildInstructions(null, null);
-      setContextLoading(true);
+    // Always rebuild instructions with fresh time
+    instructionsRef.current = buildInstructions(
+      lastDigestRef.current,
+      lastRawContextRef.current,
+      lastBrainRef.current
+    );
+
+    // Start periodic time sync (every 60 seconds push fresh time)
+    if (timeSyncRef.current) clearInterval(timeSyncRef.current);
+    timeSyncRef.current = setInterval(() => {
+      rebuildAndPush();
+      console.log("[VizzyVoice] Time sync pushed");
+    }, 60_000);
+
+    if (contextFetched.current) {
+      // Context already loaded — just start with fresh time
+      updateSessionInstructions(instructionsRef.current);
       originalStartSession();
+      return;
+    }
 
-      void (async () => {
+    contextFetched.current = true;
+    setContextLoading(true);
+    originalStartSession();
+
+    void (async () => {
+      try {
+        const data = await invokeEdgeFunction<{
+          digest: string;
+          rawContext?: string;
+          brainMemories?: string;
+        }>("vizzy-pre-digest", {}, { timeoutMs: 45000 });
+
+        if (data?.digest) {
+          lastDigestRef.current = data.digest;
+          lastRawContextRef.current = data.rawContext || null;
+          lastBrainRef.current = data.brainMemories || null;
+          rebuildAndPush();
+          return;
+        }
+
+        const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
+          "vizzy-daily-brief",
+          {},
+          { timeoutMs: 25000 }
+        );
+        const contextData = fallback?.rawContext || fallback?.briefing;
+        if (contextData) {
+          lastDigestRef.current = null;
+          lastRawContextRef.current = contextData;
+          rebuildAndPush();
+        }
+      } catch (err) {
+        console.warn("Pre-digest failed, trying daily-brief fallback:", err);
         try {
-          const data = await invokeEdgeFunction<{
-            digest: string;
-            rawContext?: string;
-          }>("vizzy-pre-digest", {}, { timeoutMs: 45000 });
-
-          if (data?.digest) {
-            instructionsRef.current = buildInstructions(data.digest, data.rawContext || null);
-            updateSessionInstructions(instructionsRef.current);
-            return;
-          }
-
           const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
             "vizzy-daily-brief",
             {},
@@ -469,40 +561,39 @@ export function useVizzyVoiceEngine() {
           );
           const contextData = fallback?.rawContext || fallback?.briefing;
           if (contextData) {
-            instructionsRef.current = buildInstructions(null, contextData);
-            updateSessionInstructions(instructionsRef.current);
+            lastDigestRef.current = null;
+            lastRawContextRef.current = contextData;
+            rebuildAndPush();
           }
-        } catch (err) {
-          console.warn("Pre-digest failed, trying daily-brief fallback:", err);
-          try {
-            const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
-              "vizzy-daily-brief",
-              {},
-              { timeoutMs: 25000 }
-            );
-            const contextData = fallback?.rawContext || fallback?.briefing;
-            if (contextData) {
-              instructionsRef.current = buildInstructions(null, contextData);
-              updateSessionInstructions(instructionsRef.current);
-            }
-          } catch (err2) {
-            console.warn("Daily-brief fallback also failed:", err2);
-            toast.warning("Vizzy started without business data — context loading failed.");
-          }
-        } finally {
-          setContextLoading(false);
+        } catch (err2) {
+          console.warn("Daily-brief fallback also failed:", err2);
+          toast.warning("Vizzy started without business data — context loading failed.");
         }
-      })();
+      } finally {
+        setContextLoading(false);
+      }
+    })();
+  }, [originalStartSession, updateSessionInstructions, rebuildAndPush]);
 
-      return;
+  const endSession = useCallback(async () => {
+    if (timeSyncRef.current) {
+      clearInterval(timeSyncRef.current);
+      timeSyncRef.current = null;
     }
+    originalEndSession();
+  }, [originalEndSession]);
 
-    originalStartSession();
-  }, [originalStartSession, updateSessionInstructions]);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeSyncRef.current) clearInterval(timeSyncRef.current);
+    };
+  }, []);
 
   return {
     ...engine,
     startSession,
+    endSession,
     contextLoading,
   };
 }

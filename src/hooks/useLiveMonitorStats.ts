@@ -136,7 +136,7 @@ export function useLiveMonitorStats() {
     if (!user) return;
 
     const channel = supabase
-      .channel(`live-monitor-stats-${companyId || "global"}`)
+      .channel(`live-monitor-stats-${companyId || "global"}-${crypto.randomUUID()}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "cut_plans" }, () => {
         queryClient.invalidateQueries({ queryKey: ["live-monitor-jobs"] });
         queryClient.invalidateQueries({ queryKey: ["live-monitor-cleared"] });

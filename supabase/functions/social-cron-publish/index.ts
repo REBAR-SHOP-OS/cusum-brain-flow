@@ -2,6 +2,7 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 import { acquirePublishLock, releasePublishLock, recoverStaleLocks, normalizePageName } from "../_shared/publishLock.ts";
+import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
@@ -165,9 +166,13 @@ Deno.serve((req) =>
         console.log(`[social-cron-publish] Acquired lock for post ${post.id}: lockId=${lockId}`);
 
         // ── Enhanced Duplicate Guard ─────────────────────────────────
-        const dayStr = post.scheduled_date
-          ? new Date(post.scheduled_date).toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0];
+        const tz = await getWorkspaceTimezone(supabase);
+        const nowLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+        const dayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
+        const localMidnight = new Date(`${dayStr}T00:00:00`);
+        const offsetMs = new Date().getTime() - new Date(new Date().toLocaleString("en-US", { timeZone: tz })).getTime();
+        const dayStartUtc = new Date(localMidnight.getTime() + offsetMs).toISOString();
+        const dayEndUtc = new Date(localMidnight.getTime() + offsetMs + 86400000 - 1).toISOString();
 
         const { data: publishedToday } = await supabase
           .from("social_posts")
@@ -175,8 +180,8 @@ Deno.serve((req) =>
           .eq("platform", post.platform)
           .eq("status", "published")
           .neq("id", post.id)
-          .gte("scheduled_date", `${dayStr}T00:00:00Z`)
-          .lte("scheduled_date", `${dayStr}T23:59:59Z`)
+          .gte("scheduled_date", dayStartUtc)
+          .lte("scheduled_date", dayEndUtc)
           .limit(50);
 
         const individualPages = post.page_name
@@ -189,18 +194,22 @@ Deno.serve((req) =>
             const sameContent = pub.content === post.content && pub.image_url === post.image_url;
             const sameTitle = pub.title && post.title && pub.title === post.title;
 
-            if (sameContent || sameTitle) {
+            // Only block on content+image match, not title alone
+            if (sameContent) {
               const pubPages = pub.page_name
                 ? pub.page_name.split(", ").map((p: string) => p.trim()).filter(Boolean)
                 : [];
-              const hasPageOverlap = individualPages.length === 0 || pubPages.length === 0
-                || individualPages.some((pg: string) => pubPages.includes(pg));
+              // Only overlap when both sides have pages and they intersect
+              const hasPageOverlap = individualPages.length > 0 && pubPages.length > 0
+                && individualPages.some((pg: string) => pubPages.includes(pg));
 
               if (hasPageOverlap) {
                 isDuplicate = true;
                 console.warn(`[social-cron-publish] Duplicate detected: post ${post.id} matches published ${pub.id}`);
                 break;
               }
+            } else if (sameTitle) {
+              console.log(`[social-cron-publish] INFO — same title as ${pub.id} but different content, allowing publish`);
             }
           }
         }
@@ -651,20 +660,41 @@ async function publishToLinkedIn(
       .eq("integration_id", "linkedin")
       .maybeSingle();
 
-    // OWNER-ONLY: no team fallback when ownerOnly is true
-    if (!connection && !ownerOnly) {
-      const { data: fallback } = await supabase
-        .from("integration_connections")
-        .select("config")
-        .eq("integration_id", "linkedin")
-        .eq("status", "connected")
-        .order("last_sync_at", { ascending: false })
-        .limit(1)
+    // Team fallback: find any teammate in same company with valid LinkedIn connection
+    if (!connection) {
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
         .maybeSingle();
-      connection = fallback;
+
+      if (ownerProfile?.company_id) {
+        const { data: teammates } = await supabase
+          .from("profiles")
+          .select("user_id")
+          .eq("company_id", ownerProfile.company_id)
+          .neq("user_id", userId);
+
+        for (const tm of teammates || []) {
+          const { data: tmConn } = await supabase
+            .from("integration_connections")
+            .select("config")
+            .eq("user_id", tm.user_id)
+            .eq("integration_id", "linkedin")
+            .maybeSingle();
+          if (tmConn) {
+            const tmConfig = tmConn.config as { expires_at: number };
+            if (tmConfig.expires_at > Date.now()) {
+              connection = tmConn;
+              console.log(`[social-cron] LinkedIn team fallback: using token from user ${tm.user_id}`);
+              break;
+            }
+          }
+        }
+      }
     }
 
-    if (!connection) return { error: ownerOnly ? `LinkedIn not connected for post owner (${userId}). Owner-only token policy.` : "LinkedIn not connected" };
+    if (!connection) return { error: "LinkedIn not connected for any team member." };
     const config = connection.config as { access_token: string; expires_at: number };
 
     if (config.expires_at < Date.now()) return { error: "LinkedIn token expired — please reconnect LinkedIn in Settings → Integrations" };

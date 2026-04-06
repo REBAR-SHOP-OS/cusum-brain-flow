@@ -21,7 +21,7 @@ const WORKSHOP_ALLOWED = [
 /** Routes accessible to shop supervisors (workshop + extras) */
 const SHOP_SUPERVISOR_ALLOWED = [
   ...WORKSHOP_ALLOWED,
-  "/deliveries",
+  "/shopfloor/delivery-ops",
 ];
 
 /** Routes accessible to sales-only users */
@@ -105,7 +105,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
     }
 
     // External shop supervisor → extended workshop routes
-    const EXTERNAL_SUPERVISOR_ALLOWED = ["/timeclock", "/team-hub", "/shop-floor", "/shopfloor", "/home", "/tasks", "/deliveries", "/settings"];
+    const EXTERNAL_SUPERVISOR_ALLOWED = ["/timeclock", "/team-hub", "/shop-floor", "/shopfloor", "/home", "/tasks", "/shopfloor/delivery-ops", "/settings"];
     if (isShopSupervisor) {
       const isAllowed = EXTERNAL_SUPERVISOR_ALLOWED.some((p) => location.pathname.startsWith(p));
       if (!isAllowed) return <Navigate to="/shop-floor" replace />;
@@ -135,7 +135,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
 
   // Shared shopfloor device accounts — lock to shop routes only (UX gate only)
   if (ACCESS_POLICIES.shopfloorDevices.includes(email.toLowerCase())) {
-    const DEVICE_ALLOWED = ["/shopfloor", "/shop-floor", "/timeclock", "/team-hub", "/settings", "/tasks", "/deliveries"];
+    const DEVICE_ALLOWED = ["/shopfloor", "/shop-floor", "/timeclock", "/team-hub", "/settings", "/tasks", "/shopfloor/delivery-ops"];
     const isAllowed = DEVICE_ALLOWED.some((p) => location.pathname.startsWith(p));
     if (!isAllowed) return <Navigate to="/shopfloor" replace />;
     return <>{children}</>;
