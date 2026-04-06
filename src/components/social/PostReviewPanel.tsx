@@ -1151,6 +1151,18 @@ export function PostReviewPanel({
 
                       // Publish first combo using original post ID
                       const firstCombo = combos[0];
+
+                      // CRITICAL: Sync the original DB row to ONLY this combo's platform + page
+                      // BEFORE calling publish. This ensures the backend sees a single-page row
+                      // and doesn't fan-out to all pages stored on the original record.
+                      await supabase
+                        .from("social_posts")
+                        .update({
+                          platform: firstCombo.platform,
+                          page_name: firstCombo.page,
+                        })
+                        .eq("id", post.id);
+
                       const firstOk = await publishPost({
                         id: post.id,
                         platform: firstCombo.platform,

@@ -234,8 +234,13 @@ Deno.serve((req) =>
     }
 
     // ── Multi-Page Publishing Loop ────────────────────────────────
-    const dbPageName = postRecord?.page_name || page_name || "";
-    const individualPages = dbPageName ? dbPageName.split(", ").map((p: string) => p.trim()).filter(Boolean) : [];
+    // CRITICAL: For manual publish (force_publish=true), the request's page_name
+    // takes priority over the DB record's page_name. This prevents the backend
+    // from fan-out publishing to ALL pages stored on the DB row when the frontend
+    // has already split each page into separate publish calls.
+    const resolvedPageName = (force_publish && page_name) ? page_name : (postRecord?.page_name || page_name || "");
+    const individualPages = resolvedPageName ? resolvedPageName.split(", ").map((p: string) => p.trim()).filter(Boolean) : [];
+    console.log(`[social-publish] Resolved pages: [${individualPages.join(", ")}] (force_publish=${force_publish}, request_page="${page_name}", db_page="${postRecord?.page_name}")`);
 
     const pageErrors: string[] = [];
     const pageSuccesses: string[] = [];
