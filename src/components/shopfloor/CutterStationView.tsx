@@ -107,11 +107,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           .eq("id", machine.current_run_id)
           .single()
           .then(async ({ data: runRow, error: runErr }) => {
-            const isStale = runRow?.status === "running" && runRow.started_at &&
-              (Date.now() - new Date(runRow.started_at).getTime() > 60 * 60 * 1000) &&
-              (!runRow.output_qty || runRow.output_qty === 0);
-            if (runErr || !runRow || runRow.status !== "running" || isStale) {
-              console.warn("[CutterStation] Stale run detected (status:", runRow?.status, "), auto-clearing");
+            if (runErr || !runRow || runRow.status !== "running") {
+              console.warn("[CutterStation] Non-running run detected (status:", runRow?.status, "), auto-clearing");
               try {
                 await manageMachine({
                   action: "complete-run",
