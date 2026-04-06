@@ -178,15 +178,17 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const { toast } = useToast();
 
   const grouped = useMemo(() => {
+    // Group entries by sidebar group
     const map: Record<string, VizzyMemoryEntry[]> = {};
     for (const e of entries) {
-      const cat = e.category;
-      if (!map[cat]) map[cat] = [];
-      map[cat].push(e);
+      const groupKey = CATEGORY_TO_GROUP[e.category] || "dashboard";
+      if (!map[groupKey]) map[groupKey] = [];
+      map[groupKey].push(e);
     }
-    return Object.entries(map).sort(([a], [b]) =>
-      getCategoryLabel(a).localeCompare(getCategoryLabel(b))
-    );
+    // Return in sidebar order, only groups that have entries
+    return SIDEBAR_GROUPS
+      .filter((g) => map[g.key] && map[g.key].length > 0)
+      .map((g) => ({ key: g.key, label: g.label, items: map[g.key] }));
   }, [entries]);
 
   const handleAnalyze = async () => {
@@ -241,17 +243,17 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
     return (
       <Accordion type="multiple" className="w-full space-y-1">
-        {grouped.map(([cat, items]) => (
-          <AccordionItem key={cat} value={cat} className="border border-border rounded-lg px-3">
+        {grouped.map((group) => (
+          <AccordionItem key={group.key} value={group.key} className="border border-border rounded-lg px-3">
             <AccordionTrigger className="text-sm font-medium hover:no-underline">
               <span className="flex items-center gap-2">
-                {getCategoryLabel(cat)}
-                <span className="text-xs text-muted-foreground font-normal">({items.length})</span>
+                {group.label}
+                <span className="text-xs text-muted-foreground font-normal">({group.items.length})</span>
               </span>
             </AccordionTrigger>
             <AccordionContent>
               <DateGroupedEntries
-                items={items}
+                items={group.items}
                 onUpdate={(id, content) => updateEntry({ id, content })}
                 onDelete={deleteEntry}
               />
