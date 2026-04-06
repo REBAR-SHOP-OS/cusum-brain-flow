@@ -203,11 +203,70 @@ function DateGroupedEntries({
   );
 }
 
+/** Performance summary card for selected user */
+function PerformanceCard({ profileId, userId, name, timezone }: { profileId: string; userId: string | null; name: string; timezone: string }) {
+  const { data, isLoading } = useUserPerformance(profileId, userId);
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin mr-2 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Loading...</span>
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const clockInLabel = data.clockedIn && data.clockInTime
+    ? formatDateInTimezone(new Date(data.clockInTime), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+    : null;
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+      <h3 className="text-sm font-semibold text-foreground">{name}'s Performance</h3>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-primary" />
+          <span className="text-muted-foreground">
+            {data.clockedIn ? `In: ${clockInLabel}` : "Not clocked in"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-primary" />
+          <span className="text-muted-foreground">Hours: {data.hoursToday}h</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Activity className="w-3.5 h-3.5 text-primary" />
+          <span className="text-muted-foreground">Activities: {data.activitiesToday}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Bot className="w-3.5 h-3.5 text-primary" />
+          <span className="text-muted-foreground">AI: {data.aiSessionsToday}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
   const { timezone } = useWorkspaceSettings();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
+  const { profiles } = useProfiles();
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+
+  // Filter @rebar.shop profiles, active first
+  const rebarProfiles = useMemo(() => {
+    return profiles
+      .filter((p) => p.email?.endsWith("@rebar.shop"))
+      .sort((a, b) => {
+        if (a.is_active === b.is_active) return a.full_name.localeCompare(b.full_name);
+        return a.is_active ? -1 : 1;
+      });
+  }, [profiles]);
+
+  const selectedProfile = rebarProfiles.find((p) => p.id === selectedProfileId);
 
   const grouped = useMemo(() => {
     const map: Record<string, VizzyMemoryEntry[]> = {};
