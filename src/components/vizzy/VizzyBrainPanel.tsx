@@ -12,32 +12,27 @@ interface Props {
   onClose: () => void;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  brain_insight: "🧠 Insights",
-  general: "📌 General",
-  benchmark: "📊 Benchmarks",
-  daily_benchmark: "📊 Daily Benchmarks",
-  call_summary: "📞 Calls",
-  voicemail_summary: "📩 Voicemails",
-  agent_audit: "🤖 Agent Audits",
-  auto_fix: "🔧 Auto-Fixes",
-  feedback_patch: "📝 Feedback Patches",
-  feedback_fix: "🔧 Feedback Fixes",
-  feedback_clarification: "💬 Clarifications",
-  feedback_escalation: "🚨 Escalations",
-  business: "💼 Business",
-  pre_digest: "📋 Digests",
-  timeclock: "⏰ Time Clock",
-  production: "🏭 Production",
-  orders: "📦 Orders",
-  leads: "🎯 Leads",
-  accounting: "💰 Accounting",
-  email: "📧 Email",
-  crm: "👥 CRM",
-};
+const SIDEBAR_GROUPS: { key: string; label: string; categories: string[] }[] = [
+  { key: "dashboard",  label: "📊 Dashboard",        categories: ["brain_insight", "general", "benchmark", "daily_benchmark"] },
+  { key: "inbox",      label: "📥 Inbox",             categories: ["email"] },
+  { key: "team_hub",   label: "💬 Team Hub",          categories: ["feedback_clarification", "feedback_patch"] },
+  { key: "tasks",      label: "📋 Business Tasks",    categories: ["auto_fix", "feedback_fix"] },
+  { key: "monitor",    label: "📡 Live Monitor",      categories: ["agent_audit", "pre_digest"] },
+  { key: "ceo",        label: "🏢 CEO Portal",        categories: ["business"] },
+  { key: "support",    label: "🎧 Support",           categories: ["feedback_escalation", "call_summary", "voicemail_summary"] },
+  { key: "pipeline",   label: "📈 Pipeline & Leads",  categories: ["leads"] },
+  { key: "customers",  label: "👥 Customers",         categories: ["crm", "orders"] },
+  { key: "accounting", label: "💰 Accounting",        categories: ["accounting"] },
+  { key: "shop_floor", label: "🏭 Shop Floor",        categories: ["production"] },
+  { key: "timeclock",  label: "⏰ Time Clock",        categories: ["timeclock"] },
+];
 
-function getCategoryLabel(cat: string) {
-  return CATEGORY_LABELS[cat] || cat;
+// Build a reverse map: category -> group key
+const CATEGORY_TO_GROUP: Record<string, string> = {};
+for (const g of SIDEBAR_GROUPS) {
+  for (const c of g.categories) {
+    CATEGORY_TO_GROUP[c] = g.key;
+  }
 }
 
 function getDateKey(dateStr: string) {
