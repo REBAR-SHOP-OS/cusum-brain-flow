@@ -2,6 +2,7 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { hasAnyRole } from "../_shared/roleCheck.ts";
 import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
@@ -135,14 +136,16 @@ Deno.serve((req) =>
         }
       }
 
-      // Look up publisher's email for canPublish bypass
+      // Bypass Neel-approval gate: admins, or legacy publisher emails (unchanged behavior)
       const { data: publisher } = await supabaseAdmin
         .from("profiles")
         .select("email")
         .eq("user_id", userId)
         .maybeSingle();
       const publisherEmail = (publisher?.email || "").toLowerCase();
-      const canBypassApproval = ["radin@rebar.shop", "zahra@rebar.shop"].includes(publisherEmail);
+      const bypassByEmail = ["radin@rebar.shop", "zahra@rebar.shop"].includes(publisherEmail);
+      const isAdminUser = await hasAnyRole(supabaseAdmin, userId, ["admin"]);
+      const canBypassApproval = isAdminUser || bypassByEmail;
 
       // HARD GATE: require neel_approved unless user has publish bypass
       if (!existing?.neel_approved && !canBypassApproval) {
@@ -456,7 +459,12 @@ Deno.serve((req) =>
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-  }, { functionName: "social-publish", requireCompany: false, wrapResult: false })
+  }, {
+    functionName: "social-publish",
+    requireCompany: false,
+    wrapResult: false,
+    requireAnyRole: ["admin", "marketing"],
+  })
 );
 
 async function publishToFacebook(

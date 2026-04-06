@@ -2,7 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 
-export type AppRole = "admin" | "sales" | "accounting" | "office" | "workshop" | "field" | "shop_supervisor" | "customer";
+export type AppRole =
+  | "admin"
+  | "sales"
+  | "accounting"
+  | "office"
+  | "workshop"
+  | "field"
+  | "shop_supervisor"
+  | "customer"
+  | "marketing";
 
 export function useUserRole() {
   const { user } = useAuth();
@@ -33,6 +42,8 @@ export function useUserRole() {
     isLoading,
     hasRole,
     isAdmin,
+    isMarketing,
+    canAccessSocialModules,
     isOffice,
     isWorkshop,
     isShopSupervisor,

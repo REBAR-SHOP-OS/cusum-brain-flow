@@ -43,6 +43,7 @@ import DailySummarizer from "./pages/DailySummarizer";
 import FacebookCommenter from "./pages/FacebookCommenter";
 import Phonecalls from "./pages/Phonecalls";
 import Settings from "./pages/Settings";
+import Architecture from "./pages/Architecture";
 import AdminPanel from "./pages/AdminPanel";
 import WasteBankAdmin from "./pages/WasteBankAdmin";
 import BendQueueAdmin from "./pages/BendQueueAdmin";
@@ -146,7 +147,7 @@ const App = () => (
                     <Route path="/" element={<SmartErrorBoundary level="page" maxAutoRetries={2}><Landing /></SmartErrorBoundary>} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
-                    {/* Print-only route — zero app layout */}
+                    {/* Print-only route â€” zero app layout */}
                     <Route path="/print-tags" element={<ProtectedRoute><Suspense fallback={<div>Loading...</div>}><PrintTags /></Suspense></ProtectedRoute>} />
 
                     {/* Core */}
@@ -219,10 +220,11 @@ const App = () => (
                     <Route path="/synology" element={<P><Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-5 w-5 animate-spin" /></div>}><SynologyNAS /></Suspense></P>} />
                     <Route path="/settings" element={<P><Settings /></P>} />
 
+                    <Route path="/architecture" element={<P><Architecture /></P>} />
                     {/* Social / Comms */}
-                    <Route path="/social-media-manager" element={<P><AdminRoute allowedEmails={["zahra@rebar.shop"]}><SocialMediaManager /></AdminRoute></P>} />
-                    <Route path="/video-studio" element={<P><AdminRoute allowedEmails={["zahra@rebar.shop"]}><VideoStudio /></AdminRoute></P>} />
-                    <Route path="/ad-director" element={<P><AdminRoute allowedEmails={["zahra@rebar.shop"]}><AdDirector /></AdminRoute></P>} />
+                    <Route path="/social-media-manager" element={<P><AdminRoute allowedRoles={["marketing"]}><SocialMediaManager /></AdminRoute></P>} />
+                    <Route path="/video-studio" element={<P><AdminRoute allowedRoles={["marketing"]}><VideoStudio /></AdminRoute></P>} />
+                    <Route path="/ad-director" element={<P><AdminRoute allowedRoles={["marketing"]}><AdDirector /></AdminRoute></P>} />
                     <Route path="/email-marketing" element={<P><AdminRoute><EmailMarketing /></AdminRoute></P>} />
                     <Route path="/daily-summarizer" element={<P><DailySummarizer /></P>} />
                     <Route path="/facebook-commenter" element={<P><AdminRoute><FacebookCommenter /></AdminRoute></P>} />
@@ -291,3 +293,4 @@ const App = () => (
 );
 
 export default App;
+

@@ -3,7 +3,7 @@ import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
-  LayoutGrid, Brain, Settings, Shield, Plug, DollarSign, Activity,
+  LayoutGrid, Workflow, Brain, Settings, Shield, Plug, DollarSign, Activity,
   Terminal, Lock, BarChart3, Monitor, Clock, MessageSquare, Bot, Globe, Search, Headset, Zap, Maximize, PanelLeftClose, PanelLeft, TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -192,6 +192,7 @@ export function AppSidebar() {
     {
       label: "System",
       items: [
+        { name: "Architecture", href: "/architecture", icon: Workflow, tourId: "nav-architecture" },
         { name: "Settings", href: "/settings", icon: Settings, tourId: "nav-settings" },
         { name: "Admin Panel", href: "/admin", icon: Shield, roles: ["admin"], lockReason: "Requires Admin role", tourId: "nav-admin" },
       ],
@@ -329,3 +330,6 @@ export function AppSidebar() {
     </aside>
   );
 }
+
+
+

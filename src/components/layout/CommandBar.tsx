@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/command";
 import {
   Home, Factory, Package, Truck, Users, Kanban, CheckSquare,
-  LayoutGrid, FileText, Brain, Settings, Shield, Inbox, Phone,
+  LayoutGrid, FileText, Brain, Workflow, Settings, Shield, Inbox, Phone,
   Sparkles, MessageSquare, TrendingUp, Receipt,
 } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -45,6 +45,7 @@ const navCommands: NavCommand[] = [
   { label: "Brain / Knowledge", icon: Brain, href: "/brain", group: "System" },
   { label: "Phone Calls", icon: Phone, href: "/phonecalls", group: "System" },
   { label: "Admin Panel", icon: Shield, href: "/admin", roles: ["admin"], group: "System" },
+  { label: "Architecture", icon: Workflow, href: "/architecture", group: "System" },
   { label: "Settings", icon: Settings, href: "/settings", group: "System" },
   { label: "Sales Department", icon: TrendingUp, href: "/sales", roles: ["admin", "sales", "office"], group: "Navigate" },
   { label: "Sales Pipeline", icon: Kanban, href: "/sales/pipeline", roles: ["admin", "sales", "office"], group: "Navigate" },
@@ -90,7 +91,7 @@ export function CommandBar({ open, onOpenChange }: CommandBarProps) {
 
   return (
     <CommandDialog open={open} onOpenChange={onOpenChange}>
-      <CommandInput placeholder="Search pages, commands, or ask the system…" />
+      <CommandInput placeholder="Search pages, commands, or ask the systemâ€¦" />
       <CommandList>
         <CommandEmpty>No results found. Try asking differently.</CommandEmpty>
         {groups.map((group, i) => (
@@ -116,3 +117,5 @@ export function CommandBar({ open, onOpenChange }: CommandBarProps) {
     </CommandDialog>
   );
 }
+
+

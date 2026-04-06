@@ -6,7 +6,16 @@
 import { corsHeaders } from "./auth.ts";
 import { SUPER_ADMIN_EMAILS } from "./accessPolicies.ts";
 
-type AppRole = "admin" | "sales" | "accounting" | "office" | "workshop" | "field" | "shop_supervisor" | "customer";
+type AppRole =
+  | "admin"
+  | "sales"
+  | "accounting"
+  | "office"
+  | "workshop"
+  | "field"
+  | "shop_supervisor"
+  | "customer"
+  | "marketing";
 
 /**
  * Check if a user has a specific role.

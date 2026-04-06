@@ -221,5 +221,10 @@ Deno.serve((req) =>
     }
 
     return json({ success: true, post: data, cloned_ids: cloned });
-  }, { functionName: "schedule-post", requireCompany: false, wrapResult: false })
+  }, {
+    functionName: "schedule-post",
+    requireCompany: false,
+    wrapResult: false,
+    requireAnyRole: ["admin", "marketing"],
+  })
 );

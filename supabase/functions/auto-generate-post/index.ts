@@ -642,5 +642,10 @@ Return an array of 5 objects:
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "auto-generate-post", requireCompany: false, wrapResult: false })
+  }, {
+    functionName: "auto-generate-post",
+    requireCompany: false,
+    wrapResult: false,
+    requireAnyRole: ["admin", "marketing"],
+  })
 );

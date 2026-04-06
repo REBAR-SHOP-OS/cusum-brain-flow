@@ -15,7 +15,16 @@ import { corsHeaders, requireAuth, optionalAuthFull, AppSupabaseClient } from ".
 import { resolveCompanyId } from "./resolveCompany.ts";
 import { createLogger } from "./structuredLog.ts";
 
-type AppRole = "admin" | "sales" | "accounting" | "office" | "workshop" | "field" | "shop_supervisor" | "customer";
+type AppRole =
+  | "admin"
+  | "sales"
+  | "accounting"
+  | "office"
+  | "workshop"
+  | "field"
+  | "shop_supervisor"
+  | "customer"
+  | "marketing";
 
 export interface RequestContext {
   req: Request;
@@ -178,7 +187,12 @@ export async function handleRequest(
     );
   } catch (err) {
     // requireAuth / requireRole throw Response objects
-    if (err instanceof Response) return err;
+    if (err instanceof Response) {
+      if (err.status === 401 || err.status === 403) {
+        log.warn("Auth rejected", { status: err.status });
+      }
+      return err;
+    }
 
     const message = err instanceof Error ? err.message : String(err);
     log.error("Request failed", err);
