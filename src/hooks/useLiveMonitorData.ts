@@ -86,7 +86,7 @@ export function useLiveMonitorData() {
     if (!user) return;
 
     const channel = supabase
-      .channel(`live-monitor-${companyId || "global"}`)
+      .channel(`live-monitor-${companyId || "global"}-${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "machines" },
