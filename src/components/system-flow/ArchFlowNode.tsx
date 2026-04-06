@@ -3,20 +3,21 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Pin, PinOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
-import type { Accent, ArchLayer } from "@/lib/architectureGraphData";
+export type FlowAccent = "cyan" | "emerald" | "violet" | "orange";
+export type FlowLayer = "input" | "core" | "output";
 
 export type ArchFlowNodeData = {
   label: string;
   hint: string;
-  accent: Accent;
+  accent: FlowAccent;
   large?: boolean;
-  layer: ArchLayer;
+  layer: FlowLayer;
   pinned: boolean;
   Icon: LucideIcon;
   onTogglePin: (id: string) => void;
 };
 
-const accentStyles: Record<Accent, { border: string; glow: string; icon: string }> = {
+const accentStyles: Record<FlowAccent, { border: string; glow: string; icon: string }> = {
   cyan: {
     border: "border-cyan-400/90",
     glow: "shadow-[0_0_18px_rgba(34,211,238,0.35)]",

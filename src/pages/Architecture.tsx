@@ -2,184 +2,135 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Users,
-  Webhook,
-  Database,
-  Globe,
-  Bell,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Move,
+  ZoomIn, ZoomOut, Maximize2, Move, Search, Eye, EyeOff, X,
 } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  ARCH_NODES, ARCH_EDGES, LAYERS,
+  type ArchNode, type ArchLayer, type Accent,
+} from "@/lib/architectureGraphData";
 
-type Accent = "cyan" | "emerald" | "violet" | "orange";
-
-type ArchNode = {
-  id: string;
-  label: string;
-  hint: string;
-  accent: Accent;
-  Icon: React.ElementType;
-  x: number;
-  y: number;
-  large?: boolean;
-  detail: { title: string; bullets: string[] };
+/* ───── Style maps ───── */
+const accentColor: Record<Accent, string> = {
+  cyan:    "rgba(34,211,238,0.85)",
+  emerald: "rgba(52,211,153,0.85)",
+  orange:  "rgba(251,146,60,0.85)",
+  violet:  "rgba(167,139,250,0.85)",
+  blue:    "rgba(96,165,250,0.85)",
+  rose:    "rgba(251,113,133,0.85)",
 };
 
-const NODES: ArchNode[] = [
-  {
-    id: "users",
-    label: "People",
-    hint: "App + login",
-    accent: "cyan",
-    Icon: Users,
-    x: 110,
-    y: 140,
-    detail: {
-      title: "Browser & authentication",
-      bullets: [
-        "React routes and pages: src/App.tsx",
-        "Supabase Auth session: src/lib/auth.tsx (signIn, signUp, onAuthStateChange)",
-      ],
-    },
-  },
-  {
-    id: "automation",
-    label: "Signals",
-    hint: "Webhooks & jobs",
-    accent: "emerald",
-    Icon: Webhook,
-    x: 110,
-    y: 420,
-    detail: {
-      title: "Incoming automation",
-      bullets: [
-        "RingCentral webhook: supabase/functions/ringcentral-webhook/index.ts",
-        "Scheduled HTTP (pg_cron → ringcentral-sync): supabase/migrations/20260402002613_166b3c6e-8cb5-4057-9a82-5475e2635f83.sql",
-      ],
-    },
-  },
-  {
-    id: "core",
-    label: "Core",
-    hint: "Data + APIs",
-    accent: "orange",
-    Icon: Database,
-    x: 500,
-    y: 280,
-    large: true,
-    detail: {
-      title: "Supabase (Postgres + Edge Functions)",
-      bullets: [
-        "PostgreSQL schema & data: supabase/migrations/",
-        "Edge function wrapper: supabase/functions/_shared/requestHandler.ts",
-        "Business logic in supabase/functions/*/index.ts (Stripe, social, Vizzy, QB, …)",
-      ],
-    },
-  },
-  {
-    id: "integrations",
-    label: "Partners",
-    hint: "HTTP out",
-    accent: "violet",
-    Icon: Globe,
-    x: 890,
-    y: 140,
-    detail: {
-      title: "Outbound integrations (examples)",
-      bullets: [
-        "Payments: supabase/functions/stripe-payment/index.ts",
-        "Telephony sync: supabase/functions/ringcentral-sync (invoked by cron above)",
-        "Social publish: supabase/functions/social-publish/index.ts",
-      ],
-    },
-  },
-  {
-    id: "delivery",
-    label: "You",
-    hint: "UI + push",
-    accent: "cyan",
-    Icon: Bell,
-    x: 890,
-    y: 420,
-    detail: {
-      title: "Responses & notifications",
-      bullets: [
-        "In-app UI: React + TanStack Query patterns across src/",
-        "Push pipeline: DB trigger on notifications → supabase/functions/push-on-notify → send-push (see supabase/migrations/20260401224944_942b953a-d09b-4dbf-bdf5-96e2e2038df2.sql)",
-      ],
-    },
-  },
-];
-
-const accentStyles: Record<Accent, { border: string; glow: string; icon: string }> = {
-  cyan: {
-    border: "border-cyan-400/90",
-    glow: "shadow-[0_0_20px_rgba(34,211,238,0.35)]",
-    icon: "text-cyan-200",
-  },
-  emerald: {
-    border: "border-emerald-400/90",
-    glow: "shadow-[0_0_20px_rgba(52,211,153,0.35)]",
-    icon: "text-emerald-200",
-  },
-  violet: {
-    border: "border-violet-400/90",
-    glow: "shadow-[0_0_22px_rgba(167,139,250,0.4)]",
-    icon: "text-violet-200",
-  },
-  orange: {
-    border: "border-orange-400",
-    glow: "shadow-[0_0_32px_rgba(251,146,60,0.55)]",
-    icon: "text-orange-100",
-  },
+const accentGlow: Record<Accent, string> = {
+  cyan:    "0 0 18px rgba(34,211,238,0.35)",
+  emerald: "0 0 18px rgba(52,211,153,0.35)",
+  orange:  "0 0 22px rgba(251,146,60,0.45)",
+  violet:  "0 0 20px rgba(167,139,250,0.4)",
+  blue:    "0 0 18px rgba(96,165,250,0.35)",
+  rose:    "0 0 18px rgba(251,113,133,0.35)",
 };
 
-function edgePath(x1: number, y1: number, x2: number, y2: number): string {
-  const mx = (x1 + x2) / 2;
-  const my = (y1 + y2) / 2;
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.hypot(dx, dy) || 1;
-  const ox = (-dy / len) * 40;
-  const oy = (dx / len) * 40;
-  return `M ${x1} ${y1} Q ${mx + ox} ${my + oy} ${x2} ${y2}`;
+const accentBg: Record<Accent, string> = {
+  cyan:    "rgba(34,211,238,0.08)",
+  emerald: "rgba(52,211,153,0.08)",
+  orange:  "rgba(251,146,60,0.08)",
+  violet:  "rgba(167,139,250,0.08)",
+  blue:    "rgba(96,165,250,0.08)",
+  rose:    "rgba(251,113,133,0.08)",
+};
+
+/* ───── Layout constants ───── */
+const LAYER_GAP = 170;
+const NODE_W = 120;
+const NODE_H = 72;
+const NODE_GAP = 18;
+const LEFT_MARGIN = 160;
+const TOP_MARGIN = 60;
+
+function computeNodePositions(
+  visibleLayers: Set<ArchLayer>,
+  filteredIds: Set<string> | null,
+) {
+  const positions = new Map<string, { x: number; y: number }>();
+  let layerIdx = 0;
+
+  for (const layer of LAYERS) {
+    if (!visibleLayers.has(layer.key)) continue;
+    const nodes = ARCH_NODES.filter(
+      (n) => n.layer === layer.key && (!filteredIds || filteredIds.has(n.id)),
+    );
+    const totalW = nodes.length * NODE_W + (nodes.length - 1) * NODE_GAP;
+    const startX = LEFT_MARGIN + Math.max(0, (900 - totalW) / 2);
+    const y = TOP_MARGIN + layerIdx * LAYER_GAP;
+
+    nodes.forEach((n, i) => {
+      positions.set(n.id, { x: startX + i * (NODE_W + NODE_GAP), y });
+    });
+    layerIdx++;
+  }
+  return positions;
 }
 
-const EDGES: [string, string][] = [
-  ["users", "core"],
-  ["automation", "core"],
-  ["core", "integrations"],
-  ["core", "delivery"],
-];
+/* ───── Canvas size ───── */
+const CANVAS_W = 1200;
+const CANVAS_H = 1100;
 
-const CANVAS_W = 1000;
-const CANVAS_H = 560;
+/* ───── Edge path with vertical Bezier ───── */
+function edgePath(x1: number, y1: number, x2: number, y2: number) {
+  const cy1 = y1 + 50;
+  const cy2 = y2 - 50;
+  return `M ${x1} ${y1} C ${x1} ${cy1}, ${x2} ${cy2}, ${x2} ${y2}`;
+}
 
 export default function Architecture() {
-  const byId = useMemo(() => Object.fromEntries(NODES.map((n) => [n.id, n])), []);
-
   const [openId, setOpenId] = useState<string | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [searchQ, setSearchQ] = useState("");
+  const [visibleLayers, setVisibleLayers] = useState<Set<ArchLayer>>(
+    () => new Set(LAYERS.map((l) => l.key)),
+  );
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(0.85);
   const draggingRef = useRef(false);
   const dragRef = useRef({ x: 0, y: 0, px: 0, py: 0 });
   const viewportRef = useRef<HTMLDivElement>(null);
 
+  /* search filter */
+  const filteredIds = useMemo(() => {
+    if (!searchQ.trim()) return null;
+    const q = searchQ.toLowerCase();
+    const ids = new Set<string>();
+    ARCH_NODES.forEach((n) => {
+      if (
+        n.label.toLowerCase().includes(q) ||
+        n.hint.toLowerCase().includes(q) ||
+        n.id.toLowerCase().includes(q)
+      )
+        ids.add(n.id);
+    });
+    return ids;
+  }, [searchQ]);
+
+  /* positions */
+  const positions = useMemo(
+    () => computeNodePositions(visibleLayers, filteredIds),
+    [visibleLayers, filteredIds],
+  );
+
+  /* visible edges */
+  const visibleEdges = useMemo(() => {
+    return ARCH_EDGES.filter(
+      (e) => positions.has(e.source) && positions.has(e.target),
+    );
+  }, [positions]);
+
+  /* zoom via wheel */
   const onWheel = useCallback((e: WheelEvent) => {
     e.preventDefault();
-    setZoom((prev) => Math.min(2.2, Math.max(0.55, prev - e.deltaY * 0.0012)));
+    setZoom((prev) => Math.min(2.5, Math.max(0.35, prev - e.deltaY * 0.001)));
   }, []);
 
   useEffect(() => {
@@ -189,203 +140,347 @@ export default function Architecture() {
     return () => el.removeEventListener("wheel", onWheel);
   }, [onWheel]);
 
+  /* pan */
   const onPanPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
     draggingRef.current = true;
     dragRef.current = { x: pan.x, y: pan.y, px: e.clientX, py: e.clientY };
   };
-
   const onPanPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (!draggingRef.current) return;
     const d = dragRef.current;
-    setPan({
-      x: d.x + (e.clientX - d.px),
-      y: d.y + (e.clientY - d.py),
-    });
+    setPan({ x: d.x + (e.clientX - d.px), y: d.y + (e.clientY - d.py) });
   };
-
   const onPanPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     draggingRef.current = false;
     (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
   };
 
-  const resetView = () => {
-    setPan({ x: 0, y: 0 });
-    setZoom(1);
+  const resetView = () => { setPan({ x: 0, y: 0 }); setZoom(0.85); };
+
+  const toggleLayer = (key: ArchLayer) => {
+    setVisibleLayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   };
 
-  const selected = openId ? byId[openId] : null;
-  const DetailIcon = selected?.Icon;
+  const selected = openId ? ARCH_NODES.find((n) => n.id === openId) : null;
+  const SelectedIcon = selected?.icon;
+
+  /* visible nodes */
+  const visibleNodes = ARCH_NODES.filter(
+    (n) => visibleLayers.has(n.layer) && (!filteredIds || filteredIds.has(n.id)),
+  );
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col md:h-[calc(100vh-4rem)]">
-      <header className="shrink-0 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md">
-        <h1 className="text-lg font-semibold tracking-tight text-foreground">System architecture</h1>
-        <p className="text-xs text-muted-foreground md:text-sm">
-          Drag to pan · Scroll to zoom · Click a node for sources
-        </p>
+      {/* Header */}
+      <header className="shrink-0 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md flex items-center gap-4 flex-wrap">
+        <div className="flex-1 min-w-[200px]">
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">System Architecture</h1>
+          <p className="text-xs text-muted-foreground">
+            {ARCH_NODES.length} components · {ARCH_EDGES.length} connections · {LAYERS.length} layers
+          </p>
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder="Filter nodes…"
+            className="h-8 w-48 rounded-md border border-border bg-secondary pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring"
+          />
+          {searchQ && (
+            <button onClick={() => setSearchQ("")} className="absolute right-2 top-1/2 -translate-y-1/2">
+              <X className="h-3 w-3 text-muted-foreground" />
+            </button>
+          )}
+        </div>
       </header>
 
-      <div
-        ref={viewportRef}
-        className="relative min-h-0 flex-1 overflow-hidden bg-[radial-gradient(ellipse_at_center,_#0c2140_0%,_#050a14_55%,_#020617_100%)]"
-      >
-        <div className="absolute right-3 top-3 z-20 flex flex-col gap-1.5 rounded-xl border border-white/10 bg-slate-950/70 p-1.5 shadow-lg backdrop-blur-md">
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-9 w-9 text-white hover:bg-white/10"
-            onClick={() => setZoom((z) => Math.min(2.2, z + 0.15))}
-            aria-label="Zoom in"
-          >
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-9 w-9 text-white hover:bg-white/10"
-            onClick={() => setZoom((z) => Math.max(0.55, z - 0.15))}
-            aria-label="Zoom out"
-          >
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="ghost"
-            className="h-9 w-9 text-white hover:bg-white/10"
-            onClick={resetView}
-            aria-label="Reset view"
-          >
-            <Maximize2 className="h-4 w-4" />
-          </Button>
-          <div className="flex items-center justify-center border-t border-white/10 pt-1.5">
-            <Move className="h-3.5 w-3.5 text-white/50" aria-hidden />
+      <div className="flex flex-1 min-h-0">
+        {/* Layer filter sidebar */}
+        <div className="hidden md:flex w-44 shrink-0 flex-col border-r border-border/40 bg-background/60 backdrop-blur-sm p-3 gap-1.5 overflow-y-auto">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Layers</p>
+          {LAYERS.map((layer) => {
+            const on = visibleLayers.has(layer.key);
+            const count = ARCH_NODES.filter((n) => n.layer === layer.key).length;
+            return (
+              <button
+                key={layer.key}
+                onClick={() => toggleLayer(layer.key)}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors",
+                  on ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-secondary/50",
+                )}
+              >
+                {on ? <Eye className="h-3.5 w-3.5 shrink-0" /> : <EyeOff className="h-3.5 w-3.5 shrink-0" />}
+                <span
+                  className="h-2 w-2 rounded-full shrink-0"
+                  style={{ background: accentColor[layer.accent] }}
+                />
+                <span className="flex-1 truncate">{layer.label}</span>
+                <span className="text-[10px] text-muted-foreground">{count}</span>
+              </button>
+            );
+          })}
+
+          <div className="mt-auto pt-3 border-t border-border/40">
+            <button
+              onClick={() => setVisibleLayers(new Set(LAYERS.map((l) => l.key)))}
+              className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Show all
+            </button>
           </div>
         </div>
 
-        <motion.div
-          className="absolute inset-0 flex cursor-grab items-center justify-center active:cursor-grabbing"
-          style={{ touchAction: "none" }}
-          onPointerDown={onPanPointerDown}
-          onPointerMove={onPanPointerMove}
-          onPointerUp={onPanPointerUp}
-          onPointerLeave={() => {
-            draggingRef.current = false;
+        {/* Canvas viewport */}
+        <div
+          ref={viewportRef}
+          className="relative flex-1 overflow-hidden"
+          style={{
+            background: "radial-gradient(ellipse at center, #0c2140 0%, #050a14 55%, #020617 100%)",
           }}
         >
+          {/* Zoom controls */}
+          <div className="absolute right-3 top-3 z-20 flex flex-col gap-1.5 rounded-xl border border-white/10 bg-slate-950/70 p-1.5 shadow-lg backdrop-blur-md">
+            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/10" onClick={() => setZoom((z) => Math.min(2.5, z + 0.15))} aria-label="Zoom in">
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/10" onClick={() => setZoom((z) => Math.max(0.35, z - 0.15))} aria-label="Zoom out">
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/10" onClick={resetView} aria-label="Reset view">
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center justify-center border-t border-white/10 pt-1">
+              <Move className="h-3.5 w-3.5 text-white/50" />
+            </div>
+            <span className="text-center text-[9px] text-white/40">{Math.round(zoom * 100)}%</span>
+          </div>
+
+          {/* Pan surface */}
           <motion.div
-            className="relative will-change-transform"
-            style={{ width: CANVAS_W, height: CANVAS_H, x: pan.x, y: pan.y, scale: zoom }}
-            transition={{ type: "spring", stiffness: 380, damping: 38 }}
+            className="absolute inset-0 cursor-grab active:cursor-grabbing"
+            style={{ touchAction: "none" }}
+            onPointerDown={onPanPointerDown}
+            onPointerMove={onPanPointerMove}
+            onPointerUp={onPanPointerUp}
+            onPointerLeave={() => { draggingRef.current = false; }}
           >
-            <svg
-              className="pointer-events-none absolute inset-0 h-full w-full"
-              viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
-              preserveAspectRatio="xMidYMid meet"
-              aria-hidden
+            <motion.div
+              className="relative will-change-transform origin-top-left"
+              style={{ width: CANVAS_W, height: CANVAS_H, x: pan.x, y: pan.y, scale: zoom }}
             >
-              <defs>
-                <filter id="archGlow" x="-30%" y="-30%" width="160%" height="160%">
-                  <feGaussianBlur stdDeviation="4" result="b" />
-                  <feMerge>
-                    <feMergeNode in="b" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-                <linearGradient id="edgeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.25" />
-                  <stop offset="50%" stopColor="#60a5fa" stopOpacity="0.85" />
-                  <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.25" />
-                </linearGradient>
-              </defs>
-              {EDGES.map(([a, b], i) => {
-                const na = byId[a];
-                const nb = byId[b];
-                if (!na || !nb) return null;
+              {/* Layer labels */}
+              {(() => {
+                let idx = 0;
+                return LAYERS.map((layer) => {
+                  if (!visibleLayers.has(layer.key)) return null;
+                  const y = TOP_MARGIN + idx * LAYER_GAP;
+                  idx++;
+                  return (
+                    <div
+                      key={layer.key}
+                      className="absolute left-2 flex items-center gap-2 select-none"
+                      style={{ top: y + NODE_H / 2 - 10 }}
+                    >
+                      <span
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ background: accentColor[layer.accent] }}
+                      />
+                      <span
+                        className="text-[10px] font-bold uppercase tracking-[0.15em]"
+                        style={{ color: accentColor[layer.accent], opacity: 0.7 }}
+                      >
+                        {layer.label}
+                      </span>
+                    </div>
+                  );
+                });
+              })()}
+
+              {/* SVG edges */}
+              <svg
+                className="pointer-events-none absolute inset-0 h-full w-full"
+                viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <defs>
+                  <filter id="edgeGlow" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="3" result="b" />
+                    <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  </filter>
+                  {LAYERS.map((l) => (
+                    <linearGradient key={l.key} id={`grad-${l.key}`} x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor={accentColor[l.accent]} stopOpacity="0.5" />
+                      <stop offset="50%" stopColor={accentColor[l.accent]} stopOpacity="0.9" />
+                      <stop offset="100%" stopColor={accentColor[l.accent]} stopOpacity="0.5" />
+                    </linearGradient>
+                  ))}
+                </defs>
+
+                {visibleEdges.map((edge) => {
+                  const sp = positions.get(edge.source)!;
+                  const tp = positions.get(edge.target)!;
+                  const srcNode = ARCH_NODES.find((n) => n.id === edge.source);
+                  const srcLayer = srcNode?.layer || "entry";
+                  const isHighlighted = hoverId === edge.source || hoverId === edge.target;
+
+                  const x1 = sp.x + NODE_W / 2;
+                  const y1 = sp.y + NODE_H;
+                  const x2 = tp.x + NODE_W / 2;
+                  const y2 = tp.y;
+
+                  return (
+                    <g key={edge.id}>
+                      <path
+                        d={edgePath(x1, y1, x2, y2)}
+                        fill="none"
+                        stroke={`url(#grad-${srcLayer})`}
+                        strokeWidth={isHighlighted ? 2.5 : 1.5}
+                        strokeLinecap="round"
+                        filter="url(#edgeGlow)"
+                        opacity={isHighlighted ? 1 : 0.55}
+                        className="transition-all duration-300"
+                      />
+                      {/* Animated particle */}
+                      <circle r="2.5" fill={accentColor[srcNode?.accent || "cyan"]} opacity="0.9">
+                        <animateMotion
+                          dur={`${2 + Math.random() * 2}s`}
+                          repeatCount="indefinite"
+                          path={edgePath(x1, y1, x2, y2)}
+                        />
+                      </circle>
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Nodes */}
+              {visibleNodes.map((node) => {
+                const pos = positions.get(node.id);
+                if (!pos) return null;
+                const isHover = hoverId === node.id;
+                const Icon = node.icon;
+
                 return (
-                  <path
-                    key={`${a}-${b}-${i}`}
-                    d={edgePath(na.x, na.y, nb.x, nb.y)}
-                    fill="none"
-                    stroke="url(#edgeGrad)"
-                    strokeWidth={2.4}
-                    strokeLinecap="round"
-                    filter="url(#archGlow)"
-                    opacity={0.92}
-                  />
+                  <motion.button
+                    key={node.id}
+                    type="button"
+                    className="absolute flex flex-col items-center justify-center rounded-xl text-center backdrop-blur-md"
+                    style={{
+                      left: pos.x,
+                      top: pos.y,
+                      width: NODE_W,
+                      height: NODE_H,
+                      zIndex: isHover ? 20 : 10,
+                      border: `1.5px solid ${accentColor[node.accent]}`,
+                      boxShadow: isHover
+                        ? `${accentGlow[node.accent]}, 0 0 0 2px rgba(255,255,255,0.15)`
+                        : accentGlow[node.accent],
+                      background: isHover
+                        ? `linear-gradient(135deg, ${accentBg[node.accent]}, rgba(15,23,42,0.85))`
+                        : "rgba(15,23,42,0.7)",
+                    }}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: isHover ? 1.08 : 1 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => setOpenId(node.id)}
+                    onMouseEnter={() => setHoverId(node.id)}
+                    onMouseLeave={() => setHoverId(null)}
+                  >
+                    <Icon
+                      className="shrink-0"
+                      style={{ color: accentColor[node.accent], width: 22, height: 22 }}
+                      strokeWidth={1.5}
+                    />
+                    <span className="mt-0.5 text-[11px] font-semibold text-white leading-tight truncate max-w-[100px]">
+                      {node.label}
+                    </span>
+                    <span className="text-[8px] font-medium uppercase tracking-wider" style={{ color: accentColor[node.accent], opacity: 0.7 }}>
+                      {node.hint}
+                    </span>
+                  </motion.button>
                 );
               })}
-            </svg>
-
-            {NODES.map((node) => {
-              const st = accentStyles[node.accent];
-              const isHover = hoverId === node.id;
-              const Icon = node.Icon;
-              const w = node.large ? 168 : 128;
-              const h = node.large ? 168 : 128;
-              return (
-                <motion.button
-                  key={node.id}
-                  type="button"
-                  className={cn(
-                    "absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-2xl border-2 bg-slate-950/55 text-center shadow-xl backdrop-blur-md",
-                    st.border,
-                    st.glow,
-                    isHover && "ring-2 ring-white/30",
-                  )}
-                  style={{ left: node.x, top: node.y, width: w, height: h, zIndex: 10 }}
-                  initial={{ opacity: 0, scale: 0.85 }}
-                  animate={{ opacity: 1, scale: isHover ? (node.large ? 1.06 : 1.08) : 1 }}
-                  transition={{ type: "spring", stiffness: 420, damping: 28 }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => setOpenId(node.id)}
-                  onMouseEnter={() => setHoverId(node.id)}
-                  onMouseLeave={() => setHoverId(null)}
-                >
-                  <Icon
-                    className={cn(
-                      "shrink-0 drop-shadow-[0_0_12px_rgba(255,255,255,0.25)]",
-                      node.large ? "h-14 w-14" : "h-11 w-11",
-                      st.icon,
-                    )}
-                    strokeWidth={1.35}
-                  />
-                  <span className="mt-1.5 max-w-[90%] truncate text-sm font-semibold text-white">{node.label}</span>
-                  <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-300/90">
-                    {node.hint}
-                  </span>
-                </motion.button>
-              );
-            })}
+            </motion.div>
           </motion.div>
-        </motion.div>
 
-        <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 text-[10px] text-zinc-400 backdrop-blur-sm">
-          Inputs ← Core → Outputs
+          {/* Bottom info */}
+          <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 text-[10px] text-zinc-400 backdrop-blur-sm">
+            Entry → Auth → Modules → AI → Backend → External
+          </div>
         </div>
       </div>
 
+      {/* Detail dialog */}
       <AnimatePresence>
-        {selected && DetailIcon && (
+        {selected && SelectedIcon && (
           <Dialog open={!!openId} onOpenChange={(o) => !o && setOpenId(null)}>
             <DialogContent className="max-w-md border-border/80 bg-background/95 backdrop-blur-xl">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-base">
-                  <DetailIcon className="h-5 w-5 text-primary" />
+                  <SelectedIcon className="h-5 w-5" style={{ color: accentColor[selected.accent] }} />
                   {selected.detail.title}
                 </DialogTitle>
                 <DialogDescription asChild>
-                  <ul className="mt-3 list-inside list-disc space-y-2 text-left text-sm text-muted-foreground">
-                    {selected.detail.bullets.map((line) => (
-                      <li key={line} className="break-words">
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mt-3 space-y-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
+                        style={{
+                          background: accentBg[selected.accent],
+                          color: accentColor[selected.accent],
+                          border: `1px solid ${accentColor[selected.accent]}`,
+                        }}
+                      >
+                        {selected.layer}
+                      </span>
+                      <span className="text-muted-foreground">{selected.hint}</span>
+                    </div>
+                    <ul className="list-inside list-disc space-y-1.5 text-left text-sm text-muted-foreground">
+                      {selected.detail.bullets.map((line) => (
+                        <li key={line} className="break-words">{line}</li>
+                      ))}
+                    </ul>
+                    {/* Connected nodes */}
+                    <div className="pt-2 border-t border-border/40">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Connected to</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {ARCH_EDGES
+                          .filter((e) => e.source === selected.id || e.target === selected.id)
+                          .map((e) => {
+                            const otherId = e.source === selected.id ? e.target : e.source;
+                            const other = ARCH_NODES.find((n) => n.id === otherId);
+                            if (!other) return null;
+                            return (
+                              <button
+                                key={e.id}
+                                onClick={() => setOpenId(otherId)}
+                                className="rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80"
+                                style={{
+                                  background: accentBg[other.accent],
+                                  color: accentColor[other.accent],
+                                  border: `1px solid ${accentColor[other.accent]}40`,
+                                }}
+                              >
+                                {other.label}
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  </div>
                 </DialogDescription>
               </DialogHeader>
             </DialogContent>
