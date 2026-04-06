@@ -2,10 +2,11 @@ import React, { useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Mic, MessageSquare } from "lucide-react";
+import { Mic, MessageSquare, Brain } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import { VizzyVoiceChat } from "./VizzyVoiceChat";
+import { VizzyBrainPanel } from "./VizzyBrainPanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 
@@ -19,6 +20,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
 
     const [expanded, setExpanded] = useState(false);
     const [showVoiceChat, setShowVoiceChat] = useState(false);
+    const [showBrainPanel, setShowBrainPanel] = useState(false);
     const [pulseActive] = useState(false);
     const isAppBuilderDashboard = location.pathname === "/app-builder";
 
@@ -48,6 +50,12 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       setShowVoiceChat(true);
     }, []);
 
+    const onBrainClick = useCallback((e: React.MouseEvent) => {
+      e.stopPropagation();
+      setExpanded(false);
+      setShowBrainPanel(true);
+    }, []);
+
     const onChatClick = useCallback((e: React.MouseEvent) => {
       e.stopPropagation();
       setExpanded(false);
@@ -66,6 +74,12 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
         <AnimatePresence>
           {showVoiceChat && (
             <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showBrainPanel && (
+            <VizzyBrainPanel onClose={() => setShowBrainPanel(false)} />
           )}
         </AnimatePresence>
 
@@ -114,6 +128,19 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
                   aria-label="Open text chat"
                 >
                   <MessageSquare size={18} className="text-primary-foreground" />
+                </motion.button>
+
+                {/* Brain button */}
+                <motion.button
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1, x: 50, y: -50 }}
+                  exit={{ scale: 0, opacity: 0, x: 0, y: 0 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20, delay: 0.1 }}
+                  onClick={onBrainClick}
+                  className="absolute top-0 left-0 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-accent/30 cursor-pointer bg-accent text-accent-foreground"
+                  aria-label="Open Vizzy Brain"
+                >
+                  <Brain size={18} />
                 </motion.button>
               </>
             )}
