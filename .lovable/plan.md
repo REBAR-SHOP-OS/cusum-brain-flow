@@ -1,116 +1,32 @@
 
-I audited the current Vizzy voice-time path and found the problem is in the implementation, not your prompt wording.
 
-## What I found
+# Force Vizzy Chat Agent to Always Use Brain Memory
 
-### 1) Vizzy is being asked to “infer” the current time
-In `src/hooks/useVizzyVoiceEngine.ts`, the prompt tells the model:
+## Problem
+The text chat agent (admin-chat) receives brain memories in the context (`🧠 PERSISTENT MEMORY` section from `buildFullVizzyContext`), but there is no explicit instruction telling the AI to **prioritize and always reference** those memories when answering. The voice engine already has a strong `═══ BRAIN MEMORY (ALWAYS USE — CEO VERIFIED INTELLIGENCE) ═══` block, but the text chat lacks this.
 
-- here is the time at session start
-- now calculate current time from elapsed conversation time
+## Changes
 
-That is not deterministic. A realtime model will drift, estimate, or answer differently across retries.
+### File: `supabase/functions/admin-chat/index.ts`
 
-### 2) The prompt contains conflicting time sources
-The same instruction block mixes:
+Add a new section to the system prompt (after the `═══ INTELLIGENCE STANDARD ═══` block, around line 2500) with a strong directive:
 
-- dynamic `CURRENT TIME CONTEXT` based on `timezone`
-- hardcoded `America/Toronto` in `REAL-TIME CLOCK`
-
-So Vizzy can receive more than one temporal cue inside the same session.
-
-### 3) The “exact current time at session start” is not fully refreshed
-When a session is restarted, `useVizzyVoiceEngine.ts` only regex-replaces:
-
-- `CURRENT TIME CONTEXT`
-- `as of ...`
-
-But it does not rebuild the full prompt from scratch, so the critical line:
-
-- `The EXACT current time at session start: ...`
-
-can stay stale in `instructionsRef`.
-
-### 4) Backend “today” logic is still partially timezone-fragile
-In `supabase/functions/vizzy-pre-digest/index.ts`, this pattern exists:
-
-```ts
-const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: tz });
-const todayStart = new Date(`${todayDate}T00:00:00`);
+```
+═══ BRAIN MEMORY (MANDATORY — ALWAYS CONSULT FIRST) ═══
+Your PERSISTENT MEMORY section contains CEO-verified intelligence, corrections, learned facts, and saved insights from previous sessions.
+RULES:
+1. ALWAYS scan your persistent memory BEFORE answering any question
+2. If a memory contradicts live data, the MEMORY wins — it was verified by the CEO
+3. If a memory says "X is wrong, the correct answer is Y" — ALWAYS use Y
+4. Reference memories naturally in your answers — do not ignore them
+5. Brain memories are your accumulated institutional knowledge — treat them as ground truth
+6. When you learn something new from the CEO, save it using save_memory immediately
 ```
 
-That can shift boundaries because the constructed date is not anchored safely to Toronto time. It does not directly answer “what time is it?”, but it injects inconsistent temporal context into Vizzy’s brain.
+This mirrors the same pattern already used in the voice engine (`useVizzyVoiceEngine.ts` line 435) and ensures the text chat agent treats brain memories as authoritative.
 
-## Plan to fix it
+## Result
+- The text chat agent will always consult brain memories before answering
+- CEO corrections stored in memory will be respected over live data
+- Consistent behavior between voice and text interfaces
 
-### A. Make Toronto the single source of truth for Vizzy voice
-For Vizzy voice specifically, I will remove mixed timezone behavior and use one authoritative timezone everywhere:
-
-- `America/Toronto`
-- one formatter
-- one time payload
-- one instruction style
-
-### B. Stop asking the model to compute time from elapsed conversation
-Instead of:
-- “session start time + elapsed time = current time”
-
-I will change Vizzy to receive the authoritative current Toronto time directly.
-
-### C. Rebuild the full instruction payload every time
-I will refactor `buildInstructions(...)` so it can rebuild the entire prompt with a fresh `now` value, instead of doing string replacements on old instructions.
-
-That fixes the stale session-start timestamp bug.
-
-### D. Push fresh time into the session while it is live
-I will add live time synchronization for the voice session so Vizzy gets updated Toronto time during the conversation, not just once at connect.
-
-Best path:
-- refresh on connect
-- refresh again when the user finishes speaking
-- optionally keep a lightweight periodic refresh while connected
-
-This makes time answers deterministic across repeated tries.
-
-### E. Clean up timezone-safe backend context generation
-I will fix the pre-digest/day-boundary logic so all “today” context is computed with Toronto-safe boundaries, preventing conflicting date/time cues from the backend context.
-
-## Files to update
-
-- `src/hooks/useVizzyVoiceEngine.ts`
-  - rebuild full instructions with fresh time
-  - hard-pin Vizzy voice to Toronto
-  - remove “infer elapsed time” behavior
-  - add live time sync updates
-
-- `src/hooks/useVoiceEngine.ts`
-  - add the hook/event point needed to send a fresh session update right before/around response generation
-
-- `src/lib/dateConfig.ts`
-  - centralize the exact Toronto time payload/format used by Vizzy
-
-- `supabase/functions/vizzy-pre-digest/index.ts`
-  - replace fragile local-midnight construction with timezone-safe Toronto boundaries
-
-- `supabase/functions/vizzy-daily-brief/index.ts`
-  - align time-of-day/greeting logic with the same Toronto-safe approach
-
-## Expected result
-
-After this fix:
-
-- Vizzy will stop giving different times on repeated attempts
-- every voice answer will use Toronto time only
-- reconnects/restarts will not reuse stale timestamps
-- backend context will stop feeding inconsistent time/day signals into the session
-
-## Validation I will use after implementation
-
-1. Start Vizzy, ask for the time immediately
-2. Wait 1–2 minutes, ask again in the same session
-3. End session, start a new one, ask again
-4. Repeat multiple times and compare against Toronto time
-5. Confirm no mismatch between greeting, “today” context, and spoken time
-
-## Root cause summary
-The main bug is that Vizzy currently relies on prompt-based clock reasoning instead of a deterministic live Toronto clock update. The stale partial prompt refresh makes that even worse.
