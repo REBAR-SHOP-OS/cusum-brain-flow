@@ -20,6 +20,7 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
 
     const [expanded, setExpanded] = useState(false);
     const [showVoiceChat, setShowVoiceChat] = useState(false);
+    const [showBrainPanel, setShowBrainPanel] = useState(false);
     const [pulseActive] = useState(false);
     const isAppBuilderDashboard = location.pathname === "/app-builder";
 
