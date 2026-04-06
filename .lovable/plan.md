@@ -1,27 +1,25 @@
 
 
-# Show Only Used Agents in Monitoring View
+# Hide Empty Brain Sections When User Is Selected
 
 ## Problem
-The Agents section currently shows all 22 agents from `agentConfigs`, including ones the user has never used. This is a **monitoring** panel — its purpose is to report which agents a user has actually interacted with. Showing unused agents (all with "0 sessions") adds noise and defeats the purpose.
+When a specific user is selected in the avatar bar, all 16 Brain sections still appear — most showing "(0)". This is a monitoring view: it should only display sections where the selected user has actual activity. Empty sections add clutter.
 
 ## Rule
-**Only display agents that the selected user has at least 1 session with.** If a user has never used an agent, it should not appear in the list.
+When a user is selected, **only show Brain sections that have at least 1 memory entry** for that user. If "All" is selected, show all sections as before.
 
 ## Changes
 
-### File: `src/hooks/useUserAgentSessions.ts`
+### File: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-Remove the logic that adds all `agentConfigs` agents to the result set. Only iterate over agents found in the user's `chat_sessions` data.
+In the `renderContent()` function (around line 415-438), filter out empty groups when a user profile is selected:
 
-Specifically:
-1. **Remove lines 44-53** — the `allAgentNames` set that merges all config names
-2. **Remove the `else` branch (lines 83-92)** — the block that adds agents with 0 sessions
-3. **Iterate only over `agentMap.keys()`** — agents the user actually has sessions with
-4. Sort by `lastUsed` descending (no inactive agents to sort)
+- Before rendering the accordion, filter `grouped` to exclude groups with `items.length === 0` **only when** `selectedProfile` is set
+- When no profile is selected ("All" mode), keep current behavior showing all sections
+- Add an empty state message if a user is selected but has zero entries across all sections
 
-Result: If Neel has only used Blitz and Vizzy, only those two appear. No "0 sessions" clutter.
+Approximately 3-5 lines changed in the render logic.
 
 ## Files Changed
-- `src/hooks/useUserAgentSessions.ts` — filter to only agents with real session data
+- `src/components/vizzy/VizzyBrainPanel.tsx` — filter empty sections when user is selected
 
