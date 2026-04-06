@@ -137,7 +137,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
     if (!hasCompanyContext) {
       return (
         <div className="text-center py-12 text-muted-foreground">
-          <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-50 text-yellow-500" />
+          <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-50 text-warning" />
           <p className="text-sm font-medium">Company profile not found</p>
           <p className="text-xs mt-1">Your account may not be linked to a company yet.</p>
         </div>
