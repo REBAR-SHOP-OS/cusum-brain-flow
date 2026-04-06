@@ -62,7 +62,7 @@ export default function TimeClock() {
   // Kiosk sleep/idle timer — stop camera after 5 min inactivity
   const [kioskSleeping, setKioskSleeping] = useState(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const KIOSK_IDLE_MS = 5 * 60 * 1000; // 5 minutes
+  const KIOSK_IDLE_MS = 3 * 60 * 1000; // 3 minutes
 
   const resetIdleTimer = useCallback(() => {
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
