@@ -74,85 +74,22 @@ function getDateLabel(dateStr: string) {
   return format(new Date(dateStr), "MMM d, yyyy");
 }
 
-function MemoryCard({
-  entry,
-  onUpdate,
-  onDelete,
-}: {
-  entry: VizzyMemoryEntry;
-  onUpdate: (id: string, content: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(entry.content);
-
-  const save = () => {
-    onUpdate(entry.id, draft);
-    setEditing(false);
-  };
-
+function MemoryCard({ entry }: { entry: VizzyMemoryEntry }) {
   return (
     <div className="rounded-lg border border-border bg-card p-3 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] text-muted-foreground">
-          {entry.metadata?.report_date
-            ? `📅 ${entry.metadata.report_date}`
-            : format(new Date(entry.created_at), "MMM d, yyyy • HH:mm")}
-        </span>
-        {!editing && (
-          <div className="flex gap-1">
-            <button
-              onClick={() => { setDraft(entry.content); setEditing(true); }}
-              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-              title="Edit"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => onDelete(entry.id)}
-              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-              title="Delete"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {editing ? (
-        <div className="space-y-2">
-          <Textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            className="text-sm min-h-[60px]"
-          />
-          <div className="flex gap-2 justify-end">
-            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-              Cancel
-            </Button>
-            <Button size="sm" onClick={save}>
-              <Check className="w-3 h-3 mr-1" /> Save
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-          {entry.content}
-        </p>
-      )}
+      <span className="text-[10px] text-muted-foreground">
+        {entry.metadata?.report_date
+          ? `📅 ${entry.metadata.report_date}`
+          : format(new Date(entry.created_at), "MMM d, yyyy • HH:mm")}
+      </span>
+      <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+        {entry.content}
+      </p>
     </div>
   );
 }
 
-function DateGroupedEntries({
-  items,
-  onUpdate,
-  onDelete,
-}: {
-  items: VizzyMemoryEntry[];
-  onUpdate: (id: string, content: string) => void;
-  onDelete: (id: string) => void;
-}) {
+function DateGroupedEntries({ items }: { items: VizzyMemoryEntry[] }) {
   const grouped = useMemo(() => {
     const map: Record<string, VizzyMemoryEntry[]> = {};
     for (const e of items) {
@@ -167,12 +104,7 @@ function DateGroupedEntries({
     return (
       <div className="space-y-2 pt-1">
         {items.map((entry) => (
-          <MemoryCard
-            key={entry.id}
-            entry={entry}
-            onUpdate={onUpdate}
-            onDelete={onDelete}
-          />
+          <MemoryCard key={entry.id} entry={entry} />
         ))}
       </div>
     );
@@ -191,12 +123,7 @@ function DateGroupedEntries({
           </div>
           <div className="space-y-2">
             {entries.map((entry) => (
-              <MemoryCard
-                key={entry.id}
-                entry={entry}
-                onUpdate={onUpdate}
-                onDelete={onDelete}
-              />
+              <MemoryCard key={entry.id} entry={entry} />
             ))}
           </div>
         </div>
@@ -435,11 +362,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              <DateGroupedEntries
-                items={group.items}
-                onUpdate={(id, content) => updateEntry({ id, content })}
-                onDelete={deleteEntry}
-              />
+              <DateGroupedEntries items={group.items} />
             </AccordionContent>
           </AccordionItem>
         ))}
