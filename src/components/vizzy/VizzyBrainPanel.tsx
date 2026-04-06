@@ -316,7 +316,7 @@ function UserAgentsSections({ userId, name }: { userId: string; name: string }) 
                     ))}
                   </>
                 ) : (
-                  <p className="text-xs text-muted-foreground italic text-center py-3">هنوز فعالیتی با این ایجنت ثبت نشده</p>
+                  <p className="text-xs text-muted-foreground italic text-center py-3">No activity with this agent yet</p>
                 )}
               </div>
             </AccordionContent>
@@ -527,8 +527,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
               <div className="rounded-xl border border-border bg-card overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                   <Activity className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground">بخش کلی</h3>
-                  <span className="text-xs text-muted-foreground">General Overview</span>
+                   <h3 className="text-sm font-semibold text-foreground">General Overview</h3>
                 </div>
                 <div className="p-3">
                   <PerformanceCard
@@ -545,8 +544,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 <div className="rounded-xl border border-border bg-card overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                     <Bot className="w-4 h-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground">بخش ایجنت‌ها</h3>
-                    <span className="text-xs text-muted-foreground">Agents</span>
+                     <h3 className="text-sm font-semibold text-foreground">Agents</h3>
                   </div>
                   <div className="p-3">
                     <UserAgentsSections
