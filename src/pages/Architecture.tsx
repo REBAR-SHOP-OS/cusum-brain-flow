@@ -321,9 +321,9 @@ export default function Architecture() {
                   </filter>
                   {LAYERS.map((l) => (
                     <linearGradient key={l.key} id={`grad-${l.key}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor={accentColor[l.accent]} stopOpacity="0.5" />
-                      <stop offset="50%" stopColor={accentColor[l.accent]} stopOpacity="0.9" />
-                      <stop offset="100%" stopColor={accentColor[l.accent]} stopOpacity="0.5" />
+                      <stop offset="0%" stopColor={accentColor[l.accent]} stopOpacity="0.7" />
+                      <stop offset="50%" stopColor={accentColor[l.accent]} stopOpacity="1.0" />
+                      <stop offset="100%" stopColor={accentColor[l.accent]} stopOpacity="0.7" />
                     </linearGradient>
                   ))}
                 </defs>
@@ -346,10 +346,10 @@ export default function Architecture() {
                         d={edgePath(x1, y1, x2, y2)}
                         fill="none"
                         stroke={`url(#grad-${srcLayer})`}
-                        strokeWidth={isHighlighted ? 2.5 : 1.5}
+                        strokeWidth={isHighlighted ? 2.5 : 2}
                         strokeLinecap="round"
                         filter="url(#edgeGlow)"
-                        opacity={isHighlighted ? 1 : 0.55}
+                        opacity={isHighlighted ? 1 : 0.7}
                         className="transition-all duration-300"
                       />
                       {/* Animated particle */}
