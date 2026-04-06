@@ -1,32 +1,24 @@
 
 
-# Show All Available Agents Per User (Not Just Active Sessions)
+# Improve User Avatar Bar in Vizzy Brain Panel
 
 ## Problem
-The Agents section only shows agents that have `chat_sessions` records. If a user has access to agents like Pixel, Seomi, Blitz but hasn't chatted with them yet, they don't appear. The user wants to see **all agents accessible to the user**, with session counts (including 0).
-
-## Solution
-Combine two data sources:
-1. **All agents from `agentConfigs`** (the full agent catalog — ~22 agents)
-2. **Actual session data from `chat_sessions`** for the selected user
-
-Show every agent the user could use, with real session stats where available, and "(0)" for unused ones.
+The user avatar bar (horizontal profile selector) is too small and cramped. It needs to be displayed more prominently — larger avatars, bigger text, better spacing.
 
 ## Changes
 
-### File: `src/hooks/useUserAgentSessions.ts`
+### File: `src/components/vizzy/VizzyBrainPanel.tsx` (lines 483-520)
 
-1. Import `agentConfigs` from `@/components/agent/agentConfigs`
-2. After fetching `chat_sessions` data, build a complete list from all `agentConfigs` keys
-3. For each agent in configs:
-   - If sessions exist → show real stats (session count, messages, recent messages)
-   - If no sessions → show with `sessionCount: 0, totalMessages: 0, recentMessages: []`
-4. Match `chat_sessions.agent_name` to `agentConfigs` keys by normalizing (lowercase comparison, or matching config `name` field)
-5. Sort: agents with activity first (by last used), then inactive agents alphabetically
+Increase the size and prominence of the avatar bar:
 
-### Matching Logic
-The `chat_sessions.agent_name` stores values like "Vizzy", "Architect", "Seomi", "Eisenhower Matrix". These correspond to the `name` field in `agentConfigs` (e.g., `agentConfigs.assistant.name = "Vizzy"`, `agentConfigs.empire.name = "Architect"`). Match by name to merge the data.
+1. **Container**: Increase padding from `px-5 py-2` → `px-5 py-3`, add `gap-3` instead of `gap-2`
+2. **"All" button**: Increase from `px-2.5 py-1 text-xs` → `px-3.5 py-1.5 text-sm`
+3. **User buttons**: Increase from `px-2 py-1 text-xs` → `px-3 py-1.5 text-sm`, add `gap-2` between avatar and name
+4. **Avatar circles**: Increase from `w-5 h-5 text-[10px]` → `w-7 h-7 text-xs`
+5. **Names**: Add `text-sm font-semibold` for better readability
+
+Result: Larger, clearer, more touchable avatar buttons that are easy to read and interact with.
 
 ## Files Changed
-- `src/hooks/useUserAgentSessions.ts` — merge agentConfigs with session data to show complete agent list
+- `src/components/vizzy/VizzyBrainPanel.tsx` — resize avatar bar elements
 
