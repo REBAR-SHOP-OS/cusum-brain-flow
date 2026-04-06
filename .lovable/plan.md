@@ -1,44 +1,21 @@
 
 
-# Fix: ai@rebar.shop 404 — Wrong Redirect Path
+# Remove ontariorebars6@gmail.com from System
 
-## Root Cause
+## Current State
+- Email is in the `allowedLoginEmails` whitelist in `src/lib/accessPolicies.ts` (line 51)
+- No auth user or profile record exists in the database — no deletion needed there
 
-In `RoleGuard.tsx` (line ~138), shopfloor device accounts are redirected to `/shopfloor` when they access a non-allowed route. But the Shop Floor page route is `/shop-floor` (with a hyphen). `/shopfloor` has no route definition — only sub-routes like `/shopfloor/station`, `/shopfloor/pool`, etc. exist. So the redirect hits the `*` catch-all → NotFound → 404.
+## Change
 
-## Fix
+### File: `src/lib/accessPolicies.ts`
 
-### File: `src/components/auth/RoleGuard.tsx`
+Remove `"ontariorebars6@gmail.com"` from the `allowedLoginEmails` array (line 51).
 
-Change the redirect target from `/shopfloor` to `/shop-floor`:
-
-```typescript
-// Line ~140: Change
-if (!isAllowed) return <Navigate to="/shopfloor" replace />;
-// To
-if (!isAllowed) return <Navigate to="/shop-floor" replace />;
-```
-
-Also fix the same issue for external shop supervisors (line ~111):
-```typescript
-// Change
-if (!isAllowed) return <Navigate to="/shop-floor" replace />;
-// Already correct — confirm no other /shopfloor redirects
-```
-
-And fix the internal shop supervisor redirect (line ~157):
-```typescript
-// Change
-return <Navigate to="/shop-floor" replace />;
-// Already correct — confirm
-```
-
-### Verification
-
-Only **one** redirect is broken — the `shopfloorDevices` block redirecting to `/shopfloor` instead of `/shop-floor`.
+The final list will have 11 allowed emails instead of 12.
 
 ## Impact
-- Fixes the 404 for `ai@rebar.shop` on login
-- User will now correctly land on the Shop Floor page
-- No other users or routes affected
+- This email will be blocked from both email/password and Google OAuth sign-in
+- The `onAuthStateChange` guard in `auth.tsx` will auto-sign-out if somehow a session is established
+- No database cleanup needed — no records exist for this email
 
