@@ -1,18 +1,32 @@
 
 
-# Remove Persian Text from Vizzy Brain Panel
+# Show All Available Agents Per User (Not Just Active Sessions)
 
 ## Problem
-Three locations in `VizzyBrainPanel.tsx` contain Persian text, violating the English-only UI standard.
+The Agents section only shows agents that have `chat_sessions` records. If a user has access to agents like Pixel, Seomi, Blitz but hasn't chatted with them yet, they don't appear. The user wants to see **all agents accessible to the user**, with session counts (including 0).
+
+## Solution
+Combine two data sources:
+1. **All agents from `agentConfigs`** (the full agent catalog — ~22 agents)
+2. **Actual session data from `chat_sessions`** for the selected user
+
+Show every agent the user could use, with real session stats where available, and "(0)" for unused ones.
 
 ## Changes
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx`
+### File: `src/hooks/useUserAgentSessions.ts`
 
-1. **Line 319**: Replace `هنوز فعالیتی با این ایجنت ثبت نشده` → `No activity with this agent yet`
-2. **Line 530-531**: Replace `بخش کلی` + "General Overview" → just `General Overview`
-3. **Line 548-549**: Replace `بخش ایجنت‌ها` + "Agents" → just `Agents`
+1. Import `agentConfigs` from `@/components/agent/agentConfigs`
+2. After fetching `chat_sessions` data, build a complete list from all `agentConfigs` keys
+3. For each agent in configs:
+   - If sessions exist → show real stats (session count, messages, recent messages)
+   - If no sessions → show with `sessionCount: 0, totalMessages: 0, recentMessages: []`
+4. Match `chat_sessions.agent_name` to `agentConfigs` keys by normalizing (lowercase comparison, or matching config `name` field)
+5. Sort: agents with activity first (by last used), then inactive agents alphabetically
+
+### Matching Logic
+The `chat_sessions.agent_name` stores values like "Vizzy", "Architect", "Seomi", "Eisenhower Matrix". These correspond to the `name` field in `agentConfigs` (e.g., `agentConfigs.assistant.name = "Vizzy"`, `agentConfigs.empire.name = "Architect"`). Match by name to merge the data.
 
 ## Files Changed
-- `src/components/vizzy/VizzyBrainPanel.tsx` — 3 text replacements
+- `src/hooks/useUserAgentSessions.ts` — merge agentConfigs with session data to show complete agent list
 
