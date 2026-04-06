@@ -215,6 +215,37 @@ ${agentAuditContext}`,
       }
     }
 
+    // Step 4b: Extract and save timeclock summary to vizzy_memory
+    try {
+      const { data: profile2 } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const cid = profile2?.company_id;
+      if (cid) {
+        // Extract PER-PERSON INTELLIGENCE or TIME CLOCK section for timeclock insights
+        const tcMatch = fullDigest.match(/PER-PERSON INTELLIGENCE[\s\S]*?(?=═══|FINANCIAL HEALTH|$)/i);
+        const tcSection = tcMatch ? tcMatch[0] : "";
+        // Extract individual lines about hours/clock
+        const tcLines = tcSection.split("\n")
+          .map((l: string) => l.trim())
+          .filter((l: string) => /clock|hour|shift|absent|not clocked/i.test(l) && l.length > 10);
+        
+        if (tcLines.length > 0) {
+          const tcInserts = tcLines.slice(0, 20).map((line: string) => ({
+            user_id: userId,
+            company_id: cid,
+            category: "timeclock",
+            content: line.replace(/^[-•*]\s*/, ""),
+          }));
+          await supabase.from("vizzy_memory").insert(tcInserts);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to save timeclock insights:", e);
+    }
+
     // Remove the benchmark JSON line from the digest (it's internal)
     const cleanDigest = fullDigest.replace(/BENCHMARK_JSON:\{[^}]+\}/, "").trim();
 

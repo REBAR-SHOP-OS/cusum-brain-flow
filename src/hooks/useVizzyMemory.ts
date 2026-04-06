@@ -91,7 +91,14 @@ export function useVizzyMemory() {
 For each department, use this exact header format: [SECTION_NAME]
 The valid section names are: TIME CLOCK, PRODUCTION, ORDERS, LEADS, ACCOUNTING, EMAIL, CRM
 
-1. [TIME CLOCK]: Who is currently clocked in, total hours worked today, any anomalies (missed punches, overtime)
+1. [TIME CLOCK]: THIS SECTION IS MANDATORY — do NOT skip even if data seems simple.
+   - List EVERY employee and their current status (clocked in / clocked out / not clocked in today)
+   - For clocked-in employees: name, clock-in time, hours worked so far
+   - For clocked-out employees: name, clock-in time, clock-out time, total hours worked
+   - For employees not clocked in today: name, mark as "Not clocked in"
+   - Total staff currently on site
+   - Total hours worked across all team members today
+   - Any anomalies: missed punches, overtime (>8h), late arrivals (after 7:30 AM)
 2. [PRODUCTION]: Machine status, completed pieces today, active cut plans, targets vs actuals
 3. [ORDERS]: Today's work orders, pending orders, overdue items
 4. [LEADS]: New leads, stalled leads, pipeline status, follow-ups needed
