@@ -1,25 +1,33 @@
 
 
-# Hide Empty Brain Sections When User Is Selected
+# Real-Time Monitoring for "All" View in Vizzy Brain
 
 ## Problem
-When a specific user is selected in the avatar bar, all 16 Brain sections still appear — most showing "(0)". This is a monitoring view: it should only display sections where the selected user has actual activity. Empty sections add clutter.
-
-## Rule
-When a user is selected, **only show Brain sections that have at least 1 memory entry** for that user. If "All" is selected, show all sections as before.
+The "All" view in Vizzy Brain should function as a live monitoring dashboard — always showing all sections with up-to-date data. Currently, the query has no auto-refresh interval, so data goes stale until the panel is reopened.
 
 ## Changes
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx`
+### File: `src/hooks/useVizzyMemory.ts` (line ~36-48)
 
-In the `renderContent()` function (around line 415-438), filter out empty groups when a user profile is selected:
+Add `refetchInterval` and reduce `staleTime` on the main memory query to keep data fresh:
 
-- Before rendering the accordion, filter `grouped` to exclude groups with `items.length === 0` **only when** `selectedProfile` is set
-- When no profile is selected ("All" mode), keep current behavior showing all sections
-- Add an empty state message if a user is selected but has zero entries across all sections
+- Add `refetchInterval: 30_000` (refresh every 30 seconds)
+- Add `staleTime: 10_000` (consider data stale after 10 seconds)
 
-Approximately 3-5 lines changed in the render logic.
+This ensures the "All" view continuously pulls latest entries without manual refresh.
+
+### File: `src/hooks/useUserAgentSessions.ts` (line ~16-18)
+
+Reduce `staleTime` from 2 minutes to 30 seconds and add `refetchInterval: 60_000` so agent session data also stays current.
+
+### File: `src/components/vizzy/VizzyBrainPanel.tsx` (line ~414-438)
+
+Ensure the "All" mode (no `selectedProfile`) always shows all 16 sections — this is already the current behavior, so no change needed here. The filtering only applies when a specific user is selected.
+
+## Result
+The "All" view becomes a live monitoring dashboard that auto-refreshes every 30 seconds, keeping all sections visible and data current. Individual user views continue to show only sections with activity.
 
 ## Files Changed
-- `src/components/vizzy/VizzyBrainPanel.tsx` — filter empty sections when user is selected
+- `src/hooks/useVizzyMemory.ts` — add `refetchInterval` and `staleTime`
+- `src/hooks/useUserAgentSessions.ts` — reduce `staleTime`, add `refetchInterval`
 
