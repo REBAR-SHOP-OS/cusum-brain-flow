@@ -9,9 +9,9 @@ export type FlowLayer = "input" | "core" | "output";
 export type ArchFlowNodeData = {
   label: string;
   hint: string;
-  accent: Accent;
+  accent: FlowAccent;
   large?: boolean;
-  layer: ArchLayer;
+  layer: FlowLayer;
   pinned: boolean;
   Icon: LucideIcon;
   onTogglePin: (id: string) => void;
