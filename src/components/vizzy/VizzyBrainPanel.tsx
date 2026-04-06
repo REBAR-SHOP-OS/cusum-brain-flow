@@ -290,21 +290,33 @@ function UserAgentsSections({ userId, name }: { userId: string; name: string }) 
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2 pt-1">
-                {agent.recentMessages.map((msg, i) => (
-                  <div key={i} className="rounded border border-border bg-card p-2">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <span className={`text-[10px] font-semibold ${msg.role === "user" ? "text-primary" : "text-muted-foreground"}`}>
-                        {msg.role === "user" ? "👤 You" : `🤖 ${agent.agentName}`}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {format(new Date(msg.created_at), "MMM d, HH:mm")}
-                      </span>
+                {agent.sessionCount > 0 ? (
+                  <>
+                    {/* Summary stats */}
+                    <div className="flex items-center gap-4 text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-1.5 mb-2">
+                      <span>Sessions: <strong className="text-foreground">{agent.sessionCount}</strong></span>
+                      <span>Messages: <strong className="text-foreground">{agent.totalMessages}</strong></span>
+                      {agent.lastUsed && (
+                        <span>Last active: <strong className="text-foreground">{format(new Date(agent.lastUsed), "MMM d, h:mm a")}</strong></span>
+                      )}
                     </div>
-                    <p className="text-xs text-foreground line-clamp-2">{msg.content}</p>
-                  </div>
-                ))}
-                {agent.recentMessages.length === 0 && (
-                  <p className="text-xs text-muted-foreground italic text-center py-2">No messages</p>
+                    {/* Messages */}
+                    {agent.recentMessages.map((msg, i) => (
+                      <div key={i} className="rounded border border-border bg-card p-2">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className={`text-[10px] font-semibold ${msg.role === "user" ? "text-primary" : "text-muted-foreground"}`}>
+                            {msg.role === "user" ? "👤 User" : `🤖 ${agent.agentName}`}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {format(new Date(msg.created_at), "MMM d, HH:mm")}
+                          </span>
+                        </div>
+                        <p className="text-xs text-foreground line-clamp-3">{msg.content}</p>
+                      </div>
+                    ))}
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic text-center py-3">هنوز فعالیتی با این ایجنت ثبت نشده</p>
                 )}
               </div>
             </AccordionContent>

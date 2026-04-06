@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 export interface AgentSessionSummary {
   agentName: string;
   sessionCount: number;
+  totalMessages: number;
   lastUsed: string;
   recentMessages: { role: string; content: string; created_at: string }[];
 }
@@ -69,18 +70,25 @@ export function useUserAgentSessions(userId: string | null) {
         const info = agentMap.get(agentName);
 
         if (info) {
-          // Has sessions — fetch recent messages from latest
+          // Fetch recent messages from latest session (up to 10)
           const latestSessionId = info.sessionIds[0];
           const { data: msgs } = await supabase
             .from("chat_messages")
             .select("role, content, created_at")
             .eq("session_id", latestSessionId)
             .order("created_at", { ascending: false })
-            .limit(3);
+            .limit(10);
+
+          // Count total messages across all sessions for this agent
+          const { count: totalMsgCount } = await supabase
+            .from("chat_messages")
+            .select("id", { count: "exact", head: true })
+            .in("session_id", info.sessionIds);
 
           results.push({
             agentName,
             sessionCount: info.count,
+            totalMessages: totalMsgCount ?? 0,
             lastUsed: info.lastUsed,
             recentMessages: (msgs ?? []).reverse(),
           });
@@ -89,6 +97,7 @@ export function useUserAgentSessions(userId: string | null) {
           results.push({
             agentName,
             sessionCount: 0,
+            totalMessages: 0,
             lastUsed: "",
             recentMessages: [],
           });
