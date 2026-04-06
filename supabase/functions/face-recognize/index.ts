@@ -47,13 +47,13 @@ Deno.serve((req) =>
       return { matched: false, reason: "No enrolled faces found" };
     }
 
-    // Group enrollments by profile_id, limit to 3 per person for balanced AI input
+    // Group enrollments by profile_id, limit to 1 per person for speed
     const profileEnrollments = new Map<string, string[]>();
     const profileEnrollmentCounts = new Map<string, number>();
     for (const e of enrollments) {
       profileEnrollmentCounts.set(e.profile_id, (profileEnrollmentCounts.get(e.profile_id) || 0) + 1);
       const urls = profileEnrollments.get(e.profile_id) || [];
-      if (urls.length < 3) {
+      if (urls.length < 1) {
         urls.push(e.photo_url);
         profileEnrollments.set(e.profile_id, urls);
       }
@@ -131,32 +131,18 @@ Deno.serve((req) =>
     const contentParts: any[] = [
       {
         type: "text",
-        text: `You are a STRICT facial recognition system. Compare the CAPTURED photo against the enrolled employee reference photos below.
+        text: `Facial recognition system. Compare CAPTURED photo against enrolled reference photos.
 
-Enrolled employees:
+Enrolled:
 ${employeeList}
 
-For each employee, I'm providing their reference photos followed by the captured photo to match.
+Rules:
+- Match ONLY on facial features: nose, eyes, jaw, facial hair, glasses, face shape.
+- Confidence 85+: highly certain. 60-84: resemblance. Below 50: no match (matched_profile_id="null").
+- Multiple faces → use center face only.
+- Prefer "no match" over wrong match.
 
-CRITICAL ANTI-BIAS RULES:
-- The number of reference photos per person varies. Do NOT let more reference photos bias you toward that person.
-- Each person's identity is equally likely a priori. Judge ONLY on facial feature similarity.
-- Having more photos does NOT make someone more likely to be the match.
-
-STRICT MATCHING RULES:
-- You must be CERTAIN it is the same person before returning a match. If in doubt, return NO match.
-- Pay close attention to UNIQUE facial features: nose shape, eye spacing, jawline, facial hair, eyebrow shape, face proportions, ear shape.
-- Carefully compare: glasses (present/absent, frame style), facial hair (beard, mustache, stubble vs clean-shaven), face shape (round, oval, square), hairline and forehead size.
-- Account for variations in lighting, angles, glasses on/off, and minor appearance changes (e.g. shaved vs unshaved).
-- Do NOT assume a match just because of similar hair color, skin tone, or general build.
-- If MULTIPLE faces are visible in the captured photo, focus ONLY on the face closest to the camera center. Ignore people in the background.
-- Return confidence 85+ ONLY if you are highly certain it's the same person across multiple distinguishing features.
-- Return confidence 60-84 if there is a reasonable resemblance but you are not fully certain.
-- Return confidence below 50 and matched_profile_id="null" if you cannot confidently identify the person.
-- Watch for obvious spoofing (e.g. a photo of a photo held up to the camera).
-- It is MUCH better to return "no match" than to return a wrong match.
-
-You MUST call the face_match_result function with your answer.`,
+Call face_match_result with your answer.`,
       },
     ];
 
@@ -197,7 +183,7 @@ You MUST call the face_match_result function with your answer.`,
       console.log(`[face-recognize] Calling AI with ${enrolledFaces.length} enrolled faces`);
       aiResult = await callAI({
         provider: "gemini",
-        model: "gemini-2.5-flash",
+        model: "gemini-2.5-flash-lite",
         agentName: "shopfloor",
         messages: [{ role: "user", content: contentParts }],
         tools: [toolDef],
@@ -240,29 +226,8 @@ You MUST call the face_match_result function with your answer.`,
       }
     }
 
-    // Retry once if no structured result
     if (!resultData) {
-      console.warn("[face-recognize] No structured result, retrying once...");
-      try {
-        const retryResult = await callAI({
-          provider: "gemini",
-          model: "gemini-2.5-flash",
-          messages: [{ role: "user", content: contentParts }],
-          tools: [toolDef],
-          toolChoice: { type: "function", function: { name: "face_match_result" } },
-        });
-        const retryTc = retryResult.toolCalls?.[0];
-        if (retryTc?.function?.arguments) {
-          resultData = JSON.parse(retryTc.function.arguments);
-          console.log("[face-recognize] Retry succeeded:", resultData);
-        }
-      } catch (retryErr) {
-        console.error("[face-recognize] Retry failed:", retryErr);
-      }
-    }
-
-    if (!resultData) {
-      console.error("[face-recognize] No structured result after retry. Raw:", aiResult.content?.slice(0, 500));
+      console.error("[face-recognize] No structured result. Raw:", aiResult.content?.slice(0, 500));
       return { matched: false, reason: "AI returned no structured result" };
     }
 
