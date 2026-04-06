@@ -1,45 +1,39 @@
 
 
-# Fix: Scheduled Posts Not Publishing Automatically
+# Fix: Manual Publish Blocked by Role Check
+
+## Problem
+When clicking "Publish Now" manually, the `social-publish` edge function returns **403: "Forbidden: requires one of [admin, marketing] roles"**. The user performing the publish (likely Neel or another approver) doesn't have the `admin` or `marketing` role in the `user_roles` table, even though they have approval authority.
+
+The **cron auto-publish** is unaffected (it uses `internalOnly: true` with no auth), but manual publish from the UI is blocked.
 
 ## Root Cause
-
-The `social-cron-publish` edge function exists and works correctly, but **there is no pg_cron job scheduling it to run automatically**. Other functions (ringcentral-sync, odoo-crm-sync, check-sla-breaches) have pg_cron jobs — but `social-cron-publish` was never given one. Posts sit in "scheduled" status indefinitely because nothing invokes the function.
-
-Additionally, the query requires `neel_approved = true` — posts that are "Scheduled + Approved" in the UI but haven't been explicitly approved by Neel will also be skipped. From the screenshot, posts show "Scheduled · Approved" but may have `neel_approved = false`.
+`supabase/functions/social-publish/index.ts` line 482:
+```typescript
+requireAnyRole: ["admin", "marketing"],
+```
+This blocks any user without those specific roles from manually publishing, even if they are a super admin (sattar/radin) or an authorized approver.
 
 ## Fix
 
-### 1. Create a pg_cron job to call `social-cron-publish` every 5 minutes
+### File: `supabase/functions/social-publish/index.ts`
 
-A new database migration will schedule:
+**Remove the `requireAnyRole` restriction** from the function options and instead implement a smarter check inside the handler body that respects the existing super admin bypass:
 
-```sql
-SELECT cron.schedule(
-  'social-cron-publish',
-  '*/5 * * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/social-cron-publish',
-    headers := '{"Content-Type": "application/json", "Authorization": "Bearer <anon_key>"}'::jsonb,
-    body := '{}'::jsonb
-  ) AS request_id;
-  $$
-);
-```
+1. Remove `requireAnyRole: ["admin", "marketing"]` from the options (line 482)
+2. Add an inline role + super-admin check at the top of the handler:
+   - Allow if user has `admin` or `marketing` role
+   - Allow if user email is in `SUPER_ADMIN_EMAILS` (sattar/radin)
+   - Otherwise return 403
 
-This runs every 5 minutes, checks for posts where `status = 'scheduled'`, `neel_approved = true`, and `scheduled_date <= now()`, then publishes them.
-
-### 2. Verify approval flow alignment
-
-The cron function queries `.eq("neel_approved", true)`. The approval UI in `PostReviewPanel.tsx` sets `neel_approved: true` when approved. The calendar shows "Approved" status — this should be consistent. No code change needed here, but the migration ensures the trigger exists.
+This ensures super admins and authorized approvers can always publish manually, while still preventing unauthorized users from accessing the endpoint.
 
 ## Impact
-
-- Only adds a new cron job — no existing code or behavior is modified
-- Posts will now automatically publish within 5 minutes of their scheduled time
-- Stale lock recovery (already in the function) handles edge cases
+- Only modifies the authorization logic in `social-publish` — no publishing behavior changes
+- Super admins (sattar, radin) can always publish manually
+- Users with `admin` or `marketing` roles can publish as before
+- Cron auto-publish is completely unaffected (different function)
 
 ## Files Changed
-- New migration SQL — add pg_cron job for `social-cron-publish` every 5 minutes
+- `supabase/functions/social-publish/index.ts` — replace rigid `requireAnyRole` with flexible role + super-admin check
 
