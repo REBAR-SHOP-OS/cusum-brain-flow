@@ -541,7 +541,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
               </div>
 
               {/* Section 2: Agents */}
-              {selectedProfile.user_id && (
+              {selectedProfile.user_id && selectedProfile.email !== "ai@rebar.shop" && (
                 <div className="rounded-xl border border-border bg-card overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                     <Bot className="w-4 h-4 text-primary" />
