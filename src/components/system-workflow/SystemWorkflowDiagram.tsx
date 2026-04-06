@@ -146,7 +146,7 @@ export function SystemWorkflowDiagram() {
 
   return (
     <ReactFlowProvider>
-      <div className="relative min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 flex-col">
         <DiagramCanvas
           nodes={rf.nodes}
           edges={rf.edges}
