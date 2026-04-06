@@ -1,61 +1,66 @@
 
 
-# تکمیل Vizzy Brain — نمایش همه بخش‌ها + تاریخ گزارش
+# تغییر دسته‌بندی Vizzy Brain مطابق منوی سایدبار
 
-## مشکلات فعلی (از اسکرین‌شات)
+## مشکل
+دسته‌بندی‌های فعلی Brain (Clarifications, Business, Feedback Fixes, Insights, Escalations) با ساختار منوی اصلی اپلیکیشن همخوانی ندارد. کاربر می‌خواهد دسته‌بندی‌ها دقیقاً مطابق بخش‌های سایدبار باشد.
 
-1. **لیبل‌های دسته‌بندی خام نمایش داده می‌شوند** — `business`، `daily_benchmark`، `feedback_fix` و غیره بدون ایموجی و لیبل مناسب
-2. **بخش‌های مهم سیستم وجود ندارند** — Time Clock، Production، Orders، Leads، Accounting در Brain نیستند
-3. **تاریخ گزارش مشخص نیست** — کاربر نمی‌داند هر گزارش مربوط به چه روزی است
+## نقشه‌بندی جدید
+
+دسته‌بندی‌های موجود در دیتابیس را به بخش‌های سایدبار مپ می‌کنیم:
+
+```text
+سایدبار                    ←  دسته‌بندی‌های دیتابیس
+─────────────────────────────────────────────────
+📊 Dashboard               ←  brain_insight, general, benchmark, daily_benchmark
+📥 Inbox                   ←  email
+💬 Team Hub                ←  feedback_clarification, feedback_patch
+📋 Business Tasks          ←  auto_fix, feedback_fix
+📡 Live Monitor            ←  agent_audit, pre_digest
+🏢 CEO Portal              ←  business
+🎧 Support                 ←  feedback_escalation, call_summary, voicemail_summary
+📈 Pipeline                ←  leads
+🎯 Lead Scoring            ←  leads (merged with Pipeline)
+👥 Customers               ←  crm, orders
+💰 Accounting              ←  accounting
+📈 Sales                   ←  (sales-related entries)
+🏭 Shop Floor (Production) ←  production
+⏰ Time Clock              ←  timeclock
+🛠️ Office Tools            ←  (general tools)
+```
 
 ## تغییرات
 
-### 1. فایل: `src/components/vizzy/VizzyBrainPanel.tsx`
+### فایل: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-**لیبل‌ها**: اضافه کردن دسته‌بندی‌های جدید برای بخش‌های سیستم:
-```
-timeclock: "⏰ Time Clock"
-production: "🏭 Production"  
-orders: "📦 Orders"
-leads: "🎯 Leads"
-accounting: "💰 Accounting"
-email: "📧 Email"
-crm: "👥 CRM"
-```
+1. **تغییر `CATEGORY_LABELS`** — لیبل‌ها مطابق نام‌های سایدبار
+2. **اضافه کردن `CATEGORY_GROUP_MAP`** — هر category دیتابیس به یک گروه سایدبار مپ می‌شود
+3. **تغییر grouping logic** — به‌جای گروه‌بندی بر اساس `category` خام، بر اساس گروه سایدبار دسته‌بندی شود
 
-**تاریخ روی هر کارت**: فرمت تاریخ MemoryCard از `MMM d, HH:mm` به `MMM d, yyyy • HH:mm` تغییر می‌کند تا سال هم مشخص باشد.
-
-**گروه‌بندی با تاریخ**: در هر دسته‌بندی، مموری‌ها بر اساس تاریخ (روز) ساب‌گروپ می‌شوند. مثلا:
-```
-📊 Daily Benchmarks (11)
-  ── Apr 5, 2026 ──
-    [card] [card]
-  ── Apr 4, 2026 ──
-    [card] [card] [card]
-```
-
-### 2. فایل: `src/hooks/useVizzyMemory.ts`
-
-**تقویت پرامپت `analyzeSystem`**: پرامپت را به بخش‌های مشخص تقسیم می‌کنم تا AI برای هر بخش سیستم جداگانه گزارش دهد:
-
-```
-Scan and report on EACH of these departments separately:
-1. TIME CLOCK: Who is clocked in, total hours, anomalies
-2. PRODUCTION: Machine status, completed pieces, targets  
-3. ORDERS: Today's orders, pending, overdue
-4. LEADS: New leads, stalled leads, pipeline
-5. ACCOUNTING: Receivables, payables, overdue invoices
-6. EMAIL: Unanswered emails, important messages
-7. CRM: Customer activity, follow-ups needed
-
-Format: Use [SECTION_NAME] header before each section.
+```typescript
+const SIDEBAR_GROUPS: Record<string, { label: string; categories: string[] }> = {
+  dashboard:    { label: "📊 Dashboard",       categories: ["brain_insight", "general", "benchmark", "daily_benchmark"] },
+  inbox:        { label: "📥 Inbox",            categories: ["email"] },
+  team_hub:     { label: "💬 Team Hub",         categories: ["feedback_clarification", "feedback_patch"] },
+  tasks:        { label: "📋 Business Tasks",   categories: ["auto_fix", "feedback_fix"] },
+  monitor:      { label: "📡 Live Monitor",     categories: ["agent_audit", "pre_digest"] },
+  ceo:          { label: "🏢 CEO Portal",       categories: ["business"] },
+  support:      { label: "🎧 Support",          categories: ["feedback_escalation", "call_summary", "voicemail_summary"] },
+  pipeline:     { label: "📈 Pipeline & Leads", categories: ["leads"] },
+  customers:    { label: "👥 Customers",        categories: ["crm", "orders"] },
+  accounting:   { label: "💰 Accounting",       categories: ["accounting"] },
+  shop_floor:   { label: "🏭 Shop Floor",       categories: ["production"] },
+  timeclock:    { label: "⏰ Time Clock",       categories: ["timeclock"] },
+};
 ```
 
-**دسته‌بندی هوشمند**: به‌جای ذخیره همه چیز به‌عنوان `brain_insight`، هر بخش با category مناسب ذخیره می‌شود (مثلا `timeclock`، `production`، `orders`).
+4. **تغییر `useMemo` گروه‌بندی** — entries را بر اساس `SIDEBAR_GROUPS` گروه‌بندی کنم (نه بر اساس category خام). دسته‌هایی که ورودی ندارند نمایش داده نمی‌شوند.
+
+### فایل: `src/hooks/useVizzyMemory.ts`
+بدون تغییر — ساختار ذخیره‌سازی همان می‌ماند، فقط نمایش تغییر می‌کند.
 
 ### نتیجه
-- همه بخش‌های سیستم در Brain نمایش داده می‌شوند
-- هر مموری تاریخ کامل دارد
-- مموری‌ها در هر دسته بر اساس روز گروه‌بندی می‌شوند
-- Analyze Now تمام بخش‌ها را اسکن و جداگانه ذخیره می‌کند
+- دسته‌بندی‌های Brain دقیقاً مطابق منوی سایدبار
+- چند category مرتبط در یک گروه ادغام می‌شوند
+- ترتیب نمایش مطابق ترتیب سایدبار
 
