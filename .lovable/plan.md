@@ -1,54 +1,67 @@
 
 
-# Fix: Vizzy Stops Talking After 4-5 Turns + Build Error
+# Redesign: Multi-Layer Interactive Architecture Flow
 
-## Two Issues
+## Problem
+Current Architecture page shows only 5 generic nodes (People, Signals, Core, Partners, You). The user wants to see the **full system architecture** with all real components organized in multiple layers with interactive transitions.
 
-### Issue 1: Vizzy Goes Silent After ~5 Exchanges
+## Design
 
-**Root Cause**: OpenAI Realtime API has a context window limit. Vizzy's system prompt is massive (~430 lines of instructions + full ERP data digest). After 4-5 voice turns, the conversation context fills up and the model stops generating audio responses — it silently fails without an error event.
-
-**Fix**: Implement a sliding conversation window that automatically deletes old conversation items from the Realtime session after accumulating more than 6 items (3 user + 3 agent turns). When a new `response.done` arrives, count conversation items and send `conversation.item.delete` for the oldest pairs, keeping the session context lean.
-
-#### File: `src/hooks/useVoiceEngine.ts`
-
-1. Add a `conversationItemIds` ref to track all item IDs received from the Realtime API
-2. Listen for `conversation.item.created` events to capture item IDs
-3. After each `response.done`, if items exceed 6, delete the oldest items via `conversation.item.delete` data channel messages
-4. This keeps the context window fresh — system prompt stays, but old turns are pruned
+A multi-layer, zoomable architecture canvas with **6 horizontal layers**, each containing real system components. Nodes are interactive — click to expand details. Edges show data flow with animated transitions.
 
 ```text
-Flow:
-  Turn 1: user_item_1, agent_item_1  (2 items)
-  Turn 2: user_item_2, agent_item_2  (4 items)
-  Turn 3: user_item_3, agent_item_3  (6 items)
-  Turn 4: user_item_4, agent_item_4  (8 items → delete items 1-2 → 6 items)
-  ...always keeps last 3 exchanges
+Layer 1: ENTRY POINTS
+  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │ Web App  │ │ Webhooks │ │  Crons   │ │  OAuth   │ │  Kiosk   │
+  └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘ └────┬─────┘
+       │             │            │             │             │
+Layer 2: AUTH & ROUTING
+  ┌──────────┐ ┌──────────┐ ┌──────────┐
+  │ Auth     │ │RoleGuard │ │Agent Rtr │
+  └────┬─────┘ └────┬─────┘ └────┬─────┘
+       │             │            │
+Layer 3: CORE MODULES (pages/features)
+  ┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐
+  │CRM ││Shop││Team││Acct││SEO ││Video││Email││Chat│
+  └──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘
+     │      │     │      │     │      │     │      │
+Layer 4: AI & AUTOMATION
+  ┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐
+  │Vizzy││Pipeline││Autopilot││QA War││Ad Dir││Nila│
+  └──┬─┘└──┬─┘└────┬──┘└──┬─┘└──┬─┘└──┬─┘
+     │      │       │       │      │      │
+Layer 5: EDGE FUNCTIONS (backend)
+  ┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐
+  │social││stripe││ring ││gmail││odoo ││qb  ││seo │
+  └──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘└──┬─┘
+     │      │      │      │      │      │      │
+Layer 6: EXTERNAL SERVICES
+  ┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐┌────┐
+  │Meta ││Stripe││RC  ││Google││Odoo ││QB  ││OpenAI│
+  └────┘└────┘└────┘└────┘└────┘└────┘└────┘
 ```
 
-### Issue 2: Build Error in ArchFlowNode.tsx
+### Features
+- **Layer filter sidebar**: Toggle layers on/off to focus on specific areas
+- **Animated edges**: Bezier curves with flowing particle animation showing data direction
+- **Node groups**: Nodes are color-coded by layer (cyan=entry, emerald=auth, orange=modules, violet=AI, blue=backend, red=external)
+- **Click to expand**: Each node shows its sub-components, related files, and connections
+- **Search**: Filter nodes by name
+- **Zoom/Pan**: Existing controls enhanced
+- **Layer labels**: Vertical labels on the left showing each layer name
 
-**Root Cause**: `@xyflow/react` v12+ changed the `NodeProps` generic — it now expects `Node<DataType>` not just `DataType`. The component passes `ArchFlowNodeData` directly which doesn't satisfy the `Node` constraint.
-
-**Fix**: Change `NodeProps<ArchFlowNodeData>` to `NodeProps` and manually type `data` from the destructured props, or use the correct generic form `NodeProps<Node<ArchFlowNodeData>>`.
-
-#### File: `src/components/system-flow/ArchFlowNode.tsx` (line 42)
-
-Change the function signature to use the correct typing pattern for @xyflow/react v12+:
-```typescript
-function ArchFlowNodeInner(props: NodeProps) {
-  const data = props.data as ArchFlowNodeData;
-  const { id, selected } = props;
-```
-
-## Impact
-- Vizzy can now sustain unlimited conversation turns without going silent
-- Old conversation context is pruned server-side, keeping responses fast
-- Transcripts in the UI are NOT affected — they remain in React state for display
-- Build error is fixed with correct typing
-- No other features affected
+### Technical Approach
+- Keep using the custom canvas (no React Flow dependency needed for this)
+- Define all nodes with layer, position, connections in a data file
+- Render with SVG edges + positioned HTML nodes
+- Add layer filter state to show/hide layers
+- Animated edge particles via CSS keyframes on SVG
 
 ## Files Changed
-- `src/hooks/useVoiceEngine.ts` — add conversation item tracking + auto-pruning
-- `src/components/system-flow/ArchFlowNode.tsx` — fix NodeProps typing
+- `src/pages/Architecture.tsx` — complete rewrite with multi-layer canvas, ~50+ nodes organized in 6 layers, layer filter, search, animated edges
+- `src/lib/architectureGraphData.ts` — expand with full system node/edge definitions
+
+## Impact
+- Only the Architecture page changes
+- No other pages, routes, or functionality affected
 
