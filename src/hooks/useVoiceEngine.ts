@@ -38,6 +38,8 @@ export interface VoiceEngineConfig {
   temperature?: number;
   /** Enable translation-mode filtering (language-mismatch + aggressive phrase blocking). Default: false */
   translationMode?: boolean;
+  /** Eagerness for turn-taking: "low" | "medium" | "high" | "auto". Lower = waits longer before responding. Default: "auto" */
+  eagerness?: string;
 }
 
 const OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime";
@@ -138,6 +140,13 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const configRef = useRef(config);
   configRef.current = config;
 
+  // Stability refs
+  const reconnectAttemptsRef = useRef(0);
+  const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const iceGraceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalCloseRef = useRef(false);
+  const MAX_RECONNECT_ATTEMPTS = 3;
+
   // Keep transcriptsRef in sync
   useEffect(() => { transcriptsRef.current = transcripts; }, [transcripts]);
 
@@ -155,9 +164,26 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     }
   };
 
+  const clearKeepalive = useCallback(() => {
+    if (keepaliveRef.current) {
+      clearInterval(keepaliveRef.current);
+      keepaliveRef.current = null;
+    }
+  }, []);
+
+  const clearIceGrace = useCallback(() => {
+    if (iceGraceRef.current) {
+      clearTimeout(iceGraceRef.current);
+      iceGraceRef.current = null;
+    }
+  }, []);
+
   const cleanup = useCallback(() => {
+    intentionalCloseRef.current = true;
     clearTimeout_();
     clearSessionTimer();
+    clearKeepalive();
+    clearIceGrace();
     if (dcRef.current) {
       try { dcRef.current.close(); } catch {}
       dcRef.current = null;
@@ -176,7 +202,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     }
     pendingSessionInstructionsRef.current = null;
     setOutputAudioBlocked(false);
-  }, []);
+  }, [clearKeepalive, clearIceGrace]);
 
   /** Push new system instructions to OpenAI Realtime after connect (e.g. ERP digest arrived late). */
   const updateSessionInstructions = useCallback((instructions: string) => {
@@ -226,6 +252,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           clearTimeout_();
           setState("connected");
           setMode("listening");
+          reconnectAttemptsRef.current = 0; // Reset on successful session
           if (navigator.vibrate) navigator.vibrate(50);
           break;
 
@@ -238,6 +265,24 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
             // Repetition filter
             const uniqueWords = new Set(words.map(w => w.toLowerCase()));
             if (uniqueWords.size <= 2 && words.length >= 3) break;
+            // Non-target language filter: block Korean, Japanese, Chinese, Thai, Bengali, Devanagari, etc.
+            const FOREIGN_SCRIPT = /[\u3000-\u9FFF\uAC00-\uD7AF\u1100-\u11FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0D7F\u0E00-\u0E7F\u1000-\u109F]/;
+            if (FOREIGN_SCRIPT.test(text)) {
+              console.log("[voice-engine] blocked foreign-script transcript:", text.slice(0, 40));
+              break;
+            }
+            // Must contain at least some Farsi or Latin letters
+            const HAS_TARGET_LANG = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
+            if (!HAS_TARGET_LANG.test(text)) {
+              console.log("[voice-engine] blocked non-target transcript:", text.slice(0, 40));
+              break;
+            }
+            // TV/media noise pattern filter
+            const MEDIA_NOISE = /\b(MBC|KBS|SBS|CNN|BBC|channel|subtitle|broadcast|breaking news)\b/i;
+            if (MEDIA_NOISE.test(text)) {
+              console.log("[voice-engine] blocked media-noise transcript:", text.slice(0, 40));
+              break;
+            }
             setTranscripts(prev => [
               ...prev,
               { id: String(++idCounter.current), role: "user", text, timestamp: Date.now() },
@@ -291,14 +336,33 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   }, []);
 
   const endSession = useCallback(async () => {
+    reconnectAttemptsRef.current = 0;
     cleanup();
     setState("idle");
     setMode(null);
     setIsSpeaking(false);
   }, [cleanup]);
 
+  /** Internal reconnect with exponential backoff */
+  const attemptReconnect = useCallback((startFn: () => Promise<void>) => {
+    const attempt = reconnectAttemptsRef.current;
+    if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+      console.error(`[VoiceEngine] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached`);
+      setState("error");
+      setMode(null);
+      setIsSpeaking(false);
+      return;
+    }
+    reconnectAttemptsRef.current = attempt + 1;
+    const delay = 1500 * Math.pow(2, attempt); // 1.5s, 3s, 6s
+    console.warn(`[VoiceEngine] Reconnect attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+    cleanup();
+    setTimeout(() => startFn(), delay);
+  }, [cleanup]);
+
   const startSession = useCallback(async () => {
     const cfg = configRef.current;
+    intentionalCloseRef.current = false;
     setState("connecting");
     setTranscripts([]);
     setMode(null);
@@ -315,7 +379,13 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
 
     try {
       // 1. Get microphone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
 
       // 2. Resolve instructions (support lazy getter to avoid stale closures)
@@ -333,6 +403,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           silenceDurationMs: cfg.silenceDurationMs ?? 300,
           prefixPaddingMs: cfg.prefixPaddingMs ?? 200,
           temperature: cfg.temperature ?? 0.8,
+          eagerness: cfg.eagerness ?? "auto",
         },
       });
 
@@ -401,6 +472,34 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
             console.warn("[VoiceEngine] session.update on open failed:", e);
           }
         }
+
+        // Start keepalive ping every 30s
+        clearKeepalive();
+        keepaliveRef.current = setInterval(() => {
+          try {
+            if (dc.readyState === "open") {
+              dc.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+            } else {
+              console.warn("[VoiceEngine] Keepalive: DC not open, triggering reconnect");
+              attemptReconnect(startSession);
+            }
+          } catch (e) {
+            console.warn("[VoiceEngine] Keepalive send failed, triggering reconnect:", e);
+            attemptReconnect(startSession);
+          }
+        }, 30_000);
+      };
+
+      // Data channel close/error detection
+      dc.onclose = () => {
+        if (intentionalCloseRef.current) return;
+        console.warn("[VoiceEngine] Data channel closed unexpectedly");
+        attemptReconnect(startSession);
+      };
+      dc.onerror = (ev) => {
+        if (intentionalCloseRef.current) return;
+        console.error("[VoiceEngine] Data channel error:", ev);
+        attemptReconnect(startSession);
       };
 
       // 7. Create and set local SDP offer
@@ -436,27 +535,41 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         endSession();
       }, maxDuration);
 
-      // Connection state monitoring
-      // Auto-reconnect once on disconnect, give up on "failed"
-      let hasAutoReconnected = false;
+      // Connection state monitoring with exponential backoff reconnect
       pc.onconnectionstatechange = () => {
+        if (intentionalCloseRef.current) return;
         const cs = pc.connectionState;
+        console.log("[VoiceEngine] Connection state:", cs);
         if (cs === "failed") {
-          clearTimeout_();
-          clearSessionTimer();
-          setState("error");
-          setMode(null);
-          setIsSpeaking(false);
-          cleanup();
-          toast.error("Voice connection lost.");
-        } else if (cs === "disconnected" && !hasAutoReconnected) {
-          hasAutoReconnected = true;
-          console.warn("Voice engine disconnected — attempting auto-reconnect...");
-          cleanup();
-          // Small delay then retry
-          setTimeout(() => {
-            startSession();
-          }, 1500);
+          attemptReconnect(startSession);
+        } else if (cs === "disconnected") {
+          // Grace period — sometimes recovers on its own
+          clearIceGrace();
+          iceGraceRef.current = setTimeout(() => {
+            if (pcRef.current?.connectionState === "disconnected") {
+              console.warn("[VoiceEngine] Still disconnected after grace period");
+              attemptReconnect(startSession);
+            }
+          }, 5000);
+        } else if (cs === "connected") {
+          clearIceGrace();
+        }
+      };
+
+      // ICE connection state monitoring
+      pc.oniceconnectionstatechange = () => {
+        if (intentionalCloseRef.current) return;
+        const ics = pc.iceConnectionState;
+        console.log("[VoiceEngine] ICE state:", ics);
+        if (ics === "failed") {
+          attemptReconnect(startSession);
+        } else if (ics === "disconnected") {
+          clearIceGrace();
+          iceGraceRef.current = setTimeout(() => {
+            if (pcRef.current?.iceConnectionState === "disconnected") {
+              attemptReconnect(startSession);
+            }
+          }, 5000);
         }
       };
 
@@ -471,7 +584,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         toast.error("Could not connect. Try again.");
       }
     }
-  }, [cleanup, handleDataChannelMessage, endSession]);
+  }, [cleanup, handleDataChannelMessage, endSession, attemptReconnect, clearKeepalive, clearIceGrace]);
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {
@@ -487,9 +600,25 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     setTranscripts([]);
   }, []);
 
+  // Network change detection — auto-reconnect when coming back online
   useEffect(() => {
-    return () => { cleanup(); };
-  }, [cleanup]);
+    const handleOnline = () => {
+      console.log("[VoiceEngine] Network back online");
+      // Only reconnect if we were in a session (not idle)
+      if (pcRef.current && !intentionalCloseRef.current) {
+        const cs = pcRef.current.connectionState;
+        if (cs === "disconnected" || cs === "failed") {
+          console.warn("[VoiceEngine] Network restored, triggering reconnect");
+          attemptReconnect(startSession);
+        }
+      }
+    };
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      cleanup();
+    };
+  }, [cleanup, attemptReconnect, startSession]);
 
   return {
     state,

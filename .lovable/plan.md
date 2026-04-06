@@ -1,42 +1,56 @@
 
 
-# فیلتر ایجنت‌ها — فقط ایجنت‌های اختصاصی هر کاربر
+# Enforce Zero-Visibility for Unauthorized Users
 
-## مشکل
-در حال حاضر `UserAgentsSections` تمام ایجنت‌هایی که کاربر با آن‌ها چت کرده را نشان می‌دهد (از `chat_sessions`). باید فقط ایجنت‌هایی که **رسماً به آن کاربر اختصاص داده شده** نمایش داده شوند.
+## Problem
 
-## منبع داده
-- جدول `user_agents` → ایجنت‌های اختصاص‌یافته به هر کاربر (با `agent_id` → `agents.code/name`)
-- جدول `chat_sessions` → سابقه چت (فقط برای ایجنت‌های مجاز)
+Current `ProtectedRoute` only checks if a `user` object exists — it does NOT verify the email is whitelisted. There is a race condition: between the moment a session is established (e.g. via Google OAuth) and the auto-sign-out in `onAuthStateChange`, an unauthorized user could briefly see system content (pages, nav, data).
 
-## تغییرات
+## Solution
 
-### 1. هوک `src/hooks/useUserAgentSessions.ts`
-- ابتدا لیست ایجنت‌های اختصاصی کاربر از `user_agents` + `agents` واکشی شود
-- سپس `chat_sessions` فقط برای همان `agent_name`‌های مجاز فیلتر شود
-- ایجنت‌هایی که اختصاص داده شده ولی هنوز چتی ندارند نیز نمایش داده شوند (با `sessionCount: 0`)
+Add a whitelist check directly in `ProtectedRoute`. If a user is authenticated but their email is NOT in `allowedLoginEmails`, render a blank screen and trigger sign-out — showing absolutely nothing.
+
+## Changes
+
+### File: `src/components/auth/ProtectedRoute.tsx`
+
+Add email whitelist verification after the `user` check:
 
 ```typescript
-// 1. Fetch assigned agents
-const { data: assigned } = await supabase
-  .from("user_agents")
-  .select("agents!inner(code, name)")
-  .eq("user_id", userId);
+import { Navigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 
-// 2. Build allowed agent names set
-const allowedAgents = new Map(assigned.map(a => [a.agents.code, a.agents.name]));
+export function ProtectedRoute({ children }) {
+  const { user, loading, signOut } = useAuth();
 
-// 3. Filter chat_sessions to only allowed agents
-const sessions = ... .in("agent_name", [...allowedAgents.keys()]);
+  if (loading) {
+    return /* loading spinner (existing) */;
+  }
 
-// 4. Include assigned agents with 0 sessions
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // CRITICAL: If user exists but email is NOT whitelisted → show nothing, sign out
+  const email = user.email?.toLowerCase() ?? "";
+  const isAllowed = ACCESS_POLICIES.allowedLoginEmails.some(
+    (e) => e.toLowerCase() === email
+  );
+
+  if (!isAllowed) {
+    signOut(); // trigger sign-out in background
+    return null; // render absolutely nothing
+  }
+
+  return <>{children}</>;
+}
 ```
 
-### 2. فایل‌های تغییر
-- `src/hooks/useUserAgentSessions.ts` — بازنویسی queryFn
-
-### نتیجه
-- هر کاربر فقط ایجنت‌های خودش را می‌بیند
-- ایجنت‌هایی که به او مرتبط نیست اصلاً نمایش داده نمی‌شود
-- ایجنت‌های اختصاصی بدون سابقه چت هم با `(0 sessions)` نشان داده می‌شوند
+## Impact
+- Any unauthorized user who somehow gets a session sees a completely blank screen
+- Sign-out is triggered immediately in the background
+- Works as a second defense layer alongside `onAuthStateChange` in `auth.tsx`
+- No changes to any other file
+- Zero risk to existing authorized users
 

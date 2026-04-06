@@ -1,6 +1,14 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
+
+function isEmailAllowed(email: string | undefined): boolean {
+  if (!email) return false;
+  return ACCESS_POLICIES.allowedLoginEmails.some(
+    (e) => e.toLowerCase() === email.toLowerCase(),
+  );
+}
 
 interface AuthContextType {
   user: User | null;
@@ -20,7 +28,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
+        if (session?.user && !isEmailAllowed(session.user.email)) {
+          console.warn("Unauthorized email detected, signing out:", session.user.email);
+          await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -31,6 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
+    if (!isEmailAllowed(email)) {
+      return { error: new Error("Access denied — your account is not authorized.") };
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };
   };

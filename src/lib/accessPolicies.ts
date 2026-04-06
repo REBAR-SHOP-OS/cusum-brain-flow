@@ -34,4 +34,19 @@ export const ACCESS_POLICIES = {
 
   /** Internal domain for basic access checks */
   internalDomain: "@rebar.shop",
+
+  /** Exhaustive whitelist — only these emails may sign in */
+  allowedLoginEmails: [
+    "sattar@rebar.shop",
+    "radin@rebar.shop",
+    "zahra@rebar.shop",
+    "neel@rebar.shop",
+    "vicky@rebar.shop",
+    "kourosh@rebar.shop",
+    "saurabh@rebar.shop",
+    "ben@rebar.shop",
+    "ai@rebar.shop",
+    "swapnil.m183@gmail.com",
+    "tariq0001010@gmail.com",
+  ] as string[],
 };

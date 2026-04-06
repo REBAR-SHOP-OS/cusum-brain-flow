@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { hasAnyRole } from "../_shared/roleCheck.ts";
+import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 
@@ -37,6 +38,23 @@ async function refreshPageToken(
 
 Deno.serve((req) =>
   handleRequest(req, async ({ userId, serviceClient: supabaseAdmin, body, req: rawReq }) => {
+
+    // Flexible auth: allow admin/marketing roles OR super admin emails
+    const hasPublishRole = await hasAnyRole(supabaseAdmin, userId, ["admin", "marketing"]);
+    if (!hasPublishRole) {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("email")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const email = (profile?.email ?? "").toLowerCase();
+      if (!SUPER_ADMIN_EMAILS.includes(email)) {
+        return new Response(
+          JSON.stringify({ error: "Forbidden: requires admin, marketing role or super admin access" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
 
     const publishSchema = z.object({
       platform: z.enum(["facebook", "instagram", "linkedin", "twitter"]),
@@ -414,10 +432,12 @@ Deno.serve((req) =>
       if (igPublishQueue.length > 0) {
         console.log(`[social-publish] Publishing to ${igPublishQueue.length} IG accounts in parallel`);
         const igResults = await Promise.allSettled(
-          igPublishQueue.map(({ igAccountId, pageAccessToken: pat, targetPageName: tpn }) =>
-            publishToInstagram(igAccountId, pat, message, image_url, content_type, cover_image_url)
-              .then(r => ({ ...r, targetPageName: tpn }))
-              .catch(e => ({ error: e?.message || String(e), targetPageName: tpn }))
+          igPublishQueue.map(({ igAccountId, pageAccessToken: pat, targetPageName: tpn }, index) =>
+            new Promise((r) => setTimeout(r, index * 1500)).then(() =>
+              publishToInstagram(igAccountId, pat, message, image_url, content_type, cover_image_url)
+                .then(r => ({ ...r, targetPageName: tpn }))
+                .catch(e => ({ error: e?.message || String(e), targetPageName: tpn }))
+            )
           )
         );
         for (const settled of igResults) {
@@ -479,7 +499,7 @@ Deno.serve((req) =>
     functionName: "social-publish",
     requireCompany: false,
     wrapResult: false,
-    requireAnyRole: ["admin", "marketing"],
+    
   })
 );
 
@@ -594,13 +614,23 @@ async function publishToInstagram(
 
     console.log(`[social-publish] Creating container for IG account ${igAccountId}, media_type=${containerBody.media_type || "IMAGE"}`);
 
-    const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(containerBody),
-    });
+    let containerData: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(containerBody),
+      });
+      containerData = await containerRes.json();
 
-    const containerData = await containerRes.json();
+      if (containerData.error?.is_transient && attempt < 2) {
+        console.warn(`[IG] Transient error on attempt ${attempt + 1}, retrying in 3s...`);
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      break;
+    }
+
     if (containerData.error) {
       console.error("Instagram container error:", containerData.error);
       return { error: `Instagram: ${containerData.error.message}` };

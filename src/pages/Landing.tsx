@@ -130,8 +130,8 @@ export default function Landing() {
             <Link to="/login">
               <Button variant="ghost" size="sm">Sign In</Button>
             </Link>
-            <Link to="/signup">
-              <Button size="sm">Request Pilot <ArrowRight className="w-4 h-4 ml-1" /></Button>
+            <Link to="/login">
+              <Button size="sm">Get Started <ArrowRight className="w-4 h-4 ml-1" /></Button>
             </Link>
           </div>
         </nav>
@@ -155,8 +155,8 @@ export default function Landing() {
               AI-powered production intelligence that eliminates waste, prevents errors, and turns workshops into data-driven smart factories.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
-              <Link to="/signup">
-                <Button size="lg" className="text-base px-8">Request a Pilot <ArrowRight className="w-4 h-4 ml-2" /></Button>
+              <Link to="/login">
+                <Button size="lg" className="text-base px-8">Get Started <ArrowRight className="w-4 h-4 ml-2" /></Button>
               </Link>
               <a href="https://rebar.shop" target="_blank" rel="noopener noreferrer">
                 <Button size="lg" variant="outline" className="text-base px-8">Watch Demo</Button>
@@ -339,7 +339,7 @@ export default function Landing() {
                       </li>
                     ))}
                   </ul>
-                  <Link to="/signup">
+                  <Link to="/login">
                     <Button variant={t.popular ? "default" : "outline"} className="w-full">{t.price}</Button>
                   </Link>
                 </div>
@@ -355,8 +355,8 @@ export default function Landing() {
             <p className="text-lg text-foreground/80 mb-3">AI + low-cost sensors + ERP APIs make industrial intelligence affordable for the first time.</p>
             <p className="text-muted-foreground mb-8">Material savings scale with steel price. Even 5% improvement is huge. The ROI is obvious and fast.</p>
             <div className="flex items-center justify-center gap-4">
-              <Link to="/signup">
-                <Button size="lg" className="text-base px-10">Request a Pilot <ArrowRight className="w-4 h-4 ml-2" /></Button>
+              <Link to="/login">
+                <Button size="lg" className="text-base px-10">Get Started <ArrowRight className="w-4 h-4 ml-2" /></Button>
               </Link>
               <a href="https://rebar.shop" target="_blank" rel="noopener noreferrer">
                 <Button size="lg" variant="outline" className="text-base px-8">Watch Demo</Button>

@@ -36,6 +36,8 @@ export function useUserRole() {
   const isShopSupervisor = hasRole("shop_supervisor");
   const isCustomer = hasRole("customer");
   const isField = hasRole("field");
+  const isMarketing = hasRole("marketing");
+  const canAccessSocialModules = isAdmin || isMarketing;
 
   return {
     roles: roles ?? [],
