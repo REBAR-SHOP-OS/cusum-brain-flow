@@ -99,12 +99,9 @@ export function TagsExportView() {
   );
 
   const sortedRows = useMemo(() => {
-    return [...rows].sort((a, b) => {
-      const sizeA = a.bar_size_mapped || a.bar_size || "";
-      const sizeB = b.bar_size_mapped || b.bar_size || "";
-      if (sizeA !== sizeB) return sizeA.localeCompare(sizeB);
-      return (b.total_length_mm || 0) - (a.total_length_mm || 0);
-    });
+    return [...rows].sort((a, b) => 
+      (b.total_length_mm || 0) - (a.total_length_mm || 0)
+    );
   }, [rows, sortMode]);
 
   // CSV export
