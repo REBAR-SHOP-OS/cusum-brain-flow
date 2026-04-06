@@ -239,7 +239,26 @@ ${agentAuditContext}`,
       if (cid) {
         // Get today's date in workspace timezone
         const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
-        const todayStart = new Date(`${todayDate}T00:00:00`);
+        // Build timezone-safe midnight: construct UTC guess then adjust by offset
+        const midnightUtcGuess = Date.UTC(
+          parseInt(todayDate.slice(0, 4)),
+          parseInt(todayDate.slice(5, 7)) - 1,
+          parseInt(todayDate.slice(8, 10)),
+          0, 0, 0
+        );
+        // Compute the offset: how far is "tz midnight" from UTC midnight?
+        const tzFormatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+          hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+        });
+        const offsetParts = Object.fromEntries(
+          tzFormatter.formatToParts(new Date(midnightUtcGuess))
+            .filter(p => p.type !== "literal")
+            .map(p => [p.type, Number(p.value)])
+        );
+        const zonedUtc = Date.UTC(offsetParts.year, offsetParts.month - 1, offsetParts.day, offsetParts.hour, offsetParts.minute, offsetParts.second);
+        const offsetMs = zonedUtc - midnightUtcGuess;
+        const todayStart = new Date(midnightUtcGuess - offsetMs);
         const todayStartIso = todayStart.toISOString();
 
         // Fetch ALL company profiles

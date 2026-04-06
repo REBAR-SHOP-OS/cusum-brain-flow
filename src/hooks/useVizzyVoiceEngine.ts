@@ -1,8 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useVoiceEngine } from "./useVoiceEngine";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
-import { getTimeContextInTimezone } from "@/lib/dateConfig";
-import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
+import { getTorontoTimePayload } from "@/lib/dateConfig";
 import { toast } from "sonner";
 
 /**
@@ -418,23 +417,19 @@ export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
 function buildInstructions(
   digest: string | null,
   rawContext: string | null,
-  timezone?: string,
   brainMemories?: string | null
 ): string {
-  if (!digest && !rawContext) return VIZZY_INSTRUCTIONS;
-
-  const { timeOfDay, formattedNow, timezoneLabel } = getTimeContextInTimezone(timezone);
-  const timeContext = `It is currently ${timeOfDay} in the workspace timezone (${timezoneLabel}) — ${formattedNow}.`;
+  const { timeString, timeOfDay, dateString } = getTorontoTimePayload();
 
   const realTimeClock = `
 ═══ REAL-TIME CLOCK (CRITICAL — NEVER GET THIS WRONG) ═══
 You are in CANADA timezone: America/Toronto (Eastern Time).
-The EXACT current time at session start: ${formattedNow} (America/Toronto — Eastern Time).
-ALWAYS use America/Toronto timezone. NEVER use UTC, server time, or any other timezone. ONLY Eastern Time.
-If the user asks "what time is it?" — calculate: session start time + elapsed conversation time = CURRENT time.
-Provide the CURRENT time in America/Toronto (Eastern Time), NOT the session start time.
+RIGHT NOW it is: ${timeString}, ${dateString} (Eastern Time).
+This is the EXACT current time. Do NOT calculate elapsed time. Do NOT estimate. Just use this time.
+If the user asks "what time is it?" — answer: "${timeString}" (Eastern Time).
 You MUST always know the current time. Never say "I don't know the time."
-The timezone is ALWAYS America/Toronto regardless of any other setting.`;
+The timezone is ALWAYS America/Toronto regardless of any other setting.
+NEVER use UTC, server time, or any other timezone. ONLY Eastern Time.`;
 
   const brainBlock = brainMemories ? `
 ═══ BRAIN MEMORY (ALWAYS USE — CEO VERIFIED INTELLIGENCE) ═══
@@ -445,32 +440,40 @@ If a brain memory says "X is wrong, the correct answer is Y" — ALWAYS use Y.
 
 ${brainMemories}` : "";
 
+  if (!digest && !rawContext) {
+    return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay}. Good ${timeOfDay}!\n${brainBlock}`;
+  }
+
   if (digest) {
     return `${VIZZY_INSTRUCTIONS}
 ${realTimeClock}
 
-CURRENT TIME CONTEXT: ${timeContext} Greet the CEO with "Good ${timeOfDay}!" or a natural variation.
+CURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.
 ${brainBlock}
 
-═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${formattedNow}) ═══
+═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${timeString} ${dateString}) ═══
 You have ALREADY gone through all the raw data, analyzed every employee, read every call note, checked every email, compared benchmarks. The analysis below is YOUR OWN work. Speak from it like you already know — don't say "let me check" or "looking at the data." You KNOW.
 
 ${digest}`;
   }
 
-  // Fallback: raw context only (no digest available)
-  return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: ${timeContext} Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${formattedNow}) ═══\n${rawContext}`;
+  // Fallback: raw context only
+  return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
 }
 
 export function useVizzyVoiceEngine() {
-  const { timezone } = useWorkspaceSettings();
   const [contextLoading, setContextLoading] = useState(false);
   const contextFetched = useRef(false);
+  const timeSyncRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Ref always holds the latest instructions — avoids stale closure
-  const instructionsRef = useRef(buildInstructions(null, null, timezone));
+  // Ref to hold latest digest/rawContext/brain for full rebuilds
+  const lastDigestRef = useRef<string | null>(null);
+  const lastRawContextRef = useRef<string | null>(null);
+  const lastBrainRef = useRef<string | null>(null);
 
-  // Pass a getter function so useVoiceEngine reads the latest instructions at connection time
+  // Ref always holds the latest instructions
+  const instructionsRef = useRef(buildInstructions(null, null));
+
   const engine = useVoiceEngine({
     instructions: () => instructionsRef.current,
     voice: "shimmer",
@@ -482,31 +485,42 @@ export function useVizzyVoiceEngine() {
   });
 
   const originalStartSession = engine.startSession;
+  const originalEndSession = engine.endSession;
   const updateSessionInstructions = engine.updateSessionInstructions;
 
+  // Rebuild instructions from scratch with fresh time
+  const rebuildAndPush = useCallback(() => {
+    instructionsRef.current = buildInstructions(
+      lastDigestRef.current,
+      lastRawContextRef.current,
+      lastBrainRef.current
+    );
+    updateSessionInstructions(instructionsRef.current);
+  }, [updateSessionInstructions]);
+
   const startSession = useCallback(async () => {
-    // Always refresh time context before every session to prevent stale time
+    // Always rebuild instructions with fresh time
+    instructionsRef.current = buildInstructions(
+      lastDigestRef.current,
+      lastRawContextRef.current,
+      lastBrainRef.current
+    );
+
+    // Start periodic time sync (every 60 seconds push fresh time)
+    if (timeSyncRef.current) clearInterval(timeSyncRef.current);
+    timeSyncRef.current = setInterval(() => {
+      rebuildAndPush();
+      console.log("[VizzyVoice] Time sync pushed");
+    }, 60_000);
+
     if (contextFetched.current) {
-      // Context already loaded from a previous session — just refresh the time portion
-      const { timeOfDay, formattedNow, timezoneLabel } = getTimeContextInTimezone(timezone);
-      const freshTimeContext = `It is currently ${timeOfDay} in the workspace timezone (${timezoneLabel}) — ${formattedNow}.`;
-      // Replace the CURRENT TIME CONTEXT line in existing instructions
-      instructionsRef.current = instructionsRef.current.replace(
-        /CURRENT TIME CONTEXT: .+?Greet the CEO/,
-        `CURRENT TIME CONTEXT: ${freshTimeContext} Greet the CEO`
-      );
-      // Also update the "as of" timestamps
-      instructionsRef.current = instructionsRef.current.replace(
-        /as of [^)]+\)/g,
-        `as of ${formattedNow})`
-      );
+      // Context already loaded — just start with fresh time
       updateSessionInstructions(instructionsRef.current);
       originalStartSession();
       return;
     }
 
     contextFetched.current = true;
-    instructionsRef.current = buildInstructions(null, null, timezone);
     setContextLoading(true);
     originalStartSession();
 
@@ -519,13 +533,10 @@ export function useVizzyVoiceEngine() {
         }>("vizzy-pre-digest", {}, { timeoutMs: 45000 });
 
         if (data?.digest) {
-          instructionsRef.current = buildInstructions(
-            data.digest,
-            data.rawContext || null,
-            timezone,
-            data.brainMemories || null
-          );
-          updateSessionInstructions(instructionsRef.current);
+          lastDigestRef.current = data.digest;
+          lastRawContextRef.current = data.rawContext || null;
+          lastBrainRef.current = data.brainMemories || null;
+          rebuildAndPush();
           return;
         }
 
@@ -536,8 +547,9 @@ export function useVizzyVoiceEngine() {
         );
         const contextData = fallback?.rawContext || fallback?.briefing;
         if (contextData) {
-          instructionsRef.current = buildInstructions(null, contextData, timezone);
-          updateSessionInstructions(instructionsRef.current);
+          lastDigestRef.current = null;
+          lastRawContextRef.current = contextData;
+          rebuildAndPush();
         }
       } catch (err) {
         console.warn("Pre-digest failed, trying daily-brief fallback:", err);
@@ -549,8 +561,9 @@ export function useVizzyVoiceEngine() {
           );
           const contextData = fallback?.rawContext || fallback?.briefing;
           if (contextData) {
-            instructionsRef.current = buildInstructions(null, contextData, timezone);
-            updateSessionInstructions(instructionsRef.current);
+            lastDigestRef.current = null;
+            lastRawContextRef.current = contextData;
+            rebuildAndPush();
           }
         } catch (err2) {
           console.warn("Daily-brief fallback also failed:", err2);
@@ -560,11 +573,27 @@ export function useVizzyVoiceEngine() {
         setContextLoading(false);
       }
     })();
-  }, [originalStartSession, timezone, updateSessionInstructions]);
+  }, [originalStartSession, updateSessionInstructions, rebuildAndPush]);
+
+  const endSession = useCallback(async () => {
+    if (timeSyncRef.current) {
+      clearInterval(timeSyncRef.current);
+      timeSyncRef.current = null;
+    }
+    originalEndSession();
+  }, [originalEndSession]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeSyncRef.current) clearInterval(timeSyncRef.current);
+    };
+  }, []);
 
   return {
     ...engine,
     startSession,
+    endSession,
     contextLoading,
   };
 }
