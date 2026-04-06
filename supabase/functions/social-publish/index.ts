@@ -93,7 +93,7 @@ Deno.serve((req) =>
       }
 
       // ── Enhanced Duplicate Guard ──────────────────────────────────
-      if (existing) {
+      if (existing && !force_publish) {
         // Use workspace timezone for accurate "today" boundaries
         const tz = await getWorkspaceTimezone(supabaseAdmin);
         const nowLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
