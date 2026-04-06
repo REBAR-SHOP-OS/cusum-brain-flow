@@ -381,9 +381,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             </div>
           )}
 
-          {isError && (
+          {isError && !isAutoRetrying && (
             <button
-              onClick={startSession}
+              onClick={() => { autoRetryCountRef.current = 0; startSession(); }}
               className="px-5 py-2 rounded-full text-sm font-medium transition-colors"
               style={{
                 background: "hsl(172 66% 50%)",
@@ -392,6 +392,15 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             >
               Retry Connection
             </button>
+          )}
+
+          {isAutoRetrying && (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: "hsl(45 93% 58%)" }} />
+              <span className="text-xs" style={{ color: "hsl(45 93% 58%)" }}>
+                Auto-retry {autoRetryCountRef.current}/{MAX_AUTO_RETRIES}...
+              </span>
+            </div>
           )}
 
           {isConnected && outputAudioBlocked && (
