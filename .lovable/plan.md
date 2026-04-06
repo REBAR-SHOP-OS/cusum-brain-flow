@@ -1,30 +1,18 @@
 
 
-# Add Team Hub to ai@rebar.shop Sidebar
+# Change Kiosk Sleep Timer from 5 Minutes to 3 Minutes
 
-## Current State
-- `ai@rebar.shop` sidebar only shows **Kiosk** and **Shop Floor** (AppSidebar.tsx line 70-73)
-- RoleGuard already allows `/team-hub` for this account (line 138) and redirects to `/shopfloor` for non-allowed routes — so the default landing page is already shop-floor
-- No changes needed for default page — it already works
+## Change
 
-## Fix
+### File: `src/pages/TimeClock.tsx` (line 65)
 
-### File: `src/components/layout/AppSidebar.tsx` (lines 70-73)
-
-Add Team Hub to the `aiNav` array:
+Change `KIOSK_IDLE_MS` from `5 * 60 * 1000` to `3 * 60 * 1000`.
 
 ```typescript
-const aiNav: NavItem[] = [
-  { name: "Kiosk", href: "/timeclock?kiosk=1", icon: Maximize },
-  { name: "Shop Floor", href: "/shop-floor", icon: Factory },
-  { name: "Team Hub", href: "/team-hub", icon: Users },
-];
+const KIOSK_IDLE_MS = 3 * 60 * 1000; // 3 minutes
 ```
 
-Import `Users` from lucide-react (likely already imported).
-
 ## Impact
-- Only adds one nav item to the ai@rebar.shop sidebar
-- No other users or routes affected
-- Team Hub access is already permitted by RoleGuard
+- Only affects kiosk sleep timeout for all kiosk users (including ai@rebar.shop)
+- No other logic or behavior changes
 
