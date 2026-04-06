@@ -138,6 +138,13 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const configRef = useRef(config);
   configRef.current = config;
 
+  // Stability refs
+  const reconnectAttemptsRef = useRef(0);
+  const keepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const iceGraceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalCloseRef = useRef(false);
+  const MAX_RECONNECT_ATTEMPTS = 3;
+
   // Keep transcriptsRef in sync
   useEffect(() => { transcriptsRef.current = transcripts; }, [transcripts]);
 
@@ -155,9 +162,26 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     }
   };
 
+  const clearKeepalive = useCallback(() => {
+    if (keepaliveRef.current) {
+      clearInterval(keepaliveRef.current);
+      keepaliveRef.current = null;
+    }
+  }, []);
+
+  const clearIceGrace = useCallback(() => {
+    if (iceGraceRef.current) {
+      clearTimeout(iceGraceRef.current);
+      iceGraceRef.current = null;
+    }
+  }, []);
+
   const cleanup = useCallback(() => {
+    intentionalCloseRef.current = true;
     clearTimeout_();
     clearSessionTimer();
+    clearKeepalive();
+    clearIceGrace();
     if (dcRef.current) {
       try { dcRef.current.close(); } catch {}
       dcRef.current = null;
@@ -176,7 +200,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     }
     pendingSessionInstructionsRef.current = null;
     setOutputAudioBlocked(false);
-  }, []);
+  }, [clearKeepalive, clearIceGrace]);
 
   /** Push new system instructions to OpenAI Realtime after connect (e.g. ERP digest arrived late). */
   const updateSessionInstructions = useCallback((instructions: string) => {
@@ -226,6 +250,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           clearTimeout_();
           setState("connected");
           setMode("listening");
+          reconnectAttemptsRef.current = 0; // Reset on successful session
           if (navigator.vibrate) navigator.vibrate(50);
           break;
 
