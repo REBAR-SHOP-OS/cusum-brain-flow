@@ -50,6 +50,12 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
       setShowVoiceChat(true);
     }, []);
 
+    const onBrainClick = useCallback((e: React.MouseEvent) => {
+      e.stopPropagation();
+      setExpanded(false);
+      setShowBrainPanel(true);
+    }, []);
+
     const onChatClick = useCallback((e: React.MouseEvent) => {
       e.stopPropagation();
       setExpanded(false);
@@ -68,6 +74,12 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
         <AnimatePresence>
           {showVoiceChat && (
             <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showBrainPanel && (
+            <VizzyBrainPanel onClose={() => setShowBrainPanel(false)} />
           )}
         </AnimatePresence>
 
