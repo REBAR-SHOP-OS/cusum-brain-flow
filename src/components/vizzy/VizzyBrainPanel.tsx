@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Trash2, Check, Pencil, Loader2 } from "lucide-react";
+import { X, Brain, Zap, Trash2, Check, Pencil, Loader2, AlertTriangle } from "lucide-react";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -97,7 +97,7 @@ function MemoryCard({
 }
 
 export function VizzyBrainPanel({ onClose }: Props) {
-  const { entries, isLoading, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
+  const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
 
@@ -108,7 +108,6 @@ export function VizzyBrainPanel({ onClose }: Props) {
       if (!map[cat]) map[cat] = [];
       map[cat].push(e);
     }
-    // Sort categories by label
     return Object.entries(map).sort(([a], [b]) =>
       getCategoryLabel(a).localeCompare(getCategoryLabel(b))
     );
@@ -126,12 +125,79 @@ export function VizzyBrainPanel({ onClose }: Props) {
     }
   };
 
+  const renderContent = () => {
+    if (isLoading || isCompanyLoading) {
+      return (
+        <div className="flex items-center justify-center py-12 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading...
+        </div>
+      );
+    }
+
+    if (!hasCompanyContext) {
+      return (
+        <div className="text-center py-12 text-muted-foreground">
+          <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-50 text-warning" />
+          <p className="text-sm font-medium">Company profile not found</p>
+          <p className="text-xs mt-1">Your account may not be linked to a company yet.</p>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="text-center py-12 text-muted-foreground">
+          <AlertTriangle className="w-10 h-10 mx-auto mb-3 opacity-50 text-destructive" />
+          <p className="text-sm font-medium">Failed to load memories</p>
+          <p className="text-xs mt-1">{(error as Error).message}</p>
+        </div>
+      );
+    }
+
+    if (grouped.length === 0) {
+      return (
+        <div className="text-center py-12 text-muted-foreground">
+          <Brain className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No memories yet. Click "Analyze Now" to scan the system.</p>
+        </div>
+      );
+    }
+
+    return (
+      <Accordion type="multiple" className="w-full space-y-1">
+        {grouped.map(([cat, items]) => (
+          <AccordionItem key={cat} value={cat} className="border border-border rounded-lg px-3">
+            <AccordionTrigger className="text-sm font-medium hover:no-underline">
+              <span className="flex items-center gap-2">
+                {getCategoryLabel(cat)}
+                <span className="text-xs text-muted-foreground font-normal">({items.length})</span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 pt-1">
+                {items.map((entry) => (
+                  <MemoryCard
+                    key={entry.id}
+                    entry={entry}
+                    onUpdate={(id, content) => updateEntry({ id, content })}
+                    onDelete={deleteEntry}
+                  />
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    );
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      style={{ pointerEvents: "auto" }}
       onClick={onClose}
     >
       <motion.div
@@ -150,7 +216,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
             <span className="text-xs text-muted-foreground">({entries.length})</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" onClick={handleAnalyze} disabled={analyzing} className="gap-1">
+            <Button size="sm" onClick={handleAnalyze} disabled={analyzing || !hasCompanyContext} className="gap-1">
               {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
               {analyzing ? "Analyzing..." : "Analyze Now"}
             </Button>
@@ -163,43 +229,9 @@ export function VizzyBrainPanel({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Accordion List */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading...
-            </div>
-          ) : grouped.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Brain className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">No memories yet. Click "Analyze Now" to scan the system.</p>
-            </div>
-          ) : (
-            <Accordion type="multiple" className="w-full space-y-1">
-              {grouped.map(([cat, items]) => (
-                <AccordionItem key={cat} value={cat} className="border border-border rounded-lg px-3">
-                  <AccordionTrigger className="text-sm font-medium hover:no-underline">
-                    <span className="flex items-center gap-2">
-                      {getCategoryLabel(cat)}
-                      <span className="text-xs text-muted-foreground font-normal">({items.length})</span>
-                    </span>
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    <div className="space-y-2 pt-1">
-                      {items.map((entry) => (
-                        <MemoryCard
-                          key={entry.id}
-                          entry={entry}
-                          onUpdate={(id, content) => updateEntry({ id, content })}
-                          onDelete={deleteEntry}
-                        />
-                      ))}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
-          )}
+          {renderContent()}
         </div>
       </motion.div>
     </motion.div>
