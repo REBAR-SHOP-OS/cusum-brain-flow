@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Pin, PinOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
@@ -39,7 +39,7 @@ const accentStyles: Record<Accent, { border: string; glow: string; icon: string 
   },
 };
 
-function ArchFlowNodeInner({ id, data, selected }: NodeProps<ArchFlowNodeData>) {
+function ArchFlowNodeInner({ id, data, selected }: NodeProps<Node<ArchFlowNodeData>>) {
   const st = accentStyles[data.accent];
   const isLarge = !!data.large;
 
