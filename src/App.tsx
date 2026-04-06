@@ -151,7 +151,12 @@ const App = () => (
                     {/* Public routes */}
                     <Route path="/" element={<SmartErrorBoundary level="page" maxAutoRetries={2}><Landing /></SmartErrorBoundary>} />
                     <Route path="/login" element={<Login />} />
-                    <Route path="/signup" element={<Signup />} />
+                    <Route path="/signup" element={
+                      (() => {
+                        const params = new URLSearchParams(window.location.search);
+                        return params.get("token") ? <Signup /> : <Navigate to="/login" replace />;
+                      })()
+                    } />
                     {/* Print-only route â€” zero app layout */}
                     <Route path="/print-tags" element={<ProtectedRoute><Suspense fallback={<div>Loading...</div>}><PrintTags /></Suspense></ProtectedRoute>} />
 
