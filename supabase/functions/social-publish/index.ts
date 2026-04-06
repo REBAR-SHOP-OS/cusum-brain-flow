@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { hasAnyRole } from "../_shared/roleCheck.ts";
+import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 
@@ -37,6 +38,23 @@ async function refreshPageToken(
 
 Deno.serve((req) =>
   handleRequest(req, async ({ userId, serviceClient: supabaseAdmin, body, req: rawReq }) => {
+
+    // Flexible auth: allow admin/marketing roles OR super admin emails
+    const hasPublishRole = await hasAnyRole(supabaseAdmin, userId, ["admin", "marketing"]);
+    if (!hasPublishRole) {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("email")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const email = (profile?.email ?? "").toLowerCase();
+      if (!SUPER_ADMIN_EMAILS.includes(email)) {
+        return new Response(
+          JSON.stringify({ error: "Forbidden: requires admin, marketing role or super admin access" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+    }
 
     const publishSchema = z.object({
       platform: z.enum(["facebook", "instagram", "linkedin", "twitter"]),
@@ -479,7 +497,7 @@ Deno.serve((req) =>
     functionName: "social-publish",
     requireCompany: false,
     wrapResult: false,
-    requireAnyRole: ["admin", "marketing"],
+    
   })
 );
 
