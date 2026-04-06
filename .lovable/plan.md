@@ -1,49 +1,47 @@
 
 
-# Speed Up Face Recognition for AI@REBAR.SHOP Kiosk
+# Enforce Data-Grounded Answers in Vizzy Voice Engine
 
 ## Problem
-Face scanning is slow because every scan: downloads up to 3 photos per enrolled person from storage, converts all to base64, sends all images to AI, and retries on failure. This adds up to several seconds.
+When the CEO asks aggregate questions like "how many people are active?" or "who's online?", Vizzy sometimes gives inaccurate answers instead of reading directly from the injected ERP data (team presence, time clock entries, profiles).
 
-## Optimizations
+## Root Cause
+The current instructions enforce data usage for individual employee lookups (via `investigate_entity`), but lack a strong directive for **aggregate team queries**. Vizzy may paraphrase or estimate instead of reading the exact numbers from the `[FACTS]` block and `TEAM PRESENCE` section.
 
-### 1. Edge Function: `supabase/functions/face-recognize/index.ts`
+## Changes
 
-**a) Use faster AI model**
-- Switch from `gemini-2.5-flash` to `gemini-2.5-flash-lite` (fastest model, ideal for classification tasks like face matching)
+### 1. `src/hooks/useVizzyVoiceEngine.ts` — Add Team Query Data Rule
 
-**b) Reduce photos per person: 3 → 1**
-- Line 56: change `if (urls.length < 3)` → `if (urls.length < 1)`
-- Fewer images = less download time + less AI processing time
+Add a new section to `VIZZY_INSTRUCTIONS` (after the `ANTI-HALLUCINATION: HARD NUMBER RULES` block, around line 411):
 
-**c) Remove retry logic**
-- Lines 243-262: Remove the "retry once if no structured result" block
-- Saves an entire duplicate AI call on edge cases
+```
+═══ TEAM & PRESENCE QUERIES (MANDATORY DATA-ONLY) ═══
+When asked "how many people are active", "who's working", "who's online", "how many staff":
+1. Go to TEAM PRESENCE section — count who is "Currently Clocked In" = ACTIVE
+2. Count who is "Clocked Out Today" = was here but left
+3. Cross-reference with the full profiles list to identify who is ABSENT (no clock entry at all)
+4. Report EXACT numbers: "Right now X people are clocked in: [names]. Y already left today. Z haven't shown up."
+5. NEVER estimate or round. NEVER say "about" or "around" for headcount.
+6. For "total staff" → use the [FACTS] block number ONLY
+7. For "who's online right now" → ONLY count Currently Clocked In from TEAM PRESENCE
+```
 
-**d) Reduce prompt verbosity**
-- Shorten the system prompt (lines 134-159) — remove redundant anti-bias rules that inflate token count and slow processing
+Also strengthen the `QUESTION → DATA MAPPING` section (line 367) to add:
+```
+- "How many people are active?" / "Who's online?" / "چند نفر فعال هستن؟" → TEAM PRESENCE (Currently Clocked In) + cross-ref full staff list
+```
 
-### 2. Client: `src/hooks/useFaceRecognition.ts`
+### 2. `supabase/functions/_shared/vizzyFullContext.ts` — Add Staff Summary Line
 
-**a) Reduce captured image size**
-- Line 51-52: Change canvas from 640×480 → 480×360
-- Line 53: Reduce JPEG quality from 0.85 → 0.7
-- Smaller payload = faster upload + faster AI processing
+In the output string, add a clear factual summary line near the `[FACTS]` block that states:
+```
+STAFF PRESENCE: X currently clocked in, Y clocked out today, Z total registered staff
+```
 
-### 3. Client: `src/pages/TimeClock.tsx`
+This gives Vizzy an unambiguous single line to read for presence queries.
 
-**a) For ai@rebar.shop: auto-trigger scan on camera ready**
-- After camera starts in kiosk mode, auto-click "Scan Face" after 1s delay so the operator doesn't need to tap
-
-## Expected Impact
-- Model switch: ~40-50% faster AI response
-- 1 photo vs 3: ~60% less download + smaller AI payload
-- Smaller capture: ~30% less upload time
-- No retry: eliminates worst-case double latency
-- Auto-scan: removes manual tap delay
-
-## Files Changed
-- `supabase/functions/face-recognize/index.ts`
-- `src/hooks/useFaceRecognition.ts`
-- `src/pages/TimeClock.tsx`
+### Result
+- Vizzy will always report exact, real-time numbers for team presence
+- No hallucination or estimation for "how many people are active"
+- Both Farsi and English queries about staff presence map to the correct data section
 
