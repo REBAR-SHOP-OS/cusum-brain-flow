@@ -402,18 +402,36 @@ export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
 function buildInstructions(
   digest: string | null,
   rawContext: string | null,
-  timezone?: string
+  timezone?: string,
+  brainMemories?: string | null
 ): string {
   if (!digest && !rawContext) return VIZZY_INSTRUCTIONS;
 
   const { timeOfDay, formattedNow, timezoneLabel } = getTimeContextInTimezone(timezone);
   const timeContext = `It is currently ${timeOfDay} in the workspace timezone (${timezoneLabel}) — ${formattedNow}.`;
 
+  const realTimeClock = `
+═══ REAL-TIME CLOCK (CRITICAL) ═══
+The CURRENT time is: ${formattedNow} (${timezoneLabel}).
+This session started at ${formattedNow}. For time-sensitive questions, calculate the current time by adding elapsed conversation time to this start time.
+When asked "what time is it?" — provide the CURRENT time in ${timezoneLabel}, not the session start time.
+You MUST always know the current time. Never say "I don't know the time."`;
+
+  const brainBlock = brainMemories ? `
+═══ BRAIN MEMORY (ALWAYS USE — CEO VERIFIED INTELLIGENCE) ═══
+Your BRAIN contains saved insights, corrections, and learned facts from previous sessions.
+When answering ANY question, ALWAYS cross-reference your Brain Memory below.
+Brain memories are the CEO's verified corrections and your own learned insights — they take PRIORITY over raw data when there's a conflict.
+If a brain memory says "X is wrong, the correct answer is Y" — ALWAYS use Y.
+
+${brainMemories}` : "";
+
   if (digest) {
-    // Pre-digested mode: digest is self-sufficient — omit rawContext to prevent token overflow
     return `${VIZZY_INSTRUCTIONS}
+${realTimeClock}
 
 CURRENT TIME CONTEXT: ${timeContext} Greet the CEO with "Good ${timeOfDay}!" or a natural variation.
+${brainBlock}
 
 ═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${formattedNow}) ═══
 You have ALREADY gone through all the raw data, analyzed every employee, read every call note, checked every email, compared benchmarks. The analysis below is YOUR OWN work. Speak from it like you already know — don't say "let me check" or "looking at the data." You KNOW.
@@ -422,7 +440,7 @@ ${digest}`;
   }
 
   // Fallback: raw context only (no digest available)
-  return `${VIZZY_INSTRUCTIONS}\n\nCURRENT TIME CONTEXT: ${timeContext} Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n\n═══ LIVE BUSINESS DATA (as of ${formattedNow}) ═══\n${rawContext}`;
+  return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: ${timeContext} Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${formattedNow}) ═══\n${rawContext}`;
 }
 
 export function useVizzyVoiceEngine() {
@@ -478,13 +496,15 @@ export function useVizzyVoiceEngine() {
         const data = await invokeEdgeFunction<{
           digest: string;
           rawContext?: string;
+          brainMemories?: string;
         }>("vizzy-pre-digest", {}, { timeoutMs: 45000 });
 
         if (data?.digest) {
           instructionsRef.current = buildInstructions(
             data.digest,
             data.rawContext || null,
-            timezone
+            timezone,
+            data.brainMemories || null
           );
           updateSessionInstructions(instructionsRef.current);
           return;

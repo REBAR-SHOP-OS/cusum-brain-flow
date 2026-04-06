@@ -70,6 +70,19 @@ Deno.serve((req) =>
       ? `\n═══ PREVIOUS AGENT AUDIT (${new Date(prevAudit.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz })}) ═══\n${prevAudit.content}`
       : "\nNo previous agent audit available.";
 
+    // Step 2c: Load Brain Memories (vizzy_memory excluding benchmarks/timeclock)
+    const { data: brainMemories } = await supabase
+      .from("vizzy_memory")
+      .select("category, content, created_at")
+      .eq("user_id", userId)
+      .not("category", "in", "(daily_benchmark,timeclock)")
+      .order("created_at", { ascending: false })
+      .limit(30);
+
+    const brainBlock = (brainMemories || [])
+      .map((m: any) => `[${m.category}] ${m.content}`)
+      .join("\n");
+
     // Step 3: AI pre-digestion — produce a concise intelligence briefing
     const result = await callAI({
       provider: "gemini",
@@ -384,6 +397,7 @@ ${agentAuditContext}`,
     return {
       digest: cleanDigest,
       rawContext,
+      brainMemories: brainBlock || null,
       generated_at: new Date().toISOString(),
     };
   }, { functionName: "vizzy-pre-digest", requireCompany: false, wrapResult: false })
