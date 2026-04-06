@@ -1,50 +1,46 @@
 
 
-# Stabilize Vizzy Voice Session
+# Add Explicit Absent Staff List to Vizzy Context
 
-## Current Stability Issues
+## Problem
+When asked "how many people are in the company?" or "who hasn't shown up?", Vizzy must cross-reference the TEAM PRESENCE section against the full staff list to compute absent names. This mental math is unreliable — Vizzy sometimes gets it wrong.
 
-1. **Single auto-reconnect** — only retries once on disconnect, then gives up permanently
-2. **No ICE state monitoring** — only watches `connectionstatechange`, misses ICE failures
-3. **No data channel close detection** — if DC closes silently, session hangs with no recovery
-4. **No network change detection** — switching WiFi or losing connectivity causes silent death
-5. **No keepalive/heartbeat** — stale connections not detected until OpenAI drops them
-6. **Error state is terminal** — requires manual "Retry" tap; no auto-recovery
+## Solution
+Add a third presence category ("Not Clocked In Today") that explicitly lists staff members with no time clock entry, so Vizzy reads exact names instead of computing them.
 
-## Plan
+## Changes
 
-### File: `src/hooks/useVoiceEngine.ts`
+### File: `supabase/functions/_shared/vizzyFullContext.ts` (~line 382)
 
-**a) Exponential auto-reconnect (up to 3 attempts)**
-- Replace the single `hasAutoReconnected` boolean with a counter (`reconnectAttempts`)
-- On disconnect: wait 1.5s, 3s, 6s between retries (exponential backoff)
-- After 3 failures, show error state
-- Reset counter on successful `session.created`
+After the "Clocked Out Today" block, add:
 
-**b) ICE connection state monitoring**
-- Add `pc.oniceconnectionstatechange` handler
-- On `"failed"` → trigger reconnect flow
-- On `"disconnected"` → start a 5s grace timer; if not recovered, reconnect
+```typescript
+// Compute absent staff (no clock entry at all today)
+const clockedProfileIds = new Set(clockEntries.map((t: any) => t.profile_id));
+const absentProfiles = (profiles || []).filter((p: any) => !clockedProfileIds.has(p.id));
+if (absentProfiles.length > 0) {
+  presenceLines.push("  Not Clocked In Today:");
+  absentProfiles.forEach((p: any) =>
+    presenceLines.push(`    • ${p.full_name || "Unknown"}`)
+  );
+}
+```
 
-**c) Data channel close/error detection**
-- Add `dc.onclose` and `dc.onerror` handlers
-- On unexpected close → trigger reconnect
+Also update the FACTS block (~line 838) to include `absent` count:
+```
+absent=${absentProfiles.length}
+```
 
-**d) Network change listener**
-- Listen to `window.addEventListener("online", ...)` 
-- When network comes back online after being offline → auto-reconnect
+And update the STAFF PRESENCE summary line:
+```
+STAFF PRESENCE: X currently clocked in, Y clocked out today, Z absent, N total registered staff
+```
 
-**e) Keepalive ping every 30s**
-- Send a small `input_audio_buffer.clear` message on the data channel every 30s to keep the connection alive and detect stale connections early
-- If send throws → trigger reconnect
+### Redeploy
+- `admin-chat`, `vizzy-daily-brief`, `vizzy-pre-digest` (they share this context file)
 
-### File: `src/components/vizzy/VizzyVoiceChat.tsx`
-
-**f) Auto-retry on error state**
-- When `voiceState === "error"`, auto-retry after 3s (up to 2 times) before showing manual retry button
-- Show "Reconnecting..." status during auto-retry
-
-## Files Changed
-- `src/hooks/useVoiceEngine.ts`
-- `src/components/vizzy/VizzyVoiceChat.tsx`
+## Result
+- Vizzy sees explicit absent names — no inference needed
+- "How many people are here?" → reads Currently Clocked In count + names directly
+- "Who hasn't shown up?" → reads Not Clocked In Today list directly
 
