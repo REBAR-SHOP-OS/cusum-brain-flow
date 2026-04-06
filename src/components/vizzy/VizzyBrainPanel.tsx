@@ -182,17 +182,14 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const { toast } = useToast();
 
   const grouped = useMemo(() => {
-    // Group entries by sidebar group
     const map: Record<string, VizzyMemoryEntry[]> = {};
     for (const e of entries) {
       const groupKey = CATEGORY_TO_GROUP[e.category] || "dashboard";
       if (!map[groupKey]) map[groupKey] = [];
       map[groupKey].push(e);
     }
-    // Return in sidebar order, only groups that have entries
-    return SIDEBAR_GROUPS
-      .filter((g) => map[g.key] && map[g.key].length > 0)
-      .map((g) => ({ key: g.key, label: g.label, items: map[g.key] }));
+    // Return ALL groups in sidebar order, even if empty
+    return SIDEBAR_GROUPS.map((g) => ({ key: g.key, label: g.label, items: map[g.key] || [] }));
   }, [entries]);
 
   const handleAnalyze = async () => {
