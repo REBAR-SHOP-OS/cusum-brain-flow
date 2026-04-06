@@ -1,27 +1,38 @@
 
 
-# Barlist sections closed by default in Station View
+# حذف لغو خودکار ران‌ها بر اساس محدودیت زمانی
 
-## Problem
-In the station view (`src/pages/StationView.tsx`), both customer sections and barlist sections auto-expand when they have active work (`defaultOpen={cust.hasActiveWork}` on line 428 and `defaultOpen={bl.hasActiveWork}` on line 452). The user wants **barlists** to always start collapsed.
+## مشکل
+سه نقطه در کد، ران‌های فعال را بر اساس مدت زمان (30 دقیقه یا 60 دقیقه) به صورت خودکار کنسل می‌کنند. این باعث کنسل شدن ران‌هایی می‌شود که واقعاً هنوز در حال اجرا هستند.
 
-## Changes
+## تغییرات
 
-### File: `src/pages/StationView.tsx`
+### 1. `supabase/functions/manage-machine/index.ts` — حذف شرط stale از startRun
 
-**Line 452** — Change barlist `Collapsible` from:
-```tsx
-<Collapsible key={bl.planId} defaultOpen={bl.hasActiveWork}>
-```
-to:
-```tsx
-<Collapsible key={bl.planId} defaultOpen={false}>
-```
+**خط ~160**: حذف `STALE_THRESHOLD_MS` و `isStale` از بلاک startRun. فقط `isOrphan`، `isInactive` و `activeJobDone` باقی بمانند.
 
-Customer sections (line 428) remain unchanged — they still auto-expand based on active work. Only barlists within each project/customer will be closed by default.
+**خط ~357**: حذف `STALE_THRESHOLD_MS` و `isStale` از بلاک startQueuedRun. فقط `isOrphan` و `isInactive` باقی بمانند.
 
-## Result
-- All barlist sections start collapsed inside each customer group
-- Customer groups still auto-expand if they have active work
-- Users can manually open any barlist they want to view
+تغییرات:
+- حذف `const STALE_THRESHOLD_MS = 30 * 60 * 1000;` (دو جا)
+- حذف `const isStale = ...` (دو جا)
+- حذف `isStale` از شرط `if` و از `reason` logic
+- حذف `isStale` از `logProductionEvent` payload
+
+### 2. `src/components/shopfloor/CutterStationView.tsx` — حذف شرط stale از client
+
+**خط ~110-112**: حذف شرط زمانی `isStale` از restore logic. فقط وضعیت‌های غیرفعال (`runErr || !runRow || runRow.status !== "running"`) چک شوند.
+
+تغییرات:
+- حذف `const isStale = runRow?.status === "running" && ...`
+- حذف `|| isStale` از شرط `if`
+
+## آنچه حفظ می‌شود
+- Orphan recovery (ران بدون رکورد در DB) — **بدون تغییر**
+- Inactive recovery (ران با وضعیت paused/completed/canceled) — **بدون تغییر**
+- Active job done recovery — **بدون تغییر**
+
+## نتیجه
+- هیچ رانی فقط به دلیل طولانی بودن زمان کنسل نمی‌شود
+- ران‌های واقعی می‌توانند ساعت‌ها فعال بمانند بدون اینکه سیستم آن‌ها را کنسل کند
 
