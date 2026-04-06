@@ -40,12 +40,11 @@ export default function PrintTags() {
   }, [sessionId]);
 
   const sortedRows = useMemo(() => {
-    if (sortMode === "standard") return rows;
     return [...rows].sort((a, b) => {
       const sA = a.bar_size_mapped || a.bar_size || "";
       const sB = b.bar_size_mapped || b.bar_size || "";
       if (sA !== sB) return sA.localeCompare(sB);
-      return (a.total_length_mm || 0) - (b.total_length_mm || 0);
+      return (b.total_length_mm || 0) - (a.total_length_mm || 0);
     });
   }, [rows, sortMode]);
 
