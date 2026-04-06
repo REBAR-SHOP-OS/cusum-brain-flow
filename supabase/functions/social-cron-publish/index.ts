@@ -660,20 +660,41 @@ async function publishToLinkedIn(
       .eq("integration_id", "linkedin")
       .maybeSingle();
 
-    // OWNER-ONLY: no team fallback when ownerOnly is true
-    if (!connection && !ownerOnly) {
-      const { data: fallback } = await supabase
-        .from("integration_connections")
-        .select("config")
-        .eq("integration_id", "linkedin")
-        .eq("status", "connected")
-        .order("last_sync_at", { ascending: false })
-        .limit(1)
+    // Team fallback: find any teammate in same company with valid LinkedIn connection
+    if (!connection) {
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
         .maybeSingle();
-      connection = fallback;
+
+      if (ownerProfile?.company_id) {
+        const { data: teammates } = await supabase
+          .from("profiles")
+          .select("user_id")
+          .eq("company_id", ownerProfile.company_id)
+          .neq("user_id", userId);
+
+        for (const tm of teammates || []) {
+          const { data: tmConn } = await supabase
+            .from("integration_connections")
+            .select("config")
+            .eq("user_id", tm.user_id)
+            .eq("integration_id", "linkedin")
+            .maybeSingle();
+          if (tmConn) {
+            const tmConfig = tmConn.config as { expires_at: number };
+            if (tmConfig.expires_at > Date.now()) {
+              connection = tmConn;
+              console.log(`[social-cron] LinkedIn team fallback: using token from user ${tm.user_id}`);
+              break;
+            }
+          }
+        }
+      }
     }
 
-    if (!connection) return { error: ownerOnly ? `LinkedIn not connected for post owner (${userId}). Owner-only token policy.` : "LinkedIn not connected" };
+    if (!connection) return { error: "LinkedIn not connected for any team member." };
     const config = connection.config as { access_token: string; expires_at: number };
 
     if (config.expires_at < Date.now()) return { error: "LinkedIn token expired — please reconnect LinkedIn in Settings → Integrations" };
