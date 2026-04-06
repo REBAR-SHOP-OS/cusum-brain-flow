@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
+import type { ArchLayer, ArchNode } from "@/lib/architectureGraphData";
 
 export type FlowAccent = "cyan" | "emerald" | "violet" | "orange" | "blue" | "rose";
 
@@ -10,7 +11,10 @@ export type ArchFlowNodeData = {
   label: string;
   hint: string;
   accent: FlowAccent;
+  layer: ArchLayer;
   Icon: LucideIcon;
+  detail: ArchNode["detail"];
+  isCustom?: boolean;
   onDelete?: (id: string) => void;
   onLabelChange?: (id: string, label: string) => void;
 };
@@ -73,7 +77,7 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        "relative rounded-xl text-center transition-all duration-200",
+        "group relative rounded-xl text-center transition-all duration-200",
         selected && "ring-2 ring-white/40",
       )}
       style={{
@@ -141,8 +145,9 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
         />
       ) : (
         <span
-          className="text-[11px] font-semibold text-white leading-tight truncate max-w-[110px] cursor-text"
+          className="max-w-[112px] cursor-text text-balance text-[11px] font-semibold leading-tight text-white"
           onDoubleClick={() => { setEditVal(nodeData.label); setEditing(true); }}
+          title={nodeData.label}
         >
           {nodeData.label}
         </span>
