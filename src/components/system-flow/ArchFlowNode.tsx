@@ -39,7 +39,7 @@ const accentStyles: Record<Accent, { border: string; glow: string; icon: string 
   },
 };
 
-function ArchFlowNodeInner({ id, data, selected }: NodeProps<ArchFlowNodeData>) {
+function ArchFlowNodeInner({ id, data, selected }: NodeProps<Node<ArchFlowNodeData>>) {
   const st = accentStyles[data.accent];
   const isLarge = !!data.large;
 
