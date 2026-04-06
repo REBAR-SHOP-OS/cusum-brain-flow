@@ -339,16 +339,28 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
   const selectedProfile = rebarProfiles.find((p) => p.id === selectedProfileId);
 
+  // Filter entries by selected user name if applicable
+  const filteredEntries = useMemo(() => {
+    if (!selectedProfile) return entries;
+    const firstName = selectedProfile.full_name?.split(" ")[0]?.toLowerCase();
+    const fullName = selectedProfile.full_name?.toLowerCase();
+    const email = selectedProfile.email?.toLowerCase();
+    if (!firstName) return entries;
+    return entries.filter((e) => {
+      const c = e.content.toLowerCase();
+      return c.includes(firstName) || (fullName && c.includes(fullName)) || (email && c.includes(email));
+    });
+  }, [entries, selectedProfile]);
+
   const grouped = useMemo(() => {
     const map: Record<string, VizzyMemoryEntry[]> = {};
-    for (const e of entries) {
+    for (const e of filteredEntries) {
       const groupKey = CATEGORY_TO_GROUP[e.category] || "dashboard";
       if (!map[groupKey]) map[groupKey] = [];
       map[groupKey].push(e);
     }
-    // Return ALL groups in sidebar order, even if empty
     return SIDEBAR_GROUPS.map((g) => ({ key: g.key, label: g.label, items: map[g.key] || [] }));
-  }, [entries]);
+  }, [filteredEntries]);
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
