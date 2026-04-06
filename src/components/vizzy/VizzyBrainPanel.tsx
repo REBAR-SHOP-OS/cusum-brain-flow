@@ -178,8 +178,57 @@ function PerformanceCard({ profileId, userId, name, timezone }: { profileId: str
 }
 
 /** Agent sessions accordion for selected user */
-function UserAgentsSections({ userId, name }: { userId: string; name: string }) {
-  const { data: agents, isLoading } = useUserAgentSessions(userId);
+function UserAgentsSections({ userId, name, email }: { userId: string; name: string; email?: string }) {
+  const { data: sessionAgents, isLoading } = useUserAgentSessions(userId);
+  const assignedMapping = getUserAgentMapping(email);
+
+  // Build merged list: assigned agent + any additional agents from sessions
+  const mergedAgents = React.useMemo(() => {
+    const result: Array<{
+      agentName: string;
+      agentRole: string;
+      isAssigned: boolean;
+      sessionCount: number;
+      totalMessages: number;
+      lastUsed: string;
+      recentMessages: { role: string; content: string; created_at: string }[];
+    }> = [];
+
+    // Add assigned agent first
+    if (assignedMapping) {
+      const config = agentConfigs[assignedMapping.agentKey];
+      const sessionData = sessionAgents?.find(
+        (s) => s.agentName.toLowerCase() === (config?.name?.toLowerCase() ?? assignedMapping.agentKey)
+      );
+      result.push({
+        agentName: config?.name ?? assignedMapping.agentKey,
+        agentRole: config?.role ?? assignedMapping.userRole,
+        isAssigned: true,
+        sessionCount: sessionData?.sessionCount ?? 0,
+        totalMessages: sessionData?.totalMessages ?? 0,
+        lastUsed: sessionData?.lastUsed ?? "",
+        recentMessages: sessionData?.recentMessages ?? [],
+      });
+    }
+
+    // Add any other agents from sessions that aren't the assigned one
+    for (const s of sessionAgents ?? []) {
+      const alreadyAdded = result.some((r) => r.agentName.toLowerCase() === s.agentName.toLowerCase());
+      if (!alreadyAdded) {
+        result.push({
+          agentName: s.agentName,
+          agentRole: "",
+          isAssigned: false,
+          sessionCount: s.sessionCount,
+          totalMessages: s.totalMessages,
+          lastUsed: s.lastUsed,
+          recentMessages: s.recentMessages,
+        });
+      }
+    }
+
+    return result;
+  }, [assignedMapping, sessionAgents]);
 
   if (isLoading) {
     return (
@@ -190,18 +239,18 @@ function UserAgentsSections({ userId, name }: { userId: string; name: string }) 
     );
   }
 
-  if (!agents?.length) {
+  if (!mergedAgents.length) {
     return (
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-        <span className="text-xs text-muted-foreground italic">No AI agent sessions found</span>
+        <span className="text-xs text-muted-foreground italic">No agents assigned</span>
       </div>
     );
   }
 
-    return (
-      <div className="space-y-1">
-        <Accordion type="multiple" className="w-full space-y-1">
-        {agents.map((agent) => (
+  return (
+    <div className="space-y-1">
+      <Accordion type="multiple" className="w-full space-y-1">
+        {mergedAgents.map((agent) => (
           <AccordionItem
             key={agent.agentName}
             value={`agent-${agent.agentName}`}
@@ -210,16 +259,25 @@ function UserAgentsSections({ userId, name }: { userId: string; name: string }) 
             <AccordionTrigger className="text-sm font-medium hover:no-underline">
               <span className="flex items-center gap-2">
                 🤖 {agent.agentName}
-                <span className="text-xs text-muted-foreground font-normal">
-                  ({agent.sessionCount} session{agent.sessionCount !== 1 ? "s" : ""})
-                </span>
+                {agent.agentRole && (
+                  <span className="text-[10px] text-muted-foreground font-normal">— {agent.agentRole}</span>
+                )}
+                {agent.isAssigned && (
+                  <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">Assigned</span>
+                )}
+                {agent.sessionCount > 0 ? (
+                  <span className="text-xs text-muted-foreground font-normal">
+                    ({agent.sessionCount} session{agent.sessionCount !== 1 ? "s" : ""})
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-muted-foreground font-normal italic">No activity yet</span>
+                )}
               </span>
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2 pt-1">
                 {agent.sessionCount > 0 ? (
                   <>
-                    {/* Summary stats */}
                     <div className="flex items-center gap-4 text-[11px] text-muted-foreground bg-muted/40 rounded-md px-3 py-1.5 mb-2">
                       <span>Sessions: <strong className="text-foreground">{agent.sessionCount}</strong></span>
                       <span>Messages: <strong className="text-foreground">{agent.totalMessages}</strong></span>
@@ -227,7 +285,6 @@ function UserAgentsSections({ userId, name }: { userId: string; name: string }) 
                         <span>Last active: <strong className="text-foreground">{format(new Date(agent.lastUsed), "MMM d, h:mm a")}</strong></span>
                       )}
                     </div>
-                    {/* Messages */}
                     {agent.recentMessages.map((msg, i) => (
                       <div key={i} className="rounded border border-border bg-card p-2">
                         <div className="flex items-center gap-1.5 mb-1">
@@ -482,6 +539,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
                     <UserAgentsSections
                       userId={selectedProfile.user_id}
                       name={selectedProfile.full_name?.split(" ")[0] || "User"}
+                      email={selectedProfile.email}
                     />
                   </div>
                 </div>
