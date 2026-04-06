@@ -1,52 +1,32 @@
 
 
-# Stabilize Vizzy Voice Turn-Taking
+# Show Assigned Agents per User with Activity Reports
 
 ## Problem
-Vizzy sometimes interrupts itself mid-response — cuts off and gives a different answer. The OpenAI Realtime API's VAD (Voice Activity Detection) is picking up ambient noise or echo as "user speech," triggering a new response before the current one completes. The prompt-level instruction exists but the VAD parameters are too sensitive.
+The Agents section under each user currently only shows agents they've **used** (from `chat_sessions`). If a user hasn't used their assigned agent yet, nothing appears. The user wants to see which agents are **available/assigned** to each user, and show activity reports only if they've actually used them.
 
-## Root Cause
-1. **VAD threshold too low**: Currently `0.6` — background noise or speaker echo can trigger false "user speaking" events
-2. **Silence duration too short**: `800ms` — OpenAI interprets brief pauses as end-of-turn, starts responding prematurely
-3. **Prefix padding too short**: `400ms` — not enough buffer before detecting speech start
-4. **No `eagerness` parameter**: OpenAI Realtime supports an `eagerness` field in `turn_detection` that controls how aggressively the model responds (`low` = wait longer)
+## Data Source
+`src/lib/userAgentMap.ts` already maps each `@rebar.shop` email to their primary agent (e.g., Saurabh → `sales`/Blitz, Zahra → `social`/Pixel). `src/components/agent/agentConfigs.ts` has agent display names and roles.
 
 ## Changes
 
-### 1. Increase VAD stability in `src/hooks/useVizzyVoiceEngine.ts` (line ~492-494)
+### File: `src/components/vizzy/VizzyBrainPanel.tsx` — `UserAgentsSections` component (~line 181)
 
-Adjust the voice engine config:
-- `vadThreshold`: `0.6` → `0.75` (require stronger signal to detect speech)
-- `silenceDurationMs`: `800` → `1200` (wait 1.2s of silence before considering turn complete)
-- `prefixPaddingMs`: `400` → `500` (more buffer before speech detection)
+1. Accept `email` prop in addition to `userId` and `name`
+2. Import `getUserAgentMapping` from `@/lib/userAgentMap` and `agentConfigs` from `@/components/agent/agentConfigs`
+3. Look up the user's assigned agent via `getUserAgentMapping(email)`
+4. Merge assigned agent(s) with actual session data:
+   - If the assigned agent has session data → show it with full activity report (sessions, messages, recent thread)
+   - If the assigned agent has **no** session data → show it with a "No activity yet" indicator
+   - Also show any other agents the user has used beyond their assigned one
+5. Pass `email` from the parent where `UserAgentsSections` is rendered (~line 482-485), using `selectedProfile.email`
 
-### 2. Add `eagerness` parameter to token edge function (`supabase/functions/voice-engine-token/index.ts`)
-
-- Accept `eagerness` param from client (default `"low"`)
-- Pass it in `turn_detection` config to OpenAI: `eagerness: "low"`
-- This tells the model to wait longer before responding
-
-### 3. Pass `eagerness` from voice engine hook (`src/hooks/useVoiceEngine.ts`)
-
-- Add `eagerness` to the config interface (~line 26)
-- Pass it through to the edge function call (~line 371)
-- Default to `"low"` for conservative turn-taking
-
-### 4. Strengthen turn-taking prompt in `src/hooks/useVizzyVoiceEngine.ts` (~line 310-315)
-
-Add explicit instruction:
-```
-CRITICAL STABILITY RULE: If you are currently speaking and generating audio, you MUST complete your ENTIRE response before stopping. Do NOT abort mid-sentence to start a new response. If the user interrupts, finish your current sentence first, THEN acknowledge them. Never produce two overlapping responses.
-```
-
-## Result
-- Higher VAD threshold reduces false triggers from echo/noise
-- Longer silence duration prevents premature turn-ending
-- `eagerness: "low"` makes the model wait for clear user intent
-- Stronger prompt reinforces complete-before-responding behavior
+### Result
+- Each user sees their assigned agent listed (e.g., Saurabh sees "Blitz — Sales & Pipeline")
+- If they've used it, the activity report expands with sessions/messages
+- If they haven't, it shows the agent name with "No activity yet"
+- Any additional agents they've used also appear with reports
 
 ## Files Changed
-- `src/hooks/useVizzyVoiceEngine.ts` — VAD params + prompt update
-- `src/hooks/useVoiceEngine.ts` — add `eagerness` to config interface
-- `supabase/functions/voice-engine-token/index.ts` — pass `eagerness` to OpenAI
+- `src/components/vizzy/VizzyBrainPanel.tsx` — update `UserAgentsSections` to show assigned agents + pass email prop
 
