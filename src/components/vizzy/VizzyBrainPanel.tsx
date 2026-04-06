@@ -12,32 +12,27 @@ interface Props {
   onClose: () => void;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  brain_insight: "🧠 Insights",
-  general: "📌 General",
-  benchmark: "📊 Benchmarks",
-  daily_benchmark: "📊 Daily Benchmarks",
-  call_summary: "📞 Calls",
-  voicemail_summary: "📩 Voicemails",
-  agent_audit: "🤖 Agent Audits",
-  auto_fix: "🔧 Auto-Fixes",
-  feedback_patch: "📝 Feedback Patches",
-  feedback_fix: "🔧 Feedback Fixes",
-  feedback_clarification: "💬 Clarifications",
-  feedback_escalation: "🚨 Escalations",
-  business: "💼 Business",
-  pre_digest: "📋 Digests",
-  timeclock: "⏰ Time Clock",
-  production: "🏭 Production",
-  orders: "📦 Orders",
-  leads: "🎯 Leads",
-  accounting: "💰 Accounting",
-  email: "📧 Email",
-  crm: "👥 CRM",
-};
+const SIDEBAR_GROUPS: { key: string; label: string; categories: string[] }[] = [
+  { key: "dashboard",  label: "📊 Dashboard",        categories: ["brain_insight", "general", "benchmark", "daily_benchmark"] },
+  { key: "inbox",      label: "📥 Inbox",             categories: ["email"] },
+  { key: "team_hub",   label: "💬 Team Hub",          categories: ["feedback_clarification", "feedback_patch"] },
+  { key: "tasks",      label: "📋 Business Tasks",    categories: ["auto_fix", "feedback_fix"] },
+  { key: "monitor",    label: "📡 Live Monitor",      categories: ["agent_audit", "pre_digest"] },
+  { key: "ceo",        label: "🏢 CEO Portal",        categories: ["business"] },
+  { key: "support",    label: "🎧 Support",           categories: ["feedback_escalation", "call_summary", "voicemail_summary"] },
+  { key: "pipeline",   label: "📈 Pipeline & Leads",  categories: ["leads"] },
+  { key: "customers",  label: "👥 Customers",         categories: ["crm", "orders"] },
+  { key: "accounting", label: "💰 Accounting",        categories: ["accounting"] },
+  { key: "shop_floor", label: "🏭 Shop Floor",        categories: ["production"] },
+  { key: "timeclock",  label: "⏰ Time Clock",        categories: ["timeclock"] },
+];
 
-function getCategoryLabel(cat: string) {
-  return CATEGORY_LABELS[cat] || cat;
+// Build a reverse map: category -> group key
+const CATEGORY_TO_GROUP: Record<string, string> = {};
+for (const g of SIDEBAR_GROUPS) {
+  for (const c of g.categories) {
+    CATEGORY_TO_GROUP[c] = g.key;
+  }
 }
 
 function getDateKey(dateStr: string) {
@@ -183,15 +178,17 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const { toast } = useToast();
 
   const grouped = useMemo(() => {
+    // Group entries by sidebar group
     const map: Record<string, VizzyMemoryEntry[]> = {};
     for (const e of entries) {
-      const cat = e.category;
-      if (!map[cat]) map[cat] = [];
-      map[cat].push(e);
+      const groupKey = CATEGORY_TO_GROUP[e.category] || "dashboard";
+      if (!map[groupKey]) map[groupKey] = [];
+      map[groupKey].push(e);
     }
-    return Object.entries(map).sort(([a], [b]) =>
-      getCategoryLabel(a).localeCompare(getCategoryLabel(b))
-    );
+    // Return in sidebar order, only groups that have entries
+    return SIDEBAR_GROUPS
+      .filter((g) => map[g.key] && map[g.key].length > 0)
+      .map((g) => ({ key: g.key, label: g.label, items: map[g.key] }));
   }, [entries]);
 
   const handleAnalyze = async () => {
@@ -246,17 +243,17 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
     return (
       <Accordion type="multiple" className="w-full space-y-1">
-        {grouped.map(([cat, items]) => (
-          <AccordionItem key={cat} value={cat} className="border border-border rounded-lg px-3">
+        {grouped.map((group) => (
+          <AccordionItem key={group.key} value={group.key} className="border border-border rounded-lg px-3">
             <AccordionTrigger className="text-sm font-medium hover:no-underline">
               <span className="flex items-center gap-2">
-                {getCategoryLabel(cat)}
-                <span className="text-xs text-muted-foreground font-normal">({items.length})</span>
+                {group.label}
+                <span className="text-xs text-muted-foreground font-normal">({group.items.length})</span>
               </span>
             </AccordionTrigger>
             <AccordionContent>
               <DateGroupedEntries
-                items={items}
+                items={group.items}
                 onUpdate={(id, content) => updateEntry({ id, content })}
                 onDelete={deleteEntry}
               />
