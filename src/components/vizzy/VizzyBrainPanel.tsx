@@ -522,6 +522,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
               timezone={timezone}
             />
           )}
+          {/* Agent sessions for selected user */}
+          {selectedProfile?.user_id && (
+            <UserAgentsSections
+              userId={selectedProfile.user_id}
+              name={selectedProfile.full_name?.split(" ")[0] || "User"}
+            />
+          )}
           {renderContent()}
         </div>
       </motion.div>
