@@ -70,6 +70,7 @@ export function AppSidebar() {
     const aiNav: NavItem[] = [
       { name: "Kiosk", href: "/timeclock?kiosk=1", icon: Maximize },
       { name: "Shop Floor", href: "/shop-floor", icon: Factory },
+      { name: "Team Hub", href: "/team-hub", icon: Users },
     ];
     return (
       <aside data-tour="sidebar" className={cn("group/sidebar w-14 hover:w-48 shrink-0 border-r flex flex-col h-full transition-all duration-200 ease-in-out overflow-hidden", isAppBuilderRoute ? "bg-[hsl(var(--dashboard-reference-sidebar))] border-[hsl(var(--dashboard-reference-border))]" : "bg-sidebar border-sidebar-border")}>
