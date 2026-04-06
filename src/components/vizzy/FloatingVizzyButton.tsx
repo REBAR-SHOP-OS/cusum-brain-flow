@@ -2,10 +2,11 @@ import React, { useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { getFloatingPortalContainer } from "@/lib/floatingPortal";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Mic, MessageSquare } from "lucide-react";
+import { Mic, MessageSquare, Brain } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import { VizzyVoiceChat } from "./VizzyVoiceChat";
+import { VizzyBrainPanel } from "./VizzyBrainPanel";
 import { motion, AnimatePresence } from "framer-motion";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 
