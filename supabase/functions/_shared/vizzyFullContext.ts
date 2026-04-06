@@ -833,7 +833,10 @@ export async function buildFullVizzyContext(
   }
 
   // Build structured facts block for anti-hallucination anchoring
-  const factsBlock = `[FACTS] staff=${totalStaff}, customers=${totalCustomerCount}, open_leads=${openLeads}, AR=${fmt(totalReceivable)}, AP=${fmt(totalPayable)}, scheduled_deliveries=${scheduledToday}, in_transit=${inTransit}, rc_calls_today=${totalRcCalls}, rc_missed=${totalRcMissed} [/FACTS]`;
+  const clockedInCount = clockEntries.filter((t: any) => !t.clock_out).length;
+  const clockedOutTodayCount = clockEntries.filter((t: any) => !!t.clock_out).length;
+  const factsBlock = `[FACTS] staff=${totalStaff}, clocked_in=${clockedInCount}, clocked_out_today=${clockedOutTodayCount}, customers=${totalCustomerCount}, open_leads=${openLeads}, AR=${fmt(totalReceivable)}, AP=${fmt(totalPayable)}, scheduled_deliveries=${scheduledToday}, in_transit=${inTransit}, rc_calls_today=${totalRcCalls}, rc_missed=${totalRcMissed} [/FACTS]
+STAFF PRESENCE: ${clockedInCount} currently clocked in, ${clockedOutTodayCount} clocked out today, ${totalStaff} total registered staff`;
 
   // Build output as parts array to avoid deeply-nested template literal parsing issues
   const parts: string[] = [];

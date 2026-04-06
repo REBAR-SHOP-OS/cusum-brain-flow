@@ -364,7 +364,7 @@ Use this to know WHERE to look in the data below:
 - "What did the team do today?" → EMPLOYEE PERFORMANCE + TEAM PRESENCE + EMAIL BIRD'S-EYE VIEW + RINGCENTRAL CALLS + DIGITAL FOOTPRINT
 - "How is production?" → PRODUCTION + Active Work Orders
 - "Any overdue invoices?" → FINANCIALS (Overdue Invoices section)
-- "Who's working?" → TEAM PRESENCE & HOURS TODAY + DIGITAL FOOTPRINT
+- "Who's working?" / "Who's online?" / "چند نفر فعال هستن؟" / "کی آنلاینه؟" → TEAM PRESENCE (Currently Clocked In) + cross-ref [FACTS] staff count + DIGITAL FOOTPRINT
 - "How are sales?" → SALES PIPELINE + Hot Leads + RINGCENTRAL CALLS + CALL NOTES (read actual conversation content)
 - "What emails came in?" / "Check my emails" → EMAIL INBOX — read each one, summarize, flag urgency, suggest replies
 - "How's the money?" → ACCOUNTS RECEIVABLE + ACCOUNTS PAYABLE + Cash Flow
@@ -409,7 +409,18 @@ When reporting agent status:
 - For financial figures (AR, AP): ONLY use numbers from "ACCOUNTS RECEIVABLE" / "ACCOUNTS PAYABLE" or the [FACTS] block.
 - For call counts: ONLY use numbers from "RINGCENTRAL CALLS TODAY" or the [FACTS] block.
 - If you cannot find a specific number in the data below, say "I don't have that exact figure in today's snapshot" — NEVER fabricate a number.
-- The [FACTS] block at the top of the data is the AUTHORITATIVE source for key metrics. Always prefer it over narrative text.`;
+- The [FACTS] block at the top of the data is the AUTHORITATIVE source for key metrics. Always prefer it over narrative text.
+
+═══ TEAM & PRESENCE QUERIES (MANDATORY DATA-ONLY) ═══
+When asked "how many people are active", "who's working", "who's online", "how many staff", "چند نفر فعال هستن؟", "کی آنلاینه؟":
+1. Go to TEAM PRESENCE & HOURS TODAY section — count entries under "Currently Clocked In" = ACTIVE right now.
+2. Count entries under "Clocked Out Today" = was here but already left.
+3. Cross-reference with [FACTS] staff=N to identify who is ABSENT (total staff minus clocked-in minus clocked-out = absent).
+4. Also check the [FACTS] line for "clocked_in" and "clocked_out_today" for pre-computed counts.
+5. Report EXACT numbers with names: "Right now X people are clocked in: [names]. Y already left today. Z haven't shown up."
+6. NEVER estimate or round. NEVER say "about" or "around" for headcount.
+7. For "total staff" → use the [FACTS] block staff=N ONLY.
+8. For "who's online right now" → ONLY count "Currently Clocked In" names from TEAM PRESENCE.`;
 
 export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVoiceEngine";
 export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
