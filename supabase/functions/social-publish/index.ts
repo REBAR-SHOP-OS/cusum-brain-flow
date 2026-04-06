@@ -661,15 +661,49 @@ async function publishToLinkedIn(
   pageName?: string
 ): Promise<{ id?: string; error?: string }> {
   try {
-    // OWNER-ONLY: no team fallback
-    const { data: connection } = await supabase
+    // OWNER-FIRST with team fallback
+    let { data: connection } = await supabase
       .from("integration_connections")
       .select("config")
       .eq("user_id", userId)
       .eq("integration_id", "linkedin")
       .maybeSingle();
 
-    if (!connection) return { error: `LinkedIn not connected for your account. Owner-only token policy — please connect it from Settings → Integrations.` };
+    if (!connection) {
+      // Team fallback: find any teammate with a valid LinkedIn connection
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (ownerProfile?.company_id) {
+        const { data: teammates } = await supabase
+          .from("profiles")
+          .select("user_id")
+          .eq("company_id", ownerProfile.company_id)
+          .neq("user_id", userId);
+
+        for (const tm of teammates || []) {
+          const { data: tmConn } = await supabase
+            .from("integration_connections")
+            .select("config")
+            .eq("user_id", tm.user_id)
+            .eq("integration_id", "linkedin")
+            .maybeSingle();
+          if (tmConn) {
+            const tmConfig = tmConn.config as { expires_at: number };
+            if (tmConfig.expires_at > Date.now()) {
+              connection = tmConn;
+              console.log(`[social-publish] LinkedIn team fallback: using token from user ${tm.user_id}`);
+              break;
+            }
+          }
+        }
+      }
+
+      if (!connection) return { error: "LinkedIn not connected for any team member. Please connect from Settings → Integrations." };
+    }
     const config = connection.config as { access_token: string; expires_at: number; organization_ids?: Record<string, string> };
 
     if (config.expires_at < Date.now()) return { error: "LinkedIn token expired. Please reconnect." };
