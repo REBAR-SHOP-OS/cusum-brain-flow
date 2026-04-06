@@ -233,15 +233,6 @@ export function VizzyBrainPanel({ onClose }: Props) {
       );
     }
 
-    if (grouped.length === 0) {
-      return (
-        <div className="text-center py-12 text-muted-foreground">
-          <Brain className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No memories yet. Click "Analyze Now" to scan the system.</p>
-        </div>
-      );
-    }
-
     return (
       <Accordion type="multiple" className="w-full space-y-1">
         {grouped.map((group) => (
@@ -253,11 +244,15 @@ export function VizzyBrainPanel({ onClose }: Props) {
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              <DateGroupedEntries
-                items={group.items}
-                onUpdate={(id, content) => updateEntry({ id, content })}
-                onDelete={deleteEntry}
-              />
+              {group.items.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-3 text-center italic">No insights yet</p>
+              ) : (
+                <DateGroupedEntries
+                  items={group.items}
+                  onUpdate={(id, content) => updateEntry({ id, content })}
+                  onDelete={deleteEntry}
+                />
+              )}
             </AccordionContent>
           </AccordionItem>
         ))}
