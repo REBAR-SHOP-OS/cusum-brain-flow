@@ -18,11 +18,13 @@ export interface VizzyMemoryEntry {
 const QUERY_KEY = "vizzy_memory_all";
 
 export function useVizzyMemory() {
-  const { companyId } = useCompanyId();
+  const { companyId, isLoading: isCompanyLoading } = useCompanyId();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: entries = [], isLoading } = useQuery({
+  const hasCompanyContext = !!companyId;
+
+  const { data: entries = [], isLoading, error } = useQuery({
     queryKey: [QUERY_KEY, companyId],
     enabled: !!companyId,
     queryFn: async () => {
@@ -81,7 +83,6 @@ export function useVizzyMemory() {
 
     if (!res.reply) throw new Error("No response from analysis");
 
-    // Parse bullet points into individual entries
     const lines = res.reply
       .split("\n")
       .map((l) => l.trim())
@@ -102,7 +103,6 @@ export function useVizzyMemory() {
       const { error } = await supabase.from("vizzy_memory").insert(inserts);
       if (error) throw error;
     } else {
-      // Save entire response as single entry
       const { error } = await supabase.from("vizzy_memory").insert({
         company_id: companyId,
         user_id: userId,
@@ -121,6 +121,9 @@ export function useVizzyMemory() {
   return {
     entries,
     isLoading,
+    error,
+    isCompanyLoading,
+    hasCompanyContext,
     categories,
     updateEntry: updateMutation.mutate,
     deleteEntry: deleteMutation.mutate,
