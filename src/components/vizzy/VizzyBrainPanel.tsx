@@ -250,6 +250,75 @@ function PerformanceCard({ profileId, userId, name, timezone }: { profileId: str
   );
 }
 
+/** Agent sessions accordion for selected user */
+function UserAgentsSections({ userId, name }: { userId: string; name: string }) {
+  const { data: agents, isLoading } = useUserAgentSessions(userId);
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin mr-2 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Loading agents...</span>
+      </div>
+    );
+  }
+
+  if (!agents?.length) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+        <span className="text-xs text-muted-foreground italic">No AI agent sessions found</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5 mb-2">
+        <Bot className="w-4 h-4 text-primary" />
+        {name}'s Agents
+      </h3>
+      <Accordion type="multiple" className="w-full space-y-1">
+        {agents.map((agent) => (
+          <AccordionItem
+            key={agent.agentName}
+            value={`agent-${agent.agentName}`}
+            className="border border-border rounded-lg px-3"
+          >
+            <AccordionTrigger className="text-sm font-medium hover:no-underline">
+              <span className="flex items-center gap-2">
+                🤖 {agent.agentName}
+                <span className="text-xs text-muted-foreground font-normal">
+                  ({agent.sessionCount} session{agent.sessionCount !== 1 ? "s" : ""})
+                </span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 pt-1">
+                {agent.recentMessages.map((msg, i) => (
+                  <div key={i} className="rounded border border-border bg-card p-2">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span className={`text-[10px] font-semibold ${msg.role === "user" ? "text-primary" : "text-muted-foreground"}`}>
+                        {msg.role === "user" ? "👤 You" : `🤖 ${agent.agentName}`}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">
+                        {format(new Date(msg.created_at), "MMM d, HH:mm")}
+                      </span>
+                    </div>
+                    <p className="text-xs text-foreground line-clamp-2">{msg.content}</p>
+                  </div>
+                ))}
+                {agent.recentMessages.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic text-center py-2">No messages</p>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    </div>
+  );
+}
+
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
   const { timezone } = useWorkspaceSettings();
