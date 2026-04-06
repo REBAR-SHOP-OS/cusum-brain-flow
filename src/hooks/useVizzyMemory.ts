@@ -36,6 +36,8 @@ export function useVizzyMemory() {
   const { data: entries = [], isLoading, error } = useQuery({
     queryKey: [QUERY_KEY, companyId],
     enabled: !!companyId,
+    staleTime: 10_000,
+    refetchInterval: 30_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("vizzy_memory")

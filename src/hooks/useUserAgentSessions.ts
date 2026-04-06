@@ -13,7 +13,8 @@ export function useUserAgentSessions(userId: string | null) {
   return useQuery({
     queryKey: ["user_agent_sessions", userId],
     enabled: !!userId,
-    staleTime: 1000 * 60 * 2,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
     queryFn: async (): Promise<AgentSessionSummary[]> => {
       const { data: sessions, error } = await supabase
         .from("chat_sessions")
