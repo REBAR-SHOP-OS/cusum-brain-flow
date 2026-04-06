@@ -1,33 +1,25 @@
 
 
-# تغییر ایجنت پیش‌فرض radin به Vizzy (Assistant)
-
-## وضعیت فعلی
-
-`radin@rebar.shop` از نظر دسترسی، **هم‌اکنون** به همه بخش‌ها دسترسی دارد (SuperAdmin). اما وقتی وارد چت می‌شود، ایجنت پیش‌فرض او **Pixel** (social) است، نه **Vizzy** (assistant).
+# اضافه کردن دکمه Brain به هدر صفحه Chat
 
 ## مشکل
+آیکون مغز (Brain) فقط از طریق دکمه شناور Vizzy قابل دسترسی است. کاربر می‌خواهد مستقیما در صفحه `/chat` هم دکمه Brain با تمام امکاناتش (مشاهده مموری‌ها، Analyze، ویرایش، حذف) وجود داشته باشد.
 
-در فایل `src/lib/userAgentMap.ts`، radin به ایجنت `social` مپ شده:
+## تغییرات
+
+### فایل: `src/pages/LiveChat.tsx`
+
+1. ایمپورت `VizzyBrainPanel` اضافه شود
+2. یک state جدید `showBrainPanel` اضافه شود
+3. در هدر، کنار دکمه Mic و Trash، یک دکمه Brain اضافه شود (آیکون بنفش مشابه FloatingVizzyButton)
+4. کامپوننت `VizzyBrainPanel` را با شرط `showBrainPanel` رندر کنم
+
 ```
-"radin@rebar.shop": {
-    agentKey: "social",       // ← باید "assistant" باشد
-    userRole: "ai_manager",
-    heroText: "How can **Pixel** assist you today?",
-    ...
-}
+هدر فعلی:  [←] [آواتار] [نام] ... [🎤] [🗑️]
+هدر جدید:  [←] [آواتار] [نام] ... [🧠] [🎤] [🗑️]
 ```
 
-## تغییر
+دکمه Brain شمارنده مموری‌ها را هم نمایش می‌دهد (badge کوچک با عدد `memoryCount`).
 
-**فایل: `src/lib/userAgentMap.ts`**
-
-مپینگ `radin@rebar.shop` را از `social` به `assistant` تغییر می‌دهم:
-
-- `agentKey`: `"social"` → `"assistant"`
-- `userRole`: `"ai_manager"` → `"ceo"`
-- `heroText`: متن Vizzy
-- `quickActions`: اکشن‌های مدیریتی/مانیتورینگ مناسب (مشابه sattar)
-
-یک خط تغییر در یک فایل.
+یک فایل، تغییرات کوچک.
 
