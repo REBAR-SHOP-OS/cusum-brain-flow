@@ -3,7 +3,8 @@ import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
 import { Pin, PinOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
-import type { Accent, ArchLayer } from "@/lib/architectureGraphData";
+export type FlowAccent = "cyan" | "emerald" | "violet" | "orange";
+export type FlowLayer = "input" | "core" | "output";
 
 export type ArchFlowNodeData = {
   label: string;
