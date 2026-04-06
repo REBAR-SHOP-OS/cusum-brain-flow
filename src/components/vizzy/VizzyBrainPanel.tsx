@@ -68,7 +68,9 @@ function MemoryCard({
     <div className="rounded-lg border border-border bg-card p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] text-muted-foreground">
-          {format(new Date(entry.created_at), "MMM d, yyyy • HH:mm")}
+          {entry.metadata?.report_date
+            ? `📅 ${entry.metadata.report_date}`
+            : format(new Date(entry.created_at), "MMM d, yyyy • HH:mm")}
         </span>
         {!editing && (
           <div className="flex gap-1">
