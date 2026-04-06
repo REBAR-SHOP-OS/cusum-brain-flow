@@ -1,104 +1,164 @@
-import { memo } from "react";
-import { Handle, Position, type NodeProps, type Node } from "@xyflow/react";
-import { Pin, PinOff } from "lucide-react";
+import { memo, useState, useCallback } from "react";
+import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
-export type FlowAccent = "cyan" | "emerald" | "violet" | "orange";
-export type FlowLayer = "input" | "core" | "output";
+
+export type FlowAccent = "cyan" | "emerald" | "violet" | "orange" | "blue" | "rose";
 
 export type ArchFlowNodeData = {
   label: string;
   hint: string;
   accent: FlowAccent;
-  large?: boolean;
-  layer: FlowLayer;
-  pinned: boolean;
   Icon: LucideIcon;
-  onTogglePin: (id: string) => void;
+  onDelete?: (id: string) => void;
+  onLabelChange?: (id: string, label: string) => void;
 };
 
-const accentStyles: Record<FlowAccent, { border: string; glow: string; icon: string }> = {
+const accentStyles: Record<FlowAccent, { border: string; glow: string; solid: string; bg: string }> = {
   cyan: {
-    border: "border-cyan-400/90",
-    glow: "shadow-[0_0_18px_rgba(34,211,238,0.35)]",
-    icon: "text-cyan-200",
+    border: "rgba(34,211,238,0.85)",
+    glow: "0 0 18px rgba(34,211,238,0.35)",
+    solid: "rgb(34,211,238)",
+    bg: "rgba(34,211,238,0.08)",
   },
   emerald: {
-    border: "border-emerald-400/90",
-    glow: "shadow-[0_0_18px_rgba(52,211,153,0.35)]",
-    icon: "text-emerald-200",
+    border: "rgba(52,211,153,0.85)",
+    glow: "0 0 18px rgba(52,211,153,0.35)",
+    solid: "rgb(52,211,153)",
+    bg: "rgba(52,211,153,0.08)",
   },
   violet: {
-    border: "border-violet-400/90",
-    glow: "shadow-[0_0_20px_rgba(167,139,250,0.4)]",
-    icon: "text-violet-200",
+    border: "rgba(167,139,250,0.85)",
+    glow: "0 0 20px rgba(167,139,250,0.4)",
+    solid: "rgb(167,139,250)",
+    bg: "rgba(167,139,250,0.08)",
   },
   orange: {
-    border: "border-orange-400",
-    glow: "shadow-[0_0_28px_rgba(251,146,60,0.5)]",
-    icon: "text-orange-100",
+    border: "rgba(251,146,60,0.85)",
+    glow: "0 0 22px rgba(251,146,60,0.45)",
+    solid: "rgb(251,146,60)",
+    bg: "rgba(251,146,60,0.08)",
+  },
+  blue: {
+    border: "rgba(96,165,250,0.85)",
+    glow: "0 0 18px rgba(96,165,250,0.35)",
+    solid: "rgb(96,165,250)",
+    bg: "rgba(96,165,250,0.08)",
+  },
+  rose: {
+    border: "rgba(251,113,133,0.85)",
+    glow: "0 0 18px rgba(251,113,133,0.35)",
+    solid: "rgb(251,113,133)",
+    bg: "rgba(251,113,133,0.08)",
   },
 };
 
-function ArchFlowNodeInner({ id, data, selected }: NodeProps<Node<ArchFlowNodeData>>) {
-  const st = accentStyles[data.accent];
-  const isLarge = !!data.large;
+function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
+  const nodeData = data as unknown as ArchFlowNodeData;
+  const st = accentStyles[nodeData.accent] || accentStyles.cyan;
+  const Icon = nodeData.Icon;
+  const [editing, setEditing] = useState(false);
+  const [editVal, setEditVal] = useState(nodeData.label);
+
+  const commitEdit = useCallback(() => {
+    setEditing(false);
+    if (editVal.trim() && editVal !== nodeData.label) {
+      nodeData.onLabelChange?.(id, editVal.trim());
+    } else {
+      setEditVal(nodeData.label);
+    }
+  }, [editVal, nodeData, id]);
 
   return (
     <div
       className={cn(
-        "relative rounded-2xl border-2 bg-slate-950/80 px-3 py-2.5 text-center shadow-xl backdrop-blur-md",
-        st.border,
-        st.glow,
+        "relative rounded-xl text-center transition-all duration-200",
         selected && "ring-2 ring-white/40",
-        data.pinned && "ring-2 ring-amber-400/70",
       )}
-      style={{ minWidth: isLarge ? 168 : 138, maxWidth: isLarge ? 200 : 160 }}
+      style={{
+        width: 130,
+        minHeight: 72,
+        border: `1.5px solid ${st.border}`,
+        boxShadow: selected ? `${st.glow}, 0 0 0 2px rgba(255,255,255,0.15)` : st.glow,
+        backdropFilter: "blur(16px) saturate(1.5)",
+        background: `linear-gradient(180deg, rgba(15,23,42,0.6), rgba(8,12,30,0.8))`,
+        padding: "10px 8px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
-      {data.layer !== "input" && (
-        <Handle
-          type="target"
-          position={Position.Left}
-          className="!h-2.5 !w-2.5 !border-2 !border-sky-400/80 !bg-slate-900"
-        />
-      )}
+      {/* Top glow line */}
+      <div
+        className="absolute top-0 left-2 right-2 h-px rounded-full"
+        style={{ background: `linear-gradient(90deg, transparent, ${st.solid}, transparent)`, opacity: 0.6 }}
+      />
 
+      {/* Target handle (top) */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!h-2.5 !w-2.5 !border-2 !bg-slate-900"
+        style={{ borderColor: st.border }}
+      />
+
+      {/* Delete button */}
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation();
-          data.onTogglePin(id);
+          nodeData.onDelete?.(id);
         }}
-        className={cn(
-          "absolute -right-1 -top-1 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-slate-900/90 text-white/80 transition hover:bg-slate-800 hover:text-white",
-          data.pinned && "border-amber-400/60 text-amber-200",
-        )}
-        title={data.pinned ? "Unpin (allow drag)" : "Pin (lock position)"}
+        className="absolute -right-1.5 -top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-slate-900/90 text-white/60 transition hover:bg-red-900/80 hover:text-red-300 opacity-0 group-hover:opacity-100"
+        style={{ opacity: selected ? 1 : undefined }}
+        title="Delete node"
       >
-        {data.pinned ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
+        <Trash2 className="h-2.5 w-2.5" />
       </button>
 
-      <data.Icon
-        className={cn(
-          "mx-auto mb-1 drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]",
-          isLarge ? "h-10 w-10" : "h-8 w-8",
-          st.icon,
-        )}
-        strokeWidth={1.35}
-      />
-
-      <div className={cn("mx-auto font-semibold text-white", isLarge ? "text-sm" : "text-xs")}>
-        {data.label}
-      </div>
-      <div className="text-[9px] font-medium uppercase tracking-wide text-zinc-400">{data.hint}</div>
-
-      {data.layer !== "output" && (
-        <Handle
-          type="source"
-          position={Position.Right}
-          className="!h-2.5 !w-2.5 !border-2 !border-sky-400/80 !bg-slate-900"
+      {Icon && (
+        <Icon
+          className="shrink-0 mb-1"
+          style={{ color: st.border, width: 22, height: 22, filter: `drop-shadow(0 0 6px ${st.solid}40)` }}
+          strokeWidth={1.5}
         />
       )}
+
+      {editing ? (
+        <input
+          autoFocus
+          value={editVal}
+          onChange={(e) => setEditVal(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitEdit();
+            if (e.key === "Escape") { setEditVal(nodeData.label); setEditing(false); }
+          }}
+          className="w-full bg-transparent text-center text-[11px] font-semibold text-white outline-none border-b border-white/30"
+          style={{ maxWidth: 110 }}
+        />
+      ) : (
+        <span
+          className="text-[11px] font-semibold text-white leading-tight truncate max-w-[110px] cursor-text"
+          onDoubleClick={() => { setEditVal(nodeData.label); setEditing(true); }}
+        >
+          {nodeData.label}
+        </span>
+      )}
+
+      <span className="text-[8px] font-medium uppercase tracking-wider" style={{ color: st.border, opacity: 0.7 }}>
+        {nodeData.hint}
+      </span>
+
+      {/* Source handle (bottom) */}
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!h-2.5 !w-2.5 !border-2 !bg-slate-900"
+        style={{ borderColor: st.border }}
+      />
     </div>
   );
 }

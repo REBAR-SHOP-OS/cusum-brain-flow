@@ -1,8 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  addEdge,
+  useNodesState,
+  useEdgesState,
+  type Connection,
+  type Edge,
+  type Node,
+  MarkerType,
+  BackgroundVariant,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ZoomIn, ZoomOut, Maximize2, Move, Search, Eye, EyeOff, X,
+  Plus, Search, X, Eye, EyeOff, Sparkles,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -13,6 +27,7 @@ import {
   ARCH_NODES, ARCH_EDGES, LAYERS,
   type ArchNode, type ArchLayer, type Accent,
 } from "@/lib/architectureGraphData";
+import { ArchFlowNode } from "@/components/system-flow/ArchFlowNode";
 
 /* ───── Style maps ───── */
 const accentColor: Record<Accent, string> = {
@@ -24,15 +39,6 @@ const accentColor: Record<Accent, string> = {
   rose:    "rgba(251,113,133,0.85)",
 };
 
-const accentGlow: Record<Accent, string> = {
-  cyan:    "0 0 18px rgba(34,211,238,0.35)",
-  emerald: "0 0 18px rgba(52,211,153,0.35)",
-  orange:  "0 0 22px rgba(251,146,60,0.45)",
-  violet:  "0 0 20px rgba(167,139,250,0.4)",
-  blue:    "0 0 18px rgba(96,165,250,0.35)",
-  rose:    "0 0 18px rgba(251,113,133,0.35)",
-};
-
 const accentBg: Record<Accent, string> = {
   cyan:    "rgba(34,211,238,0.08)",
   emerald: "rgba(52,211,153,0.08)",
@@ -42,64 +48,72 @@ const accentBg: Record<Accent, string> = {
   rose:    "rgba(251,113,133,0.08)",
 };
 
-const accentSolid: Record<Accent, string> = {
-  cyan:    "rgb(34,211,238)",
-  emerald: "rgb(52,211,153)",
-  orange:  "rgb(251,146,60)",
-  violet:  "rgb(167,139,250)",
-  blue:    "rgb(96,165,250)",
-  rose:    "rgb(251,113,133)",
-};
+/* ───── Node types ───── */
+const nodeTypes = { archNode: ArchFlowNode };
 
 /* ───── Layout constants ───── */
 const LAYER_GAP = 180;
-const NODE_W = 120;
-const NODE_H = 72;
-const NODE_GAP = 18;
-const LEFT_MARGIN = 160;
+const NODE_W = 130;
+const NODE_GAP = 20;
+const LEFT_MARGIN = 180;
 const TOP_MARGIN = 60;
 
-function computeNodePositions(
-  visibleLayers: Set<ArchLayer>,
-  filteredIds: Set<string> | null,
-) {
-  const positions = new Map<string, { x: number; y: number }>();
+/* ───── Convert static data to React Flow nodes/edges ───── */
+function buildInitialNodes(
+  onDelete: (id: string) => void,
+  onLabelChange: (id: string, label: string) => void,
+): Node[] {
+  const nodes: Node[] = [];
   let layerIdx = 0;
 
   for (const layer of LAYERS) {
-    if (!visibleLayers.has(layer.key)) continue;
-    const nodes = ARCH_NODES.filter(
-      (n) => n.layer === layer.key && (!filteredIds || filteredIds.has(n.id)),
-    );
-    const totalW = nodes.length * NODE_W + (nodes.length - 1) * NODE_GAP;
+    const layerNodes = ARCH_NODES.filter((n) => n.layer === layer.key);
+    const totalW = layerNodes.length * NODE_W + (layerNodes.length - 1) * NODE_GAP;
     const startX = LEFT_MARGIN + Math.max(0, (900 - totalW) / 2);
     const y = TOP_MARGIN + layerIdx * LAYER_GAP;
 
-    nodes.forEach((n, i) => {
-      positions.set(n.id, { x: startX + i * (NODE_W + NODE_GAP), y });
+    layerNodes.forEach((n, i) => {
+      nodes.push({
+        id: n.id,
+        type: "archNode",
+        position: { x: startX + i * (NODE_W + NODE_GAP), y },
+        data: {
+          label: n.label,
+          hint: n.hint,
+          accent: n.accent,
+          Icon: n.icon,
+          onDelete,
+          onLabelChange,
+        },
+      });
     });
     layerIdx++;
   }
-  return positions;
+  return nodes;
 }
 
-/* ───── Canvas size ───── */
-const CANVAS_W = 1200;
-const CANVAS_H = 1300;
-
-/* ───── Edge path with vertical Bezier ───── */
-function edgePath(x1: number, y1: number, x2: number, y2: number) {
-  const cy1 = y1 + 50;
-  const cy2 = y2 - 50;
-  return `M ${x1} ${y1} C ${x1} ${cy1}, ${x2} ${cy2}, ${x2} ${y2}`;
+function buildInitialEdges(): Edge[] {
+  return ARCH_EDGES.map((e) => {
+    const srcNode = ARCH_NODES.find((n) => n.id === e.source);
+    const color = srcNode ? accentColor[srcNode.accent] : accentColor.cyan;
+    return {
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      animated: true,
+      style: { stroke: color, strokeWidth: 2 },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color,
+        width: 14,
+        height: 14,
+      },
+    };
+  });
 }
 
-/* ───── CSS for futuristic effects (injected once) ───── */
+/* ───── Futuristic CSS injection ───── */
 const FUTURISTIC_STYLES = `
-@keyframes arch-breathe {
-  0%, 100% { box-shadow: var(--glow-base); }
-  50% { box-shadow: var(--glow-pulse); }
-}
 @keyframes arch-scanline {
   0% { transform: translateY(-100%); }
   100% { transform: translateY(100%); }
@@ -108,28 +122,85 @@ const FUTURISTIC_STYLES = `
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
-.arch-node-card {
-  animation: arch-breathe 3s ease-in-out infinite;
+.react-flow__edge-path {
+  filter: drop-shadow(0 0 4px currentColor);
 }
-.arch-node-card:hover {
-  animation: none;
+.react-flow__node {
+  transition: transform 0.1s ease;
+}
+.react-flow__node:hover {
+  z-index: 100 !important;
+}
+.react-flow__handle {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.react-flow__handle:hover {
+  transform: scale(1.5);
+  box-shadow: 0 0 8px rgba(34,211,238,0.6);
+}
+.react-flow__minimap {
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: rgba(5,10,20,0.8) !important;
+}
+.react-flow__controls {
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+  background: rgba(5,10,20,0.8) !important;
+}
+.react-flow__controls-button {
+  background: rgba(15,23,42,0.9) !important;
+  border-color: rgba(255,255,255,0.1) !important;
+  color: white !important;
+  fill: white !important;
+}
+.react-flow__controls-button:hover {
+  background: rgba(30,40,60,0.9) !important;
+}
+.react-flow__attribution {
+  display: none !important;
 }
 `;
 
+/* ───── Layer palette for adding new nodes ───── */
+const LAYER_PALETTE: { key: ArchLayer; label: string; accent: Accent }[] = LAYERS.map((l) => ({
+  key: l.key,
+  label: l.label,
+  accent: l.accent,
+}));
+
 export default function Architecture() {
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [openNode, setOpenNode] = useState<ArchNode | null>(null);
   const [searchQ, setSearchQ] = useState("");
   const [visibleLayers, setVisibleLayers] = useState<Set<ArchLayer>>(
     () => new Set(LAYERS.map((l) => l.key)),
   );
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(0.85);
-  const draggingRef = useRef(false);
-  const dragRef = useRef({ x: 0, y: 0, px: 0, py: 0 });
-  const viewportRef = useRef<HTMLDivElement>(null);
+  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [newNodeLabel, setNewNodeLabel] = useState("");
+  const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("modules");
 
-  /* inject styles once */
+  /* Delete + label change handlers (stable via useCallback) */
+  const handleDelete = useCallback((nodeId: string) => {
+    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
+  }, []);
+
+  const handleLabelChange = useCallback((nodeId: string, label: string) => {
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, label } } : n,
+      ),
+    );
+  }, []);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState(
+    buildInitialNodes(handleDelete, handleLabelChange),
+  );
+  const [edges, setEdges, onEdgesChange] = useEdgesState(buildInitialEdges());
+
+  /* Inject futuristic styles */
   useEffect(() => {
     const id = "arch-futuristic-styles";
     if (document.getElementById(id)) return;
@@ -140,66 +211,100 @@ export default function Architecture() {
     return () => { document.getElementById(id)?.remove(); };
   }, []);
 
-  /* search filter */
-  const filteredIds = useMemo(() => {
-    if (!searchQ.trim()) return null;
-    const q = searchQ.toLowerCase();
-    const ids = new Set<string>();
-    ARCH_NODES.forEach((n) => {
-      if (
-        n.label.toLowerCase().includes(q) ||
-        n.hint.toLowerCase().includes(q) ||
-        n.id.toLowerCase().includes(q)
-      )
-        ids.add(n.id);
-    });
-    return ids;
-  }, [searchQ]);
-
-  /* positions */
-  const positions = useMemo(
-    () => computeNodePositions(visibleLayers, filteredIds),
-    [visibleLayers, filteredIds],
+  /* Connect handler — draw new edges */
+  const onConnect = useCallback(
+    (params: Connection) => {
+      const srcNode = nodes.find((n) => n.id === params.source);
+      const color = srcNode ? accentColor[(srcNode.data as any).accent] : accentColor.cyan;
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            animated: true,
+            style: { stroke: color, strokeWidth: 2 },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color,
+              width: 14,
+              height: 14,
+            },
+          },
+          eds,
+        ),
+      );
+    },
+    [nodes, setEdges],
   );
 
-  /* visible edges */
-  const visibleEdges = useMemo(() => {
-    return ARCH_EDGES.filter(
-      (e) => positions.has(e.source) && positions.has(e.target),
-    );
-  }, [positions]);
+  /* Add new node */
+  const addNode = useCallback(() => {
+    if (!newNodeLabel.trim()) return;
+    const layer = LAYERS.find((l) => l.key === newNodeLayer)!;
+    const layerIdx = LAYERS.findIndex((l) => l.key === newNodeLayer);
+    const newId = `custom-${Date.now()}`;
+    const y = TOP_MARGIN + layerIdx * LAYER_GAP;
+    const existingInLayer = nodes.filter((n) => (n.data as any).accent === layer.accent);
+    const x = LEFT_MARGIN + existingInLayer.length * (NODE_W + NODE_GAP);
 
-  /* zoom via wheel */
-  const onWheel = useCallback((e: WheelEvent) => {
-    e.preventDefault();
-    setZoom((prev) => Math.min(2.5, Math.max(0.35, prev - e.deltaY * 0.001)));
+    const newNode: Node = {
+      id: newId,
+      type: "archNode",
+      position: { x, y },
+      data: {
+        label: newNodeLabel.trim(),
+        hint: layer.label,
+        accent: layer.accent,
+        Icon: Sparkles,
+        onDelete: handleDelete,
+        onLabelChange: handleLabelChange,
+      },
+    };
+    setNodes((nds) => [...nds, newNode]);
+    setNewNodeLabel("");
+    setShowAddPanel(false);
+  }, [newNodeLabel, newNodeLayer, nodes, handleDelete, handleLabelChange, setNodes]);
+
+  /* Node click → detail */
+  const onNodeClick = useCallback((_: any, node: Node) => {
+    const archNode = ARCH_NODES.find((n) => n.id === node.id);
+    if (archNode) setOpenNode(archNode);
   }, []);
 
-  useEffect(() => {
-    const el = viewportRef.current;
-    if (!el) return;
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [onWheel]);
+  /* Search-filtered nodes */
+  const filteredNodeIds = useMemo(() => {
+    if (!searchQ.trim()) return null;
+    const q = searchQ.toLowerCase();
+    return new Set(
+      ARCH_NODES.filter(
+        (n) =>
+          n.label.toLowerCase().includes(q) ||
+          n.hint.toLowerCase().includes(q),
+      ).map((n) => n.id),
+    );
+  }, [searchQ]);
 
-  /* pan */
-  const onPanPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return;
-    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    draggingRef.current = true;
-    dragRef.current = { x: pan.x, y: pan.y, px: e.clientX, py: e.clientY };
-  };
-  const onPanPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) return;
-    const d = dragRef.current;
-    setPan({ x: d.x + (e.clientX - d.px), y: d.y + (e.clientY - d.py) });
-  };
-  const onPanPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
-    draggingRef.current = false;
-    (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
-  };
+  /* Apply visibility */
+  const displayNodes = useMemo(() => {
+    return nodes.map((n) => {
+      const nodeData = n.data as any;
+      const layerKey = ARCH_NODES.find((an) => an.id === n.id)?.layer;
+      const layerHidden = layerKey ? !visibleLayers.has(layerKey) : false;
+      const searchHidden = filteredNodeIds ? !filteredNodeIds.has(n.id) : false;
+      return {
+        ...n,
+        hidden: layerHidden || searchHidden,
+        data: { ...nodeData, onDelete: handleDelete, onLabelChange: handleLabelChange },
+      };
+    });
+  }, [nodes, visibleLayers, filteredNodeIds, handleDelete, handleLabelChange]);
 
-  const resetView = () => { setPan({ x: 0, y: 0 }); setZoom(0.85); };
+  const displayEdges = useMemo(() => {
+    const hiddenIds = new Set(displayNodes.filter((n) => n.hidden).map((n) => n.id));
+    return edges.map((e) => ({
+      ...e,
+      hidden: hiddenIds.has(e.source) || hiddenIds.has(e.target),
+    }));
+  }, [edges, displayNodes]);
 
   const toggleLayer = (key: ArchLayer) => {
     setVisibleLayers((prev) => {
@@ -210,14 +315,6 @@ export default function Architecture() {
     });
   };
 
-  const selected = openId ? ARCH_NODES.find((n) => n.id === openId) : null;
-  const SelectedIcon = selected?.icon;
-
-  /* visible nodes */
-  const visibleNodes = ARCH_NODES.filter(
-    (n) => visibleLayers.has(n.layer) && (!filteredIds || filteredIds.has(n.id)),
-  );
-
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col md:h-[calc(100vh-4rem)]">
       {/* Header */}
@@ -225,9 +322,20 @@ export default function Architecture() {
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-lg font-semibold tracking-tight text-foreground">System Architecture</h1>
           <p className="text-xs text-muted-foreground">
-            {ARCH_NODES.length} components · {ARCH_EDGES.length} connections · {LAYERS.length} layers
+            {nodes.length} components · {edges.length} connections · Drag to move · Connect handles to wire · Double-click to edit
           </p>
         </div>
+
+        {/* Add node button */}
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5 text-xs"
+          onClick={() => setShowAddPanel(!showAddPanel)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Node
+        </Button>
 
         {/* Search */}
         <div className="relative">
@@ -274,6 +382,33 @@ export default function Architecture() {
             );
           })}
 
+          {/* Add node panel (inline) */}
+          {showAddPanel && (
+            <div className="mt-3 pt-3 border-t border-border/40 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">New Node</p>
+              <input
+                type="text"
+                value={newNodeLabel}
+                onChange={(e) => setNewNodeLabel(e.target.value)}
+                placeholder="Node name…"
+                className="w-full h-7 rounded-md border border-border bg-secondary px-2 text-xs text-foreground placeholder:text-muted-foreground outline-none"
+                onKeyDown={(e) => e.key === "Enter" && addNode()}
+              />
+              <select
+                value={newNodeLayer}
+                onChange={(e) => setNewNodeLayer(e.target.value as ArchLayer)}
+                className="w-full h-7 rounded-md border border-border bg-secondary px-2 text-xs text-foreground outline-none"
+              >
+                {LAYER_PALETTE.map((l) => (
+                  <option key={l.key} value={l.key}>{l.label}</option>
+                ))}
+              </select>
+              <Button size="sm" className="w-full text-xs h-7" onClick={addNode}>
+                Add
+              </Button>
+            </div>
+          )}
+
           <div className="mt-auto pt-3 border-t border-border/40">
             <button
               onClick={() => setVisibleLayers(new Set(LAYERS.map((l) => l.key)))}
@@ -284,295 +419,59 @@ export default function Architecture() {
           </div>
         </div>
 
-        {/* Canvas viewport */}
-        <div
-          ref={viewportRef}
-          className="relative flex-1 overflow-hidden"
-          style={{
-            background: "radial-gradient(ellipse at center, #0c2140 0%, #050a14 55%, #020617 100%)",
-          }}
-        >
-          {/* Dot-matrix grid overlay */}
-          <div
-            className="pointer-events-none absolute inset-0"
+        {/* React Flow Canvas */}
+        <div className="flex-1 relative">
+          <ReactFlow
+            nodes={displayNodes}
+            edges={displayEdges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            nodeTypes={nodeTypes}
+            fitView
+            fitViewOptions={{ padding: 0.15 }}
+            deleteKeyCode={["Backspace", "Delete"]}
+            snapToGrid
+            snapGrid={[10, 10]}
             style={{
-              backgroundImage: "radial-gradient(circle, rgba(34,211,238,0.08) 1px, transparent 1px)",
-              backgroundSize: "24px 24px",
+              background: "radial-gradient(ellipse at center, #0c2140 0%, #050a14 55%, #020617 100%)",
             }}
-          />
+            defaultEdgeOptions={{
+              animated: true,
+              style: { strokeWidth: 2 },
+            }}
+          >
+            <Background
+              variant={BackgroundVariant.Dots}
+              gap={24}
+              size={1}
+              color="rgba(34,211,238,0.08)"
+            />
+            <Controls position="top-right" />
+            <MiniMap
+              position="bottom-right"
+              nodeColor={(n) => {
+                const accent = (n.data as any)?.accent as string;
+                return accentColor[accent as Accent] || "rgba(100,100,100,0.5)";
+              }}
+              maskColor="rgba(0,0,0,0.7)"
+              style={{ width: 160, height: 100 }}
+            />
+          </ReactFlow>
+
           {/* Scan-line overlay */}
           <div
-            className="pointer-events-none absolute inset-0"
+            className="pointer-events-none absolute inset-0 z-10"
             style={{
-              backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.015) 2px, rgba(34,211,238,0.015) 4px)",
-            }}
-          />
-          {/* Animated scan bar */}
-          <div
-            className="pointer-events-none absolute left-0 right-0 h-20 opacity-20"
-            style={{
-              background: "linear-gradient(180deg, transparent, rgba(34,211,238,0.08), transparent)",
-              animation: "arch-scanline 8s linear infinite",
-            }}
-          />
-          {/* Corner vignette */}
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background: "radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.5) 100%)",
+              backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(34,211,238,0.012) 2px, rgba(34,211,238,0.012) 4px)",
             }}
           />
 
-          {/* Hexagonal SVG pattern in background */}
-          <svg className="pointer-events-none absolute inset-0 w-full h-full opacity-[0.03]" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="hex-pattern" x="0" y="0" width="56" height="100" patternUnits="userSpaceOnUse" patternTransform="scale(1.2)">
-                <polygon points="28,2 52,18 52,50 28,66 4,50 4,18" fill="none" stroke="rgba(34,211,238,1)" strokeWidth="0.5"/>
-                <polygon points="28,36 52,52 52,84 28,100 4,84 4,52" fill="none" stroke="rgba(34,211,238,1)" strokeWidth="0.5"/>
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#hex-pattern)" />
-          </svg>
-
-          {/* Zoom controls */}
-          <div className="absolute right-3 top-3 z-20 flex flex-col gap-1.5 rounded-xl border border-white/10 bg-slate-950/70 p-1.5 shadow-lg backdrop-blur-md">
-            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/10" onClick={() => setZoom((z) => Math.min(2.5, z + 0.15))} aria-label="Zoom in">
-              <ZoomIn className="h-4 w-4" />
-            </Button>
-            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/10" onClick={() => setZoom((z) => Math.max(0.35, z - 0.15))} aria-label="Zoom out">
-              <ZoomOut className="h-4 w-4" />
-            </Button>
-            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-white hover:bg-white/10" onClick={resetView} aria-label="Reset view">
-              <Maximize2 className="h-4 w-4" />
-            </Button>
-            <div className="flex items-center justify-center border-t border-white/10 pt-1">
-              <Move className="h-3.5 w-3.5 text-white/50" />
-            </div>
-            <span className="text-center text-[9px] text-white/40">{Math.round(zoom * 100)}%</span>
-          </div>
-
-          {/* Pan surface */}
-          <motion.div
-            className="absolute inset-0 cursor-grab active:cursor-grabbing"
-            style={{ touchAction: "none" }}
-            onPointerDown={onPanPointerDown}
-            onPointerMove={onPanPointerMove}
-            onPointerUp={onPanPointerUp}
-            onPointerLeave={() => { draggingRef.current = false; }}
-          >
-            <motion.div
-              className="relative will-change-transform origin-top-left"
-              style={{ width: CANVAS_W, height: CANVAS_H, x: pan.x, y: pan.y, scale: zoom }}
-            >
-              {/* Layer labels with glow + horizontal rule */}
-              {(() => {
-                let idx = 0;
-                return LAYERS.map((layer) => {
-                  if (!visibleLayers.has(layer.key)) return null;
-                  const y = TOP_MARGIN + idx * LAYER_GAP;
-                  idx++;
-                  return (
-                    <div
-                      key={layer.key}
-                      className="absolute left-2 right-4 flex items-center gap-3 select-none"
-                      style={{ top: y + NODE_H / 2 - 10 }}
-                    >
-                      <span
-                        className="h-2 w-2 rounded-full shrink-0"
-                        style={{
-                          background: accentSolid[layer.accent],
-                          boxShadow: `0 0 8px ${accentSolid[layer.accent]}`,
-                        }}
-                      />
-                      <span
-                        className="text-[10px] font-bold uppercase shrink-0"
-                        style={{
-                          color: accentSolid[layer.accent],
-                          letterSpacing: "0.2em",
-                          textShadow: `0 0 12px ${accentColor[layer.accent]}, 0 0 24px ${accentBg[layer.accent]}`,
-                        }}
-                      >
-                        {layer.label}
-                      </span>
-                      {/* Horizontal gradient rule */}
-                      <div
-                        className="flex-1 h-px"
-                        style={{
-                          background: `linear-gradient(90deg, ${accentColor[layer.accent]}, transparent)`,
-                        }}
-                      />
-                    </div>
-                  );
-                });
-              })()}
-
-              {/* SVG edges */}
-              <svg
-                className="pointer-events-none absolute inset-0 h-full w-full"
-                viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
-                preserveAspectRatio="xMidYMid meet"
-              >
-                <defs>
-                  <filter id="edgeGlow" x="-30%" y="-30%" width="160%" height="160%">
-                    <feGaussianBlur stdDeviation="3" result="b" />
-                    <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-                  </filter>
-                  <filter id="edgeGlowWide" x="-40%" y="-40%" width="180%" height="180%">
-                    <feGaussianBlur stdDeviation="6" result="b" />
-                    <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-                  </filter>
-                  {LAYERS.map((l) => (
-                    <linearGradient key={l.key} id={`grad-${l.key}`} x1="0%" y1="0%" x2="0%" y2="100%">
-                      <stop offset="0%" stopColor={accentColor[l.accent]} stopOpacity="0.7" />
-                      <stop offset="50%" stopColor={accentColor[l.accent]} stopOpacity="1.0" />
-                      <stop offset="100%" stopColor={accentColor[l.accent]} stopOpacity="0.7" />
-                    </linearGradient>
-                  ))}
-                  {/* Comet-tail gradient for particles */}
-                  {LAYERS.map((l) => (
-                    <radialGradient key={`pg-${l.key}`} id={`particle-grad-${l.key}`}>
-                      <stop offset="0%" stopColor={accentSolid[l.accent]} stopOpacity="1" />
-                      <stop offset="60%" stopColor={accentSolid[l.accent]} stopOpacity="0.5" />
-                      <stop offset="100%" stopColor={accentSolid[l.accent]} stopOpacity="0" />
-                    </radialGradient>
-                  ))}
-                </defs>
-
-                {visibleEdges.map((edge) => {
-                  const sp = positions.get(edge.source)!;
-                  const tp = positions.get(edge.target)!;
-                  const srcNode = ARCH_NODES.find((n) => n.id === edge.source);
-                  const srcLayer = srcNode?.layer || "entry";
-                  const isHighlighted = hoverId === edge.source || hoverId === edge.target;
-
-                  const x1 = sp.x + NODE_W / 2;
-                  const y1 = sp.y + NODE_H;
-                  const x2 = tp.x + NODE_W / 2;
-                  const y2 = tp.y;
-                  const path = edgePath(x1, y1, x2, y2);
-                  const color = accentColor[srcNode?.accent || "cyan"];
-
-                  return (
-                    <g key={edge.id}>
-                      {/* Wide blurred glow stroke underneath */}
-                      <path
-                        d={path}
-                        fill="none"
-                        stroke={color}
-                        strokeWidth={isHighlighted ? 8 : 5}
-                        strokeLinecap="round"
-                        filter="url(#edgeGlowWide)"
-                        opacity={isHighlighted ? 0.35 : 0.15}
-                        className="transition-all duration-300"
-                      />
-                      {/* Sharp thin stroke on top */}
-                      <path
-                        d={path}
-                        fill="none"
-                        stroke={`url(#grad-${srcLayer})`}
-                        strokeWidth={isHighlighted ? 2.5 : 2}
-                        strokeLinecap="round"
-                        filter="url(#edgeGlow)"
-                        opacity={isHighlighted ? 1 : 0.7}
-                        className="transition-all duration-300"
-                      />
-                      {/* Staggered particles (3 per edge) */}
-                      {[0, 1, 2].map((pi) => (
-                        <circle
-                          key={pi}
-                          r={pi === 0 ? 3.5 : 2}
-                          fill={`url(#particle-grad-${srcLayer})`}
-                          opacity={pi === 0 ? 0.95 : 0.6}
-                        >
-                          <animateMotion
-                            dur={`${1.5 + pi * 0.8}s`}
-                            begin={`${pi * 0.5}s`}
-                            repeatCount="indefinite"
-                            path={path}
-                          />
-                        </circle>
-                      ))}
-                    </g>
-                  );
-                })}
-              </svg>
-
-              {/* Nodes with glassmorphism + breathing */}
-              {visibleNodes.map((node) => {
-                const pos = positions.get(node.id);
-                if (!pos) return null;
-                const isHover = hoverId === node.id;
-                const Icon = node.icon;
-                const color = accentColor[node.accent];
-                const solid = accentSolid[node.accent];
-
-                return (
-                  <motion.button
-                    key={node.id}
-                    type="button"
-                    className="arch-node-card absolute flex flex-col items-center justify-center rounded-xl text-center"
-                    style={{
-                      left: pos.x,
-                      top: pos.y,
-                      width: NODE_W,
-                      height: NODE_H,
-                      zIndex: isHover ? 20 : 10,
-                      border: `1.5px solid ${color}`,
-                      backdropFilter: "blur(16px) saturate(1.5)",
-                      WebkitBackdropFilter: "blur(16px) saturate(1.5)",
-                      background: isHover
-                        ? `linear-gradient(135deg, ${accentBg[node.accent].replace("0.08", "0.2")}, rgba(15,23,42,0.85))`
-                        : `linear-gradient(180deg, rgba(15,23,42,0.6), rgba(8,12,30,0.8))`,
-                      // CSS custom properties for the breathing animation
-                      "--glow-base": `${accentGlow[node.accent]}, inset 0 1px 0 ${color}`,
-                      "--glow-pulse": `0 0 28px ${solid}50, ${accentGlow[node.accent]}, inset 0 1px 0 ${color}`,
-                    } as React.CSSProperties}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: isHover ? 1.12 : 1 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 25 }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => setOpenId(node.id)}
-                    onMouseEnter={() => setHoverId(node.id)}
-                    onMouseLeave={() => setHoverId(null)}
-                  >
-                    {/* Inner top glow line */}
-                    <div
-                      className="absolute top-0 left-2 right-2 h-px rounded-full"
-                      style={{
-                        background: `linear-gradient(90deg, transparent, ${solid}, transparent)`,
-                        opacity: 0.6,
-                      }}
-                    />
-                    {/* Hover radial glow burst */}
-                    {isHover && (
-                      <div
-                        className="absolute inset-0 rounded-xl pointer-events-none"
-                        style={{
-                          background: `radial-gradient(circle at center, ${accentBg[node.accent].replace("0.08", "0.25")}, transparent 70%)`,
-                        }}
-                      />
-                    )}
-                    <Icon
-                      className="shrink-0"
-                      style={{ color, width: 22, height: 22, filter: `drop-shadow(0 0 6px ${solid}40)` }}
-                      strokeWidth={1.5}
-                    />
-                    <span className="mt-0.5 text-[11px] font-semibold text-white leading-tight truncate max-w-[100px]">
-                      {node.label}
-                    </span>
-                    <span className="text-[8px] font-medium uppercase tracking-wider" style={{ color, opacity: 0.7 }}>
-                      {node.hint}
-                    </span>
-                  </motion.button>
-                );
-              })}
-            </motion.div>
-          </motion.div>
-
-          {/* Bottom info bar with SYSTEM ONLINE */}
-          <div className="pointer-events-none absolute bottom-3 left-3 right-3 flex items-center justify-between">
+          {/* Bottom info bar */}
+          <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-3">
             <div className="rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 text-[10px] text-zinc-400 backdrop-blur-sm">
-              Entry → Auth → Modules → AI → Backend → External
+              Drag nodes · Draw edges · Delete with ⌫ · Double-click to rename
             </div>
             <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 backdrop-blur-sm">
               <span
@@ -589,13 +488,13 @@ export default function Architecture() {
 
       {/* Detail dialog */}
       <AnimatePresence>
-        {selected && SelectedIcon && (
-          <Dialog open={!!openId} onOpenChange={(o) => !o && setOpenId(null)}>
+        {openNode && (
+          <Dialog open={!!openNode} onOpenChange={(o) => !o && setOpenNode(null)}>
             <DialogContent className="max-w-md border-border/80 bg-background/95 backdrop-blur-xl">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-base">
-                  <SelectedIcon className="h-5 w-5" style={{ color: accentColor[selected.accent] }} />
-                  {selected.detail.title}
+                  <openNode.icon className="h-5 w-5" style={{ color: accentColor[openNode.accent] }} />
+                  {openNode.detail.title}
                 </DialogTitle>
                 <DialogDescription asChild>
                   <div className="mt-3 space-y-3">
@@ -603,17 +502,17 @@ export default function Architecture() {
                       <span
                         className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
                         style={{
-                          background: accentBg[selected.accent],
-                          color: accentColor[selected.accent],
-                          border: `1px solid ${accentColor[selected.accent]}`,
+                          background: accentBg[openNode.accent],
+                          color: accentColor[openNode.accent],
+                          border: `1px solid ${accentColor[openNode.accent]}`,
                         }}
                       >
-                        {selected.layer}
+                        {openNode.layer}
                       </span>
-                      <span className="text-muted-foreground">{selected.hint}</span>
+                      <span className="text-muted-foreground">{openNode.hint}</span>
                     </div>
                     <ul className="list-inside list-disc space-y-1.5 text-left text-sm text-muted-foreground">
-                      {selected.detail.bullets.map((line) => (
+                      {openNode.detail.bullets.map((line) => (
                         <li key={line} className="break-words">{line}</li>
                       ))}
                     </ul>
@@ -622,15 +521,18 @@ export default function Architecture() {
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Connected to</p>
                       <div className="flex flex-wrap gap-1.5">
                         {ARCH_EDGES
-                          .filter((e) => e.source === selected.id || e.target === selected.id)
+                          .filter((e) => e.source === openNode.id || e.target === openNode.id)
                           .map((e) => {
-                            const otherId = e.source === selected.id ? e.target : e.source;
+                            const otherId = e.source === openNode.id ? e.target : e.source;
                             const other = ARCH_NODES.find((n) => n.id === otherId);
                             if (!other) return null;
                             return (
                               <button
                                 key={e.id}
-                                onClick={() => setOpenId(otherId)}
+                                onClick={() => {
+                                  const next = ARCH_NODES.find((n) => n.id === otherId);
+                                  if (next) setOpenNode(next);
+                                }}
                                 className="rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80"
                                 style={{
                                   background: accentBg[other.accent],
