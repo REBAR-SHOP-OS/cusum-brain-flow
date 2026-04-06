@@ -87,7 +87,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {isInternal && <VizzyCallHandler />}
 
             {/* Floating Vizzy avatar — force visible on app builder dashboard to match reference */}
-            {(user?.email === "sattar@rebar.shop" || isAppBuilderDashboard) && <FloatingVizzyButton />}
+            {((user?.email === "sattar@rebar.shop" || user?.email === "radin@rebar.shop") || isAppBuilderDashboard) && <FloatingVizzyButton />}
 
             {/* Screenshot Feedback button — force visible on app builder dashboard to match reference */}
             {(isInternal || isAppBuilderDashboard) && <ScreenshotFeedbackButton />}
