@@ -13,18 +13,22 @@ interface Props {
 }
 
 const SIDEBAR_GROUPS: { key: string; label: string; categories: string[] }[] = [
-  { key: "dashboard",  label: "📊 Dashboard",        categories: ["brain_insight", "general", "benchmark", "daily_benchmark"] },
-  { key: "inbox",      label: "📥 Inbox",             categories: ["email"] },
-  { key: "team_hub",   label: "💬 Team Hub",          categories: ["feedback_clarification", "feedback_patch"] },
-  { key: "tasks",      label: "📋 Business Tasks",    categories: ["auto_fix", "feedback_fix"] },
-  { key: "monitor",    label: "📡 Live Monitor",      categories: ["agent_audit", "pre_digest"] },
-  { key: "ceo",        label: "🏢 CEO Portal",        categories: ["business"] },
-  { key: "support",    label: "🎧 Support",           categories: ["feedback_escalation", "call_summary", "voicemail_summary"] },
-  { key: "pipeline",   label: "📈 Pipeline & Leads",  categories: ["leads"] },
-  { key: "customers",  label: "👥 Customers",         categories: ["crm", "orders"] },
-  { key: "accounting", label: "💰 Accounting",        categories: ["accounting"] },
-  { key: "shop_floor", label: "🏭 Shop Floor",        categories: ["production"] },
-  { key: "timeclock",  label: "⏰ Time Clock",        categories: ["timeclock"] },
+  { key: "dashboard",    label: "📊 Dashboard",       categories: ["brain_insight", "general", "benchmark", "daily_benchmark"] },
+  { key: "inbox",        label: "📥 Inbox",            categories: ["email"] },
+  { key: "team_hub",     label: "💬 Team Hub",         categories: ["feedback_clarification", "feedback_patch"] },
+  { key: "tasks",        label: "📋 Business Tasks",   categories: ["auto_fix", "feedback_fix"] },
+  { key: "monitor",      label: "📡 Live Monitor",     categories: ["agent_audit", "pre_digest"] },
+  { key: "ceo",          label: "🏢 CEO Portal",       categories: ["business"] },
+  { key: "support",      label: "🎧 Support",          categories: ["feedback_escalation", "call_summary", "voicemail_summary"] },
+  { key: "pipeline",     label: "📈 Pipeline",         categories: ["leads"] },
+  { key: "lead_scoring", label: "🎯 Lead Scoring",     categories: ["lead_scoring"] },
+  { key: "customers",    label: "👥 Customers",        categories: ["crm"] },
+  { key: "accounting",   label: "💰 Accounting",       categories: ["accounting"] },
+  { key: "sales",        label: "🛒 Sales",            categories: ["sales", "orders"] },
+  { key: "production",   label: "🏭 Production",       categories: ["production"] },
+  { key: "shop_floor",   label: "🔧 Shop Floor",       categories: ["shop_floor"] },
+  { key: "timeclock",    label: "⏰ Time Clock",       categories: ["timeclock"] },
+  { key: "office_tools", label: "🛠️ Office Tools",     categories: ["office_tools"] },
 ];
 
 // Build a reverse map: category -> group key
