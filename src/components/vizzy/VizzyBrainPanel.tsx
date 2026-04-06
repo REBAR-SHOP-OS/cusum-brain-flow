@@ -11,6 +11,8 @@ import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
+import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
+import { Bot as BotIcon } from "lucide-react";
 
 interface Props {
   onClose: () => void;
