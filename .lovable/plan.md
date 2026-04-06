@@ -1,84 +1,66 @@
 
 
-# Vizzy Brain Panel — Department-Based Accordion Layout
+# Fix: Vizzy Brain Panel & Button Issues
 
-## Problem
-Currently the Brain Panel shows a flat list of memory cards with category filter chips. The user wants a structured, department-based view where each system section is a collapsible accordion, showing all related knowledge inside it.
+## Root Cause
 
-## Design
+Two problems identified:
 
-Replace the flat card list + category chips with an **Accordion** layout. Each accordion section represents a department/system area. Memory entries are grouped into their department accordion.
+1. **AnimatePresence ref error**: `AnimatePresence` wraps `VizzyBrainPanel` and `VizzyVoiceChat` directly. These are plain function components, but `AnimatePresence` tries to pass a ref to its direct children. This causes the React warning and can break exit animations / event handling.
 
-```text
-┌─────────────────────────────────┐
-│ 🧠 Vizzy Brain (45 memories)   │  [Analyze Now]  ✕
-├─────────────────────────────────┤
-│ ▼ 💰 Revenue & Sales (8)       │
-│   ├─ [Insight card - editable]  │
-│   ├─ [Insight card - editable]  │
-│   └─ ...                        │
-│ ▶ 🏭 Operations & Production(12)│
-│ ▶ 📞 Support & Communications(6)│
-│ ▶ 📈 Growth & Marketing (5)     │
-│ ▶ 🤖 AI & System Audits (9)    │
-│ ▶ 📌 General (5)               │
-└─────────────────────────────────┘
-```
+2. **Brain button not visually distinct**: The Brain action button uses `bg-accent text-accent-foreground` which may blend with the background or be invisible depending on theme.
 
-## Department Mapping
+## Fix
 
-Map existing `category` values to departments:
+### File: `src/components/vizzy/FloatingVizzyButton.tsx`
 
-| Department | Icon | Categories |
-|---|---|---|
-| Revenue & Sales | 💰 | `benchmark`, `brain_insight` (sales-related) |
-| Operations & Production | 🏭 | `auto_fix`, `pre_digest` |
-| Support & Communications | 📞 | `call_summary`, `voicemail_summary`, `feedback_patch` |
-| Growth & Marketing | 📈 | (social/growth entries) |
-| AI & System Audits | 🤖 | `agent_audit`, `brain_insight` |
-| General | 📌 | `general`, and any unmatched |
-
-Since `brain_insight` entries cover multiple departments and we can't reliably split them by content, we'll group by **category directly** as the accordion sections — each category becomes its own collapsible section. This is accurate and doesn't require guessing.
-
-## Changes
-
-### `src/components/vizzy/VizzyBrainPanel.tsx`
-- Remove the category filter chips row
-- Replace flat memory list with `Accordion` (from `src/components/ui/accordion.tsx`)
-- Group entries by category using `CATEGORY_LABELS`
-- Each `AccordionItem`: trigger shows icon + label + count, content shows the MemoryCard list
-- Use `type="multiple"` so multiple sections can be open
-- Keep MemoryCard component as-is (edit/delete)
-- Keep header with Analyze Now button
-
-### No changes to `useVizzyMemory.ts`
-The hook already returns entries and categories — just need to group them in the UI.
-
-## Technical Detail
+Remove `AnimatePresence` wrappers around `VizzyBrainPanel` and `VizzyVoiceChat`. These panels already have their own `motion.div` with enter/exit animations internally, but since they're not direct `motion.*` children of `AnimatePresence`, the ref forwarding fails. Replace with simple conditional rendering:
 
 ```tsx
-// Group entries by category
-const grouped = entries.reduce((acc, entry) => {
-  const cat = entry.category;
-  if (!acc[cat]) acc[cat] = [];
-  acc[cat].push(entry);
-  return acc;
-}, {} as Record<string, VizzyMemoryEntry[]>);
+// Before (broken):
+<AnimatePresence>
+  {showVoiceChat && (
+    <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
+  )}
+</AnimatePresence>
 
-// Render
-<Accordion type="multiple" className="w-full">
-  {Object.entries(grouped).map(([cat, items]) => (
-    <AccordionItem key={cat} value={cat}>
-      <AccordionTrigger>
-        {getCategoryLabel(cat)} ({items.length})
-      </AccordionTrigger>
-      <AccordionContent>
-        {items.map(entry => <MemoryCard ... />)}
-      </AccordionContent>
-    </AccordionItem>
-  ))}
-</Accordion>
+<AnimatePresence>
+  {showBrainPanel && (
+    <VizzyBrainPanel onClose={() => setShowBrainPanel(false)} />
+  )}
+</AnimatePresence>
+
+// After (fixed):
+{showVoiceChat && (
+  <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
+)}
+
+{showBrainPanel && (
+  <VizzyBrainPanel onClose={() => setShowBrainPanel(false)} />
+)}
 ```
 
-Single file change, ~30 lines modified.
+Also update the Brain action button styling to match the teal theme used by Voice button, making it clearly visible:
+
+```tsx
+<motion.button
+  ...
+  onClick={onBrainClick}
+  className="absolute top-0 left-0 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/30 cursor-pointer"
+  style={{
+    background: "linear-gradient(135deg, hsl(270 60% 45%), hsl(270 60% 60%))",
+  }}
+  aria-label="Open Vizzy Brain"
+>
+  <Brain size={18} className="text-white" />
+</motion.button>
+```
+
+This gives the Brain button a distinct purple gradient, clearly differentiating it from Voice (teal) and Chat (primary).
+
+## Summary
+
+- Remove broken `AnimatePresence` wrappers (fixes ref error + potential click/render issues)
+- Give Brain button a visible, distinct style
+- Single file change: `FloatingVizzyButton.tsx`
 
