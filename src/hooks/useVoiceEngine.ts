@@ -573,9 +573,25 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     setTranscripts([]);
   }, []);
 
+  // Network change detection — auto-reconnect when coming back online
   useEffect(() => {
-    return () => { cleanup(); };
-  }, [cleanup]);
+    const handleOnline = () => {
+      console.log("[VoiceEngine] Network back online");
+      // Only reconnect if we were in a session (not idle)
+      if (pcRef.current && !intentionalCloseRef.current) {
+        const cs = pcRef.current.connectionState;
+        if (cs === "disconnected" || cs === "failed") {
+          console.warn("[VoiceEngine] Network restored, triggering reconnect");
+          attemptReconnect(startSession);
+        }
+      }
+    };
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      cleanup();
+    };
+  }, [cleanup, attemptReconnect, startSession]);
 
   return {
     state,
