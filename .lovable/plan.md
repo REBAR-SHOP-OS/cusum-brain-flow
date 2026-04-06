@@ -1,55 +1,50 @@
 
 
-# Fix: Stop Cloning Posts on Publish — Keep Single Card
+# Root Cause: "Rebar.Shop Incorporated" Does Not Exist in Facebook/Instagram
 
 ## Problem
 
-When "Publish Now" is clicked, the frontend splits a post with Pages(5) across 3 platforms into up to 15 separate combos. It uses the original row for the first combo and **creates clone rows** (via `createPost.mutateAsync`) for combos 2–15. These clones:
+The UI lists the page as **"Rebar.Shop Incorporated"** (`socialConstants.ts` line 10, 18), but the actual Facebook/Instagram page name stored in `user_meta_tokens.pages` is **"Rebar.shop"** (lowercase "s", no "Incorporated").
 
-1. Appear as separate "Pages (1) · Draft" cards in the calendar (visible in screenshot, circled in red on Sunday)
-2. Often fail to publish (duplicate guard or race condition), leaving orphan Draft cards
-3. Break the visual grouping the user expects — one card per platform with all pages
+When the backend tries to match `"Rebar.Shop Incorporated"` against available pages `["Ontario Steel Detailing", "Rebar.shop", "Ontario Digital Marketing", ...]`, the `normalizePageName` function compares:
+- `"rebar.shop incorporated"` vs `"rebar.shop"` → **no match**
 
-## Root Cause
+Result: every publish attempt for this page hits line 294:
+```
+SKIP — page "Rebar.Shop Incorporated" not found in connected pages — skipped
+```
 
-The backend (`social-publish/index.ts`) **already handles multi-page publishing** in a single call. It splits `page_name` by comma and iterates internally (lines 241–283). The frontend clone logic is redundant and conflicts with this.
+This is the same root cause for all posts that include "Rebar.Shop Incorporated" — they silently skip that page or fail entirely.
 
 ## Fix
 
-### 1. Remove clone logic from `PostReviewPanel.tsx` (lines ~1141–1212)
+### 1. Update `src/lib/socialConstants.ts` — rename to match Facebook
 
-Instead of creating combos per page and cloning, group by **platform only**:
+Change "Rebar.Shop Incorporated" → "Rebar.shop" in both facebook and instagram arrays. This matches the actual page name from Meta's API stored in `user_meta_tokens`.
 
+### 2. Database migration — update existing posts
+
+Run a data migration to rename "Rebar.Shop Incorporated" → "Rebar.shop" in all `social_posts.page_name` values (both standalone and within comma-separated strings).
+
+```sql
+UPDATE social_posts 
+SET page_name = REPLACE(page_name, 'Rebar.Shop Incorporated', 'Rebar.shop')
+WHERE page_name LIKE '%Rebar.Shop Incorporated%';
 ```
-For each publishable platform:
-  1. Update original row → set platform + page_name (all selected pages, comma-joined)
-  2. Call publishPost once with all pages
-  
-If multiple platforms:
-  - First platform: use original row
-  - Additional platforms: clone once per platform (not per page)
-  - Each clone gets ALL selected pages in its page_name field
-```
 
-This means a post with 5 pages across Facebook + Instagram + LinkedIn creates at most 3 rows (1 original + 2 clones), not 15. Each row keeps `page_name = "Page1, Page2, Page3, Page4, Page5"`.
+### 3. Also fix "Rebar.Shop Ontario" → "Rebar.shop Ontario"
 
-### 2. Keep backend unchanged
-
-The backend's multi-page loop (`individualPages`) already handles comma-separated pages correctly. No changes needed.
-
-### 3. Calendar display stays correct
-
-`SocialCalendar.tsx` already parses `page_name.split(", ")` to show "Pages (5)" with per-page status indicators. No changes needed.
+The token data shows `"Rebar.shop Ontario"` (lowercase "s") but the constants have `"Rebar.Shop Ontario"` (uppercase "S"). The `normalizePageName` function lowercases both so this works today, but it should be consistent to avoid confusion.
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `src/components/social/PostReviewPanel.tsx` | Replace per-page clone logic with per-platform grouping; each row keeps all pages |
+| `src/lib/socialConstants.ts` | Rename "Rebar.Shop Incorporated" → "Rebar.shop" |
+| Database migration | Update existing `page_name` values |
 
 ## Safety
-- No database changes
-- Backend unchanged — already supports multi-page in single call
-- Calendar display unchanged — already groups by comma-separated pages
-- Reduces DB writes from N×M to N (platforms only)
+- `normalizePageName` lowercases, so case differences are safe — but "Incorporated" suffix is a completely different string, which is why it fails
+- Migration only touches `page_name` text, no structural changes
+- No edge function changes needed — the matching logic is correct, the data is wrong
 
