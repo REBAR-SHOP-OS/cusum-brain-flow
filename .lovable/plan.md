@@ -1,56 +1,54 @@
 
 
-# Enforce Zero-Visibility for Unauthorized Users
+# Fix: Vizzy Stops Talking After 4-5 Turns + Build Error
 
-## Problem
+## Two Issues
 
-Current `ProtectedRoute` only checks if a `user` object exists — it does NOT verify the email is whitelisted. There is a race condition: between the moment a session is established (e.g. via Google OAuth) and the auto-sign-out in `onAuthStateChange`, an unauthorized user could briefly see system content (pages, nav, data).
+### Issue 1: Vizzy Goes Silent After ~5 Exchanges
 
-## Solution
+**Root Cause**: OpenAI Realtime API has a context window limit. Vizzy's system prompt is massive (~430 lines of instructions + full ERP data digest). After 4-5 voice turns, the conversation context fills up and the model stops generating audio responses — it silently fails without an error event.
 
-Add a whitelist check directly in `ProtectedRoute`. If a user is authenticated but their email is NOT in `allowedLoginEmails`, render a blank screen and trigger sign-out — showing absolutely nothing.
+**Fix**: Implement a sliding conversation window that automatically deletes old conversation items from the Realtime session after accumulating more than 6 items (3 user + 3 agent turns). When a new `response.done` arrives, count conversation items and send `conversation.item.delete` for the oldest pairs, keeping the session context lean.
 
-## Changes
+#### File: `src/hooks/useVoiceEngine.ts`
 
-### File: `src/components/auth/ProtectedRoute.tsx`
+1. Add a `conversationItemIds` ref to track all item IDs received from the Realtime API
+2. Listen for `conversation.item.created` events to capture item IDs
+3. After each `response.done`, if items exceed 6, delete the oldest items via `conversation.item.delete` data channel messages
+4. This keeps the context window fresh — system prompt stays, but old turns are pruned
 
-Add email whitelist verification after the `user` check:
+```text
+Flow:
+  Turn 1: user_item_1, agent_item_1  (2 items)
+  Turn 2: user_item_2, agent_item_2  (4 items)
+  Turn 3: user_item_3, agent_item_3  (6 items)
+  Turn 4: user_item_4, agent_item_4  (8 items → delete items 1-2 → 6 items)
+  ...always keeps last 3 exchanges
+```
 
+### Issue 2: Build Error in ArchFlowNode.tsx
+
+**Root Cause**: `@xyflow/react` v12+ changed the `NodeProps` generic — it now expects `Node<DataType>` not just `DataType`. The component passes `ArchFlowNodeData` directly which doesn't satisfy the `Node` constraint.
+
+**Fix**: Change `NodeProps<ArchFlowNodeData>` to `NodeProps` and manually type `data` from the destructured props, or use the correct generic form `NodeProps<Node<ArchFlowNodeData>>`.
+
+#### File: `src/components/system-flow/ArchFlowNode.tsx` (line 42)
+
+Change the function signature to use the correct typing pattern for @xyflow/react v12+:
 ```typescript
-import { Navigate } from "react-router-dom";
-import { useAuth } from "@/lib/auth";
-import { ACCESS_POLICIES } from "@/lib/accessPolicies";
-
-export function ProtectedRoute({ children }) {
-  const { user, loading, signOut } = useAuth();
-
-  if (loading) {
-    return /* loading spinner (existing) */;
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // CRITICAL: If user exists but email is NOT whitelisted → show nothing, sign out
-  const email = user.email?.toLowerCase() ?? "";
-  const isAllowed = ACCESS_POLICIES.allowedLoginEmails.some(
-    (e) => e.toLowerCase() === email
-  );
-
-  if (!isAllowed) {
-    signOut(); // trigger sign-out in background
-    return null; // render absolutely nothing
-  }
-
-  return <>{children}</>;
-}
+function ArchFlowNodeInner(props: NodeProps) {
+  const data = props.data as ArchFlowNodeData;
+  const { id, selected } = props;
 ```
 
 ## Impact
-- Any unauthorized user who somehow gets a session sees a completely blank screen
-- Sign-out is triggered immediately in the background
-- Works as a second defense layer alongside `onAuthStateChange` in `auth.tsx`
-- No changes to any other file
-- Zero risk to existing authorized users
+- Vizzy can now sustain unlimited conversation turns without going silent
+- Old conversation context is pruned server-side, keeping responses fast
+- Transcripts in the UI are NOT affected — they remain in React state for display
+- Build error is fixed with correct typing
+- No other features affected
+
+## Files Changed
+- `src/hooks/useVoiceEngine.ts` — add conversation item tracking + auto-pruning
+- `src/components/system-flow/ArchFlowNode.tsx` — fix NodeProps typing
 
