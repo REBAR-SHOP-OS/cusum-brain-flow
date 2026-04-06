@@ -70,8 +70,6 @@ export function useUserAgentSessions(userId: string | null) {
         const info = agentMap.get(agentName);
 
         if (info) {
-          // Has sessions — fetch recent messages from latest
-          const latestSessionId = info.sessionIds[0];
           // Fetch recent messages from latest session (up to 10)
           const latestSessionId = info.sessionIds[0];
           const { data: msgs } = await supabase
