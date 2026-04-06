@@ -1,37 +1,60 @@
 
 
-# Fix: Vizzy Time Inconsistency + Social Media Realtime Collision
+# Investigation: Why Posts Fail to Publish ("Duplicate")
 
-## Issue 1: Vizzy Says Different Time Each Session
+## Root Cause Found
 
-**Root cause**: `useVizzyVoiceEngine.ts` uses a `contextFetched` ref that is set to `true` on the first voice session and never reset. On subsequent sessions, the time context from the original session is reused (stale). The AI model receives "It is currently morning ... 7:42 AM" from the first session even if it's now afternoon.
+The duplicate guard in both `social-publish/index.ts` (line 94-136) and `social-cron-publish/index.ts` (line 167-212) is **too aggressive**. Three specific flaws:
 
-**Fix in `src/hooks/useVizzyVoiceEngine.ts`**:
-- Always rebuild the time context portion of instructions before each session start, even if `contextFetched.current` is already true
-- When `contextFetched` is true and the user starts a new session, update the time context in `instructionsRef.current` using `getTimeContextInTimezone(timezone)` before calling `originalStartSession()`
-- This ensures every voice session gets the current time, not a cached one from hours ago
+### Flaw 1 — Title-only match triggers false positives
+```typescript
+const sameTitle = pub.title && post.title && pub.title === post.title;
+if (sameContent || sameTitle) { // ← title alone blocks!
+```
+Your auto-generated posts likely share generic titles (e.g. "Daily Rebar Post") across platforms. Two posts with the same title but **different content and images** are incorrectly flagged as duplicates.
 
-**Additional fix in `supabase/functions/daily-team-report/index.ts`**:
-- Replace `new Date().toISOString().split("T")[0]` with timezone-aware date using `getWorkspaceTimezone`
-- Replace hardcoded `T00:00:00.000Z` / `T23:59:59.999Z` with computed UTC boundaries
+### Flaw 2 — Empty page_name = universal overlap
+```typescript
+const hasPageOverlap = postPages.length === 0 || pubPages.length === 0
+  || postPages.some(pg => pubPages.includes(pg));
+```
+If either post has no `page_name`, the guard assumes overlap — blocking publication even when they target different pages.
 
-## Issue 2: Social Media Realtime Collision
+### Flaw 3 — UTC date boundaries vs workspace timezone
+```typescript
+const dayStr = new Date(post.scheduled_date).toISOString().split("T")[0];
+// queries with T00:00:00Z / T23:59:59Z
+```
+For `America/Toronto` (UTC-4), a post scheduled at 11 PM local time falls into the "next day" in UTC. This can cause:
+- Posts not finding their actual duplicates (false negatives at edges)
+- Posts matching against wrong-day posts (false positives)
 
-**Root cause**: `useSocialApprovals.ts` uses a static channel name `"social_approvals_realtime"`. When `SocialMediaManager` mounts both `useSocialPosts` (already fixed with UUID) and `useSocialApprovals` (still static), and the `ApprovalsPanel` also calls `useSocialApprovals`, channel collisions can cause the realtime subscription to fail silently, preventing data refresh.
+## Fix Plan
 
-**Fix in `src/hooks/useSocialApprovals.ts`**:
-- Change channel name from `"social_approvals_realtime"` to `` `social_approvals_realtime_${crypto.randomUUID()}` `` (same pattern applied to all other hooks)
+### 1. Relax duplicate guard — require content+image match, not title alone
+In both `social-publish/index.ts` and `social-cron-publish/index.ts`:
+- Change `sameContent || sameTitle` → `sameContent` (content + image must both match)
+- Title-only match should be a **warning log**, not a block
+- This is the primary fix that unblocks the user immediately
 
-## Files Changed
+### 2. Fix empty page_name overlap logic
+- Change: if either side has no pages, treat as **no overlap** (not universal overlap)
+- Only block when there's actual page intersection
+
+### 3. Use timezone-aware date boundaries
+- Import `getWorkspaceTimezone` 
+- Compute local "today" string and UTC boundaries using timezone offset
+- Same pattern already applied in `daily-team-report`
+
+## Files to Change
 
 | File | Change |
 |------|--------|
-| `src/hooks/useVizzyVoiceEngine.ts` | Refresh time context on every session start, not just the first |
-| `src/hooks/useSocialApprovals.ts` | Unique channel name with UUID |
-| `supabase/functions/daily-team-report/index.ts` | Timezone-aware date boundaries |
+| `supabase/functions/social-publish/index.ts` | Fix duplicate guard logic (lines 94-136) |
+| `supabase/functions/social-cron-publish/index.ts` | Fix duplicate guard logic (lines 167-212) |
 
 ## Safety
 - No database changes
-- No schema changes
-- Minimal code changes following established patterns
+- Only relaxes an overly strict guard — no risk of actual duplicates since content+image match is still enforced
+- Posts that were incorrectly blocked can be retried immediately after deploy
 
