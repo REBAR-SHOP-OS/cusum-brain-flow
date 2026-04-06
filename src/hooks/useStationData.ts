@@ -200,7 +200,11 @@ export function useStationData(machineId: string | null, machineType?: string, p
     });
     for (const key of sortedKeys) {
       const g = groupMap.get(key)!;
-      groups.push({ barCode: key, bendItems: g.bend, straightItems: g.straight });
+      groups.push({
+        barCode: key,
+        bendItems: g.bend.sort((a, b) => (b.cut_length_mm || 0) - (a.cut_length_mm || 0)),
+        straightItems: g.straight.sort((a, b) => (b.cut_length_mm || 0) - (a.cut_length_mm || 0)),
+      });
     }
   }
 
