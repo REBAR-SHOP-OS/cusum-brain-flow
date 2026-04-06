@@ -71,17 +71,13 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
 
     return createPortal(
       <>
-        <AnimatePresence>
-          {showVoiceChat && (
-            <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
-          )}
-        </AnimatePresence>
+        {showVoiceChat && (
+          <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />
+        )}
 
-        <AnimatePresence>
-          {showBrainPanel && (
-            <VizzyBrainPanel onClose={() => setShowBrainPanel(false)} />
-          )}
-        </AnimatePresence>
+        {showBrainPanel && (
+          <VizzyBrainPanel onClose={() => setShowBrainPanel(false)} />
+        )}
 
         <div
           data-feedback-btn="true"
@@ -137,10 +133,13 @@ export const FloatingVizzyButton = React.forwardRef<HTMLButtonElement, {}>(
                   exit={{ scale: 0, opacity: 0, x: 0, y: 0 }}
                   transition={{ type: "spring", stiffness: 400, damping: 20, delay: 0.1 }}
                   onClick={onBrainClick}
-                  className="absolute top-0 left-0 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-accent/30 cursor-pointer bg-accent text-accent-foreground"
+                  className="absolute top-0 left-0 w-11 h-11 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/30 cursor-pointer"
+                  style={{
+                    background: "linear-gradient(135deg, hsl(270 60% 45%), hsl(270 60% 60%))",
+                  }}
                   aria-label="Open Vizzy Brain"
                 >
-                  <Brain size={18} />
+                  <Brain size={18} className="text-white" />
                 </motion.button>
               </>
             )}
