@@ -1,42 +1,49 @@
 
 
-# فیلتر ایجنت‌ها — فقط ایجنت‌های اختصاصی هر کاربر
+# Speed Up Face Recognition for AI@REBAR.SHOP Kiosk
 
-## مشکل
-در حال حاضر `UserAgentsSections` تمام ایجنت‌هایی که کاربر با آن‌ها چت کرده را نشان می‌دهد (از `chat_sessions`). باید فقط ایجنت‌هایی که **رسماً به آن کاربر اختصاص داده شده** نمایش داده شوند.
+## Problem
+Face scanning is slow because every scan: downloads up to 3 photos per enrolled person from storage, converts all to base64, sends all images to AI, and retries on failure. This adds up to several seconds.
 
-## منبع داده
-- جدول `user_agents` → ایجنت‌های اختصاص‌یافته به هر کاربر (با `agent_id` → `agents.code/name`)
-- جدول `chat_sessions` → سابقه چت (فقط برای ایجنت‌های مجاز)
+## Optimizations
 
-## تغییرات
+### 1. Edge Function: `supabase/functions/face-recognize/index.ts`
 
-### 1. هوک `src/hooks/useUserAgentSessions.ts`
-- ابتدا لیست ایجنت‌های اختصاصی کاربر از `user_agents` + `agents` واکشی شود
-- سپس `chat_sessions` فقط برای همان `agent_name`‌های مجاز فیلتر شود
-- ایجنت‌هایی که اختصاص داده شده ولی هنوز چتی ندارند نیز نمایش داده شوند (با `sessionCount: 0`)
+**a) Use faster AI model**
+- Switch from `gemini-2.5-flash` to `gemini-2.5-flash-lite` (fastest model, ideal for classification tasks like face matching)
 
-```typescript
-// 1. Fetch assigned agents
-const { data: assigned } = await supabase
-  .from("user_agents")
-  .select("agents!inner(code, name)")
-  .eq("user_id", userId);
+**b) Reduce photos per person: 3 → 1**
+- Line 56: change `if (urls.length < 3)` → `if (urls.length < 1)`
+- Fewer images = less download time + less AI processing time
 
-// 2. Build allowed agent names set
-const allowedAgents = new Map(assigned.map(a => [a.agents.code, a.agents.name]));
+**c) Remove retry logic**
+- Lines 243-262: Remove the "retry once if no structured result" block
+- Saves an entire duplicate AI call on edge cases
 
-// 3. Filter chat_sessions to only allowed agents
-const sessions = ... .in("agent_name", [...allowedAgents.keys()]);
+**d) Reduce prompt verbosity**
+- Shorten the system prompt (lines 134-159) — remove redundant anti-bias rules that inflate token count and slow processing
 
-// 4. Include assigned agents with 0 sessions
-```
+### 2. Client: `src/hooks/useFaceRecognition.ts`
 
-### 2. فایل‌های تغییر
-- `src/hooks/useUserAgentSessions.ts` — بازنویسی queryFn
+**a) Reduce captured image size**
+- Line 51-52: Change canvas from 640×480 → 480×360
+- Line 53: Reduce JPEG quality from 0.85 → 0.7
+- Smaller payload = faster upload + faster AI processing
 
-### نتیجه
-- هر کاربر فقط ایجنت‌های خودش را می‌بیند
-- ایجنت‌هایی که به او مرتبط نیست اصلاً نمایش داده نمی‌شود
-- ایجنت‌های اختصاصی بدون سابقه چت هم با `(0 sessions)` نشان داده می‌شوند
+### 3. Client: `src/pages/TimeClock.tsx`
+
+**a) For ai@rebar.shop: auto-trigger scan on camera ready**
+- After camera starts in kiosk mode, auto-click "Scan Face" after 1s delay so the operator doesn't need to tap
+
+## Expected Impact
+- Model switch: ~40-50% faster AI response
+- 1 photo vs 3: ~60% less download + smaller AI payload
+- Smaller capture: ~30% less upload time
+- No retry: eliminates worst-case double latency
+- Auto-scan: removes manual tap delay
+
+## Files Changed
+- `supabase/functions/face-recognize/index.ts`
+- `src/hooks/useFaceRecognition.ts`
+- `src/pages/TimeClock.tsx`
 
