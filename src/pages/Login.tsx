@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import logoCoin from "@/assets/logo-coin.png";
 import loginBg from "@/assets/login-bg.png";
 import { useToast } from "@/hooks/use-toast";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -131,6 +132,20 @@ export default function Login() {
                 });
               }
               if (result.redirected) return;
+
+              // Check whitelist after Google OAuth
+              const { data: { user: oauthUser } } = await supabase.auth.getUser();
+              const oauthEmail = oauthUser?.email?.toLowerCase() ?? "";
+              if (!ACCESS_POLICIES.allowedLoginEmails.some((e) => e.toLowerCase() === oauthEmail)) {
+                await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+                toast({
+                  title: "Access denied",
+                  description: "Your account is not authorized to access this system.",
+                  variant: "destructive",
+                });
+                return;
+              }
+
               navigate("/home");
             } catch (err: any) {
               toast({
