@@ -1,24 +1,27 @@
 
 
-# Make Avatar Bar Larger and More Readable
+# Show Only Used Agents in Monitoring View
 
 ## Problem
-The avatar bar is still too small despite the previous increase. The user wants it significantly bigger and more readable.
+The Agents section currently shows all 22 agents from `agentConfigs`, including ones the user has never used. This is a **monitoring** panel — its purpose is to report which agents a user has actually interacted with. Showing unused agents (all with "0 sessions") adds noise and defeats the purpose.
+
+## Rule
+**Only display agents that the selected user has at least 1 session with.** If a user has never used an agent, it should not appear in the list.
 
 ## Changes
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx` (lines 483-520)
+### File: `src/hooks/useUserAgentSessions.ts`
 
-Scale up all avatar bar elements substantially:
+Remove the logic that adds all `agentConfigs` agents to the result set. Only iterate over agents found in the user's `chat_sessions` data.
 
-1. **Container**: `px-5 py-3 gap-3` → `px-5 py-4 gap-4`
-2. **"All" button**: `px-3.5 py-1.5 text-sm` → `px-5 py-2.5 text-base font-semibold`
-3. **User buttons**: `px-3 py-1.5 text-sm gap-2` → `px-4 py-2.5 text-base gap-3`
-4. **Avatar circles**: `w-7 h-7 text-xs` → `w-10 h-10 text-sm`
-5. **Names**: `text-sm font-semibold` → `text-base font-bold`
+Specifically:
+1. **Remove lines 44-53** — the `allAgentNames` set that merges all config names
+2. **Remove the `else` branch (lines 83-92)** — the block that adds agents with 0 sessions
+3. **Iterate only over `agentMap.keys()`** — agents the user actually has sessions with
+4. Sort by `lastUsed` descending (no inactive agents to sort)
 
-Result: Avatar circles become 40px (nearly double), text becomes `text-base` (16px), and padding/spacing increases throughout for a bold, easy-to-read bar.
+Result: If Neel has only used Blitz and Vizzy, only those two appear. No "0 sessions" clutter.
 
 ## Files Changed
-- `src/components/vizzy/VizzyBrainPanel.tsx` — scale up avatar bar elements
+- `src/hooks/useUserAgentSessions.ts` — filter to only agents with real session data
 
