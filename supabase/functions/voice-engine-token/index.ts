@@ -14,6 +14,7 @@ Deno.serve((req) =>
       silenceDurationMs = 800,
       prefixPaddingMs = 400,
       temperature = 0.8,
+      eagerness = "auto",
     } = ctx.body;
 
     const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
@@ -34,6 +35,7 @@ Deno.serve((req) =>
           threshold: vadThreshold,
           prefix_padding_ms: prefixPaddingMs,
           silence_duration_ms: silenceDurationMs,
+          eagerness,
         },
       }),
     });
