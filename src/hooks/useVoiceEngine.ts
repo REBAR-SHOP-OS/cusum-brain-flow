@@ -256,32 +256,38 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           clearTimeout_();
           setState("connected");
           setMode("listening");
-          reconnectAttemptsRef.current = 0; // Reset on successful session
+          reconnectAttemptsRef.current = 0;
+          conversationItemIdsRef.current = []; // Reset on new session
           if (navigator.vibrate) navigator.vibrate(50);
           break;
+
+        case "conversation.item.created": {
+          // Track conversation item IDs for context pruning
+          const itemId = msg.item?.id;
+          if (itemId) {
+            conversationItemIdsRef.current.push(itemId);
+            console.log(`[VoiceEngine] Conversation items: ${conversationItemIdsRef.current.length}`);
+          }
+          break;
+        }
 
         case "conversation.item.input_audio_transcription.completed": {
           const text = msg.transcript?.trim();
           if (text) {
-            // Filter short noise fragments (greetings, filler, mic artifacts)
             const words = text.split(/\s+/);
             if (words.length < 3 && text.length < 10) break;
-            // Repetition filter
             const uniqueWords = new Set(words.map(w => w.toLowerCase()));
             if (uniqueWords.size <= 2 && words.length >= 3) break;
-            // Non-target language filter: block Korean, Japanese, Chinese, Thai, Bengali, Devanagari, etc.
             const FOREIGN_SCRIPT = /[\u3000-\u9FFF\uAC00-\uD7AF\u1100-\u11FF\u0900-\u097F\u0980-\u09FF\u0A00-\u0D7F\u0E00-\u0E7F\u1000-\u109F]/;
             if (FOREIGN_SCRIPT.test(text)) {
               console.log("[voice-engine] blocked foreign-script transcript:", text.slice(0, 40));
               break;
             }
-            // Must contain at least some Farsi or Latin letters
             const HAS_TARGET_LANG = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
             if (!HAS_TARGET_LANG.test(text)) {
               console.log("[voice-engine] blocked non-target transcript:", text.slice(0, 40));
               break;
             }
-            // TV/media noise pattern filter
             const MEDIA_NOISE = /\b(MBC|KBS|SBS|CNN|BBC|channel|subtitle|broadcast|breaking news)\b/i;
             if (MEDIA_NOISE.test(text)) {
               console.log("[voice-engine] blocked media-noise transcript:", text.slice(0, 40));
@@ -302,7 +308,6 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         case "response.audio_transcript.done": {
           const text = (msg.transcript || agentTextRef.current).trim();
           agentTextRef.current = "";
-          // Get last user transcript for language-mismatch filtering
           const lastUser = [...transcriptsRef.current].reverse().find(t => t.role === "user");
           if (text && !isSelfTalk(text, lastUser?.text, configRef.current.translationMode)) {
             setTranscripts(prev => [
@@ -321,10 +326,33 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
 
         case "response.audio.done":
         case "output_audio_buffer.speech_stopped":
-        case "response.done":
           setIsSpeaking(false);
           setMode("listening");
           break;
+
+        case "response.done": {
+          setIsSpeaking(false);
+          setMode("listening");
+
+          // Prune old conversation items to prevent context overflow
+          const dc = dcRef.current;
+          const items = conversationItemIdsRef.current;
+          if (dc && dc.readyState === "open" && items.length > MAX_CONVERSATION_ITEMS) {
+            const toDelete = items.splice(0, items.length - MAX_CONVERSATION_ITEMS);
+            for (const itemId of toDelete) {
+              try {
+                dc.send(JSON.stringify({
+                  type: "conversation.item.delete",
+                  item_id: itemId,
+                }));
+              } catch (e) {
+                console.warn("[VoiceEngine] Failed to delete conversation item:", e);
+              }
+            }
+            console.log(`[VoiceEngine] Pruned ${toDelete.length} old items, ${items.length} remaining`);
+          }
+          break;
+        }
 
         case "input_audio_buffer.speech_started":
           setMode("listening");
