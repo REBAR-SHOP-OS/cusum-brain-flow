@@ -215,35 +215,167 @@ ${agentAuditContext}`,
       }
     }
 
-    // Step 4b: Extract and save timeclock summary to vizzy_memory
+    // Step 4b: Deterministic timeclock snapshot from DB (not AI text parsing)
     try {
       const { data: profile2 } = await supabase
         .from("profiles")
-        .select("company_id")
+        .select("id, company_id, full_name, is_active")
         .eq("user_id", userId)
         .maybeSingle();
       const cid = profile2?.company_id;
       if (cid) {
-        // Extract PER-PERSON INTELLIGENCE or TIME CLOCK section for timeclock insights
-        const tcMatch = fullDigest.match(/PER-PERSON INTELLIGENCE[\s\S]*?(?=═══|FINANCIAL HEALTH|$)/i);
-        const tcSection = tcMatch ? tcMatch[0] : "";
-        // Extract individual lines about hours/clock
-        const tcLines = tcSection.split("\n")
-          .map((l: string) => l.trim())
-          .filter((l: string) => /clock|hour|shift|absent|not clocked/i.test(l) && l.length > 10);
-        
-        if (tcLines.length > 0) {
-          const tcInserts = tcLines.slice(0, 20).map((line: string) => ({
+        // Get today's date in workspace timezone
+        const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
+        const todayStart = new Date(`${todayDate}T00:00:00`);
+        const todayStartIso = todayStart.toISOString();
+
+        // Fetch ALL company profiles
+        const { data: allProfiles } = await supabase
+          .from("profiles")
+          .select("id, full_name, is_active")
+          .eq("company_id", cid);
+
+        // Fetch today's time clock entries for ALL employees in the company
+        const { data: todayEntries } = await supabase
+          .from("time_clock_entries")
+          .select("id, profile_id, clock_in, clock_out, break_minutes, notes")
+          .gte("clock_in", todayStartIso)
+          .order("clock_in", { ascending: true });
+
+        // Also fetch any open shifts (no clock_out) regardless of date
+        const { data: openShifts } = await supabase
+          .from("time_clock_entries")
+          .select("id, profile_id, clock_in, clock_out, break_minutes, notes")
+          .is("clock_out", null);
+
+        const profiles = allProfiles || [];
+        const entries = todayEntries || [];
+        const opens = openShifts || [];
+
+        // Filter entries to only company profiles
+        const profileIds = new Set(profiles.map((p: any) => p.id));
+        const companyEntries = entries.filter((e: any) => profileIds.has(e.profile_id));
+        const companyOpenShifts = opens.filter((e: any) => profileIds.has(e.profile_id));
+
+        // Build per-employee facts
+        const now = new Date();
+        const tcInserts: any[] = [];
+        let totalOnSite = 0;
+        let totalHoursToday = 0;
+        const anomalies: string[] = [];
+
+        for (const prof of profiles) {
+          const name = prof.full_name || "Unknown";
+          const myEntries = companyEntries.filter((e: any) => e.profile_id === prof.id);
+          const myOpenShift = companyOpenShifts.find((e: any) => e.profile_id === prof.id);
+
+          if (myEntries.length === 0 && !myOpenShift) {
+            // Not clocked in today
+            tcInserts.push({
+              user_id: userId,
+              company_id: cid,
+              category: "timeclock",
+              content: `${name} — Not clocked in today`,
+              metadata: { report_date: todayDate, report_timezone: tz, source: "timeclock_daily_snapshot", profile_id: prof.id },
+            });
+            continue;
+          }
+
+          // Calculate total hours worked today
+          let totalMinutes = 0;
+          let status = "clocked out";
+          let clockInTime = "";
+          let clockOutTime = "";
+
+          for (const entry of myEntries) {
+            const cin = new Date(entry.clock_in);
+            const cout = entry.clock_out ? new Date(entry.clock_out) : now;
+            const mins = (cout.getTime() - cin.getTime()) / 60000 - (entry.break_minutes || 0);
+            totalMinutes += Math.max(0, mins);
+            if (!clockInTime) clockInTime = cin.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: tz });
+            if (entry.clock_out) clockOutTime = cout.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: tz });
+          }
+
+          // Check for currently open shift
+          if (myOpenShift) {
+            status = "clocked in";
+            totalOnSite++;
+            if (!clockInTime) {
+              clockInTime = new Date(myOpenShift.clock_in).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", timeZone: tz });
+            }
+          }
+
+          const hours = Math.round(totalMinutes / 6) / 10; // 1 decimal
+          totalHoursToday += hours;
+
+          let content = "";
+          if (status === "clocked in") {
+            content = `${name} — Clocked in at ${clockInTime}, ${hours}h worked so far`;
+          } else if (clockOutTime) {
+            content = `${name} — Clocked in ${clockInTime}, out ${clockOutTime}, total ${hours}h`;
+          } else {
+            content = `${name} — ${hours}h worked today`;
+          }
+
+          tcInserts.push({
             user_id: userId,
             company_id: cid,
             category: "timeclock",
-            content: line.replace(/^[-•*]\s*/, ""),
-          }));
+            content,
+            metadata: { report_date: todayDate, report_timezone: tz, source: "timeclock_daily_snapshot", profile_id: prof.id, hours, status },
+          });
+
+          // Anomaly checks
+          if (hours > 8) anomalies.push(`⚠️ ${name} overtime: ${hours}h`);
+          if (clockInTime && status === "clocked in") {
+            const cinDate = new Date(myOpenShift?.clock_in || myEntries[0]?.clock_in);
+            const cinHour = parseInt(cinDate.toLocaleTimeString("en-US", { hour: "2-digit", hour12: false, timeZone: tz }));
+            const cinMin = parseInt(cinDate.toLocaleTimeString("en-US", { minute: "2-digit", timeZone: tz }));
+            if (cinHour > 7 || (cinHour === 7 && cinMin > 30)) {
+              anomalies.push(`⚠️ ${name} late arrival: ${clockInTime}`);
+            }
+          }
+        }
+
+        // Add summary lines
+        tcInserts.push({
+          user_id: userId,
+          company_id: cid,
+          category: "timeclock",
+          content: `📊 Total staff on site: ${totalOnSite} | Total team hours today: ${Math.round(totalHoursToday * 10) / 10}h`,
+          metadata: { report_date: todayDate, report_timezone: tz, source: "timeclock_daily_snapshot", type: "summary" },
+        });
+
+        for (const a of anomalies) {
+          tcInserts.push({
+            user_id: userId,
+            company_id: cid,
+            category: "timeclock",
+            content: a,
+            metadata: { report_date: todayDate, report_timezone: tz, source: "timeclock_daily_snapshot", type: "anomaly" },
+          });
+        }
+
+        // Dedupe: delete today's existing timeclock snapshot before inserting fresh
+        const { data: existingToday } = await supabase
+          .from("vizzy_memory")
+          .select("id")
+          .eq("company_id", cid)
+          .eq("category", "timeclock")
+          .gte("created_at", todayStartIso);
+
+        if (existingToday && existingToday.length > 0) {
+          const idsToRemove = existingToday.map((r: any) => r.id);
+          await supabase.from("vizzy_memory").delete().in("id", idsToRemove);
+        }
+
+        // Insert fresh snapshot
+        if (tcInserts.length > 0) {
           await supabase.from("vizzy_memory").insert(tcInserts);
         }
       }
     } catch (e) {
-      console.warn("Failed to save timeclock insights:", e);
+      console.warn("Failed to save timeclock snapshot:", e);
     }
 
     // Remove the benchmark JSON line from the digest (it's internal)
