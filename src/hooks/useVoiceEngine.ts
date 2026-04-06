@@ -316,14 +316,33 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   }, []);
 
   const endSession = useCallback(async () => {
+    reconnectAttemptsRef.current = 0;
     cleanup();
     setState("idle");
     setMode(null);
     setIsSpeaking(false);
   }, [cleanup]);
 
+  /** Internal reconnect with exponential backoff */
+  const attemptReconnect = useCallback((startFn: () => Promise<void>) => {
+    const attempt = reconnectAttemptsRef.current;
+    if (attempt >= MAX_RECONNECT_ATTEMPTS) {
+      console.error(`[VoiceEngine] Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached`);
+      setState("error");
+      setMode(null);
+      setIsSpeaking(false);
+      return;
+    }
+    reconnectAttemptsRef.current = attempt + 1;
+    const delay = 1500 * Math.pow(2, attempt); // 1.5s, 3s, 6s
+    console.warn(`[VoiceEngine] Reconnect attempt ${attempt + 1}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
+    cleanup();
+    setTimeout(() => startFn(), delay);
+  }, [cleanup]);
+
   const startSession = useCallback(async () => {
     const cfg = configRef.current;
+    intentionalCloseRef.current = false;
     setState("connecting");
     setTranscripts([]);
     setMode(null);
@@ -426,6 +445,34 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
             console.warn("[VoiceEngine] session.update on open failed:", e);
           }
         }
+
+        // Start keepalive ping every 30s
+        clearKeepalive();
+        keepaliveRef.current = setInterval(() => {
+          try {
+            if (dc.readyState === "open") {
+              dc.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+            } else {
+              console.warn("[VoiceEngine] Keepalive: DC not open, triggering reconnect");
+              attemptReconnect(startSession);
+            }
+          } catch (e) {
+            console.warn("[VoiceEngine] Keepalive send failed, triggering reconnect:", e);
+            attemptReconnect(startSession);
+          }
+        }, 30_000);
+      };
+
+      // Data channel close/error detection
+      dc.onclose = () => {
+        if (intentionalCloseRef.current) return;
+        console.warn("[VoiceEngine] Data channel closed unexpectedly");
+        attemptReconnect(startSession);
+      };
+      dc.onerror = (ev) => {
+        if (intentionalCloseRef.current) return;
+        console.error("[VoiceEngine] Data channel error:", ev);
+        attemptReconnect(startSession);
       };
 
       // 7. Create and set local SDP offer
@@ -461,27 +508,41 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         endSession();
       }, maxDuration);
 
-      // Connection state monitoring
-      // Auto-reconnect once on disconnect, give up on "failed"
-      let hasAutoReconnected = false;
+      // Connection state monitoring with exponential backoff reconnect
       pc.onconnectionstatechange = () => {
+        if (intentionalCloseRef.current) return;
         const cs = pc.connectionState;
+        console.log("[VoiceEngine] Connection state:", cs);
         if (cs === "failed") {
-          clearTimeout_();
-          clearSessionTimer();
-          setState("error");
-          setMode(null);
-          setIsSpeaking(false);
-          cleanup();
-          toast.error("Voice connection lost.");
-        } else if (cs === "disconnected" && !hasAutoReconnected) {
-          hasAutoReconnected = true;
-          console.warn("Voice engine disconnected — attempting auto-reconnect...");
-          cleanup();
-          // Small delay then retry
-          setTimeout(() => {
-            startSession();
-          }, 1500);
+          attemptReconnect(startSession);
+        } else if (cs === "disconnected") {
+          // Grace period — sometimes recovers on its own
+          clearIceGrace();
+          iceGraceRef.current = setTimeout(() => {
+            if (pcRef.current?.connectionState === "disconnected") {
+              console.warn("[VoiceEngine] Still disconnected after grace period");
+              attemptReconnect(startSession);
+            }
+          }, 5000);
+        } else if (cs === "connected") {
+          clearIceGrace();
+        }
+      };
+
+      // ICE connection state monitoring
+      pc.oniceconnectionstatechange = () => {
+        if (intentionalCloseRef.current) return;
+        const ics = pc.iceConnectionState;
+        console.log("[VoiceEngine] ICE state:", ics);
+        if (ics === "failed") {
+          attemptReconnect(startSession);
+        } else if (ics === "disconnected") {
+          clearIceGrace();
+          iceGraceRef.current = setTimeout(() => {
+            if (pcRef.current?.iceConnectionState === "disconnected") {
+              attemptReconnect(startSession);
+            }
+          }, 5000);
         }
       };
 
@@ -496,7 +557,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         toast.error("Could not connect. Try again.");
       }
     }
-  }, [cleanup, handleDataChannelMessage, endSession]);
+  }, [cleanup, handleDataChannelMessage, endSession, attemptReconnect, clearKeepalive, clearIceGrace]);
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {
