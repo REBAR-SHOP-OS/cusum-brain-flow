@@ -1,32 +1,18 @@
 
 
-# Fix Agent Sessions: Show All Agents User Has Interacted With
+# Remove Persian Text from Vizzy Brain Panel
 
 ## Problem
-The `useUserAgentSessions` hook only queries agents from the `user_agents` table. Radin only has "Vizzy" assigned there, but has actually used 6 different agents (Vizzy, Architect, Eisenhower, Ike, Seomi, etc.) via `chat_sessions`. The current logic filters out all unassigned agents, so nothing meaningful shows up.
-
-## Solution
-Change the hook to discover agents from **actual `chat_sessions`** for the user, not just from `user_agents` assignments. This shows every agent the user has interacted with.
+Three locations in `VizzyBrainPanel.tsx` contain Persian text, violating the English-only UI standard.
 
 ## Changes
 
-### File: `src/hooks/useUserAgentSessions.ts`
+### File: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-Replace the current approach:
-1. **Remove** the `user_agents` lookup entirely
-2. **Query** `chat_sessions` directly for the user, grouped by `agent_name`
-3. For each distinct `agent_name`, fetch session count, total messages, and recent messages (same as now)
-4. Include all agents found — no filtering by `user_agents`
-
-**Logic flow:**
-```text
-1. SELECT DISTINCT agent_name FROM chat_sessions WHERE user_id = X
-2. For each agent_name → count sessions, count messages, fetch 10 recent messages
-3. Sort by last active (descending)
-```
-
-This removes the dependency on `user_agents` and shows the real picture of what agents each user has actually used.
+1. **Line 319**: Replace `هنوز فعالیتی با این ایجنت ثبت نشده` → `No activity with this agent yet`
+2. **Line 530-531**: Replace `بخش کلی` + "General Overview" → just `General Overview`
+3. **Line 548-549**: Replace `بخش ایجنت‌ها` + "Agents" → just `Agents`
 
 ## Files Changed
-- `src/hooks/useUserAgentSessions.ts` — rewrite query logic to source from `chat_sessions` instead of `user_agents`
+- `src/components/vizzy/VizzyBrainPanel.tsx` — 3 text replacements
 
