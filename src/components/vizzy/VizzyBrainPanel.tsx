@@ -12,6 +12,8 @@ import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
+import { getUserAgentMapping } from "@/lib/userAgentMap";
+import { agentConfigs } from "@/components/agent/agentConfigs";
 import { Bot as BotIcon } from "lucide-react";
 
 interface Props {
