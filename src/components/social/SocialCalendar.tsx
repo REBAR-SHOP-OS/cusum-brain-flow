@@ -173,14 +173,10 @@ function PageStatusDropdown({ post, platform }: { post: SocialPost; platform: st
         <div className="mt-1 space-y-0.5" onClick={(e) => e.stopPropagation()}>
           {pageStatuses.map((ps) => (
             <div key={ps.name} className="flex items-center gap-1 text-[10px]">
-              {post.status === "published" ? (
-                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-              ) : ps.failed ? (
-                <XCircle className="w-3 h-3 text-destructive shrink-0" />
-              ) : hasFailed ? (
+              {(post.status === "published" && !ps.failed) || (hasFailed && !ps.failed) ? (
                 <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
               ) : (
-                <Circle className="w-3 h-3 text-muted-foreground shrink-0" />
+                <XCircle className="w-3 h-3 text-destructive shrink-0" />
               )}
               <span className={cn("truncate", ps.failed && "text-destructive")} title={ps.error || ps.name}>
                 {ps.name}
