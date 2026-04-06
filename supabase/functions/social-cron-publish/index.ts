@@ -165,9 +165,13 @@ Deno.serve((req) =>
         console.log(`[social-cron-publish] Acquired lock for post ${post.id}: lockId=${lockId}`);
 
         // ── Enhanced Duplicate Guard ─────────────────────────────────
-        const dayStr = post.scheduled_date
-          ? new Date(post.scheduled_date).toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0];
+        const tz = await getWorkspaceTimezone(supabase);
+        const nowLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+        const dayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
+        const localMidnight = new Date(`${dayStr}T00:00:00`);
+        const offsetMs = new Date().getTime() - new Date(new Date().toLocaleString("en-US", { timeZone: tz })).getTime();
+        const dayStartUtc = new Date(localMidnight.getTime() + offsetMs).toISOString();
+        const dayEndUtc = new Date(localMidnight.getTime() + offsetMs + 86400000 - 1).toISOString();
 
         const { data: publishedToday } = await supabase
           .from("social_posts")
@@ -175,8 +179,8 @@ Deno.serve((req) =>
           .eq("platform", post.platform)
           .eq("status", "published")
           .neq("id", post.id)
-          .gte("scheduled_date", `${dayStr}T00:00:00Z`)
-          .lte("scheduled_date", `${dayStr}T23:59:59Z`)
+          .gte("scheduled_date", dayStartUtc)
+          .lte("scheduled_date", dayEndUtc)
           .limit(50);
 
         const individualPages = post.page_name
@@ -189,18 +193,22 @@ Deno.serve((req) =>
             const sameContent = pub.content === post.content && pub.image_url === post.image_url;
             const sameTitle = pub.title && post.title && pub.title === post.title;
 
-            if (sameContent || sameTitle) {
+            // Only block on content+image match, not title alone
+            if (sameContent) {
               const pubPages = pub.page_name
                 ? pub.page_name.split(", ").map((p: string) => p.trim()).filter(Boolean)
                 : [];
-              const hasPageOverlap = individualPages.length === 0 || pubPages.length === 0
-                || individualPages.some((pg: string) => pubPages.includes(pg));
+              // Only overlap when both sides have pages and they intersect
+              const hasPageOverlap = individualPages.length > 0 && pubPages.length > 0
+                && individualPages.some((pg: string) => pubPages.includes(pg));
 
               if (hasPageOverlap) {
                 isDuplicate = true;
                 console.warn(`[social-cron-publish] Duplicate detected: post ${post.id} matches published ${pub.id}`);
                 break;
               }
+            } else if (sameTitle) {
+              console.log(`[social-cron-publish] INFO — same title as ${pub.id} but different content, allowing publish`);
             }
           }
         }
