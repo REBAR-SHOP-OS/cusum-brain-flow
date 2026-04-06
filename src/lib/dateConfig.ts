@@ -184,3 +184,36 @@ export function getTimeContextInTimezone(
     timezoneLocation: getTimezoneLocationLabel(tz),
   };
 }
+
+/**
+ * Returns the authoritative Toronto time string for Vizzy voice.
+ * Always uses America/Toronto regardless of workspace settings.
+ * Includes seconds for precision.
+ */
+export function getTorontoTimePayload(date: Date = new Date()): {
+  timeString: string;
+  timeOfDay: TimeOfDay;
+  dateString: string;
+} {
+  const tz = "America/Toronto";
+  const parts = getZonedDateTimeParts(date, tz);
+  const timeOfDay = getTimeOfDayInTimezone(tz, date);
+
+  const timeString = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(date);
+
+  const dateString = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date);
+
+  return { timeString, timeOfDay, dateString };
+}
