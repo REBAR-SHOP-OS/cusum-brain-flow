@@ -400,6 +400,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     setMode(null);
     setIsSpeaking(false);
     agentTextRef.current = "";
+    conversationItemIdsRef.current = [];
 
     const timeout = cfg.connectionTimeoutMs ?? 15_000;
     timeoutRef.current = setTimeout(() => {
