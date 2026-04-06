@@ -534,13 +534,13 @@ export function useVizzyVoiceEngine() {
     if (contextFetched.current) {
       // Context already loaded — just start with fresh time
       updateSessionInstructions(instructionsRef.current);
-      originalStartSession();
+      originalStartSession().catch((e) => console.warn("[VizzyVoice] session start failed:", e));
       return;
     }
 
     contextFetched.current = true;
     setContextLoading(true);
-    originalStartSession();
+    originalStartSession().catch((e) => console.warn("[VizzyVoice] session start failed:", e));
 
     void (async () => {
       try {
