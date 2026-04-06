@@ -1,25 +1,47 @@
 
 
-# اضافه کردن دکمه Brain به هدر صفحه Chat
+# اصلاح نمایش دسته‌بندی‌های Vizzy Brain
 
-## مشکل
-آیکون مغز (Brain) فقط از طریق دکمه شناور Vizzy قابل دسترسی است. کاربر می‌خواهد مستقیما در صفحه `/chat` هم دکمه Brain با تمام امکاناتش (مشاهده مموری‌ها، Analyze، ویرایش، حذف) وجود داشته باشد.
+## وضعیت فعلی
+
+داده‌ها **واقعی** هستند و مستقیماً از دیتابیس `vizzy_memory` خوانده می‌شوند. هیچ داده فیک یا mock در سیستم وجود ندارد.
+
+مشکل اصلی: دسته‌بندی‌هایی مثل `feedback_fix`، `daily_benchmark`، `business`، `feedback_clarification`، `feedback_escalation` **لیبل فارسی/انگلیسی مناسب ندارند** و به‌صورت خام نمایش داده می‌شوند که ظاهر غیرحرفه‌ای و ناشناخته‌ای ایجاد می‌کند.
 
 ## تغییرات
 
-### فایل: `src/pages/LiveChat.tsx`
+### فایل: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-1. ایمپورت `VizzyBrainPanel` اضافه شود
-2. یک state جدید `showBrainPanel` اضافه شود
-3. در هدر، کنار دکمه Mic و Trash، یک دکمه Brain اضافه شود (آیکون بنفش مشابه FloatingVizzyButton)
-4. کامپوننت `VizzyBrainPanel` را با شرط `showBrainPanel` رندر کنم
+`CATEGORY_LABELS` را کامل می‌کنم تا همه دسته‌بندی‌های موجود در دیتابیس لیبل مناسب داشته باشند:
+
+```typescript
+const CATEGORY_LABELS: Record<string, string> = {
+  brain_insight: "🧠 Insights",
+  general: "📌 General",
+  benchmark: "📊 Benchmarks",
+  daily_benchmark: "📊 Daily Benchmarks",
+  call_summary: "📞 Calls",
+  voicemail_summary: "📩 Voicemails",
+  agent_audit: "🤖 Agent Audits",
+  auto_fix: "🔧 Auto-Fixes",
+  feedback_patch: "📝 Feedback Patches",
+  feedback_fix: "🔧 Feedback Fixes",
+  feedback_clarification: "💬 Clarifications",
+  feedback_escalation: "🚨 Escalations",
+  business: "💼 Business",
+  pre_digest: "📋 Digests",
+};
+```
+
+### فایل: `src/hooks/useVizzyMemory.ts` — تقویت پرامپت Analyze
+
+پرامپت `analyzeSystem` را اصلاح می‌کنم تا AI صریحاً دستور داشته باشد **فقط بر اساس داده‌های واقعی** بنویسد و هیچ عدد یا اطلاعات فرضی تولید نکند:
 
 ```
-هدر فعلی:  [←] [آواتار] [نام] ... [🎤] [🗑️]
-هدر جدید:  [←] [آواتار] [نام] ... [🧠] [🎤] [🗑️]
+"... Only report facts you can confirm from the provided context.
+ Do NOT fabricate numbers, names, or events. 
+ If data is unavailable, say 'Data not available' instead of guessing."
 ```
 
-دکمه Brain شمارنده مموری‌ها را هم نمایش می‌دهد (badge کوچک با عدد `memoryCount`).
-
-یک فایل، تغییرات کوچک.
+**نتیجه:** تمام دسته‌بندی‌ها با لیبل مناسب نمایش داده می‌شوند و AI از ساخت اطلاعات فیک منع می‌شود.
 
