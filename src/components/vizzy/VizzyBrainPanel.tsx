@@ -1,12 +1,14 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Trash2, Check, Pencil, Loader2, AlertTriangle } from "lucide-react";
+import { X, Brain, Zap, Trash2, Check, Pencil, Loader2, AlertTriangle, Clock } from "lucide-react";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
+import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
+import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
 
 interface Props {
   onClose: () => void;
@@ -31,7 +33,28 @@ const SIDEBAR_GROUPS: { key: string; label: string; categories: string[] }[] = [
   { key: "office_tools", label: "🛠️ Office Tools",     categories: ["office_tools"] },
 ];
 
-// Build a reverse map: category -> group key
+/** Live clock component that updates every second */
+function LiveClock({ timezone }: { timezone: string }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const timeStr = formatDateInTimezone(now, timezone, {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+
+  const tzShort = getTimezoneLabel(timezone);
+  const abbr = tzShort.match(/\(([^)]+)\)/)?.[1] ?? "";
+
+  return <span>{timeStr}{abbr ? ` ${abbr}` : ""}</span>;
+}
+
+
 const CATEGORY_TO_GROUP: Record<string, string> = {};
 for (const g of SIDEBAR_GROUPS) {
   for (const c of g.categories) {
@@ -180,6 +203,7 @@ function DateGroupedEntries({
 
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
+  const { timezone } = useWorkspaceSettings();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
 
@@ -284,6 +308,11 @@ export function VizzyBrainPanel({ onClose }: Props) {
             <Brain className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-foreground">Vizzy Brain</h2>
             <span className="text-xs text-muted-foreground">({entries.length})</span>
+            <span className="text-muted-foreground/50 mx-1">|</span>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Clock className="w-3.5 h-3.5" />
+              <LiveClock timezone={timezone} />
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={handleAnalyze} disabled={analyzing || !hasCompanyContext} className="gap-1">
