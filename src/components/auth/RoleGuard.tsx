@@ -137,7 +137,7 @@ export function RoleGuard({ children }: RoleGuardProps) {
   if (ACCESS_POLICIES.shopfloorDevices.includes(email.toLowerCase())) {
     const DEVICE_ALLOWED = ["/shopfloor", "/shop-floor", "/timeclock", "/team-hub", "/settings", "/tasks", "/shopfloor/delivery-ops"];
     const isAllowed = DEVICE_ALLOWED.some((p) => location.pathname.startsWith(p));
-    if (!isAllowed) return <Navigate to="/shopfloor" replace />;
+    if (!isAllowed) return <Navigate to="/shop-floor" replace />;
     return <>{children}</>;
   }
 
