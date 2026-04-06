@@ -1,32 +1,49 @@
 
 
-# Show Assigned Agents per User with Activity Reports
+# Filter Background Noise from Vizzy Voice Transcription
 
 ## Problem
-The Agents section under each user currently only shows agents they've **used** (from `chat_sessions`). If a user hasn't used their assigned agent yet, nothing appears. The user wants to see which agents are **available/assigned** to each user, and show activity reports only if they've actually used them.
+Vizzy picks up ambient sounds (TV, radio, other conversations) and transcribes them as user input. The screenshot shows Korean text and random English phrases appearing as "YOU" messages — these are clearly from background audio, not the user speaking directly.
 
-## Data Source
-`src/lib/userAgentMap.ts` already maps each `@rebar.shop` email to their primary agent (e.g., Saurabh → `sales`/Blitz, Zahra → `social`/Pixel). `src/components/agent/agentConfigs.ts` has agent display names and roles.
+## Root Cause
+1. **VAD threshold still too permissive** for noisy environments — ambient audio from TV/radio passes the 0.75 threshold
+2. **User transcript filter is too basic** — only blocks fragments < 3 words / 10 chars (line 263-264). Full sentences from TV audio pass through
+3. **No language coherence check** — Korean or random English from TV gets accepted as valid user input
+4. **Microphone not constrained** — no noise suppression or echo cancellation enabled in `getUserMedia`
 
 ## Changes
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx` — `UserAgentsSections` component (~line 181)
+### 1. Enable hardware noise suppression (`src/hooks/useVoiceEngine.ts` ~line 364)
 
-1. Accept `email` prop in addition to `userId` and `name`
-2. Import `getUserAgentMapping` from `@/lib/userAgentMap` and `agentConfigs` from `@/components/agent/agentConfigs`
-3. Look up the user's assigned agent via `getUserAgentMapping(email)`
-4. Merge assigned agent(s) with actual session data:
-   - If the assigned agent has session data → show it with full activity report (sessions, messages, recent thread)
-   - If the assigned agent has **no** session data → show it with a "No activity yet" indicator
-   - Also show any other agents the user has used beyond their assigned one
-5. Pass `email` from the parent where `UserAgentsSections` is rendered (~line 482-485), using `selectedProfile.email`
+Change `getUserMedia({ audio: true })` to use advanced constraints:
+```typescript
+getUserMedia({
+  audio: {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  }
+})
+```
+This tells the browser to apply built-in DSP filtering before sending audio to the WebRTC connection.
 
-### Result
-- Each user sees their assigned agent listed (e.g., Saurabh sees "Blitz — Sales & Pipeline")
-- If they've used it, the activity report expands with sessions/messages
-- If they haven't, it shows the agent name with "No activity yet"
-- Any additional agents they've used also appear with reports
+### 2. Increase VAD threshold further (`src/hooks/useVizzyVoiceEngine.ts` ~line 494)
+
+- `vadThreshold`: `0.75` → `0.85` (only strong, close-mic speech triggers)
+- `silenceDurationMs`: `1200` → `1500` (longer silence needed to confirm turn)
+
+### 3. Strengthen user transcript noise filter (`src/hooks/useVoiceEngine.ts` ~line 259-273)
+
+Add additional filters for ambient noise detection in the `input_audio_transcription.completed` handler:
+- **Non-target language filter**: Block transcripts containing Korean, Japanese, Chinese, or other non-target scripts (user speaks English or Farsi only)
+- **TV/media pattern filter**: Block common broadcast phrases like "MBC", "news", "channel", subtitle-like text
+- **Confidence-based length filter**: Raise minimum from 3 words to a smarter check — short fragments without Farsi characters that don't look like direct speech get blocked
+
+### 4. Add prompt instruction about noise (`src/hooks/useVizzyVoiceEngine.ts` prompt)
+
+Add to system prompt: "IGNORE any background noise, TV audio, radio, or conversations from other people. Only respond to direct speech addressed to you. If you detect ambient noise transcribed as input, discard it silently."
 
 ## Files Changed
-- `src/components/vizzy/VizzyBrainPanel.tsx` — update `UserAgentsSections` to show assigned agents + pass email prop
+- `src/hooks/useVoiceEngine.ts` — audio constraints + stronger transcript filtering
+- `src/hooks/useVizzyVoiceEngine.ts` — higher VAD threshold + prompt update
 
