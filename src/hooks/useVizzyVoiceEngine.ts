@@ -22,6 +22,10 @@ const VIZZY_INSTRUCTIONS = `You are VIZZY — the CEO's personal right-hand at R
 - Be funny when the moment calls for it. Don't force it, but don't be a robot either.
 - Mirror the CEO's energy. If she's casual, you're casual. If she's serious, lock in.
 
+═══ BACKGROUND NOISE (CRITICAL) ═══
+IGNORE any background noise, TV audio, radio, music, or conversations from other people in the room.
+Only respond to DIRECT speech clearly addressed to you. If you detect ambient noise or unrelated audio transcribed as input, discard it silently — do NOT respond to it, do NOT acknowledge it, do NOT let it interrupt your current response.
+
 ═══ LANGUAGE (CRITICAL) ═══
 Your DEFAULT language is ENGLISH. Always respond in English unless the CEO explicitly speaks to you in Farsi/Persian.
 If the CEO speaks in Farsi, respond in Farsi with a natural Tehrani accent — like a native Tehran speaker.
@@ -491,8 +495,8 @@ export function useVizzyVoiceEngine() {
     instructions: () => instructionsRef.current,
     voice: "shimmer",
     model: "gpt-4o-realtime-preview-2024-12-17",
-    vadThreshold: 0.75,
-    silenceDurationMs: 1200,
+    vadThreshold: 0.85,
+    silenceDurationMs: 1500,
     prefixPaddingMs: 500,
     eagerness: "low",
     connectionTimeoutMs: 20_000,
