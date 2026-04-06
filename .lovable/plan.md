@@ -1,39 +1,41 @@
 
 
-# Fix: Manual Publish Blocked by Role Check
-
-## Problem
-When clicking "Publish Now" manually, the `social-publish` edge function returns **403: "Forbidden: requires one of [admin, marketing] roles"**. The user performing the publish (likely Neel or another approver) doesn't have the `admin` or `marketing` role in the `user_roles` table, even though they have approval authority.
-
-The **cron auto-publish** is unaffected (it uses `internalOnly: true` with no auth), but manual publish from the UI is blocked.
+# Fix: Vizzy Voice Connection Error
 
 ## Root Cause
-`supabase/functions/social-publish/index.ts` line 482:
-```typescript
-requireAnyRole: ["admin", "marketing"],
-```
-This blocks any user without those specific roles from manually publishing, even if they are a super admin (sattar/radin) or an authorized approver.
+
+Two issues found:
+
+1. **Edge function stale deployment**: The `voice-engine-token` edge function was in a broken state — logs only showed "shutdown" with no "booted" messages. After redeployment, it boots and responds correctly. This is already fixed.
+
+2. **Unhandled promise rejection crashes React**: In `useVizzyVoiceEngine.ts` (lines 537, 543), `originalStartSession()` is an async function called without `await` or `.catch()`. When the edge function fails (e.g., network error, stale deployment), the rejected promise is unhandled, causing the React error overlay ("The app encountered an error").
 
 ## Fix
 
-### File: `supabase/functions/social-publish/index.ts`
+### File: `src/hooks/useVizzyVoiceEngine.ts` (lines 534-543)
 
-**Remove the `requireAnyRole` restriction** from the function options and instead implement a smarter check inside the handler body that respects the existing super admin bypass:
+Add `.catch()` to both `originalStartSession()` calls to prevent unhandled rejections:
 
-1. Remove `requireAnyRole: ["admin", "marketing"]` from the options (line 482)
-2. Add an inline role + super-admin check at the top of the handler:
-   - Allow if user has `admin` or `marketing` role
-   - Allow if user email is in `SUPER_ADMIN_EMAILS` (sattar/radin)
-   - Otherwise return 403
+```typescript
+// Line 537
+originalStartSession().catch((e) => console.warn("[VizzyVoice] session start failed:", e));
 
-This ensures super admins and authorized approvers can always publish manually, while still preventing unauthorized users from accessing the endpoint.
+// Line 543
+originalStartSession().catch((e) => console.warn("[VizzyVoice] session start failed:", e));
+```
+
+The voice engine's own `startSession` already has a try/catch that sets state to "error" and shows a toast — but Promise rejections from async functions still need to be caught at the call site when not awaited.
+
+### Edge function redeployment (already done)
+
+The `voice-engine-token` function has been redeployed and is responding correctly.
 
 ## Impact
-- Only modifies the authorization logic in `social-publish` — no publishing behavior changes
-- Super admins (sattar, radin) can always publish manually
-- Users with `admin` or `marketing` roles can publish as before
-- Cron auto-publish is completely unaffected (different function)
+
+- Prevents React crash overlay when voice connection fails
+- Error state is handled gracefully (toast + retry button still work)
+- No changes to any other logic or behavior
 
 ## Files Changed
-- `supabase/functions/social-publish/index.ts` — replace rigid `requireAnyRole` with flexible role + super-admin check
+- `src/hooks/useVizzyVoiceEngine.ts` — add `.catch()` to two fire-and-forget `originalStartSession()` calls
 
