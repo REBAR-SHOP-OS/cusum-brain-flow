@@ -59,6 +59,44 @@ export default function TimeClock() {
   // Cache of profile IDs confirmed during this kiosk session
   const confirmedProfilesRef = useRef<Set<string>>(new Set());
 
+  // Kiosk sleep/idle timer — stop camera after 5 min inactivity
+  const [kioskSleeping, setKioskSleeping] = useState(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const KIOSK_IDLE_MS = 5 * 60 * 1000; // 5 minutes
+
+  const resetIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      if (kioskMode) {
+        face.stopCamera();
+        setKioskSleeping(true);
+      }
+    }, KIOSK_IDLE_MS);
+  }, [kioskMode, face]);
+
+  const wakeKiosk = useCallback(async () => {
+    setKioskSleeping(false);
+    await face.startCamera();
+    resetIdleTimer();
+  }, [face, resetIdleTimer]);
+
+  // Start/stop idle timer when kiosk mode changes
+  useEffect(() => {
+    if (kioskMode) {
+      resetIdleTimer();
+      // Listen for touch/mouse activity to reset timer
+      const handler = () => { if (!kioskSleeping) resetIdleTimer(); };
+      window.addEventListener("pointerdown", handler);
+      return () => {
+        window.removeEventListener("pointerdown", handler);
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      };
+    } else {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      setKioskSleeping(false);
+    }
+  }, [kioskMode, kioskSleeping, resetIdleTimer]);
+
   const now = new Date();
 
   // Fetch enrollment count
@@ -121,6 +159,7 @@ export default function TimeClock() {
   const handleScan = async () => {
     if (scanningRef.current) return;
     scanningRef.current = true;
+    resetIdleTimer(); // Reset idle on scan activity
     setShowRegistration(false);
     try {
       const result = await face.recognize();
@@ -269,6 +308,18 @@ export default function TimeClock() {
 
     return (
       <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center p-6">
+        {/* Sleep overlay — tap to wake */}
+        {kioskSleeping && (
+          <div
+            className="fixed inset-0 z-[60] bg-black flex flex-col items-center justify-center cursor-pointer"
+            onClick={wakeKiosk}
+            onTouchStart={wakeKiosk}
+          >
+            <ScanFace className="w-16 h-16 text-muted-foreground/30 mb-4 animate-pulse" />
+            <p className="text-xl font-bold text-muted-foreground/40">Tap to wake</p>
+            <p className="text-sm text-muted-foreground/30 mt-1">لمس کنید</p>
+          </div>
+        )}
         <canvas ref={face.canvasRef} className="hidden" />
         <div className="absolute top-4 right-4 flex items-center gap-2">
           {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
