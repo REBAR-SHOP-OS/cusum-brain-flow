@@ -1,24 +1,24 @@
 
 
-# Improve User Avatar Bar in Vizzy Brain Panel
+# Make Avatar Bar Larger and More Readable
 
 ## Problem
-The user avatar bar (horizontal profile selector) is too small and cramped. It needs to be displayed more prominently — larger avatars, bigger text, better spacing.
+The avatar bar is still too small despite the previous increase. The user wants it significantly bigger and more readable.
 
 ## Changes
 
 ### File: `src/components/vizzy/VizzyBrainPanel.tsx` (lines 483-520)
 
-Increase the size and prominence of the avatar bar:
+Scale up all avatar bar elements substantially:
 
-1. **Container**: Increase padding from `px-5 py-2` → `px-5 py-3`, add `gap-3` instead of `gap-2`
-2. **"All" button**: Increase from `px-2.5 py-1 text-xs` → `px-3.5 py-1.5 text-sm`
-3. **User buttons**: Increase from `px-2 py-1 text-xs` → `px-3 py-1.5 text-sm`, add `gap-2` between avatar and name
-4. **Avatar circles**: Increase from `w-5 h-5 text-[10px]` → `w-7 h-7 text-xs`
-5. **Names**: Add `text-sm font-semibold` for better readability
+1. **Container**: `px-5 py-3 gap-3` → `px-5 py-4 gap-4`
+2. **"All" button**: `px-3.5 py-1.5 text-sm` → `px-5 py-2.5 text-base font-semibold`
+3. **User buttons**: `px-3 py-1.5 text-sm gap-2` → `px-4 py-2.5 text-base gap-3`
+4. **Avatar circles**: `w-7 h-7 text-xs` → `w-10 h-10 text-sm`
+5. **Names**: `text-sm font-semibold` → `text-base font-bold`
 
-Result: Larger, clearer, more touchable avatar buttons that are easy to read and interact with.
+Result: Avatar circles become 40px (nearly double), text becomes `text-base` (16px), and padding/spacing increases throughout for a bold, easy-to-read bar.
 
 ## Files Changed
-- `src/components/vizzy/VizzyBrainPanel.tsx` — resize avatar bar elements
+- `src/components/vizzy/VizzyBrainPanel.tsx` — scale up avatar bar elements
 
