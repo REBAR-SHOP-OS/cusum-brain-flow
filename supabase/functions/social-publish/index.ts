@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
+import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
@@ -93,9 +94,15 @@ Deno.serve((req) =>
 
       // ── Enhanced Duplicate Guard ──────────────────────────────────
       if (existing) {
-        const dayStr = existing.scheduled_date
-          ? new Date(existing.scheduled_date).toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0];
+        // Use workspace timezone for accurate "today" boundaries
+        const tz = await getWorkspaceTimezone(supabaseAdmin);
+        const nowLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+        const dayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
+        // Compute UTC boundaries for the local day
+        const localMidnight = new Date(`${dayStr}T00:00:00`);
+        const offsetMs = new Date().getTime() - new Date(new Date().toLocaleString("en-US", { timeZone: tz })).getTime();
+        const dayStartUtc = new Date(localMidnight.getTime() + offsetMs).toISOString();
+        const dayEndUtc = new Date(localMidnight.getTime() + offsetMs + 86400000 - 1).toISOString();
 
         const { data: publishedToday } = await supabaseAdmin
           .from("social_posts")
@@ -103,8 +110,8 @@ Deno.serve((req) =>
           .eq("platform", existing.platform)
           .eq("status", "published")
           .neq("id", post_id)
-          .gte("scheduled_date", `${dayStr}T00:00:00Z`)
-          .lte("scheduled_date", `${dayStr}T23:59:59Z`)
+          .gte("scheduled_date", dayStartUtc)
+          .lte("scheduled_date", dayEndUtc)
           .limit(50);
 
         const postPages = existing.page_name
@@ -116,12 +123,14 @@ Deno.serve((req) =>
             const sameContent = pub.content === existing.content && pub.image_url === existing.image_url;
             const sameTitle = pub.title && existing.title && pub.title === existing.title;
 
-            if (sameContent || sameTitle) {
+            // Only block on content+image match, not title alone
+            if (sameContent) {
               const pubPages = pub.page_name
                 ? pub.page_name.split(", ").map((p: string) => p.trim()).filter(Boolean)
                 : [];
-              const hasPageOverlap = postPages.length === 0 || pubPages.length === 0
-                || postPages.some((pg: string) => pubPages.includes(pg));
+              // Only overlap when both sides have pages and they intersect
+              const hasPageOverlap = postPages.length > 0 && pubPages.length > 0
+                && postPages.some((pg: string) => pubPages.includes(pg));
 
               if (hasPageOverlap) {
                 console.warn(`[social-publish] BLOCKED — duplicate content already published: ${pub.id}`);
@@ -130,6 +139,8 @@ Deno.serve((req) =>
                   { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
                 );
               }
+            } else if (sameTitle) {
+              console.log(`[social-publish] INFO — same title as ${pub.id} but different content, allowing publish`);
             }
           }
         }
