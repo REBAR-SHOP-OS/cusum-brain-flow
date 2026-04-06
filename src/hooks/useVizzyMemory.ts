@@ -76,7 +76,7 @@ export function useVizzyMemory() {
   const analyzeSystem = async () => {
     const res = await sendAgentMessage(
       "assistant",
-      "Perform a full system analysis right now. Scan all projects, active orders, production queue, financials, recent emails, CRM leads, team presence, and any anomalies. Return a structured list of key insights, each on its own line prefixed with '• '. Be concise and actionable. Focus on what needs attention TODAY.",
+      "Perform a full system analysis right now. Scan all projects, active orders, production queue, financials, recent emails, CRM leads, team presence, and any anomalies. Return a structured list of key insights, each on its own line prefixed with '• '. Be concise and actionable. Focus on what needs attention TODAY. CRITICAL: Only report facts you can confirm from the provided context. Do NOT fabricate numbers, names, percentages, or events. If data is unavailable for a category, say 'Data not available' instead of guessing.",
       [],
       { companyId }
     );

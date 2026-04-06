@@ -16,11 +16,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   brain_insight: "🧠 Insights",
   general: "📌 General",
   benchmark: "📊 Benchmarks",
+  daily_benchmark: "📊 Daily Benchmarks",
   call_summary: "📞 Calls",
   voicemail_summary: "📩 Voicemails",
   agent_audit: "🤖 Agent Audits",
   auto_fix: "🔧 Auto-Fixes",
-  feedback_patch: "📝 Feedback",
+  feedback_patch: "📝 Feedback Patches",
+  feedback_fix: "🔧 Feedback Fixes",
+  feedback_clarification: "💬 Clarifications",
+  feedback_escalation: "🚨 Escalations",
+  business: "💼 Business",
   pre_digest: "📋 Digests",
 };
 
