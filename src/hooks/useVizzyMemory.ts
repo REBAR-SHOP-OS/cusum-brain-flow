@@ -18,7 +18,6 @@ export interface VizzyMemoryEntry {
 const QUERY_KEY = "vizzy_memory_all";
 
 const SECTION_CATEGORY_MAP: Record<string, string> = {
-  "TIME CLOCK": "timeclock",
   "PRODUCTION": "production",
   "ORDERS": "orders",
   "LEADS": "leads",
