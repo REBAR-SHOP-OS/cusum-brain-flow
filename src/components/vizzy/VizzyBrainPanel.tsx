@@ -451,7 +451,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
           <div className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-foreground">Vizzy Brain</h2>
-            <span className="text-xs text-muted-foreground">({entries.length})</span>
+            <span className="text-xs text-muted-foreground">({filteredEntries.length})</span>
             <span className="text-muted-foreground/50 mx-1">|</span>
             <div className="flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="w-3.5 h-3.5" />
