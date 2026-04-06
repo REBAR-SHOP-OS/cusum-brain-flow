@@ -271,13 +271,9 @@ function UserAgentsSections({ userId, name }: { userId: string; name: string }) 
     );
   }
 
-  return (
-    <div className="space-y-1">
-      <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5 mb-2">
-        <Bot className="w-4 h-4 text-primary" />
-        {name}'s Agents
-      </h3>
-      <Accordion type="multiple" className="w-full space-y-1">
+    return (
+      <div className="space-y-1">
+        <Accordion type="multiple" className="w-full space-y-1">
         {agents.map((agent) => (
           <AccordionItem
             key={agent.agentName}
@@ -513,21 +509,42 @@ export function VizzyBrainPanel({ onClose }: Props) {
         )}
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Performance card for selected user */}
           {selectedProfile && (
-            <PerformanceCard
-              profileId={selectedProfile.id}
-              userId={selectedProfile.user_id}
-              name={selectedProfile.full_name?.split(" ")[0] || "User"}
-              timezone={timezone}
-            />
-          )}
-          {/* Agent sessions for selected user */}
-          {selectedProfile?.user_id && (
-            <UserAgentsSections
-              userId={selectedProfile.user_id}
-              name={selectedProfile.full_name?.split(" ")[0] || "User"}
-            />
+            <div className="space-y-4">
+              {/* Section 1: General Overview */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+                  <Activity className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">بخش کلی</h3>
+                  <span className="text-xs text-muted-foreground">General Overview</span>
+                </div>
+                <div className="p-3">
+                  <PerformanceCard
+                    profileId={selectedProfile.id}
+                    userId={selectedProfile.user_id}
+                    name={selectedProfile.full_name?.split(" ")[0] || "User"}
+                    timezone={timezone}
+                  />
+                </div>
+              </div>
+
+              {/* Section 2: Agents */}
+              {selectedProfile.user_id && (
+                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+                    <Bot className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground">بخش ایجنت‌ها</h3>
+                    <span className="text-xs text-muted-foreground">Agents</span>
+                  </div>
+                  <div className="p-3">
+                    <UserAgentsSections
+                      userId={selectedProfile.user_id}
+                      name={selectedProfile.full_name?.split(" ")[0] || "User"}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {renderContent()}
         </div>
