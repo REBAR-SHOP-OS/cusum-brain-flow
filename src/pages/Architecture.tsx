@@ -14,7 +14,7 @@ import {
   BackgroundVariant,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence } from "framer-motion";
 import {
   Plus, Search, X, Eye, EyeOff, Sparkles,
 } from "lucide-react";
@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   ARCH_NODES, ARCH_EDGES, LAYERS,
-  type ArchNode, type ArchLayer, type Accent,
+  type ArchNode, type ArchEdge, type ArchLayer, type Accent,
 } from "@/lib/architectureGraphData";
 import { ArchFlowNode } from "@/components/system-flow/ArchFlowNode";
 
@@ -48,15 +48,29 @@ const accentBg: Record<Accent, string> = {
   rose:    "rgba(251,113,133,0.08)",
 };
 
+/* ───── Edge style helpers ───── */
+const FAILURE_COLOR = "rgba(251,113,133,0.85)";
+
+function getEdgeVisuals(archEdge: ArchEdge | undefined, srcAccent: Accent) {
+  const style = archEdge?.edgeStyle || "solid";
+  const baseColor = style === "failure" ? FAILURE_COLOR : accentColor[srcAccent];
+
+  const strokeDasharray = style === "dashed" ? "6 4" : style === "failure" ? "4 3" : undefined;
+  const animated = style === "solid";
+
+  return { baseColor, strokeDasharray, animated };
+}
+
 /* ───── Node types ───── */
 const nodeTypes = { archNode: ArchFlowNode };
 
-/* ───── Layout constants ───── */
-const LAYER_GAP = 180;
+/* ───── Layout constants — ADHD-proof spacing ───── */
+const LAYER_GAP = 220;
 const NODE_W = 130;
-const NODE_GAP = 20;
-const LEFT_MARGIN = 180;
-const TOP_MARGIN = 60;
+const NODE_GAP = 30;
+const LEFT_MARGIN = 160;
+const TOP_MARGIN = 40;
+const CENTER_REF = 1200;
 
 /* ───── Convert static data to React Flow nodes/edges ───── */
 function buildInitialNodes(
@@ -69,7 +83,7 @@ function buildInitialNodes(
   for (const layer of LAYERS) {
     const layerNodes = ARCH_NODES.filter((n) => n.layer === layer.key);
     const totalW = layerNodes.length * NODE_W + (layerNodes.length - 1) * NODE_GAP;
-    const startX = LEFT_MARGIN + Math.max(0, (900 - totalW) / 2);
+    const startX = LEFT_MARGIN + Math.max(0, (CENTER_REF - totalW) / 2);
     const y = TOP_MARGIN + layerIdx * LAYER_GAP;
 
     layerNodes.forEach((n, i) => {
@@ -95,16 +109,27 @@ function buildInitialNodes(
 function buildInitialEdges(): Edge[] {
   return ARCH_EDGES.map((e) => {
     const srcNode = ARCH_NODES.find((n) => n.id === e.source);
-    const color = srcNode ? accentColor[srcNode.accent] : accentColor.cyan;
+    const srcAccent = srcNode?.accent || "cyan";
+    const { baseColor, strokeDasharray, animated } = getEdgeVisuals(e, srcAccent);
+
     return {
       id: e.id,
       source: e.source,
       target: e.target,
-      animated: true,
-      style: { stroke: color, strokeWidth: 2 },
+      animated,
+      label: e.label || undefined,
+      labelStyle: e.label ? { fill: "rgba(255,255,255,0.6)", fontSize: 9, fontWeight: 500 } : undefined,
+      labelBgStyle: e.label ? { fill: "rgba(5,10,20,0.8)", fillOpacity: 0.9 } : undefined,
+      labelBgPadding: e.label ? [4, 2] as [number, number] : undefined,
+      labelBgBorderRadius: 3,
+      style: {
+        stroke: baseColor,
+        strokeWidth: 2,
+        strokeDasharray,
+      },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color,
+        color: baseColor,
         width: 14,
         height: 14,
       },
@@ -162,6 +187,9 @@ const FUTURISTIC_STYLES = `
 .react-flow__attribution {
   display: none !important;
 }
+.react-flow__edgelabel-renderer .react-flow__edge-text {
+  pointer-events: none;
+}
 `;
 
 /* ───── Layer palette for adding new nodes ───── */
@@ -170,6 +198,21 @@ const LAYER_PALETTE: { key: ArchLayer; label: string; accent: Accent }[] = LAYER
   label: l.label,
   accent: l.accent,
 }));
+
+/* ───── Workflow status strip pills ───── */
+const WORKFLOW_STEPS = [
+  { label: "Draft", color: "rgba(167,139,250,0.7)" },
+  { label: "Review", color: "rgba(96,165,250,0.7)" },
+  { label: "Approved", color: "rgba(52,211,153,0.7)" },
+  { label: "Queued", color: "rgba(251,146,60,0.7)" },
+  { label: "Processing", color: "rgba(34,211,238,0.7)" },
+  { label: "Complete", color: "rgba(52,211,153,0.9)" },
+];
+const FAILURE_STEPS = [
+  { label: "Failed", color: "rgba(251,113,133,0.8)" },
+  { label: "Retry", color: "rgba(251,146,60,0.7)" },
+  { label: "Dead Letter", color: "rgba(251,113,133,0.5)" },
+];
 
 export default function Architecture() {
   const [openNode, setOpenNode] = useState<ArchNode | null>(null);
@@ -181,7 +224,6 @@ export default function Architecture() {
   const [newNodeLabel, setNewNodeLabel] = useState("");
   const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("modules");
 
-  /* Delete + label change handlers (stable via useCallback) */
   const handleDelete = useCallback((nodeId: string) => {
     setNodes((nds) => nds.filter((n) => n.id !== nodeId));
     setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
@@ -200,7 +242,6 @@ export default function Architecture() {
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildInitialEdges());
 
-  /* Inject futuristic styles */
   useEffect(() => {
     const id = "arch-futuristic-styles";
     if (document.getElementById(id)) return;
@@ -211,7 +252,6 @@ export default function Architecture() {
     return () => { document.getElementById(id)?.remove(); };
   }, []);
 
-  /* Connect handler — draw new edges */
   const onConnect = useCallback(
     (params: Connection) => {
       const srcNode = nodes.find((n) => n.id === params.source);
@@ -236,7 +276,6 @@ export default function Architecture() {
     [nodes, setEdges],
   );
 
-  /* Add new node */
   const addNode = useCallback(() => {
     if (!newNodeLabel.trim()) return;
     const layer = LAYERS.find((l) => l.key === newNodeLayer)!;
@@ -264,13 +303,11 @@ export default function Architecture() {
     setShowAddPanel(false);
   }, [newNodeLabel, newNodeLayer, nodes, handleDelete, handleLabelChange, setNodes]);
 
-  /* Node click → detail */
   const onNodeClick = useCallback((_: any, node: Node) => {
     const archNode = ARCH_NODES.find((n) => n.id === node.id);
     if (archNode) setOpenNode(archNode);
   }, []);
 
-  /* Search-filtered nodes */
   const filteredNodeIds = useMemo(() => {
     if (!searchQ.trim()) return null;
     const q = searchQ.toLowerCase();
@@ -283,7 +320,6 @@ export default function Architecture() {
     );
   }, [searchQ]);
 
-  /* Apply visibility */
   const displayNodes = useMemo(() => {
     return nodes.map((n) => {
       const nodeData = n.data as any;
@@ -326,7 +362,6 @@ export default function Architecture() {
           </p>
         </div>
 
-        {/* Add node button */}
         <Button
           size="sm"
           variant="outline"
@@ -337,7 +372,6 @@ export default function Architecture() {
           Add Node
         </Button>
 
-        {/* Search */}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <input
@@ -382,7 +416,41 @@ export default function Architecture() {
             );
           })}
 
-          {/* Add node panel (inline) */}
+          {/* Workflow status strip */}
+          <div className="mt-3 pt-3 border-t border-border/40">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Workflow</p>
+            <div className="flex flex-wrap gap-1 items-center">
+              {WORKFLOW_STEPS.map((s, i) => (
+                <span key={s.label} className="flex items-center gap-0.5">
+                  <span
+                    className="rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider"
+                    style={{ background: s.color, color: "white" }}
+                  >
+                    {s.label}
+                  </span>
+                  {i < WORKFLOW_STEPS.length - 1 && (
+                    <span className="text-[8px] text-muted-foreground">→</span>
+                  )}
+                </span>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1 items-center mt-1.5">
+              {FAILURE_STEPS.map((s, i) => (
+                <span key={s.label} className="flex items-center gap-0.5">
+                  <span
+                    className="rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider"
+                    style={{ background: s.color, color: "white" }}
+                  >
+                    {s.label}
+                  </span>
+                  {i < FAILURE_STEPS.length - 1 && (
+                    <span className="text-[8px] text-muted-foreground">→</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+
           {showAddPanel && (
             <div className="mt-3 pt-3 border-t border-border/40 space-y-2">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">New Node</p>
@@ -430,7 +498,7 @@ export default function Architecture() {
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
             fitView
-            fitViewOptions={{ padding: 0.15 }}
+            fitViewOptions={{ padding: 0.1 }}
             deleteKeyCode={["Backspace", "Delete"]}
             snapToGrid
             snapGrid={[10, 10]}
@@ -516,7 +584,6 @@ export default function Architecture() {
                         <li key={line} className="break-words">{line}</li>
                       ))}
                     </ul>
-                    {/* Connected nodes */}
                     <div className="pt-2 border-t border-border/40">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Connected to</p>
                       <div className="flex flex-wrap gap-1.5">
