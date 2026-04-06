@@ -27,10 +27,25 @@ const CATEGORY_LABELS: Record<string, string> = {
   feedback_escalation: "🚨 Escalations",
   business: "💼 Business",
   pre_digest: "📋 Digests",
+  timeclock: "⏰ Time Clock",
+  production: "🏭 Production",
+  orders: "📦 Orders",
+  leads: "🎯 Leads",
+  accounting: "💰 Accounting",
+  email: "📧 Email",
+  crm: "👥 CRM",
 };
 
 function getCategoryLabel(cat: string) {
   return CATEGORY_LABELS[cat] || cat;
+}
+
+function getDateKey(dateStr: string) {
+  return format(new Date(dateStr), "yyyy-MM-dd");
+}
+
+function getDateLabel(dateStr: string) {
+  return format(new Date(dateStr), "MMM d, yyyy");
 }
 
 function MemoryCard({
@@ -54,7 +69,7 @@ function MemoryCard({
     <div className="rounded-lg border border-border bg-card p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[10px] text-muted-foreground">
-          {format(new Date(entry.created_at), "MMM d, HH:mm")}
+          {format(new Date(entry.created_at), "MMM d, yyyy • HH:mm")}
         </span>
         {!editing && (
           <div className="flex gap-1">
@@ -97,6 +112,67 @@ function MemoryCard({
           {entry.content}
         </p>
       )}
+    </div>
+  );
+}
+
+function DateGroupedEntries({
+  items,
+  onUpdate,
+  onDelete,
+}: {
+  items: VizzyMemoryEntry[];
+  onUpdate: (id: string, content: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const grouped = useMemo(() => {
+    const map: Record<string, VizzyMemoryEntry[]> = {};
+    for (const e of items) {
+      const key = getDateKey(e.created_at);
+      if (!map[key]) map[key] = [];
+      map[key].push(e);
+    }
+    return Object.entries(map).sort(([a], [b]) => b.localeCompare(a));
+  }, [items]);
+
+  if (grouped.length <= 1) {
+    return (
+      <div className="space-y-2 pt-1">
+        {items.map((entry) => (
+          <MemoryCard
+            key={entry.id}
+            entry={entry}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 pt-1">
+      {grouped.map(([dateKey, entries]) => (
+        <div key={dateKey}>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">
+              {getDateLabel(entries[0].created_at)}
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <div className="space-y-2">
+            {entries.map((entry) => (
+              <MemoryCard
+                key={entry.id}
+                entry={entry}
+                onUpdate={onUpdate}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -179,16 +255,11 @@ export function VizzyBrainPanel({ onClose }: Props) {
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-2 pt-1">
-                {items.map((entry) => (
-                  <MemoryCard
-                    key={entry.id}
-                    entry={entry}
-                    onUpdate={(id, content) => updateEntry({ id, content })}
-                    onDelete={deleteEntry}
-                  />
-                ))}
-              </div>
+              <DateGroupedEntries
+                items={items}
+                onUpdate={(id, content) => updateEntry({ id, content })}
+                onDelete={deleteEntry}
+              />
             </AccordionContent>
           </AccordionItem>
         ))}
@@ -213,7 +284,6 @@ export function VizzyBrainPanel({ onClose }: Props) {
         className="relative w-full max-w-2xl max-h-[85vh] mx-4 rounded-2xl border border-border bg-background shadow-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-muted/30">
           <div className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
@@ -234,7 +304,6 @@ export function VizzyBrainPanel({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {renderContent()}
         </div>

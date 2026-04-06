@@ -17,6 +17,16 @@ export interface VizzyMemoryEntry {
 
 const QUERY_KEY = "vizzy_memory_all";
 
+const SECTION_CATEGORY_MAP: Record<string, string> = {
+  "TIME CLOCK": "timeclock",
+  "PRODUCTION": "production",
+  "ORDERS": "orders",
+  "LEADS": "leads",
+  "ACCOUNTING": "accounting",
+  "EMAIL": "email",
+  "CRM": "crm",
+};
+
 export function useVizzyMemory() {
   const { companyId, isLoading: isCompanyLoading } = useCompanyId();
   const queryClient = useQueryClient();
@@ -76,44 +86,112 @@ export function useVizzyMemory() {
   const analyzeSystem = async () => {
     const res = await sendAgentMessage(
       "assistant",
-      "Perform a full system analysis right now. Scan all projects, active orders, production queue, financials, recent emails, CRM leads, team presence, and any anomalies. Return a structured list of key insights, each on its own line prefixed with '• '. Be concise and actionable. Focus on what needs attention TODAY. CRITICAL: Only report facts you can confirm from the provided context. Do NOT fabricate numbers, names, percentages, or events. If data is unavailable for a category, say 'Data not available' instead of guessing.",
+      `Perform a full system analysis right now. Scan all data sources available to you and report on EACH of the following departments separately.
+
+For each department, use this exact header format: [SECTION_NAME]
+The valid section names are: TIME CLOCK, PRODUCTION, ORDERS, LEADS, ACCOUNTING, EMAIL, CRM
+
+1. [TIME CLOCK]: Who is currently clocked in, total hours worked today, any anomalies (missed punches, overtime)
+2. [PRODUCTION]: Machine status, completed pieces today, active cut plans, targets vs actuals
+3. [ORDERS]: Today's work orders, pending orders, overdue items
+4. [LEADS]: New leads, stalled leads, pipeline status, follow-ups needed
+5. [ACCOUNTING]: Receivables, payables, overdue invoices, cash position
+6. [EMAIL]: Unanswered inbound emails, important messages requiring attention
+7. [CRM]: Customer activity, recent interactions, follow-ups needed
+
+Rules:
+- Each insight must be on its own line prefixed with '• '
+- Be concise and actionable
+- Focus on what needs attention TODAY
+- CRITICAL: Only report facts you can confirm from the provided context
+- Do NOT fabricate numbers, names, percentages, or events
+- If data is unavailable for a department, write: • Data not available for this section
+- Always include the [SECTION_NAME] header even if no data is available`,
       [],
       { companyId }
     );
 
     if (!res.reply) throw new Error("No response from analysis");
 
-    const lines = res.reply
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.startsWith("•") || l.startsWith("-") || l.startsWith("*"));
-
     const { data: userData } = await supabase.auth.getUser();
     const userId = userData?.user?.id;
     if (!userId || !companyId) throw new Error("Missing user/company");
 
-    if (lines.length > 0) {
-      const inserts = lines.map((line) => ({
-        company_id: companyId,
-        user_id: userId,
-        category: "brain_insight",
-        content: line.replace(/^[•\-*]\s*/, ""),
-      }));
+    // Parse sections from AI response
+    const sectionRegex = /\[([A-Z\s]+)\]/g;
+    const sections: { category: string; lines: string[] }[] = [];
+    const rawLines = res.reply.split("\n");
 
-      const { error } = await supabase.from("vizzy_memory").insert(inserts);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from("vizzy_memory").insert({
-        company_id: companyId,
-        user_id: userId,
-        category: "brain_insight",
-        content: res.reply,
-      });
-      if (error) throw error;
+    let currentCategory = "brain_insight";
+    let currentLines: string[] = [];
+
+    for (const line of rawLines) {
+      const headerMatch = line.match(/\[([A-Z\s]+)\]/);
+      if (headerMatch) {
+        // Save previous section
+        if (currentLines.length > 0) {
+          sections.push({ category: currentCategory, lines: currentLines });
+        }
+        const sectionName = headerMatch[1].trim();
+        currentCategory = SECTION_CATEGORY_MAP[sectionName] || "brain_insight";
+        currentLines = [];
+      } else {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("•") || trimmed.startsWith("-") || trimmed.startsWith("*")) {
+          currentLines.push(trimmed.replace(/^[•\-*]\s*/, ""));
+        }
+      }
+    }
+    // Push last section
+    if (currentLines.length > 0) {
+      sections.push({ category: currentCategory, lines: currentLines });
     }
 
+    // Build inserts
+    const inserts: { company_id: string; user_id: string; category: string; content: string }[] = [];
+    for (const section of sections) {
+      for (const content of section.lines) {
+        if (content && !content.toLowerCase().includes("data not available")) {
+          inserts.push({
+            company_id: companyId,
+            user_id: userId,
+            category: section.category,
+            content,
+          });
+        }
+      }
+    }
+
+    // Fallback if no structured sections found
+    if (inserts.length === 0) {
+      const fallbackLines = rawLines
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith("•") || l.startsWith("-") || l.startsWith("*"));
+
+      if (fallbackLines.length > 0) {
+        for (const line of fallbackLines) {
+          inserts.push({
+            company_id: companyId,
+            user_id: userId,
+            category: "brain_insight",
+            content: line.replace(/^[•\-*]\s*/, ""),
+          });
+        }
+      } else {
+        inserts.push({
+          company_id: companyId,
+          user_id: userId,
+          category: "brain_insight",
+          content: res.reply,
+        });
+      }
+    }
+
+    const { error } = await supabase.from("vizzy_memory").insert(inserts);
+    if (error) throw error;
+
     queryClient.invalidateQueries({ queryKey: [QUERY_KEY] });
-    return lines.length || 1;
+    return inserts.length;
   };
 
   const categories = [...new Set(entries.map((e) => e.category))].sort();
