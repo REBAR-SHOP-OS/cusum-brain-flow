@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { X, Brain, Zap, Trash2, Check, Pencil, Loader2 } from "lucide-react";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
 interface Props {
@@ -13,15 +13,15 @@ interface Props {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  brain_insight: "🧠 Insight",
+  brain_insight: "🧠 Insights",
   general: "📌 General",
-  benchmark: "📊 Benchmark",
-  call_summary: "📞 Call",
-  voicemail_summary: "📩 Voicemail",
-  agent_audit: "🤖 Audit",
-  auto_fix: "🔧 Auto-Fix",
+  benchmark: "📊 Benchmarks",
+  call_summary: "📞 Calls",
+  voicemail_summary: "📩 Voicemails",
+  agent_audit: "🤖 Agent Audits",
+  auto_fix: "🔧 Auto-Fixes",
   feedback_patch: "📝 Feedback",
-  pre_digest: "📋 Digest",
+  pre_digest: "📋 Digests",
 };
 
 function getCategoryLabel(cat: string) {
@@ -48,12 +48,27 @@ function MemoryCard({
   return (
     <div className="rounded-lg border border-border bg-card p-3 space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-          {getCategoryLabel(entry.category)}
-        </span>
         <span className="text-[10px] text-muted-foreground">
           {format(new Date(entry.created_at), "MMM d, HH:mm")}
         </span>
+        {!editing && (
+          <div className="flex gap-1">
+            <button
+              onClick={() => { setDraft(entry.content); setEditing(true); }}
+              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Edit"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onDelete(entry.id)}
+              className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
       </div>
 
       {editing ? (
@@ -77,45 +92,33 @@ function MemoryCard({
           {entry.content}
         </p>
       )}
-
-      {!editing && (
-        <div className="flex gap-1 justify-end">
-          <button
-            onClick={() => { setDraft(entry.content); setEditing(true); }}
-            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-            title="Edit"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => onDelete(entry.id)}
-            className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-            title="Delete"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
     </div>
   );
 }
 
 export function VizzyBrainPanel({ onClose }: Props) {
-  const { entries, isLoading, categories, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const { entries, isLoading, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
 
-  const filtered = activeCategory
-    ? entries.filter((e) => e.category === activeCategory)
-    : entries;
+  const grouped = useMemo(() => {
+    const map: Record<string, VizzyMemoryEntry[]> = {};
+    for (const e of entries) {
+      const cat = e.category;
+      if (!map[cat]) map[cat] = [];
+      map[cat].push(e);
+    }
+    // Sort categories by label
+    return Object.entries(map).sort(([a], [b]) =>
+      getCategoryLabel(a).localeCompare(getCategoryLabel(b))
+    );
+  }, [entries]);
 
   const handleAnalyze = async () => {
     setAnalyzing(true);
     try {
       const count = await analyzeSystem();
       toast({ title: `🧠 ${count} insight(s) added` });
-      setActiveCategory("brain_insight");
     } catch (err: any) {
       toast({ title: "Analysis failed", description: err.message, variant: "destructive" });
     } finally {
@@ -144,20 +147,11 @@ export function VizzyBrainPanel({ onClose }: Props) {
           <div className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold text-foreground">Vizzy Brain</h2>
-            <span className="text-xs text-muted-foreground">({entries.length} memories)</span>
+            <span className="text-xs text-muted-foreground">({entries.length})</span>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              onClick={handleAnalyze}
-              disabled={analyzing}
-              className="gap-1"
-            >
-              {analyzing ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Zap className="w-3.5 h-3.5" />
-              )}
+            <Button size="sm" onClick={handleAnalyze} disabled={analyzing} className="gap-1">
+              {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
               {analyzing ? "Analyzing..." : "Analyze Now"}
             </Button>
             <button
@@ -169,55 +163,42 @@ export function VizzyBrainPanel({ onClose }: Props) {
           </div>
         </div>
 
-        {/* Category Filters */}
-        <div className="flex gap-1.5 px-5 py-3 overflow-x-auto border-b border-border bg-muted/10">
-          <button
-            onClick={() => setActiveCategory(null)}
-            className={cn(
-              "px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors",
-              !activeCategory
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            )}
-          >
-            All
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={cn(
-                "px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors",
-                activeCategory === cat
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {getCategoryLabel(cat)}
-            </button>
-          ))}
-        </div>
-
-        {/* Memory List */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+        {/* Accordion List */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin mr-2" /> Loading...
             </div>
-          ) : filtered.length === 0 ? (
+          ) : grouped.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Brain className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">No memories yet. Click "Analyze Now" to scan the system.</p>
             </div>
           ) : (
-            filtered.map((entry) => (
-              <MemoryCard
-                key={entry.id}
-                entry={entry}
-                onUpdate={(id, content) => updateEntry({ id, content })}
-                onDelete={deleteEntry}
-              />
-            ))
+            <Accordion type="multiple" className="w-full space-y-1">
+              {grouped.map(([cat, items]) => (
+                <AccordionItem key={cat} value={cat} className="border border-border rounded-lg px-3">
+                  <AccordionTrigger className="text-sm font-medium hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      {getCategoryLabel(cat)}
+                      <span className="text-xs text-muted-foreground font-normal">({items.length})</span>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-2 pt-1">
+                      {items.map((entry) => (
+                        <MemoryCard
+                          key={entry.id}
+                          entry={entry}
+                          onUpdate={(id, content) => updateEntry({ id, content })}
+                          onDelete={deleteEntry}
+                        />
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
           )}
         </div>
       </motion.div>
