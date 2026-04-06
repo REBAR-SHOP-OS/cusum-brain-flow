@@ -226,7 +226,7 @@ export default function Architecture() {
     setNodes((nds) => applyArchitectureLayout(nds.filter((n) => n.id !== nodeId)));
     setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
     setOpenNode((current) => (current?.id === nodeId ? null : current));
-  }, []);
+  }, [setEdges, setNodes]);
 
   const handleLabelChange = useCallback((nodeId: string, label: string) => {
     setNodes((nds) =>
@@ -241,7 +241,7 @@ export default function Architecture() {
         ? { ...current, detail: { ...current.detail, title: label } }
         : current,
     );
-  }, []);
+  }, [setNodes]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
     buildInitialNodes(handleDelete, handleLabelChange),
