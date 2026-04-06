@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Trash2, Check, Pencil, Loader2, AlertTriangle, Clock } from "lucide-react";
+import { X, Brain, Zap, Trash2, Check, Pencil, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users } from "lucide-react";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
+import { useProfiles } from "@/hooks/useProfiles";
+import { useUserPerformance } from "@/hooks/useUserPerformance";
 
 interface Props {
   onClose: () => void;
@@ -201,11 +203,70 @@ function DateGroupedEntries({
   );
 }
 
+/** Performance summary card for selected user */
+function PerformanceCard({ profileId, userId, name, timezone }: { profileId: string; userId: string | null; name: string; timezone: string }) {
+  const { data, isLoading } = useUserPerformance(profileId, userId);
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin mr-2 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Loading...</span>
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const clockInLabel = data.clockedIn && data.clockInTime
+    ? formatDateInTimezone(new Date(data.clockInTime), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+    : null;
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 space-y-2">
+      <h3 className="text-sm font-semibold text-foreground">{name}'s Performance</h3>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-primary" />
+          <span className="text-muted-foreground">
+            {data.clockedIn ? `In: ${clockInLabel}` : "Not clocked in"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5 text-primary" />
+          <span className="text-muted-foreground">Hours: {data.hoursToday}h</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Activity className="w-3.5 h-3.5 text-primary" />
+          <span className="text-muted-foreground">Activities: {data.activitiesToday}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Bot className="w-3.5 h-3.5 text-primary" />
+          <span className="text-muted-foreground">AI: {data.aiSessionsToday}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, updateEntry, deleteEntry, analyzeSystem } = useVizzyMemory();
   const { timezone } = useWorkspaceSettings();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
+  const { profiles } = useProfiles();
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+
+  // Filter @rebar.shop profiles, active first
+  const rebarProfiles = useMemo(() => {
+    return profiles
+      .filter((p) => p.email?.endsWith("@rebar.shop"))
+      .sort((a, b) => {
+        if (a.is_active === b.is_active) return a.full_name.localeCompare(b.full_name);
+        return a.is_active ? -1 : 1;
+      });
+  }, [profiles]);
+
+  const selectedProfile = rebarProfiles.find((p) => p.id === selectedProfileId);
 
   const grouped = useMemo(() => {
     const map: Record<string, VizzyMemoryEntry[]> = {};
@@ -328,7 +389,56 @@ export function VizzyBrainPanel({ onClose }: Props) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4">
+        {/* User avatar bar */}
+        {rebarProfiles.length > 0 && (
+          <div className="px-5 py-2 border-b border-border flex items-center gap-2 overflow-x-auto">
+            <button
+              onClick={() => setSelectedProfileId(null)}
+              className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                !selectedProfileId
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              All
+            </button>
+            {rebarProfiles.map((p) => {
+              const initial = p.full_name?.charAt(0)?.toUpperCase() || "?";
+              const firstName = p.full_name?.split(" ")[0] || "?";
+              const isSelected = selectedProfileId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setSelectedProfileId(isSelected ? null : p.id)}
+                  className={`shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-full text-xs transition-all ${
+                    isSelected
+                      ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
+                      : "bg-muted hover:bg-muted/80"
+                  } ${!p.is_active ? "opacity-50" : ""}`}
+                  title={`${p.full_name} (${p.email})`}
+                >
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                    isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"
+                  }`}>
+                    {initial}
+                  </span>
+                  <span className="font-medium">{firstName}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Performance card for selected user */}
+          {selectedProfile && (
+            <PerformanceCard
+              profileId={selectedProfile.id}
+              userId={selectedProfile.user_id}
+              name={selectedProfile.full_name?.split(" ")[0] || "User"}
+              timezone={timezone}
+            />
+          )}
           {renderContent()}
         </div>
       </motion.div>
