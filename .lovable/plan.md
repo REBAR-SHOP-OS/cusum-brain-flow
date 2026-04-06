@@ -1,84 +1,71 @@
 
 
-# فیلتر محتوای Brain برای هر کاربر + نمایش ایجنت‌ها به صورت کشویی
+# Fix LinkedIn Publishing for Team Members (zahra@rebar.shop)
 
-## مشکل فعلی
-وقتی روی یک کاربر کلیک می‌شود، فقط کارت Performance نمایش داده می‌شود ولی محتوای اکاردئون Brain همچنان برای همه کاربران است. همچنین هیچ اطلاعاتی از ایجنت‌هایی که کاربر استفاده کرده نمایش داده نمی‌شود.
+## Problem
+LinkedIn publishing uses "OWNER-ONLY" token policy — it only looks for a LinkedIn connection matching the current user's `user_id`. Since Zahra doesn't have her own LinkedIn OAuth connection, publishing fails with "LinkedIn not connected for your account."
 
-## تغییرات
+Facebook and Instagram already have a "team fallback" pattern (lines 190-218) that finds a teammate's token when the owner doesn't have one. LinkedIn explicitly skips this.
 
-### 1. هوک جدید: `src/hooks/useUserAgentSessions.ts`
+## Fix
 
-یک hook برای واکشی session‌های AI هر کاربر از `chat_sessions`:
+### File: `supabase/functions/social-publish/index.ts` (lines 663-672)
+
+Replace the OWNER-ONLY lookup with team fallback logic:
 
 ```typescript
-function useUserAgentSessions(userId: string | null) {
-  // Query: chat_sessions where user_id = userId, grouped by agent_name
-  // For each agent: count sessions, last session date, last 5 messages preview
-  // Returns: { agentName, sessionCount, lastUsed, recentMessages[] }[]
+// OWNER-FIRST with team fallback
+let connection = (await supabase
+  .from("integration_connections")
+  .select("config")
+  .eq("user_id", userId)
+  .eq("integration_id", "linkedin")
+  .maybeSingle()).data;
+
+if (!connection) {
+  // Team fallback: find any teammate with a valid LinkedIn connection
+  const { data: ownerProfile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (ownerProfile?.company_id) {
+    const { data: teammates } = await supabase
+      .from("profiles")
+      .select("user_id")
+      .eq("company_id", ownerProfile.company_id)
+      .neq("user_id", userId);
+
+    for (const tm of teammates || []) {
+      const { data: tmConn } = await supabase
+        .from("integration_connections")
+        .select("config")
+        .eq("user_id", tm.user_id)
+        .eq("integration_id", "linkedin")
+        .maybeSingle();
+      if (tmConn) {
+        const tmConfig = tmConn.config as { expires_at: number };
+        if (tmConfig.expires_at > Date.now()) {
+          connection = tmConn;
+          console.log(`[social-publish] LinkedIn team fallback: using token from user ${tm.user_id}`);
+          break;
+        }
+      }
+    }
+  }
+
+  if (!connection) {
+    return { error: "LinkedIn not connected for any team member. Please connect from Settings → Integrations." };
+  }
 }
 ```
 
-کوئری‌ها:
-- `chat_sessions` فیلتر با `user_id` → لیست agent‌ها + تعداد session
-- `chat_messages` برای آخرین 3 پیام هر agent (جهت نمایش خلاصه)
+### Also update: `supabase/functions/social-cron-publish/index.ts`
+Apply the same team fallback pattern to the cron publisher's LinkedIn token resolution (~line 665-676).
 
-### 2. تغییر `src/components/vizzy/VizzyBrainPanel.tsx`
-
-**فیلتر Brain memories:**
-- وقتی یک کاربر انتخاب شده، memories بر اساس نام کاربر در `content` فیلتر شوند
-- بخش‌های خالی بعد از فیلتر همچنان نمایش داده شوند (مثل حالت All)
-
-**بخش جدید — Agent Sessions:**
-- بعد از PerformanceCard و قبل از اکاردئون Brain، یک اکاردئون جداگانه برای ایجنت‌ها اضافه شود
-- هر ایجنت یک آیتم کشویی با آیکون + نام ایجنت + تعداد session‌ها
-- داخل هر کشوی: آخرین 3 پیام (user/agent) با تاریخ
-
-```text
-┌── 🤖 Agent Sessions ────────────────────────┐
-│ 🛒 Sales Agent (5 sessions)            ▼    │
-│   └ Last: "Please send quote to..."         │
-│ 📊 Accounting Agent (2 sessions)       ▼    │
-│   └ Last: "Invoice #1234 status..."         │
-│ 🏭 Shop Floor Agent (1 session)        ▼    │
-│   └ Last: "Machine 3 maintenance..."        │
-└─────────────────────────────────────────────┘
-```
-
-### 3. UI Layout نهایی (حالت کاربر انتخاب شده)
-
-```text
-┌──────────────────────────────────────────────┐
-│ [All] [👤Radin*] [👤Zahra] [👤Neel] ...     │
-├──────────────────────────────────────────────┤
-│ Radin's Performance                          │
-│ 🕐 In: 8:30 AM | Hours: 4.5h | AI: 3       │
-├──────────────────────────────────────────────┤
-│ 🤖 Radin's Agents                            │
-│ ├─ Sales Agent (5)                      ▼    │
-│ ├─ Accounting Agent (2)                 ▼    │
-│ └─ Commander (1)                        ▼    │
-├──────────────────────────────────────────────┤
-│ 📊 Dashboard (3)  ← filtered for Radin ▼    │
-│ 📥 Inbox (1)                            ▼    │
-│ ...                                          │
-└──────────────────────────────────────────────┘
-```
-
-### جزئیات فنی
-
-**فایل‌های تغییر:**
-- `src/hooks/useUserAgentSessions.ts` — جدید
-- `src/components/vizzy/VizzyBrainPanel.tsx` — اضافه کردن بخش agents + فیلتر memories
-
-**فیلتر memories:** بر اساس `content.toLowerCase().includes(firstName.toLowerCase())` یا `metadata` در صورت وجود فیلد مرتبط
-
-**Agent sessions query:**
-```sql
-SELECT agent_name, count(*) as session_count, max(updated_at) as last_used
-FROM chat_sessions
-WHERE user_id = ?
-GROUP BY agent_name
-ORDER BY last_used DESC
-```
+## Result
+- Zahra (and any team member) can publish to LinkedIn using the team's shared LinkedIn connection
+- Same pattern already proven working for Facebook/Instagram
+- Owner's own connection is still preferred when available
 
