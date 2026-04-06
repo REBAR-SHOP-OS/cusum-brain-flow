@@ -1,86 +1,84 @@
 
 
-# نمایش لیست کاربران @rebar.shop با گزارش عملکرد فردی در Vizzy Brain
+# فیلتر محتوای Brain برای هر کاربر + نمایش ایجنت‌ها به صورت کشویی
 
-## هدف
-در ناحیه‌ای که در اسکرین‌شات دور آن دایره کشیده شده (بین هدر و لیست بخش‌ها)، یک ردیف آواتار/نام کاربران @rebar.shop اضافه شود. با کلیک روی هر کاربر، محتوای Brain فیلتر شده و اطلاعات عملکردی آن شخص نمایش داده شود.
-
-## کاربران سیستم (9 نفر)
-
-| نام | ایمیل | وضعیت |
-|-----|-------|-------|
-| Radin Lachini | radin@rebar.shop | فعال |
-| Zahra Zokaei | zahra@rebar.shop | فعال |
-| Neel Mahajan | neel@rebar.shop | فعال |
-| Saurabh Seghal | saurabh@rebar.shop | فعال |
-| Ai | ai@rebar.shop | فعال |
-| Sattar Esmaeili | sattar@rebar.shop | غیرفعال |
-| Vicky Anderson | anderson@rebar.shop | غیرفعال |
-| Kourosh Zand | kourosh@rebar.shop | غیرفعال |
-| Behnam Rajabifar | ben@rebar.shop | غیرفعال |
+## مشکل فعلی
+وقتی روی یک کاربر کلیک می‌شود، فقط کارت Performance نمایش داده می‌شود ولی محتوای اکاردئون Brain همچنان برای همه کاربران است. همچنین هیچ اطلاعاتی از ایجنت‌هایی که کاربر استفاده کرده نمایش داده نمی‌شود.
 
 ## تغییرات
 
-### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
+### 1. هوک جدید: `src/hooks/useUserAgentSessions.ts`
 
-**اضافه کردن نوار کاربران:**
-- بین هدر و محتوای اکاردئون، یک ردیف اسکرول‌شونده افقی از آواتارهای کاربران اضافه شود
-- دکمه "All" برای نمایش همه memories (حالت فعلی)
-- هر کاربر با آواتار دایره‌ای (حرف اول نام) + نام کوچک نمایش داده شود
-- کاربران فعال اول، غیرفعال‌ها با opacity کمتر
-- کاربر انتخاب‌شده با حاشیه رنگی مشخص شود
-
-**نمایش اطلاعات عملکردی کاربر:**
-- وقتی کاربری انتخاب شود، یک بخش خلاصه عملکرد بالای اکاردئون نمایش داده شود
-- داده‌ها از جداول زیر واکشی شود:
-  - `time_clock_entries` (profile_id) → ساعات کاری امروز/هفته
-  - `activity_events` (actor_id) → رویدادهای اخیر
-  - `chat_sessions` (user_id) → تعاملات با AI agents
-  - `machine_runs` (operator_profile_id) → عملکرد تولید (برای workshop)
-  - `communications` (from_address) → ایمیل‌های ارسال‌شده
-
-**فیلتر Brain memories:**
-- وقتی کاربری انتخاب شود، memories مرتبط با آن شخص فیلتر شود (بر اساس metadata یا محتوا)
-
-### 2. `src/hooks/useUserPerformance.ts` (فایل جدید)
-
-یک hook جدید برای واکشی اطلاعات عملکردی یک کاربر:
+یک hook برای واکشی session‌های AI هر کاربر از `chat_sessions`:
 
 ```typescript
-function useUserPerformance(profileId: string | null) {
-  // Returns: timeClock (today/week), recentActivity, agentUsage, productionStats
+function useUserAgentSessions(userId: string | null) {
+  // Query: chat_sessions where user_id = userId, grouped by agent_name
+  // For each agent: count sessions, last session date, last 5 messages preview
+  // Returns: { agentName, sessionCount, lastUsed, recentMessages[] }[]
 }
 ```
 
 کوئری‌ها:
-- Time Clock: آخرین ورود/خروج امروز + مجموع ساعات هفته
-- Activity: آخرین 10 رویداد
-- Agent Sessions: تعداد sessions امروز به تفکیک agent
-- Machine Runs: تعداد و قطعات تولید‌شده امروز (اگر workshop role دارد)
+- `chat_sessions` فیلتر با `user_id` → لیست agent‌ها + تعداد session
+- `chat_messages` برای آخرین 3 پیام هر agent (جهت نمایش خلاصه)
 
-### 3. UI Layout
+### 2. تغییر `src/components/vizzy/VizzyBrainPanel.tsx`
+
+**فیلتر Brain memories:**
+- وقتی یک کاربر انتخاب شده، memories بر اساس نام کاربر در `content` فیلتر شوند
+- بخش‌های خالی بعد از فیلتر همچنان نمایش داده شوند (مثل حالت All)
+
+**بخش جدید — Agent Sessions:**
+- بعد از PerformanceCard و قبل از اکاردئون Brain، یک اکاردئون جداگانه برای ایجنت‌ها اضافه شود
+- هر ایجنت یک آیتم کشویی با آیکون + نام ایجنت + تعداد session‌ها
+- داخل هر کشوی: آخرین 3 پیام (user/agent) با تاریخ
 
 ```text
-┌──────────────────────────────────────────────────────┐
-│ 🧠 Vizzy Brain (118) | 🕐 1:07 PM ET  [Analyze] ✕  │
-├──────────────────────────────────────────────────────┤
-│ [All] [👤Radin] [👤Zahra] [👤Neel] [👤Saurabh] ... │
-├──────────────────────────────────────────────────────┤
-│ ┌── Radin's Performance ──────────────────────────┐  │
-│ │ 🕐 Clocked in: 8:30 AM  |  Hours today: 4.5h   │  │
-│ │ 📊 Activities: 12  |  🤖 AI Sessions: 3        │  │
-│ │ 📧 Emails sent: 5  |  📞 Calls: 2              │  │
-│ └─────────────────────────────────────────────────┘  │
-│                                                      │
-│ 📊 Dashboard (17)                              ▼     │
-│ 📥 Inbox (3)                                   ▼     │
-│ ...                                                  │
-└──────────────────────────────────────────────────────┘
+┌── 🤖 Agent Sessions ────────────────────────┐
+│ 🛒 Sales Agent (5 sessions)            ▼    │
+│   └ Last: "Please send quote to..."         │
+│ 📊 Accounting Agent (2 sessions)       ▼    │
+│   └ Last: "Invoice #1234 status..."         │
+│ 🏭 Shop Floor Agent (1 session)        ▼    │
+│   └ Last: "Machine 3 maintenance..."        │
+└─────────────────────────────────────────────┘
 ```
 
-## نکات فنی
-- پروفایل‌ها از `profiles` واکشی شده و فیلتر `email ILIKE '%@rebar.shop'` اعمال می‌شود
-- کوئری‌ها timezone-aware هستند (از workspace settings)
-- فقط admin‌ها این پنل را می‌بینند پس RLS مشکلی ندارد
-- کاربران غیرفعال با استایل dimmed نمایش داده می‌شوند ولی قابل کلیک هستند (برای دیدن سوابق)
+### 3. UI Layout نهایی (حالت کاربر انتخاب شده)
+
+```text
+┌──────────────────────────────────────────────┐
+│ [All] [👤Radin*] [👤Zahra] [👤Neel] ...     │
+├──────────────────────────────────────────────┤
+│ Radin's Performance                          │
+│ 🕐 In: 8:30 AM | Hours: 4.5h | AI: 3       │
+├──────────────────────────────────────────────┤
+│ 🤖 Radin's Agents                            │
+│ ├─ Sales Agent (5)                      ▼    │
+│ ├─ Accounting Agent (2)                 ▼    │
+│ └─ Commander (1)                        ▼    │
+├──────────────────────────────────────────────┤
+│ 📊 Dashboard (3)  ← filtered for Radin ▼    │
+│ 📥 Inbox (1)                            ▼    │
+│ ...                                          │
+└──────────────────────────────────────────────┘
+```
+
+### جزئیات فنی
+
+**فایل‌های تغییر:**
+- `src/hooks/useUserAgentSessions.ts` — جدید
+- `src/components/vizzy/VizzyBrainPanel.tsx` — اضافه کردن بخش agents + فیلتر memories
+
+**فیلتر memories:** بر اساس `content.toLowerCase().includes(firstName.toLowerCase())` یا `metadata` در صورت وجود فیلد مرتبط
+
+**Agent sessions query:**
+```sql
+SELECT agent_name, count(*) as session_count, max(updated_at) as last_used
+FROM chat_sessions
+WHERE user_id = ?
+GROUP BY agent_name
+ORDER BY last_used DESC
+```
 
