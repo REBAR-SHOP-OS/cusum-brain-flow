@@ -17,7 +17,7 @@ export type ArchFlowNodeData = {
   onTogglePin: (id: string) => void;
 };
 
-const accentStyles: Record<Accent, { border: string; glow: string; icon: string }> = {
+const accentStyles: Record<FlowAccent, { border: string; glow: string; icon: string }> = {
   cyan: {
     border: "border-cyan-400/90",
     glow: "shadow-[0_0_18px_rgba(34,211,238,0.35)]",
