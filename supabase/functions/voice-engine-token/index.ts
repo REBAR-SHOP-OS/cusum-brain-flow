@@ -10,9 +10,9 @@ Deno.serve((req) =>
       instructions = "You are a helpful assistant.",
       voice = "alloy",
       model = "gpt-4o-realtime-preview-2024-12-17",
-      vadThreshold = 0.4,
-      silenceDurationMs = 300,
-      prefixPaddingMs = 200,
+      vadThreshold = 0.6,
+      silenceDurationMs = 800,
+      prefixPaddingMs = 400,
       temperature = 0.8,
     } = ctx.body;
 

@@ -178,6 +178,7 @@ export function getTimeContextInTimezone(
       day: "numeric",
       hour: "numeric",
       minute: "2-digit",
+      second: "2-digit",
     }),
     timezoneLabel: getTimezoneLabel(tz),
     timezoneLocation: getTimezoneLocationLabel(tz),
