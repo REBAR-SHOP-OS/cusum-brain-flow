@@ -1,22 +1,22 @@
 
 
-# افزودن دکمه ورود با Google به صفحه Login
+# حذف ۲ اکانت tempmail خطرناک
 
-## هدف
-دکمه "Sign in with Google" به صفحه لاگین اضافه شود تا کاربران ثبت‌نام‌شده بتوانند راحت‌تر وارد شوند. این فقط برای **ورود** است، نه ثبت‌نام جدید.
+## وضعیت فعلی
+این دو اکانت در جدول `profiles` وجود ندارند (ثبت‌نام‌شان تکمیل نشده) اما احتمالاً هنوز در `auth.users` باقی هستند.
 
 ## تغییرات
 
-### فایل: `src/pages/Login.tsx`
-- اضافه کردن import از `lovable` (`@/integrations/lovable`)
-- اضافه کردن state برای `googleLoading`
-- اضافه کردن handler `handleGoogleSignIn` با استفاده از `lovable.auth.signInWithOAuth("google")`
-- اضافه کردن یک separator ("or") بعد از دکمه email
-- اضافه کردن دکمه "Sign in with Google" با آیکون Google SVG
-- حذف لینک "Having trouble signing in? Clear session" (طبق تصویر کاربر که آن را دور زده)
+### Migration: حذف از auth.users بر اساس ایمیل
+```sql
+DELETE FROM auth.users WHERE email IN (
+  'testuser2026@tempmail.com',
+  'temp.test.uitesting.2024@disposable.local'
+);
+```
 
-### جزئیات فنی
-- از `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })` استفاده می‌شود (Lovable Cloud managed)
-- نیازی به تنظیمات اضافی نیست — Google OAuth به صورت managed در Cloud فعال است
-- دکمه Google بعد از separator "or" و زیر دکمه email قرار می‌گیرد
+### نتیجه
+- هر دو اکانت از سیستم auth کاملاً حذف می‌شوند
+- دیگر امکان تلاش مجدد ورود ندارند
+- با سیستم invite-only فعلی، ثبت‌نام مجدد هم غیرممکن است
 
