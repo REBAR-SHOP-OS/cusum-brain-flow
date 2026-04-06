@@ -76,11 +76,17 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const [elapsed, setElapsed] = useState(0);
+  const autoRetryCountRef = useRef(0);
+  const autoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const MAX_AUTO_RETRIES = 2;
 
   // Auto-start
   useEffect(() => {
     startSession();
-    return () => { endSession(); };
+    return () => {
+      endSession();
+      if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -189,11 +195,35 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const isConnecting = voiceState === "connecting" || contextLoading;
   const isConnected = voiceState === "connected";
   const isError = voiceState === "error";
+  const isAutoRetrying = isError && autoRetryCountRef.current < MAX_AUTO_RETRIES;
+
+  // Auto-retry on error (up to MAX_AUTO_RETRIES times)
+  useEffect(() => {
+    if (voiceState === "error" && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
+      autoRetryCountRef.current += 1;
+      console.log(`[VizzyVoiceChat] Auto-retry ${autoRetryCountRef.current}/${MAX_AUTO_RETRIES}`);
+      autoRetryTimerRef.current = setTimeout(() => {
+        startSession();
+      }, 3000);
+      return () => {
+        if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current);
+      };
+    }
+  }, [voiceState, startSession]);
+
+  // Reset auto-retry counter on successful connection
+  useEffect(() => {
+    if (voiceState === "connected") {
+      autoRetryCountRef.current = 0;
+    }
+  }, [voiceState]);
 
   const statusText = isConnecting
     ? elapsed >= 8
       ? "Loading ERP intelligence..."
       : "Initializing Vizzy..."
+    : isAutoRetrying
+    ? "Reconnecting..."
     : isError
     ? "Connection failed"
     : isActive
@@ -351,9 +381,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             </div>
           )}
 
-          {isError && (
+          {isError && !isAutoRetrying && (
             <button
-              onClick={startSession}
+              onClick={() => { autoRetryCountRef.current = 0; startSession(); }}
               className="px-5 py-2 rounded-full text-sm font-medium transition-colors"
               style={{
                 background: "hsl(172 66% 50%)",
@@ -362,6 +392,15 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             >
               Retry Connection
             </button>
+          )}
+
+          {isAutoRetrying && (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: "hsl(45 93% 58%)" }} />
+              <span className="text-xs" style={{ color: "hsl(45 93% 58%)" }}>
+                Auto-retry {autoRetryCountRef.current}/{MAX_AUTO_RETRIES}...
+              </span>
+            </div>
           )}
 
           {isConnected && outputAudioBlocked && (
