@@ -1,49 +1,45 @@
 
 
-# Filter Background Noise from Vizzy Voice Transcription
-
-## Problem
-Vizzy picks up ambient sounds (TV, radio, other conversations) and transcribes them as user input. The screenshot shows Korean text and random English phrases appearing as "YOU" messages — these are clearly from background audio, not the user speaking directly.
+# Fix: Scheduled Posts Not Publishing Automatically
 
 ## Root Cause
-1. **VAD threshold still too permissive** for noisy environments — ambient audio from TV/radio passes the 0.75 threshold
-2. **User transcript filter is too basic** — only blocks fragments < 3 words / 10 chars (line 263-264). Full sentences from TV audio pass through
-3. **No language coherence check** — Korean or random English from TV gets accepted as valid user input
-4. **Microphone not constrained** — no noise suppression or echo cancellation enabled in `getUserMedia`
 
-## Changes
+The `social-cron-publish` edge function exists and works correctly, but **there is no pg_cron job scheduling it to run automatically**. Other functions (ringcentral-sync, odoo-crm-sync, check-sla-breaches) have pg_cron jobs — but `social-cron-publish` was never given one. Posts sit in "scheduled" status indefinitely because nothing invokes the function.
 
-### 1. Enable hardware noise suppression (`src/hooks/useVoiceEngine.ts` ~line 364)
+Additionally, the query requires `neel_approved = true` — posts that are "Scheduled + Approved" in the UI but haven't been explicitly approved by Neel will also be skipped. From the screenshot, posts show "Scheduled · Approved" but may have `neel_approved = false`.
 
-Change `getUserMedia({ audio: true })` to use advanced constraints:
-```typescript
-getUserMedia({
-  audio: {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
-  }
-})
+## Fix
+
+### 1. Create a pg_cron job to call `social-cron-publish` every 5 minutes
+
+A new database migration will schedule:
+
+```sql
+SELECT cron.schedule(
+  'social-cron-publish',
+  '*/5 * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/social-cron-publish',
+    headers := '{"Content-Type": "application/json", "Authorization": "Bearer <anon_key>"}'::jsonb,
+    body := '{}'::jsonb
+  ) AS request_id;
+  $$
+);
 ```
-This tells the browser to apply built-in DSP filtering before sending audio to the WebRTC connection.
 
-### 2. Increase VAD threshold further (`src/hooks/useVizzyVoiceEngine.ts` ~line 494)
+This runs every 5 minutes, checks for posts where `status = 'scheduled'`, `neel_approved = true`, and `scheduled_date <= now()`, then publishes them.
 
-- `vadThreshold`: `0.75` → `0.85` (only strong, close-mic speech triggers)
-- `silenceDurationMs`: `1200` → `1500` (longer silence needed to confirm turn)
+### 2. Verify approval flow alignment
 
-### 3. Strengthen user transcript noise filter (`src/hooks/useVoiceEngine.ts` ~line 259-273)
+The cron function queries `.eq("neel_approved", true)`. The approval UI in `PostReviewPanel.tsx` sets `neel_approved: true` when approved. The calendar shows "Approved" status — this should be consistent. No code change needed here, but the migration ensures the trigger exists.
 
-Add additional filters for ambient noise detection in the `input_audio_transcription.completed` handler:
-- **Non-target language filter**: Block transcripts containing Korean, Japanese, Chinese, or other non-target scripts (user speaks English or Farsi only)
-- **TV/media pattern filter**: Block common broadcast phrases like "MBC", "news", "channel", subtitle-like text
-- **Confidence-based length filter**: Raise minimum from 3 words to a smarter check — short fragments without Farsi characters that don't look like direct speech get blocked
+## Impact
 
-### 4. Add prompt instruction about noise (`src/hooks/useVizzyVoiceEngine.ts` prompt)
-
-Add to system prompt: "IGNORE any background noise, TV audio, radio, or conversations from other people. Only respond to direct speech addressed to you. If you detect ambient noise transcribed as input, discard it silently."
+- Only adds a new cron job — no existing code or behavior is modified
+- Posts will now automatically publish within 5 minutes of their scheduled time
+- Stale lock recovery (already in the function) handles edge cases
 
 ## Files Changed
-- `src/hooks/useVoiceEngine.ts` — audio constraints + stronger transcript filtering
-- `src/hooks/useVizzyVoiceEngine.ts` — higher VAD threshold + prompt update
+- New migration SQL — add pg_cron job for `social-cron-publish` every 5 minutes
 
