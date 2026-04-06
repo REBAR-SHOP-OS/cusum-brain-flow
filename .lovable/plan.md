@@ -1,48 +1,44 @@
 
 
-# Restrict Login to Whitelisted Emails Only
+# Fix: ai@rebar.shop 404 — Wrong Redirect Path
 
-## Allowed Users (from screenshots)
+## Root Cause
 
-| Email | Type |
-|---|---|
-| sattar@rebar.shop | Super Admin |
-| radin@rebar.shop | Super Admin |
-| zahra@rebar.shop | Internal |
-| neel@rebar.shop | Internal |
-| vicky@rebar.shop | Internal |
-| kourosh@rebar.shop | Internal |
-| saurabh@rebar.shop | Internal |
-| ben@rebar.shop | Internal |
-| ai@rebar.shop | Device |
-| swapnil.m183@gmail.com | External |
-| tariq0001010@gmail.com | External |
-| ontariorebars6@gmail.com | External |
+In `RoleGuard.tsx` (line ~138), shopfloor device accounts are redirected to `/shopfloor` when they access a non-allowed route. But the Shop Floor page route is `/shop-floor` (with a hyphen). `/shopfloor` has no route definition — only sub-routes like `/shopfloor/station`, `/shopfloor/pool`, etc. exist. So the redirect hits the `*` catch-all → NotFound → 404.
 
-## Current State
-- Signup is already invite-only (token required)
-- But **login** has no email whitelist — anyone with valid credentials can sign in
-- Google OAuth also has no restriction
+## Fix
 
-## Changes
+### File: `src/components/auth/RoleGuard.tsx`
 
-### 1. `src/lib/accessPolicies.ts` — Add allowed login emails list
+Change the redirect target from `/shopfloor` to `/shop-floor`:
 
-Add a new `allowedLoginEmails` array containing all 12 emails above. This becomes the single source of truth.
+```typescript
+// Line ~140: Change
+if (!isAllowed) return <Navigate to="/shopfloor" replace />;
+// To
+if (!isAllowed) return <Navigate to="/shop-floor" replace />;
+```
 
-### 2. `src/lib/auth.tsx` — Block sign-in for non-whitelisted emails
+Also fix the same issue for external shop supervisors (line ~111):
+```typescript
+// Change
+if (!isAllowed) return <Navigate to="/shop-floor" replace />;
+// Already correct — confirm no other /shopfloor redirects
+```
 
-- In `signIn()`: check email against whitelist **before** calling Supabase. Return error "Access denied" if not on the list.
-- In `onAuthStateChange`: after a session is established, check the user's email. If not whitelisted, immediately call `signOut()` and clear session. This catches Google OAuth logins from unauthorized accounts.
+And fix the internal shop supervisor redirect (line ~157):
+```typescript
+// Change
+return <Navigate to="/shop-floor" replace />;
+// Already correct — confirm
+```
 
-### 3. `src/pages/Login.tsx` — Block Google OAuth post-login
+### Verification
 
-After `lovable.auth.signInWithOAuth` succeeds, if the resulting user email is not in the whitelist, sign them out and show an error toast. This handles the case where someone signs in with an unauthorized Google account.
+Only **one** redirect is broken — the `shopfloorDevices` block redirecting to `/shopfloor` instead of `/shop-floor`.
 
 ## Impact
-- Only the 12 listed users can access the system
-- Email/password login blocked at the form level
-- Google OAuth blocked after authentication (since we can't pre-filter Google accounts)
-- No database changes needed
-- Landing page unchanged (Sign In button stays, just won't work for unauthorized users)
+- Fixes the 404 for `ai@rebar.shop` on login
+- User will now correctly land on the Shop Floor page
+- No other users or routes affected
 
