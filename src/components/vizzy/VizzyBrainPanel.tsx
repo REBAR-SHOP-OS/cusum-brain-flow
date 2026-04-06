@@ -271,13 +271,9 @@ function UserAgentsSections({ userId, name }: { userId: string; name: string }) 
     );
   }
 
-  return (
-    <div className="space-y-1">
-      <h3 className="text-sm font-semibold text-foreground flex items-center gap-1.5 mb-2">
-        <Bot className="w-4 h-4 text-primary" />
-        {name}'s Agents
-      </h3>
-      <Accordion type="multiple" className="w-full space-y-1">
+    return (
+      <div className="space-y-1">
+        <Accordion type="multiple" className="w-full space-y-1">
         {agents.map((agent) => (
           <AccordionItem
             key={agent.agentName}
