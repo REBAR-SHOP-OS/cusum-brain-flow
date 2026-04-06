@@ -68,9 +68,10 @@ const nodeTypes = { archNode: ArchFlowNode };
 const LAYER_GAP = 220;
 const NODE_W = 130;
 const NODE_GAP = 30;
-const LEFT_MARGIN = 160;
+const LEFT_MARGIN = 40;
 const TOP_MARGIN = 40;
-const CENTER_REF = 1200;
+const CENTER_REF = 2800;
+const MAX_PER_ROW = 10;
 
 /* ───── Convert static data to React Flow nodes/edges ───── */
 function buildInitialNodes(
@@ -82,26 +83,31 @@ function buildInitialNodes(
 
   for (const layer of LAYERS) {
     const layerNodes = ARCH_NODES.filter((n) => n.layer === layer.key);
-    const totalW = layerNodes.length * NODE_W + (layerNodes.length - 1) * NODE_GAP;
-    const startX = LEFT_MARGIN + Math.max(0, (CENTER_REF - totalW) / 2);
-    const y = TOP_MARGIN + layerIdx * LAYER_GAP;
+    const rowCount = Math.ceil(layerNodes.length / MAX_PER_ROW);
 
-    layerNodes.forEach((n, i) => {
-      nodes.push({
-        id: n.id,
-        type: "archNode",
-        position: { x: startX + i * (NODE_W + NODE_GAP), y },
-        data: {
-          label: n.label,
-          hint: n.hint,
-          accent: n.accent,
-          Icon: n.icon,
-          onDelete,
-          onLabelChange,
-        },
+    for (let row = 0; row < rowCount; row++) {
+      const rowNodes = layerNodes.slice(row * MAX_PER_ROW, (row + 1) * MAX_PER_ROW);
+      const totalW = rowNodes.length * NODE_W + (rowNodes.length - 1) * NODE_GAP;
+      const startX = LEFT_MARGIN + Math.max(0, (CENTER_REF - totalW) / 2);
+      const y = TOP_MARGIN + layerIdx * LAYER_GAP + row * (LAYER_GAP * 0.55);
+
+      rowNodes.forEach((n, i) => {
+        nodes.push({
+          id: n.id,
+          type: "archNode",
+          position: { x: startX + i * (NODE_W + NODE_GAP), y },
+          data: {
+            label: n.label,
+            hint: n.hint,
+            accent: n.accent,
+            Icon: n.icon,
+            onDelete,
+            onLabelChange,
+          },
+        });
       });
-    });
-    layerIdx++;
+    }
+    layerIdx += rowCount > 1 ? 2 : 1;
   }
   return nodes;
 }
@@ -498,7 +504,7 @@ export default function Architecture() {
             onNodeClick={onNodeClick}
             nodeTypes={nodeTypes}
             fitView
-            fitViewOptions={{ padding: 0.1 }}
+            fitViewOptions={{ padding: 0.15 }}
             deleteKeyCode={["Backspace", "Delete"]}
             snapToGrid
             snapGrid={[10, 10]}
