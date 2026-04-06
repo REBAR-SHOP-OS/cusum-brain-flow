@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
+import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
