@@ -1,50 +1,44 @@
 
 
-# Root Cause: "Rebar.Shop Incorporated" Does Not Exist in Facebook/Instagram
+# Fix: Page Status Indicators — Green = Published, Red = Not Published
 
 ## Problem
+Currently, page indicators in the calendar cards show neutral gray circles (○) for scheduled/draft/pending posts. The user wants a clear monitoring view: **green = published, red = not published**. No gray/neutral state.
 
-The UI lists the page as **"Rebar.Shop Incorporated"** (`socialConstants.ts` line 10, 18), but the actual Facebook/Instagram page name stored in `user_meta_tokens.pages` is **"Rebar.shop"** (lowercase "s", no "Incorporated").
+## Change
 
-When the backend tries to match `"Rebar.Shop Incorporated"` against available pages `["Ontario Steel Detailing", "Rebar.shop", "Ontario Digital Marketing", ...]`, the `normalizePageName` function compares:
-- `"rebar.shop incorporated"` vs `"rebar.shop"` → **no match**
+**File: `src/components/social/SocialCalendar.tsx`**
 
-Result: every publish attempt for this page hits line 294:
-```
-SKIP — page "Rebar.Shop Incorporated" not found in connected pages — skipped
-```
+Update `PageStatusDropdown` (lines 176-184) to use a binary logic:
 
-This is the same root cause for all posts that include "Rebar.Shop Incorporated" — they silently skip that page or fail entirely.
+- `post.status === "published"` AND page not in `last_error` → **green checkmark**
+- Partial success: pages NOT mentioned in error → **green**, pages in error → **red**
+- Everything else (draft, scheduled, pending, declined, failed, publishing) → **red X**
 
-## Fix
-
-### 1. Update `src/lib/socialConstants.ts` — rename to match Facebook
-
-Change "Rebar.Shop Incorporated" → "Rebar.shop" in both facebook and instagram arrays. This matches the actual page name from Meta's API stored in `user_meta_tokens`.
-
-### 2. Database migration — update existing posts
-
-Run a data migration to rename "Rebar.Shop Incorporated" → "Rebar.shop" in all `social_posts.page_name` values (both standalone and within comma-separated strings).
-
-```sql
-UPDATE social_posts 
-SET page_name = REPLACE(page_name, 'Rebar.Shop Incorporated', 'Rebar.shop')
-WHERE page_name LIKE '%Rebar.Shop Incorporated%';
+Replace the current conditional block:
+```tsx
+// Current: shows gray circles for non-published/non-failed
+{post.status === "published" ? (
+  <CheckCircle2 className="w-3 h-3 text-green-500" />
+) : ps.failed ? (
+  <XCircle className="w-3 h-3 text-destructive" />
+) : hasFailed ? (
+  <CheckCircle2 className="w-3 h-3 text-green-500" />
+) : (
+  <Circle className="w-3 h-3 text-muted-foreground" />  // ← gray neutral
+)}
 ```
 
-### 3. Also fix "Rebar.Shop Ontario" → "Rebar.shop Ontario"
+With:
+```tsx
+// New: binary — green if published successfully, red otherwise
+{(post.status === "published" && !ps.failed) || 
+ (hasFailed && !ps.failed) ? (
+  <CheckCircle2 className="w-3 h-3 text-green-500" />
+) : (
+  <XCircle className="w-3 h-3 text-destructive" />  // ← always red if not published
+)}
+```
 
-The token data shows `"Rebar.shop Ontario"` (lowercase "s") but the constants have `"Rebar.Shop Ontario"` (uppercase "S"). The `normalizePageName` function lowercases both so this works today, but it should be consistent to avoid confusion.
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `src/lib/socialConstants.ts` | Rename "Rebar.Shop Incorporated" → "Rebar.shop" |
-| Database migration | Update existing `page_name` values |
-
-## Safety
-- `normalizePageName` lowercases, so case differences are safe — but "Incorporated" suffix is a completely different string, which is why it fails
-- Migration only touches `page_name` text, no structural changes
-- No edge function changes needed — the matching logic is correct, the data is wrong
+This removes the gray `Circle` entirely — every page is either green (published) or red (not published), making the monitoring purpose clear.
 
