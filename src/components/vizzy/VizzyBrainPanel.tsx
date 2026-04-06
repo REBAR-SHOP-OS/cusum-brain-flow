@@ -13,18 +13,22 @@ interface Props {
 }
 
 const SIDEBAR_GROUPS: { key: string; label: string; categories: string[] }[] = [
-  { key: "dashboard",  label: "📊 Dashboard",        categories: ["brain_insight", "general", "benchmark", "daily_benchmark"] },
-  { key: "inbox",      label: "📥 Inbox",             categories: ["email"] },
-  { key: "team_hub",   label: "💬 Team Hub",          categories: ["feedback_clarification", "feedback_patch"] },
-  { key: "tasks",      label: "📋 Business Tasks",    categories: ["auto_fix", "feedback_fix"] },
-  { key: "monitor",    label: "📡 Live Monitor",      categories: ["agent_audit", "pre_digest"] },
-  { key: "ceo",        label: "🏢 CEO Portal",        categories: ["business"] },
-  { key: "support",    label: "🎧 Support",           categories: ["feedback_escalation", "call_summary", "voicemail_summary"] },
-  { key: "pipeline",   label: "📈 Pipeline & Leads",  categories: ["leads"] },
-  { key: "customers",  label: "👥 Customers",         categories: ["crm", "orders"] },
-  { key: "accounting", label: "💰 Accounting",        categories: ["accounting"] },
-  { key: "shop_floor", label: "🏭 Shop Floor",        categories: ["production"] },
-  { key: "timeclock",  label: "⏰ Time Clock",        categories: ["timeclock"] },
+  { key: "dashboard",    label: "📊 Dashboard",       categories: ["brain_insight", "general", "benchmark", "daily_benchmark"] },
+  { key: "inbox",        label: "📥 Inbox",            categories: ["email"] },
+  { key: "team_hub",     label: "💬 Team Hub",         categories: ["feedback_clarification", "feedback_patch"] },
+  { key: "tasks",        label: "📋 Business Tasks",   categories: ["auto_fix", "feedback_fix"] },
+  { key: "monitor",      label: "📡 Live Monitor",     categories: ["agent_audit", "pre_digest"] },
+  { key: "ceo",          label: "🏢 CEO Portal",       categories: ["business"] },
+  { key: "support",      label: "🎧 Support",          categories: ["feedback_escalation", "call_summary", "voicemail_summary"] },
+  { key: "pipeline",     label: "📈 Pipeline",         categories: ["leads"] },
+  { key: "lead_scoring", label: "🎯 Lead Scoring",     categories: ["lead_scoring"] },
+  { key: "customers",    label: "👥 Customers",        categories: ["crm"] },
+  { key: "accounting",   label: "💰 Accounting",       categories: ["accounting"] },
+  { key: "sales",        label: "🛒 Sales",            categories: ["sales", "orders"] },
+  { key: "production",   label: "🏭 Production",       categories: ["production"] },
+  { key: "shop_floor",   label: "🔧 Shop Floor",       categories: ["shop_floor"] },
+  { key: "timeclock",    label: "⏰ Time Clock",       categories: ["timeclock"] },
+  { key: "office_tools", label: "🛠️ Office Tools",     categories: ["office_tools"] },
 ];
 
 // Build a reverse map: category -> group key
@@ -178,17 +182,14 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const { toast } = useToast();
 
   const grouped = useMemo(() => {
-    // Group entries by sidebar group
     const map: Record<string, VizzyMemoryEntry[]> = {};
     for (const e of entries) {
       const groupKey = CATEGORY_TO_GROUP[e.category] || "dashboard";
       if (!map[groupKey]) map[groupKey] = [];
       map[groupKey].push(e);
     }
-    // Return in sidebar order, only groups that have entries
-    return SIDEBAR_GROUPS
-      .filter((g) => map[g.key] && map[g.key].length > 0)
-      .map((g) => ({ key: g.key, label: g.label, items: map[g.key] }));
+    // Return ALL groups in sidebar order, even if empty
+    return SIDEBAR_GROUPS.map((g) => ({ key: g.key, label: g.label, items: map[g.key] || [] }));
   }, [entries]);
 
   const handleAnalyze = async () => {
@@ -232,15 +233,6 @@ export function VizzyBrainPanel({ onClose }: Props) {
       );
     }
 
-    if (grouped.length === 0) {
-      return (
-        <div className="text-center py-12 text-muted-foreground">
-          <Brain className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No memories yet. Click "Analyze Now" to scan the system.</p>
-        </div>
-      );
-    }
-
     return (
       <Accordion type="multiple" className="w-full space-y-1">
         {grouped.map((group) => (
@@ -252,11 +244,15 @@ export function VizzyBrainPanel({ onClose }: Props) {
               </span>
             </AccordionTrigger>
             <AccordionContent>
-              <DateGroupedEntries
-                items={group.items}
-                onUpdate={(id, content) => updateEntry({ id, content })}
-                onDelete={deleteEntry}
-              />
+              {group.items.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-3 text-center italic">No insights yet</p>
+              ) : (
+                <DateGroupedEntries
+                  items={group.items}
+                  onUpdate={(id, content) => updateEntry({ id, content })}
+                  onDelete={deleteEntry}
+                />
+              )}
             </AccordionContent>
           </AccordionItem>
         ))}
