@@ -1,8 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 import { useVoiceEngine } from "./useVoiceEngine";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
-import { getTimeContextInTimezone } from "@/lib/dateConfig";
-import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
+import { getTorontoTimePayload } from "@/lib/dateConfig";
 import { toast } from "sonner";
 
 /**
