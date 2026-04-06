@@ -147,6 +147,10 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
   const intentionalCloseRef = useRef(false);
   const MAX_RECONNECT_ATTEMPTS = 3;
 
+  // Conversation context pruning — sliding window to prevent context overflow
+  const conversationItemIdsRef = useRef<string[]>([]);
+  const MAX_CONVERSATION_ITEMS = 6; // Keep last 3 exchanges (3 user + 3 agent)
+
   // Keep transcriptsRef in sync
   useEffect(() => { transcriptsRef.current = transcripts; }, [transcripts]);
 
