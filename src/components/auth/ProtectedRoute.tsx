@@ -8,6 +8,12 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading } = useAuth();
 
+  // Dev-only: allow unauthenticated access to the workflow diagram for local testing/demo.
+  // Keeps production behavior unchanged.
+  if (import.meta.env.DEV && window.location.pathname === "/architecture") {
+    return <>{children}</>;
+  }
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
