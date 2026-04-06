@@ -531,6 +531,7 @@ export default function LiveChat() {
       <AnimatePresence>
         {showVoiceChat && <VizzyVoiceChat onClose={() => setShowVoiceChat(false)} />}
       </AnimatePresence>
+      {showBrainPanel && <VizzyBrainPanel onClose={() => setShowBrainPanel(false)} />}
     </TooltipProvider>
   );
 }
