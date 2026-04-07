@@ -1,79 +1,89 @@
 
 
-# Split Vizzy Call Handling: Personal Assistant (Ext 101) vs Sales Agent (All Others)
+# CEO SMS Alerts + Push Notification Status Check
 
-## The Key Distinction
+## What the CEO Wants
 
-- **Extension 101 (Sattar's direct line):** Vizzy answers as a personal assistant — "Sattar is busy right now, can I help? If not, I'll make sure he knows you called." Warm, gatekeeper behavior. Current behavior stays mostly the same.
-- **All other company extensions (missed calls, after-hours, weekends):** Vizzy answers as a trained sales agent — answers product questions, provides ballpark pricing, captures RFQs, offers to connect to team members. Revenue-generating.
+1. **Vizzy should auto-reply to the CEO via SMS** at +14165870788 when she takes actions or has updates
+2. **Push notifications status check** — confirm they're working
+3. **On every inbound call or SMS, text the CEO** on their personal phone number
+4. **Team Hub push notifications** should also be active
+
+## Current State
+
+- **Push notifications**: Already implemented — `push-on-notify` edge function fires on every notification insert, `sw-push.js` handles display, `useNotifications` registers push subscriptions on load
+- **SMS to CEO**: `rc_send_sms` tool exists in `admin-chat` but is only used on-demand (Vizzy doesn't auto-text the CEO)
+- **Inbound call/SMS alerts**: `VizzyCallHandler` creates in-app notifications but never sends an SMS to the CEO's phone
+- **Team Hub**: Push notifications already fire via the `notify-on-message` trigger
+
+## Changes
+
+### 1. `supabase/functions/push-on-notify/index.ts` — Add SMS Alert to CEO
+
+After sending the push notification, add logic to also send an SMS to the CEO's phone (+14165870788) for high-priority notification types:
+- `call_summary` (Vizzy took a call)
+- `rfq_approval` (RFQ captured)
+- `callback_request` (someone wants a callback)
+- Any notification with `priority: "high"`
+
+Uses the same RingCentral SMS sending pattern already in `admin-chat` (fetch token from `user_ringcentral_tokens`, auto-detect SMS sender number, send via RC API).
+
+SMS format: Short summary — e.g. "📞 Vizzy took a call from John Smith (Sales mode). RFQ captured for 20M rebar. Check app for details."
+
+~50 lines added.
+
+### 2. `supabase/functions/ringcentral-sync/index.ts` — SMS Alert on New Inbound SMS
+
+After syncing a new inbound SMS to the database, send an SMS notification to the CEO at +14165870788:
+- "📱 New SMS from [contact/number]: [first 100 chars of message]"
+- Only for genuinely new messages (not already in DB)
+
+~15 lines added in the SMS sync loop.
+
+### 3. `supabase/functions/_shared/vizzyIdentity.ts` — Update Identity
+
+Add to CAN DO list:
+- "Auto-text the CEO at +14165870788 on every inbound call, SMS, or high-priority event"
+
+Add directive:
+- "When you complete a significant action or detect a critical event, always send an SMS summary to +14165870788 via rc_send_sms"
+
+~5 lines added.
+
+### 4. `supabase/functions/_shared/smsAlertHelper.ts` — NEW Shared Helper
+
+Create a reusable helper function `sendCeoSmsAlert(message: string)` that:
+- Fetches RC token from `user_ringcentral_tokens`
+- Refreshes if expired
+- Auto-detects SMS sender number
+- Sends SMS to +14165870788
+- Returns success/failure (never throws — alerts should not break primary flows)
+
+This avoids duplicating the RC SMS logic across multiple functions. ~60 lines.
 
 ## File Changes
 
-### 1. `supabase/functions/vizzy-call-receptionist/index.ts` — Route by Extension
+| File | Change |
+|------|--------|
+| `supabase/functions/_shared/smsAlertHelper.ts` | NEW — reusable `sendCeoSmsAlert()` helper |
+| `supabase/functions/push-on-notify/index.ts` | Add SMS alert to CEO for calls/RFQs/high-priority (~15 lines) |
+| `supabase/functions/ringcentral-sync/index.ts` | SMS alert on new inbound SMS (~15 lines) |
+| `supabase/functions/_shared/vizzyIdentity.ts` | Update CAN DO + add SMS alert directive (~5 lines) |
 
-Accept a new `targetExtension` parameter. Based on whether it's `"101"` or not, return a completely different prompt:
+## Push Notification Status
 
-**Extension 101 (personal assistant):** Keep the existing gatekeeper prompt almost unchanged — "Sattar is busy, I'll pass along the message." No pricing, no sales. Just take a message and offer to help if possible.
+Push notifications are already fully implemented:
+- Service worker (`sw-push.js`) handles display
+- `push-on-notify` sends push on every notification insert
+- `useNotifications` auto-registers push subscription on page load
+- Team Hub messages trigger push via `notify-on-message`
+- VAPID keys are configured
 
-**All other extensions (sales agent):** New prompt with:
-- Full product catalog (10M-35M rebar, copied from `sales-concierge`)
-- Bending types and surcharges
-- Volume discount tiers
-- AI-driven sales questions ("What's your project timeline?", "How many tonnes are you looking at?")
-- Team directory for diversion (Neel = Sales, Saurabh = Operations, Sattar = Owner)
-- After-hours awareness (Mon-Fri 8-5 ET)
-- Confidentiality rules (CAN discuss catalog/pricing, CANNOT discuss specific orders/invoices)
-
-The function already fetches contact/lead/delivery context from DB — this stays the same for both modes.
-
-### 2. `src/components/vizzy/VizzyCallHandler.tsx` — Pass Extension + Handle All Extensions
-
-Currently hardcoded to `TARGET_EXTENSION = "101"` only. Changes:
-- Remove the single-extension filter — listen for calls on ALL extensions
-- Pass the called extension number to `vizzy-call-receptionist` so it returns the right prompt
-- Store which mode was used (personal vs sales) in `callerInfoRef`
-- Post-call: if sales mode and RFQ captured, create approval notification
-- Post-call: if callback requested for a specific person, create a task for them
-
-### 3. `supabase/functions/summarize-call/index.ts` — Extract Sales Intelligence
-
-Add to the JSON extraction schema:
-- `rfq_details`: object with `bar_sizes`, `quantities`, `project_type`, `timeline` if caller requested a quote
-- `callback_requested`: string (team member name) if caller asked to speak with someone specific
-- `lead_info`: object with `name`, `company`, `phone`, `project_description`
-- `call_mode`: "personal_assistant" or "sales_agent" (passed from caller)
-
-### 4. `supabase/functions/_shared/vizzyIdentity.ts` — Update CAN DO List
-
-Add line: "Answer company-wide inbound calls — personal assistant on ext 101, smart sales agent on all other lines. Captures RFQs and flags leads with CEO approval."
-
-## Call Flow
-
-```text
-Inbound call arrives
-  │
-  ├── Extension 101 (Sattar's line)?
-  │   └── PERSONAL ASSISTANT MODE
-  │       "Sattar is busy — can I help? If not, I'll pass along the message."
-  │       → Summarize → notify CEO
-  │
-  └── Any other extension (or missed/after-hours)?
-      └── SALES AGENT MODE
-          "Hi, this is Vizzy at Rebar Shop! How can I help?"
-          ├── Product questions → answer with catalog knowledge
-          ├── Pricing → ballpark estimates
-          ├── RFQ → capture details, "We'll have a quote ready for you"
-          ├── Wants Neel/Saurabh → "I'll have them call you back"
-          └── Post-call:
-              ├── RFQ? → Notification: "Approve to create lead?"
-              ├── Callback? → Task for team member
-              └── Hot lead? → Priority flag to CEO
-```
+The CEO just needs to have granted notification permission in their browser. No code changes needed for push.
 
 ## Impact
-- 4 files changed
-- Vizzy handles ALL company calls, not just ext 101
-- Two distinct personalities: gatekeeper vs sales agent
-- RFQ capture and lead creation require CEO approval
+- 4 files (1 new, 3 updated)
+- CEO gets SMS on their phone for every call, inbound SMS, and critical event
+- Push notifications already active — no changes needed
 - No database or auth changes
 
