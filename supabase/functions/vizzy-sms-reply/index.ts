@@ -36,16 +36,16 @@ Deno.serve(async (req) => {
     const normalized = from_number.replace(/\D/g, "");
     const isCeo = from_number === CEO_PHONE || normalized === "4165870788" || normalized === "14165870788";
 
-    // Spam filter
-    if (isSpamSms(message_text, from_number)) {
+    // Spam filter (skip for CEO — always allow)
+    if (!isCeo && isSpamSms(message_text, from_number)) {
       console.log("[sms-reply] Spam detected, skipping:", from_number);
       return new Response(JSON.stringify({ ok: true, skipped: "spam" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Skip short codes (less than 7 digits)
-    if (normalized.length < 7) {
+    // Skip short codes (less than 7 digits) — not for CEO
+    if (!isCeo && normalized.length < 7) {
       console.log("[sms-reply] Skipping short code:", from_number);
       return new Response(JSON.stringify({ ok: true, skipped: "short_code" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
