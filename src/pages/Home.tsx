@@ -27,6 +27,7 @@ import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
+import { getVisibleAgents } from "@/lib/userAccessConfig";
 import { VizzyDailyBriefing } from "@/components/vizzy/VizzyDailyBriefing";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 
@@ -121,21 +122,18 @@ export default function Home() {
     return agentKeyToSuggestion["assistant"];
   }, [mapping, isAdmin, isWorkshop, roles]);
 
-  // Reorder helpers: primary agent first
+  // Reorder helpers: filter by user's agent access, primary first
   const orderedHelpers = useMemo(() => {
-    let filtered = [...helpers]; // Vizzy now available to all employees
-    // Hide accounting agent (Penny) from users without admin/accounting role
-    if (!hasRole("admin") && !hasRole("accounting")) {
-      filtered = filtered.filter((h) => h.id !== "accounting");
-    }
-    if (!hasRole("admin")) {
-      filtered = filtered.filter((h) => h.id !== "rebuild");
-    }
+    const allowedAgents = getVisibleAgents(user?.email);
+    // If no config found (unknown user), show all for backward compat
+    let filtered = allowedAgents.length > 0
+      ? helpers.filter((h) => allowedAgents.includes(h.id))
+      : (isSuperAdmin ? [...helpers] : []);
     if (!mapping) return filtered;
     const primary = filtered.find((h) => h.id === mapping.agentKey);
     if (!primary) return filtered;
     return [primary, ...filtered.filter((h) => h.id !== mapping.agentKey)];
-  }, [mapping, isSuperAdmin, hasRole]);
+  }, [mapping, isSuperAdmin, user?.email]);
 
   const handleSend = useCallback((content: string) => {
     const result = routeToAgent(content);

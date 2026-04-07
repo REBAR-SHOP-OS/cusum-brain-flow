@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
+import { getVisibleAgents } from "@/lib/userAccessConfig";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { parseQuickReplies } from "@/lib/parseQuickReplies";
 import { QuickReplies } from "@/components/chat/QuickReplies";
@@ -35,8 +36,8 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  // Block ai@rebar.shop from accessing any agents
-  if (user?.email === "ai@rebar.shop") return null;
+  // Block users with zero agent access from seeing the chat widget
+  if (getVisibleAgents(user?.email).length === 0) return null;
 
   // Cancel stream when closing the panel
   const handleClose = () => {

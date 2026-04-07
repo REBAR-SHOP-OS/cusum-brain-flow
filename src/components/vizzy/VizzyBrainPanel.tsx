@@ -18,6 +18,7 @@ import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
 import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { agentConfigs } from "@/components/agent/agentConfigs";
+import { getVisibleAgents, getUserPrimaryAgentKeyFromConfig } from "@/lib/userAccessConfig";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -188,17 +189,6 @@ function PerformanceCard({ profileId, userId, name, timezone, date }: { profileI
 /** Agent sessions accordion for selected user */
 function UserAgentsSections({ userId, name, email }: { userId: string; name: string; email?: string }) {
   const { data: sessionAgents, isLoading } = useUserAgentSessions(userId);
-  const assignedMapping = getUserAgentMapping(email);
-
-  // Role-based agent access mapping
-  const roleAgentAccess: Record<string, string[]> = {
-    ceo: Object.keys(agentConfigs), // CEOs get all agents
-    shop_supervisor: [],
-    sales: ["sales", "support", "estimating", "email", "legal", "eisenhower", "assistant", "copywriting", "growth"],
-    accountant: ["accounting", "legal", "email", "eisenhower", "assistant", "growth"],
-    social_media_manager: ["social", "eisenhower", "support", "legal"],
-    estimator: ["sales", "support", "estimating", "eisenhower"],
-  };
 
   // Build merged list: accessible agents + any additional agents from sessions
   const mergedAgents = React.useMemo(() => {
@@ -213,10 +203,9 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
       recentMessages: { role: string; content: string; created_at: string }[];
     }> = [];
 
-    // Determine accessible agent keys based on user role
-    const userRole = assignedMapping?.userRole ?? "";
-    const accessibleKeys = roleAgentAccess[userRole] ?? ["assistant", "eisenhower", "growth"];
-    const primaryKey = assignedMapping?.agentKey;
+    // Use centralized email-based config
+    const accessibleKeys = getVisibleAgents(email);
+    const primaryKey = getUserPrimaryAgentKeyFromConfig(email);
 
     // Add all accessible agents (primary first)
     const orderedKeys = primaryKey
@@ -265,7 +254,7 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
     }
 
     return result;
-  }, [assignedMapping, sessionAgents]);
+  }, [email, sessionAgents]);
 
   if (isLoading) {
     return (

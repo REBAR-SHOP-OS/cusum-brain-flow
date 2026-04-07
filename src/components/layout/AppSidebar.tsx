@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
+import { getVisibleMenus } from "@/lib/userAccessConfig";
 import { Link, useLocation } from "react-router-dom";
 import {
   Home, Inbox, CheckSquare, Kanban, Users, Factory, Package, Truck,
@@ -221,9 +222,15 @@ export function AppSidebar() {
 
   const { isSuperAdmin } = useSuperAdmin();
 
+  const visibleMenus = getVisibleMenus(email);
+
   const hasAccess = (item: NavItem) => {
     if (isSuperAdmin) return true;
     if (item.blockedEmails?.includes(email.toLowerCase())) return false;
+    // Email-based menu access check from central config
+    if (isInternal && email) {
+      return visibleMenus.includes(item.name);
+    }
     if (item.allowedEmails) {
       return item.allowedEmails.includes(email.toLowerCase());
     }
