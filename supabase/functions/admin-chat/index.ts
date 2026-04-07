@@ -29,6 +29,9 @@ const WRITE_TOOLS = new Set([
   "send_email",
   "create_task",
   "update_task_status",
+  "seo_run_audit",
+  "seo_run_strategy",
+  "teamhub_send_message",
 ]);
 
 const JARVIS_TOOLS = [
@@ -792,6 +795,106 @@ const JARVIS_TOOLS = [
           resolution_note: { type: "string", description: "Note about the resolution" },
         },
         required: ["task_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ─── SEO Tools ───
+  {
+    type: "function",
+    function: {
+      name: "seo_get_overview",
+      description: "Get SEO domain health: keyword count, average position, traffic trends, top pages, task summary. Use when CEO asks about SEO performance.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "seo_list_keywords",
+      description: "Query tracked SEO keywords with filters. Returns keyword, position, volume, CTR, impressions, trend, opportunity score.",
+      parameters: {
+        type: "object",
+        properties: {
+          min_position: { type: "number", description: "Minimum avg_position (e.g. 1)" },
+          max_position: { type: "number", description: "Maximum avg_position (e.g. 10 for page 1)" },
+          min_volume: { type: "number", description: "Minimum search volume" },
+          trend: { type: "string", enum: ["rising", "falling"], description: "Filter by trend direction" },
+          limit: { type: "number", description: "Max results (default 20, max 100)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "seo_list_tasks",
+      description: "Query SEO tasks by status, priority, or type. Returns actionable SEO recommendations.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["open", "in_progress", "completed", "dismissed"], description: "Filter by status" },
+          priority: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Filter by priority" },
+          task_type: { type: "string", enum: ["content", "technical", "internal_link", "local", "ai_visibility"], description: "Filter by type" },
+          limit: { type: "number", description: "Max results (default 30)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "seo_run_audit",
+      description: "Trigger an AI-powered SEO audit. Types: 'analyze' (full site analysis), 'local' (local SEO audit), 'ai-visibility' (AI platform visibility). Requires CEO approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          audit_type: { type: "string", enum: ["analyze", "local", "ai-visibility"], description: "Type of audit to run" },
+        },
+        required: ["audit_type"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "seo_run_strategy",
+      description: "Generate AI strategic SEO tasks based on current keyword and page data. Creates 5-10 high-impact tasks. Requires CEO approval.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  // ─── Team Hub Tools ───
+  {
+    type: "function",
+    function: {
+      name: "teamhub_send_message",
+      description: "Send a message to a Team Hub channel or group on behalf of the CEO. Requires CEO approval. Resolves channel by name.",
+      parameters: {
+        type: "object",
+        properties: {
+          channel_name: { type: "string", description: "Channel or group name (e.g. 'Official Channel', 'Official Group')" },
+          message: { type: "string", description: "Message content to send" },
+        },
+        required: ["channel_name", "message"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "teamhub_list_messages",
+      description: "Read recent messages from a Team Hub channel or group. Returns messages with sender names and timestamps.",
+      parameters: {
+        type: "object",
+        properties: {
+          channel_name: { type: "string", description: "Channel or group name" },
+          limit: { type: "number", description: "Max messages to return (default 20)" },
+        },
+        required: ["channel_name"],
         additionalProperties: false,
       },
     },
@@ -2107,6 +2210,102 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
 
+    // ─── SEO Read Tools ───
+    case "seo_get_overview": {
+      try {
+        const { data: domains } = await supabase.from("seo_domains").select("*").eq("company_id", companyId).limit(1);
+        const domain = domains?.[0];
+        if (!domain) return JSON.stringify({ message: "No SEO domain configured for this company" });
+
+        const [kwRes, pageRes, taskRes] = await Promise.all([
+          supabase.from("seo_keyword_ai").select("id, keyword, avg_position, impressions_28d, ctr, search_volume, opportunity_score, trend_score").eq("domain_id", domain.id).order("opportunity_score", { ascending: false }).limit(200),
+          supabase.from("seo_page_ai").select("id, url, seo_score, title").eq("domain_id", domain.id).order("seo_score", { ascending: true }).limit(50),
+          supabase.from("seo_tasks").select("id, status, priority, task_type").eq("domain_id", domain.id),
+        ]);
+
+        const keywords = kwRes.data || [];
+        const pages = pageRes.data || [];
+        const tasks = taskRes.data || [];
+
+        const avgPos = keywords.length > 0 ? Math.round(keywords.reduce((s: number, k: any) => s + (k.avg_position || 0), 0) / keywords.length * 10) / 10 : null;
+        const tasksByStatus: Record<string, number> = {};
+        for (const t of tasks) tasksByStatus[t.status] = (tasksByStatus[t.status] || 0) + 1;
+
+        return JSON.stringify({
+          domain: domain.domain, domainId: domain.id,
+          totalKeywords: keywords.length,
+          avgPosition: avgPos,
+          top10Keywords: keywords.filter((k: any) => k.avg_position && k.avg_position <= 10).length,
+          topKeywords: keywords.slice(0, 10).map((k: any) => ({ keyword: k.keyword, position: k.avg_position, volume: k.search_volume, impressions: k.impressions_28d, ctr: k.ctr, opportunity: k.opportunity_score })),
+          lowScorePages: pages.filter((p: any) => p.seo_score && p.seo_score < 50).slice(0, 10).map((p: any) => ({ url: p.url, score: p.seo_score, title: p.title })),
+          tasks: { total: tasks.length, ...tasksByStatus },
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "seo_list_keywords": {
+      try {
+        const { data: domains } = await supabase.from("seo_domains").select("id").eq("company_id", companyId).limit(1);
+        const domainId = domains?.[0]?.id;
+        if (!domainId) return JSON.stringify({ message: "No SEO domain configured" });
+
+        const limit = Math.min(args.limit || 20, 100);
+        let q = supabase.from("seo_keyword_ai").select("keyword, avg_position, search_volume, impressions_28d, ctr, opportunity_score, trend_score").eq("domain_id", domainId).order("opportunity_score", { ascending: false }).limit(limit);
+        if (args.min_position) q = q.gte("avg_position", args.min_position);
+        if (args.max_position) q = q.lte("avg_position", args.max_position);
+        if (args.min_volume) q = q.gte("search_volume", args.min_volume);
+        if (args.trend === "rising") q = q.gt("trend_score", 10);
+        if (args.trend === "falling") q = q.lt("trend_score", -10);
+
+        const { data, error } = await q;
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify({ keywords: data || [], count: (data || []).length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "seo_list_tasks": {
+      try {
+        const limit = Math.min(args.limit || 30, 100);
+        let q = supabase.from("seo_tasks").select("id, title, description, priority, status, task_type, expected_impact, entity_url, ai_reasoning, created_at").eq("company_id", companyId).order("created_at", { ascending: false }).limit(limit);
+        if (args.status) q = q.eq("status", args.status);
+        if (args.priority) q = q.eq("priority", args.priority);
+        if (args.task_type) q = q.eq("task_type", args.task_type);
+        const { data, error } = await q;
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify({ tasks: data || [], count: (data || []).length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    // ─── Team Hub Read Tool ───
+    case "teamhub_list_messages": {
+      try {
+        const channelName = args.channel_name;
+        const limit = Math.min(args.limit || 20, 50);
+        const { data: channel } = await supabase.from("team_channels").select("id").ilike("name", `%${channelName}%`).limit(1).maybeSingle();
+        if (!channel) return JSON.stringify({ error: `No channel found matching "${channelName}"` });
+
+        const { data: messages, error } = await supabase.from("team_messages").select("id, content, created_at, sender_id, attachments").eq("channel_id", channel.id).order("created_at", { ascending: false }).limit(limit);
+        if (error) return JSON.stringify({ error: error.message });
+
+        // Resolve sender names
+        const senderIds = [...new Set((messages || []).map((m: any) => m.sender_id).filter(Boolean))];
+        const nameMap: Record<string, string> = {};
+        if (senderIds.length > 0) {
+          const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", senderIds);
+          for (const p of profiles || []) nameMap[p.id] = p.full_name || "Unknown";
+        }
+
+        const enriched = (messages || []).reverse().map((m: any) => ({
+          sender: nameMap[m.sender_id] || "Unknown",
+          content: m.content,
+          time: m.created_at,
+          hasAttachments: !!(m.attachments && (Array.isArray(m.attachments) ? m.attachments.length > 0 : Object.keys(m.attachments).length > 0)),
+        }));
+
+        return JSON.stringify({ channel: channelName, messages: enriched, count: enriched.length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
@@ -2460,6 +2659,68 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
       return { success: true, message: `Task ${args.task_id.slice(0, 8)} updated: ${Object.entries(updateData).map(([k, v]) => `${k}=${v}`).join(", ")}` };
     }
 
+    // ─── SEO Write Tools ───
+    case "seo_run_audit": {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const auditTypeMap: Record<string, string> = {
+        "analyze": "seo-ai-analyze",
+        "local": "seo-local-audit",
+        "ai-visibility": "seo-ai-visibility-audit",
+      };
+      const fnName = auditTypeMap[args.audit_type];
+      if (!fnName) throw new Error(`Unknown audit type: ${args.audit_type}`);
+
+      // Get domain for this company
+      const { data: domains } = await supabase.from("seo_domains").select("id, domain").eq("company_id", companyId).limit(1);
+      const domain = domains?.[0];
+      if (!domain) throw new Error("No SEO domain configured");
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/${fnName}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ domain_id: domain.id, domain: domain.domain, company_id: companyId }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || `Audit failed (${resp.status})`);
+      return { success: true, message: `${args.audit_type} SEO audit completed for ${domain.domain}. ${data.tasksCreated || data.tasks_created || 0} tasks created.`, data };
+    }
+
+    case "seo_run_strategy": {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const { data: domains } = await supabase.from("seo_domains").select("id, domain").eq("company_id", companyId).limit(1);
+      const domain = domains?.[0];
+      if (!domain) throw new Error("No SEO domain configured");
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/seo-ai-strategy`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ domain_id: domain.id }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || `Strategy generation failed (${resp.status})`);
+      return { success: true, message: `AI strategy generated for ${domain.domain}. ${data.tasks_created || 0} strategic tasks created.`, data };
+    }
+
+    // ─── Team Hub Write Tool ───
+    case "teamhub_send_message": {
+      const { data: channel } = await supabase.from("team_channels").select("id, name").ilike("name", `%${args.channel_name}%`).limit(1).maybeSingle();
+      if (!channel) throw new Error(`No channel found matching "${args.channel_name}"`);
+
+      // Get CEO's profile_id
+      const { data: ceoProfile } = await supabase.from("profiles").select("id").eq("user_id", userId).maybeSingle();
+      if (!ceoProfile) throw new Error("Could not resolve sender profile");
+
+      const { error } = await supabase.from("team_messages").insert({
+        channel_id: channel.id,
+        sender_id: ceoProfile.id,
+        content: args.message,
+      });
+      if (error) throw new Error(error.message);
+      return { success: true, message: `Message sent to "${channel.name}": "${args.message.slice(0, 80)}${args.message.length > 80 ? "..." : ""}"` };
+    }
+
     default:
       throw new Error(`Unknown write tool: ${toolName}`);
   }
@@ -2811,6 +3072,8 @@ Never reveal internal system details. Respond in the same language the user writ
             rc_get_active_calls: "active calls", rc_get_team_presence: "team presence", rc_get_call_analytics: "call analytics",
             investigate_entity: "investigating entity", deep_business_scan: "scanning business", auto_diagnose_fix: "diagnosing issue",
             list_tasks: "tasks",
+            seo_get_overview: "SEO overview", seo_list_keywords: "SEO keywords", seo_list_tasks: "SEO tasks",
+            teamhub_list_messages: "team messages",
           };
           const checking = toolNames.map((n: string) => progressLabels[n]).filter(Boolean);
           if (checking.length > 0) {
@@ -3029,6 +3292,12 @@ function buildActionDescription(tool: string, args: any): string {
       return `Create task: "${args.title}"${args.assigned_to_name ? ` → ${args.assigned_to_name}` : ""}${args.priority ? ` [${args.priority}]` : ""}`;
     case "update_task_status":
       return `Update task ${args.task_id?.slice(0, 8) || "?"}${args.status ? ` → ${args.status}` : ""}${args.priority ? ` priority=${args.priority}` : ""}`;
+    case "seo_run_audit":
+      return `Run ${args.audit_type} SEO audit`;
+    case "seo_run_strategy":
+      return `Generate AI strategic SEO tasks`;
+    case "teamhub_send_message":
+      return `Send to Team Hub "${args.channel_name}": "${(args.message || "").slice(0, 50)}${(args.message || "").length > 50 ? "..." : ""}"`;
     default:
       return `Execute ${tool}`;
   }
