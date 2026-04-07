@@ -1,17 +1,20 @@
 /**
  * VizzyCallHandler — Invisible component that auto-answers inbound calls
- * on extension 101 and connects to OpenAI Realtime for AI conversation.
- * On call end: summarizes, saves to vizzy_memory, notifies CEO.
+ * and connects to OpenAI Realtime for AI conversation.
  *
- * Must be mounted in AppLayout for internal users.
+ * Extension 101 → Personal assistant mode (gatekeeper for Sattar)
+ * All other extensions → Sales agent mode (product knowledge, RFQ capture)
+ *
+ * On call end: summarizes, saves to vizzy_memory, notifies CEO,
+ * creates RFQ approval notifications and callback tasks.
  */
 import { useEffect, useRef, useCallback } from "react";
-import { useWebPhone, WebPhoneState } from "@/hooks/useWebPhone";
+import { useWebPhone } from "@/hooks/useWebPhone";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
-const TARGET_EXTENSION = "101";
+const CEO_EXTENSION = "101";
 
 export function VizzyCallHandler() {
   const { user } = useAuth();
@@ -19,7 +22,12 @@ export function VizzyCallHandler() {
   const initAttempted = useRef(false);
   const activeRealtimeSession = useRef<RTCPeerConnection | null>(null);
   const transcriptRef = useRef<string[]>([]);
-  const callerInfoRef = useRef<{ from: string; contactName?: string }>({ from: "Unknown" });
+  const callerInfoRef = useRef<{
+    from: string;
+    contactName?: string;
+    targetExtension?: string;
+    callMode?: "personal_assistant" | "sales_agent";
+  }>({ from: "Unknown" });
 
   // Initialize WebPhone once on mount
   useEffect(() => {
@@ -30,7 +38,7 @@ export function VizzyCallHandler() {
       try {
         const ok = await phoneActions.initialize();
         if (ok) {
-          console.log("[VizzyCallHandler] WebPhone initialized, listening for calls on ext", TARGET_EXTENSION);
+          console.log("[VizzyCallHandler] WebPhone initialized, listening for calls on ALL extensions");
         } else {
           console.log("[VizzyCallHandler] WebPhone not available (RC not connected)");
         }
@@ -45,10 +53,12 @@ export function VizzyCallHandler() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Handle call end — summarize and save
-  const handleCallEnd = useCallback(async (fromNumber: string, contactName?: string) => {
+  // Handle call end — summarize, save, and create RFQ/callback actions
+  const handleCallEnd = useCallback(async () => {
     const transcript = transcriptRef.current.join("\n");
     transcriptRef.current = [];
+
+    const { from: fromNumber, contactName, callMode, targetExtension } = callerInfoRef.current;
 
     if (!transcript || transcript.trim().length < 10) {
       console.log("[VizzyCallHandler] Call too short to summarize");
@@ -56,9 +66,14 @@ export function VizzyCallHandler() {
     }
 
     try {
-      // Summarize the call
+      // Summarize the call with mode info
       const { data: summary, error } = await supabase.functions.invoke("summarize-call", {
-        body: { transcript, fromNumber, toNumber: `ext:${TARGET_EXTENSION}` },
+        body: {
+          transcript,
+          fromNumber,
+          toNumber: `ext:${targetExtension || "unknown"}`,
+          callMode: callMode || "unknown",
+        },
       });
 
       if (error) {
@@ -68,40 +83,60 @@ export function VizzyCallHandler() {
 
       const summaryText = summary?.summary || "Call completed (no summary available)";
       const tasks = summary?.tasks || [];
+      const rfqDetails = summary?.rfq_details || null;
+      const callbackRequested = summary?.callback_requested || null;
+      const leadInfo = summary?.lead_info || null;
 
       // Save to vizzy_memory
       const { error: memErr } = await supabase.from("vizzy_memory" as any).insert({
         user_id: user?.id,
         category: "call_summary",
-        content: `Call from ${contactName || fromNumber}: ${summaryText}`,
+        content: `Call from ${contactName || fromNumber} (${callMode || "unknown"} mode): ${summaryText}`,
         metadata: {
           from_number: fromNumber,
           contact_name: contactName || null,
+          call_mode: callMode,
+          target_extension: targetExtension,
           tasks,
+          rfq_details: rfqDetails,
+          callback_requested: callbackRequested,
+          lead_info: leadInfo,
           transcript_length: transcript.length,
           auto_answered: true,
           timestamp: new Date().toISOString(),
         },
-        company_id: null, // Will be set by trigger if exists
+        company_id: null,
       } as any);
 
       if (memErr) console.error("[VizzyCallHandler] Save memory error:", memErr);
 
-      // Create notification for CEO
+      // Build notification description
+      const modeLabel = callMode === "sales_agent" ? "🛒 Sales" : "📞 Personal";
       const taskList = tasks.length > 0
         ? `\nAction items: ${tasks.map((t: any) => t.title).join(", ")}`
         : "";
+      const rfqNote = rfqDetails
+        ? `\n💰 RFQ Captured: ${rfqDetails.bar_sizes?.join(", ") || "details in metadata"} — ${rfqDetails.project_type || "project"}`
+        : "";
+      const callbackNote = callbackRequested
+        ? `\n🔄 Callback requested for: ${callbackRequested}`
+        : "";
 
+      // Create main notification for CEO
       const { error: notifErr } = await supabase.from("notifications").insert({
         user_id: user?.id,
-        title: `📞 Vizzy took a call from ${contactName || fromNumber}`,
-        description: `${summaryText}${taskList}`.slice(0, 500),
+        title: `${modeLabel} Vizzy took a call from ${contactName || fromNumber}`,
+        description: `${summaryText}${taskList}${rfqNote}${callbackNote}`.slice(0, 500),
         type: "call_summary",
         link_to: "/communications",
         metadata: {
           from_number: fromNumber,
           contact_name: contactName,
+          call_mode: callMode,
           tasks,
+          rfq_details: rfqDetails,
+          callback_requested: callbackRequested,
+          lead_info: leadInfo,
           auto_answered: true,
         },
       } as any);
@@ -109,18 +144,65 @@ export function VizzyCallHandler() {
       if (notifErr) console.error("[VizzyCallHandler] Notification error:", notifErr);
       else toast.info(`Vizzy summarized call from ${contactName || fromNumber}`);
 
+      // If RFQ captured in sales mode, create approval notification
+      if (rfqDetails && callMode === "sales_agent") {
+        const rfqDesc = [
+          leadInfo?.name ? `From: ${leadInfo.name}` : null,
+          leadInfo?.company ? `Company: ${leadInfo.company}` : null,
+          rfqDetails.bar_sizes?.length ? `Sizes: ${rfqDetails.bar_sizes.join(", ")}` : null,
+          rfqDetails.quantities ? `Qty: ${rfqDetails.quantities}` : null,
+          rfqDetails.timeline ? `Timeline: ${rfqDetails.timeline}` : null,
+        ].filter(Boolean).join(" | ");
+
+        await supabase.from("notifications").insert({
+          user_id: user?.id,
+          title: `💰 Approve RFQ from ${contactName || leadInfo?.name || fromNumber}`,
+          description: `Vizzy captured an RFQ during a sales call. ${rfqDesc}`.slice(0, 500),
+          type: "rfq_approval",
+          link_to: "/leads",
+          metadata: {
+            action_required: "approve_rfq",
+            rfq_details: rfqDetails,
+            lead_info: leadInfo,
+            from_number: fromNumber,
+            contact_name: contactName,
+          },
+        } as any);
+      }
+
+      // If callback requested, create a task for the team member
+      if (callbackRequested) {
+        await supabase.from("notifications").insert({
+          user_id: user?.id,
+          title: `🔄 ${callbackRequested}: Call back ${contactName || fromNumber}`,
+          description: `Caller asked to speak with ${callbackRequested}. Reason: ${summaryText}`.slice(0, 500),
+          type: "callback_request",
+          link_to: "/communications",
+          metadata: {
+            callback_for: callbackRequested,
+            from_number: fromNumber,
+            contact_name: contactName,
+            reason: summaryText,
+          },
+        } as any);
+      }
+
     } catch (err) {
       console.error("[VizzyCallHandler] Post-call processing error:", err);
     }
   }, [user]);
 
   // Connect to OpenAI Realtime for AI conversation
-  const startRealtimeConversation = useCallback(async (callSession: any, fromNumber: string) => {
+  const startRealtimeConversation = useCallback(async (
+    callSession: any,
+    fromNumber: string,
+    targetExtension: string
+  ) => {
     try {
-      // Get receptionist prompt with ERP context
+      // Get prompt based on extension (personal assistant vs sales agent)
       const { data: receptionistData, error: recErr } = await supabase.functions.invoke(
         "vizzy-call-receptionist",
-        { body: { callerNumber: fromNumber } }
+        { body: { callerNumber: fromNumber, targetExtension } }
       );
 
       if (recErr) {
@@ -128,9 +210,13 @@ export function VizzyCallHandler() {
         return;
       }
 
-      const instructions = receptionistData?.instructions || "You are Vizzy, a professional phone manager. Greet the caller warmly, ask who's calling and what they need, and take detailed notes.";
+      const instructions = receptionistData?.instructions || "You are Vizzy, a professional phone manager.";
       const contactName = receptionistData?.contactName;
-      callerInfoRef.current = { from: fromNumber, contactName };
+      const callMode = receptionistData?.mode || (targetExtension === CEO_EXTENSION ? "personal_assistant" : "sales_agent");
+
+      callerInfoRef.current = { from: fromNumber, contactName, targetExtension, callMode };
+
+      console.log(`[VizzyCallHandler] Mode: ${callMode} for ext ${targetExtension}, caller: ${fromNumber}`);
 
       // Get OpenAI Realtime token
       const { data: tokenData, error: tokenErr } = await supabase.functions.invoke(
@@ -168,13 +254,11 @@ export function VizzyCallHandler() {
       pc.ontrack = (event) => {
         const aiStream = event.streams[0];
         if (aiStream && callSession.localStream) {
-          // Route AI audio back to the call
           const audioCtx = new AudioContext();
           const source = audioCtx.createMediaStreamSource(aiStream);
           const dest = audioCtx.createMediaStreamDestination();
           source.connect(dest);
 
-          // Replace local audio with AI audio
           for (const track of dest.stream.getTracks()) {
             const sender = pc.getSenders().find(s => s.track?.kind === "audio");
             if (sender) sender.replaceTrack(track);
@@ -218,29 +302,30 @@ export function VizzyCallHandler() {
       const answerSdp = await sdpResp.text();
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
-      console.log("[VizzyCallHandler] OpenAI Realtime connected for call from", fromNumber);
+      console.log(`[VizzyCallHandler] OpenAI Realtime connected (${callMode}) for call from`, fromNumber);
 
     } catch (err) {
       console.error("[VizzyCallHandler] Realtime setup error:", err);
     }
   }, []);
 
-  // Monitor WebPhone for inbound calls and auto-answer
+  // Monitor WebPhone for inbound calls on ANY extension and auto-answer
   useEffect(() => {
-    const wp = (phoneActions as any).getCallSession?.() ? null : undefined;
-    // We need to hook into the webphone's inbound call event
-    // The useWebPhone hook already stores the webphone ref internally
-    // We'll poll the internal state and check for inbound calls
-
-    // Actually, we need to modify useWebPhone to expose an onInboundCall callback
-    // For now, use the webphone ref directly through a shared mechanism
     const checkInterval = setInterval(() => {
       const session = phoneActions.getCallSession();
       if (session && phoneState.status === "in_call" && !activeRealtimeSession.current) {
-        // Inbound call detected and not yet connected to AI — start Realtime
-        const from = callerInfoRef.current.from || "Unknown";
-        console.log("[VizzyCallHandler] Inbound call detected, connecting Realtime for", from);
-        startRealtimeConversation(session, from);
+        // Detect which extension was called
+        const calledExt = (session as any).toExtension
+          || (session as any)._toExtension
+          || (session as any).request?.to?.uri?.user
+          || "unknown";
+        const from = (session as any).remoteIdentity?.uri?.user
+          || (session as any)._remoteIdentity?.uri?.user
+          || callerInfoRef.current.from
+          || "Unknown";
+
+        console.log(`[VizzyCallHandler] Inbound call on ext ${calledExt} from ${from}`);
+        startRealtimeConversation(session, from, String(calledExt));
       }
     }, 1000);
 
@@ -257,6 +342,5 @@ export function VizzyCallHandler() {
     };
   }, []);
 
-  // This is an invisible component
   return null;
 }
