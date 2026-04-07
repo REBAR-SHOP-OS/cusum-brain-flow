@@ -1,47 +1,45 @@
 
 
-# Enhance Per-Employee Report Button with Comprehensive Report
+# Add "General Report" Header to All-Tab Category Accordions
 
 ## Goal
-When the clipboard icon next to each employee in the Team Daily Report is clicked, it should generate and copy a detailed, comprehensive English text report covering all of that employee's daily performance data — not just a simple activity list.
+Wrap all the category accordion items (Dashboard, Inbox, Team Hub, Business Tasks, etc.) shown in the "All" tab with a parent section titled "General Report" — consistent with the naming used in other sections.
 
 ## Change
 
-### `src/components/vizzy/VizzyBrainPanel.tsx` (lines 645-660)
-Update the `getText` function in the per-employee `SectionReportButton` to produce a full structured report including:
+### `src/components/vizzy/VizzyBrainPanel.tsx` (lines 855-871, inside `renderContent`)
+Wrap the existing `<Accordion>` block with a styled container that includes a "General Report" header, matching the card style used in the per-user sections (rounded-xl border, header bar with icon + title + report button).
 
-1. **Header** — Employee name, date, total activity count
-2. **Time Clock Summary** — All clock-in/out entries with durations, total hours worked
-3. **Activity Breakdown by Category** — Group activities by `entity_type` (e.g., Dashboard: 12, Inbox: 8, Orders: 5) with counts
-4. **Activity Timeline** — Chronological list of all activities with timestamps, event types, and descriptions
-5. **Summary Stats** — First activity time, last activity time, total active span
-
-The report format will be clean English text, structured with sections and bullet points, ready for pasting into any document or chat.
-
-### Example Output
-```text
-📋 DAILY PERFORMANCE REPORT — Sattar Mohammadi
-Date: April 7, 2026 | Total Activities: 137
-
-⏰ TIME CLOCK
-• Clocked in: 8:15 AM → Still working
-• Total hours: 5h 35m
-
-📊 ACTIVITY BREAKDOWN
-• Dashboard: 37 events
-• Inbox: 25 events
-• Orders: 20 events
-• Team Hub: 15 events
-...
-
-📝 ACTIVITY LOG (137 events)
-• 1:48 PM — page_view · Dashboard: Viewed dashboard
-• 1:45 PM — mutation · Orders: Updated order #1234
-...
+**Before:**
+```tsx
+return (
+  <Accordion type="multiple" className="w-full space-y-1">
+    {sectionsToShow.map((group) => (...))}
+  </Accordion>
+);
 ```
 
+**After:**
+```tsx
+return (
+  <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+      <FileBarChart className="w-4 h-4 text-primary" />
+      <h3 className="text-sm font-semibold text-foreground flex-1">General Report</h3>
+      <SectionReportButton label="General Report" getText={...} />
+    </div>
+    <div className="p-3">
+      <Accordion type="multiple" className="w-full space-y-1">
+        {sectionsToShow.map((group) => (...))}
+      </Accordion>
+    </div>
+  </div>
+);
+```
+
+The `SectionReportButton` will generate a summary of all categories with their counts.
+
 ## Impact
-- Single file changed (`VizzyBrainPanel.tsx`)
-- Only the `getText` callback is updated — no structural or logic changes
-- Calculates clock durations and groups activities by entity type inline
+- Single file change
+- Visual-only — no logic changes
 
