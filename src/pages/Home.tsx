@@ -27,6 +27,7 @@ import { useAuth } from "@/lib/auth";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
+import { getVisibleAgents } from "@/lib/userAccessConfig";
 import { VizzyDailyBriefing } from "@/components/vizzy/VizzyDailyBriefing";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 
@@ -121,21 +122,18 @@ export default function Home() {
     return agentKeyToSuggestion["assistant"];
   }, [mapping, isAdmin, isWorkshop, roles]);
 
-  // Reorder helpers: primary agent first
+  // Reorder helpers: filter by user's agent access, primary first
   const orderedHelpers = useMemo(() => {
-    let filtered = [...helpers]; // Vizzy now available to all employees
-    // Hide accounting agent (Penny) from users without admin/accounting role
-    if (!hasRole("admin") && !hasRole("accounting")) {
-      filtered = filtered.filter((h) => h.id !== "accounting");
-    }
-    if (!hasRole("admin")) {
-      filtered = filtered.filter((h) => h.id !== "rebuild");
-    }
+    const allowedAgents = getVisibleAgents(user?.email);
+    // If no config found (unknown user), show all for backward compat
+    let filtered = allowedAgents.length > 0
+      ? helpers.filter((h) => allowedAgents.includes(h.id))
+      : (isSuperAdmin ? [...helpers] : []);
     if (!mapping) return filtered;
     const primary = filtered.find((h) => h.id === mapping.agentKey);
     if (!primary) return filtered;
     return [primary, ...filtered.filter((h) => h.id !== mapping.agentKey)];
-  }, [mapping, isSuperAdmin, hasRole]);
+  }, [mapping, isSuperAdmin, user?.email]);
 
   const handleSend = useCallback((content: string) => {
     const result = routeToAgent(content);
@@ -310,17 +308,21 @@ export default function Home() {
 
         {/* Helpers Section */}
         <div className="relative z-10 w-full">
-          <h2 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-4">Your Helpers</h2>
-          <div className="grid grid-cols-4 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-4">
-            {orderedHelpers.map((helper) => (
-              <HelperCard
-                key={helper.id}
-                helper={helper}
-                isPrimary={mapping?.agentKey === helper.id}
-                onClick={() => handleHelperClick(helper)}
-              />
-            ))}
-          </div>
+        {orderedHelpers.length > 0 && (
+          <>
+            <h2 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-4">Your Helpers</h2>
+            <div className="grid grid-cols-4 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-4">
+              {orderedHelpers.map((helper) => (
+                <HelperCard
+                  key={helper.id}
+                  helper={helper}
+                  isPrimary={mapping?.agentKey === helper.id}
+                  onClick={() => handleHelperClick(helper)}
+                />
+              ))}
+            </div>
+          </>
+        )}
         </div>
       </div>
     </ScrollArea>
