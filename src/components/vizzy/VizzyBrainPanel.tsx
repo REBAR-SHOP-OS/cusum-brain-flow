@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart } from "lucide-react";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
