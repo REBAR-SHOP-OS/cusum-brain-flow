@@ -1,49 +1,33 @@
 
 
-# Fix: DM Messages Not Showing in Team Hub
+# QuickBooks Payment Link Visibility + Stripe Test Mode
 
-## Root Cause
+## Two Issues
 
-When clicking a team member in the Team Hub sidebar, `openDMMutation` creates/finds a DM channel and sets `selectedChannelId` to its ID. However, the rendering logic at line 313 of `TeamHub.tsx` checks:
+### 1. QuickBooks Payment Link Not Showing
+The QB payment link section (line 1223) is wrapped in `{qbPayUrl && ...}`, so it only shows when `qbPayUrl` is set. The data loading at line 297 reads from `metadata.qb_invoice_link`, but many invoices don't have this populated (the QB sync may not have stored the link, or the invoice was created before this feature). The QB link should always be available — either from metadata or generated on-the-fly from the QB invoice ID.
 
-```
-activeChannel ? <MessageThread ... /> : <Welcome screen>
-```
+**Fix**: Show the QB payment button always. If `qbPayUrl` is empty but `qb_invoice_id` exists in metadata, construct the QB payment URL from the invoice ID. If neither exists, show a "Sync to QuickBooks" button that triggers the QB push and retrieves the link.
 
-`activeChannel` is looked up via `channels.find(c => c.id === activeChannelId)`. DM channels created by the `create_dm_channel` RPC are either not returned by `useTeamChannels()` (filtered out due to `company_id` mismatch or channel type) or take time to appear after the `invalidateQueries` call. Since `activeChannel` is `undefined`, the code falls through to the "Welcome to Team Hub" empty state — skipping the `MessageThread` entirely.
+### 2. Stripe in Test Mode
+Stripe shows "TEST MODE" because the `STRIPE_SECRET_KEY` secret is set to a **test key** (`sk_test_...`). This is not a code issue — it's a configuration issue. You need to replace it with your **live secret key** (`sk_live_...`) from the Stripe Dashboard → Developers → API Keys.
 
-The DockChatBox widget works because it passes `channelId` directly to `useTeamMessages()` and renders messages unconditionally.
+**Action**: Update the `STRIPE_SECRET_KEY` secret to your live key when ready to accept real payments.
 
-## Fix
+## Changes
 
-In `src/pages/TeamHub.tsx`, add a fallback rendering path: when `selectedChannelId` is set (not notes, not a known channel) but `activeChannel` is undefined, still render `MessageThread` using the DM target's profile name as the channel name. This mirrors how DockChatBox works.
+### `src/components/accounting/documents/DraftInvoiceEditor.tsx`
 
-### Changes to `src/pages/TeamHub.tsx`
+1. **Always show QB payment section** — remove the `qbPayUrl &&` guard on line 1223
+2. **Fallback QB URL**: If `qbPayUrl` is empty but `metadata.qb_invoice_id` exists, construct URL as `https://app.qbo.intuit.com/app/invoice?txnId={qb_invoice_id}`
+3. **"Get QB Link" button**: If no QB URL and no QB invoice ID, show a button that pushes the invoice to QB (reusing existing `push-to-qb` flow) and captures the returned `InvoiceLink`
 
-1. **Track DM target info** — when `onClickMember` succeeds, store the target profile name alongside the channel ID in state (e.g., `dmTargetName`).
+### Secret Update (manual)
+Replace `STRIPE_SECRET_KEY` from `sk_test_...` to `sk_live_...` when ready for production payments.
 
-2. **Add DM rendering branch** — between the `activeChannel ?` check (line 313) and the `channelsLoading` fallback (line 332), add a condition: if `selectedChannelId` is set and not notes view, render `MessageThread` with:
-   - `channelName` = the stored DM target name
-   - `channelDescription` = "Direct message"
-   - All other props same as the existing `activeChannel` branch
-
-3. **Clear DM target** when switching to a known channel or notes.
-
-### Rendering logic after fix:
-
-```text
-isNotesView && selfChannelId  →  MessageThread (My Notes)
-isNotesView && !selfChannelId →  Loading spinner
-activeChannel                 →  MessageThread (group/channel)
-selectedChannelId (DM)        →  MessageThread (DM - NEW)
-channelsLoading               →  Loading spinner
-else                          →  Welcome screen
-```
-
-## Files Changed
+## Files
 | File | Change |
 |------|--------|
-| `src/pages/TeamHub.tsx` | Add `dmTargetName` state, populate on DM open, add DM rendering branch |
-
-Single file, no backend changes.
+| `src/components/accounting/documents/DraftInvoiceEditor.tsx` | Always show QB link section with fallback URL construction |
+| Secret: `STRIPE_SECRET_KEY` | User must update to live key |
 
