@@ -1,73 +1,116 @@
 
 
-# Make RingCentral Live: Register Webhook Subscription + Fix Dead Extension
+# Upgrade Vizzy Call Receptionist to Smart Sales Agent
 
-## Current State
+## What's Changing
 
-- **Webhook handler exists** (`ringcentral-webhook/index.ts`) — fully functional, handles calls, SMS, voicemails
-- **No webhook subscription registered** with RingCentral — the handler never receives events
-- **System relies on 15-min cron poll** — not "live"
-- **Extension 340479042** causes errors every sync cycle (404 "Resource not found") — likely deleted/disabled in RC
+Currently, Vizzy answers calls as a passive gatekeeper — takes a message and says "Sattar will call you back." The CEO wants Vizzy to act as a **smart sales agent** on missed calls, after-hours, and weekends: answer questions about products/pricing using business knowledge, capture RFQs, offer to connect callers to specific team members, and close what she can — all with CEO approval for write actions.
 
-## What Changes
+## Changes
 
-### 1. NEW: `supabase/functions/ringcentral-register-webhook/index.ts`
+### 1. `supabase/functions/vizzy-call-receptionist/index.ts` — Full Rewrite of Instructions
 
-A new edge function that registers a RingCentral webhook subscription via the RC API:
+Replace the passive gatekeeper prompt with a smart sales agent prompt that includes:
 
-- Calls `POST /restapi/v1.0/subscription` with event filters:
-  - `/restapi/v1.0/account/~/extension/~/telephony/sessions` (live calls)
-  - `/restapi/v1.0/account/~/extension/~/message-store` (SMS, voicemail, fax — per-extension)
-- Sets delivery mode to `WebHook` pointing at `{SUPABASE_URL}/functions/v1/ringcentral-webhook?token={RINGCENTRAL_WEBHOOK_SECRET}`
-- Uses the admin RC token from `user_ringcentral_tokens` (same pattern as cron sync)
-- Returns subscription ID and expiration
-- Can be called manually or scheduled to renew before expiry (RC subscriptions expire in ~15 min unless renewed, so we'll set `expiresIn: 630720000` for max or handle renewal)
+**Product Knowledge** (from sales-concierge catalog):
+- Full rebar product catalog (10M-35M), weights, grades, price ranges
+- Bending types and surcharges (straight, L-shape, U-shape, custom)
+- Volume discount tiers (5t/10t/20t)
 
-### 2. UPDATE: `supabase/functions/ringcentral-sync/index.ts`
+**Sales Capabilities**:
+- Answer product questions confidently (sizes, specs, pricing ballparks)
+- Capture caller details for RFQ (name, company, project, sizes, quantities)
+- Provide ballpark estimates using the same logic as sales-concierge
+- Flag hot leads with project details
 
-**Fix dead extension 340479042:** Wrap each per-extension fetch in a try/catch that:
-- On 404 "Resource for parameter [extensionId] is not found" → log warning, **skip** that extension, continue
-- This prevents the error spam in logs every 15 minutes
-- The extension map already has 16 entries; only 1 is dead
+**Team Directory for Call Diversion**:
+- If caller asks for a specific person (Neel, Saurabh, Sattar, etc.), offer to transfer or have them call back
+- Include extension/role mapping so Vizzy can say "I'll have Neel call you back — he handles [role]"
 
-Changes (~10 lines):
-- In SMS sync loop (~line 432): add catch that checks for 404 CMN-102 and continues
-- In Voicemail sync loop (~line 470): same
-- In Fax sync loop (~line 512): same
-- These catches already exist but they `console.error` and continue — the fix is to downgrade to `console.warn` for 404s specifically so they don't pollute error logs
+**After-Hours Awareness**:
+- Detect business hours (Mon-Fri 8AM-5PM ET)
+- During hours: "Let me connect you" / "They're on another line, I'll have them call back"
+- After hours/weekends: "We're closed right now but I can absolutely help you with pricing and get your request queued for first thing Monday morning"
 
-### 3. UPDATE: `supabase/functions/_shared/vizzyIdentity.ts`
+**Approval Protocol** (via post-call processing):
+- Captured RFQs create a draft lead + notification for CEO approval
+- Team member callbacks create a task for the requested person
+- Sales opportunities flagged with priority
 
-Add to the CAN DO list:
-- `Register and manage RingCentral webhook subscriptions for real-time call/SMS monitoring`
+**Confidentiality (relaxed for sales)**:
+- CAN discuss: product catalog, general pricing, capabilities, lead times (general)
+- CANNOT discuss: specific customer orders, exact invoice amounts, internal operations
+- CANNOT confirm: specific delivery dates for existing orders
 
-### 4. ADD SECRET: `RINGCENTRAL_WEBHOOK_SECRET`
+### 2. `supabase/functions/vizzy-call-receptionist/index.ts` — Enrich ERP Context
 
-A random token to authenticate incoming webhook payloads. The webhook handler already checks for it — it just hasn't been set.
+Add to the data fetch:
+- Recent products/services info (hardcoded catalog, same as sales-concierge)
+- Team directory with roles for diversion logic
+- Business hours detection (is it after hours right now?)
 
-## How It Works
+### 3. `supabase/functions/summarize-call/index.ts` — Upgrade Post-Call Processing
+
+Update the system prompt to also extract:
+- `rfq_details`: If caller requested a quote (bar sizes, quantities, project type)
+- `callback_requested`: If caller asked to speak with a specific person (name)
+- `lead_info`: Name, company, phone, project description
+
+These get passed back to `VizzyCallHandler` which creates appropriate notifications/tasks.
+
+### 4. `src/components/vizzy/VizzyCallHandler.tsx` — Handle RFQ & Callback Actions
+
+After call summary, if `rfq_details` exists:
+- Create a notification: "📞 Vizzy captured an RFQ from [caller] — [project details]. Approve to create lead?"
+- Include the details in metadata for CEO to act on
+
+If `callback_requested` exists:
+- Create a task for the requested team member: "Call back [caller name] at [number] — [reason]"
+
+### 5. `supabase/functions/_shared/vizzyIdentity.ts` — Update CAN DO List
+
+Add: "Answer inbound sales calls as a knowledgeable sales agent — provide product info, ballpark pricing, and capture RFQs with CEO approval"
+
+## The New Call Flow
 
 ```text
-Before (polling only):
-  CRON (15 min) → ringcentral-sync → RC API → DB
-
-After (live + polling fallback):
-  RC Event → ringcentral-webhook → DB (instant)
-  CRON (15 min) → ringcentral-sync → DB (catches anything missed)
+Caller → Vizzy picks up
+  ├── "Hi, this is Vizzy at Rebar Shop!"
+  ├── Identifies caller from contacts DB
+  │
+  ├── SALES INQUIRY:
+  │   ├── Answers product questions (sizes, specs, pricing)
+  │   ├── Provides ballpark estimates
+  │   ├── Captures RFQ details (project, quantities, timeline)
+  │   └── "I've got all the details — we'll have a formal quote ready for you."
+  │
+  ├── WANTS SPECIFIC PERSON:
+  │   ├── During hours: "Let me see if [name] is available..."
+  │   ├── After hours: "The team is out for the day, but I'll have [name] call you first thing tomorrow."
+  │   └── Creates callback task for that person
+  │
+  ├── EXISTING ORDER QUESTION:
+  │   └── "I'll have the team look into that and get back to you with the details."
+  │
+  └── POST-CALL:
+      ├── Summarize → vizzy_memory
+      ├── RFQ captured? → Notification with approval request
+      ├── Callback needed? → Task for team member
+      └── Hot lead? → Priority notification to CEO
 ```
 
 ## File Changes
 
 | File | Change |
 |------|--------|
-| `supabase/functions/ringcentral-register-webhook/index.ts` | NEW — registers RC webhook subscription |
-| `supabase/functions/ringcentral-sync/index.ts` | Downgrade 404 errors for dead extensions to warnings (~6 lines) |
-| `supabase/functions/_shared/vizzyIdentity.ts` | Add webhook registration to CAN DO list |
+| `supabase/functions/vizzy-call-receptionist/index.ts` | Rewrite prompt: passive gatekeeper → smart sales agent with product knowledge, team directory, hours awareness (~120 lines replaced) |
+| `supabase/functions/summarize-call/index.ts` | Extract RFQ details, callback requests, lead info from transcripts (~15 lines updated) |
+| `src/components/vizzy/VizzyCallHandler.tsx` | Create tasks/notifications for RFQs and callback requests (~30 lines added) |
+| `supabase/functions/_shared/vizzyIdentity.ts` | Update CAN DO list (~2 lines) |
 
 ## Impact
-- 3 files (1 new, 2 updated)
-- Incoming SMS and calls appear instantly instead of up to 15 minutes later
-- Dead extension 340479042 stops polluting error logs
-- Cron continues as a safety net
-- Requires setting `RINGCENTRAL_WEBHOOK_SECRET` secret
+- 4 files changed
+- Vizzy becomes a revenue-generating phone agent, not just a message-taker
+- All write actions (lead creation, task assignment, emails) still require CEO approval via notifications
+- No database or auth changes needed
 
