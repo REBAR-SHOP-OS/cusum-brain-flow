@@ -2680,6 +2680,65 @@ async function handleGetTransactionList(supabase: ReturnType<typeof createClient
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Phase 2: Extended Report Handlers
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── Customer Balance Report ──────────────────────────────────────
+
+async function handleGetCustomerBalance(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/CustomerBalanceSummary?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Customer Balance Detail Report ───────────────────────────────
+
+async function handleGetCustomerBalanceDetail(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/CustomerBalanceDetail?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Vendor Balance Report ────────────────────────────────────────
+
+async function handleGetVendorBalance(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/VendorBalanceSummary?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── AR Aging Summary Report ──────────────────────────────────────
+
+async function handleGetARAgingSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/AgedReceivable?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── AP Aging Summary Report ──────────────────────────────────────
+
+async function handleGetAPAgingSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/AgedPayable?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Customer Income Report ───────────────────────────────────────
+
+async function handleGetCustomerIncome(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/CustomerIncome?start_date=${startDate}&end_date=${endDate}`);
+  return jsonRes({ report: data });
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Phase 17: New Action Handlers
 // ═══════════════════════════════════════════════════════════════════
 
