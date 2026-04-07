@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3 } from "lucide-react";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3, Download } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
@@ -20,6 +20,7 @@ import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { agentConfigs } from "@/components/agent/agentConfigs";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
   onClose: () => void;
@@ -333,6 +334,49 @@ function SectionReportButton({ label, getText }: { label: string; getText: () =>
     </button>
   );
 }
+
+/** PDF generation button for the General Report header */
+function GeneralReportPDFButton({ date }: { date: Date }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleGenerate = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (loading) return;
+    setLoading(true);
+    sonnerToast.info("Generating full daily report PDF…");
+
+    try {
+      const dateStr = date.toISOString().split("T")[0];
+      const { data, error } = await supabase.functions.invoke("generate-daily-report-pdf", {
+        body: { date: dateStr },
+      });
+
+      if (error) throw new Error(error.message || "Failed to generate report");
+      if (data?.error) throw new Error(data.error);
+      if (!data?.url) throw new Error("No download URL returned");
+
+      window.open(data.url, "_blank");
+      sonnerToast.success("Report generated — opening in new tab");
+    } catch (err: any) {
+      console.error("Report generation failed:", err);
+      sonnerToast.error(err.message || "Failed to generate report");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleGenerate}
+      disabled={loading}
+      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+      title="Generate full daily report PDF"
+    >
+      {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+    </button>
+  );
+}
+
 
 /** Comprehensive user report button — aggregates all performance data */
 function UserFullReportButton({
@@ -857,14 +901,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
           <FileBarChart className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground flex-1">General Report</h3>
-          <SectionReportButton
-            label="General Report"
-            getText={() => {
-              const totalItems = sectionsToShow.reduce((sum, g) => sum + g.items.length, 0);
-              const lines = sectionsToShow.map(g => `• ${g.label}: ${g.items.length} events`).join('\n');
-              return `📋 GENERAL REPORT\nTotal Events: ${totalItems}\n\n${lines}`;
-            }}
-          />
+          <GeneralReportPDFButton date={userSelectedDate} />
         </div>
         <div className="p-3">
           <Accordion type="multiple" className="w-full space-y-1">
