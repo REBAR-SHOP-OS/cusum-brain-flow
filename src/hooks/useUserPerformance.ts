@@ -85,6 +85,7 @@ export function useUserPerformance(profileId: string | null, userId: string | nu
         activitiesToday: activityRes.count ?? 0,
         aiSessionsToday: (sessionsRes as any).count ?? 0,
         emailsSent: commsRes.count ?? 0,
+        clockEntries,
       };
     },
   });
