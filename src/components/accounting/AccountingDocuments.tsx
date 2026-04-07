@@ -712,6 +712,15 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           }}
         />
       )}
+      {invoiceEditorId && (
+        <DraftInvoiceEditor
+          invoiceId={invoiceEditorId}
+          onClose={() => {
+            setInvoiceEditorId(null);
+            queryClient.invalidateQueries({ queryKey: ["sales_invoices"] });
+          }}
+        />
+      )}
     </div>
   );
 }
