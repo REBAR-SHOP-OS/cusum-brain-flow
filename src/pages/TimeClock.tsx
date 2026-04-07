@@ -241,7 +241,7 @@ export default function TimeClock() {
   }
 
   const activeProfiles = profiles.filter(
-    (p) => !["General Labour", "Ryle Lachini", "Ai"].includes(p.full_name)
+    (p) => !["General Labour", "Ai"].includes(p.full_name)
   );
 
   const officeProfiles = activeProfiles.filter(

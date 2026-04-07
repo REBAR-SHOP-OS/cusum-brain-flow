@@ -451,7 +451,6 @@ NEVER reference previous days' activity as today's. Historical data is ONLY for 
 - Zahra Zokaei (Zara, Zora, Zahara, Zokay)
 - Amir AHD (Ameer, Amer, Ahmed)
 - Kourosh Zand (Kurosh, Koorosh, Corosh)
-- Ryle Lachini (Rail, Rile, Riley)
 - Kayvan (Kivan, Kevan, Cayvaan, Kevin)
 Always fuzzy-match FIRST before saying someone isn't found.
 

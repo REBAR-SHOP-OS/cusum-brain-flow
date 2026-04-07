@@ -148,7 +148,6 @@ CRITICAL: If speaking, COMPLETE entire response. Do NOT abort mid-sentence.
 - Zahra Zokaei (Zara, Zora, Zahara, Zokay)
 - Amir AHD (Ameer, Amer, Ahmed)
 - Kourosh Zand (Kurosh, Koorosh, Corosh)
-- Ryle Lachini (Rail, Rile, Riley)
 - Kayvan (Kivan, Kevan, Cayvaan, Kevin)
 Always fuzzy-match FIRST before saying someone isn't found.
 
