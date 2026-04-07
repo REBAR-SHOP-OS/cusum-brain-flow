@@ -349,7 +349,7 @@ export function SlotTracker({
         )}
 
         {/* Stop run mid-way (partial completion) */}
-        {!allDone && canWrite && (
+        {!allDone && totalCutsDone > 0 && canWrite && (
           <Button
             variant="destructive"
             className="gap-2 font-bold h-12 text-base"
