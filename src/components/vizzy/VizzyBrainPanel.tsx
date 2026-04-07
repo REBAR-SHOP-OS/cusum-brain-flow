@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart } from "lucide-react";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
@@ -1001,14 +1001,14 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 </div>
               )}
 
-              {/* Section 3: Activity Log */}
+              {/* Section 3: System Performance Overview */}
               <div className="rounded-xl border border-border bg-card overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
-                  <Users className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground flex-1">Activity Log</h3>
+                  <BarChart3 className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground flex-1">System Performance Overview</h3>
                   <SectionReportButton
-                    label="Activities"
-                    getText={() => `📋 Activity Log — ${selectedProfile.full_name || "User"}\nToday's system activities.`}
+                    label="System Performance"
+                    getText={() => `📊 System Performance Overview — ${selectedProfile.full_name || "User"}\nToday's system activities.`}
                   />
                 </div>
                 <div className="p-3">
