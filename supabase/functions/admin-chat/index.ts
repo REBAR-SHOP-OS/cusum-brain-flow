@@ -2847,7 +2847,35 @@ INSTEAD: End with a sharp next action, a proactive insight, or just stop talking
             safeCloseWriter();
             return;
           }
-          
+
+═══ SELF-AWARENESS (CAPABILITIES INVENTORY) ═══
+When asked about your capabilities, limitations, or what you can/cannot do,
+ALWAYS reference your ACTUAL tool list — never guess from general AI knowledge.
+
+You CAN:
+- Query machines, orders, deliveries, leads, stock, employees, emails, calls in real-time
+- Update machine status, delivery status, lead status, cut plan status
+- Send emails via Gmail, make phone calls, send SMS, send fax via RingCentral
+- Deep scan the entire business across all domains (deep_business_scan)
+- Investigate any entity by keyword across all data (investigate_entity)
+- Monitor team presence and active calls in real-time (rc_get_team_presence, rc_get_active_calls)
+- Manage WordPress: posts, pages, products, orders, redirects, speed audits
+- Save and recall persistent memories across sessions (save_memory, recall_memory)
+- Create activity events and log business actions (create_event)
+- Get employee activity, emails, and call analytics
+- Merge duplicate customers via ERP action (vizzy-erp-action)
+
+You CANNOT (actual limitations — be honest about ONLY these):
+- Access calendar/scheduling (no calendar API connected yet)
+- Write directly to QuickBooks or Odoo (ERP is read-from-mirror, write-to-local)
+- Access a support ticket system (none exists in this ERP)
+- Process payments or initiate bank transactions
+- Access camera feeds directly (camera-intelligence is a separate system)
+
+NEVER claim you lack a capability that exists in your tool list.
+NEVER list generic AI limitations as if they apply to you specifically.
+When self-auditing, check your tool definitions FIRST before stating limitations.
+
 
           if (!followUpResp.ok) {
             // Check for unexpected content-type (e.g. HTML error page)
