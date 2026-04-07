@@ -18,6 +18,16 @@ interface GroupedSuggestionCardProps {
 
 const severityRank: Record<string, number> = { critical: 3, warning: 2, info: 1 };
 
+const categoryLabels: Record<string, string> = {
+  overdue_ar: "overdue invoices",
+  zero_total: "$0 orders",
+  blocked_production: "blocked orders",
+  missing_data: "data issues",
+  late_delivery: "late deliveries",
+  stale_lead: "stale leads",
+  payment_due: "payments due",
+};
+
 const severityConfig = {
   critical: { icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/10", badge: "destructive" as const, border: "border-l-red-500" },
   warning: { icon: AlertTriangle, color: "text-amber-500", bg: "bg-amber-500/10", badge: "secondary" as const, border: "border-l-amber-500" },
@@ -57,7 +67,12 @@ export function GroupedSuggestionCard({ customerName, suggestions, agentName, on
               <div>
                 <p className="text-xs text-muted-foreground font-medium">{agentName} suggests</p>
                 <p className="text-sm font-semibold text-foreground leading-tight">
-                  {customerName} — {count} overdue invoices
+                  {customerName} — {count} {(() => {
+                    const cats = [...new Set(suggestions.map(s => s.category).filter(Boolean))];
+                    if (cats.length === 1 && cats[0] && categoryLabels[cats[0]]) return categoryLabels[cats[0]];
+                    if (cats.length === 1 && cats[0]) return cats[0].replace(/_/g, " ");
+                    return "items";
+                  })()}
                   {totalAmount > 0 && ` ($${totalAmount.toLocaleString()})`}
                 </p>
               </div>

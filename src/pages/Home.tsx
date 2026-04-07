@@ -273,7 +273,7 @@ export default function Home() {
 
         {/* Agent Suggestions (replaces Quick Actions) */}
         <div className="relative z-10 w-full mb-6 sm:mb-12">
-          <AgentSuggestionsPanel agentCode={agentSuggestion.code} agentName={agentSuggestion.name} />
+          <AgentSuggestionsPanel agentCode={agentSuggestion.code} agentName={agentSuggestion.name} isSuperAdmin={isSuperAdmin} />
         </div>
 
         {/* Workspaces Section */}
