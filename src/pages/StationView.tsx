@@ -26,7 +26,7 @@ export default function StationView() {
   const machine = machines.find((m) => m.id === machineId);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   // Fetch ALL items for this machine (no project filter) so we can extract projects
-  const { groups: allGroups, items: allItems, isLoading: dataLoading, error } = useStationData(machineId || null, machine?.type, null);
+  const { groups: allGroups, items: allItems, isLoading: dataLoading, error } = useStationData(machineId || null, machine?.type, null, machine?.active_job_id);
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
   const [activeTab, setActiveTab] = useState("production");
