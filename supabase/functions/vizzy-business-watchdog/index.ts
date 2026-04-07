@@ -7,7 +7,17 @@ import { sendCeoSmsAlert } from "../_shared/smsAlertHelper.ts";
  * Vizzy Business Watchdog — runs every 15 minutes via pg_cron.
  * Scans all business domains for anomalies and writes alerts to notifications.
  * Uses metadata.dedupe_key to prevent duplicate alerts within 24 hours.
+ *
+ * SMS Policy:
+ *   Only truly critical/safety alerts trigger SMS (broken integrations,
+ *   missed deliveries, long shifts). Max 3 SMS per day from watchdog.
+ *   Production, invoice, lead, and email alerts are in-app only.
  */
+
+/** Alert types that justify an SMS to the CEO */
+const SMS_WORTHY_PREFIXES = ["broken-int-", "missed-delivery-", "long-shift-"];
+const MAX_DAILY_SMS = 3;
+
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { serviceClient: supabase } = ctx;
@@ -76,17 +86,49 @@ Deno.serve((req) =>
       }));
       await supabase.from("notifications").insert(rows);
 
-      // SMS CEO for dangerous/high-priority alerts
-      const dangerAlerts = newAlerts.filter(
-        (a) => a.priority === "high" || 
-               a.dedupe.startsWith("broken-int-") || 
-               a.dedupe.startsWith("missed-delivery-") || 
-               a.dedupe.startsWith("long-shift-")
+      // SMS CEO — ONLY for safety/security/delivery-critical alerts
+      const smsAlerts = newAlerts.filter((a) =>
+        SMS_WORTHY_PREFIXES.some((prefix) => a.dedupe.startsWith(prefix))
       );
-      if (dangerAlerts.length > 0) {
-        const smsLines = dangerAlerts.slice(0, 5).map((a) => `⚠️ ${a.title}`).join("\n");
-        const smsText = `🚨 Watchdog Alert (${dangerAlerts.length} critical):\n${smsLines}`;
-        sendCeoSmsAlert(smsText).catch((e) => console.error("[watchdog] SMS alert error:", e));
+
+      if (smsAlerts.length > 0) {
+        // Check daily SMS cap
+        const todayStart = `${today}T00:00:00.000Z`;
+        const { data: todaySmsLogs } = await supabase
+          .from("notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("agent_name", "watchdog")
+          .gte("created_at", todayStart)
+          .not("metadata->>sms_sent", "is", null);
+
+        const smsSentToday = todaySmsLogs?.length ?? 0;
+        const smsRemaining = MAX_DAILY_SMS - smsSentToday;
+
+        if (smsRemaining > 0) {
+          const toSend = smsAlerts.slice(0, smsRemaining);
+          const smsLines = toSend.map((a) => `⚠️ ${a.title}`).join("\n");
+          const smsText = `🚨 Watchdog (${toSend.length} critical):\n${smsLines}`;
+          const sent = await sendCeoSmsAlert(smsText).catch((e) => {
+            console.error("[watchdog] SMS alert error:", e);
+            return false;
+          });
+
+          // Mark these alerts so we can count them for the daily cap
+          if (sent) {
+            const sentDedupes = toSend.map((a) => a.dedupe);
+            // Tag the notifications we just created with sms_sent
+            for (const dk of sentDedupes) {
+              await supabase
+                .from("notifications")
+                .update({ metadata: { dedupe_key: dk, source: "vizzy-business-watchdog", sms_sent: true } })
+                .eq("agent_name", "watchdog")
+                .eq("metadata->>dedupe_key", dk)
+                .gte("created_at", todayStart);
+            }
+          }
+        } else {
+          console.log(`[watchdog] Daily SMS cap reached (${MAX_DAILY_SMS}), skipping SMS for ${smsAlerts.length} critical alerts`);
+        }
       }
     }
 
@@ -220,7 +262,7 @@ async function checkStalledLeads(supabase: any, alerts: any[], adminUserIds: str
         type: "warning",
         title: `Stalled lead: ${lead.title}`,
         description: `Stage "${lead.stage}" unchanged for ${timeSince(new Date(lead.updated_at))}. Value: $${lead.expected_value || 0}`,
-        priority: lead.expected_value > 10000 ? "high" : "medium",
+        priority: "medium", // Downgraded — no SMS for stalled leads
         dedupe: `stalled-lead-${lead.id}`,
         link_to: `/crm?lead=${lead.id}`,
       });
@@ -228,29 +270,53 @@ async function checkStalledLeads(supabase: any, alerts: any[], adminUserIds: str
   }
 }
 
+/**
+ * AGGREGATED production check — creates ONE summary alert per admin per day
+ * instead of hundreds of individual item alerts.
+ */
 async function checkAtRiskProduction(supabase: any, alerts: any[], adminUserIds: string[]) {
-  const fiveDaysFromNow = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   const { data: items } = await supabase
     .from("cut_plan_items")
     .select("id, bar_code, total_pieces, completed_pieces, phase")
     .in("phase", ["queued", "cutting", "bending"])
     .limit(200);
 
-  for (const item of items || []) {
+  if (!items?.length) return;
+
+  // Filter at-risk items (<50% progress)
+  const atRisk = (items as any[]).filter((item) => {
     const progress = item.total_pieces > 0 ? (item.completed_pieces || 0) / item.total_pieces : 0;
-    if (progress < 0.5) {
-      for (const uid of adminUserIds) {
-        alerts.push({
-          user_id: uid,
-          type: "alert",
-          title: `At-risk production: ${item.bar_code || item.id.slice(0, 8)}`,
-          description: `Only ${Math.round(progress * 100)}% complete (${item.completed_pieces || 0}/${item.total_pieces} pieces). Phase: ${item.phase}`,
-          priority: progress < 0.2 ? "high" : "medium",
-          dedupe: `atrisk-prod-${item.id}`,
-          link_to: "/production",
-        });
-      }
-    }
+    return progress < 0.5;
+  });
+
+  if (atRisk.length === 0) return;
+
+  // Group by phase for summary
+  const byPhase: Record<string, number> = {};
+  let criticalCount = 0; // < 20% progress
+  for (const item of atRisk) {
+    const phase = item.phase || "unknown";
+    byPhase[phase] = (byPhase[phase] || 0) + 1;
+    const progress = item.total_pieces > 0 ? (item.completed_pieces || 0) / item.total_pieces : 0;
+    if (progress < 0.2) criticalCount++;
+  }
+
+  const phaseBreakdown = Object.entries(byPhase)
+    .map(([phase, count]) => `${count} ${phase}`)
+    .join(", ");
+
+  const today = new Date().toISOString().split("T")[0];
+
+  for (const uid of adminUserIds) {
+    alerts.push({
+      user_id: uid,
+      type: "alert",
+      title: `${atRisk.length} production items at risk`,
+      description: `${criticalCount} critical (<20% done), ${atRisk.length} total below 50%. Breakdown: ${phaseBreakdown}.`,
+      priority: "medium", // In-app only — no SMS for production summaries
+      dedupe: `atrisk-prod-summary-${today}`,
+      link_to: "/production",
+    });
   }
 }
 
@@ -299,7 +365,7 @@ async function checkOverdueInvoices(supabase: any, today: string, alerts: any[],
         type: "alert",
         title: `Overdue invoice: ${customerName}`,
         description: `$${inv.balance} overdue since ${inv.data?.DueDate}. QB#${inv.quickbooks_id}`,
-        priority: inv.balance > 5000 ? "high" : "medium",
+        priority: "medium", // Downgraded — no SMS for invoices
         dedupe: `overdue-inv-${inv.id}`,
         link_to: "/accounting",
       });
@@ -333,7 +399,7 @@ async function checkLongShifts(supabase: any, now: Date, alerts: any[], adminUse
         type: "warning",
         title: `Long shift: ${name}`,
         description: `Clocked in ${timeSince(new Date(entry.clock_in))} ago without clock-out.`,
-        priority: "medium",
+        priority: "high",
         dedupe: `long-shift-${entry.id}`,
         link_to: "/hr",
       });
