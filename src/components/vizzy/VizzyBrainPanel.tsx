@@ -838,6 +838,7 @@ function TeamDailyReport({
 
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, analyzeSystem } = useVizzyMemory();
+  const { user } = useAuth();
   const { timezone } = useWorkspaceSettings();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
@@ -923,9 +924,17 @@ export function VizzyBrainPanel({ onClose }: Props) {
       );
     }
 
+    // Filter sections by current user's menu access
+    const userMenus = getVisibleMenus(user?.email);
+    const accessibleGroups = grouped.filter((group) => {
+      const requiredMenu = GROUP_TO_MENU[group.key];
+      if (!requiredMenu) return true; // no mapping = always show
+      return userMenus.includes(requiredMenu);
+    });
+
     const sectionsToShow = selectedProfile
-      ? grouped.filter((group) => group.items.length > 0)
-      : grouped;
+      ? accessibleGroups.filter((group) => group.items.length > 0)
+      : accessibleGroups;
 
     if (selectedProfile && sectionsToShow.length === 0) {
       return (
