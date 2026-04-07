@@ -80,10 +80,7 @@ type ArchitectureDialogNode = {
 const getAllLayers = () => new Set(LAYERS.map((layer) => layer.key));
 
 /* ───── Convert static data to React Flow nodes/edges ───── */
-function buildInitialNodes(
-  onDelete: (id: string) => void,
-  onLabelChange: (id: string, label: string) => void,
-): ArchitectureFlowNode[] {
+function buildInitialNodes(): ArchitectureFlowNode[] {
   return applyArchitectureLayout(
     ARCH_NODES.map((node) => ({
       id: node.id,
@@ -96,8 +93,6 @@ function buildInitialNodes(
         layer: node.layer,
         detail: node.detail,
         Icon: node.icon,
-        onDelete,
-        onLabelChange,
       },
     })),
   );
@@ -222,6 +217,11 @@ export default function Architecture() {
   const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("modules");
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ArchitectureFlowNode, Edge> | null>(null);
 
+  const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
+    buildInitialNodes(),
+  );
+  const [edges, setEdges, onEdgesChange] = useEdgesState(buildInitialEdges());
+
   const handleDelete = useCallback((nodeId: string) => {
     setNodes((nds) => applyArchitectureLayout(nds.filter((n) => n.id !== nodeId)));
     setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
@@ -242,11 +242,6 @@ export default function Architecture() {
         : current,
     );
   }, [setNodes]);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
-    buildInitialNodes(handleDelete, handleLabelChange),
-  );
-  const [edges, setEdges, onEdgesChange] = useEdgesState(buildInitialEdges());
 
   useEffect(() => {
     const id = "arch-futuristic-styles";
@@ -306,14 +301,12 @@ export default function Architecture() {
         },
         Icon: Sparkles,
         isCustom: true,
-        onDelete: handleDelete,
-        onLabelChange: handleLabelChange,
       },
     };
     setNodes((nds) => applyArchitectureLayout([...nds, newNode]));
     setNewNodeLabel("");
     setShowAddPanel(false);
-  }, [newNodeLabel, newNodeLayer, handleDelete, handleLabelChange, setNodes]);
+  }, [newNodeLabel, newNodeLayer, setNodes]);
 
   const onNodeClick = useCallback((_: unknown, node: ArchitectureFlowNode) => {
     setOpenNode({
