@@ -588,7 +588,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-8">
-      {/* Email Dialog */}
+      {/* Email Dialog with link status warnings */}
       {emailDialogOpen && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center print:hidden" onClick={() => setEmailDialogOpen(false)}>
           <div className="bg-white rounded-lg shadow-xl p-6 w-96 text-gray-900" onClick={(e) => e.stopPropagation()}>
@@ -599,17 +599,74 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
               placeholder="customer@example.com"
               value={recipientEmail || customerEmail}
               onChange={(e) => setRecipientEmail(e.target.value)}
-              className={`mt-1 mb-4 ${inputCls}`}
+              className={`mt-1 mb-3 ${inputCls}`}
             />
+
+            {/* Payment link status indicators */}
+            <div className="space-y-1.5 mb-4 text-xs">
+              <div className="flex items-center gap-2">
+                {linkCheckStatus.stripe === null ? (
+                  <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+                ) : linkCheckStatus.stripe ? (
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                ) : (
+                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                )}
+                <span className={linkCheckStatus.stripe === false ? "text-amber-600" : "text-gray-500"}>
+                  Stripe payment link {linkCheckStatus.stripe === null ? "checking…" : linkCheckStatus.stripe ? "ready" : "unavailable"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {linkCheckStatus.qb === null ? (
+                  <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+                ) : linkCheckStatus.qb ? (
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                ) : (
+                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                )}
+                <span className={linkCheckStatus.qb === false ? "text-amber-600" : "text-gray-500"}>
+                  QuickBooks payment link {linkCheckStatus.qb === null ? "checking…" : linkCheckStatus.qb ? "ready" : "unavailable"}
+                </span>
+              </div>
+            </div>
+
+            {(linkCheckStatus.stripe === false || linkCheckStatus.qb === false) && (
+              <p className="text-xs text-amber-600 mb-3 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                Invoice will be sent without {linkCheckStatus.stripe === false && linkCheckStatus.qb === false ? "payment links" : linkCheckStatus.stripe === false ? "Stripe link" : "QuickBooks link"}
+              </p>
+            )}
+
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setEmailDialogOpen(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleSendEmail} disabled={sendingEmail} className="gap-2">
+              <Button
+                size="sm"
+                onClick={handleSendEmail}
+                disabled={sendingEmail}
+                className={`gap-2 ${(linkCheckStatus.stripe === false || linkCheckStatus.qb === false) ? "bg-amber-600 hover:bg-amber-700" : ""}`}
+              >
                 {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                Send
+                {(linkCheckStatus.stripe === false || linkCheckStatus.qb === false) ? "Send Anyway" : "Send"}
               </Button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Record Payment Dialog */}
+      {paymentDialogOpen && (
+        <RecordPaymentDialog
+          invoiceId={invoiceId}
+          invoiceNumber={invoiceNumber}
+          customerName={customerName}
+          amountDue={total}
+          onSuccess={() => {
+            setPaymentDialogOpen(false);
+            setStatus("paid");
+            queryClient.invalidateQueries({ queryKey: ["sales_invoices"] });
+          }}
+          onClose={() => setPaymentDialogOpen(false)}
+        />
       )}
 
       {/* Action buttons */}
@@ -620,9 +677,14 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         <Button size="sm" variant="outline" onClick={handlePrint} className="gap-2">
           <Printer className="w-4 h-4" /> Print / PDF
         </Button>
-        <Button size="sm" variant="outline" onClick={() => setEmailDialogOpen(true)} className="gap-2">
+        <Button size="sm" variant="outline" onClick={() => handleOpenEmailDialog()} className="gap-2">
           <Mail className="w-4 h-4" /> Send Email
         </Button>
+        {(status === "sent" || status === "draft") && total > 0 && (
+          <Button size="sm" variant="outline" onClick={() => setPaymentDialogOpen(true)} className="gap-2">
+            <DollarSign className="w-4 h-4" /> Record Payment
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={onClose}>
           <X className="w-4 h-4" />
         </Button>
