@@ -1,67 +1,91 @@
 
 
-# Add Work Hours, Alerts & Communication Discipline to Vizzy Identity
+# Add Clickable Quick-Reply Suggestions to Vizzy
 
-## What's Being Added
+## What You'll Get
 
-A new section in `VIZZY_CORE_IDENTITY` covering:
-- **Business hours rule**: Mon-Fri 8AM-5PM ET communication window
-- **Do Not Disturb logic**: Queue non-urgent comms outside hours
-- **Urgent exception protocol**: Only cash/safety/delivery/client crises bypass hours
-- **Old email alert intelligence**: Aging threads classified by business importance (Critical/Important/Low)
-- **Alert discipline**: Quality over quantity, bundle low-priority items
-- **Scheduling logic**: Evaluate timing before any outbound action
+After every Vizzy response, you'll see 2-4 tappable suggestion buttons below the message — actionable next steps you can click instead of typing. Vizzy will always offer choices for you to pick from.
 
-## File Change
+## How It Works
 
-### `supabase/functions/_shared/vizzyIdentity.ts`
+### 1. Prompt Update — Tell Vizzy to Always Offer Choices
 
-Add a new section to `VIZZY_CORE_IDENTITY` (before the BANNED PHRASES block, ~line 90) containing:
+**File: `supabase/functions/_shared/vizzyIdentity.ts`**
+
+Add to `VIZZY_CORE_IDENTITY` (after the DISCIPLINE section):
 
 ```
-═══ WORK HOURS & COMMUNICATION DISCIPLINE ═══
-Business communication window: Monday-Friday, 8:00 AM to 5:00 PM ET (America/Toronto).
-Outside this window, DO NOT propose sending: follow-ups, Team Hub messages, emails, SMS, or calls — unless urgent.
-Instead: queue the item, label it "Scheduled for next business window", prepare the draft, surface it at next appropriate time.
+═══ RESPONSE FORMAT — ALWAYS OFFER CHOICES ═══
+At the END of every response, include 2-4 clickable follow-up options using this exact format:
+[QUICK_REPLIES]
+- Approve and send it
+- Show me the details first
+- Hold — let me think about it
+- What's the risk if we wait?
+[/QUICK_REPLIES]
 
-URGENT EXCEPTIONS (after-hours only if):
-- Critical client issue, money at risk, payment crisis, delivery failure
-- Major operational disruption, safety issue, executive escalation
-- Time-sensitive approval that materially hurts business if delayed
-For urgent exceptions present: Person, Channel, Why it can't wait, Business risk, Draft/objective, Approval needed.
-NEVER send after-hours without CEO approval.
-
-SCHEDULING LOGIC:
-Before any outbound action evaluate: Is it within business hours? Is it urgent? Does it affect cash/clients/delivery/safety? Can it wait?
-If it can wait → queue it with: recommended send time, channel, draft, approval status.
-
-═══ OLD EMAIL ALERT INTELLIGENCE ═══
-Actively monitor aging/stale email threads. Classify by business importance:
-- CRITICAL: payment, collections, client risk, production/delivery risk, legal/compliance, executive decision pending
-- IMPORTANT: vendor follow-up, quote follow-up, project coordination, overdue updates, unresolved dependencies
-- LOW: informational, outdated, no longer actionable
-
-For aging emails present: Thread/Topic, Age, From/With, Why it matters, Current risk, Recommended action, Best channel, Draft response, Approval needed.
-If thread is dead: label as stale/archive candidate/no action.
-
-Think like an operator: Is delay hurting us? Is money involved? Is someone waiting? Should this move from email to Team Hub/SMS/call?
-
-═══ ALERT DISCIPLINE ═══
-Do NOT overwhelm with noise. Only alert when: the issue matters, aging beyond reasonable time, risk increasing, execution blocked, money/timing/accountability affected.
-Bundle low-level items into clean summaries. Alert quality over quantity.
-During hours: proactively surface critical old emails, aging approvals, stale follow-ups, payment comms risk.
-Outside hours: queue non-urgent, hold drafts, only surface urgent exceptions.
+Rules:
+- EVERY response must end with [QUICK_REPLIES]
+- Options must be specific to the conversation context (not generic)
+- Options should represent real next actions the CEO would take
+- Keep each option under 8 words
+- Include at least one "dig deeper" and one "take action" option
+- For diagnosis: offer different investigation paths
+- For recommendations: offer approve/reject/modify
+- For updates: offer drill-down or move-on options
 ```
 
-Also add the same rules (condensed) to `VIZZY_VOICE_ADDENDUM` (~2 lines):
-```
-═══ WORK HOURS ═══
-Business hours: Mon-Fri 8AM-5PM ET. Outside hours, queue non-urgent comms. Only surface urgent exceptions (cash, safety, client crisis) with CEO approval.
-```
+### 2. Parse Suggestions from Vizzy's Response
+
+**File: `src/lib/parseQuickReplies.ts` (NEW)**
+
+A utility that extracts the `[QUICK_REPLIES]...[/QUICK_REPLIES]` block from assistant messages, returning:
+- `content`: the message text without the quick replies block
+- `replies`: string array of clickable options
+
+### 3. QuickReplies Component
+
+**File: `src/components/chat/QuickReplies.tsx` (NEW)**
+
+Renders suggestion buttons below assistant messages:
+- Horizontal flex-wrap of pill buttons
+- Styled as outlined pills with primary accent
+- On click: calls `sendMessage(reply)` directly
+- Only shown on the LAST assistant message (not on historical ones)
+- Hidden while streaming
+
+### 4. Wire Into All Vizzy Chat Surfaces
+
+**File: `src/components/layout/IntelligencePanel.tsx`**
+- Import `parseQuickReplies` and `QuickReplies`
+- Parse last assistant message to extract replies
+- Render `QuickReplies` below the last message, wired to `sendMessage`
+
+**File: `src/pages/LiveChat.tsx`**
+- Same integration — parse + render quick replies on last assistant message
+
+**File: `src/components/layout/LiveChatWidget.tsx`**
+- Same integration
+
+### 5. Voice Addendum Update
+
+**File: `supabase/functions/_shared/vizzyIdentity.ts`**
+- Add to `VIZZY_VOICE_ADDENDUM`: "When speaking, always end with 2-3 options: 'You can tell me to [option 1], [option 2], or [option 3].'"
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `supabase/functions/_shared/vizzyIdentity.ts` | Add QUICK_REPLIES format instruction to core identity + voice addendum |
+| `src/lib/parseQuickReplies.ts` | NEW — parser utility |
+| `src/components/chat/QuickReplies.tsx` | NEW — clickable pill buttons component |
+| `src/components/layout/IntelligencePanel.tsx` | Wire quick replies |
+| `src/pages/LiveChat.tsx` | Wire quick replies |
+| `src/components/layout/LiveChatWidget.tsx` | Wire quick replies |
 
 ## Impact
-- 1 file changed (`vizzyIdentity.ts`)
-- ~40 lines added to core identity, ~3 lines to voice addendum
-- All Vizzy surfaces inherit the rules automatically
-- No database, UI, or routing changes
+- 6 files (2 new, 4 updated)
+- Every Vizzy response ends with tappable choices
+- CEO can interact by clicking instead of typing
+- No database or auth changes
 
