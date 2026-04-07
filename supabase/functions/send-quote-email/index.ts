@@ -716,6 +716,7 @@ Deno.serve((req) =>
               invoiceNumber,
               customerName: sqCheck?.customer_name || customerName,
               qbInvoiceId: newInvoice.id,
+              companyId,
             }),
           });
           if (stripeRes.ok) {
