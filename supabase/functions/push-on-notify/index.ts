@@ -1,5 +1,10 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { sendCeoSmsAlert } from "../_shared/smsAlertHelper.ts";
+
+const CEO_SMS_TYPES = new Set([
+  "call_summary", "rfq_approval", "callback_request",
+]);
 
 Deno.serve((req) =>
   handleRequest(req, async ({ body, serviceClient }) => {
@@ -59,6 +64,14 @@ Deno.serve((req) =>
         console.error("Failed to log push failure:", logErr);
       }
       return { ok: false, push: result };
+    }
+
+    // SMS alert to CEO for high-priority notification types
+    const notifType = record.type || "";
+    const priority = record.priority || "normal";
+    if (CEO_SMS_TYPES.has(notifType) || priority === "high") {
+      const smsText = `🔔 ${title}: ${(description || "").slice(0, 200)}`;
+      sendCeoSmsAlert(smsText).catch((e) => console.error("[push-on-notify] SMS alert error:", e));
     }
 
     return { ok: true, push: result };
