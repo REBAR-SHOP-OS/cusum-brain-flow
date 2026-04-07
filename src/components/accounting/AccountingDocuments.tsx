@@ -572,8 +572,8 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
             </Card>
           ))}
 
-          {((activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.length === 0) && (
-            <p className="text-center text-muted-foreground py-12">No invoices found. Sync from QuickBooks first.</p>
+          {((activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.length === 0 && localOnlyInvoices.length === 0) && (
+            <p className="text-center text-muted-foreground py-12">No invoices found.</p>
           )}
           {activeDoc === "quotation" && quotations.length === 0 && !quotationsLoading && totalCount === 0 && data.estimates.length === 0 && (
             <p className="text-center text-muted-foreground py-12">No quotations found.</p>
