@@ -1951,6 +1951,43 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
 
+    case "web_research": {
+      try {
+        const query = args.query;
+        if (!query) return JSON.stringify({ error: "query is required" });
+
+        const apiKey = Deno.env.get("FIRECRAWL_API_KEY");
+        if (!apiKey) return JSON.stringify({ error: "Web research not available — Firecrawl not configured" });
+
+        const searchLimit = Math.min(args.limit || 5, 10);
+        const response = await fetch("https://api.firecrawl.dev/v1/search", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query,
+            limit: searchLimit,
+            scrapeOptions: { formats: ["markdown"] },
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          return JSON.stringify({ error: data.error || `Search failed (${response.status})` });
+        }
+
+        const results = (data.data || []).map((r: any) => ({
+          title: r.title || "Untitled",
+          url: r.url,
+          snippet: (r.markdown || r.description || "").slice(0, 500),
+        }));
+
+        return JSON.stringify({ tool: "web_research", query, results, count: results.length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
