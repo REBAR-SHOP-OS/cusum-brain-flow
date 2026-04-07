@@ -1,44 +1,48 @@
 
 
-# Expand Architecture Flow Tests — Full Coverage
+# Fix: Tame the Spaghetti — Interactive Edge Visibility
 
-## What's Missing
+## Problem
+77 nodes + 107 edges all visible at once = unreadable chaos. Every edge draws a curve across multiple layers, creating a tangled mess that defeats the "ADHD-proof" goal.
 
-The test file has only 2 layout tests. The architecture now has 77 nodes, 107 edges, and a `resolveLayer` fallback. Critical invariants are untested.
+## Solution: Edges On Demand
 
-## New Tests to Add
+**Hide all edges by default. Show only the edges connected to the hovered/selected node.** This is the single highest-impact change possible — zero spaghetti, instant clarity.
 
-### File: `src/lib/architectureFlow.test.ts`
+### Behavior
+1. **Default state**: All nodes visible, NO edges drawn. Clean layered grid.
+2. **Hover a node**: All edges connected to that node fade in with glow. Connected nodes get highlighted, others dim.
+3. **Click a node**: Locks the edge view (persists after mouse leaves). Click again or click background to clear.
+4. **"Show all" toggle**: Existing toggle in sidebar still works for those who want full spaghetti view.
 
-**Add 6 new test cases:**
+### Additionally: Prune Redundant Edges
+Cut ~20 low-value edges that add visual noise without architectural clarity:
+- Remove 12 `role-guard → module` edges → replace with a single visual indicator (all modules are behind auth, it's implied by the layer structure)
+- Remove duplicate `persist` edges (3 modules all connecting to primary-db separately → keep only 1 representative edge + a "all modules persist" note)
 
-1. **`resolveLayer` fallback** — verify that items with `layer` nested inside `data.layer` (React Flow format) get positioned correctly, same as top-level `layer`
+This brings edge count from 107 → ~75, and only ~5-10 visible at any time during interaction.
 
-2. **`matchesArchitectureQuery` filtering** — test label match, hint match, empty query (returns true), and no-match case
+## Technical Changes
 
-3. **Large layer wrapping (25+ nodes)** — verify the platform layer with 25 nodes wraps into 3 rows, and nodes in row 3 have higher y than row 1
+### File: `src/pages/Architecture.tsx`
+1. Add `hoveredNode` and `lockedNode` state
+2. Filter edges: only render edges where `source === activeNode || target === activeNode`
+3. When a node is active, dim non-connected nodes (opacity 0.25)
+4. Add `onNodeMouseEnter` / `onNodeMouseLeave` / `onNodeClick` handlers
+5. Add a small "Show all edges" checkbox in the toolbar
 
-### File: `src/lib/architectureGraphData.test.ts` (NEW)
+### File: `src/lib/architectureGraphData.ts`
+1. Remove 12 `role-guard → *` edges (e10-e19c) — replace with a layer-level annotation
+2. Remove 3 duplicate `persist` edges (keep e60, remove e61, e62)
+3. Total edges: 107 → ~92
 
-**Add 4 graph integrity tests:**
+### File: `src/components/system-flow/ArchFlowNode.tsx`
+1. Accept `dimmed` prop → apply opacity 0.25 + no pointer events when dimmed
+2. Accept `highlighted` prop → add brighter border glow when highlighted
 
-4. **No duplicate node IDs** — `ARCH_NODES` should have all unique IDs
-
-5. **No duplicate edge IDs** — `ARCH_EDGES` should have all unique IDs
-
-6. **All edge sources/targets reference valid nodes** — every `source` and `target` in `ARCH_EDGES` must exist in `ARCH_NODES`
-
-7. **All nodes have valid layers** — every node's `layer` must be one of the 7 defined layer keys
-
-## Technical Details
-
-- New file `architectureGraphData.test.ts` imports `ARCH_NODES`, `ARCH_EDGES`, `LAYERS` directly
-- Uses `vitest` (`describe`, `it`, `expect`) consistent with existing test style
-- Graph integrity tests are pure data validation — no DOM or React needed
-- Layout tests extend the existing file with 3 more `it()` blocks
-
-## Impact
-- 2 test files total (1 existing expanded, 1 new)
-- No production code changes
-- Catches silent breakage from typos in node/edge IDs going forward
+## Result
+- Default view: clean grid of colored nodes, zero crossing lines
+- Hover any node: see exactly what it connects to
+- Executive-friendly at rest, engineer-friendly on interaction
+- Same data, same nodes, dramatically better comprehension
 
