@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail } from "lucide-react";
+import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail, DollarSign, AlertTriangle } from "lucide-react";
+import { RecordPaymentDialog } from "@/components/accounting/RecordPaymentDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -68,6 +69,8 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [invoiceAmount, setInvoiceAmount] = useState(0);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [linkCheckStatus, setLinkCheckStatus] = useState<{ stripe: boolean | null; qb: boolean | null }>({ stripe: null, qb: null });
 
   // Customer dropdown state
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -401,6 +404,43 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
     }
   };
 
+  const handleOpenEmailDialog = useCallback(() => {
+    setEmailDialogOpen(true);
+    setLinkCheckStatus({ stripe: null, qb: null });
+
+    // Pre-check Stripe link availability
+    supabase.functions.invoke("stripe-payment", {
+      body: {
+        action: "create-payment-link",
+        amount: total,
+        currency: "cad",
+        invoiceNumber,
+        customerName: customerName || undefined,
+        qbInvoiceId: invoiceId,
+      },
+    }).then(({ data }) => {
+      setLinkCheckStatus(prev => ({ ...prev, stripe: !!data?.paymentLink?.stripe_url }));
+    }).catch(() => {
+      setLinkCheckStatus(prev => ({ ...prev, stripe: false }));
+    });
+
+    // Pre-check QB link availability
+    supabase.functions.invoke("quickbooks-oauth", {
+      body: {
+        action: "create-invoice",
+        customerName: customerName || undefined,
+        items: items.map(it => ({ description: it.description, unitPrice: it.unitPrice, quantity: it.quantity })),
+        dueDate: dueDate || undefined,
+        memo: `ERP Invoice ${invoiceNumber}`,
+      },
+    }).then(({ data }) => {
+      const link = data?.invoiceLink || data?.invoice?.InvoiceLink;
+      setLinkCheckStatus(prev => ({ ...prev, qb: !!link }));
+    }).catch(() => {
+      setLinkCheckStatus(prev => ({ ...prev, qb: false }));
+    });
+  }, [total, invoiceNumber, customerName, invoiceId, items, dueDate]);
+
   const handlePrint = () => window.print();
 
   const handleSendEmail = async () => {
@@ -585,7 +625,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-8">
-      {/* Email Dialog */}
+      {/* Email Dialog with link status warnings */}
       {emailDialogOpen && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center print:hidden" onClick={() => setEmailDialogOpen(false)}>
           <div className="bg-white rounded-lg shadow-xl p-6 w-96 text-gray-900" onClick={(e) => e.stopPropagation()}>
@@ -596,17 +636,74 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
               placeholder="customer@example.com"
               value={recipientEmail || customerEmail}
               onChange={(e) => setRecipientEmail(e.target.value)}
-              className={`mt-1 mb-4 ${inputCls}`}
+              className={`mt-1 mb-3 ${inputCls}`}
             />
+
+            {/* Payment link status indicators */}
+            <div className="space-y-1.5 mb-4 text-xs">
+              <div className="flex items-center gap-2">
+                {linkCheckStatus.stripe === null ? (
+                  <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+                ) : linkCheckStatus.stripe ? (
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                ) : (
+                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                )}
+                <span className={linkCheckStatus.stripe === false ? "text-amber-600" : "text-gray-500"}>
+                  Stripe payment link {linkCheckStatus.stripe === null ? "checking…" : linkCheckStatus.stripe ? "ready" : "unavailable"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {linkCheckStatus.qb === null ? (
+                  <Loader2 className="w-3 h-3 animate-spin text-gray-400" />
+                ) : linkCheckStatus.qb ? (
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                ) : (
+                  <AlertTriangle className="w-3 h-3 text-amber-500" />
+                )}
+                <span className={linkCheckStatus.qb === false ? "text-amber-600" : "text-gray-500"}>
+                  QuickBooks payment link {linkCheckStatus.qb === null ? "checking…" : linkCheckStatus.qb ? "ready" : "unavailable"}
+                </span>
+              </div>
+            </div>
+
+            {(linkCheckStatus.stripe === false || linkCheckStatus.qb === false) && (
+              <p className="text-xs text-amber-600 mb-3 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                Invoice will be sent without {linkCheckStatus.stripe === false && linkCheckStatus.qb === false ? "payment links" : linkCheckStatus.stripe === false ? "Stripe link" : "QuickBooks link"}
+              </p>
+            )}
+
             <div className="flex gap-2 justify-end">
               <Button variant="outline" size="sm" onClick={() => setEmailDialogOpen(false)}>Cancel</Button>
-              <Button size="sm" onClick={handleSendEmail} disabled={sendingEmail} className="gap-2">
+              <Button
+                size="sm"
+                onClick={handleSendEmail}
+                disabled={sendingEmail}
+                className={`gap-2 ${(linkCheckStatus.stripe === false || linkCheckStatus.qb === false) ? "bg-amber-600 hover:bg-amber-700" : ""}`}
+              >
                 {sendingEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-                Send
+                {(linkCheckStatus.stripe === false || linkCheckStatus.qb === false) ? "Send Anyway" : "Send"}
               </Button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Record Payment Dialog */}
+      {paymentDialogOpen && (
+        <RecordPaymentDialog
+          invoiceId={invoiceId}
+          invoiceNumber={invoiceNumber}
+          customerName={customerName}
+          amountDue={total}
+          onSuccess={() => {
+            setPaymentDialogOpen(false);
+            setStatus("paid");
+            queryClient.invalidateQueries({ queryKey: ["sales_invoices"] });
+          }}
+          onClose={() => setPaymentDialogOpen(false)}
+        />
       )}
 
       {/* Action buttons */}
@@ -617,9 +714,14 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         <Button size="sm" variant="outline" onClick={handlePrint} className="gap-2">
           <Printer className="w-4 h-4" /> Print / PDF
         </Button>
-        <Button size="sm" variant="outline" onClick={() => setEmailDialogOpen(true)} className="gap-2">
+        <Button size="sm" variant="outline" onClick={() => handleOpenEmailDialog()} className="gap-2">
           <Mail className="w-4 h-4" /> Send Email
         </Button>
+        {(status === "sent" || status === "draft") && total > 0 && (
+          <Button size="sm" variant="outline" onClick={() => setPaymentDialogOpen(true)} className="gap-2">
+            <DollarSign className="w-4 h-4" /> Record Payment
+          </Button>
+        )}
         <Button size="sm" variant="outline" onClick={onClose}>
           <X className="w-4 h-4" />
         </Button>

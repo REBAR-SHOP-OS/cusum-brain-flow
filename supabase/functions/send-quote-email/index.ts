@@ -522,6 +522,10 @@ Deno.serve((req) =>
         console.warn("Invoice email failed:", await emailRes.text());
       }
 
+      const warnings: string[] = [];
+      if (!stripePaymentUrl) warnings.push("Stripe payment link unavailable");
+      if (!qbInvoiceLink) warnings.push("QuickBooks payment link unavailable");
+
       return {
         success: true,
         invoice_id: newInvoice.id,
@@ -529,6 +533,7 @@ Deno.serve((req) =>
         payment_link: stripePaymentUrl || null,
         qb_payment_link: qbInvoiceLink || null,
         email_sent: emailOk,
+        warnings,
         message: `Invoice ${invoiceNumber} created${emailOk ? ` and sent to ${customer_email}` : " (email failed)"}${stripePaymentUrl ? " with Stripe link" : ""}${qbInvoiceLink ? " with QB link" : ""}`,
       };
     }

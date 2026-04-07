@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Copy, ExternalLink, CreditCard, Loader2 } from "lucide-react";
+import { Copy, ExternalLink, CreditCard, Loader2, DollarSign } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { RecordPaymentDialog } from "@/components/accounting/RecordPaymentDialog";
 import type { QBInvoice } from "@/hooks/useQuickBooksData";
 
 interface Props {
@@ -18,6 +19,7 @@ export function PaymentLinksSection({ invoice, amountDue }: Props) {
   const { toast } = useToast();
   const [stripeUrl, setStripeUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
 
   // QuickBooks payment link
   const invoiceLink = rawField(invoice, "InvoiceLink") as string | undefined;
@@ -125,6 +127,33 @@ export function PaymentLinksSection({ invoice, amountDue }: Props) {
           )}
         </div>
       </div>
+
+      {/* Record Payment */}
+      {amountDue > 0 && (
+        <div className="mt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
+            onClick={() => setPaymentDialogOpen(true)}
+          >
+            <DollarSign className="w-3.5 h-3.5" />
+            Record Manual Payment
+          </Button>
+        </div>
+      )}
+
+      {paymentDialogOpen && (
+        <RecordPaymentDialog
+          invoiceId={invoice.Id}
+          invoiceNumber={invoice.DocNumber || ""}
+          customerName={invoice.CustomerRef?.name || ""}
+          amountDue={amountDue}
+          qbInvoiceId={invoice.Id}
+          onSuccess={() => setPaymentDialogOpen(false)}
+          onClose={() => setPaymentDialogOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -397,6 +397,8 @@ Deno.serve((req) =>
         return handleCreateInvoice(supabase, userId, body);
       case "create-payment":
         return handleCreatePayment(supabase, userId, body);
+      case "receive-payment":
+        return handleReceivePayment(supabase, userId, body);
       case "create-bill":
         return handleCreateBill(supabase, userId, body);
       case "create-credit-memo":
@@ -1445,6 +1447,126 @@ async function handleCreatePayment(supabase: ReturnType<typeof createClient>, us
   });
 
   return jsonRes({ success: true, payment: data.Payment });
+}
+
+// ─── Receive Payment (AR — from Invoice) ──────────────────────────
+
+async function handleReceivePayment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const {
+    qbInvoiceId, erpInvoiceId, invoiceNumber, customerName,
+    amount, paymentMethod, referenceNumber, paymentDate, memo,
+  } = body as {
+    qbInvoiceId?: string; erpInvoiceId?: string; invoiceNumber?: string; customerName?: string;
+    amount: number; paymentMethod?: string; referenceNumber?: string; paymentDate?: string; memo?: string;
+  };
+
+  if (!amount || amount <= 0) throw new Error("Valid payment amount required");
+
+  // Resolve QB invoice ID if not provided
+  let resolvedQBInvoiceId = qbInvoiceId;
+  let customerId = "";
+  let customerDisplayName = customerName || "";
+
+  if (!resolvedQBInvoiceId && invoiceNumber) {
+    // Look up from accounting_mirror
+    const { data: mirror } = await supabase
+      .from("accounting_mirror")
+      .select("quickbooks_id, data")
+      .eq("entity_type", "Invoice")
+      .eq("company_id", companyId)
+      .ilike("data->>DocNumber", invoiceNumber)
+      .maybeSingle();
+    if (mirror) {
+      resolvedQBInvoiceId = mirror.quickbooks_id;
+      const mirrorData = mirror.data as Record<string, unknown>;
+      const custRef = mirrorData?.CustomerRef as Record<string, unknown> | undefined;
+      if (custRef) {
+        customerId = String(custRef.value || "");
+        customerDisplayName = customerDisplayName || String(custRef.name || "");
+      }
+    }
+  }
+
+  // If we have a QB invoice ID, fetch it to get customer + balance
+  if (resolvedQBInvoiceId && !customerId) {
+    try {
+      const invData = await qbFetch(config, `invoice/${resolvedQBInvoiceId}`, { method: "GET" }) as Record<string, unknown>;
+      const inv = invData.Invoice as Record<string, unknown>;
+      if (inv) {
+        const custRef = inv.CustomerRef as Record<string, unknown>;
+        customerId = String(custRef?.value || "");
+        customerDisplayName = customerDisplayName || String(custRef?.name || "");
+      }
+    } catch (e) {
+      console.warn("Failed to fetch QB invoice for payment:", e);
+    }
+  }
+
+  // If still no customer, try to find by name in QB
+  if (!customerId && customerDisplayName) {
+    const escapedName = customerDisplayName.replace(/'/g, "''");
+    const query = `SELECT Id, DisplayName FROM Customer WHERE DisplayName = '${escapedName}'`;
+    try {
+      const qData = await qbFetch(config, `query?query=${encodeURIComponent(query)}`, { method: "GET" }) as Record<string, unknown>;
+      const qr = qData.QueryResponse as Record<string, unknown> | undefined;
+      const custs = (qr?.Customer as Record<string, unknown>[]) || [];
+      if (custs.length > 0) {
+        customerId = String(custs[0].Id);
+      }
+    } catch {}
+  }
+
+  if (!customerId) throw new Error("Could not resolve QuickBooks customer for this invoice");
+
+  // Build payment payload
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerDisplayName },
+    TotalAmt: amount,
+    ...(paymentDate && { TxnDate: paymentDate }),
+    ...(memo && { PrivateNote: memo }),
+    ...(paymentMethod && { PaymentMethodRef: { value: paymentMethod } }),
+    ...(referenceNumber && { PaymentRefNum: referenceNumber }),
+  };
+
+  if (resolvedQBInvoiceId) {
+    payload.Line = [{
+      Amount: amount,
+      LinkedTxn: [{ TxnId: resolvedQBInvoiceId, TxnType: "Invoice" }],
+    }];
+  }
+
+  const data = await qbFetch(config, "payment", { method: "POST", body: JSON.stringify(payload) });
+
+  // Update ERP invoice status
+  if (erpInvoiceId) {
+    try {
+      await supabase.from("sales_invoices").update({
+        status: "paid",
+        paid_date: paymentDate || new Date().toISOString().slice(0, 10),
+        payment_method: paymentMethod || "other",
+      } as any).eq("id", erpInvoiceId);
+    } catch {}
+  }
+
+  // Store dedupe key
+  const dedupeKey = `rcv-pmt:${companyId}:${customerId}:${resolvedQBInvoiceId || "none"}:${amount}:${paymentDate || "nodate"}`;
+  try {
+    await supabase.from("qb_transactions").upsert({
+      company_id: companyId,
+      qb_id: (data as any).Payment?.Id,
+      entity_type: "Payment",
+      data: (data as any).Payment,
+      dedupe_key: dedupeKey,
+    }, { onConflict: "company_id,qb_id,entity_type" });
+  } catch {}
+
+  await logAuditEvent(supabase, companyId, userId, "qb_payment_received", "Payment", (data as any).Payment?.Id || "", {
+    customerId, amount, invoiceId: resolvedQBInvoiceId, paymentMethod, erpInvoiceId,
+  });
+
+  return jsonRes({ success: true, payment: (data as any).Payment });
 }
 
 // ─── Create Bill ──────────────────────────────────────────────────
