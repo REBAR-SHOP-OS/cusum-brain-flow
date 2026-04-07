@@ -3,6 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { getStartOfDayIsoInTimezone } from "@/lib/dateConfig";
 
+export interface ClockEntry {
+  clock_in: string;
+  clock_out: string | null;
+}
+
 export interface UserPerformance {
   clockedIn: boolean;
   clockInTime: string | null;
@@ -10,6 +15,7 @@ export interface UserPerformance {
   activitiesToday: number;
   aiSessionsToday: number;
   emailsSent: number;
+  clockEntries: ClockEntry[];
 }
 
 export function useUserPerformance(profileId: string | null, userId: string | null) {
@@ -79,6 +85,7 @@ export function useUserPerformance(profileId: string | null, userId: string | nu
         activitiesToday: activityRes.count ?? 0,
         aiSessionsToday: (sessionsRes as any).count ?? 0,
         emailsSent: commsRes.count ?? 0,
+        clockEntries,
       };
     },
   });
