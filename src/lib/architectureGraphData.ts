@@ -158,19 +158,10 @@ export const ARCH_EDGES: ArchEdge[] = [
   { id: "e8",  source: "auth",      target: "role-guard", edgeStyle: "solid" },
   { id: "e9",  source: "agent-rtr", target: "role-guard", edgeStyle: "solid" },
 
-  // Auth → Modules
-  { id: "e10", source: "role-guard", target: "crm",        edgeStyle: "solid" },
+  // Auth → Modules (representative edges — all modules sit behind role-guard)
+  { id: "e10", source: "role-guard", target: "crm",        edgeStyle: "solid", label: "RBAC" },
   { id: "e11", source: "role-guard", target: "shop-floor", edgeStyle: "solid" },
-  { id: "e12", source: "role-guard", target: "team-hub",   edgeStyle: "solid" },
   { id: "e13", source: "role-guard", target: "accounting", edgeStyle: "solid" },
-  { id: "e14", source: "role-guard", target: "seo",        edgeStyle: "solid" },
-  { id: "e15", source: "role-guard", target: "video",      edgeStyle: "solid" },
-  { id: "e16", source: "role-guard", target: "email",      edgeStyle: "solid" },
-  { id: "e17", source: "role-guard", target: "chat",       edgeStyle: "solid" },
-  { id: "e18", source: "role-guard", target: "estimating", edgeStyle: "solid" },
-  { id: "e19", source: "role-guard", target: "quotes",     edgeStyle: "solid" },
-  { id: "e19b", source: "role-guard", target: "payroll",   edgeStyle: "solid" },
-  { id: "e19c", source: "role-guard", target: "inbox",     edgeStyle: "solid" },
 
   // Modules → AI
   { id: "e20", source: "crm",        target: "pipeline",      edgeStyle: "solid" },
@@ -211,9 +202,7 @@ export const ARCH_EDGES: ArchEdge[] = [
   { id: "e58", source: "fn-push",    target: "ext-google",  edgeStyle: "dashed" },
 
   // Modules / AI → Data + Platform (via hubs)
-  { id: "e60", source: "crm",         target: "primary-db",   edgeStyle: "dashed", label: "persist" },
-  { id: "e61", source: "shop-floor",  target: "primary-db",   edgeStyle: "dashed", label: "persist" },
-  { id: "e62", source: "accounting",  target: "primary-db",   edgeStyle: "dashed" },
+  { id: "e60", source: "crm",         target: "primary-db",   edgeStyle: "dashed", label: "all modules persist" },
   { id: "e63", source: "pipeline",    target: "job-queue",    edgeStyle: "dashed", label: "enqueue" },
   { id: "e64", source: "job-queue",   target: "worker-pool",  edgeStyle: "solid" },
   { id: "e65", source: "worker-pool", target: "retry-queue",  edgeStyle: "failure", label: "fail" },
