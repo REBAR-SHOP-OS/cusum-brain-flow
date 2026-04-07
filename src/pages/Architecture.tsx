@@ -367,21 +367,27 @@ export default function Architecture() {
       const nodeData = n.data;
       const layerHidden = !visibleLayers.has(nodeData.layer);
       const searchHidden = filteredNodeIds ? !filteredNodeIds.has(n.id) : false;
+      const dimmed = !!(activeNode && connectedNodeIds && !connectedNodeIds.has(n.id));
+      const highlighted = !!(activeNode && connectedNodeIds && connectedNodeIds.has(n.id) && n.id !== activeNode);
       return {
         ...n,
         hidden: layerHidden || searchHidden,
-        data: { ...nodeData, onDelete: handleDelete, onLabelChange: handleLabelChange },
+        data: { ...nodeData, onDelete: handleDelete, onLabelChange: handleLabelChange, dimmed, highlighted },
       };
     });
-  }, [nodes, visibleLayers, filteredNodeIds, handleDelete, handleLabelChange]);
+  }, [nodes, visibleLayers, filteredNodeIds, handleDelete, handleLabelChange, activeNode, connectedNodeIds]);
 
   const displayEdges = useMemo(() => {
     const hiddenIds = new Set(displayNodes.filter((n) => n.hidden).map((n) => n.id));
-    return edges.map((e) => ({
-      ...e,
-      hidden: hiddenIds.has(e.source) || hiddenIds.has(e.target),
-    }));
-  }, [edges, displayNodes]);
+    return edges.map((e) => {
+      const nodeHidden = hiddenIds.has(e.source) || hiddenIds.has(e.target);
+      const edgeVisible = showAllEdges || (activeNode && (e.source === activeNode || e.target === activeNode));
+      return {
+        ...e,
+        hidden: nodeHidden || !edgeVisible,
+      };
+    });
+  }, [edges, displayNodes, showAllEdges, activeNode]);
 
   const layerCounts = useMemo(() => {
     return nodes.reduce<Record<ArchLayer, number>>(
