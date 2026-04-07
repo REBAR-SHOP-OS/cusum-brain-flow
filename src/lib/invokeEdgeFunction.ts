@@ -47,7 +47,10 @@ export async function invokeEdgeFunction<T = any>(
       }
 
       if (!response.ok) {
-        throw new Error(data?.error || `Edge function ${functionName} failed (${response.status})`);
+        const errMsg = data?.error || `Edge function ${functionName} failed (${response.status})`;
+        const err = new Error(errMsg);
+        (err as any).status = response.status;
+        throw err;
       }
 
       if (data?.error) {
@@ -63,7 +66,7 @@ export async function invokeEdgeFunction<T = any>(
         lastError = err;
       }
       // Only retry on timeout or network errors, not on business logic errors
-      const isRetryable = err.name === "AbortError" || err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError");
+      const isRetryable = err.name === "AbortError" || err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError") || ((err as any).status ?? 0) >= 500;
       if (attempt < maxRetries && isRetryable) {
         await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // backoff
         continue;
