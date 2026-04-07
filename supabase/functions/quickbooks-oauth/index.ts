@@ -592,6 +592,12 @@ Deno.serve((req) =>
         return handleVoidInvoice(supabase, userId, body);
       case "update-invoice":
         return handleUpdateInvoice(supabase, userId, body);
+      case "read-invoice":
+        return handleReadInvoice(supabase, userId, body);
+      case "get-invoice-pdf":
+        return handleGetInvoicePdf(supabase, userId, body);
+      case "update-estimate":
+        return handleUpdateEstimate(supabase, userId, body);
 
       // ── Payroll ────────────────────────────────────────────────
       case "list-employees":
