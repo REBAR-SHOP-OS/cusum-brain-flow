@@ -34,25 +34,18 @@ Deno.serve(async (req) => {
 
     // ── Safety checks ──
     const normalized = from_number.replace(/\D/g, "");
+    const isCeo = from_number === CEO_PHONE || normalized === "4165870788" || normalized === "14165870788";
 
-    // Skip CEO
-    if (from_number === CEO_PHONE || normalized === "4165870788" || normalized === "14165870788") {
-      console.log("[sms-reply] Skipping CEO number");
-      return new Response(JSON.stringify({ ok: true, skipped: "ceo_number" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Spam filter
-    if (isSpamSms(message_text, from_number)) {
+    // Spam filter (skip for CEO — always allow)
+    if (!isCeo && isSpamSms(message_text, from_number)) {
       console.log("[sms-reply] Spam detected, skipping:", from_number);
       return new Response(JSON.stringify({ ok: true, skipped: "spam" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Skip short codes (less than 7 digits)
-    if (normalized.length < 7) {
+    // Skip short codes (less than 7 digits) — not for CEO
+    if (!isCeo && normalized.length < 7) {
       console.log("[sms-reply] Skipping short code:", from_number);
       return new Response(JSON.stringify({ ok: true, skipped: "short_code" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -72,9 +65,10 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Rate limit: max 5 auto-replies per number per day
+    // Rate limit: max replies per number per day (higher for CEO)
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const dailyLimit = isCeo ? 50 : MAX_REPLIES_PER_DAY;
 
     const { count } = await supabase
       .from("communications")
@@ -83,21 +77,21 @@ Deno.serve(async (req) => {
       .eq("to_address", from_number)
       .gte("received_at", todayStart.toISOString());
 
-    if ((count || 0) >= MAX_REPLIES_PER_DAY) {
+    if ((count || 0) >= dailyLimit) {
       console.log("[sms-reply] Rate limit hit for", from_number);
       return new Response(JSON.stringify({ ok: true, skipped: "rate_limit" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Skip own company numbers
+    // Skip own company numbers (but NOT the CEO — allow CEO conversation)
     const { data: ownTokens } = await supabase
       .from("user_ringcentral_tokens")
       .select("rc_phone_number")
       .not("rc_phone_number", "is", null);
 
     const ownNumbers = (ownTokens || []).map((t: any) => t.rc_phone_number?.replace(/\D/g, ""));
-    if (ownNumbers.includes(normalized)) {
+    if (!isCeo && ownNumbers.includes(normalized)) {
       console.log("[sms-reply] Skipping own company number");
       return new Response(JSON.stringify({ ok: true, skipped: "own_number" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -143,7 +137,23 @@ Deno.serve(async (req) => {
       });
     }
 
-    const systemPrompt = `You are Vizzy, the AI sales assistant for Rebar Shop — a rebar fabrication company in Toronto, Ontario.
+    const ceoPrompt = `You are Vizzy, Sattar's personal AI assistant. He is texting you directly.
+
+CRITICAL: Keep replies SHORT — under 160 characters when possible, max 300. This is SMS.
+
+Respond naturally and conversationally like a trusted assistant:
+- If he says "Hi" or "Hey" → reply warmly: "Hey Sattar! What do you need?"
+- If he asks about the business → answer directly from what you know
+- If he asks you to do something → confirm you'll handle it or explain what you can/can't do
+- If he asks about orders, leads, calls → summarize what you know or say "Let me check — I'll update you"
+- Never use sales language or treat him like a customer
+- Never say "I'll have the team follow up" — HE IS the team leader
+- Be direct, brief, helpful. Like texting a smart colleague.
+
+You know: Rebar Shop, Toronto. Products: 10M-35M rebar, custom bending. Team: Neel (Sales), Saurabh (Ops).
+${contextInfo ? `\nContext: ${contextInfo}` : ""}`;
+
+    const salesPrompt = `You are Vizzy, the AI sales assistant for Rebar Shop — a rebar fabrication company in Toronto, Ontario.
 
 CRITICAL: Keep replies SHORT — under 160 characters when possible, max 300 characters. This is SMS, not email.
 
@@ -171,6 +181,8 @@ If they want to talk to someone specific, say you'll pass the message along.
 
 Be friendly, professional, helpful. Sound human, not robotic.
 ${contextInfo ? `\nContext: ${contextInfo}` : ""}`;
+
+    const systemPrompt = isCeo ? ceoPrompt : salesPrompt;
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",

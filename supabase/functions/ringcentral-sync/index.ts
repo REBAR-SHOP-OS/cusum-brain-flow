@@ -543,15 +543,22 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?:
             metadata: { type: "sms" }, user_id: userId, company_id: companyId,
           }, { onConflict: "source,source_id", ignoreDuplicates: false });
           if (!error) {
+            const isNewInsert = status === 201;
             smsUpserted++;
-            // SMS alert to CEO for new inbound SMS (skip spam)
-            if (msgDirection === "inbound") {
+            // SMS alert to CEO for NEW inbound SMS only (skip spam, skip CEO's own texts)
+            if (msgDirection === "inbound" && isNewInsert) {
               const preview = (msg.subject || "").slice(0, 100);
-              const { isSpamSms } = await import("../_shared/spamFilter.ts");
-              if (!isSpamSms(preview, fromAddress)) {
-                sendCeoSmsAlert(`📱 New SMS from ${fromAddress}: ${preview}`).catch(() => {});
+              const fromDigits = (fromAddress || "").replace(/\D/g, "");
+              const isCeoNumber = fromDigits === "14165870788" || fromDigits === "4165870788";
+              if (isCeoNumber) {
+                console.log(`CRON: Skipping CEO self-alert from ${fromAddress}`);
               } else {
-                console.log(`CRON: Spam SMS filtered from ${fromAddress}`);
+                const { isSpamSms } = await import("../_shared/spamFilter.ts");
+                if (!isSpamSms(preview, fromAddress)) {
+                  sendCeoSmsAlert(`📱 New SMS from ${fromAddress}: ${preview}`).catch(() => {});
+                } else {
+                  console.log(`CRON: Spam SMS filtered from ${fromAddress}`);
+                }
               }
             }
           }
