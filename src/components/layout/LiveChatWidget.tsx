@@ -35,6 +35,9 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
     if (open) inputRef.current?.focus();
   }, [open]);
 
+  // Block ai@rebar.shop from accessing any agents
+  if (user?.email === "ai@rebar.shop") return null;
+
   // Cancel stream when closing the panel
   const handleClose = () => {
     if (isStreaming) cancelStream();
