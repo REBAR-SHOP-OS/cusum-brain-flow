@@ -2210,6 +2210,102 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
 
+    // ─── SEO Read Tools ───
+    case "seo_get_overview": {
+      try {
+        const { data: domains } = await supabase.from("seo_domains").select("*").eq("company_id", companyId).limit(1);
+        const domain = domains?.[0];
+        if (!domain) return JSON.stringify({ message: "No SEO domain configured for this company" });
+
+        const [kwRes, pageRes, taskRes] = await Promise.all([
+          supabase.from("seo_keyword_ai").select("id, keyword, avg_position, impressions_28d, ctr, search_volume, opportunity_score, trend_score").eq("domain_id", domain.id).order("opportunity_score", { ascending: false }).limit(200),
+          supabase.from("seo_page_ai").select("id, url, seo_score, title").eq("domain_id", domain.id).order("seo_score", { ascending: true }).limit(50),
+          supabase.from("seo_tasks").select("id, status, priority, task_type").eq("domain_id", domain.id),
+        ]);
+
+        const keywords = kwRes.data || [];
+        const pages = pageRes.data || [];
+        const tasks = taskRes.data || [];
+
+        const avgPos = keywords.length > 0 ? Math.round(keywords.reduce((s: number, k: any) => s + (k.avg_position || 0), 0) / keywords.length * 10) / 10 : null;
+        const tasksByStatus: Record<string, number> = {};
+        for (const t of tasks) tasksByStatus[t.status] = (tasksByStatus[t.status] || 0) + 1;
+
+        return JSON.stringify({
+          domain: domain.domain, domainId: domain.id,
+          totalKeywords: keywords.length,
+          avgPosition: avgPos,
+          top10Keywords: keywords.filter((k: any) => k.avg_position && k.avg_position <= 10).length,
+          topKeywords: keywords.slice(0, 10).map((k: any) => ({ keyword: k.keyword, position: k.avg_position, volume: k.search_volume, impressions: k.impressions_28d, ctr: k.ctr, opportunity: k.opportunity_score })),
+          lowScorePages: pages.filter((p: any) => p.seo_score && p.seo_score < 50).slice(0, 10).map((p: any) => ({ url: p.url, score: p.seo_score, title: p.title })),
+          tasks: { total: tasks.length, ...tasksByStatus },
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "seo_list_keywords": {
+      try {
+        const { data: domains } = await supabase.from("seo_domains").select("id").eq("company_id", companyId).limit(1);
+        const domainId = domains?.[0]?.id;
+        if (!domainId) return JSON.stringify({ message: "No SEO domain configured" });
+
+        const limit = Math.min(args.limit || 20, 100);
+        let q = supabase.from("seo_keyword_ai").select("keyword, avg_position, search_volume, impressions_28d, ctr, opportunity_score, trend_score").eq("domain_id", domainId).order("opportunity_score", { ascending: false }).limit(limit);
+        if (args.min_position) q = q.gte("avg_position", args.min_position);
+        if (args.max_position) q = q.lte("avg_position", args.max_position);
+        if (args.min_volume) q = q.gte("search_volume", args.min_volume);
+        if (args.trend === "rising") q = q.gt("trend_score", 10);
+        if (args.trend === "falling") q = q.lt("trend_score", -10);
+
+        const { data, error } = await q;
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify({ keywords: data || [], count: (data || []).length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "seo_list_tasks": {
+      try {
+        const limit = Math.min(args.limit || 30, 100);
+        let q = supabase.from("seo_tasks").select("id, title, description, priority, status, task_type, expected_impact, entity_url, ai_reasoning, created_at").eq("company_id", companyId).order("created_at", { ascending: false }).limit(limit);
+        if (args.status) q = q.eq("status", args.status);
+        if (args.priority) q = q.eq("priority", args.priority);
+        if (args.task_type) q = q.eq("task_type", args.task_type);
+        const { data, error } = await q;
+        if (error) return JSON.stringify({ error: error.message });
+        return JSON.stringify({ tasks: data || [], count: (data || []).length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    // ─── Team Hub Read Tool ───
+    case "teamhub_list_messages": {
+      try {
+        const channelName = args.channel_name;
+        const limit = Math.min(args.limit || 20, 50);
+        const { data: channel } = await supabase.from("team_channels").select("id").ilike("name", `%${channelName}%`).limit(1).maybeSingle();
+        if (!channel) return JSON.stringify({ error: `No channel found matching "${channelName}"` });
+
+        const { data: messages, error } = await supabase.from("team_messages").select("id, content, created_at, sender_id, attachments").eq("channel_id", channel.id).order("created_at", { ascending: false }).limit(limit);
+        if (error) return JSON.stringify({ error: error.message });
+
+        // Resolve sender names
+        const senderIds = [...new Set((messages || []).map((m: any) => m.sender_id).filter(Boolean))];
+        const nameMap: Record<string, string> = {};
+        if (senderIds.length > 0) {
+          const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", senderIds);
+          for (const p of profiles || []) nameMap[p.id] = p.full_name || "Unknown";
+        }
+
+        const enriched = (messages || []).reverse().map((m: any) => ({
+          sender: nameMap[m.sender_id] || "Unknown",
+          content: m.content,
+          time: m.created_at,
+          hasAttachments: !!(m.attachments && (Array.isArray(m.attachments) ? m.attachments.length > 0 : Object.keys(m.attachments).length > 0)),
+        }));
+
+        return JSON.stringify({ channel: channelName, messages: enriched, count: enriched.length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
