@@ -1,20 +1,33 @@
 
 
-# Fix Calendar Date Picker in Team Daily Report
+# Add Calendar Date Picker to Individual User View
 
-## Problem
-The calendar popover doesn't work because the Vizzy Brain panel overlay has `z-[100000]`, but the `PopoverContent` (rendered via Radix Portal at document body level) only has `z-50`. The calendar appears behind the overlay and is not clickable.
+## Goal
+Add a calendar icon to the individual user's "General Overview" section header, allowing navigation to any day's performance data — matching the same pattern already used in the "All" tab's Team Daily Report.
 
-## Fix
+## Changes
 
-### `src/components/vizzy/VizzyBrainPanel.tsx`
-- Add `className="z-[100001]"` to the `PopoverContent` so it renders above the Brain panel overlay
-- This ensures the calendar portal appears on top of the `z-[100000]` overlay
+### 1. Update `useUserPerformance.ts`
+- Add optional `date?: Date` parameter
+- Compute `dayStart` and `dayEnd` using `getStartOfDayIsoInTimezone(timezone, date)` (same pattern as `useTeamDailyActivity`)
+- Add `.lt("created_at", dayEnd)` / `.lt("clock_in", dayEnd)` upper bound filters
+- Include date in `queryKey` for reactive refetch
 
-Single line change — add `z-[100001]` to the existing `PopoverContent` className:
-```tsx
-<PopoverContent className="w-auto p-0 z-[100001]" align="end">
-```
+### 2. Update `VizzyBrainPanel.tsx` — individual user view
+- Add `selectedDate` state and `calendarOpen` state at the user view level (inside the `selectedProfile` block)
+- Add `CalendarIcon` button + `Popover` with `Calendar` in the "General Overview" section header (next to the existing `SectionReportButton`)
+- Show date label when not today, plus a "Today" reset button
+- Pass `selectedDate` to `PerformanceCard` → `useUserPerformance`
+- Add `pointer-events-auto` to Calendar className and `z-[100001]` to PopoverContent (same fix as Team report)
 
-No other files need changes.
+### 3. Update `PerformanceCard` component
+- Accept optional `date?: Date` prop
+- Pass it through to `useUserPerformance(profileId, userId, date)`
+
+## File Summary
+
+| File | Change |
+|------|--------|
+| `src/hooks/useUserPerformance.ts` | Add `date` param, bounded queries, date in queryKey |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Add calendar UI to individual user view, pass date to PerformanceCard |
 
