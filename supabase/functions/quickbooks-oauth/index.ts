@@ -357,7 +357,10 @@ async function qbFetch(
     }
   }
 
-  const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${path}`;
+  // Auto-append minorversion=69 for full InvoiceLink + ProjectRef support
+  const separator = path.includes("?") ? "&" : "?";
+  const versionedPath = path.includes("minorversion") ? path : `${path}${separator}minorversion=69`;
+  const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${versionedPath}`;
   const t0 = Date.now();
   let res: Response;
   try {
@@ -1533,7 +1536,12 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
     Line: lines,
-    ...(customerEmail && { BillEmail: { Address: customerEmail } }),
+    // Online payment flags — required for QB to generate InvoiceLink
+    AllowOnlineCreditCardPayment: true,
+    AllowOnlineACHPayment: true,
+    // Canadian locale: tax-exclusive calculation
+    GlobalTaxCalculation: "TaxExcluded",
+    ...(customerEmail && { BillEmail: { Address: customerEmail }, EmailStatus: "NeedToSend" }),
     ...(dueDate && { DueDate: dueDate }),
     ...(memo && { CustomerMemo: { value: memo } }),
     ...(effectiveTerms && { SalesTermRef: { value: effectiveTerms } }),
@@ -1613,30 +1621,33 @@ async function handleGetInvoiceLink(supabase: ReturnType<typeof createClient>, u
 
   // Read the invoice with ?include=invoiceLink
   const readBack = await qbFetch(config, `invoice/${qbInvoiceId}?include=invoiceLink`, {});
-  const invoice = readBack?.Invoice;
+  let invoice = readBack?.Invoice;
 
-  // If the invoice exists but has no BillEmail, and we have a customerEmail, update it
   const customerEmail = body.customerEmail as string | undefined;
-  if (invoice && !invoice.BillEmail?.Address && customerEmail) {
+
+  // Repair path: if invoice exists but missing payment flags or email, sparse-update to enable them
+  if (invoice && (!invoice.AllowOnlineCreditCardPayment || !invoice.AllowOnlineACHPayment || (!invoice.BillEmail?.Address && customerEmail))) {
     try {
-      const updatePayload = {
+      const updatePayload: Record<string, unknown> = {
         Id: invoice.Id,
         SyncToken: invoice.SyncToken,
         sparse: true,
-        BillEmail: { Address: customerEmail },
+        AllowOnlineCreditCardPayment: true,
+        AllowOnlineACHPayment: true,
       };
+      if (customerEmail && !invoice.BillEmail?.Address) {
+        updatePayload.BillEmail = { Address: customerEmail };
+        updatePayload.EmailStatus = "NeedToSend";
+      }
+      console.log(`[get-invoice-link] Repairing invoice ${qbInvoiceId} — enabling online payment flags`);
       await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(updatePayload) });
       // Re-read after update to get fresh InvoiceLink
       const reRead = await qbFetch(config, `invoice/${qbInvoiceId}?include=invoiceLink`, {});
       if (reRead?.Invoice) {
-        return jsonRes({
-          success: true,
-          invoice: reRead.Invoice,
-          invoiceLink: reRead.Invoice.InvoiceLink || null,
-        });
+        invoice = reRead.Invoice;
       }
     } catch (e) {
-      console.warn("[get-invoice-link] BillEmail update failed:", e);
+      console.warn("[get-invoice-link] Repair update failed:", e);
     }
   }
 
@@ -2086,11 +2097,19 @@ async function handleConvertEstimateToInvoice(supabase: ReturnType<typeof create
   const estimateData = await qbFetch(config, `estimate/${estimateId}`);
   const estimate = estimateData.Estimate;
 
-  const invoicePayload = {
+  const invoicePayload: Record<string, unknown> = {
     CustomerRef: estimate.CustomerRef,
     Line: estimate.Line,
     LinkedTxn: [{ TxnId: estimateId, TxnType: "Estimate" }],
+    AllowOnlineCreditCardPayment: true,
+    AllowOnlineACHPayment: true,
+    GlobalTaxCalculation: "TaxExcluded",
   };
+  // Carry over BillEmail from estimate if available
+  if (estimate.BillEmail?.Address) {
+    invoicePayload.BillEmail = estimate.BillEmail;
+    invoicePayload.EmailStatus = "NeedToSend";
+  }
 
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(invoicePayload) });
 
