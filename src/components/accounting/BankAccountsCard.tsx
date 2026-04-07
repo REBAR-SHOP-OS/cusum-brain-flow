@@ -1,15 +1,23 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Landmark, Pencil, Check, X, Plus, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Landmark, Pencil, Check, X, Plus, RefreshCw, Wifi } from "lucide-react";
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from "@/components/ui/table";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import type { QBAccount } from "@/hooks/useQuickBooksData";
 import type { QBBankActivity } from "@/hooks/useQBBankActivity";
 import { format } from "date-fns";
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(n);
+
+function varianceColor(variance: number): string {
+  const abs = Math.abs(variance);
+  if (abs <= 50) return "text-green-600";
+  if (abs <= 500) return "text-yellow-600";
+  return "text-destructive font-semibold";
+}
 
 interface BankAccountsCardProps {
   accounts: QBAccount[];
@@ -97,6 +105,9 @@ export function BankAccountsCard({ accounts, getActivity, upsertBankBalance, onN
                 <TableHead className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground text-right">
                   Reconciled Through
                 </TableHead>
+                <TableHead className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground text-right">
+                  Variance
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -115,7 +126,13 @@ export function BankAccountsCard({ accounts, getActivity, upsertBankBalance, onN
                       <div className="flex items-start gap-2">
                         <Landmark className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold truncate">{account.Name}</p>
+                         <p className="text-sm font-semibold truncate">{account.Name}</p>
+                          {activity?.bank_balance != null && activity.last_qb_sync_at && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 gap-0.5">
+                              <Wifi className="w-2.5 h-2.5" />
+                              Live
+                            </Badge>
+                          )}
                           {!activity?.last_qb_sync_at && (
                             <p className="text-[11px] italic text-muted-foreground">
                               No bank data. QuickBooks transactions only.
@@ -208,6 +225,20 @@ export function BankAccountsCard({ accounts, getActivity, upsertBankBalance, onN
                         <span className="text-muted-foreground italic text-xs">
                           {activity?.last_qb_sync_at ? "Never reconciled" : "--"}
                         </span>
+                      )}
+                    </TableCell>
+
+                    {/* Variance: Bank Balance - QB Ledger */}
+                    <TableCell className="text-right text-sm tabular-nums">
+                      {activity?.bank_balance != null && activity?.last_qb_sync_at ? (() => {
+                        const variance = activity.bank_balance - activity.ledger_balance;
+                        return (
+                          <span className={varianceColor(variance)}>
+                            {variance >= 0 ? "+" : ""}{fmt(variance)}
+                          </span>
+                        );
+                      })() : (
+                        <span className="text-muted-foreground">--</span>
                       )}
                     </TableCell>
                   </TableRow>

@@ -245,4 +245,13 @@ export const defaultIntegrations: Integration[] = [
       { key: "SYNOLOGY_PASSWORD", label: "DSM Password", type: "password", placeholder: "••••••••", helpText: "Your Synology DSM password" },
     ],
   },
+  {
+    id: "plaid-bank",
+    name: "Bank (Plaid)",
+    description: "Read-only bank connection for real-time balances & transactions. No conflict with QuickBooks.",
+    status: "available",
+    icon: "landmark",
+    docsUrl: "https://plaid.com/docs/",
+    fields: [],
+  },
 ];

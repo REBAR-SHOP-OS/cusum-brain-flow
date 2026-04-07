@@ -909,6 +909,68 @@ export type Database = {
           },
         ]
       }
+      bank_connections: {
+        Row: {
+          access_token_encrypted: string
+          account_mask: string | null
+          account_name: string | null
+          account_type: string | null
+          company_id: string
+          created_at: string
+          id: string
+          institution_name: string
+          last_balance: number | null
+          last_balance_sync: string | null
+          linked_qb_account_id: string | null
+          plaid_account_id: string | null
+          plaid_item_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          access_token_encrypted: string
+          account_mask?: string | null
+          account_name?: string | null
+          account_type?: string | null
+          company_id: string
+          created_at?: string
+          id?: string
+          institution_name: string
+          last_balance?: number | null
+          last_balance_sync?: string | null
+          linked_qb_account_id?: string | null
+          plaid_account_id?: string | null
+          plaid_item_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          access_token_encrypted?: string
+          account_mask?: string | null
+          account_name?: string | null
+          account_type?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          institution_name?: string
+          last_balance?: number | null
+          last_balance_sync?: string | null
+          linked_qb_account_id?: string | null
+          plaid_account_id?: string | null
+          plaid_item_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_connections_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_feed_balances: {
         Row: {
           account_id: string
@@ -947,6 +1009,60 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      bank_transactions_live: {
+        Row: {
+          amount: number
+          category: string | null
+          company_id: string
+          connection_id: string | null
+          date: string
+          description: string | null
+          id: string
+          pending: boolean
+          plaid_txn_id: string | null
+          synced_at: string
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          company_id: string
+          connection_id?: string | null
+          date: string
+          description?: string | null
+          id?: string
+          pending?: boolean
+          plaid_txn_id?: string | null
+          synced_at?: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          company_id?: string
+          connection_id?: string | null
+          date?: string
+          description?: string | null
+          id?: string
+          pending?: boolean
+          plaid_txn_id?: string | null
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_transactions_live_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_transactions_live_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "bank_connections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       barlist_items: {
         Row: {
