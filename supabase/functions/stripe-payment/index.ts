@@ -69,8 +69,12 @@ Deno.serve((req) =>
       .select("company_id")
       .eq("user_id", userId)
       .single();
-    if (!profile?.company_id) return json({ error: "No company" }, 400);
-    const companyId = profile.company_id;
+    let companyId = profile?.company_id;
+    if (!companyId && body.companyId) {
+      // Trust companyId from body when called internally (service role)
+      companyId = body.companyId;
+    }
+    if (!companyId) return json({ error: "No company" }, 400);
 
     // ── check-status ──
     if (action === "check-status") {

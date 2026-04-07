@@ -716,6 +716,7 @@ Deno.serve((req) =>
               invoiceNumber,
               customerName: sqCheck?.customer_name || customerName,
               qbInvoiceId: newInvoice.id,
+              companyId,
             }),
           });
           if (stripeRes.ok) {
@@ -891,6 +892,63 @@ Deno.serve((req) =>
         }
       }
 
+      // Generate PDF
+      let pdfDownloadUrl = "";
+      try {
+        const pdfItems = [];
+        const { data: invItemsForPdf } = await svc
+          .from("sales_invoice_items")
+          .select("description, quantity, unit_price, total, sort_order")
+          .eq("invoice_id", invoiceId)
+          .order("sort_order");
+        if (invItemsForPdf && invItemsForPdf.length > 0) {
+          for (const si of invItemsForPdf) {
+            pdfItems.push({
+              description: si.description || "",
+              quantity: Number(si.quantity) || 0,
+              unitPrice: Number(si.unit_price) || 0,
+            });
+          }
+        }
+        if (pdfItems.length > 0) {
+          const itemSubForPdf = pdfItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+          const taxRateForPdf = (meta.tax_rate as number) ?? 13;
+          const taxAmtForPdf = Math.round(itemSubForPdf * taxRateForPdf) / 100;
+          const totalForPdf = itemSubForPdf + taxAmtForPdf;
+
+          const pdfRes = await fetch(`${supabaseUrl}/functions/v1/generate-invoice-pdf`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+            },
+            body: JSON.stringify({
+              invoiceId,
+              invoiceNumber,
+              invoiceDate: issuedDate,
+              dueDate,
+              customerName: sqCheck?.customer_name || customerName,
+              items: pdfItems,
+              subtotal: itemSubForPdf,
+              taxRate: taxRateForPdf,
+              taxAmount: taxAmtForPdf,
+              total: totalForPdf,
+              stripePayUrl: stripePaymentUrl || undefined,
+              qbPayUrl: qbPaymentUrl || undefined,
+            }),
+          });
+          if (pdfRes.ok) {
+            const pdfData = await pdfRes.json();
+            pdfDownloadUrl = pdfData.url || "";
+            console.log("[accept_and_convert] PDF generated:", pdfDownloadUrl);
+          } else {
+            console.warn("[accept_and_convert] PDF generation failed:", await pdfRes.text());
+          }
+        }
+      } catch (pdfErr) {
+        console.warn("[accept_and_convert] PDF error:", pdfErr);
+      }
+
       // Build dual payment buttons
       const paymentButtons: string[] = [];
       if (stripePaymentUrl) {
@@ -900,6 +958,10 @@ Deno.serve((req) =>
       if (qbPaymentUrl) {
         paymentButtons.push(`<a href="${qbPaymentUrl}" style="display:inline-block;background:linear-gradient(135deg,#2ca01c 0%,#1a7a12 100%);color:#ffffff;text-decoration:none;padding:16px 48px;border-radius:8px;font-size:18px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(44,160,28,0.4);width:80%;text-align:center;">📋 Pay via QuickBooks</a>
           <p style="color:#888;font-size:12px;margin-top:6px;">Pay through QuickBooks Online</p>`);
+      }
+      if (pdfDownloadUrl) {
+        paymentButtons.push(`<a href="${pdfDownloadUrl}" style="display:inline-block;background:linear-gradient(135deg,#1a1a2e 0%,#2d2d4e 100%);color:#ffffff;text-decoration:none;padding:14px 48px;border-radius:8px;font-size:16px;font-weight:700;letter-spacing:1px;box-shadow:0 4px 14px rgba(26,26,46,0.3);width:80%;text-align:center;">📄 Download Invoice PDF</a>
+          <p style="color:#888;font-size:12px;margin-top:6px;">Save or print your invoice</p>`);
       }
       const payNowButton = paymentButtons.length > 0
         ? `<div style="text-align:center;margin:32px 0;">${paymentButtons.join('<div style="margin-top:16px;"></div>')}</div>`
