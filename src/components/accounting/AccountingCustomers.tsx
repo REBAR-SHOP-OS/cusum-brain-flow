@@ -93,9 +93,25 @@ export function AccountingCustomers() {
     ? customers.find((c) => c.id === selectedCustomerId)
     : null;
 
-  // ── Delete mutation ──
+  // ── Delete mutation with pre-check ──
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
+      // Pre-check for linked financial records
+      const [invoices, orders, quotes, leads] = await Promise.all([
+        supabase.from("accounting_mirror").select("id", { count: "exact", head: true }).eq("customer_id", id).eq("entity_type", "Invoice"),
+        supabase.from("orders").select("id", { count: "exact", head: true }).eq("customer_id", id),
+        supabase.from("quotes").select("id", { count: "exact", head: true }).eq("customer_id", id),
+        supabase.from("leads").select("id", { count: "exact", head: true }).eq("customer_id", id),
+      ]);
+      const total = (invoices.count ?? 0) + (orders.count ?? 0) + (quotes.count ?? 0) + (leads.count ?? 0);
+      if (total > 0) {
+        const parts: string[] = [];
+        if (invoices.count) parts.push(`${invoices.count} invoice(s)`);
+        if (orders.count) parts.push(`${orders.count} order(s)`);
+        if (quotes.count) parts.push(`${quotes.count} quote(s)`);
+        if (leads.count) parts.push(`${leads.count} lead(s)`);
+        throw new Error(`Cannot delete: customer has ${parts.join(", ")}. Reassign or archive them first.`);
+      }
       const { error: contactErr } = await supabase.from("contacts").delete().eq("customer_id", id);
       if (contactErr) console.warn("Failed to delete child contacts:", contactErr.message);
       const { error } = await supabase.from("customers").delete().eq("id", id);
@@ -108,7 +124,7 @@ export function AccountingCustomers() {
       toast({ title: "Customer deleted" });
     },
     onError: (error) => {
-      toast({ title: "Error deleting customer", description: error.message, variant: "destructive" });
+      toast({ title: "Cannot delete customer", description: error.message, variant: "destructive" });
     },
   });
 
