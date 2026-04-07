@@ -559,6 +559,8 @@ Deno.serve((req) =>
         return handleCreateEstimate(supabase, userId, body);
       case "create-invoice":
         return handleCreateInvoice(supabase, userId, body);
+      case "get-invoice-link":
+        return handleGetInvoiceLink(supabase, userId, body);
       case "create-payment":
         return handleCreatePayment(supabase, userId, body);
       case "receive-payment":
