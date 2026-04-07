@@ -1,51 +1,58 @@
 
 
-# Fix: Duplicate Eisenhower Agent in Vizzy Brain
+# Fix: Lock "Bars to Load" After First Supervisor Confirmation
+
+## Problem
+When a supervisor confirms manual floor stock (or any action that triggers a run plan recalculation), the "Bars to Load" value recalculates because `operatorOverride` is only set by the +/- buttons, not by the confirmation action. This causes the bars count to shift unexpectedly after the supervisor has already seen and implicitly accepted a value.
 
 ## Root Cause
+In `CutEngine.tsx` (lines 64-71), the `useEffect` syncs `bars` from `runPlan.barsThisRun` whenever the plan changes — unless `operatorOverride` is `true`. But `operatorOverride` is only set when the supervisor manually clicks +/- on the bars counter. The floor stock confirmation and other supervisor actions don't set this flag, so bars drift on recompute.
 
-There are two different `agent_name` values in the `chat_sessions` table:
-- `"Eisenhower Matrix"` (1 session) — correct, created by current code via `config.name`
-- `"eisenhower"` (1 session) — legacy, created Feb 9 before the code was fixed to use `config.name` instead of `config.agentType`
+## Fix
 
-The Vizzy Brain panel groups sessions by raw `agent_name`, so they appear as two separate agents.
+### `CutEngine.tsx` — Freeze bars after first supervisor-triggered value is set
 
-The current code (line 315 in `AgentWorkspace.tsx`) already uses `config.name` ("Eisenhower Matrix"), so no new sessions will have this problem. This is purely a data cleanup + defensive dedup issue.
-
-## Plan
-
-### 1. Data migration — normalize legacy session
-Rename `agent_name = 'eisenhower'` → `'Eisenhower Matrix'` in `chat_sessions`.
-
-```sql
-UPDATE chat_sessions SET agent_name = 'Eisenhower Matrix' WHERE agent_name = 'eisenhower';
-```
-
-### 2. Defensive dedup in `useUserAgentSessions.ts`
-Add a normalization map so that even if future edge cases create mismatched names, the grouping merges them:
+Add a `barsLocked` ref that gets set to `true` after the first time `bars` is populated from a valid run plan. Once locked, the sync effect no longer overwrites the value — only manual +/- or a new item (barCode change) can change it.
 
 ```typescript
-// Before grouping, normalize agent_name
-const AGENT_NAME_ALIASES: Record<string, string> = {
-  "eisenhower": "Eisenhower Matrix",
-};
-const normalized = AGENT_NAME_ALIASES[s.agent_name] ?? s.agent_name;
+// New ref
+const barsLocked = useRef(false);
+
+// Modified sync effect (lines 64-71)
+useEffect(() => {
+  if (isRunning || operatorOverride || barsLocked.current) return;
+  if (runPlan?.feasible) {
+    setBars(Math.min(runPlan.barsThisRun, maxBars));
+    barsLocked.current = true;  // Lock after first valid plan
+  } else if (suggestedBars && suggestedBars > 0) {
+    setBars(Math.min(suggestedBars, maxBars));
+    barsLocked.current = true;
+  }
+}, [runPlan?.barsThisRun, runPlan?.feasible, suggestedBars, maxBars, isRunning, operatorOverride]);
+
+// Reset lock on item change (modify existing effect at lines 73-78)
+useEffect(() => {
+  if (!isRunning) {
+    setOperatorOverride(false);
+    barsLocked.current = false;  // Unlock for new item
+  }
+}, [barCode, isRunning]);
 ```
 
-Use `normalized` as the map key instead of raw `s.agent_name`.
-
-### 3. Same dedup in `VizzyBrainPanel.tsx` merge logic (line 203, 218)
-The `mergedAgents` logic compares `s.agentName.toLowerCase()` which already partially handles this, but after the hook fix in step 2, this becomes moot. No changes needed here if step 2 is applied.
+This ensures:
+- First run plan computation sets the bars value and locks it
+- Subsequent run plan recalculations (e.g., after floor stock confirm) do NOT change bars
+- Navigating to a new item or completing a run resets the lock
+- Manual +/- still works (already sets `operatorOverride`)
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| Migration SQL | Normalize 1 legacy row |
-| `src/hooks/useUserAgentSessions.ts` | Add alias map for agent name normalization (~3 lines) |
+| `src/components/shopfloor/CutEngine.tsx` | Add `barsLocked` ref, freeze after first valid plan (~4 lines changed) |
 
 ## Impact
-- The two entries merge into one "Eisenhower Matrix" entry in Vizzy Brain
-- No UI, schema, or auth changes
-- Defensive against future naming inconsistencies
+- "Bars to Load" stays constant after the first supervisor/system sets it
+- No database, auth, or schema changes
+- Manual override via +/- buttons still works as before
 
