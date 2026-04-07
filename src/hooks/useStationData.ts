@@ -45,7 +45,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["station-data", machineId, machineType, companyId, projectId],
+    queryKey: ["station-data", machineId, machineType, companyId, projectId, activeJobId],
     enabled: !!user && !!machineId && !!companyId,
     queryFn: async () => {
       if (machineType === "bender") {
