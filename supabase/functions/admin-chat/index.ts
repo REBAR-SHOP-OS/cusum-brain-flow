@@ -2659,6 +2659,68 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
       return { success: true, message: `Task ${args.task_id.slice(0, 8)} updated: ${Object.entries(updateData).map(([k, v]) => `${k}=${v}`).join(", ")}` };
     }
 
+    // ─── SEO Write Tools ───
+    case "seo_run_audit": {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const auditTypeMap: Record<string, string> = {
+        "analyze": "seo-ai-analyze",
+        "local": "seo-local-audit",
+        "ai-visibility": "seo-ai-visibility-audit",
+      };
+      const fnName = auditTypeMap[args.audit_type];
+      if (!fnName) throw new Error(`Unknown audit type: ${args.audit_type}`);
+
+      // Get domain for this company
+      const { data: domains } = await supabase.from("seo_domains").select("id, domain").eq("company_id", companyId).limit(1);
+      const domain = domains?.[0];
+      if (!domain) throw new Error("No SEO domain configured");
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/${fnName}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ domain_id: domain.id, domain: domain.domain, company_id: companyId }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || `Audit failed (${resp.status})`);
+      return { success: true, message: `${args.audit_type} SEO audit completed for ${domain.domain}. ${data.tasksCreated || data.tasks_created || 0} tasks created.`, data };
+    }
+
+    case "seo_run_strategy": {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const { data: domains } = await supabase.from("seo_domains").select("id, domain").eq("company_id", companyId).limit(1);
+      const domain = domains?.[0];
+      if (!domain) throw new Error("No SEO domain configured");
+
+      const resp = await fetch(`${supabaseUrl}/functions/v1/seo-ai-strategy`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ domain_id: domain.id }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error || `Strategy generation failed (${resp.status})`);
+      return { success: true, message: `AI strategy generated for ${domain.domain}. ${data.tasks_created || 0} strategic tasks created.`, data };
+    }
+
+    // ─── Team Hub Write Tool ───
+    case "teamhub_send_message": {
+      const { data: channel } = await supabase.from("team_channels").select("id, name").ilike("name", `%${args.channel_name}%`).limit(1).maybeSingle();
+      if (!channel) throw new Error(`No channel found matching "${args.channel_name}"`);
+
+      // Get CEO's profile_id
+      const { data: ceoProfile } = await supabase.from("profiles").select("id").eq("user_id", userId).maybeSingle();
+      if (!ceoProfile) throw new Error("Could not resolve sender profile");
+
+      const { error } = await supabase.from("team_messages").insert({
+        channel_id: channel.id,
+        sender_id: ceoProfile.id,
+        content: args.message,
+      });
+      if (error) throw new Error(error.message);
+      return { success: true, message: `Message sent to "${channel.name}": "${args.message.slice(0, 80)}${args.message.length > 80 ? "..." : ""}"` };
+    }
+
     default:
       throw new Error(`Unknown write tool: ${toolName}`);
   }
