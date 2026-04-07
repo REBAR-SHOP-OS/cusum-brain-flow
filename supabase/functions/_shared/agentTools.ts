@@ -34,7 +34,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     }
   ];
 
-  if (!stripSendCapabilities && (agent === "accounting" || agent === "commander" || agent === "email" || agent === "sales")) {
+  if (!stripSendCapabilities && (agent === "accounting" || agent === "email" || agent === "sales")) {
     tools.push({
       type: "function" as const,
       function: {
@@ -175,7 +175,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
   }
 
   // Estimation Tools
-  if (agent === "estimation") {
+  if (agent === "estimating") {
     tools.push(
       {
         type: "function" as const,
@@ -482,7 +482,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
   }
 
   // Accounting (Penny) — QB Action Tools
-  if (agent === "accounting" || agent === "collections") {
+  if (agent === "accounting") {
     tools.push(
       {
         type: "function" as const,
@@ -538,7 +538,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
   }
 
   // Customer lookup & creation — available to sales and commander
-  if (agent === "sales" || agent === "commander") {
+  if (agent === "sales") {
     tools.push(
       {
         type: "function" as const,
@@ -575,7 +575,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
   }
 
   // Save sales quotation — available to sales and commander
-  if (agent === "sales" || agent === "commander") {
+  if (agent === "sales") {
     tools.push(
       {
         type: "function" as const,
@@ -649,7 +649,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
   }
 
   // Quote engine tool — available to estimation and sales agents
-  if (agent === "estimation" || agent === "sales" || agent === "commander") {
+  if (agent === "estimating" || agent === "sales") {
     tools.push({
       type: "function" as const,
       function: {

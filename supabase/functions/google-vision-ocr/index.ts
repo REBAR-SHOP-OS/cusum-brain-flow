@@ -88,7 +88,7 @@ Deno.serve((req) =>
       const result = await callAI({
         provider: "gemini",
         model: "gemini-2.5-flash",
-        agentName: "estimation",
+        agentName: "estimating",
         messages: [{ role: "user", content: [{ type: "text", text: STANDARD_PROMPT }, imageContent] }],
       });
 
@@ -105,7 +105,7 @@ Deno.serve((req) =>
       const fullResult = await callAI({
         provider: "gemini",
         model: "gemini-2.5-pro",
-        agentName: "estimation",
+        agentName: "estimating",
         messages: [{ role: "user", content: [{ type: "text", text: FULL_SCAN_PROMPT }, imageContent] }],
         maxTokens: 8000,
         temperature: 0.1,
@@ -122,7 +122,7 @@ Deno.serve((req) =>
         const quadResult = await callAI({
           provider: "gemini",
           model: "gemini-2.5-pro",
-          agentName: "estimation",
+          agentName: "estimating",
           messages: [{
             role: "user",
             content: [{ type: "text", text: buildQuadrantPrompt(position) }, imageContent],

@@ -185,7 +185,7 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
     try {
       const attachedFiles = uploadedFiles.map(f => ({ name: f.name, url: f.url }));
       const response = await sendAgentMessage(
-        "estimation",
+        "estimating",
         initialPrompt,
         [],
         { calculationMode: mode, projectName },
@@ -196,7 +196,7 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
         id: crypto.randomUUID(),
         role: "agent",
         content: response.reply,
-        agent: "estimation",
+        agent: "estimating",
         timestamp: new Date(),
         status: "sent",
       };
@@ -254,7 +254,7 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
           id: crypto.randomUUID(),
           role: "agent",
           content: response.reply,
-          agent: "estimation",
+          agent: "estimating",
           timestamp: new Date(),
           status: "sent",
         }]);
@@ -263,7 +263,7 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
 
       backgroundAgentService.enqueue(
         sessionId,
-        "estimation",
+        "estimating",
         "Gauge",
         msgContent,
         history,
@@ -272,8 +272,8 @@ export function CalChatInterface({ onBack }: CalChatInterfaceProps) {
     } else {
       // Fallback
       try {
-        const response = await sendAgentMessage("estimation", msgContent, history, { calculationMode, projectName });
-        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: "agent", content: response.reply, agent: "estimation", timestamp: new Date(), status: "sent" }]);
+        const response = await sendAgentMessage("estimating", msgContent, history, { calculationMode, projectName });
+        setMessages(prev => [...prev, { id: crypto.randomUUID(), role: "agent", content: response.reply, agent: "estimating", timestamp: new Date(), status: "sent" }]);
       } catch (error) {
         toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to get response", variant: "destructive" });
       } finally {

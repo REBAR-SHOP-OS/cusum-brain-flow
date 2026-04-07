@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { AgentBadge, AgentType } from "./AgentSelector";
+import { AgentBadge } from "./AgentSelector";
+import type { AgentType } from "@/lib/agent";
 import { User, Bot, FileIcon, Download, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { getSignedFileUrl } from "@/lib/storageUtils";

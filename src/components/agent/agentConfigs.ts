@@ -71,7 +71,7 @@ export const agentConfigs: Record<string, AgentConfig> = {
     name: "Gauge",
     role: "Estimating",
     image: estimatingHelper,
-    agentType: "estimation",
+    agentType: "estimating",
     greeting: "Hey! I'm Gauge, your precision Estimating agent.",
     placeholder: "Upload drawings or ask about estimates...",
     capabilities: ["Analyze drawings (PDF/DWG)", "Extract rebar quantities", "Calculate weights", "Produce takeoff reports"],

@@ -24,7 +24,7 @@ export default function GaugeChat() {
     setLoading(true);
 
     try {
-      const res = await sendAgentMessage("estimation", userMsg.content, messages);
+      const res = await sendAgentMessage("estimating", userMsg.content, messages);
       setMessages((prev) => [...prev, { role: "assistant", content: res.reply }]);
     } catch (err: any) {
       toast.error(err.message);

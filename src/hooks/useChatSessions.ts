@@ -34,8 +34,6 @@ const agentColorMap: Record<string, string> = {
   Rex: "bg-teal-500",
   Penny: "bg-purple-500",
   Ally: "bg-amber-500",
-  Chase: "bg-red-500",
-  Cal: "bg-sky-500",
 };
 
 export function getAgentColor(agentName: string): string {
@@ -48,8 +46,7 @@ const agentTypeNameMap: Record<string, string> = {
   accounting: "Penny",
   legal: "Tally",
   support: "Haven",
-  collections: "Chase",
-  estimation: "Cal",
+  estimating: "Gauge",
   social: "Pixel",
 };
 

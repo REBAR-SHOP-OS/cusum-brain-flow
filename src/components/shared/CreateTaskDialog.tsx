@@ -39,8 +39,7 @@ const agentTypes = [
   { value: "sales", label: "Sales" },
   { value: "accounting", label: "Accounting" },
   { value: "support", label: "Support" },
-  { value: "collections", label: "Collections" },
-  { value: "estimation", label: "Estimation" },
+  { value: "estimating", label: "Estimation" },
 ];
 
 const priorities = [
