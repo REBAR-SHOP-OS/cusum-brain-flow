@@ -1,54 +1,58 @@
 
 
-# Fix: Vizzy Delegating AR Checks Instead of Using Her Own Tools
+# Fix: Prevent Customer Deletion When Invoices Exist (Critical Data Integrity)
 
-## The Problem
+## Problem
+58 invoices are already orphaned. The `accounting_mirror.customer_id_fkey` uses `ON DELETE SET NULL`, so deleting a customer silently nullifies all their invoice links. The frontend delete flow has no guard — it just fires a delete with a generic "are you sure?" dialog.
 
-Vizzy says "I don't have direct, real-time access to live QuickBooks data" and delegates AR verification to Vicky. This is wrong — she has two tools that give her exactly this access:
+## Three-Layer Fix
 
-- `fetch_qb_report` — fetches live AgedReceivables, AgedPayables, P&L, BalanceSheet, CashFlow, TaxSummary directly from QuickBooks
-- `trigger_qb_sync` — triggers an incremental QB sync to refresh the local mirror
+### 1. Database: Change FK to RESTRICT
+Alter `accounting_mirror_customer_id_fkey` from `SET NULL` to `RESTRICT`. This makes it impossible to delete a customer who has invoices — the database itself blocks it.
 
-She also has `accounting_mirror` data loaded into her context. The issue is her identity prompt doesn't explicitly tell her she has QuickBooks READ access, and line 348 says "Write directly to QuickBooks" is a limitation — which she misinterprets as having NO QuickBooks access at all.
+Also apply to `orders`, `quotes`, `leads`, `sales_invoices` (via quotation→customer chain) — the critical financial tables that should never lose their customer link.
 
-## Changes
+```sql
+-- accounting_mirror: SET NULL → RESTRICT
+ALTER TABLE accounting_mirror DROP CONSTRAINT accounting_mirror_customer_id_fkey;
+ALTER TABLE accounting_mirror ADD CONSTRAINT accounting_mirror_customer_id_fkey 
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
 
-### `supabase/functions/_shared/vizzyIdentity.ts`
+-- orders
+ALTER TABLE orders DROP CONSTRAINT orders_customer_id_fkey;
+ALTER TABLE orders ADD CONSTRAINT orders_customer_id_fkey 
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
 
-**1. Add QuickBooks read access to the CAN DO list** (after line 342):
+-- quotes  
+ALTER TABLE quotes DROP CONSTRAINT quotes_customer_id_fkey;
+ALTER TABLE quotes ADD CONSTRAINT quotes_customer_id_fkey 
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
 
-```
-- Fetch LIVE QuickBooks reports: AgedReceivables, AgedPayables, P&L, BalanceSheet, CashFlow, TaxSummary (fetch_qb_report) — USE THIS for AR/AP verification, never delegate to Vicky
-- Trigger QuickBooks data sync to refresh local mirror (trigger_qb_sync) — use when data looks stale
-- Read all invoice, bill, payment, and vendor data from accounting_mirror — this IS your QuickBooks data
-```
-
-**2. Clarify the CANNOT line** (line 348):
-
-Change from:
-```
-- Write directly to QuickBooks or Odoo (ERP is read-from-mirror, write-to-local)
-```
-To:
-```
-- Write directly to QuickBooks or Odoo (you CAN read QB via fetch_qb_report and accounting_mirror — you CANNOT create/edit invoices in QB directly)
-```
-
-**3. Add explicit anti-delegation rule for financial data** (in the DIY section, after line 181):
-
-```
-NEVER say "I don't have access to QuickBooks data" — you DO. Use fetch_qb_report for live reports and accounting_mirror for invoice/payment data.
-NEVER delegate AR/AP verification to Vicky or anyone else — pull the data yourself first.
+-- leads
+ALTER TABLE leads DROP CONSTRAINT leads_customer_id_fkey;
+ALTER TABLE leads ADD CONSTRAINT leads_customer_id_fkey 
+  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
 ```
 
-## File Changes
+### 2. Frontend: Pre-check before delete
+In `AccountingCustomers.tsx`, update the delete mutation to first check for linked invoices/orders. If any exist, show a blocking error toast instead of proceeding.
+
+In `CustomerDetail.tsx`, update the delete dialog to show a warning count of linked records and disable the delete button if critical links exist.
+
+### 3. Relink the 58 orphaned invoices
+Use the existing `relink-orphan-invoices` edge function to reconnect the 58 orphaned `accounting_mirror` records back to their customers using QuickBooks CustomerRef data.
+
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/_shared/vizzyIdentity.ts` | Add QB read tools to CAN DO list, clarify CANNOT line, add anti-delegation rule (~8 lines) |
+| **Migration SQL** | Alter 4 FKs from SET NULL to RESTRICT |
+| `src/components/accounting/AccountingCustomers.tsx` | Add pre-delete check for linked invoices/orders (~10 lines) |
+| `src/components/customers/CustomerDetail.tsx` | Query linked record counts, show warning, disable delete if links exist (~20 lines) |
 
 ## Impact
-- 1 file, ~8 lines changed
-- Vizzy will pull AR data herself instead of delegating to Vicky
-- No database, UI, or routing changes
+- Database-level protection against future orphaning
+- UI prevents accidental deletion with clear warnings
+- Existing 58 orphans can be relinked via existing tool
+- No new tables or auth changes
 
