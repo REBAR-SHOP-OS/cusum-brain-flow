@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail, DollarSign, AlertTriangle } from "lucide-react";
+import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail, DollarSign, AlertTriangle, CreditCard, ExternalLink, Copy } from "lucide-react";
 import { RecordPaymentDialog } from "@/components/accounting/RecordPaymentDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
@@ -72,6 +72,9 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
   const [invoiceAmount, setInvoiceAmount] = useState(0);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [linkCheckStatus, setLinkCheckStatus] = useState<{ stripe: boolean | null; qb: boolean | null }>({ stripe: null, qb: null });
+  const [stripePayUrl, setStripePayUrl] = useState<string | null>(null);
+  const [qbPayUrl, setQbPayUrl] = useState<string | null>(null);
+  const [generatingStripe, setGeneratingStripe] = useState(false);
 
   // Customer dropdown state
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
@@ -288,6 +291,23 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
       
       setCustomerEmail(resolvedEmail);
       setInvoiceAmount(Number(inv.amount) || 0);
+
+      // Load payment links
+      const invMeta2 = (inv as any).metadata || {};
+      if (invMeta2.qb_invoice_link) setQbPayUrl(invMeta2.qb_invoice_link);
+      if (invMeta2.stripe_payment_link) setStripePayUrl(invMeta2.stripe_payment_link);
+
+      // Check stripe_payment_links table
+      if (!invMeta2.stripe_payment_link && companyId) {
+        const { data: spl } = await supabase
+          .from("stripe_payment_links")
+          .select("stripe_url")
+          .eq("company_id", companyId)
+          .eq("invoice_number", inv.invoice_number)
+          .eq("status", "active")
+          .maybeSingle();
+        if (spl?.stripe_url) setStripePayUrl(spl.stripe_url);
+      }
 
       if (custRes.data) {
         const normalized = (custRes.data as any[]).map((c) => ({
@@ -1139,6 +1159,77 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
               <span className="text-gray-900">Amount Due:</span>
               <span className="tabular-nums text-gray-900">{fmt(total)}</span>
             </div>
+          </div>
+        </div>
+
+        {/* Payment Links — screen only */}
+        <div className="mt-6 p-4 rounded-lg border border-border bg-muted/30 print:hidden">
+          <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+            <CreditCard className="w-4 h-4" />
+            Payment Links
+          </h4>
+          <div className="flex flex-col sm:flex-row gap-2">
+            {/* Stripe */}
+            <div className="flex-1 flex items-center gap-2">
+              {stripePayUrl ? (
+                <>
+                  <Button variant="outline" size="sm" className="flex-1 gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50" onClick={() => window.open(stripePayUrl, "_blank")}>
+                    <ExternalLink className="w-3.5 h-3.5" /> Pay via Stripe
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { navigator.clipboard.writeText(stripePayUrl); toast({ title: "Copied!", description: "Stripe link copied" }); }}>
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
+                  disabled={generatingStripe}
+                  onClick={async () => {
+                    setGeneratingStripe(true);
+                    try {
+                      const { data, error } = await supabase.functions.invoke("stripe-payment", {
+                        body: {
+                          action: "create-payment-link",
+                          amount: total,
+                          currency: "cad",
+                          invoiceNumber,
+                          customerName,
+                          qbInvoiceId: invoiceId,
+                        },
+                      });
+                      if (error) throw new Error(error.message);
+                      if (data?.paymentLink?.stripe_url) {
+                        setStripePayUrl(data.paymentLink.stripe_url);
+                        toast({ title: "Stripe link ready" });
+                      } else {
+                        throw new Error("No link returned");
+                      }
+                    } catch (e) {
+                      toast({ title: "Error", description: String(e), variant: "destructive" });
+                    } finally {
+                      setGeneratingStripe(false);
+                    }
+                  }}
+                >
+                  {generatingStripe ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CreditCard className="w-3.5 h-3.5" />}
+                  {generatingStripe ? "Generating…" : "Generate Stripe Link"}
+                </Button>
+              )}
+            </div>
+
+            {/* QuickBooks */}
+            {qbPayUrl && (
+              <div className="flex-1 flex items-center gap-2">
+                <Button variant="outline" size="sm" className="flex-1 gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50" onClick={() => window.open(qbPayUrl, "_blank")}>
+                  <ExternalLink className="w-3.5 h-3.5" /> Pay via QuickBooks
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { navigator.clipboard.writeText(qbPayUrl); toast({ title: "Copied!", description: "QuickBooks link copied" }); }}>
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
