@@ -331,6 +331,32 @@ async function handleMessageEvent(supabase: any, body: any) {
       dedupe_key: dedupeKey,
       metadata: { msgId, direction, fromAddr, toAddr },
     }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+
+    // ── Trigger AI auto-reply for inbound SMS ──
+    if (direction === "inbound" && fromAddr !== "Unknown" && companyId) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+        // Fire-and-forget — don't block the webhook response
+        fetch(`${supabaseUrl}/functions/v1/vizzy-sms-reply`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${svcKey}`,
+          },
+          body: JSON.stringify({
+            from_number: fromAddr,
+            message_text: msg.subject || "",
+            contact_name: null,
+            contact_id: contactId,
+            company_id: companyId,
+          }),
+        }).catch((e) => console.error("[webhook] SMS auto-reply trigger failed:", e));
+      } catch (e) {
+        console.error("[webhook] SMS auto-reply setup error:", e);
+      }
+    }
   }
 }
 
