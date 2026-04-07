@@ -1,122 +1,52 @@
 
 
-# Direct Bank Connection — Read-Only, No QB Conflict
+# Update Vizzy Suggestions Panel
 
-## Current State
+## Issues Found
 
-Your system has **three layers** of bank data today:
+1. **Single-agent view for CEO** — The Home page picks ONE agent's suggestions based on role mapping. The CEO (super admin) only sees Vizzy suggestions, missing Penny, Forge, and other agent suggestions entirely. All 20 shown are Vizzy overdue AR cards.
 
-| Layer | Source | What It Does |
-|-------|--------|-------------|
-| `qb_bank_activity` | QB Sync Engine | Pulls ledger balance, uncleared counts, reconciled-through dates from QB |
-| `bank_feed_balances` | Manual entry | Staff types in the "real" bank balance for comparison |
-| `reconciliation_matches` | Auto-reconcile | Matches QB mirror transactions against Stripe charges |
+2. **Grouped card hardcodes "overdue invoices"** — `GroupedSuggestionCard` line 60: `{customerName} — {count} overdue invoices` is hardcoded. If the group contains mixed categories (e.g., blocked production + overdue), the label is wrong.
 
-**QB owns the bank feed** — it downloads transactions from BMO, categorizes them, and reconciles. That's the system of record for accounting.
+3. **No bulk actions for the full panel** — Individual cards and groups have Snooze/Dismiss, but there's no way to clear all 20 at once.
 
-## The Safe Architecture: Read-Only Bank Observer
+4. **No severity sorting** — Suggestions display in `created_at desc` order. A critical $190 item (140 days overdue) appears below warning items.
 
-The key principle: **QB stays the accounting authority. The ERP becomes a read-only observer of the bank.**
+5. **Grouping threshold too high** — Only groups when >= 3 items from same customer. Two invoices from the same customer appear as separate cards instead of grouped.
 
-```text
-BMO Bank ──→ Plaid (read-only) ──→ ERP (observe + alert)
-BMO Bank ──→ QB Bank Feed ──→ QB (reconcile + book)
-                                    │
-                                    └──→ ERP (sync via qb-sync-engine)
-```
+## Plan
 
-**No conflict because:**
-- ERP never writes to the bank
-- ERP never creates QB bank transactions
-- ERP only reads balances + transactions via Plaid for visibility
-- QB continues to be the sole reconciliation engine
+### File: `src/hooks/useAgentSuggestions.ts`
+- Add a new hook `useAllAgentSuggestions()` that loads suggestions from ALL agents (no `agent_id` filter) for super admins
+- Sort results: critical first, then warning, then info; within same severity, by `created_at desc`
 
-## What This Enables
+### File: `src/components/agent/AgentSuggestionsPanel.tsx`
+- For super admins: use `useAllAgentSuggestions()` instead of single-agent hook
+- Show agent name per-card dynamically (e.g., "Vizzy suggests" vs "Penny suggests" vs "Forge suggests")
+- Change grouping threshold from 3 to 2
+- Add "Dismiss All" and "Snooze All" buttons at the panel header level when count > 5
+- Pass agent name from suggestion data rather than hardcoded prop
 
-1. **Real-time balance visibility** — No more manual entry in `bank_feed_balances`; Plaid pulls the actual balance automatically
-2. **Transaction monitoring** — See deposits/withdrawals before QB processes them (QB bank feeds can lag 1-2 days)
-3. **Variance alerts** — Auto-compare Plaid balance vs QB ledger balance; flag discrepancies immediately
-4. **Cash flow forecasting** — Real transaction data feeds into projections without waiting for QB sync
+### File: `src/components/agent/GroupedSuggestionCard.tsx`
+- Replace hardcoded "overdue invoices" with dynamic category label
+- Map category to readable text: `overdue_ar` → "overdue invoices", `zero_total` → "$0 orders", `blocked_production` → "blocked orders", etc.
 
-## Implementation Plan
+### File: `src/pages/Home.tsx`
+- Pass `isSuperAdmin` flag to `AgentSuggestionsPanel` to trigger multi-agent mode
+- Keep existing single-agent behavior for non-super-admin users
 
-### Phase 1: Plaid Integration Setup
+## Technical Details
 
-**New edge function: `supabase/functions/plaid-bank/index.ts`**
-- Actions: `create-link-token`, `exchange-token`, `get-balances`, `get-transactions`, `sync-balances`
-- Uses Plaid API (requires `PLAID_CLIENT_ID` + `PLAID_SECRET` secrets)
-- Read-only access scope: `transactions`, `auth` (balance only)
-- Stores connection tokens in a new `bank_connections` table
+- New `useAllAgentSuggestions` query joins `suggestions` with `agents` table to get agent code/name per suggestion
+- Severity sort order: `{ critical: 0, warning: 1, info: 2 }`
+- Category label map added as a const in `GroupedSuggestionCard`
+- Bulk snooze/dismiss calls `Promise.all` on all visible suggestion IDs
+- No database changes needed
 
-**New table: `bank_connections`**
-```sql
-CREATE TABLE bank_connections (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id uuid NOT NULL REFERENCES companies(id),
-  institution_name text NOT NULL,
-  plaid_item_id text NOT NULL,
-  access_token_encrypted text NOT NULL,  -- encrypted at rest
-  account_mask text,                      -- last 4 digits
-  account_name text,
-  account_type text,
-  linked_qb_account_id text,             -- maps to QB account for comparison
-  status text DEFAULT 'active',
-  last_balance_sync timestamptz,
-  created_at timestamptz DEFAULT now()
-);
-```
-
-**New table: `bank_transactions_live`**
-```sql
-CREATE TABLE bank_transactions_live (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id uuid NOT NULL,
-  connection_id uuid REFERENCES bank_connections(id),
-  plaid_txn_id text UNIQUE,
-  date date NOT NULL,
-  description text,
-  amount numeric NOT NULL,
-  category text,
-  pending boolean DEFAULT false,
-  synced_at timestamptz DEFAULT now()
-);
-```
-
-### Phase 2: Auto-Sync + Replace Manual Entry
-
-- **Cron job** (every 4 hours): calls `plaid-bank` with action `sync-balances` → updates `bank_feed_balances.bank_balance` automatically from Plaid instead of manual entry
-- **Maps Plaid accounts to QB accounts** via `linked_qb_account_id` on `bank_connections`
-- The existing `BankAccountsCard` UI stays the same — it just shows auto-fetched balances instead of manually entered ones
-
-### Phase 3: Variance Dashboard
-
-- In `BankAccountsCard`, add a **variance column**: `Plaid Balance - QB Ledger Balance`
-- Green = within $50, Yellow = $50-500, Red = >$500
-- Auto-generates an alert if variance persists >24 hours
-
-### Phase 4: Plaid Link UI
-
-- Add "Connect Bank" button on Integrations page
-- Uses Plaid Link (drop-in UI) to securely connect BMO
-- After linking, map each Plaid account to its QB equivalent
-
-## Files Changed
-
-| File | Change |
-|------|--------|
-| `supabase/functions/plaid-bank/index.ts` | New — Plaid API integration |
-| `src/pages/Integrations.tsx` | Add bank connection card |
-| `src/components/accounting/BankAccountsCard.tsx` | Add variance column, auto-balance indicator |
-| `src/hooks/useBankFeedBalances.ts` | Add Plaid sync status awareness |
-| Migration | 2 new tables + RLS policies |
-
-## Secrets Required
-- `PLAID_CLIENT_ID` — from Plaid dashboard
-- `PLAID_SECRET` — from Plaid dashboard (sandbox first, then production)
-
-## Zero-Conflict Guarantee
-- QB bank feed continues unchanged — downloads, categorizes, reconciles
-- Plaid connection is **read-only** (no write permissions)
-- ERP never creates or modifies bank transactions in QB
-- The two systems observe the same bank independently — variance detection is the value add
+## Impact
+- 4 files changed
+- CEO sees all agent suggestions in one unified panel, sorted by severity
+- Non-admin users see their agent's suggestions unchanged
+- Grouped cards show accurate category labels
+- Critical items surface to the top
 
