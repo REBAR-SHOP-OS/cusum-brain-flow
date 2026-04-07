@@ -193,7 +193,7 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
   // Role-based agent access mapping
   const roleAgentAccess: Record<string, string[]> = {
     ceo: Object.keys(agentConfigs), // CEOs get all agents
-    shop_supervisor: ["shopfloor", "delivery", "assistant", "eisenhower", "growth"],
+    shop_supervisor: [],
     sales: ["sales", "support", "estimating", "email", "legal", "eisenhower", "assistant", "copywriting", "growth"],
     accountant: ["accounting", "legal", "email", "eisenhower", "assistant", "growth"],
     social_media_manager: ["social", "eisenhower", "support", "legal"],

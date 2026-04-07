@@ -22,13 +22,8 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
   "kourosh@rebar.shop": {
     agentKey: "shopfloor",
     userRole: "shop_supervisor",
-    heroText: "How can **Forge** help you today?",
-    quickActions: [
-      { title: "What machines are running?", prompt: "Show me the current status of all machines — which are running, idle, or down. Flag any that need attention.", icon: "Cog", category: "Machines" },
-      { title: "Build cage from drawing", prompt: "I need help building a cage. Walk me through the fabrication steps from the drawing — which bars to cut first, bend sequence, and assembly order.", icon: "FileText", category: "Fabrication" },
-      { title: "Maintenance schedule", prompt: "Show me the maintenance timeline for all machines — what's due, what's overdue, and recommended maintenance windows.", icon: "Wrench", category: "Maintenance" },
-      { title: "Today's production queue", prompt: "Show me today's production queue — what's scheduled, what's in progress, and what's blocked.", icon: "ListOrdered", category: "Production" },
-    ],
+    heroText: "Welcome, Kourosh",
+    quickActions: [],
   },
   "saurabh@rebar.shop": {
     agentKey: "sales",
