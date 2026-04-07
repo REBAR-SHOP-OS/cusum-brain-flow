@@ -77,7 +77,7 @@ export function PackingSlipsView() {
       const { data: items, error } = await supabase
         .from("cut_plan_items")
         .select("id, bar_code, mark_number, drawing_ref, cut_length_mm, total_pieces, cut_plan_id, clearance_evidence(id, material_photo_url, tag_scan_url, status, verified_at, verified_by), cut_plans!inner(id, name, project_name)")
-        .eq("phase", "complete");
+        .eq("phase", "loading");
 
       if (error) throw error;
 

@@ -36,7 +36,7 @@ export function useCompletedBundles(options?: { pickupOnly?: boolean }) {
       const { data: items, error: err } = await supabase
         .from("cut_plan_items")
         .select("*, cut_plans!inner(id, name, project_name, company_id, project_id, projects(customer_id, customers(name)))")
-        .eq("phase", "complete")
+        .eq("phase", "loading")
         .eq("cut_plans.company_id", companyId!);
 
       if (err) throw err;
