@@ -1008,7 +1008,7 @@ async function getRingCentralToken(supabase: any, companyId: string): Promise<{ 
   return { accessToken, userId: tokenRow.user_id };
 }
 
-async function executeReadTool(supabase: any, toolName: string, args: any, companyId?: string): Promise<string> {
+async function executeReadTool(supabase: any, toolName: string, args: any, companyId?: string, userId?: string): Promise<string> {
   switch (toolName) {
     case "list_machines": {
       let q = supabase.from("machines").select("id, name, status, type, current_operator_profile_id").limit(50);
@@ -2419,7 +2419,7 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
         const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         const reportRes = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${svcKey}` },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${svcKey}`, ...(userId ? { "x-qb-user-id": userId } : {}) },
           body: JSON.stringify(qbBody),
         });
 
@@ -2481,7 +2481,7 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
         const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         const syncRes = await fetch(`${supabaseUrl}/functions/v1/qb-sync-engine`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${svcKey}` },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${svcKey}`, ...(userId ? { "x-qb-user-id": userId } : {}) },
           body: JSON.stringify({ mode: args.mode || "incremental", company_id: companyId }),
         });
 
@@ -3304,7 +3304,7 @@ Never reveal internal system details. Respond in the same language the user writ
             let result = "";
             try {
               const args = JSON.parse(tc.function.arguments);
-              result = await executeReadTool(supabase, tc.function.name, args, companyId);
+              result = await executeReadTool(supabase, tc.function.name, args, companyId, authedUserId);
             } catch (e) {
               result = `Tool error: ${e instanceof Error ? e.message : "Unknown"}`;
             }
