@@ -25,6 +25,9 @@ Deno.serve(async (req) => {
 
   try {
     const { from_number, message_text, contact_name, contact_id, company_id } = await req.json();
+    const normalizedEntry = from_number?.replace(/\D/g, "") || "";
+    const isCeoEntry = normalizedEntry === "4165870788" || normalizedEntry === "14165870788";
+    console.log(`[sms-reply] INVOKED from=${from_number} isCeo=${isCeoEntry} text="${(message_text || "").slice(0, 60)}"`);
 
     if (!from_number || !message_text) {
       return new Response(JSON.stringify({ ok: false, error: "Missing from_number or message_text" }), {
