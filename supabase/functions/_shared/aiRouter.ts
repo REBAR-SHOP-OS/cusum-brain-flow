@@ -456,8 +456,8 @@ export function selectModel(agent: string, message: string, hasAttachments: bool
   provider: AIProvider;
 } {
   // Estimation + Docs → Gemini Pro
-  if (agent === "estimation" && hasAttachments) {
-    return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 8000, temperature: 0.1, reason: "estimation+docs" };
+  if (agent === "estimating" && hasAttachments) {
+    return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 8000, temperature: 0.1, reason: "estimating+docs" };
   }
 
   // Briefings → Gemini Pro

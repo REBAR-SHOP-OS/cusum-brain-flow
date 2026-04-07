@@ -3048,7 +3048,7 @@ Never reveal internal system details. Respond in the same language the user writ
         const aiResponse = await callAIStream({
           provider: "gemini",
           model: "gemini-2.5-flash",
-          agentName: "commander",
+          agentName: "admin-chat",
           messages: [{ role: "system", content: publicSystemPrompt }, ...publicMessages],
           signal: AbortSignal.timeout(30000),
         });
@@ -3184,7 +3184,7 @@ Never reveal internal system details. Respond in the same language the user writ
       aiResponse = await callAIStream({
         provider: mainProvider,
         model: mainModel,
-        agentName: "commander",
+        agentName: "admin-chat",
         messages: [{ role: "system", content: systemPrompt }, ...buildMultimodalMessages(messages, imageUrls)],
         tools: JARVIS_TOOLS,
         signal: AbortSignal.timeout(55000),
@@ -3371,7 +3371,7 @@ Never reveal internal system details. Respond in the same language the user writ
             followUpResp = await callAIStream({
               provider: "gemini",
               model: "gemini-2.5-flash",
-              agentName: "commander",
+              agentName: "admin-chat",
               messages: followUpMessages,
               signal: AbortSignal.timeout(25000),
             });
