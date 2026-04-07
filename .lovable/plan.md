@@ -1,51 +1,37 @@
 
 
-# Fix: QuickBooks GST/HST Tax Code Error (Root Cause)
+# Fix: QuickBooks Link Goes to QB Login Instead of Customer Payment Page
+
+## Problem
+The QuickBooks payment link on invoices uses fallback URLs like `https://app.qbo.intuit.com/app/invoice?txnId=XXX` — this is the **admin dashboard URL** that requires a QuickBooks login. Customers clicking this link see a login page, not a payment form.
+
+The correct customer-facing link is the `InvoiceLink` value returned by the QuickBooks API (e.g., `https://qbo.intuit.com/payment/...`), but when that's not available, the code falls back to the admin URL.
 
 ## Root Cause
+Three places construct fallback admin URLs when `InvoiceLink` is missing:
+- **Line 300**: `https://app.qbo.intuit.com/app/invoice?txnId=${qb_invoice_id}` — on invoice load
+- **Line 1258**: Same pattern — on "Get QB Link" button click
+- **PaymentLinksSection.tsx line 26**: `https://app.qbo.intuit.com/app/customerbalance?invoiceId=...`
 
-The `resolveTaxCodeId` helper queries QuickBooks for a tax code named `"TAX"` — but this is a **US-only** tax code. This QuickBooks account is **Canadian** (realm `9341452420664446`), where tax codes have names like `"HST ON"`, `"GST"`, `"HST"`, etc. The query returns no results, so `resolveTaxCodeId` returns `null`, and the fallback keeps the string `"TAX"` which is invalid for Canadian QBO.
+## Fix
 
-Additionally, Canadian QBO requires a **`TxnTaxDetail`** block at the transaction level with a `TxnTaxCodeRef` pointing to the tax code ID. Without this, QB rejects with error 6000.
+### 1. `DraftInvoiceEditor.tsx` — Remove admin URL fallbacks
 
-## Fix (Two Parts)
+**Line 299-301** (invoice load): Only set `qbPayUrl` when a real `qb_invoice_link` exists in metadata. Remove the `qb_invoice_id` fallback that builds an admin URL.
 
-### Part 1: Smart Tax Code Resolution with Fallback
+**Line 1258**: When the "Get QB Link" button returns no `InvoiceLink`, don't fall back to the admin URL. Instead show a message like "No customer payment link available — push invoice to QB first."
 
-Update `resolveTaxCodeId` to handle the case where the exact name isn't found:
-- If exact name match fails, query for **any taxable tax code** (`select Id, Name from TaxCode where Active = true`) and pick the first one where `Taxable = true`
-- Cache the resolved ID for the duration of the request
+### 2. `PaymentLinksSection.tsx` — Remove admin URL fallback
 
-### Part 2: Add `TxnTaxDetail` to Invoice and Estimate Payloads
+**Line 26**: Only use `invoiceLink` if it exists. Don't fall back to `app.qbo.intuit.com` admin URL.
 
-For Canadian QB accounts, the payload must include:
-```typescript
-TxnTaxDetail: {
-  TxnTaxCodeRef: { value: resolvedTaxCodeId }
-}
-```
+### 3. Show "Generate" button when no link exists
 
-QB will auto-calculate the `TotalTax` when `TxnTaxCodeRef` is provided. This is required for non-US locales.
-
-### Implementation in `supabase/functions/quickbooks-oauth/index.ts`
-
-1. **Update `resolveTaxCodeId`** (~line 75): Add fallback query for any active taxable code when exact name match fails.
-
-2. **Update estimate handler** (~line 1188): Add `TxnTaxDetail: { TxnTaxCodeRef: { value: effectiveTaxCode } }` to the payload when `effectiveTaxCode` is a numeric ID.
-
-3. **Update invoice handler** (~line 1374): Same `TxnTaxDetail` addition to the invoice payload.
-
-4. **Update `qb_company_config` default**: Change the DB default from `"TAX"` to `NULL` so the system always auto-resolves from QB rather than assuming US locale. (Migration)
-
-### Migration
-```sql
-ALTER TABLE qb_company_config 
-ALTER COLUMN default_tax_code SET DEFAULT NULL;
-```
+When `qbPayUrl` is null, the existing "Push to QB" button already handles creating the invoice and retrieving the `InvoiceLink`. No additional logic needed — just stop showing broken admin links.
 
 ## Files Changed
 | File | Change |
 |------|--------|
-| `supabase/functions/quickbooks-oauth/index.ts` | Fix tax code resolution fallback + add `TxnTaxDetail` to payloads |
-| Migration | Change `default_tax_code` default from `'TAX'` to `NULL` |
+| `src/components/accounting/documents/DraftInvoiceEditor.tsx` | Remove 2 admin-URL fallbacks (lines 300, 1258) |
+| `src/components/accounting/PaymentLinksSection.tsx` | Remove admin-URL fallback (line 26) |
 
