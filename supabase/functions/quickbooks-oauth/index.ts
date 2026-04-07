@@ -1551,7 +1551,8 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   let effectiveTerms: string | undefined = salesTermRef || (qbConfig as any).default_sales_term;
   if (effectiveTerms && isNaN(Number(effectiveTerms))) {
     const resolvedId = await resolveTermId(config, effectiveTerms);
-    effectiveTerms = resolvedId || undefined;
+    // If we can't resolve the name to an ID, drop it entirely — QB rejects non-numeric values
+    effectiveTerms = resolvedId ?? undefined;
   }
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
@@ -2253,6 +2254,42 @@ async function handleUpdateInvoice(supabase: ReturnType<typeof createClient>, us
   const companyId = await getUserCompanyId(supabase, userId);
   const { invoiceId, updates } = body as { invoiceId: string; updates: Record<string, unknown> };
   if (!invoiceId) throw new Error("Invoice ID is required");
+
+  // Resolve SalesTermRef: frontend may send { name: "Net 30" } but QB needs { value: "3" }
+  if (updates.SalesTermRef) {
+    const termRef = updates.SalesTermRef as Record<string, unknown>;
+    const termName = termRef.name as string | undefined;
+    const termValue = termRef.value as string | undefined;
+    if (termName && (!termValue || isNaN(Number(termValue)))) {
+      const resolvedId = await resolveTermId(config, termName);
+      if (resolvedId) {
+        updates.SalesTermRef = { value: resolvedId, name: termName };
+      } else {
+        // Can't resolve — remove to avoid QB validation error
+        delete updates.SalesTermRef;
+      }
+    }
+  }
+
+  // Resolve ShipMethodRef similarly if needed
+  if (updates.ShipMethodRef) {
+    const shipRef = updates.ShipMethodRef as Record<string, unknown>;
+    if (shipRef.name && !shipRef.value) {
+      // QB ShipMethodRef also needs a value; query for it
+      try {
+        const q = `select Id, Name from ShipMethod where Name = '${(shipRef.name as string).replace(/'/g, "''")}'`;
+        const r = await qbFetch(config, `query?query=${encodeURIComponent(q)}`) as Record<string, unknown>;
+        const methods = (r?.QueryResponse as Record<string, unknown>)?.ShipMethod as Record<string, unknown>[] | undefined;
+        if (methods && methods.length > 0) {
+          updates.ShipMethodRef = { value: String(methods[0].Id), name: shipRef.name };
+        } else {
+          delete updates.ShipMethodRef;
+        }
+      } catch {
+        delete updates.ShipMethodRef;
+      }
+    }
+  }
 
   // Fetch current invoice to get latest SyncToken
   const current = await qbFetch(config, `invoice/${invoiceId}?include=invoiceLink`);
