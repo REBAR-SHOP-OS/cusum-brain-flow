@@ -943,16 +943,27 @@ async function handleSyncCustomers(supabase: ReturnType<typeof createClient>, us
   const BATCH_SIZE = 50;
   for (let i = 0; i < customers.length; i += BATCH_SIZE) {
     const batch = customers.slice(i, i + BATCH_SIZE);
-    const records = batch.map((customer: Record<string, unknown>) => ({
-      quickbooks_id: customer.Id as string,
-      name: (customer.DisplayName as string) || "Unknown",
-      company_name: (customer.CompanyName as string) || null,
-      company_id: companyId,
-      notes: (customer.Notes as string) || null,
-      credit_limit: (customer.CreditLimit as number) || null,
-      payment_terms: (customer.SalesTermRef as Record<string, unknown>)?.name as string || null,
-      status: customer.Active ? "active" : "inactive",
-    }));
+    const records = batch.map((customer: Record<string, unknown>) => {
+      const emailAddr = customer.PrimaryEmailAddr as { Address?: string } | undefined;
+      const phoneNum = customer.PrimaryPhone as { FreeFormNumber?: string } | undefined;
+      const billAddr = customer.BillAddr as Record<string, string> | undefined;
+      return {
+        quickbooks_id: customer.Id as string,
+        name: (customer.DisplayName as string) || "Unknown",
+        company_name: (customer.CompanyName as string) || null,
+        company_id: companyId,
+        email: emailAddr?.Address || null,
+        phone: phoneNum?.FreeFormNumber || null,
+        notes: (customer.Notes as string) || null,
+        credit_limit: (customer.CreditLimit as number) || null,
+        payment_terms: (customer.SalesTermRef as Record<string, unknown>)?.name as string || null,
+        status: customer.Active ? "active" : "inactive",
+        address: billAddr?.Line1 || null,
+        city: billAddr?.City || null,
+        province: billAddr?.CountrySubDivisionCode || null,
+        postal_code: billAddr?.PostalCode || null,
+      };
+    });
 
     const { error, count } = await supabase
       .from("customers")
@@ -1337,6 +1348,8 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
         ...(taxCodeIsNumeric && { TaxCodeRef: { value: effectiveTaxCode } }),
       },
     })),
+    GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
     ...(expirationDate && { ExpirationDate: expirationDate }),
     ...(memo && { CustomerMemo: { value: memo } }),
     ...(classRef && { ClassRef: { value: classRef } }),
@@ -2369,6 +2382,7 @@ async function handleCreateSalesReceipt(supabase: ReturnType<typeof createClient
       Description: item.description,
       SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount, ...(item.serviceId && { ItemRef: { value: item.serviceId } }) },
     })),
+    GlobalTaxCalculation: "TaxExcluded",
     ...(memo && { CustomerMemo: { value: memo } }),
     ...(depositToAccountId && { DepositToAccountRef: { value: depositToAccountId } }),
     ...(paymentMethodId && { PaymentMethodRef: { value: paymentMethodId } }),
@@ -2611,7 +2625,7 @@ async function handleCreateCustomer(supabase: ReturnType<typeof createClient>, u
   if (!displayName) throw new Error("Missing displayName for customer creation");
 
   // Check if customer already exists in QB by display name
-  const existingQuery = `SELECT * FROM Customer WHERE DisplayName = '${displayName.replace(/'/g, "\\'")}'`;
+  const existingQuery = `SELECT * FROM Customer WHERE DisplayName = '${displayName.replace(/'/g, "''")}'`;
   const existingData = await qbFetch(config, `query?query=${encodeURIComponent(existingQuery)}`) as Record<string, unknown>;
   const existingCustomers = ((existingData as any)?.QueryResponse?.Customer as any[]) || [];
 
