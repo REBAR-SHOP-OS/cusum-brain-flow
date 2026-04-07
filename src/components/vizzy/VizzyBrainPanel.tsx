@@ -627,7 +627,14 @@ export function VizzyBrainPanel({ onClose }: Props) {
               <div className="rounded-xl border border-border bg-card overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                   <Activity className="w-4 h-4 text-primary" />
-                   <h3 className="text-sm font-semibold text-foreground">General Overview</h3>
+                  <h3 className="text-sm font-semibold text-foreground flex-1">General Overview</h3>
+                  <SectionReportButton
+                    label="Overview"
+                    getText={() => {
+                      const name = selectedProfile.full_name || "User";
+                      return `📊 General Overview — ${name}\nEmail: ${selectedProfile.email}\nStatus: ${selectedProfile.is_active ? "Active" : "Inactive"}`;
+                    }}
+                  />
                 </div>
                 <div className="p-3">
                   <PerformanceCard
@@ -644,7 +651,11 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 <div className="rounded-xl border border-border bg-card overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                     <Bot className="w-4 h-4 text-primary" />
-                     <h3 className="text-sm font-semibold text-foreground">Agents</h3>
+                    <h3 className="text-sm font-semibold text-foreground flex-1">Agents</h3>
+                    <SectionReportButton
+                      label="Agents"
+                      getText={() => `🤖 Agents Report — ${selectedProfile.full_name || "User"}\nSee agent sessions and activity in Vizzy Brain.`}
+                    />
                   </div>
                   <div className="p-3">
                     <UserAgentsSections
@@ -655,6 +666,36 @@ export function VizzyBrainPanel({ onClose }: Props) {
                   </div>
                 </div>
               )}
+
+              {/* Section 3: Activity Log */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+                  <Users className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground flex-1">Activity Log</h3>
+                  <SectionReportButton
+                    label="Activities"
+                    getText={() => `📋 Activity Log — ${selectedProfile.full_name || "User"}\nToday's system activities.`}
+                  />
+                </div>
+                <div className="p-3">
+                  <UserActivitySection profileId={selectedProfile.id} timezone={timezone} />
+                </div>
+              </div>
+
+              {/* Section 4: Time Clock Detail */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+                  <Clock className="w-4 h-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground flex-1">Time Clock</h3>
+                  <SectionReportButton
+                    label="Time Clock"
+                    getText={() => `⏰ Time Clock — ${selectedProfile.full_name || "User"}\nDetailed clock-in/clock-out entries for today.`}
+                  />
+                </div>
+                <div className="p-3">
+                  <UserTimeClockSection profileId={selectedProfile.id} userId={selectedProfile.user_id} timezone={timezone} />
+                </div>
+              </div>
             </div>
           )}
           {renderContent()}
