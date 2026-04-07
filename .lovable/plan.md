@@ -1,25 +1,29 @@
 
 
-# Unify Chat Icon Widget with Team Hub
-
-## Current State
-The floating chat icon (`DockChatBar`) and Team Hub (`/team-hub`) already share the same data layer (channels, profiles, DMs, messages). However, they are treated as separate systems:
-- The chat icon **hides itself** when the user is on `/team-hub` (line 57, 126 in `DockChatBar.tsx`)
-- The DockChatBox "expand" button navigates to `/team-hub` and **closes** the chat box
-
-## Problem
-The user wants the chat icon to always be visible as a consistent widget — it should never disappear, even on the Team Hub page. The chat icon IS Team Hub's widget form; they must behave as one unified system.
+# Add View and Delete Actions to Invoice List
 
 ## Changes
 
-### 1. `src/components/chat/DockChatBar.tsx`
-- **Remove the Team Hub hide logic**: Delete the `isTeamHub` check (lines 57, 126) so the floating chat button is always visible, including on `/team-hub`
-- The widget remains fully functional everywhere — same channels, same DMs, same data
+### `src/pages/sales/SalesInvoices.tsx`
 
-### 2. `src/components/chat/DockChatBox.tsx`
-- **Update the expand button**: Instead of closing the chat and navigating to `/team-hub`, keep the expand button but don't close the active chat — just navigate to Team Hub so the user can see the full view while keeping the widget available
-- Alternative: on Team Hub page, the expand button could scroll/focus the relevant channel in the sidebar instead of navigating
+1. **Add an "Actions" column** to the table header
+2. **Add View and Delete buttons** per row:
+   - **View (Eye icon)**: Opens the `DraftInvoiceEditor` (same as clicking the row — just makes it explicit)
+   - **Delete (Trash2 icon)**: Deletes the invoice from `sales_invoices` with a confirmation dialog, then invalidates the query cache
+3. **Delete uses `stopPropagation`** so clicking the delete button doesn't also open the editor
+4. **Delete confirmation** via `window.confirm()` to prevent accidental data loss — consistent with the quotation card delete pattern
+5. **Import** `Eye, Trash2` from lucide-react and `useQueryClient` from tanstack
 
-### No other changes needed
-The data layer (`useTeamChannels`, `useTeamMessages`, `useSendMessage`, `useOpenDM`) is already shared between both. No database changes required.
+### Row layout change
+```text
+| Number | Customer | Status | Amount | Issued | Due | Actions      |
+|        |          |        |        |        |     | [👁] [🗑]    |
+```
+
+### Delete logic
+- Call `supabase.from("sales_invoices").delete().eq("id", inv.id)`
+- On success: `toast.success`, invalidate `["sales-invoices"]` query
+- On error: `toast.error`
+
+Single file change. No database changes.
 
