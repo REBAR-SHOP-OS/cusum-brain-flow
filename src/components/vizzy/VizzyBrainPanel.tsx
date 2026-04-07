@@ -140,8 +140,8 @@ function DateGroupedEntries({ items }: { items: VizzyMemoryEntry[] }) {
 }
 
 /** Performance summary card for selected user */
-function PerformanceCard({ profileId, userId, name, timezone }: { profileId: string; userId: string | null; name: string; timezone: string }) {
-  const { data, isLoading } = useUserPerformance(profileId, userId);
+function PerformanceCard({ profileId, userId, name, timezone, date }: { profileId: string; userId: string | null; name: string; timezone: string; date?: Date }) {
+  const { data, isLoading } = useUserPerformance(profileId, userId, date);
 
   if (isLoading) {
     return (
@@ -626,6 +626,9 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const { toast } = useToast();
   const { profiles } = useProfiles();
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [userSelectedDate, setUserSelectedDate] = useState<Date>(new Date());
+  const [userCalendarOpen, setUserCalendarOpen] = useState(false);
+  const isUserToday = userSelectedDate.toDateString() === new Date().toDateString();
 
   // Filter @rebar.shop profiles, active first
   const rebarProfiles = useMemo(() => {
@@ -830,7 +833,39 @@ export function VizzyBrainPanel({ onClose }: Props) {
               <div className="rounded-xl border border-border bg-card overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                   <Activity className="w-4 h-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground flex-1">General Overview</h3>
+                  <h3 className="text-sm font-semibold text-foreground flex-1">
+                    General Overview
+                    {!isUserToday && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        ({format(userSelectedDate, "MMM d, yyyy")})
+                      </span>
+                    )}
+                  </h3>
+                  <Popover open={userCalendarOpen} onOpenChange={setUserCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <button className="p-1 rounded hover:bg-muted transition-colors" title="Select date">
+                        <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0 z-[100001]" align="end">
+                      <Calendar
+                        mode="single"
+                        selected={userSelectedDate}
+                        onSelect={(d) => { if (d) setUserSelectedDate(d); setUserCalendarOpen(false); }}
+                        disabled={(d) => d > new Date()}
+                        initialFocus
+                        className="p-3 pointer-events-auto"
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  {!isUserToday && (
+                    <button
+                      onClick={() => setUserSelectedDate(new Date())}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Today
+                    </button>
+                  )}
                   <SectionReportButton
                     label="Overview"
                     getText={() => {
@@ -845,6 +880,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
                     userId={selectedProfile.user_id}
                     name={selectedProfile.full_name?.split(" ")[0] || "User"}
                     timezone={timezone}
+                    date={userSelectedDate}
                   />
                 </div>
               </div>

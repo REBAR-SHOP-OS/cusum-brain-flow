@@ -18,15 +18,20 @@ export interface UserPerformance {
   clockEntries: ClockEntry[];
 }
 
-export function useUserPerformance(profileId: string | null, userId: string | null) {
+export function useUserPerformance(profileId: string | null, userId: string | null, date?: Date) {
   const { timezone } = useWorkspaceSettings();
 
+  const targetDate = date ?? new Date();
+  const dayStart = getStartOfDayIsoInTimezone(timezone, targetDate);
+  const nextDay = new Date(targetDate);
+  nextDay.setDate(nextDay.getDate() + 1);
+  const dayEnd = getStartOfDayIsoInTimezone(timezone, nextDay);
+
   return useQuery({
-    queryKey: ["user_performance", profileId, userId],
+    queryKey: ["user_performance", profileId, userId, dayStart],
     enabled: !!profileId,
     staleTime: 1000 * 60 * 2,
     queryFn: async (): Promise<UserPerformance> => {
-      const todayStart = getStartOfDayIsoInTimezone(timezone);
 
       // Parallel queries
       const [clockRes, activityRes, sessionsRes, commsRes] = await Promise.all([
@@ -35,7 +40,8 @@ export function useUserPerformance(profileId: string | null, userId: string | nu
           .from("time_clock_entries")
           .select("clock_in, clock_out")
           .eq("profile_id", profileId!)
-          .gte("clock_in", todayStart)
+          .gte("clock_in", dayStart)
+          .lt("clock_in", dayEnd)
           .order("clock_in", { ascending: false }),
 
         // Activity events today
@@ -43,7 +49,8 @@ export function useUserPerformance(profileId: string | null, userId: string | nu
           .from("activity_events")
           .select("id", { count: "exact", head: true })
           .eq("actor_id", profileId!)
-          .gte("created_at", todayStart),
+          .gte("created_at", dayStart)
+          .lt("created_at", dayEnd),
 
         // AI chat sessions today
         userId
@@ -51,7 +58,8 @@ export function useUserPerformance(profileId: string | null, userId: string | nu
               .from("chat_sessions")
               .select("id", { count: "exact", head: true })
               .eq("user_id", userId)
-              .gte("created_at", todayStart)
+              .gte("created_at", dayStart)
+              .lt("created_at", dayEnd)
           : Promise.resolve({ count: 0, error: null }),
 
         // Communications sent today
@@ -59,7 +67,8 @@ export function useUserPerformance(profileId: string | null, userId: string | nu
           .from("communications")
           .select("id", { count: "exact", head: true })
           .eq("direction", "outbound")
-          .gte("created_at", todayStart),
+          .gte("created_at", dayStart)
+          .lt("created_at", dayEnd),
       ]);
 
       // Calculate hours today
