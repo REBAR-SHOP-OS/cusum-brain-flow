@@ -53,8 +53,6 @@ export function DockChatBar() {
     setPortalContainer(getFloatingPortalContainer());
   }, []);
 
-  // Hide on Team Hub page — user already has full chat UI
-  const isTeamHub = location.pathname === "/team-hub";
 
   const { pos, handlers, wasDragged } = useDraggablePosition({
     storageKey: "dock-chat-pos",
@@ -123,7 +121,7 @@ export function DockChatBar() {
   const BOX_WIDTH = 330;
   const LAUNCHER_OFFSET = 80; // space for the launcher pill
 
-  if (!portalContainer || isTeamHub) return null;
+  if (!portalContainer) return null;
 
   return createPortal(
     <>
