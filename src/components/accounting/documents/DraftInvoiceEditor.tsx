@@ -489,7 +489,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
     }
   };
 
-  const handleOpenEmailDialog = useCallback(() => {
+  const handleOpenEmailDialog = useCallback(async () => {
     setEmailDialogOpen(true);
     setLinkCheckStatus({ stripe: null, qb: null });
 
@@ -509,22 +509,42 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
       setLinkCheckStatus(prev => ({ ...prev, stripe: false }));
     });
 
-    // Pre-check QB link availability
-    supabase.functions.invoke("quickbooks-oauth", {
-      body: {
-        action: "create-invoice",
-        customerName: customerName || undefined,
-        items: items.map(it => ({ description: it.description, unitPrice: it.unitPrice, quantity: it.quantity })),
-        dueDate: dueDate || undefined,
-        memo: `ERP Invoice ${invoiceNumber}`,
-      },
-    }).then(({ data }) => {
-      const link = data?.invoiceLink || data?.invoice?.InvoiceLink;
-      setLinkCheckStatus(prev => ({ ...prev, qb: !!link }));
-    }).catch(() => {
+    // Pre-check QB link availability — READ ONLY, no invoice creation
+    try {
+      const { data: invData } = await supabase
+        .from("sales_invoices")
+        .select("metadata")
+        .eq("id", invoiceId)
+        .single();
+      const meta = (invData?.metadata as Record<string, unknown>) || {};
+      const storedLink = meta.qb_invoice_link as string | undefined;
+      const storedQbId = meta.qb_invoice_id as string | undefined;
+
+      if (storedLink) {
+        setLinkCheckStatus(prev => ({ ...prev, qb: true }));
+        setQbPayUrl(storedLink);
+      } else if (storedQbId) {
+        // Fetch link from QB without creating a new invoice
+        const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
+          body: { action: "get-invoice-link", qbInvoiceId: storedQbId, customerEmail: customerEmail || undefined },
+        });
+        const link = qbData?.invoiceLink;
+        setLinkCheckStatus(prev => ({ ...prev, qb: !!link }));
+        if (link) {
+          setQbPayUrl(link);
+          // Persist link back
+          await supabase.from("sales_invoices").update({
+            metadata: { ...meta, qb_invoice_link: link },
+          }).eq("id", invoiceId);
+        }
+      } else {
+        // No QB invoice exists yet — just show unavailable (don't create)
+        setLinkCheckStatus(prev => ({ ...prev, qb: false }));
+      }
+    } catch {
       setLinkCheckStatus(prev => ({ ...prev, qb: false }));
-    });
-  }, [total, invoiceNumber, customerName, invoiceId, items, dueDate]);
+    }
+  }, [total, invoiceNumber, customerName, invoiceId, customerEmail]);
 
   const handlePrint = () => window.print();
 
