@@ -1,14 +1,15 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ serviceClient, body }) => {
     let mode: string | null = body?.mode || null;
 
-    if (!mode || !["morning", "evening"].includes(mode)) {
+    if (!mode || !["morning", "evening", "end_of_day"].includes(mode)) {
       console.log(`BLOCKED: auto-clockout called with invalid/missing mode: ${mode}`);
       return new Response(
-        JSON.stringify({ ok: false, error: "Missing or invalid mode. Must be 'morning' or 'evening'." }),
+        JSON.stringify({ ok: false, error: "Missing or invalid mode. Must be 'morning', 'evening', or 'end_of_day'." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -25,7 +26,6 @@ Deno.serve((req) =>
     }
 
     const now = new Date();
-    const todayStr = now.toISOString().split("T")[0];
 
     // Find open clock entries
     const { data: openEntries, error: fetchErr } = await serviceClient
@@ -46,6 +46,21 @@ Deno.serve((req) =>
       return { ok: true, closed: 0, message: "No open clock entries found" };
     }
 
+    // For end_of_day mode, compute 5:00 PM in workspace timezone
+    let endOfDayUtc: Date | null = null;
+    if (mode === "end_of_day") {
+      const tz = await getWorkspaceTimezone(serviceClient);
+      // Build "today 17:00" in the workspace timezone then convert to UTC
+      const nowInTz = new Date(now.toLocaleString("en-US", { timeZone: tz }));
+      const target5pm = new Date(nowInTz);
+      target5pm.setHours(17, 0, 0, 0);
+      // Offset: difference between UTC and local
+      const utcNow = now.getTime();
+      const localNow = nowInTz.getTime();
+      const offsetMs = utcNow - localNow;
+      endOfDayUtc = new Date(target5pm.getTime() + offsetMs);
+    }
+
     let closed = 0;
     const errors: string[] = [];
 
@@ -53,31 +68,35 @@ Deno.serve((req) =>
       const clockIn = new Date(entry.clock_in);
       const hoursOpen = (now.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
 
-      // Morning mode: close entries from yesterday (>14h open)
-      // Evening mode: close entries open >12h
-      const shouldClose = mode === "morning"
-        ? hoursOpen > 14
-        : hoursOpen > 12;
-
-      if (!shouldClose) continue;
-
-      // Determine clock_out time
+      let shouldClose = false;
       let clockOut: Date;
-      if (mode === "morning") {
-        // Set to yesterday 6PM
+
+      if (mode === "end_of_day") {
+        // Close ALL open entries — no duration threshold
+        shouldClose = true;
+        clockOut = endOfDayUtc!;
+        // If clock_in is after 5 PM (late entry), set clock_out = clock_in + 0 (minimal)
+        if (clockOut <= clockIn) {
+          clockOut = new Date(clockIn.getTime() + 1000); // 1 second after clock_in
+        }
+      } else if (mode === "morning") {
+        shouldClose = hoursOpen > 14;
         clockOut = new Date(clockIn);
         clockOut.setHours(18, 0, 0, 0);
         if (clockOut <= clockIn) {
           clockOut = new Date(clockIn.getTime() + 8 * 60 * 60 * 1000);
         }
       } else {
-        // Evening: set to today 6PM
+        // evening
+        shouldClose = hoursOpen > 12;
         clockOut = new Date();
         clockOut.setHours(18, 0, 0, 0);
         if (clockOut <= clockIn) {
           clockOut = new Date(clockIn.getTime() + 8 * 60 * 60 * 1000);
         }
       }
+
+      if (!shouldClose) continue;
 
       const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
       const breakMinutes = totalHours > 5 ? 30 : 0;
@@ -115,7 +134,7 @@ Deno.serve((req) =>
       }
     }
 
-    // Log automation run — derive company_id from the first processed entry's profile
+    // Log automation run
     const runCompanyId = openEntries?.[0]
       ? (openEntries[0] as any).profiles?.company_id
       : config?.company_id;
