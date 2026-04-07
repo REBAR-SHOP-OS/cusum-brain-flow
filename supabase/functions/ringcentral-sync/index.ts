@@ -296,6 +296,18 @@ async function fetchCompanyMessages(accessToken: string, dateFrom: string, messa
   );
 }
 
+/** Fetch messages for a specific extension (per-extension endpoint — works reliably) */
+async function fetchExtensionMessages(
+  accessToken: string, dateFrom: string,
+  extensionId: string, messageType: string
+): Promise<any[]> {
+  const params = new URLSearchParams({ dateFrom, perPage: "100", messageType });
+  return fetchWithPagination(
+    `${RC_SERVER}/restapi/v1.0/account/~/extension/${extensionId}/message-store?${params}`,
+    accessToken
+  );
+}
+
 async function fetchCompanyExtensions(accessToken: string): Promise<any[]> {
   return fetchWithPagination(
     `${RC_SERVER}/restapi/v1.0/account/~/extension?perPage=250&status=Enabled`,
@@ -506,80 +518,89 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?:
     } catch (e) { console.warn("CRON: account-level call sync failed:", e); }
   }
 
-  // ── SMS ──
+  // ── SMS (per-extension to avoid account-level 404) ──
   if (syncType === "sms" || syncType === "all") {
-    try {
-      const messages = await fetchCompanyMessages(accessToken, dateFrom, "SMS");
-      console.log(`CRON: Fetched ${messages.length} account-level SMS records`);
-
-      for (const msg of messages) {
-        const userId = resolveUserId(msg, extMap, adminUserId);
+    for (const [extId, userId] of extMap.entries()) {
+      try {
+        const messages = await fetchExtensionMessages(accessToken, dateFrom, extId, "SMS");
+        if (messages.length > 0) {
+          console.log(`CRON: Fetched ${messages.length} SMS for extension ${extId}`);
+        }
         usersSeen.add(userId);
-        const toAddress = msg.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
 
-        const { error } = await supabaseAdmin.from("communications").upsert({
-          source: "ringcentral", source_id: String(msg.id), thread_id: msg.conversationId,
-          from_address: msg.from?.phoneNumber || msg.from?.name || "Unknown", to_address: toAddress,
-          subject: msg.subject || "SMS", body_preview: msg.subject || "",
-          received_at: msg.creationTime, direction: (msg.direction || "").toLowerCase(),
-          status: msg.readStatus === "Unread" ? "unread" : "read",
-          metadata: { type: "sms" }, user_id: userId, company_id: companyId,
-        }, { onConflict: "source,source_id", ignoreDuplicates: false });
-        if (!error) smsUpserted++;
-      }
-    } catch (e) { console.warn("CRON: account-level SMS sync failed:", e); }
+        for (const msg of messages) {
+          const toAddress = msg.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
+
+          const { error } = await supabaseAdmin.from("communications").upsert({
+            source: "ringcentral", source_id: String(msg.id), thread_id: msg.conversationId,
+            from_address: msg.from?.phoneNumber || msg.from?.name || "Unknown", to_address: toAddress,
+            subject: msg.subject || "SMS", body_preview: msg.subject || "",
+            received_at: msg.creationTime, direction: (msg.direction || "").toLowerCase(),
+            status: msg.readStatus === "Unread" ? "unread" : "read",
+            metadata: { type: "sms" }, user_id: userId, company_id: companyId,
+          }, { onConflict: "source,source_id", ignoreDuplicates: false });
+          if (!error) smsUpserted++;
+        }
+      } catch (e) { console.error(`CRON: SMS sync failed for extension ${extId}:`, e); }
+    }
   }
 
-  // ── Voicemail ──
+  // ── Voicemail (per-extension) ──
   if (syncType === "voicemail" || syncType === "all") {
-    try {
-      const voicemails = await fetchCompanyMessages(accessToken, dateFrom, "VoiceMail");
-      console.log(`CRON: Fetched ${voicemails.length} account-level voicemail records`);
-
-      for (const vm of voicemails) {
-        const userId = resolveUserId(vm, extMap, adminUserId);
+    for (const [extId, userId] of extMap.entries()) {
+      try {
+        const voicemails = await fetchExtensionMessages(accessToken, dateFrom, extId, "VoiceMail");
+        if (voicemails.length > 0) {
+          console.log(`CRON: Fetched ${voicemails.length} voicemails for extension ${extId}`);
+        }
         usersSeen.add(userId);
-        const toAddress = vm.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
-        const vmAttachments = vm.attachments || [];
 
-        const { error } = await supabaseAdmin.from("communications").upsert({
-          source: "ringcentral", source_id: String(vm.id), thread_id: vm.conversationId,
-          from_address: vm.from?.phoneNumber || vm.from?.name || "Unknown", to_address: toAddress,
-          subject: "Voicemail", body_preview: vm.subject || "Voicemail message",
-          received_at: vm.creationTime, direction: (vm.direction || "").toLowerCase(),
-          status: vm.readStatus === "Unread" ? "unread" : "read",
-          metadata: { type: "voicemail", duration: vm.vmDuration || 0, recording_uri: vmAttachments[0]?.uri || null, recording_id: vmAttachments[0]?.id || null },
-          user_id: userId, company_id: companyId,
-        }, { onConflict: "source,source_id", ignoreDuplicates: false });
-        if (!error) voicemailsUpserted++;
-      }
-    } catch (e) { console.warn("CRON: account-level voicemail sync failed:", e); }
+        for (const vm of voicemails) {
+          const toAddress = vm.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
+          const vmAttachments = vm.attachments || [];
+
+          const { error } = await supabaseAdmin.from("communications").upsert({
+            source: "ringcentral", source_id: String(vm.id), thread_id: vm.conversationId,
+            from_address: vm.from?.phoneNumber || vm.from?.name || "Unknown", to_address: toAddress,
+            subject: "Voicemail", body_preview: vm.subject || "Voicemail message",
+            received_at: vm.creationTime, direction: (vm.direction || "").toLowerCase(),
+            status: vm.readStatus === "Unread" ? "unread" : "read",
+            metadata: { type: "voicemail", duration: vm.vmDuration || 0, recording_uri: vmAttachments[0]?.uri || null, recording_id: vmAttachments[0]?.id || null },
+            user_id: userId, company_id: companyId,
+          }, { onConflict: "source,source_id", ignoreDuplicates: false });
+          if (!error) voicemailsUpserted++;
+        }
+      } catch (e) { console.error(`CRON: Voicemail sync failed for extension ${extId}:`, e); }
+    }
   }
 
-  // ── Fax ──
+  // ── Fax (per-extension) ──
   if (syncType === "fax" || syncType === "all") {
-    try {
-      const faxes = await fetchCompanyMessages(accessToken, dateFrom, "Fax");
-      console.log(`CRON: Fetched ${faxes.length} account-level fax records`);
-
-      for (const fax of faxes) {
-        const userId = resolveUserId(fax, extMap, adminUserId);
+    for (const [extId, userId] of extMap.entries()) {
+      try {
+        const faxes = await fetchExtensionMessages(accessToken, dateFrom, extId, "Fax");
+        if (faxes.length > 0) {
+          console.log(`CRON: Fetched ${faxes.length} faxes for extension ${extId}`);
+        }
         usersSeen.add(userId);
-        const toAddress = fax.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
-        const faxAttachments = (fax.attachments || []).map((a: any) => ({ id: a.id, uri: a.uri, type: a.contentType, name: a.fileName }));
 
-        const { error } = await supabaseAdmin.from("communications").upsert({
-          source: "ringcentral", source_id: String(fax.id), thread_id: fax.conversationId,
-          from_address: fax.from?.phoneNumber || fax.from?.name || "Unknown", to_address: toAddress,
-          subject: "Fax", body_preview: fax.subject || "Fax document",
-          received_at: fax.creationTime, direction: (fax.direction || "").toLowerCase(),
-          status: fax.readStatus === "Unread" ? "unread" : "read",
-          metadata: { type: "fax", page_count: fax.pgCnt || 0, resolution: fax.faxResolution || "Standard", attachments: faxAttachments },
-          user_id: userId, company_id: companyId,
-        }, { onConflict: "source,source_id", ignoreDuplicates: false });
-        if (!error) faxesUpserted++;
-      }
-    } catch (e) { console.warn("CRON: account-level fax sync failed:", e); }
+        for (const fax of faxes) {
+          const toAddress = fax.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
+          const faxAttachments = (fax.attachments || []).map((a: any) => ({ id: a.id, uri: a.uri, type: a.contentType, name: a.fileName }));
+
+          const { error } = await supabaseAdmin.from("communications").upsert({
+            source: "ringcentral", source_id: String(fax.id), thread_id: fax.conversationId,
+            from_address: fax.from?.phoneNumber || fax.from?.name || "Unknown", to_address: toAddress,
+            subject: "Fax", body_preview: fax.subject || "Fax document",
+            received_at: fax.creationTime, direction: (fax.direction || "").toLowerCase(),
+            status: fax.readStatus === "Unread" ? "unread" : "read",
+            metadata: { type: "fax", page_count: fax.pgCnt || 0, resolution: fax.faxResolution || "Standard", attachments: faxAttachments },
+            user_id: userId, company_id: companyId,
+          }, { onConflict: "source,source_id", ignoreDuplicates: false });
+          if (!error) faxesUpserted++;
+        }
+      } catch (e) { console.error(`CRON: Fax sync failed for extension ${extId}:`, e); }
+    }
   }
 
   // Mark integration as synced for ALL users with RC connections (not just those with new data)
