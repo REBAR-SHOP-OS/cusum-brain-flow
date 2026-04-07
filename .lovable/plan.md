@@ -1,69 +1,117 @@
 
 
-# Quotation Workflow Audit — Issues Found (End-to-End)
+# Cross-Module Unification: Quotations & Invoices with Attachments
 
-## 1. Document Type Tabs Are Empty — No Tabs Visible
-**File:** `AccountingDocuments.tsx` line 248
-**Issue:** `docTabs` is initialized as an empty array `[]` and never populated. The tab bar renders nothing — users only see "Quotation" view by default because `activeDoc` defaults to `"quotation"`. Invoice, Packing Slip, and Estimation tabs are invisible.
-**Fix:** Populate `docTabs` with the four document types and their counts (invoices, quotations, estimates, packing slips).
+## Problem
 
-## 2. Delete Without Confirmation
-**File:** `AccountingDocuments.tsx` lines 448-454
-**Issue:** Clicking the trash icon immediately deletes the quote from the database with no confirmation dialog. A misclick permanently destroys data.
-**Fix:** Add a confirmation dialog (or at minimum `window.confirm`) before executing the delete.
+The system has **3 separate quotation tables** and **2 invoice systems** that don't talk to each other properly:
 
-## 3. Status Field Mismatch — `odoo_status` vs `status`
-**File:** `useArchivedQuotations.ts` line 33 and `AccountingDocuments.tsx` line 438
-**Issue:** The status filter dropdown queries `odoo_status` column, but manually created and AI-generated quotes only set the `status` column (e.g., "draft"). The dropdown values are Odoo-specific ("Draft Quotation", "Sales Order") while internal quotes use different values ("draft", "accepted", "sent"). Filtering by status misses most internal quotes.
-**Fix:** Filter on both `status` and `odoo_status` columns, and unify the dropdown to show both Odoo and internal status values.
+```text
+QUOTATION TABLES (fragmented)
+┌─────────────────────┬───────────────────────┬────────────────────────┐
+│ quotes              │ sales_quotations      │ quotations (view?)     │
+│ (Odoo sync, AI,     │ (Sales module,        │ (quoteService.ts —     │
+│  manual, accounting)│  state machine)       │  dead/broken table)    │
+├─────────────────────┼───────────────────────┼────────────────────────┤
+│ Used by:            │ Used by:              │ Used by:               │
+│ • AccountingDocs    │ • SalesQuotations pg  │ • quoteService.ts only │
+│ • convert-to-order  │ • quote_audit_log     │   (queries nonexistent │
+│ • ai-generate-quote │ • agent tool executor │    "quotations" table) │
+│ • quote-engine      │ • sales_invoices FK   │                        │
+│ • Pipeline (leads)  │ • sales_quotation_    │                        │
+│ • Inbox context     │   items FK            │                        │
+│ • mcp-server        │                       │                        │
+└─────────────────────┴───────────────────────┴────────────────────────┘
 
-## 4. Convert-to-Order Only Shows for "Sales Order" Status
-**File:** `AccountingDocuments.tsx` line 376-436
-**Issue:** The "Convert to Order" button only appears when `odoo_status === "Sales Order"`. But the edge function `convert-quote-to-order` accepts statuses: `approved`, `accepted`, `sent`, `signed`. Internally signed/accepted quotes never show the convert button.
-**Fix:** Show the convert button when `status` is in the convertible set OR `odoo_status === "Sales Order"`.
+INVOICE SYSTEMS (disconnected)
+┌──────────────────────┬──────────────────────┐
+│ sales_invoices       │ QuickBooks Invoices   │
+│ (ERP local table)    │ (QB API via hook)     │
+├──────────────────────┼──────────────────────┤
+│ • SalesInvoices page │ • AccountingInvoices  │
+│ • DraftInvoiceEditor │ • QB attachments      │
+│ • Has quotation_id   │ • No local DB link    │
+│   FK → sales_quotas  │                       │
+└──────────────────────┴──────────────────────┘
+```
 
-## 5. E-Signature Doesn't Update `odoo_status`
-**File:** `ESignatureDialog.tsx` line 119
-**Issue:** Signing a quote sets `status: "accepted"` but doesn't update `odoo_status`. The UI badge displays `odoo_status || status` (line 439), so after signing, the badge still shows the old Odoo status instead of "Accepted".
-**Fix:** Also set `odoo_status` to a displayable value on sign, or fix the badge to prefer `status` when it's been locally updated.
+### Key Issues
+1. **`quoteService.ts` queries `"quotations"` table** — this table likely doesn't exist (or is a view). Dead code.
+2. **Agent creates in `sales_quotations` AND `quotes`** — dual-writes with brittle linking via `quote_result.quote_id`.
+3. **`convert-quote-to-order` only reads `quotes`** — misses `sales_quotations`-only records.
+4. **`sales_invoices.quotation_id` FK → `sales_quotations`** — but invoices created from accounting use `quotes` table IDs.
+5. **No unified attachment system** — QuickBooks attachments are QB-only; local quotes/invoices have no attachment support.
+6. **Accounting tab shows `quotes` table; Sales tab shows `sales_quotations`** — same data, different views, no cross-reference.
 
-## 6. Quote-to-Order: `customer_id` Is Often Null
-**File:** `convert-quote-to-order/index.ts` line 63
-**Issue:** The order is created with `customer_id: quote.customer_id`. But for manually created or AI-generated quotes, `customer_id` on the quotes table is often `null` (customer name is stored in metadata only). This creates orders with no customer link.
-**Fix:** Resolve `customer_id` from metadata customer name if `quote.customer_id` is null — look up the customers table by name.
+## Plan
 
-## 7. DraftQuotationEditor Saves `total_amount` with Tax but Displays Subtotal Separately
-**File:** `DraftQuotationEditor.tsx` line 323 vs `send-quote-email/index.ts` line 148
-**Issue:** The editor saves `total_amount = subtotal + tax`. The email function then reverse-calculates subtotal from `total_amount / (1 + taxRate/100)`. If `tax_rate` is missing from metadata (defaults to 13), the email recalculation matches. But if tax rate was changed and not saved properly, the email shows wrong numbers. Also, the `line_items` in metadata store `unitPrice` (camelCase) but the `QuotationTemplate` and `convert-quote-to-order` expect `unit_price` (snake_case) — the editor handles both (`li.unitPrice ?? li.unit_price`) but the conversion function only checks `line.price_unit || line.unit_price`, missing `unitPrice`.
-**Fix:** Normalize line item field names to a single convention on save. Add `unitPrice` to the conversion function's fallback chain.
+### Phase 1: Fix Dead Code & Service Layer
 
-## 8. Search Only Queries `quote_number` and `salesperson`
-**File:** `useArchivedQuotations.ts` line 29
-**Issue:** Search doesn't cover customer name (stored in `metadata.customer_name` or `metadata.odoo_customer`). Users searching by customer name get zero results.
-**Fix:** Add `salesperson` as a proxy works for Odoo quotes, but for manual quotes the customer name is in metadata — consider adding a `customer_name` denormalized column or extending the search to cover metadata via a database function.
+**`src/lib/serviceLayer/quoteService.ts`** — Fix to query `quotes` (the actual table), not `quotations`.
 
-## 9. No Quote Status Transition Enforcement on Client
-**File:** `ESignatureDialog.tsx`, `DraftQuotationEditor.tsx`
-**Issue:** Any quote can be signed regardless of its current status. A "cancelled" quote can be signed and become "accepted". There's no client-side validation of allowed transitions.
-**Fix:** Add status validation before allowing sign/send/convert actions.
+### Phase 2: Unify Quote Resolution
 
-## 10. `terms` Not Saved in Metadata on Draft Save
-**File:** `DraftQuotationEditor.tsx` lines 327-335
-**Issue:** The save function writes `metadata` with `customer_name`, `line_items`, `notes`, etc. but does NOT include `terms` even though `terms` state is loaded and displayed. Terms entered in the editor are lost on save.
-**Fix:** Add `terms` to the metadata object in `handleSave`.
+**`supabase/functions/convert-quote-to-order/index.ts`** — Add fallback: if quote not found in `quotes`, check `sales_quotations` and resolve the linked `quotes` row via `quote_result.quote_id`.
 
-## Priority Order for Fixes
+**`src/components/accounting/AccountingDocuments.tsx`** — When clicking a quotation card, check if a `sales_quotations` record exists (via `quote_number` match) and load the richer data (state machine status, audit log, line items).
 
-| # | Issue | Severity | Impact |
-|---|-------|----------|--------|
-| 1 | Doc tabs empty | High | Users can't switch document types |
-| 3 | Status mismatch | High | Filtering broken for internal quotes |
-| 2 | Delete no confirm | High | Data loss risk |
-| 6 | Null customer_id on orders | High | Orders created without customer |
-| 4 | Convert button hidden | Medium | Workflow blocked for internal quotes |
-| 7 | Field name mismatch (unitPrice) | Medium | Line items lost during conversion |
-| 10 | Terms not saved | Medium | Data loss |
-| 5 | Badge shows wrong status | Low | Visual confusion |
-| 8 | Search limited | Low | UX inconvenience |
-| 9 | No status guards | Low | Edge case abuse |
+### Phase 3: Cross-Link Invoice ↔ Quotation
+
+**`src/components/accounting/AccountingInvoices.tsx`** — Show the linked quotation number on invoice cards when `quotation_id` is present (query `sales_quotations` for the number).
+
+**`src/components/accounting/documents/DraftInvoiceEditor.tsx`** — Add a "Linked Quotation" badge/link that opens the quotation when `quotation_id` or `metadata.source_quote_id` exists.
+
+### Phase 4: Add Document Attachments
+
+**Database migration** — Create `document_attachments` table:
+```sql
+CREATE TABLE document_attachments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id UUID NOT NULL REFERENCES companies(id),
+  entity_type TEXT NOT NULL, -- 'quote', 'invoice', 'order'
+  entity_id UUID NOT NULL,
+  file_name TEXT NOT NULL,
+  file_path TEXT NOT NULL, -- storage bucket path
+  file_size INTEGER,
+  mime_type TEXT,
+  uploaded_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE document_attachments ENABLE ROW LEVEL SECURITY;
+```
+
+**New component: `src/components/accounting/DocumentAttachments.tsx`** — Reusable attachment widget (upload to Supabase Storage, list/download/delete) that can be embedded in:
+- `DraftQuotationEditor` 
+- `DraftInvoiceEditor`
+- `QuotationTemplate` (view-only)
+- Order detail views
+
+**Storage bucket** — Create `document-attachments` bucket for file storage.
+
+### Phase 5: Unified Status Display
+
+**`src/components/accounting/AccountingDocuments.tsx`** — Merge status display logic:
+- Show `sales_quotations` status (state machine) when available
+- Fall back to `quotes.status` / `quotes.odoo_status`
+- Show attachment count badge on cards that have attachments
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `src/lib/serviceLayer/quoteService.ts` | Fix table name `quotations` → `quotes` |
+| `supabase/functions/convert-quote-to-order/index.ts` | Add `sales_quotations` fallback lookup |
+| `src/components/accounting/AccountingDocuments.tsx` | Show linked invoice count; show attachment badges |
+| `src/components/accounting/AccountingInvoices.tsx` | Show linked quotation number on invoice cards |
+| `src/components/accounting/documents/DraftInvoiceEditor.tsx` | Add "Linked Quotation" badge |
+| `src/components/accounting/documents/DraftQuotationEditor.tsx` | Embed `DocumentAttachments` widget |
+| `src/components/accounting/DocumentAttachments.tsx` | **New** — reusable attachment upload/list component |
+| Database migration | Create `document_attachments` table + RLS + storage bucket |
+
+### Technical Notes
+- The `quotes` table is the canonical source for accounting-facing quotations
+- The `sales_quotations` table is the canonical source for sales-module quotations with state machine
+- Agent dual-writes to both — this is preserved but the link (`quote_result.quote_id`) is made reliable
+- `quoteService.ts` is fixed but remains optional (no consumers currently depend on it working)
+- Attachments use Supabase Storage with RLS scoped to `company_id`
 
