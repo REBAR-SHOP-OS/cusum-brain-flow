@@ -84,7 +84,10 @@ export async function qbFetch(
   }
 
   const MAX_RETRIES = 3;
-  const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${path}`;
+  // Auto-append minorversion=69 for InvoiceLink + ProjectRef support
+  const separator = path.includes("?") ? "&" : "?";
+  const versionedPath = path.includes("minorversion") ? path : `${path}${separator}minorversion=69`;
+  const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${versionedPath}`;
   const t0 = Date.now();
 
   let res: Response;
