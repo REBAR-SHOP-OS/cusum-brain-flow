@@ -766,6 +766,12 @@ export function VizzyBrainPanel({ onClose }: Props) {
         )}
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {!selectedProfile && rebarProfiles.length > 0 && (
+            <TeamDailyReport
+              profiles={rebarProfiles.filter((p) => p.email !== "ai@rebar.shop")}
+              timezone={timezone}
+            />
+          )}
           {selectedProfile && (
             <div className="space-y-4">
               {/* Section 1: General Overview */}
