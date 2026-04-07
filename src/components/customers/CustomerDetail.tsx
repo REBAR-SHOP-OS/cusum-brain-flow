@@ -84,7 +84,70 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
   );
 }
 
-export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailProps) {
+// ── Delete guard component ──
+function DeleteCustomerButton({ customer, onDelete }: { customer: Customer; onDelete: () => void }) {
+  const { data: linkedCounts, isLoading } = useQuery({
+    queryKey: ["customer_linked_counts", customer.id],
+    queryFn: async () => {
+      const [invoices, orders, quotes, leads] = await Promise.all([
+        supabase.from("accounting_mirror").select("id", { count: "exact", head: true }).eq("customer_id", customer.id).eq("entity_type", "Invoice"),
+        supabase.from("orders").select("id", { count: "exact", head: true }).eq("customer_id", customer.id),
+        supabase.from("quotes").select("id", { count: "exact", head: true }).eq("customer_id", customer.id),
+        supabase.from("leads").select("id", { count: "exact", head: true }).eq("customer_id", customer.id),
+      ]);
+      return {
+        invoices: invoices.count ?? 0,
+        orders: orders.count ?? 0,
+        quotes: quotes.count ?? 0,
+        leads: leads.count ?? 0,
+        total: (invoices.count ?? 0) + (orders.count ?? 0) + (quotes.count ?? 0) + (leads.count ?? 0),
+      };
+    },
+  });
+
+  const hasLinks = (linkedCounts?.total ?? 0) > 0;
+  const parts: string[] = [];
+  if (linkedCounts?.invoices) parts.push(`${linkedCounts.invoices} invoice(s)`);
+  if (linkedCounts?.orders) parts.push(`${linkedCounts.orders} order(s)`);
+  if (linkedCounts?.quotes) parts.push(`${linkedCounts.quotes} quote(s)`);
+  if (linkedCounts?.leads) parts.push(`${linkedCounts.leads} lead(s)`);
+
+  return (
+    <div className="absolute bottom-4 right-4">
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="destructive" size="sm">
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{hasLinks ? "Cannot Delete Customer" : "Delete Customer"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {hasLinks ? (
+                <>
+                  <strong>{customer.name}</strong> has {parts.join(", ")} linked.
+                  Reassign or archive these records before deleting.
+                </>
+              ) : (
+                <>Are you sure you want to permanently delete <strong>{customer.name}</strong>? This action cannot be undone.</>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{hasLinks ? "OK" : "Cancel"}</AlertDialogCancel>
+            {!hasLinks && (
+              <AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                Delete
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
