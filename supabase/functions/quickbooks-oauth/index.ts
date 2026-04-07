@@ -1355,7 +1355,12 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
   if (!effectiveTaxCode) {
     effectiveTaxCode = await resolveTaxCodeId(config, "TAX") || undefined;
   }
-  const taxCodeIsNumeric = Boolean(effectiveTaxCode && !isNaN(Number(effectiveTaxCode)));
+  // Canadian QB requires GST/HST on every line — hard-fail if we still have no tax code
+  if (!effectiveTaxCode || isNaN(Number(effectiveTaxCode))) {
+    console.error(`[QB-Estimate] FATAL: No valid numeric tax code resolved. effectiveTaxCode=${effectiveTaxCode}`);
+    throw new Error("Cannot create estimate: no GST/HST tax code could be resolved from QuickBooks. Please ensure at least one active tax code exists in your QuickBooks company.");
+  }
+  const taxCodeIsNumeric = true; // guaranteed numeric at this point
 
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
@@ -1504,6 +1509,11 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   }
   if (!effectiveTaxCode) {
     effectiveTaxCode = await resolveTaxCodeId(config, "TAX") || undefined;
+  }
+  // Canadian QB requires GST/HST on every line — hard-fail if we still have no tax code
+  if (!effectiveTaxCode || isNaN(Number(effectiveTaxCode))) {
+    console.error(`[QB-Invoice] FATAL: No valid numeric tax code resolved. effectiveTaxCode=${effectiveTaxCode}`);
+    throw new Error("Cannot create invoice: no GST/HST tax code could be resolved from QuickBooks. Please ensure at least one active tax code exists in your QuickBooks company.");
   }
 
   // Normalize line items: accept either unitPrice or legacy amount
