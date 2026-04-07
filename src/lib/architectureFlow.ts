@@ -12,7 +12,8 @@ export const ARCHITECTURE_LAYOUT = {
 
 export type ArchitectureLayoutItem = {
   id: string;
-  layer: ArchLayer;
+  layer?: ArchLayer;
+  data?: { layer?: ArchLayer };
   position?: { x: number; y: number };
 };
 
