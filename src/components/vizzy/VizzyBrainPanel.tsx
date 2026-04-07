@@ -190,28 +190,56 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
   const { data: sessionAgents, isLoading } = useUserAgentSessions(userId);
   const assignedMapping = getUserAgentMapping(email);
 
-  // Build merged list: assigned agent + any additional agents from sessions
+  // Role-based agent access mapping
+  const roleAgentAccess: Record<string, string[]> = {
+    ceo: Object.keys(agentConfigs), // CEOs get all agents
+    shop_supervisor: ["shopfloor", "delivery", "assistant", "eisenhower", "growth"],
+    sales: ["sales", "support", "estimating", "email", "legal", "eisenhower", "assistant", "copywriting", "growth"],
+    accountant: ["accounting", "legal", "email", "eisenhower", "assistant", "growth"],
+    social_media_manager: ["social", "copywriting", "seo", "webbuilder", "email", "eisenhower", "assistant", "growth"],
+    estimator: ["estimating", "sales", "email", "eisenhower", "assistant", "growth"],
+  };
+
+  // Build merged list: accessible agents + any additional agents from sessions
   const mergedAgents = React.useMemo(() => {
     const result: Array<{
       agentName: string;
       agentRole: string;
       isAssigned: boolean;
+      hasAccess: boolean;
       sessionCount: number;
       totalMessages: number;
       lastUsed: string;
       recentMessages: { role: string; content: string; created_at: string }[];
     }> = [];
 
-    // Add assigned agent first
-    if (assignedMapping) {
-      const config = agentConfigs[assignedMapping.agentKey];
+    // Determine accessible agent keys based on user role
+    const userRole = assignedMapping?.userRole ?? "";
+    const accessibleKeys = roleAgentAccess[userRole] ?? ["assistant", "eisenhower", "growth"];
+    const primaryKey = assignedMapping?.agentKey;
+
+    // Add all accessible agents (primary first)
+    const orderedKeys = primaryKey
+      ? [primaryKey, ...accessibleKeys.filter((k) => k !== primaryKey)]
+      : accessibleKeys;
+
+    const addedNames = new Set<string>();
+
+    for (const key of orderedKeys) {
+      const config = agentConfigs[key];
+      if (!config) continue;
+      const nameLower = config.name.toLowerCase();
+      if (addedNames.has(nameLower)) continue;
+      addedNames.add(nameLower);
+
       const sessionData = sessionAgents?.find(
-        (s) => s.agentName.toLowerCase() === (config?.name?.toLowerCase() ?? assignedMapping.agentKey)
+        (s) => s.agentName.toLowerCase() === nameLower
       );
       result.push({
-        agentName: config?.name ?? assignedMapping.agentKey,
-        agentRole: config?.role ?? assignedMapping.userRole,
-        isAssigned: true,
+        agentName: config.name,
+        agentRole: config.role,
+        isAssigned: key === primaryKey,
+        hasAccess: true,
         sessionCount: sessionData?.sessionCount ?? 0,
         totalMessages: sessionData?.totalMessages ?? 0,
         lastUsed: sessionData?.lastUsed ?? "",
@@ -219,14 +247,15 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
       });
     }
 
-    // Add any other agents from sessions that aren't the assigned one
+    // Add any other agents from sessions that aren't already listed
     for (const s of sessionAgents ?? []) {
-      const alreadyAdded = result.some((r) => r.agentName.toLowerCase() === s.agentName.toLowerCase());
-      if (!alreadyAdded) {
+      if (!addedNames.has(s.agentName.toLowerCase())) {
+        addedNames.add(s.agentName.toLowerCase());
         result.push({
           agentName: s.agentName,
           agentRole: "",
           isAssigned: false,
+          hasAccess: false,
           sessionCount: s.sessionCount,
           totalMessages: s.totalMessages,
           lastUsed: s.lastUsed,
@@ -1075,8 +1104,8 @@ export function VizzyBrainPanel({ onClose }: Props) {
               {selectedProfile.user_id && selectedProfile.email !== "ai@rebar.shop" && (
                 <div className="rounded-xl border border-border bg-card overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
-                    <FileBarChart className="w-4 h-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground flex-1">General Report</h3>
+                    <BotIcon className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground flex-1">Agents</h3>
                     <UserFullReportButton
                       profile={selectedProfile}
                       timezone={timezone}
