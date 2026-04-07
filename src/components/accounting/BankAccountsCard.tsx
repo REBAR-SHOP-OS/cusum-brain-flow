@@ -227,6 +227,20 @@ export function BankAccountsCard({ accounts, getActivity, upsertBankBalance, onN
                         </span>
                       )}
                     </TableCell>
+
+                    {/* Variance: Bank Balance - QB Ledger */}
+                    <TableCell className="text-right text-sm tabular-nums">
+                      {activity?.bank_balance != null && activity?.last_qb_sync_at ? (() => {
+                        const variance = activity.bank_balance - activity.ledger_balance;
+                        return (
+                          <span className={varianceColor(variance)}>
+                            {variance >= 0 ? "+" : ""}{fmt(variance)}
+                          </span>
+                        );
+                      })() : (
+                        <span className="text-muted-foreground">--</span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 );
               })}
