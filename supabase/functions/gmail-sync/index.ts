@@ -543,13 +543,10 @@ Deno.serve((req) =>
     const { userId, serviceClient, body, req: rawReq } = ctx;
 
     if (!userId) {
-      // Check if cron call (anon/service key)
+      // Cron mode: optionalAuth returned no user, but request has auth header
+      // This means it's a system call (pg_cron with anon/service key)
       const authHeader = rawReq.headers.get("Authorization") || "";
-      const token = authHeader.replace("Bearer ", "");
-      const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
-      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-      if (token === anonKey || token === serviceKey) {
+      if (authHeader.startsWith("Bearer ")) {
         console.log("CRON MODE: Syncing all Gmail users");
         return await syncAllUsers(body);
       }
