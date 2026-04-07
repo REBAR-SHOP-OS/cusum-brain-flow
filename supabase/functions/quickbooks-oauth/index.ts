@@ -1441,8 +1441,12 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
         if (qbCustomers && qbCustomers.length > 0) {
           customerId = String(qbCustomers[0].Id);
         } else {
-          // 3. Create customer in QB
-          const newCust = await qbFetch(config, "customer", { method: "POST", body: JSON.stringify({ DisplayName: customerName }) }) as Record<string, any>;
+          // 3. Create customer in QB (include email if available)
+          const newCustPayload: Record<string, unknown> = { DisplayName: customerName };
+          if (customerEmail) {
+            newCustPayload.PrimaryEmailAddr = { Address: customerEmail };
+          }
+          const newCust = await qbFetch(config, "customer", { method: "POST", body: JSON.stringify(newCustPayload) }) as Record<string, any>;
           customerId = String(newCust?.Customer?.Id || newCust?.Id || "");
         }
       } catch (e) {
