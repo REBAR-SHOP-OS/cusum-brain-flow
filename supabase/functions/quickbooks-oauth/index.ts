@@ -934,6 +934,8 @@ async function handleGetCompanyInfo(supabase: ReturnType<typeof createClient>, u
   return jsonRes(data.CompanyInfo);
 }
 
+const PAGE = 1000;
+
 // ─── Sync Customers ───────────────────────────────────────────────
 
 async function handleSyncCustomers(supabase: ReturnType<typeof createClient>, userId: string) {
@@ -1114,18 +1116,17 @@ async function handleSyncInvoices(supabase: ReturnType<typeof createClient>, use
   // Pre-load ALL customer QB-id → local-id mapping (paginate past 1000-row limit)
   const customerMap = new Map<string, string>();
   let customerPage = 0;
-  const PAGE_SIZE = 1000;
   while (true) {
     const { data: batch } = await supabase
       .from("customers")
       .select("id, quickbooks_id")
       .not("quickbooks_id", "is", null)
-      .range(customerPage * PAGE_SIZE, (customerPage + 1) * PAGE_SIZE - 1);
+      .range(customerPage * PAGE, (customerPage + 1) * PAGE - 1);
     const rows = batch || [];
     for (const c of rows) {
       if (c.quickbooks_id) customerMap.set(c.quickbooks_id, c.id);
     }
-    if (rows.length < PAGE_SIZE) break;
+    if (rows.length < PAGE) break;
     customerPage++;
   }
 
@@ -1891,6 +1892,7 @@ async function handleCreateBill(supabase: ReturnType<typeof createClient>, userI
         AccountRef: { value: item.accountId || "7" }, // default Expenses account
       },
     })),
+    GlobalTaxCalculation: "TaxExcluded",
     ...(dueDate && { DueDate: dueDate }),
     ...(memo && { PrivateNote: memo }),
   };
@@ -1935,6 +1937,8 @@ async function handleCreateCreditMemo(supabase: ReturnType<typeof createClient>,
       Description: item.description,
       SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount },
     })),
+    GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
     ...(memo && { CustomerMemo: { value: memo } }),
   };
 
@@ -2124,6 +2128,7 @@ async function handleConvertEstimateToInvoice(supabase: ReturnType<typeof create
     AllowOnlineCreditCardPayment: true,
     AllowOnlineACHPayment: true,
     GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
   };
   // Carry over BillEmail from estimate if available
   if (estimate.BillEmail?.Address) {
@@ -2133,11 +2138,57 @@ async function handleConvertEstimateToInvoice(supabase: ReturnType<typeof create
 
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(invoicePayload) });
 
+  let createdInvoice = data.Invoice;
+
+  // Read back to capture InvoiceLink (not returned on POST)
+  if (createdInvoice?.Id && !createdInvoice?.InvoiceLink) {
+    try {
+      const readBack = await qbFetch(config, `invoice/${createdInvoice.Id}?include=invoiceLink`, {});
+      if (readBack?.Invoice?.InvoiceLink) {
+        createdInvoice = readBack.Invoice;
+      }
+    } catch (e) {
+      console.warn("[convert-estimate] Read-back for InvoiceLink failed:", e);
+    }
+  }
+
+  // Mirror the converted invoice for immediate availability
+  if (createdInvoice?.Id) {
+    try {
+      let mirrorCustomerId: string | null = null;
+      const custRefVal = createdInvoice.CustomerRef?.value;
+      if (custRefVal) {
+        const { data: custRow } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("quickbooks_id", custRefVal)
+          .maybeSingle();
+        mirrorCustomerId = custRow?.id || null;
+      }
+      await supabase.from("accounting_mirror").upsert({
+        quickbooks_id: String(createdInvoice.Id),
+        entity_type: "Invoice",
+        balance: createdInvoice.Balance || 0,
+        customer_id: mirrorCustomerId,
+        company_id: companyId,
+        data: createdInvoice,
+        last_synced_at: new Date().toISOString(),
+      }, { onConflict: "quickbooks_id" });
+    } catch (mirrorErr) {
+      console.warn("[convert-estimate] Mirror upsert failed:", mirrorErr);
+    }
+  }
+
   await logAuditEvent(supabase, companyId, userId, "qb_estimate_converted", "Estimate", estimateId, {
-    newInvoiceId: data.Invoice?.Id, newDocNumber: data.Invoice?.DocNumber,
+    newInvoiceId: createdInvoice?.Id, newDocNumber: createdInvoice?.DocNumber,
   });
 
-  return jsonRes({ success: true, invoice: data.Invoice, docNumber: data.Invoice?.DocNumber });
+  return jsonRes({
+    success: true,
+    invoice: createdInvoice,
+    docNumber: createdInvoice?.DocNumber,
+    invoiceLink: createdInvoice?.InvoiceLink || null,
+  });
 }
 
 // ─── Send Invoice via Email ───────────────────────────────────────
