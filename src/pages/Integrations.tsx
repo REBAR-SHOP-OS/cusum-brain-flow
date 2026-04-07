@@ -7,6 +7,7 @@ import { IntegrationSetupDialog } from "@/components/integrations/IntegrationSet
 import { ConnectDialog } from "@/components/integrations/ConnectDialog";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { StripeQBSyncPanel } from "@/components/integrations/StripeQBSyncPanel";
+import { PlaidBankSection } from "@/components/integrations/PlaidBankSection";
 import { supabase } from "@/integrations/supabase/client";
 
 interface StalenessInfo {
@@ -196,6 +197,11 @@ export default function Integrations() {
               disconnecting={disconnecting === integration.id}
             />
           ))}
+        </div>
+
+        {/* Plaid Bank Connection */}
+        <div className="border border-border rounded-lg p-6 bg-card">
+          <PlaidBankSection />
         </div>
 
         {/* Stripe → QuickBooks Sync Panel */}
