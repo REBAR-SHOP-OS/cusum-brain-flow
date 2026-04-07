@@ -1,37 +1,49 @@
 
 
-# Add Payment Links Section to Invoice View
+# Fix: DM Messages Not Showing in Team Hub
 
-## Problem
-The `DraftInvoiceEditor` (sales invoice view) has no visible payment links on the invoice itself. Payment links only exist in the email body. The `PaymentLinksSection` component exists but is only used in the QuickBooks `InvoiceEditor`.
+## Root Cause
 
-## Approach
-Add a payment links block at the bottom of the invoice view (before the signature area), visible on screen but hidden in print. This will show:
-- **Stripe payment link** — looked up from `stripe_payment_links` table or generated on demand
-- **QuickBooks payment link** — looked up from `accounting_mirror` or invoice metadata
-- **Copy to clipboard** buttons for sharing
+When clicking a team member in the Team Hub sidebar, `openDMMutation` creates/finds a DM channel and sets `selectedChannelId` to its ID. However, the rendering logic at line 313 of `TeamHub.tsx` checks:
 
-## Changes
+```
+activeChannel ? <MessageThread ... /> : <Welcome screen>
+```
 
-### `src/components/accounting/documents/DraftInvoiceEditor.tsx`
+`activeChannel` is looked up via `channels.find(c => c.id === activeChannelId)`. DM channels created by the `create_dm_channel` RPC are either not returned by `useTeamChannels()` (filtered out due to `company_id` mismatch or channel type) or take time to appear after the `invalidateQueries` call. Since `activeChannel` is `undefined`, the code falls through to the "Welcome to Team Hub" empty state — skipping the `MessageThread` entirely.
 
-1. **Add state** for Stripe URL and QB URL (loaded during the existing `useEffect` data load):
-   - Query `stripe_payment_links` for existing Stripe link
-   - Query `accounting_mirror` or invoice `metadata.qb_invoice_link` for QB link
+The DockChatBox widget works because it passes `channelId` directly to `useTeamMessages()` and renders messages unconditionally.
 
-2. **Add a payment links section** between the Totals block (~line 1143) and the Signature area (~line 1146), hidden in print (`print:hidden`):
-   - "Pay via Stripe" button (opens link) + copy button — or "Generate Stripe Link" if none exists
-   - "Pay via QuickBooks" button (opens link) + copy button — shown only if QB link exists
-   - Styled consistently with the white invoice form
+## Fix
 
-3. **Generate Stripe link on demand**: Reuse the same `stripe-payment` edge function call pattern from `PaymentLinksSection`.
+In `src/pages/TeamHub.tsx`, add a fallback rendering path: when `selectedChannelId` is set (not notes, not a known channel) but `activeChannel` is undefined, still render `MessageThread` using the DM target's profile name as the channel name. This mirrors how DockChatBox works.
 
-This keeps everything self-contained in the invoice editor without importing the QB-specific `PaymentLinksSection` component (which expects a `QBInvoice` type).
+### Changes to `src/pages/TeamHub.tsx`
 
-### Files
+1. **Track DM target info** — when `onClickMember` succeeds, store the target profile name alongside the channel ID in state (e.g., `dmTargetName`).
+
+2. **Add DM rendering branch** — between the `activeChannel ?` check (line 313) and the `channelsLoading` fallback (line 332), add a condition: if `selectedChannelId` is set and not notes view, render `MessageThread` with:
+   - `channelName` = the stored DM target name
+   - `channelDescription` = "Direct message"
+   - All other props same as the existing `activeChannel` branch
+
+3. **Clear DM target** when switching to a known channel or notes.
+
+### Rendering logic after fix:
+
+```text
+isNotesView && selfChannelId  →  MessageThread (My Notes)
+isNotesView && !selfChannelId →  Loading spinner
+activeChannel                 →  MessageThread (group/channel)
+selectedChannelId (DM)        →  MessageThread (DM - NEW)
+channelsLoading               →  Loading spinner
+else                          →  Welcome screen
+```
+
+## Files Changed
 | File | Change |
 |------|--------|
-| `src/components/accounting/documents/DraftInvoiceEditor.tsx` | Add payment link state, lookup, and UI section |
+| `src/pages/TeamHub.tsx` | Add `dmTargetName` state, populate on DM open, add DM rendering branch |
 
-Single file change. No backend changes needed.
+Single file, no backend changes.
 
