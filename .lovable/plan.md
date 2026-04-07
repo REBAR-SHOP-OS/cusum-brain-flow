@@ -1,68 +1,45 @@
 
 
-# Fix: Scheduled Posts Not Publishing — Missing Internal Secret
+# Fix: Vizzy Can't Access QuickBooks Data in Chat — Missing Tool Wiring
 
 ## Root Cause
 
-The `social-cron-publish` function was recently updated to require `internalOnly: true`, which demands the `x-internal-secret` header matching the `INTERNAL_FUNCTION_SECRET` environment variable. **Both are missing:**
+`admin-chat/index.ts` has its own **separate** tool system (`JARVIS_TOOLS` array + `executeReadTool` switch statement) that is completely independent from the shared `agentTools.ts` / `agentToolExecutor.ts` used by the MCP server.
 
-1. The **pg_cron job** calls `social-cron-publish` every 5 minutes but does **not** include the `x-internal-secret` header
-2. The **`INTERNAL_FUNCTION_SECRET` env var** is not set as an Edge Function secret
-3. The **vault secret** `INTERNAL_FUNCTION_SECRET` also does not exist in `vault.secrets`
+**Three critical QB tools are defined in `agentTools.ts` but NOT in `admin-chat`:**
 
-This means every cron invocation immediately fails with `"INTERNAL_FUNCTION_SECRET not configured"` and returns a 500 error. No posts get published. This affects **15 internal functions** including social publishing, push notifications, escalation checks, email automation, and pipeline automation.
+| Tool | What it does | Status in admin-chat |
+|------|-------------|---------------------|
+| `fetch_qb_report` | Live AR/AP aging, P&L, Balance Sheet from QuickBooks | ❌ Missing |
+| `fetch_gl_anomalies` | Scan GL for unusual transactions | ❌ Missing |
+| `trigger_qb_sync` | Refresh local QB data mirror | ❌ Missing |
 
-**6 posts** scheduled for this morning (10:30 AM, 12:00 PM UTC) are stuck in `scheduled` status despite being approved.
+The system prompt tells Vizzy "use fetch_qb_report, never delegate" — but when the AI calls the tool, `executeReadTool` hits the `default` case at line 2310 and returns `{"error": "Unknown read tool: fetch_qb_report"}`. Vizzy then tells the CEO she can't access QB data and tries to delegate to Vicky.
 
-## Fix — Two Steps
+## Fix
 
-### Step 1: Create the secret
-Generate a random `INTERNAL_FUNCTION_SECRET` value and set it in two places:
-- As an **Edge Function secret** (so `Deno.env.get("INTERNAL_FUNCTION_SECRET")` works)
-- In the **Supabase vault** (so `get_internal_function_secret()` works for DB triggers)
+### 1. Add QB tool definitions to `JARVIS_TOOLS` array (~50 lines)
 
-### Step 2: Update the cron job to pass the header
-Update the pg_cron job for `social-cron-publish` (and the duplicate job) to include the `x-internal-secret` header in the HTTP request, matching how the DB trigger functions already do it via `get_internal_function_secret()`.
+Add `fetch_qb_report`, `fetch_gl_anomalies`, and `trigger_qb_sync` tool definitions to the `JARVIS_TOOLS` array (before the closing `]` at line 902). Copy the exact definitions from `agentTools.ts` lines 487-536.
 
-Migration SQL:
-```sql
--- Insert secret into vault
-INSERT INTO vault.secrets (name, secret)
-VALUES ('INTERNAL_FUNCTION_SECRET', gen_random_uuid()::text);
+### 2. Add QB tool execution to `executeReadTool` switch (~80 lines)
 
--- Update cron job to pass the internal secret header
-SELECT cron.unschedule(21);
-SELECT cron.unschedule(32);
+Add three new cases before the `default` at line 2309:
 
-SELECT cron.schedule(
-  'social-cron-publish',
-  '*/5 * * * *',
-  $$
-  SELECT net.http_post(
-    url := 'https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/social-cron-publish',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-      'x-internal-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'INTERNAL_FUNCTION_SECRET' LIMIT 1)
-    ),
-    body := '{"source": "cron"}'::jsonb
-  ) AS request_id;
-  $$
-);
-```
+- **`fetch_qb_report`**: Call `quickbooks-oauth` with the mapped action name and date parameters (same logic as `agentToolExecutor.ts` lines 592-667)
+- **`fetch_gl_anomalies`**: Query `gl_transactions` for large/unbalanced/round-number entries (same logic as lines 672-719)
+- **`trigger_qb_sync`**: Call `qb-sync-engine` edge function (same logic as lines 725-741)
 
-Then set the same secret value as an Edge Function env var using `add_secret`.
+## Files Changed
 
-### Files Changed
+| File | Change |
+|------|--------|
+| `supabase/functions/admin-chat/index.ts` | Add 3 QB tools to `JARVIS_TOOLS` (~50 lines) + add 3 cases to `executeReadTool` switch (~80 lines) |
 
-| Change | Detail |
-|--------|--------|
-| **Migration SQL** | Insert vault secret, recreate cron jobs with `x-internal-secret` header |
-| **Edge Function Secret** | Add `INTERNAL_FUNCTION_SECRET` env var |
-
-### Impact
-- Fixes social publishing cron (6 posts will publish on next 5-min tick)
-- Fixes **all 15 internal cron/system functions** that use `internalOnly: true`
-- No code changes needed — the functions already work, they just need the secret
-- The 6 stuck morning posts will auto-publish once the fix is deployed
+## Impact
+- Vizzy can directly pull live QuickBooks data when the CEO asks about AR, AP, invoices
+- No more "Unknown read tool" errors
+- No more delegation to Vicky for financial data
+- No database, auth, or UI changes
+- The shared `agentToolExecutor.ts` is untouched — admin-chat gets its own inline implementation (consistent with its existing pattern)
 
