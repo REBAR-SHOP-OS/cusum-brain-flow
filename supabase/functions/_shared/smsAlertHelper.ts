@@ -6,11 +6,45 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { analyzeSpam } from "./spamFilter.ts";
 
 const RC_SERVER = "https://platform.ringcentral.com";
 const CEO_PHONE = "+14165870788";
 
+/**
+ * Send a generic operational SMS to the CEO (watchdog, system alerts, etc.).
+ * No spam filtering — these are system-generated messages.
+ */
 export async function sendCeoSmsAlert(message: string): Promise<boolean> {
+  return _sendSms(message);
+}
+
+/**
+ * Send a CEO SMS alert specifically for an INBOUND customer/unknown SMS.
+ * Runs the spam analyzer internally — refuses to send if spam is detected.
+ * This is the last-line defense against spam reaching the CEO's phone.
+ */
+export async function sendCeoInboundSmsAlert(
+  fromNumber: string,
+  preview: string,
+): Promise<{ sent: boolean; spamBlocked: boolean; reasons?: string[] }> {
+  const analysis = analyzeSpam(preview, fromNumber);
+
+  if (analysis.isSpam) {
+    console.log(
+      `[smsAlert] Spam blocked from CEO alert: from=${fromNumber} reasons=${analysis.reasons.join(",")}`,
+    );
+    return { sent: false, spamBlocked: true, reasons: analysis.reasons };
+  }
+
+  const sent = await _sendSms(`📱 New SMS from ${fromNumber}: ${preview.slice(0, 100)}`);
+  return { sent, spamBlocked: false };
+}
+
+/**
+ * Internal: actually send the SMS via RingCentral.
+ */
+async function _sendSms(message: string): Promise<boolean> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
