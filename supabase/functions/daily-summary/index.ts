@@ -362,31 +362,20 @@ Rules:
 - Include specific project names, values, and deadlines from the data
 - Eisenhower should synthesize tasks, overdue items, and calls into a priority matrix`;
 
-      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-      if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
+      const { callAI } = await import("../_shared/aiRouter.ts");
 
-      const aiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              { role: "user", parts: [{ text: `${benSystemPrompt}\n\nGenerate Ben's daily digest for ${targetDate}.\n\n${benContext}` }] },
-            ],
-            generationConfig: { temperature: 0.7 },
-          }),
-        }
-      );
+      const result = await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
+        agentName: "daily-summary-ben",
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: benSystemPrompt },
+          { role: "user", content: `Generate Ben's daily digest for ${targetDate}.\n\n${benContext}` },
+        ],
+      });
 
-      if (!aiResponse.ok) {
-        const errText = await aiResponse.text();
-        console.error("AI error for Ben digest:", aiResponse.status, errText);
-        throw new Error(`Gemini API error: ${aiResponse.status}`);
-      }
-
-      const aiData = await aiResponse.json();
-      const rawContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const rawContent = result.content || "";
       let digest;
       try {
         const cleaned = rawContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -531,7 +520,7 @@ ${rcCalls.length > 0 ? rcCalls.map((c: any, i: number) => { const meta = c.metad
 --- QUICKBOOKS FINANCIALS ---
 Total Accounts Receivable: $${totalAR.toFixed(2)}
 Overdue Invoices: ${overdueInvoices.length} totaling $${totalOverdue.toFixed(2)}
-${overdueInvoices.length > 0 ? overdueInvoices.slice(0, 10).map((inv: any, i: number) => { const d = inv.data || {}; return `${i + 1}. Invoice #${d.DocNumber || inv.quickbooks_id} | Customer: ${d.CustomerRef?.name || "Unknown"} | Balance: $${inv.balance} | Due: ${d.DueDate || "N/A"}`; }).join("\n") : ""}
+${overdueInvoices.length > 0 ? overdueInvoices.slice(0, 10).map((inv: any, i: number) => { const d = inv.data || {}; const custName = d.CustomerRef?.name || "Unlinked"; return `${i + 1}. Invoice #${d.DocNumber || inv.quickbooks_id} | Customer: ${custName} | Balance: $${inv.balance} | Due: ${d.DueDate || "N/A"}`; }).join("\n") : ""}
 Total Vendors on file: ${vendors.length}
 
 --- SOCIAL MEDIA (last 7 days) ---
@@ -561,8 +550,8 @@ ${mailboxReports.length > 0 ? (() => { const sections: string[] = []; for (const
 `;
 
     // ── Call Gemini AI ──
-    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured");
+    // ── Call AI via shared router (not direct Gemini) ──
+    const { callAI } = await import("../_shared/aiRouter.ts");
 
     const systemPrompt = `You are a smart Daily Digest AI assistant for a steel/rebar manufacturing company called Rebar.shop. 
 Generate a structured daily summary digest in JSON format based on real business data provided.
@@ -591,36 +580,22 @@ Rules:
 - Prioritize urgent items first
 - Include specific numbers, names, and amounts
 - Analyze MAILBOX REPORTS for RingCentral, Wincher, SEMrush, call summaries, Google Analytics data
-- Include employee time clock, production runs, ERP activity, and agent usage data`;
+- Include employee time clock, production runs, ERP activity, and agent usage data
+- Report facts only — do NOT dramatize or infer problems not supported by the data
+- If customer name shows as "Unlinked", note it as a data mapping issue, not a crisis`;
 
-    const aiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [
-            { role: "user", parts: [{ text: `${systemPrompt}\n\nGenerate the daily digest for ${targetDate}.\n\n${dataContext}` }] },
-          ],
-          generationConfig: { temperature: 0.7 },
-        }),
-      }
-    );
+    const result = await callAI({
+      provider: "gemini",
+      model: "gemini-2.5-flash",
+      agentName: "daily-summary",
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Generate the daily digest for ${targetDate}.\n\n${dataContext}` },
+      ],
+    });
 
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded, please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      const errText = await aiResponse.text();
-      console.error("Gemini API error:", aiResponse.status, errText);
-      throw new Error(`Gemini API error: ${aiResponse.status}`);
-    }
-
-    const aiData = await aiResponse.json();
-    const rawContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const rawContent = result.content || "";
 
     let digest;
     try {
