@@ -431,8 +431,19 @@ function TeamDailyReport({
   profiles: { id: string; full_name: string; email?: string; user_id: string | null }[];
   timezone: string;
 }) {
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const profileIds = useMemo(() => profiles.map((p) => p.id), [profiles]);
-  const { data, isLoading } = useTeamDailyActivity(profileIds);
+  const { data, isLoading } = useTeamDailyActivity(profileIds, selectedDate);
+
+  const isToday = useMemo(() => {
+    const now = new Date();
+    return (
+      selectedDate.getFullYear() === now.getFullYear() &&
+      selectedDate.getMonth() === now.getMonth() &&
+      selectedDate.getDate() === now.getDate()
+    );
+  }, [selectedDate]);
 
   if (isLoading) {
     return (
@@ -455,7 +466,46 @@ function TeamDailyReport({
     <div className="rounded-xl border border-border bg-card overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
         <Users className="w-4 h-4 text-primary" />
-        <h3 className="text-sm font-semibold text-foreground flex-1">Team Daily Report</h3>
+        <h3 className="text-sm font-semibold text-foreground flex-1">
+          Team Daily Report
+          {!isToday && (
+            <span className="ml-2 text-xs font-normal text-muted-foreground">
+              — {format(selectedDate, "MMM d, yyyy")}
+            </span>
+          )}
+        </h3>
+        {!isToday && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-[10px] px-2 text-primary"
+            onClick={() => setSelectedDate(new Date())}
+          >
+            Today
+          </Button>
+        )}
+        <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" title="Select date">
+              <CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={(d) => {
+                if (d) {
+                  setSelectedDate(d);
+                  setCalendarOpen(false);
+                }
+              }}
+              disabled={(d) => d > new Date()}
+              initialFocus
+              className="p-3 pointer-events-auto"
+            />
+          </PopoverContent>
+        </Popover>
         <SectionReportButton
           label="Team"
           getText={() => {
