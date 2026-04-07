@@ -289,7 +289,37 @@ async function handleMessageEvent(supabase: any, body: any) {
     const toAddr = (msg.to || []).map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
     const direction = (msg.direction || "").toLowerCase();
 
-    // Contact matching
+    // ── EARLY: Trigger AI auto-reply for inbound SMS BEFORE DB writes ──
+    const { analyzeSpam } = await import("../_shared/spamFilter.ts");
+    const spamResult = analyzeSpam(msg.subject || "", fromAddr);
+    if (spamResult.isSpam) {
+      console.log(`[webhook] Spam SMS blocked from ${fromAddr} reasons=${spamResult.reasons.join(",")}`);
+    } else if (direction === "inbound" && fromAddr !== "Unknown" && companyId) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+        // Fire-and-forget — triggers BEFORE upsert/activity to minimize latency
+        fetch(`${supabaseUrl}/functions/v1/vizzy-sms-reply`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${svcKey}`,
+          },
+          body: JSON.stringify({
+            from_number: fromAddr,
+            message_text: msg.subject || "",
+            contact_name: null,
+            contact_id: null, // contact matching happens below, but reply doesn't need to wait
+            company_id: companyId,
+          }),
+        }).catch((e) => console.error("[webhook] SMS auto-reply trigger failed:", e));
+      } catch (e) {
+        console.error("[webhook] SMS auto-reply setup error:", e);
+      }
+    }
+
+    // Contact matching (after reply trigger — reply doesn't depend on this)
     const matchPhone = direction === "inbound" ? fromAddr : toAddr;
     const contactId = companyId ? await matchContactByPhone(supabase, matchPhone, companyId) : null;
 
@@ -332,36 +362,6 @@ async function handleMessageEvent(supabase: any, body: any) {
       dedupe_key: dedupeKey,
       metadata: { msgId, direction, fromAddr, toAddr },
     }, { onConflict: "dedupe_key", ignoreDuplicates: true });
-
-    // ── Trigger AI auto-reply for inbound SMS (skip spam) ──
-    const { analyzeSpam } = await import("../_shared/spamFilter.ts");
-    const spamResult = analyzeSpam(msg.subject || "", fromAddr);
-    if (spamResult.isSpam) {
-      console.log(`[webhook] Spam SMS blocked from ${fromAddr} reasons=${spamResult.reasons.join(",")}`);
-    } else if (direction === "inbound" && fromAddr !== "Unknown" && companyId) {
-      try {
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-        // Fire-and-forget — don't block the webhook response
-        fetch(`${supabaseUrl}/functions/v1/vizzy-sms-reply`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${svcKey}`,
-          },
-          body: JSON.stringify({
-            from_number: fromAddr,
-            message_text: msg.subject || "",
-            contact_name: null,
-            contact_id: contactId,
-            company_id: companyId,
-          }),
-        }).catch((e) => console.error("[webhook] SMS auto-reply trigger failed:", e));
-      } catch (e) {
-        console.error("[webhook] SMS auto-reply setup error:", e);
-      }
-    }
   }
 }
 
