@@ -29,6 +29,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { GenerateQuotationDialog } from "./GenerateQuotationDialog";
 import { DraftQuotationEditor } from "./documents/DraftQuotationEditor";
+import { DraftInvoiceEditor } from "./documents/DraftInvoiceEditor";
+import { useSalesInvoices, SalesInvoice } from "@/hooks/useSalesInvoices";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
@@ -78,7 +80,9 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [draftEditorId, setDraftEditorId] = useState<string | null>(null);
+  const [invoiceEditorId, setInvoiceEditorId] = useState<string | null>(null);
   const { companyId } = useCompanyId();
+  const { invoices: localInvoices, isLoading: localInvoicesLoading } = useSalesInvoices();
 
   const handleCreateDraft = async () => {
     setCreatingDraft(true);
@@ -261,9 +265,15 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
     assumptions: ["Standard access for delivery truck at site."],
   });
 
+  // Merge local ERP invoices with QB invoices for count
+  const localOnlyInvoices = localInvoices.filter(
+    (li) => !data.invoices.some((qi) => qi.DocNumber === li.invoice_number)
+  );
+  const totalInvoiceCount = data.invoices.length + localOnlyInvoices.length;
+
   const docTabs: { id: DocType; label: string; icon: typeof Package; count: number }[] = [
     { id: "quotation", label: "Quotations", icon: ClipboardList, count: totalCount || quotations.length },
-    { id: "invoice", label: "Invoices", icon: FileText, count: data.invoices.length },
+    { id: "invoice", label: "Invoices", icon: FileText, count: totalInvoiceCount },
     { id: "packing-slip", label: "Packing Slips", icon: Package, count: data.invoices.length },
     { id: "estimation", label: "Estimations", icon: Calculator, count: data.estimates.length },
   ];
@@ -378,6 +388,41 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
                   variant="outline"
                   className="gap-1.5 shrink-0"
                   onClick={() => openPreview(activeDoc, inv.Id)}
+                >
+                  <Eye className="w-3.5 h-3.5" /> View
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* Local ERP invoices (not yet synced to QB) */}
+          {activeDoc === "invoice" && localOnlyInvoices.map((inv) => (
+            <Card
+              key={`local-inv-${inv.id}`}
+              className="hover:ring-2 hover:ring-primary/20 transition-all cursor-pointer"
+              onClick={() => setInvoiceEditorId(inv.id)}
+            >
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="p-1.5 rounded-lg bg-primary/10 shrink-0">
+                    <FileText className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold">#{inv.invoice_number} — {inv.customer_name || inv.customer_company || "Unknown"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {inv.issued_date ? new Date(inv.issued_date).toLocaleDateString() : new Date(inv.created_at).toLocaleDateString()}
+                      {inv.amount ? ` · ${fmt(inv.amount)}` : ""}
+                      {inv.status === "paid" && <Badge variant="outline" className="ml-2 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-200">Paid</Badge>}
+                      {inv.status === "draft" && <Badge variant="outline" className="ml-2 text-xs bg-muted text-muted-foreground">Draft</Badge>}
+                      {inv.status === "sent" && <Badge variant="outline" className="ml-2 text-xs bg-blue-500/10 text-blue-600 border-blue-200">Sent</Badge>}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 shrink-0"
+                  onClick={(e) => { e.stopPropagation(); setInvoiceEditorId(inv.id); }}
                 >
                   <Eye className="w-3.5 h-3.5" /> View
                 </Button>
@@ -527,8 +572,8 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
             </Card>
           ))}
 
-          {((activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.length === 0) && (
-            <p className="text-center text-muted-foreground py-12">No invoices found. Sync from QuickBooks first.</p>
+          {((activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.length === 0 && localOnlyInvoices.length === 0) && (
+            <p className="text-center text-muted-foreground py-12">No invoices found.</p>
           )}
           {activeDoc === "quotation" && quotations.length === 0 && !quotationsLoading && totalCount === 0 && data.estimates.length === 0 && (
             <p className="text-center text-muted-foreground py-12">No quotations found.</p>
@@ -664,6 +709,15 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           onClose={() => {
             setDraftEditorId(null);
             queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
+          }}
+        />
+      )}
+      {invoiceEditorId && (
+        <DraftInvoiceEditor
+          invoiceId={invoiceEditorId}
+          onClose={() => {
+            setInvoiceEditorId(null);
+            queryClient.invalidateQueries({ queryKey: ["sales_invoices"] });
           }}
         />
       )}
