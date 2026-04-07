@@ -121,6 +121,15 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "backups",       label: "Backups",       hint: "Recovery",     layer: "platform", accent: "emerald", icon: DownloadCloud, detail: { title: "Backups", bullets: ["Daily snapshots", "Point-in-time recovery", "Geo-redundant storage"] } },
   { id: "admin-console", label: "Admin",         hint: "Management",   layer: "platform", accent: "emerald", icon: Users,         detail: { title: "Admin Console", bullets: ["User management", "System configuration", "Feature flags"] } },
   { id: "cdn-edge",      label: "CDN / Edge",    hint: "Delivery",     layer: "platform", accent: "emerald", icon: Globe,         detail: { title: "CDN / Edge", bullets: ["Static asset delivery", "Edge caching", "Global distribution"] } },
+  { id: "memory-store",  label: "Memory",        hint: "AI & CRM memory", layer: "platform", accent: "emerald", icon: MemoryStick,   detail: { title: "Memory Store", bullets: ["Vizzy brain & lead memory", "Qualification / quote / loss memory", "Client performance memory"] } },
+  { id: "realtime",      label: "Realtime",      hint: "Live events",  layer: "platform", accent: "emerald", icon: Radio,         detail: { title: "Realtime Engine", bullets: ["Supabase Realtime", "Live chat & dashboards", "Presence & notifications"] } },
+  { id: "rate-limiter",  label: "Rate Limiter",  hint: "Throttle",     layer: "platform", accent: "emerald", icon: Gauge,         detail: { title: "Rate Limiter", bullets: ["Request rate limiting", "Per-user & per-route limits", "Burst protection"] } },
+  { id: "session-store", label: "Sessions",      hint: "Auth state",   layer: "platform", accent: "emerald", icon: Key,           detail: { title: "Session Store", bullets: ["Auth session management", "Token storage & rotation", "SSO state"] } },
+  { id: "analytics",     label: "Analytics",     hint: "Telemetry",    layer: "platform", accent: "emerald", icon: BarChart3,     detail: { title: "Analytics", bullets: ["Usage metrics", "System telemetry", "AI cost tracking"] } },
+  { id: "log-agg",       label: "Log Aggregator", hint: "System logs", layer: "platform", accent: "emerald", icon: FileText,      detail: { title: "Log Aggregator", bullets: ["Centralized log collection", "Structured logging", "Log retention policies"] } },
+  { id: "health",        label: "Health Check",  hint: "Uptime",       layer: "platform", accent: "emerald", icon: HeartPulse,    detail: { title: "Health Checks", bullets: ["Endpoint health probes", "Liveness & readiness", "Uptime monitoring"] } },
+  { id: "feature-flags", label: "Feature Flags", hint: "Toggles",      layer: "platform", accent: "emerald", icon: ToggleRight,   detail: { title: "Feature Flags", bullets: ["Feature toggles", "Gradual rollouts", "A/B testing gates"] } },
+  { id: "msg-bus",       label: "Message Bus",   hint: "Pub/Sub",      layer: "platform", accent: "emerald", icon: Bus,           detail: { title: "Message Bus", bullets: ["Event-driven Pub/Sub", "Inter-service communication", "Async decoupling"] } },
 ];
 
 /* ───── Edges — hub-based routing, 3 styles, micro-labels ───── */
