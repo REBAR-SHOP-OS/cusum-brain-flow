@@ -1,42 +1,73 @@
 
 
-# Unify Vizzy Branding Across All Chat Surfaces
+# Make RingCentral Live: Register Webhook Subscription + Fix Dead Extension
 
-## The Problem
+## Current State
 
-The screenshot shows two different "Vizzy" chat interfaces on the same screen with inconsistent branding:
-
-1. **Home page ChatInput** (top) — Says "CEO Portal", "Ask Vizzy anything...", has rich toolbar (emoji, voice, formatting)
-2. **LiveChatWidget** (floating bubble, bottom-right) — Says "Live Chat" with a generic `MessageCircle` icon, empty state says "How can we help? Ask anything about your business"
-3. **IntelligencePanel** (right sidebar) — Already branded as "Vizzy" with `Sparkles` icon ✓
-
-The LiveChatWidget is the odd one out — it uses generic "Live Chat" branding instead of Vizzy identity.
+- **Webhook handler exists** (`ringcentral-webhook/index.ts`) — fully functional, handles calls, SMS, voicemails
+- **No webhook subscription registered** with RingCentral — the handler never receives events
+- **System relies on 15-min cron poll** — not "live"
+- **Extension 340479042** causes errors every sync cycle (404 "Resource not found") — likely deleted/disabled in RC
 
 ## What Changes
 
-### 1. `src/components/layout/LiveChatWidget.tsx` — Rebrand to Vizzy
+### 1. NEW: `supabase/functions/ringcentral-register-webhook/index.ts`
 
-**Header** (line 61-65):
-- Change `MessageCircle` icon → `Sparkles` (matches IntelligencePanel)
-- Change label from "Live Chat" → "Vizzy"
+A new edge function that registers a RingCentral webhook subscription via the RC API:
 
-**Empty state** (line 82-86):
-- Change `MessageCircle` icon → `Sparkles`
-- Change "How can we help?" → "Vizzy"
-- Change "Ask anything about your business" → "Your executive intelligence assistant."
-- Add sample prompts matching IntelligencePanel style (e.g. "What's the biggest risk today?")
+- Calls `POST /restapi/v1.0/subscription` with event filters:
+  - `/restapi/v1.0/account/~/extension/~/telephony/sessions` (live calls)
+  - `/restapi/v1.0/account/~/extension/~/message-store` (SMS, voicemail, fax — per-extension)
+- Sets delivery mode to `WebHook` pointing at `{SUPABASE_URL}/functions/v1/ringcentral-webhook?token={RINGCENTRAL_WEBHOOK_SECRET}`
+- Uses the admin RC token from `user_ringcentral_tokens` (same pattern as cron sync)
+- Returns subscription ID and expiration
+- Can be called manually or scheduled to renew before expiry (RC subscriptions expire in ~15 min unless renewed, so we'll set `expiresIn: 630720000` for max or handle renewal)
 
-**Result**: Both the floating widget and the sidebar panel now look and feel like the same Vizzy.
+### 2. UPDATE: `supabase/functions/ringcentral-sync/index.ts`
 
-### 2. No changes needed to:
-- `IntelligencePanel.tsx` — already branded correctly as Vizzy
-- `Home.tsx` / `ChatInput` — this is the main command input, not a "Vizzy chat" per se (it routes to agents based on input)
-- `vizzyIdentity.ts` — backend identity is already unified
-- `FloatingVizzyButton.tsx` — this is the trigger button, not the chat UI
+**Fix dead extension 340479042:** Wrap each per-extension fetch in a try/catch that:
+- On 404 "Resource for parameter [extensionId] is not found" → log warning, **skip** that extension, continue
+- This prevents the error spam in logs every 15 minutes
+- The extension map already has 16 entries; only 1 is dead
+
+Changes (~10 lines):
+- In SMS sync loop (~line 432): add catch that checks for 404 CMN-102 and continues
+- In Voicemail sync loop (~line 470): same
+- In Fax sync loop (~line 512): same
+- These catches already exist but they `console.error` and continue — the fix is to downgrade to `console.warn` for 404s specifically so they don't pollute error logs
+
+### 3. UPDATE: `supabase/functions/_shared/vizzyIdentity.ts`
+
+Add to the CAN DO list:
+- `Register and manage RingCentral webhook subscriptions for real-time call/SMS monitoring`
+
+### 4. ADD SECRET: `RINGCENTRAL_WEBHOOK_SECRET`
+
+A random token to authenticate incoming webhook payloads. The webhook handler already checks for it — it just hasn't been set.
+
+## How It Works
+
+```text
+Before (polling only):
+  CRON (15 min) → ringcentral-sync → RC API → DB
+
+After (live + polling fallback):
+  RC Event → ringcentral-webhook → DB (instant)
+  CRON (15 min) → ringcentral-sync → DB (catches anything missed)
+```
+
+## File Changes
+
+| File | Change |
+|------|--------|
+| `supabase/functions/ringcentral-register-webhook/index.ts` | NEW — registers RC webhook subscription |
+| `supabase/functions/ringcentral-sync/index.ts` | Downgrade 404 errors for dead extensions to warnings (~6 lines) |
+| `supabase/functions/_shared/vizzyIdentity.ts` | Add webhook registration to CAN DO list |
 
 ## Impact
-- 1 file changed (`LiveChatWidget.tsx`)
-- ~10 lines modified
-- Consistent Vizzy branding across all chat surfaces
-- No database, auth, or routing changes
+- 3 files (1 new, 2 updated)
+- Incoming SMS and calls appear instantly instead of up to 15 minutes later
+- Dead extension 340479042 stops polluting error logs
+- Cron continues as a safety net
+- Requires setting `RINGCENTRAL_WEBHOOK_SECRET` secret
 
