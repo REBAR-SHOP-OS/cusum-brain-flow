@@ -475,7 +475,7 @@ Deno.serve((req) =>
     const dbContext = await fetchContext(supabase, agent, user.id, userEmail, roles, svcClient, companyId);
 
     // Inject live QuickBooks context for accounting/collections agents
-    if (agent === "accounting" || agent === "collections") {
+    if (agent === "accounting") {
       try {
         const qbLiveData = await fetchQuickBooksLiveContext(svcClient, companyId);
         Object.assign(dbContext, qbLiveData);
@@ -486,7 +486,7 @@ Deno.serve((req) =>
     
     // Phase 6: Executive dashboard context for data/empire agents
     let execContext: Record<string, unknown> = {};
-    if (agent === "data" || agent === "empire" || agent === "commander" || agent === "assistant") {
+    if (agent === "data" || agent === "empire" || agent === "assistant") {
       execContext = await fetchExecutiveContext(svcClient, companyId);
     }
     if (agent === "rebuild") {
@@ -509,7 +509,7 @@ Deno.serve((req) =>
     
     const validationRules = (dbContext.validationRules as ValidationRule[]) || [];
 
-    if (agent === "estimation" && attachedFiles.length > 0) {
+    if (agent === "estimating" && attachedFiles.length > 0) {
       console.log(`Processing ${attachedFiles.length} files for analysis...`);
       for (const file of attachedFiles) {
         const isImage = /\.(jpg|jpeg|png|gif|bmp|webp|tiff?)$/i.test(file.name);
@@ -1051,7 +1051,7 @@ Deno.serve((req) =>
 
     // Document analysis summary injection
     let docSummary = "";
-    if (agent === "estimation" && documentResults.length > 0) {
+    if (agent === "estimating" && documentResults.length > 0) {
       docSummary = "\n\n📋 DOCUMENT ANALYSIS RESULTS:\n" + documentResults.map(d => `--- ${d.fileName} ---\n${d.text.substring(0, 1000)}...`).join("\n");
     }
 
