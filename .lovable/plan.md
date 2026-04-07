@@ -1,48 +1,35 @@
 
 
-# Move Staged Delivery Items Back to Clearance
+# Add "Send Quote" Option from Lead Record on Sales Pipeline
 
-## Root Cause
-Items with `phase = 'complete'` had deliveries created (status `staged`) before going through QC clearance. There are **62 items** in `complete` phase and **14 already in `clearance`** linked to 7 staged deliveries.
+## Problem
+The lead detail drawer on `/sales/pipeline` shows linked quotation counts via `LeadSmartButtons`, but there's no way to send an existing quote to the customer directly from the lead record. Users must navigate away to the Quotations page to send.
 
-## Data State
-| Delivery | Project | Items |
-|----------|---------|-------|
-| DEL-1774367066351 | Type 6 Chamber (Small) | 12 |
-| DEL-1774366970015 | PENTHOUSE FLOOR SLAB ON DECK - DMG | 22 |
-| DEL-1774366966074 | 19 HALFORD AVE_STAIRCASE ADD'L | 9 |
-| DEL-1774366608661 | RETAINING WALL | 11 |
-| DEL-1774366011920 | RETAINING WALL | 4 |
-| DEL-1773418524203 | Tower foundation | 1 |
-| DEL-1773418289785 | jai shree ram | 17 |
+## Approach
+Enhance `LeadSmartButtons` to show a "Send Quote" action when quotes exist for the lead. Clicking it opens a small dialog listing the lead's quotations with a send button for each, which triggers the existing `send-quote-email` edge function.
 
-## Plan
+## Changes
 
-### 1. Database Migration
-Run a single migration that:
+### 1. `src/components/sales/LeadSmartButtons.tsx`
+- Expand the quotes query to also fetch `quotation_number`, `status`, `customer_name`, `amount`, and `quote_id` (the linked `quotes` table ID used by send-quote-email)
+- Make the Quotes card clickable — clicking opens a dropdown/popover listing each quote with its number, status, and amount
+- Each quote row has a **Send** button (Mail icon) that opens a small email dialog
+- The email dialog collects customer email (pre-filled from lead's `contact_email` passed as a new prop), then calls `invokeEdgeFunction("send-quote-email", { quote_id, customer_email, action: "send_quote" })`
+- After sending, update the quotation status to `sent_to_customer` and show a success toast
 
-**a)** Moves all `cut_plan_items` back to `clearance` phase where they belong to a cut plan that has a staged delivery and are currently in `complete`:
-```sql
-UPDATE cut_plan_items
-SET phase = 'clearance'
-WHERE phase = 'complete'
-  AND cut_plan_id IN (
-    SELECT cut_plan_id FROM deliveries WHERE status = 'staged'
-  );
-```
+### 2. Props change
+- Add `contactEmail?: string` prop to `LeadSmartButtons` so the email dialog can pre-fill
+- Update `SalesLeadDrawer` (line 142) to pass `contactEmail={lead.contact_email}`
 
-**b)** Delete the premature staged deliveries and their related records (delivery_stops, packing_slips):
-```sql
--- Cascade will handle delivery_stops and packing_slips via FK
-DELETE FROM deliveries WHERE status = 'staged';
-```
+## Technical Details
+- Reuses existing `send-quote-email` edge function — no backend changes
+- The `quote_id` field on `sales_quotations` links to the `quotes` table, which is what `send-quote-email` expects
+- Quotation status update uses the existing `sales_quotations` table update
+- UI: Popover with quote list + inline Dialog for email input, matching existing patterns in the codebase
 
-### 2. No Code Changes
-The clearance UI already picks up items with `phase = 'clearance'`. Once the data is corrected, items will appear in the Clearance screen for QC before they can proceed to Loading → Delivery again.
-
-## Impact
-- 7 staged deliveries removed
-- ~62 items moved back to clearance for QC
-- Items already in clearance (14) remain unaffected
-- No code changes needed — data-only fix
+## Files
+| File | Change |
+|------|--------|
+| `src/components/sales/LeadSmartButtons.tsx` | Add send-quote popover + email dialog |
+| `src/components/sales/SalesLeadDrawer.tsx` | Pass `contactEmail` prop |
 
