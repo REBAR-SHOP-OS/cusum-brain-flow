@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { X, Send, HelpCircle, BookOpen, RotateCcw, Loader2 } from "lucide-react";
+import { X, Send, Sparkles, BookOpen, RotateCcw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -172,11 +172,11 @@ export function HelpPanel({ isOpen, onClose }: HelpPanelProps) {
             <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-primary/5">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <HelpCircle className="w-4 h-4 text-primary" />
+                  <Sparkles className="w-4 h-4 text-primary" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold">Help & Training</h3>
-                  <p className="text-[10px] text-muted-foreground">AI-powered app guide</p>
+                  <h3 className="text-sm font-semibold">Vizzy</h3>
+                  <p className="text-[10px] text-muted-foreground">Ask me anything about the app</p>
                 </div>
               </div>
               <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close help" className="h-7 w-7">
