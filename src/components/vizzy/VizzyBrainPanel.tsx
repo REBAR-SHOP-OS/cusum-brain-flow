@@ -800,7 +800,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
               return (
                 <button
                   key={p.id}
-                  onClick={() => setSelectedProfileId(isSelected ? null : p.id)}
+                  onClick={() => { setSelectedProfileId(isSelected ? null : p.id); setUserSelectedDate(new Date()); }}
                   className={`shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-full text-base transition-all ${
                     isSelected
                       ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
