@@ -1551,7 +1551,8 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   let effectiveTerms: string | undefined = salesTermRef || (qbConfig as any).default_sales_term;
   if (effectiveTerms && isNaN(Number(effectiveTerms))) {
     const resolvedId = await resolveTermId(config, effectiveTerms);
-    effectiveTerms = resolvedId || undefined;
+    // If we can't resolve the name to an ID, drop it entirely — QB rejects non-numeric values
+    effectiveTerms = resolvedId ?? undefined;
   }
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
