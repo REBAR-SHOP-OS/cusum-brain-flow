@@ -1,46 +1,57 @@
 
 
-# Fix: Add 5xx Retry to Prevent Transient Edge Function Boot Failures (546)
+# Enhance Vizzy Brain User Performance Panel
 
-## Root Cause Analysis
+## Goal
+When a @rebar.shop user is selected in the Vizzy Brain panel, show three comprehensive sections with report icons:
+1. **General Overview** — performance stats + detailed clock-in/clock-out entries
+2. **Agents** — all agents the user has access to (from `userAgentMap` + session history)
+3. **Activity Log** — all actions the user performed today (from `activity_events`)
+4. **Time Clock** — detailed clock-in/clock-out entries with timestamps
 
-The screenshot shows `"Edge function ai-agent failed (546)"`. This is NOT about a missing `generate-social-posts` function — there is no such function in this project. The social post generation flows entirely through the `ai-agent` edge function with `agent: "social"`.
+Each collapsible section gets a small report/download icon button that generates a summary.
 
-HTTP 546 is a Supabase edge runtime transient error (cold start failure, boot timeout, or resource exhaustion). The function is currently working fine (logs show successful image generation at 14:03-14:05 UTC today). The 09:15 AM failure was transient.
+## Changes
 
-**The gap:** `invokeEdgeFunction.ts` already has `retries: 1` configured for `ai-agent`, but the retry logic (line 66) only retries on `AbortError`, `Failed to fetch`, or `NetworkError`. A 546 response is a successful HTTP response (not a network error), so it is NOT retried — the user sees the error immediately.
+### 1. New hook: `src/hooks/useUserActivityLog.ts`
+- Query `activity_events` for the selected user's `actor_id` today
+- Return list of events: `event_type`, `entity_type`, `description`, `created_at`
+- Ordered by `created_at` descending, limit 50
 
-## Fix
+### 2. Expand `useUserPerformance.ts`
+- Return the full `clockEntries` array (clock_in, clock_out) instead of just summary stats
+- This provides the detailed clock-in/clock-out times the user wants
 
-### `src/lib/invokeEdgeFunction.ts` — Add 5xx status codes to retryable conditions
+### 3. Update `VizzyBrainPanel.tsx`
 
-Add a check: if `response.status >= 500`, treat it as retryable before throwing.
+**New Section: Activity Log**
+- Add an "Activities" accordion section (between Agents and Time Clock)
+- Show each activity event with icon, description, and timestamp
+- Grouped by event_type for readability
 
-```typescript
-// Line 49-51, after response.ok check:
-if (!response.ok) {
-  const errMsg = data?.error || `Edge function ${functionName} failed (${response.status})`;
-  const err = new Error(errMsg);
-  (err as any).status = response.status;
-  throw err;
-}
+**Enhanced Time Clock Section**
+- Currently shows only "In: 8:12 AM" and "Hours: 2.5h" in the overview card
+- Add a dedicated "Time Clock" accordion showing each entry:
+  - Clock In time (formatted in timezone)
+  - Clock Out time (or "Still working" badge)
+  - Duration for that entry
 
-// Line 66, in isRetryable check:
-const isRetryable = err.name === "AbortError" 
-  || err.message?.includes("Failed to fetch") 
-  || err.message?.includes("NetworkError")
-  || (err as any).status >= 500;  // <-- NEW: retry on 5xx
-```
+**Report Icon on Each Section Header**
+- Add a `FileText` (or `ClipboardList`) icon button next to each section title
+- On click: copies a text summary of that section to clipboard (toast confirmation)
+- Covers: General Overview, Agents, Activities, Time Clock
 
-## Files Changed
+### 4. File Summary
 
 | File | Change |
 |------|--------|
-| `src/lib/invokeEdgeFunction.ts` | Add `status` property to error + include 5xx in retryable check (~3 lines) |
+| `src/hooks/useUserActivityLog.ts` | New hook — fetch activity_events for user today |
+| `src/hooks/useUserPerformance.ts` | Return full `clockEntries` array alongside summary |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Add Activity Log section, enhanced Time Clock section, report icons on all section headers |
 
-## Impact
-- Transient 546/500/502/503 errors are automatically retried once (with backoff) before surfacing to the user
-- No behavior change for non-5xx errors (auth failures, validation errors, etc.)
-- No database, edge function, or UI changes
-- Existing `retries: 1` in `agent.ts` is now effective for boot failures
+## Technical Notes
+- Activity events are queried by `actor_id` (profile ID) from `activity_events` table
+- Clock entries already fetched in `useUserPerformance` — just need to expose the raw array
+- Report icon uses clipboard API (`navigator.clipboard.writeText`) with toast feedback
+- No database or migration changes needed
 
