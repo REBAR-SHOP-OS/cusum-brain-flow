@@ -13,8 +13,8 @@ export interface QuoteListOptions {
 }
 
 export async function listQuotes(options: QuoteListOptions) {
-  let query = (supabase as any)
-    .from("quotations")
+  let query = supabase
+    .from("quotes")
     .select("*", { count: "exact" })
     .eq("company_id", options.companyId)
     .order("created_at", { ascending: false });
@@ -35,8 +35,8 @@ export async function listQuotes(options: QuoteListOptions) {
 }
 
 export async function getQuoteById(quoteId: string) {
-  const { data, error } = await (supabase as any)
-    .from("quotations")
+  const { data, error } = await supabase
+    .from("quotes")
     .select("*")
     .eq("id", quoteId)
     .maybeSingle();
@@ -46,9 +46,9 @@ export async function getQuoteById(quoteId: string) {
 }
 
 export async function updateQuoteStatus(quoteId: string, status: string) {
-  const { data, error } = await (supabase as any)
-    .from("quotations")
-    .update({ status, updated_at: new Date().toISOString() })
+  const { data, error } = await supabase
+    .from("quotes")
+    .update({ status, updated_at: new Date().toISOString() } as any)
     .eq("id", quoteId)
     .select()
     .maybeSingle();

@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { toast } from "@/components/ui/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { DocumentAttachments } from "@/components/accounting/DocumentAttachments";
 import brandLogo from "@/assets/brand-logo.png";
 
 interface LineItem {
@@ -697,6 +698,11 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
         <Button variant="outline" size="sm" onClick={addRow} className="mb-6 print:hidden gap-1 text-xs">
           <Plus className="w-3 h-3" /> Add Line
         </Button>
+
+        {/* Attachments */}
+        <div className="mb-6 print:hidden">
+          <DocumentAttachments entityType="quote" entityId={quoteId} />
+        </div>
 
         {/* Notes */}
         <div className="mb-6">

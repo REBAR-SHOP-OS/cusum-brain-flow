@@ -15,13 +15,65 @@ Deno.serve((req) =>
     }
     const { quoteId } = parsed.data;
 
-    // Fetch the quote
-    const { data: quote, error: qErr } = await supabase
+    // Fetch the quote — try `quotes` first, then fall back to `sales_quotations`
+    let quote: any = null;
+    const { data: q1, error: qErr1 } = await supabase
       .from("quotes")
       .select("*")
       .eq("id", quoteId)
       .maybeSingle();
-    if (qErr || !quote) throw new Error("Quote not found");
+
+    if (q1) {
+      quote = q1;
+    } else {
+      // Fallback: check sales_quotations and resolve linked quotes row
+      const { data: sq } = await supabase
+        .from("sales_quotations")
+        .select("*")
+        .eq("id", quoteId)
+        .maybeSingle();
+
+      if (sq) {
+        // Try to find linked quotes row via quote_result.quote_id or quotation_number
+        const quoteResult = (sq as any).quote_result as Record<string, unknown> | null;
+        const linkedQuoteId = quoteResult?.quote_id as string | undefined;
+
+        if (linkedQuoteId) {
+          const { data: linked } = await supabase
+            .from("quotes")
+            .select("*")
+            .eq("id", linkedQuoteId)
+            .maybeSingle();
+          if (linked) quote = linked;
+        }
+
+        if (!quote) {
+          const { data: byNum } = await supabase
+            .from("quotes")
+            .select("*")
+            .eq("quote_number", sq.quotation_number)
+            .maybeSingle();
+          if (byNum) quote = byNum;
+        }
+
+        // Last resort: use sales_quotation data directly
+        if (!quote) {
+          quote = {
+            id: sq.id,
+            quote_number: sq.quotation_number,
+            customer_id: null,
+            total_amount: sq.amount || 0,
+            status: sq.status,
+            metadata: {
+              customer_name: sq.customer_name || sq.customer_company,
+              line_items: sq.line_items || [],
+            },
+          };
+        }
+      }
+    }
+
+    if (!quote) throw new Error("Quote not found");
 
     // Resolve customer_id from metadata if null
     let resolvedCustomerId = quote.customer_id;
@@ -40,7 +92,7 @@ Deno.serve((req) =>
     }
 
     // Validate quote status before conversion
-    const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed"];
+    const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed", "internally_approved", "customer_approved"];
     if (!CONVERTIBLE_STATUSES.includes(quote.status)) {
       return new Response(
         JSON.stringify({ error: `Cannot convert quote in status: ${quote.status}. Must be one of: ${CONVERTIBLE_STATUSES.join(", ")}` }),
