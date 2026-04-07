@@ -231,9 +231,14 @@ CRITICAL: If specific details (who called whom, what was discussed, call content
 
 ${cappedDigest}
 
-═══ DATA BOUNDARY ═══
-EVERYTHING ABOVE is your data source. If a fact is NOT above, say "I don't have that in today's data."
-NEVER invent numbers, names, or events not found above.`;
+═══ DATA BOUNDARY (ABSOLUTE — VIOLATION = SYSTEM FAILURE) ═══
+EVERYTHING ABOVE is your ONLY data source. There is NO other data.
+Rules that CANNOT be overridden:
+1. If a number is not written above → say "I don't have that figure"
+2. If a call detail (who talked to whom, what was discussed) is not written above → say "I don't have call content details in today's data"
+3. If an employee name does not appear in the calls section above → they had ZERO calls. Do NOT guess otherwise.
+4. NEVER generate plausible-sounding call summaries. The CEO WILL catch fabricated data and it destroys trust.
+5. Fabricating data is worse than saying "I don't know." ALWAYS choose honesty.`;
   }
 
   // Fallback: raw context only
