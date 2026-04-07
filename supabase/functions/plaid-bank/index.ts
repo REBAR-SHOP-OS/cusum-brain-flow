@@ -8,7 +8,12 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const PLAID_BASE = "https://production.plaid.com"; // switch to sandbox for testing
+const PLAID_ENV = Deno.env.get("PLAID_ENVIRONMENT") || "sandbox";
+const PLAID_BASE = PLAID_ENV === "production"
+  ? "https://production.plaid.com"
+  : PLAID_ENV === "development"
+    ? "https://development.plaid.com"
+    : "https://sandbox.plaid.com";
 
 function getPlaidCredentials() {
   const clientId = Deno.env.get("PLAID_CLIENT_ID");
