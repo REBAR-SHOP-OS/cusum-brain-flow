@@ -265,9 +265,15 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
     assumptions: ["Standard access for delivery truck at site."],
   });
 
+  // Merge local ERP invoices with QB invoices for count
+  const localOnlyInvoices = localInvoices.filter(
+    (li) => !data.invoices.some((qi) => qi.DocNumber === li.invoice_number)
+  );
+  const totalInvoiceCount = data.invoices.length + localOnlyInvoices.length;
+
   const docTabs: { id: DocType; label: string; icon: typeof Package; count: number }[] = [
     { id: "quotation", label: "Quotations", icon: ClipboardList, count: totalCount || quotations.length },
-    { id: "invoice", label: "Invoices", icon: FileText, count: data.invoices.length },
+    { id: "invoice", label: "Invoices", icon: FileText, count: totalInvoiceCount },
     { id: "packing-slip", label: "Packing Slips", icon: Package, count: data.invoices.length },
     { id: "estimation", label: "Estimations", icon: Calculator, count: data.estimates.length },
   ];
