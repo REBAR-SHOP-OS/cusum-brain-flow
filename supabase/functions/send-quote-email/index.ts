@@ -722,9 +722,13 @@ Deno.serve((req) =>
           if (stripeRes.ok) {
             const stripeData = await stripeRes.json();
             stripePaymentUrl = stripeData.paymentLink?.stripe_url || "";
+            console.log(`[accept_and_convert] Stripe payment link created: ${stripePaymentUrl}`);
+          } else {
+            const errText = await stripeRes.text();
+            console.warn(`[accept_and_convert] Stripe payment link failed (${stripeRes.status}):`, errText);
           }
         } catch (_e) {
-          console.warn("Stripe error:", _e);
+          console.warn("[accept_and_convert] Stripe error:", _e);
         }
 
         // Auto-push invoice to QuickBooks to get InvoiceLink
