@@ -408,6 +408,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         .update({
           customer_name: customerName || null,
           customer_company: customerCompany || null,
+          customer_email: customerEmail || null,
           amount: total,
           due_date: dueDate || null,
           issued_date: invoiceDate || null,
@@ -453,6 +454,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
             body: {
               action: "create-invoice",
               customerName: customerName || undefined,
+              customerEmail: customerEmail || undefined,
               items: qbItems.length > 0 ? qbItems : [{ description: `Invoice ${invoiceNumber}`, unitPrice: total, quantity: 1 }],
               dueDate: dueDate || undefined,
               memo: `ERP Invoice ${invoiceNumber}`,
