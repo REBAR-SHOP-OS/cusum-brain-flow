@@ -1,66 +1,61 @@
 
 
-# Fix: Vizzy SMS Reply Delay
+# Safe Cleanup of Deprecated Agents: collections, Chase, commander, estimation
 
-## Root Cause Analysis
+## Summary of Findings
 
-The SMS reply flow has **three layers of delay**:
+**Agents to remove:**
+- `collections` / "Chase" — merged into Penny (accounting). Collections functionality is already handled by Penny's prompt.
+- `commander` / "Commander" — standalone sales manager agent. Has its own prompt, context, suggestions, tools, and router entry.
+- `estimation` (old ID only) — the active agent uses ID `estimating` (Gauge). The old `estimation` string appears in type unions and some references.
 
-### Layer 1: Webhook Pre-Processing (5-10s)
-The `ringcentral-webhook` handler does 6 sequential DB operations (dedupe check, extension lookup, profile lookup, contact matching, communications upsert, activity event) **before** triggering `vizzy-sms-reply`. The AI reply doesn't even start until all this finishes.
+**NOT touched:** `estimating` (Gauge), all other active agents, database tables (`estimation_projects`, `estimation_items`), the Estimation page/route, or any "estimation" text in natural-language prompts.
 
-### Layer 2: vizzy-sms-reply Sequential Operations (8-15s)
-Inside `vizzy-sms-reply`, every operation runs sequentially:
-1. Spam check (instant)
-2. Rate limit DB query
-3. Own numbers DB query
-4. Contact context DB query
-5. Conversation history DB query
-6. **AI generation call** (2-5s alone)
-7. RC token fetch + possible refresh
-8. **RC phone number fetch** (API call every time — not cached)
-9. SMS send
-10. Communications insert
+---
 
-That's ~5 DB queries + 2 external API calls + 1 AI call — all in series.
+## Changes by File
 
-### Layer 3: Webhook Unreliability (0-15 min)
-If the webhook fails to fire, the fallback is the 15-minute cron sync. This is the worst-case scenario causing the longest delays.
+### Frontend
 
-## Fix Strategy
-
-### 1. Trigger vizzy-sms-reply EARLIER in webhook
-Move the fire-and-forget `vizzy-sms-reply` call to happen **immediately after** identifying the message as inbound SMS — before the upsert and activity logging. The reply doesn't depend on those DB writes.
-
-### 2. Parallelize vizzy-sms-reply internals
-Run independent operations concurrently using `Promise.all`:
-- **Group A** (safety checks): rate limit query + own numbers query — run in parallel
-- **Group B** (context + infrastructure): contact lookup + conversation history + RC token fetch — run in parallel with each other
-- **Group C** (AI + phone): AI generation + RC phone number fetch — run in parallel (AI doesn't need the phone number, phone fetch doesn't need the AI response)
-
-### 3. Cache RC phone number in DB
-Store the SMS-capable phone number in `user_ringcentral_tokens` (already has `rc_phone_number` column). Skip the expensive RC API call if cached.
-
-## Changes
-
-### `supabase/functions/ringcentral-webhook/index.ts`
-- Move the `vizzy-sms-reply` trigger to fire **immediately after** direction detection (before upsert/activity writes)
-- Keep the rest of the webhook logic unchanged
-
-### `supabase/functions/vizzy-sms-reply/index.ts`
-- **Parallelize safety checks**: Run rate limit + own numbers queries via `Promise.all`
-- **Parallelize context + token fetch**: Run contact lookup, conversation history, and RC token fetch concurrently
-- **Parallelize AI + phone number**: Run the AI generation call and RC phone number fetch concurrently
-- **Use cached phone number**: Check `rc_phone_number` from token row before calling RC API
-- Net effect: ~3 sequential "stages" instead of ~10 sequential operations
-
-## Expected Impact
-Current: 15-25 seconds total (webhook processing + sequential vizzy-sms-reply)
-After fix: 5-8 seconds total (early trigger + parallelized operations)
-
-## Files Changed
 | File | Change |
 |------|--------|
-| `supabase/functions/ringcentral-webhook/index.ts` | Move vizzy-sms-reply trigger earlier |
-| `supabase/functions/vizzy-sms-reply/index.ts` | Parallelize operations, use cached phone number |
+| `src/lib/agent.ts` | Remove `"collections"`, `"estimation"`, `"commander"` from `AgentType` union |
+| `src/components/chat/AgentSelector.tsx` | Remove `"collections"`, `"estimation"`, `"commander"` from type + `agents` array (Chase, Cal, Commander entries) |
+| `src/hooks/useChatSessions.ts` | Remove `collections: "Chase"` and `estimation: "Cal"` from `agentTypeNameMap` |
+| `src/lib/agentRouter.ts` | Remove `commander` route entry (lines 213-221). Keep "collection"/"collections" keywords under accounting. |
+| `src/components/agent/agentSuggestionsData.ts` | Remove `commander` suggestions block (lines 101-105) |
+
+### Backend (Edge Functions)
+
+| File | Change |
+|------|--------|
+| `supabase/functions/_shared/agentTypes.ts` | Remove `"collections"`, `"estimation"`, `"commander"` from agent union type |
+| `supabase/functions/_shared/agents/accounting.ts` | Remove `collections` prompt (lines 227-237) |
+| `supabase/functions/_shared/agents/sales.ts` | Remove `commander` prompt (lines 295-362) |
+| `supabase/functions/_shared/agentTools.ts` | Replace `agent === "collections"` with nothing (already covered by `agent === "accounting"`). Replace `agent === "commander"` → `agent === "sales"` where commander had same tools as sales. Remove standalone commander checks. Replace `agent === "estimation"` → `agent === "estimating"` |
+| `supabase/functions/_shared/agentContext.ts` | Remove `agent === "commander"` context block (lines 67-86). Remove `agent === "collections"` from accounting condition (already has `agent === "accounting"`). Replace `agent === "estimation"` → `agent === "estimating"` |
+| `supabase/functions/_shared/agentQA.ts` | Remove `"collections"`, `"estimation"`, `"commander"` from `HIGH_RISK_AGENTS`. Keep `"accounting"` and `"estimating"` |
+| `supabase/functions/_shared/aiRouter.ts` | Remove `"commander"` from the complex-reasoning agent list (line 469). Replace `"estimation"` with `"estimating"` if present |
+| `supabase/functions/agent-router/index.ts` | Remove `commander` from `AGENT_DESCRIPTIONS`. Rename `estimating` key stays as-is (already correct) |
+| `supabase/functions/admin-chat/index.ts` | Remove `"collections"` and `"estimation"` from `agent_type` enum (line 777) |
+
+### What is NOT changed
+- `estimation_projects` / `estimation_items` DB tables — these are data tables, not agent IDs
+- `src/pages/Estimation.tsx` — this is a feature page, not an agent
+- `src/components/estimation/*` — estimation UI components stay
+- Natural-language mentions of "collections" in Penny's prompt (e.g., "prioritize: collections → emails") — these are instructions, not agent references
+- `agentConfigs.ts` — has no `collections` or `commander` entry (already clean). `estimating` key uses `agentType: "estimation"` which needs updating to match the cleaned type
+- `src/components/agent/agentConfigs.ts` line 74: Change `agentType: "estimation"` → `agentType: "estimating"`
+
+### Database
+- No schema changes needed
+- Existing chat sessions with `agent_type = 'collections'` or `'commander'` in the DB will display with fallback names (already handled by `getAgentName` returning the raw string)
+
+---
+
+## Validation Plan
+1. Verify all TypeScript compiles with no errors after removing the types
+2. Confirm no route references `/agent/commander` remain
+3. Confirm `estimating` agent works end-to-end (Gauge)
+4. Confirm Penny still handles collections-related queries via keyword routing
 
