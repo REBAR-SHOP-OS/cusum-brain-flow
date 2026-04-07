@@ -1,58 +1,43 @@
 
 
-# Fix: Prevent Customer Deletion When Invoices Exist (Critical Data Integrity)
+# Fix: Vizzy SMS Still Not Responding
 
-## Problem
-58 invoices are already orphaned. The `accounting_mirror.customer_id_fkey` uses `ON DELETE SET NULL`, so deleting a customer silently nullifies all their invoice links. The frontend delete flow has no guard — it just fires a delete with a generic "are you sure?" dialog.
+## Root Cause
 
-## Three-Layer Fix
+**Line 4 of `ringcentral-webhook/index.ts`** calls `serve(async (req) => {` — but `serve` is never imported or defined. It should be `Deno.serve(async (req) => {`. This means the entire webhook handler has been dead since deployment. No inbound SMS or call events reach the system in real time.
 
-### 1. Database: Change FK to RESTRICT
-Alter `accounting_mirror_customer_id_fkey` from `SET NULL` to `RESTRICT`. This makes it impossible to delete a customer who has invoices — the database itself blocks it.
+Meanwhile, `ringcentral-sync` (the 15-min cron) successfully stores inbound SMS, but **never triggers `vizzy-sms-reply`**. So messages are saved but Vizzy never generates a reply.
 
-Also apply to `orders`, `quotes`, `leads`, `sales_invoices` (via quotation→customer chain) — the critical financial tables that should never lose their customer link.
+## Changes
 
-```sql
--- accounting_mirror: SET NULL → RESTRICT
-ALTER TABLE accounting_mirror DROP CONSTRAINT accounting_mirror_customer_id_fkey;
-ALTER TABLE accounting_mirror ADD CONSTRAINT accounting_mirror_customer_id_fkey 
-  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
+### 1. Fix `supabase/functions/ringcentral-webhook/index.ts`
+- **Line 4**: Change `serve(async (req) => {` to `Deno.serve(async (req) => {`
+- Add structured logging at entry point: webhook received, event type, SMS trigger fired/skipped
 
--- orders
-ALTER TABLE orders DROP CONSTRAINT orders_customer_id_fkey;
-ALTER TABLE orders ADD CONSTRAINT orders_customer_id_fkey 
-  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
+### 2. Add cron fallback in `supabase/functions/ringcentral-sync/index.ts`
+In the SMS sync loop (around line 549), after a new inbound SMS is inserted (`status === 201`):
+- Skip CEO's own number (already done)
+- Skip spam (already done)
+- **Add**: trigger `vizzy-sms-reply` for genuinely new inbound SMS as a catch-up path
+- Fire-and-forget, same pattern as the webhook trigger
+- This ensures replies happen even when the webhook is down
 
--- quotes  
-ALTER TABLE quotes DROP CONSTRAINT quotes_customer_id_fkey;
-ALTER TABLE quotes ADD CONSTRAINT quotes_customer_id_fkey 
-  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
-
--- leads
-ALTER TABLE leads DROP CONSTRAINT leads_customer_id_fkey;
-ALTER TABLE leads ADD CONSTRAINT leads_customer_id_fkey 
-  FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT;
-```
-
-### 2. Frontend: Pre-check before delete
-In `AccountingCustomers.tsx`, update the delete mutation to first check for linked invoices/orders. If any exist, show a blocking error toast instead of proceeding.
-
-In `CustomerDetail.tsx`, update the delete dialog to show a warning count of linked records and disable the delete button if critical links exist.
-
-### 3. Relink the 58 orphaned invoices
-Use the existing `relink-orphan-invoices` edge function to reconnect the 58 orphaned `accounting_mirror` records back to their customers using QuickBooks CustomerRef data.
+### 3. Improve logging in `supabase/functions/vizzy-sms-reply/index.ts`
+- Add structured log at entry: from_number, isCeo, skip reason
+- Log the specific reason when a reply is skipped (spam/dedupe/rate_limit/own_number/short_code)
+- Already mostly there — just add an entry-point log so we can confirm invocations in edge function logs
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| **Migration SQL** | Alter 4 FKs from SET NULL to RESTRICT |
-| `src/components/accounting/AccountingCustomers.tsx` | Add pre-delete check for linked invoices/orders (~10 lines) |
-| `src/components/customers/CustomerDetail.tsx` | Query linked record counts, show warning, disable delete if links exist (~20 lines) |
+| `supabase/functions/ringcentral-webhook/index.ts` | Fix `serve` → `Deno.serve`, add entry logging (~3 lines) |
+| `supabase/functions/ringcentral-sync/index.ts` | Add vizzy-sms-reply trigger for new inbound SMS in cron (~15 lines) |
+| `supabase/functions/vizzy-sms-reply/index.ts` | Add entry-point log (~2 lines) |
 
 ## Impact
-- Database-level protection against future orphaning
-- UI prevents accidental deletion with clear warnings
-- Existing 58 orphans can be relinked via existing tool
-- No new tables or auth changes
+- Webhook path restored — real-time SMS replies work again
+- Cron fallback ensures replies even if webhook is temporarily down
+- Better observability for debugging
+- No database or auth changes
 
