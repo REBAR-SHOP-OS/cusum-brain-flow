@@ -90,10 +90,10 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
     userRole: "estimator",
     heroText: "How can **Gauge** help you today?",
     quickActions: [
+      { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
+      { title: "Customer inquiry", prompt: "Show me recent customer inquiries and support tickets that need attention.", icon: "HeadphonesIcon", category: "Customer Care" },
       { title: "Open takeoffs", prompt: "Show me all open takeoff sessions and their status — pending reviews, QC flags, and deadlines.", icon: "FileText", category: "Estimating" },
-      { title: "QC flags", prompt: "Show me all QC flags and validation warnings across active estimates.", icon: "AlertTriangle", category: "QC" },
-      { title: "Create a quote", prompt: "Help me create a new quote for a customer. Walk me through the process step by step.", icon: "FileText", category: "Estimating" },
-      { title: "Drawing revisions", prompt: "Show me any drawing revisions that need my review or re-estimation.", icon: "RefreshCw", category: "Estimating" },
+      { title: "Prioritize my tasks", prompt: "Help me organize my tasks using the Eisenhower Matrix — what's urgent vs important right now?", icon: "LayoutGrid", category: "Eisenhower" },
     ],
   },
 };
