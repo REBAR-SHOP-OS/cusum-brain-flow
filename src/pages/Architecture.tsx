@@ -708,7 +708,7 @@ export default function Architecture() {
           {/* Bottom info bar */}
           <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-3">
             <div className="rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 text-[10px] text-zinc-400 backdrop-blur-sm">
-              Drag nodes · Draw edges · Delete with ⌫ · Double-click to rename
+              Hover to reveal edges · Click to lock · Double-click for details · ⌫ to delete
             </div>
             <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 backdrop-blur-sm">
               <span
