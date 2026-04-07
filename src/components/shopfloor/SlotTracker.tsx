@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Layers,
   MinusCircle,
+  StopCircle,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -355,7 +356,7 @@ export function SlotTracker({
             className="gap-2 font-bold h-12 text-base"
             onClick={onCompleteRun}
           >
-            <MinusCircle className="w-5 h-5" />
+            <StopCircle className="w-5 h-5" />
             Stop ({totalCutsDone} pcs)
           </Button>
         )}
