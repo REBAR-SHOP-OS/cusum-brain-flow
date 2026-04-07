@@ -34,14 +34,7 @@ Deno.serve(async (req) => {
 
     // ── Safety checks ──
     const normalized = from_number.replace(/\D/g, "");
-
-    // Skip CEO
-    if (from_number === CEO_PHONE || normalized === "4165870788" || normalized === "14165870788") {
-      console.log("[sms-reply] Skipping CEO number");
-      return new Response(JSON.stringify({ ok: true, skipped: "ceo_number" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const isCeo = from_number === CEO_PHONE || normalized === "4165870788" || normalized === "14165870788";
 
     // Spam filter
     if (isSpamSms(message_text, from_number)) {
