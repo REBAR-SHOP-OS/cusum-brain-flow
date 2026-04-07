@@ -13,6 +13,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
 import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
+import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { agentConfigs } from "@/components/agent/agentConfigs";
 import { Bot as BotIcon } from "lucide-react";
@@ -420,6 +421,150 @@ function UserTimeClockSection({ profileId, userId, timezone }: { profileId: stri
     </div>
   );
 }
+/** Team Daily Report for "All" view */
+function TeamDailyReport({
+  profiles,
+  timezone,
+}: {
+  profiles: { id: string; full_name: string; email?: string; user_id: string | null }[];
+  timezone: string;
+}) {
+  const profileIds = useMemo(() => profiles.map((p) => p.id), [profiles]);
+  const { data, isLoading } = useTeamDailyActivity(profileIds);
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-4 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin mr-2 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Loading team report...</span>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  const sorted = [...profiles].sort((a, b) => {
+    const aCount = data[a.id]?.activities.length ?? 0;
+    const bCount = data[b.id]?.activities.length ?? 0;
+    return bCount - aCount;
+  });
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+        <Users className="w-4 h-4 text-primary" />
+        <h3 className="text-sm font-semibold text-foreground flex-1">Team Daily Report</h3>
+        <SectionReportButton
+          label="Team"
+          getText={() => {
+            const lines = sorted.map((p) => {
+              const d = data[p.id];
+              const actCount = d?.activities.length ?? 0;
+              const clockIn = d?.clockEntries?.[d.clockEntries.length - 1]?.clock_in;
+              const clockLabel = clockIn
+                ? formatDateInTimezone(new Date(clockIn), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+                : "Not clocked in";
+              return `${p.full_name}: ${actCount} activities, Clock: ${clockLabel}`;
+            });
+            return `👥 Team Daily Report\n${lines.join("\n")}`;
+          }}
+        />
+      </div>
+      <div className="p-3">
+        <Accordion type="multiple" className="w-full space-y-1">
+          {sorted.map((p) => {
+            const d = data[p.id];
+            const activities = d?.activities ?? [];
+            const clockEntries = d?.clockEntries ?? [];
+            const firstName = p.full_name?.split(" ")[0] || "User";
+            const firstClock = clockEntries.length > 0 ? clockEntries[clockEntries.length - 1] : null;
+            const lastClock = clockEntries.length > 0 ? clockEntries[0] : null;
+
+            return (
+              <AccordionItem
+                key={p.id}
+                value={`team-${p.id}`}
+                className="border border-border rounded-lg px-3"
+              >
+                <AccordionTrigger className="text-sm font-medium hover:no-underline">
+                  <span className="flex items-center gap-2 flex-1">
+                    <span className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                      {firstName.charAt(0).toUpperCase()}
+                    </span>
+                    <span>{firstName}</span>
+                    <span className="text-xs text-muted-foreground font-normal">
+                      ({activities.length} activit{activities.length !== 1 ? "ies" : "y"})
+                    </span>
+                  </span>
+                  <SectionReportButton
+                    label={firstName}
+                    getText={() => {
+                      const lines = activities.map(
+                        (a) => `• ${a.event_type} — ${a.entity_type}${a.description ? `: ${a.description}` : ""}`
+                      );
+                      const clockLine = firstClock
+                        ? `Clock: ${formatDateInTimezone(new Date(firstClock.clock_in), timezone, { hour: "numeric", minute: "2-digit", hour12: true })} → ${
+                            lastClock?.clock_out
+                              ? formatDateInTimezone(new Date(lastClock.clock_out), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+                              : "Still working"
+                          }`
+                        : "Not clocked in today";
+                      return `📋 ${p.full_name}\n${clockLine}\n${lines.join("\n")}`;
+                    }}
+                  />
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-md px-3 py-1.5">
+                      <Clock className="w-3.5 h-3.5 text-primary" />
+                      {firstClock ? (
+                        <span>
+                          {formatDateInTimezone(new Date(firstClock.clock_in), timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
+                          {" → "}
+                          {lastClock?.clock_out ? (
+                            formatDateInTimezone(new Date(lastClock.clock_out), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+                          ) : (
+                            <span className="text-[10px] bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded-full font-medium">Still working</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="italic">Not clocked in today</span>
+                      )}
+                    </div>
+                    {activities.length > 0 ? (
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {activities.map((a) => (
+                          <div key={a.id} className="flex items-start gap-2 rounded border border-border bg-card p-2">
+                            <Activity className="w-3.5 h-3.5 mt-0.5 text-primary shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                <span className="font-medium text-foreground">{a.event_type}</span>
+                                <span>·</span>
+                                <span>{a.entity_type}</span>
+                                <span className="ml-auto">
+                                  {formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
+                                </span>
+                              </div>
+                              {a.description && (
+                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{a.description}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic text-center py-2">No activities today</p>
+                    )}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
+      </div>
+    </div>
+  );
+}
 
 
 export function VizzyBrainPanel({ onClose }: Props) {
@@ -621,6 +766,12 @@ export function VizzyBrainPanel({ onClose }: Props) {
         )}
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {!selectedProfile && rebarProfiles.length > 0 && (
+            <TeamDailyReport
+              profiles={rebarProfiles.filter((p) => p.email !== "ai@rebar.shop")}
+              timezone={timezone}
+            />
+          )}
           {selectedProfile && (
             <div className="space-y-4">
               {/* Section 1: General Overview */}
