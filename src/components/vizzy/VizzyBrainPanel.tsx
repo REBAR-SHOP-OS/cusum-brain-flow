@@ -13,6 +13,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
 import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
+import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { agentConfigs } from "@/components/agent/agentConfigs";
 import { Bot as BotIcon } from "lucide-react";
