@@ -77,12 +77,34 @@ async function resolveTaxCodeId(
   taxCodeName: string,
 ): Promise<string | null> {
   try {
+    // Try exact name match first
     const query = `select Id, Name from TaxCode where Name = '${taxCodeName.replace(/'/g, "''")}'`;
     const result = await qbFetch(config, `query?query=${encodeURIComponent(query)}`) as Record<string, unknown>;
     const codes = (result?.QueryResponse as Record<string, unknown>)?.TaxCode as Record<string, unknown>[] | undefined;
     if (codes && codes.length > 0) return String(codes[0].Id);
+
+    // Fallback: find any active taxable tax code (handles Canadian QBO where "TAX" doesn't exist)
+    console.log(`[QB-Tax] Exact match for "${taxCodeName}" not found, querying all active tax codes`);
+    const fallbackQuery = `select Id, Name from TaxCode where Active = true MAXRESULTS 20`;
+    const fallbackResult = await qbFetch(config, `query?query=${encodeURIComponent(fallbackQuery)}`) as Record<string, unknown>;
+    const allCodes = (fallbackResult?.QueryResponse as Record<string, unknown>)?.TaxCode as Record<string, unknown>[] | undefined;
+    if (allCodes && allCodes.length > 0) {
+      // Pick the first tax code that is NOT the exempt/non-taxable one (usually Id "NON" or Name contains "Exempt")
+      const taxable = allCodes.find(c => {
+        const name = String(c.Name || "").toLowerCase();
+        return !name.includes("exempt") && !name.includes("non") && !name.includes("zero") && !name.includes("free");
+      });
+      if (taxable) {
+        console.log(`[QB-Tax] Resolved fallback tax code: ${taxable.Name} (ID: ${taxable.Id})`);
+        return String(taxable.Id);
+      }
+      // If all seem exempt, just return the first one
+      console.log(`[QB-Tax] Using first available tax code: ${allCodes[0].Name} (ID: ${allCodes[0].Id})`);
+      return String(allCodes[0].Id);
+    }
     return null;
-  } catch {
+  } catch (err) {
+    console.error(`[QB-Tax] Error resolving tax code:`, err);
     return null;
   }
 }
@@ -1184,6 +1206,7 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
     const resolvedTaxId = await resolveTaxCodeId(config, effectiveTaxCode);
     effectiveTaxCode = resolvedTaxId || effectiveTaxCode;
   }
+  const taxCodeIsNumeric = effectiveTaxCode && !isNaN(Number(effectiveTaxCode));
 
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
@@ -1201,6 +1224,7 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
     ...(memo && { CustomerMemo: { value: memo } }),
     ...(classRef && { ClassRef: { value: classRef } }),
     ...(departmentRef && { DepartmentRef: { value: departmentRef } }),
+    ...(taxCodeIsNumeric && { TxnTaxDetail: { TxnTaxCodeRef: { value: effectiveTaxCode } } }),
   };
 
   const data = await qbFetch(config, "estimate", { method: "POST", body: JSON.stringify(payload) });
@@ -1322,6 +1346,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     const resolvedTaxId = await resolveTaxCodeId(config, effectiveTaxCode);
     effectiveTaxCode = resolvedTaxId || effectiveTaxCode;
   }
+  const taxCodeIsNumeric = effectiveTaxCode && !isNaN(Number(effectiveTaxCode));
 
   // Normalize line items: accept either unitPrice or legacy amount
   const lines: Record<string, unknown>[] = lineItems.map(item => {
@@ -1379,6 +1404,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     ...(effectiveTerms && { SalesTermRef: { value: effectiveTerms } }),
     ...(classRef && { ClassRef: { value: classRef } }),
     ...(departmentRef && { DepartmentRef: { value: departmentRef } }),
+    ...(taxCodeIsNumeric && { TxnTaxDetail: { TxnTaxCodeRef: { value: effectiveTaxCode } } }),
   };
 
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
