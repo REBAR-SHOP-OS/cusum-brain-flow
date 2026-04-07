@@ -1521,17 +1521,16 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     const qty = item.quantity || 1;
     const unitPrice = item.unitPrice ?? item.amount ?? 0;
     const lineContext = await resolveInvoiceLineContext(config, item);
-    const lineTaxCode = lineContext.taxCodeRef || effectiveTaxCode || undefined;
-    const lineTaxCodeIsNumeric = Boolean(lineTaxCode && !isNaN(Number(lineTaxCode)));
+    const lineTaxCode = lineContext.taxCodeRef || effectiveTaxCode!;
     const lineDetail: Record<string, unknown> = {
       Qty: qty,
       UnitPrice: unitPrice,
       ItemRef: lineContext.itemRef,
-      ...(lineTaxCodeIsNumeric && { TaxCodeRef: { value: lineTaxCode } }),
+      TaxCodeRef: { value: String(lineTaxCode) },
     };
 
     return {
-      resolvedTaxCode: lineTaxCodeIsNumeric ? String(lineTaxCode) : null,
+      resolvedTaxCode: String(lineTaxCode),
       payload: {
         DetailType: "SalesItemLineDetail",
         Amount: unitPrice * qty,
