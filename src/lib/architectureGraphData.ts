@@ -167,6 +167,10 @@ export const ARCH_EDGES: ArchEdge[] = [
   { id: "e15", source: "role-guard", target: "video",      edgeStyle: "solid" },
   { id: "e16", source: "role-guard", target: "email",      edgeStyle: "solid" },
   { id: "e17", source: "role-guard", target: "chat",       edgeStyle: "solid" },
+  { id: "e18", source: "role-guard", target: "estimating", edgeStyle: "solid" },
+  { id: "e19", source: "role-guard", target: "quotes",     edgeStyle: "solid" },
+  { id: "e19b", source: "role-guard", target: "payroll",   edgeStyle: "solid" },
+  { id: "e19c", source: "role-guard", target: "inbox",     edgeStyle: "solid" },
 
   // Modules → AI
   { id: "e20", source: "crm",        target: "pipeline",      edgeStyle: "solid" },
