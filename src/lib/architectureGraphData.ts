@@ -213,6 +213,22 @@ export const ARCH_EDGES: ArchEdge[] = [
   { id: "e74", source: "monitoring",  target: "error-track",  edgeStyle: "solid" },
   { id: "e75", source: "cdn-edge",    target: "obj-storage",  edgeStyle: "solid" },
   { id: "e76", source: "state-machine", target: "event-log",  edgeStyle: "dashed", label: "audit" },
+
+  // Memory, Realtime, Infrastructure edges
+  { id: "e80", source: "vizzy",         target: "memory-store",  edgeStyle: "dashed", label: "remember" },
+  { id: "e81", source: "nila",          target: "memory-store",  edgeStyle: "dashed", label: "remember" },
+  { id: "e82", source: "crm",           target: "memory-store",  edgeStyle: "dashed", label: "qualify" },
+  { id: "e83", source: "memory-store",  target: "primary-db",    edgeStyle: "solid",  label: "persist" },
+  { id: "e84", source: "chat",          target: "realtime",      edgeStyle: "solid",  label: "live" },
+  { id: "e85", source: "primary-db",    target: "realtime",      edgeStyle: "dashed", label: "stream" },
+  { id: "e86", source: "api-gw",        target: "rate-limiter",  edgeStyle: "solid",  label: "throttle" },
+  { id: "e87", source: "auth",          target: "session-store", edgeStyle: "solid",  label: "session" },
+  { id: "e88", source: "monitoring",    target: "health",        edgeStyle: "solid" },
+  { id: "e89", source: "monitoring",    target: "analytics",     edgeStyle: "solid" },
+  { id: "e90", source: "monitoring",    target: "log-agg",       edgeStyle: "solid" },
+  { id: "e91", source: "admin-console", target: "feature-flags", edgeStyle: "solid" },
+  { id: "e92", source: "pipeline",      target: "msg-bus",       edgeStyle: "dashed", label: "publish" },
+  { id: "e93", source: "msg-bus",       target: "worker-pool",   edgeStyle: "solid",  label: "consume" },
 ];
 
 /* ───── Helpers ───── */
