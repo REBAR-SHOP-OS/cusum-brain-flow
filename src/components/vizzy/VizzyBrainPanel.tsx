@@ -527,8 +527,8 @@ function TeamDailyReport({
 }) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const profileIds = useMemo(() => profiles.map((p) => p.id), [profiles]);
-  const { data, isLoading } = useTeamDailyActivity(profileIds, selectedDate);
+  const profileSlims = useMemo(() => profiles.map((p) => ({ id: p.id, user_id: p.user_id })), [profiles]);
+  const { data, isLoading } = useTeamDailyActivity(profileSlims, selectedDate);
 
   const isToday = useMemo(() => {
     const now = new Date();
