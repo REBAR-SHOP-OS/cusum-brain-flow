@@ -334,6 +334,25 @@ export default function TeamHub() {
                   onLangChange={setActiveLang}
                   headerExtra={<BackgroundThemePicker themeId={themeId} onSelect={setTheme} />}
                 />
+              ) : selectedChannelId && dmTargetName && myProfile ? (
+                <MessageThread
+                  channelName={dmTargetName}
+                  channelDescription="Direct message"
+                  messages={messages}
+                  profiles={profiles}
+                  myProfile={myProfile}
+                  myLang={myLang}
+                  isLoading={msgsLoading}
+                  isSending={sendMutation.isPending}
+                  onSend={handleSend}
+                  activeMeetings={activeMeetings}
+                  onStartMeeting={() => setShowMeetingDialog(true)}
+                  onJoinMeeting={(m) => setActiveMeeting(m)}
+                  readOnly={false}
+                  onForward={(msg) => setForwardMsg(msg)}
+                  onLangChange={setActiveLang}
+                  headerExtra={<BackgroundThemePicker themeId={themeId} onSelect={setTheme} />}
+                />
               ) : channelsLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="w-8 h-8 animate-spin text-primary/40" />
