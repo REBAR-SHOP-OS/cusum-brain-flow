@@ -24,7 +24,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-type PoolPhase = "queued" | "cutting" | "cut_done" | "bending" | "clearance" | "loading" | "complete";
+type PoolPhase = "queued" | "cutting" | "cut_done" | "bending" | "clearance" | "complete";
 
 interface PoolItem {
   id: string;
@@ -42,7 +42,7 @@ interface PoolItem {
   project_name: string | null;
 }
 
-const PHASES: PoolPhase[] = ["queued", "cutting", "cut_done", "bending", "clearance", "loading", "complete"];
+const PHASES: PoolPhase[] = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
 const ITEMS_LIMIT = 2000;
 
 const PHASE_CONFIG: Record<string, { label: string; shortLabel: string; icon: React.ElementType; color: string; bg: string; actionLabel?: string; actionRoute?: string; actionColor?: string }> = {
@@ -51,8 +51,7 @@ const PHASE_CONFIG: Record<string, { label: string; shortLabel: string; icon: Re
   cut_done:  { label: "POOL → BENDER",        shortLabel: "POOL→BEND", icon: Flame,       color: "text-warning",          bg: "bg-warning/10",     actionLabel: "Open Bender",   actionRoute: "/shopfloor/station", actionColor: "bg-warning hover:bg-warning/90 text-warning-foreground" },
   bending:   { label: "BENDING",              shortLabel: "BENDING",   icon: RotateCcw,   color: "text-warning",          bg: "bg-warning/10" },
   clearance: { label: "CLEARANCE",            shortLabel: "QC",        icon: ShieldCheck,  color: "text-primary",          bg: "bg-primary/10",     actionLabel: "Review QC",     actionRoute: "/shopfloor/clearance", actionColor: "bg-primary hover:bg-primary/90 text-primary-foreground" },
-  loading:   { label: "LOADING",              shortLabel: "LOADING",   icon: PackageCheck, color: "text-cyan-400",         bg: "bg-cyan-500/10",    actionLabel: "Load Truck",    actionRoute: "/shopfloor/loading", actionColor: "bg-cyan-500 hover:bg-cyan-600 text-white" },
-  complete:  { label: "COMPLETE",             shortLabel: "DONE",      icon: PackageCheck, color: "text-success",          bg: "bg-success/10" },
+  complete:  { label: "COMPLETE → LOADING",   shortLabel: "LOADING",   icon: PackageCheck, color: "text-success",          bg: "bg-success/10",     actionLabel: "Load Truck",    actionRoute: "/shopfloor/loading", actionColor: "bg-success hover:bg-success/90 text-success-foreground" },
 };
 
 export default function PoolView() {

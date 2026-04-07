@@ -24,8 +24,7 @@ const FLOW_STAGES = [
   { phase: "cut_done", label: "POOL", sublabel: "Awaiting Bender", icon: Flame, color: "text-orange-500", border: "border-orange-500/30", bg: "bg-orange-500/10" },
   { phase: "bending", label: "BENDER", sublabel: "Active Bending", icon: RotateCcw, color: "text-orange-500", border: "border-orange-500/30", bg: "bg-orange-500/10" },
   { phase: "clearance", label: "QC", sublabel: "Clearance", icon: ShieldCheck, color: "text-primary", border: "border-primary/30", bg: "bg-primary/10" },
-  { phase: "loading", label: "LOADING", sublabel: "Load Truck", icon: PackageCheck, color: "text-cyan-500", border: "border-cyan-500/30", bg: "bg-cyan-500/10" },
-  { phase: "complete", label: "DONE", sublabel: "Complete", icon: PackageCheck, color: "text-success", border: "border-success/30", bg: "bg-success/10" },
+  { phase: "complete", label: "DISPATCH", sublabel: "Ready", icon: PackageCheck, color: "text-success", border: "border-success/30", bg: "bg-success/10" },
 ];
 
 export function MaterialFlowDiagram() {
@@ -37,7 +36,7 @@ export function MaterialFlowDiagram() {
     enabled: !!user,
     refetchInterval: 15000,
     queryFn: async () => {
-      const phases = ["queued", "cutting", "cut_done", "bending", "clearance", "loading", "complete"];
+      const phases = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
       const counts: PhaseCount[] = [];
       for (const phase of phases) {
         const { count, error } = await supabase

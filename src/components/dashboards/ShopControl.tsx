@@ -7,7 +7,7 @@ import { useCompanyId } from "@/hooks/useCompanyId";
 import { Hammer, ShieldCheck, Package } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 
-const TASK_PHASES = ["queued", "cutting", "cut_done", "bending", "qc_pack", "loading", "complete"];
+const TASK_PHASES = ["queued", "cutting", "cut_done", "bending", "qc_pack", "complete"];
 
 interface OrderGroup {
   order_id: string;

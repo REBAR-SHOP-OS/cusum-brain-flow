@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { Wrench, AlertTriangle } from "lucide-react";
 
-const PHASES = ["queued", "cutting", "cut_done", "bending", "clearance", "loading", "complete"];
+const PHASES = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
 
 export function ProductionControl() {
   const { companyId } = useCompanyId();
