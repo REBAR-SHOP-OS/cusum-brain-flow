@@ -35,6 +35,7 @@ export default function TeamHub() {
   const endMeetingMutation = useEndMeeting();
 
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [dmTargetName, setDmTargetName] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDialogMode, setCreateDialogMode] = useState<"channel" | "group">("channel");
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
@@ -209,7 +210,10 @@ export default function TeamHub() {
     <ChannelSidebar
       channels={channels}
       selectedId={isNotesView ? TEAM_HUB_SELF_NOTES_ID : activeChannelId}
-      onSelect={setSelectedChannelId}
+      onSelect={(id) => {
+        setDmTargetName(null);
+        setSelectedChannelId(id);
+      }}
       onlineCount={onlineCount}
       profiles={profiles}
       onCreateChannel={() => { setCreateDialogMode("channel"); setShowCreateDialog(true); }}
@@ -223,6 +227,7 @@ export default function TeamHub() {
             targetName: name,
           });
           if (result?.id) {
+            setDmTargetName(name || "Direct Message");
             setSelectedChannelId(result.id);
           }
         } catch (err: any) {
@@ -325,6 +330,25 @@ export default function TeamHub() {
                   onStartMeeting={() => setShowMeetingDialog(true)}
                   onJoinMeeting={(m) => setActiveMeeting(m)}
                   readOnly={!canWrite}
+                  onForward={(msg) => setForwardMsg(msg)}
+                  onLangChange={setActiveLang}
+                  headerExtra={<BackgroundThemePicker themeId={themeId} onSelect={setTheme} />}
+                />
+              ) : selectedChannelId && dmTargetName && myProfile ? (
+                <MessageThread
+                  channelName={dmTargetName}
+                  channelDescription="Direct message"
+                  messages={messages}
+                  profiles={profiles}
+                  myProfile={myProfile}
+                  myLang={myLang}
+                  isLoading={msgsLoading}
+                  isSending={sendMutation.isPending}
+                  onSend={handleSend}
+                  activeMeetings={activeMeetings}
+                  onStartMeeting={() => setShowMeetingDialog(true)}
+                  onJoinMeeting={(m) => setActiveMeeting(m)}
+                  readOnly={false}
                   onForward={(msg) => setForwardMsg(msg)}
                   onLangChange={setActiveLang}
                   headerExtra={<BackgroundThemePicker themeId={themeId} onSelect={setTheme} />}
