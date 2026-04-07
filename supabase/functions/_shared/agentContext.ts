@@ -67,13 +67,56 @@ export async function fetchContext(
 
     // --- Accounting (Penny) ---
     if (agent === "accounting") {
+      // Outstanding AR — fetch up to 100 items for better visibility
       const { data: arData } = await supabase
         .from("accounting_mirror")
         .select("id, entity_type, balance, customer_id, last_synced_at, data")
         .eq("entity_type", "Invoice")
         .gt("balance", 0)
-        .limit(15);
+        .order("balance", { ascending: false })
+        .limit(100);
       context.outstandingAR = arData;
+      context.outstandingARTotal = (arData || []).reduce((s: number, r: any) => s + (r.balance || 0), 0);
+
+      // Outstanding AP (bills)
+      const { data: apData } = await supabase
+        .from("accounting_mirror")
+        .select("id, entity_type, balance, customer_id, last_synced_at, data")
+        .eq("entity_type", "Bill")
+        .gt("balance", 0)
+        .order("balance", { ascending: false })
+        .limit(50);
+      context.outstandingAP = apData;
+      context.outstandingAPTotal = (apData || []).reduce((s: number, r: any) => s + (r.balance || 0), 0);
+
+      // Recent payments (last 30 days)
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+      const { data: recentPayments } = await supabase
+        .from("accounting_mirror")
+        .select("id, data, last_synced_at")
+        .eq("entity_type", "Payment")
+        .gte("last_synced_at", thirtyDaysAgo)
+        .limit(50);
+      context.recentPayments = recentPayments;
+
+      // Penny's collection queue status
+      const { data: pennyQueue } = await supabase
+        .from("penny_collection_queue")
+        .select("id, status, action_type, customer_name, invoice_number, amount, risk_level, scheduled_for")
+        .in("status", ["pending_approval", "approved", "scheduled"])
+        .order("created_at", { ascending: false })
+        .limit(20);
+      context.pennyCollectionQueue = pennyQueue;
+
+      // Uninvoiced orders (orders without QB invoice)
+      const { data: uninvoicedOrders } = await supabase
+        .from("orders")
+        .select("id, order_number, customer_id, total_amount, status, order_date")
+        .is("quickbooks_invoice_id", null)
+        .in("status", ["completed", "delivered", "shipped"])
+        .order("order_date", { ascending: false })
+        .limit(20);
+      context.uninvoicedOrders = uninvoicedOrders;
 
       // Unread accounting emails
       try {

@@ -598,6 +598,9 @@ export async function executeToolCall(
         AgedPayables:     "get-aged-payables",
         CashFlow:         "get-cash-flow",
         TaxSummary:       "get-tax-summary",
+        TrialBalance:     "get-trial-balance",
+        GeneralLedger:    "get-general-ledger",
+        TransactionList:  "get-transaction-list",
       };
 
       // Period → concrete dates helper
@@ -642,11 +645,11 @@ export async function executeToolCall(
 
       // Build camelCase body that each QB handler expects
       let qbBody: Record<string, unknown> = { action, company_id: companyId };
-      if (reportType === "BalanceSheet" || reportType === "AgedReceivables" || reportType === "AgedPayables") {
+      if (["BalanceSheet", "AgedReceivables", "AgedPayables", "TrialBalance"].includes(reportType)) {
         // These handlers read body.asOfDate (use endDate as the as-of date)
         qbBody.asOfDate = endDate ?? new Date().toISOString().split("T")[0];
       } else {
-        // P&L, CashFlow, TaxSummary → startDate / endDate
+        // P&L, CashFlow, TaxSummary, GeneralLedger, TransactionList → startDate / endDate
         if (startDate) qbBody.startDate = startDate;
         if (endDate)   qbBody.endDate   = endDate;
       }
@@ -737,6 +740,187 @@ export async function executeToolCall(
         result.result = { success: true, message: "QuickBooks sync triggered", ...syncData };
       } else {
         result.result = { success: false, error: await syncRes.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: Create Invoice (Penny write tool)
+    // ═══════════════════════════════════════════════════
+    else if (name === "qb_create_invoice") {
+      const qbBody: Record<string, unknown> = {
+        action: "create-invoice",
+        customerId: args.customerId,
+        customerName: args.customerName,
+        customerEmail: args.customerEmail,
+        lineItems: args.lineItems,
+        dueDate: args.dueDate,
+        memo: args.memo,
+      };
+      const res = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(qbBody),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        result.result = { success: true, docNumber: data.docNumber, totalAmount: data.totalAmount, invoiceLink: data.invoiceLink, invoiceId: data.invoice?.Id };
+      } else {
+        result.result = { success: false, error: await res.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: Receive Payment (Penny write tool)
+    // ═══════════════════════════════════════════════════
+    else if (name === "qb_receive_payment") {
+      const qbBody: Record<string, unknown> = {
+        action: "receive-payment",
+        qbInvoiceId: args.qbInvoiceId,
+        invoiceNumber: args.invoiceNumber,
+        customerName: args.customerName,
+        amount: args.amount,
+        paymentMethod: args.paymentMethod,
+        paymentDate: args.paymentDate,
+        referenceNumber: args.referenceNumber,
+        memo: args.memo,
+      };
+      const res = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(qbBody),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        result.result = { success: true, payment: data.payment };
+      } else {
+        result.result = { success: false, error: await res.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: Send Invoice via Email
+    // ═══════════════════════════════════════════════════
+    else if (name === "qb_send_invoice") {
+      const qbBody: Record<string, unknown> = {
+        action: "send-invoice",
+        invoiceId: args.invoiceId,
+        email: args.email,
+      };
+      const res = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(qbBody),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        result.result = { success: true, invoice: data.invoice };
+      } else {
+        result.result = { success: false, error: await res.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: Get Invoice Payment Link
+    // ═══════════════════════════════════════════════════
+    else if (name === "qb_get_invoice_link") {
+      const qbBody: Record<string, unknown> = {
+        action: "get-invoice-link",
+        qbInvoiceId: args.qbInvoiceId,
+        customerEmail: args.customerEmail,
+      };
+      const res = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(qbBody),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        result.result = { success: true, invoiceLink: data.invoiceLink, invoice: data.invoice };
+      } else {
+        result.result = { success: false, error: await res.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: Void Invoice
+    // ═══════════════════════════════════════════════════
+    else if (name === "qb_void_invoice") {
+      const qbBody: Record<string, unknown> = {
+        action: "void-invoice",
+        invoiceId: args.invoiceId,
+        syncToken: args.syncToken,
+      };
+      const res = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(qbBody),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        result.result = { success: true, invoice: data.invoice };
+      } else {
+        result.result = { success: false, error: await res.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: Create Estimate
+    // ═══════════════════════════════════════════════════
+    else if (name === "qb_create_estimate") {
+      const qbBody: Record<string, unknown> = {
+        action: "create-estimate",
+        customerId: args.customerId,
+        customerName: args.customerName,
+        lineItems: args.lineItems,
+        expirationDate: args.expirationDate,
+        memo: args.memo,
+      };
+      const res = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(qbBody),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        result.result = { success: true, estimate: data.estimate, docNumber: data.docNumber };
+      } else {
+        result.result = { success: false, error: await res.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: List Invoices
+    // ═══════════════════════════════════════════════════
+    else if (name === "qb_list_invoices") {
+      const qbBody = { action: "list-invoices" };
+      const res = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(qbBody),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        result.result = { success: true, invoices: data.invoices };
+      } else {
+        result.result = { success: false, error: await res.text() };
+      }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // QB: Read Single Invoice
+    // ═══════════════════════════════════════════════════
+    else if (name === "qb_read_invoice") {
+      const qbBody = { action: "read-invoice", invoiceId: args.invoiceId };
+      const res = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": authHeader },
+        body: JSON.stringify(qbBody),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        result.result = { success: true, invoice: data.invoice };
+      } else {
+        result.result = { success: false, error: await res.text() };
       }
     }
 

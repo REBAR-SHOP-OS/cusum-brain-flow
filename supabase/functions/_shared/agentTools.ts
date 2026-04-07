@@ -488,18 +488,18 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
         type: "function" as const,
         function: {
           name: "fetch_qb_report",
-          description: "Fetch a live financial report from QuickBooks: ProfitAndLoss, BalanceSheet, AgedReceivables, AgedPayables, CashFlow, or TaxSummary. Use when the user asks for P&L, balance sheet, AR aging, AP aging, cash flow, or HST/GST summary.",
+          description: "Fetch a live financial report from QuickBooks: ProfitAndLoss, BalanceSheet, AgedReceivables, AgedPayables, CashFlow, TaxSummary, TrialBalance, GeneralLedger, or TransactionList. Use when the user asks for P&L, balance sheet, AR aging, AP aging, cash flow, HST/GST summary, trial balance, general ledger, or transaction list.",
           parameters: {
             type: "object",
             properties: {
               report_type: {
                 type: "string",
-                enum: ["ProfitAndLoss", "BalanceSheet", "AgedReceivables", "AgedPayables", "CashFlow", "TaxSummary"],
+                enum: ["ProfitAndLoss", "BalanceSheet", "AgedReceivables", "AgedPayables", "CashFlow", "TaxSummary", "TrialBalance", "GeneralLedger", "TransactionList"],
                 description: "Type of report to fetch from QuickBooks"
               },
               start_date: { type: "string", description: "Start date YYYY-MM-DD (optional)" },
               end_date: { type: "string", description: "End date YYYY-MM-DD (optional)" },
-              period: { type: "string", description: "e.g. 'This Month', 'Last Month', 'This Year', 'Last Year'" }
+              period: { type: "string", description: "e.g. 'This Month', 'Last Month', 'This Year', 'Last Year', 'This Quarter'" }
             },
             required: ["report_type"]
           }
@@ -531,6 +531,159 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
               mode: { type: "string", enum: ["incremental", "full"], description: "Sync mode (default: incremental)" }
             },
             required: []
+          }
+        }
+      },
+      // ── QB Write Tools (new) ──────────────────────────────────
+      {
+        type: "function" as const,
+        function: {
+          name: "qb_create_invoice",
+          description: "Create a new invoice in QuickBooks. Requires customer ID (QB ID) or customer name, and line items. Returns the created invoice with InvoiceLink (customer payment URL). Use when user asks to invoice a customer or create a new invoice.",
+          parameters: {
+            type: "object",
+            properties: {
+              customerId: { type: "string", description: "QuickBooks customer ID" },
+              customerName: { type: "string", description: "Customer display name (used to look up or create QB customer if customerId not provided)" },
+              customerEmail: { type: "string", description: "Customer email — required for payment link generation" },
+              lineItems: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    unitPrice: { type: "number" },
+                    quantity: { type: "number" },
+                    serviceId: { type: "string", description: "QB Item/Service ID (optional)" }
+                  },
+                  required: ["description", "unitPrice"]
+                }
+              },
+              dueDate: { type: "string", description: "Due date YYYY-MM-DD" },
+              memo: { type: "string", description: "Customer-visible memo" }
+            },
+            required: ["lineItems"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "qb_receive_payment",
+          description: "Record a payment received against one or more QB invoices. Use when user says a customer paid, or to apply a payment.",
+          parameters: {
+            type: "object",
+            properties: {
+              qbInvoiceId: { type: "string", description: "QB Invoice ID to apply payment to" },
+              invoiceNumber: { type: "string", description: "Invoice DocNumber (alternative to qbInvoiceId)" },
+              customerName: { type: "string", description: "Customer name (helps resolve invoice)" },
+              amount: { type: "number", description: "Payment amount" },
+              paymentMethod: { type: "string", description: "Payment method (e.g. 'Check', 'Credit Card', 'Bank Transfer')" },
+              paymentDate: { type: "string", description: "Payment date YYYY-MM-DD (default: today)" },
+              referenceNumber: { type: "string", description: "Check number or reference" },
+              memo: { type: "string", description: "Private note" }
+            },
+            required: ["amount"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "qb_send_invoice",
+          description: "Send an existing QB invoice via email using QuickBooks' built-in email delivery. Use when user asks to email/send an invoice to a customer.",
+          parameters: {
+            type: "object",
+            properties: {
+              invoiceId: { type: "string", description: "QB Invoice ID to send" },
+              email: { type: "string", description: "Override recipient email (optional — QB uses BillEmail if not provided)" }
+            },
+            required: ["invoiceId"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "qb_get_invoice_link",
+          description: "Get the customer-facing payment link for a QB invoice. If the invoice doesn't have online payments enabled, this will repair it and generate the link. Use when user asks for a payment link or wants to share a pay-now URL.",
+          parameters: {
+            type: "object",
+            properties: {
+              qbInvoiceId: { type: "string", description: "QB Invoice ID" },
+              customerEmail: { type: "string", description: "Customer email (used to repair invoices missing email)" }
+            },
+            required: ["qbInvoiceId"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "qb_void_invoice",
+          description: "Void an invoice in QuickBooks. Use when user asks to void or cancel an invoice. Requires the invoice ID and its current SyncToken.",
+          parameters: {
+            type: "object",
+            properties: {
+              invoiceId: { type: "string", description: "QB Invoice ID to void" },
+              syncToken: { type: "string", description: "Current SyncToken of the invoice (from invoice data)" }
+            },
+            required: ["invoiceId", "syncToken"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "qb_create_estimate",
+          description: "Create a new estimate/quote in QuickBooks. Use when user asks to create a quote or estimate for a customer.",
+          parameters: {
+            type: "object",
+            properties: {
+              customerId: { type: "string", description: "QB customer ID" },
+              customerName: { type: "string", description: "Customer display name" },
+              lineItems: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    description: { type: "string" },
+                    amount: { type: "number" },
+                    quantity: { type: "number" }
+                  },
+                  required: ["description", "amount"]
+                }
+              },
+              expirationDate: { type: "string", description: "Expiration date YYYY-MM-DD" },
+              memo: { type: "string", description: "Customer memo" }
+            },
+            required: ["customerId", "customerName", "lineItems"]
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "qb_list_invoices",
+          description: "List all invoices from QuickBooks (live). Use when user asks to see all invoices or search for specific ones.",
+          parameters: {
+            type: "object",
+            properties: {},
+            required: []
+          }
+        }
+      },
+      {
+        type: "function" as const,
+        function: {
+          name: "qb_read_invoice",
+          description: "Read a single invoice by ID with full details including InvoiceLink. Use when user asks about a specific invoice.",
+          parameters: {
+            type: "object",
+            properties: {
+              invoiceId: { type: "string", description: "QB Invoice ID" }
+            },
+            required: ["invoiceId"]
           }
         }
       }
