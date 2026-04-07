@@ -550,19 +550,20 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?:
               const preview = (msg.subject || "").slice(0, 100);
               const fromDigits = (fromAddress || "").replace(/\D/g, "");
               const isCeoNumber = fromDigits === "14165870788" || fromDigits === "4165870788";
-              const { isSpamSms } = await import("../_shared/spamFilter.ts");
-              const isSpam = isSpamSms(preview, fromAddress);
+              const { analyzeSpam } = await import("../_shared/spamFilter.ts");
+              const { sendCeoInboundSmsAlert } = await import("../_shared/smsAlertHelper.ts");
+              const spamResult = analyzeSpam(preview, fromAddress);
 
               if (isCeoNumber) {
                 console.log(`CRON: Skipping CEO self-alert from ${fromAddress}`);
-              } else if (isSpam) {
-                console.log(`CRON: Spam SMS filtered from ${fromAddress}`);
+              } else if (spamResult.isSpam) {
+                console.log(`CRON: Spam SMS filtered from ${fromAddress} reasons=${spamResult.reasons.join(",")}`);
               } else {
-                sendCeoSmsAlert(`📱 New SMS from ${fromAddress}: ${preview}`).catch(() => {});
+                sendCeoInboundSmsAlert(fromAddress, preview).catch(() => {});
               }
 
               // Trigger vizzy-sms-reply for genuinely new inbound SMS (fallback for when webhook is down)
-              if (!isSpam) {
+              if (!spamResult.isSpam) {
                 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
                 const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
                 console.log(`CRON: Triggering vizzy-sms-reply for ${fromAddress} (fallback)`);
