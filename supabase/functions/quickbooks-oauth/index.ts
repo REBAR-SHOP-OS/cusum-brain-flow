@@ -1541,7 +1541,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   // QB doesn't return InvoiceLink on POST — read it back to get the customer-facing payment URL
   if (createdInvoice?.Id && !createdInvoice?.InvoiceLink) {
     try {
-      const readBack = await qbFetch(config, `invoice/${createdInvoice.Id}`, {});
+      const readBack = await qbFetch(config, `invoice/${createdInvoice.Id}?include=invoiceLink`, {});
       if (readBack?.Invoice?.InvoiceLink) {
         createdInvoice = readBack.Invoice;
       }
@@ -1704,7 +1704,7 @@ async function handleReceivePayment(supabase: ReturnType<typeof createClient>, u
   // If we have a QB invoice ID, fetch it to get customer + balance
   if (resolvedQBInvoiceId && !customerId) {
     try {
-      const invData = await qbFetch(config, `invoice/${resolvedQBInvoiceId}`, { method: "GET" }) as Record<string, unknown>;
+      const invData = await qbFetch(config, `invoice/${resolvedQBInvoiceId}?include=invoiceLink`, { method: "GET" }) as Record<string, unknown>;
       const inv = invData.Invoice as Record<string, unknown>;
       if (inv) {
         const custRef = inv.CustomerRef as Record<string, unknown>;
@@ -2110,7 +2110,7 @@ async function handleUpdateInvoice(supabase: ReturnType<typeof createClient>, us
   if (!invoiceId) throw new Error("Invoice ID is required");
 
   // Fetch current invoice to get latest SyncToken
-  const current = await qbFetch(config, `invoice/${invoiceId}`);
+  const current = await qbFetch(config, `invoice/${invoiceId}?include=invoiceLink`);
   const invoice = current.Invoice;
 
   const payload = {
