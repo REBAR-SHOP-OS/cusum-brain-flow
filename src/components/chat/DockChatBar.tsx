@@ -15,7 +15,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useUnreadSenders } from "@/hooks/useUnreadSenders";
 import { useDraggablePosition } from "@/hooks/useDraggablePosition";
 import { useAuth } from "@/lib/auth";
-import { useLocation } from "react-router-dom";
+
 import { toast } from "sonner";
 
 const CHAT_BTN_SIZE = 56;
@@ -41,7 +41,7 @@ export function DockChatBar() {
   const { profiles } = useProfiles();
   const myProfile = useMyProfile();
   const { user } = useAuth();
-  const location = useLocation();
+  
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
