@@ -527,7 +527,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
           <p className="text-[10px] text-muted-foreground leading-tight">{channelType === "group" ? "Group Channel" : "Online"}</p>
         </div>
         <div className="flex items-center gap-0.5 shrink-0" onMouseDown={stopDragPropagation}>
-          <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground" onClick={() => { closeChat(channelId); navigate("/team-hub"); }} title="Open full Team Hub">
+          <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground" onClick={() => navigate("/team-hub")} title="Open full Team Hub">
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
           <button className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground" onClick={() => toggleMinimize(channelId)} title="Minimize">
