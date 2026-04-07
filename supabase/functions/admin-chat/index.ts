@@ -899,6 +899,60 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── QuickBooks Financial Tools ───
+  {
+    type: "function",
+    function: {
+      name: "fetch_qb_report",
+      description: "Fetch a live financial report from QuickBooks: ProfitAndLoss, BalanceSheet, AgedReceivables, AgedPayables, CashFlow, or TaxSummary. Use when the user asks for P&L, balance sheet, AR aging, AP aging, cash flow, or HST/GST summary.",
+      parameters: {
+        type: "object",
+        properties: {
+          report_type: {
+            type: "string",
+            enum: ["ProfitAndLoss", "BalanceSheet", "AgedReceivables", "AgedPayables", "CashFlow", "TaxSummary"],
+            description: "Type of report to fetch from QuickBooks",
+          },
+          start_date: { type: "string", description: "Start date YYYY-MM-DD (optional)" },
+          end_date: { type: "string", description: "End date YYYY-MM-DD (optional)" },
+          period: { type: "string", description: "e.g. 'This Month', 'Last Month', 'This Year', 'Last Year'" },
+        },
+        required: ["report_type"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "fetch_gl_anomalies",
+      description: "Scan the general ledger for anomalies: round-number entries, unbalanced lines, unusual accounts, or large transactions. Use for audit and financial review.",
+      parameters: {
+        type: "object",
+        properties: {
+          days_back: { type: "number", description: "How many days back to scan (default 30)" },
+          min_amount: { type: "number", description: "Minimum transaction amount to flag (default 1000)" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "trigger_qb_sync",
+      description: "Trigger an incremental QuickBooks sync to pull the latest invoices, payments, and bills. Use when the user says data looks stale or asks to refresh QB data.",
+      parameters: {
+        type: "object",
+        properties: {
+          mode: { type: "string", enum: ["incremental", "full"], description: "Sync mode (default: incremental)" },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 const RC_SERVER = "https://platform.ringcentral.com";
@@ -2303,6 +2357,140 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
         }));
 
         return JSON.stringify({ channel: channelName, messages: enriched, count: enriched.length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "fetch_qb_report": {
+      try {
+        const reportTypeToAction: Record<string, string> = {
+          ProfitAndLoss: "get-profit-loss",
+          BalanceSheet: "get-balance-sheet",
+          AgedReceivables: "get-aged-receivables",
+          AgedPayables: "get-aged-payables",
+          CashFlow: "get-cash-flow",
+          TaxSummary: "get-tax-summary",
+        };
+
+        function resolvePeriodDates(period: string): { startDate: string; endDate: string } {
+          const now = new Date();
+          const y = now.getFullYear();
+          const m = now.getMonth();
+          const pad = (n: number) => String(n).padStart(2, "0");
+          const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+          switch (period?.toLowerCase()) {
+            case "this month":
+              return { startDate: `${y}-${pad(m + 1)}-01`, endDate: fmt(new Date(y, m + 1, 0)) };
+            case "last month": {
+              const lm = m === 0 ? 11 : m - 1;
+              const ly = m === 0 ? y - 1 : y;
+              return { startDate: `${ly}-${pad(lm + 1)}-01`, endDate: fmt(new Date(ly, lm + 1, 0)) };
+            }
+            case "this year":
+              return { startDate: `${y}-01-01`, endDate: `${y}-12-31` };
+            case "last year":
+              return { startDate: `${y - 1}-01-01`, endDate: `${y - 1}-12-31` };
+            case "this quarter": {
+              const q = Math.floor(m / 3);
+              return { startDate: `${y}-${pad(q * 3 + 1)}-01`, endDate: fmt(new Date(y, q * 3 + 3, 0)) };
+            }
+            default:
+              return { startDate: `${y}-01-01`, endDate: `${y}-12-31` };
+          }
+        }
+
+        const action = reportTypeToAction[args.report_type] ?? "get-profit-loss";
+        let startDate = args.start_date as string | undefined;
+        let endDate = args.end_date as string | undefined;
+        if ((!startDate || !endDate) && args.period) {
+          const resolved = resolvePeriodDates(args.period as string);
+          startDate = startDate ?? resolved.startDate;
+          endDate = endDate ?? resolved.endDate;
+        }
+
+        let qbBody: Record<string, unknown> = { action, company_id: companyId };
+        if (["BalanceSheet", "AgedReceivables", "AgedPayables"].includes(args.report_type)) {
+          qbBody.asOfDate = endDate ?? new Date().toISOString().split("T")[0];
+        } else {
+          if (startDate) qbBody.startDate = startDate;
+          if (endDate) qbBody.endDate = endDate;
+        }
+
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const reportRes = await fetch(`${supabaseUrl}/functions/v1/quickbooks-oauth`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${svcKey}` },
+          body: JSON.stringify(qbBody),
+        });
+
+        if (reportRes.ok) {
+          const reportData = await reportRes.json();
+          return JSON.stringify({ success: true, report_type: args.report_type, data: reportData });
+        } else {
+          const errText = await reportRes.text();
+          return JSON.stringify({ success: false, error: errText });
+        }
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "fetch_gl_anomalies": {
+      try {
+        const daysBack = args.days_back ?? 30;
+        const minAmount = args.min_amount ?? 1000;
+        const since = new Date(Date.now() - daysBack * 86400000).toISOString().split("T")[0];
+
+        const { data: largeEntries } = await supabase
+          .from("gl_transactions")
+          .select("id, txn_date, description, total_debit, total_credit, source_ref, status")
+          .eq("company_id", companyId)
+          .gte("txn_date", since)
+          .gte("total_debit", minAmount)
+          .order("total_debit", { ascending: false })
+          .limit(20);
+
+        const { data: unbalanced } = await supabase
+          .from("gl_transactions")
+          .select("id, txn_date, description, total_debit, total_credit, source_ref")
+          .eq("company_id", companyId)
+          .gte("txn_date", since)
+          .neq("status", "voided")
+          .limit(200);
+
+        const imbalanced = (unbalanced || []).filter((t: any) =>
+          Math.abs((t.total_debit || 0) - (t.total_credit || 0)) > 0.01
+        );
+        const roundNumberFlags = (largeEntries || []).filter((t: any) =>
+          (t.total_debit || 0) % 1000 === 0
+        );
+
+        return JSON.stringify({
+          success: true,
+          anomalies: {
+            large_transactions: largeEntries || [],
+            imbalanced_entries: imbalanced.slice(0, 10),
+            round_number_flags: roundNumberFlags,
+            summary: { large_count: (largeEntries || []).length, imbalanced_count: imbalanced.length, round_number_count: roundNumberFlags.length, scan_period_days: daysBack, min_amount: minAmount },
+          },
+        });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "trigger_qb_sync": {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const syncRes = await fetch(`${supabaseUrl}/functions/v1/qb-sync-engine`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${svcKey}` },
+          body: JSON.stringify({ mode: args.mode || "incremental", company_id: companyId }),
+        });
+
+        if (syncRes.ok) {
+          const syncData = await syncRes.json();
+          return JSON.stringify({ success: true, message: "QuickBooks sync triggered", ...syncData });
+        } else {
+          return JSON.stringify({ success: false, error: await syncRes.text() });
+        }
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
 
