@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, SpellCheck } from "lucide-react";
+import { Sparkles, X, Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, SpellCheck } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -58,10 +58,10 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
       {open && (
         <div className="fixed bottom-20 right-4 z-50 md:bottom-20 md:right-6 w-[340px] sm:w-[380px] max-h-[500px] bg-card border border-border rounded-2xl shadow-2xl flex flex-col animate-scale-in overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
             <div className="flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-primary" />
-              <span className="text-sm font-semibold">Live Chat</span>
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-xs font-bold tracking-wider uppercase">Vizzy</span>
             </div>
             <div className="flex items-center gap-1">
               {messages.length > 0 && (
@@ -80,9 +80,14 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
             <div className="p-3 space-y-3">
               {messages.length === 0 && (
                 <div className="text-center py-8">
-                  <MessageCircle className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="text-sm font-medium">How can we help?</p>
-                  <p className="text-xs text-muted-foreground mt-1">Ask anything about your business</p>
+                  <Sparkles className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-sm font-medium">Vizzy</p>
+                  <p className="text-xs text-muted-foreground mt-1">Your executive intelligence assistant.</p>
+                  <div className="mt-4 space-y-1.5 text-[10px] text-muted-foreground/60">
+                    <p>"What's the biggest risk today?"</p>
+                    <p>"Diagnose why AR is climbing"</p>
+                    <p>"Who needs follow-up this week?"</p>
+                  </div>
                 </div>
               )}
 
