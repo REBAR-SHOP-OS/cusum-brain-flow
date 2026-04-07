@@ -1,29 +1,35 @@
 
 
-# Remove Ryle Lachini from System
+# Add Calendar Date Picker to Team Daily Report
 
-## Current State
-- Profile `d950f825-adf4-418f-a4c3-44562631e1c8` exists with email `deleted_d950f825@removed.invalid` (already partially deactivated)
-- No `user_id` linked (no auth account)
-- Only 2 old `time_clock_entries` from Feb 11 exist — no other data
-- Referenced in 4 code files as hardcoded text
+## Goal
+Add a calendar icon to the Team Daily Report header that opens an inline date picker, allowing the user to navigate to any day's team activity report (not just today).
 
-## Plan
+## Changes
 
-### 1. Database cleanup (via insert tool)
-- DELETE the 2 `time_clock_entries` for this profile
-- DELETE the `profiles` row
+### 1. Update `useTeamDailyActivity.ts`
+- Add optional `date` parameter (defaults to today)
+- Pass it to `getStartOfDayIsoInTimezone(timezone, date)` and compute end-of-day for bounded queries
+- Include `date` in the `queryKey` so React Query refetches on date change
 
-### 2. Code cleanup (4 files)
+### 2. Update `TeamDailyReport` in `VizzyBrainPanel.tsx`
+- Add local `selectedDate` state (defaults to today)
+- Add a `CalendarIcon` button next to the report header (beside the existing clipboard button)
+- Clicking it toggles an inline `Calendar` component (from `@/components/ui/calendar`) in a small popover/dropdown below the header
+- On date select, update `selectedDate` and pass it to `useTeamDailyActivity`
+- Show the selected date as a label (e.g., "Apr 7, 2026") next to "Team Daily Report" when not today
+- Show a "Today" badge/button to quickly reset back to current day
+
+## File Summary
 
 | File | Change |
 |------|--------|
-| `supabase/functions/_shared/vizzyIdentity.ts` | Remove "Ryle Lachini" from name fuzzy-match list |
-| `supabase/functions/_shared/vizzyFullContext.ts` | Remove Ryle's phone number mapping |
-| `src/hooks/useVizzyVoiceEngine.ts` | Remove "Ryle Lachini" from voice engine name list |
-| `src/pages/TimeClock.tsx` | Remove "Ryle Lachini" from the `activeProfiles` exclusion filter (no longer needed) |
+| `src/hooks/useTeamDailyActivity.ts` | Accept optional `date` param, use it in query boundaries and queryKey |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Add calendar icon + date picker + date state to `TeamDailyReport` |
 
-### Technical Notes
-- No foreign key constraints will block deletion since `user_id` is null and only 2 clock entries exist
-- The TimeClock filter already excludes Ryle — after profile deletion the filter entry becomes dead code and should be removed for cleanliness
+## Technical Notes
+- Reuses existing `Calendar` component and `Popover` from shadcn/ui
+- `getStartOfDayIsoInTimezone` already accepts a `date` parameter — no new utility needed
+- End-of-day boundary computed by adding 1 day to start, using `.lt("created_at", nextDayStart)` filter
+- No database changes needed
 
