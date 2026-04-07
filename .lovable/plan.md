@@ -1,82 +1,95 @@
 
 
-# Fix: Gmail Sync Silently Broken for 4+ Days
+# Add Record Payment + Enforce Dual Payment Links on All Invoices
 
-## Root Cause
+## Overview
 
-The `gmail-sync` edge function's cron detection compares the incoming Bearer token against `Deno.env.get("SUPABASE_ANON_KEY")`. **This env var does not exist in the Supabase edge function runtime.** Only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are auto-injected.
+Two changes:
+1. **Record Payment (ReceivePayment)** — Add ability for office staff to manually record customer payments (check, wire, e-transfer, cash) against an invoice, syncing to QuickBooks as a `ReceivePayment` entity.
+2. **Enforce dual payment links** — Every outgoing invoice email MUST include both Stripe AND QuickBooks payment buttons. If either fails to generate, show a warning before sending (but allow override).
 
-Every 5-minute cron invocation follows this path:
-1. `optionalAuthFull` correctly returns null (anon JWT has no `sub`)
-2. Handler enters `!userId` branch
-3. Compares `token === undefined` → false
-4. Returns 401 Unauthorized
-5. The `handleRequest` wrapper logs "Success" before checking the Response — **masking the failure**
+---
 
-The cron job has been returning 401 silently every 5 minutes. Last successful sync: **April 3** (manually triggered by a user login, not cron).
+## 1. Record Payment Feature
 
-## Fix Plan
+### Backend: `supabase/functions/quickbooks-oauth/index.ts`
 
-### File: `supabase/functions/gmail-sync/index.ts`
+Add new action `"receive-payment"` in the router (next to `create-bill-payment`):
 
-**Replace the broken anon-key detection with a reliable cron detection method.**
-
-Instead of comparing tokens (which requires an unavailable env var), use the approach already proven in other functions: detect cron mode by checking if `userId` is empty AND the request has an Authorization header. Since `optionalAuthFull` already validated the JWT failed user-auth, an empty userId + present auth header = system/cron call.
-
-Specifically, replace lines 545-560:
-```typescript
-if (!userId) {
-  // Cron mode: optionalAuth returned no user, but request has auth header
-  // This means it's a system call (pg_cron with anon/service key)
-  const authHeader = rawReq.headers.get("Authorization") || "";
-  if (authHeader.startsWith("Bearer ")) {
-    console.log("CRON MODE: Syncing all Gmail users");
-    return await syncAllUsers(body);
+**New handler `handleReceivePayment`:**
+- Accepts: `invoiceId` (QB ID), `amount`, `paymentMethod` (Check/CreditCard/Cash/ETransfer), `referenceNumber`, `memo`, `paymentDate`
+- Looks up the QB invoice to get `CustomerRef` and `Balance`
+- Creates a QB `Payment` entity:
+  ```
+  POST /v3/company/{realmId}/payment
+  {
+    CustomerRef: { value: customerId },
+    TotalAmt: amount,
+    Line: [{ Amount: amount, LinkedTxn: [{ TxnId: invoiceId, TxnType: "Invoice" }] }],
+    PaymentMethodRef: { value: methodId },
+    PaymentRefNum: referenceNumber,
+    TxnDate: paymentDate,
+    PrivateNote: memo
   }
-  return new Response(
-    JSON.stringify({ error: "Unauthorized" }),
-    { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-  );
-}
-```
+  ```
+- After success: update `sales_invoices` status to `"paid"` if full payment, or keep `"sent"` if partial
+- Returns the created payment details
 
-### File: `supabase/functions/_shared/requestHandler.ts`
+### Frontend: `src/components/accounting/documents/DraftInvoiceEditor.tsx`
 
-**Fix misleading "Success" log for error responses.** Move `log.done("Success")` AFTER the Response check so 401/500 responses from handlers don't get logged as successful:
+Add a **"Record Payment"** button next to the Send Email button (visible when status is `"sent"` or `"draft"` with amount > 0):
 
-```typescript
-const result = await handler({ ... });
+**New dialog `RecordPaymentDialog`** (inline in same file or separate component):
+- Fields: Amount (pre-filled with total), Payment Method (dropdown: Check, Credit Card, Cash, E-Transfer, Wire), Reference # (optional), Date (default today), Memo (optional)
+- On submit: calls `quickbooks-oauth` with action `"receive-payment"`
+- On success: updates local status to `"paid"`, shows toast, invalidates queries
 
-if (result instanceof Response) {
-  // Log based on actual status
-  if (result.status >= 400) {
-    log.error("Handler returned error response", { status: result.status });
-  } else {
-    log.done("Success", { companyId });
-  }
-  return result;
-}
+### Frontend: `src/components/accounting/PaymentLinksSection.tsx`
 
-log.done("Success", { companyId });
-```
+Add a "Record Payment" button below the payment links for the QB InvoiceEditor view too.
 
-### Immediate Action
+---
 
-After deploying the fix, trigger a manual sync to catch up on 4 days of missed emails by calling the edge function.
+## 2. Enforce Dual Payment Links on All Outgoing Invoices
+
+### File: `src/components/accounting/documents/DraftInvoiceEditor.tsx`
+
+In `handleSendEmail` (~line 406-575):
+
+**Before dispatching the email**, check if both links were obtained:
+- If `paymentUrl` (Stripe) is missing → show warning in the email dialog: "⚠ Stripe link unavailable"
+- If `qbPayUrl` (QuickBooks) is missing → show warning: "⚠ QuickBooks link unavailable"
+- If EITHER is missing → change "Send" button to "Send Anyway" (orange) with tooltip explaining a link is missing
+- If BOTH present → green "Send" button as normal
+
+**Add state variables:**
+- `stripeReady: boolean` and `qbReady: boolean` — set during the link generation phase
+- `linkCheckDone: boolean` — gates the send button until both checks complete
+
+**Flow change:**
+1. When email dialog opens → immediately start generating both links in parallel
+2. Show spinners next to each link status
+3. When both resolve → enable the send button with appropriate color
+
+### File: `supabase/functions/send-quote-email/index.ts`
+
+The quote acceptance flow already generates both links (lines 398-530). Add a `warnings` array to the response when either link fails, so the UI can surface it.
+
+---
 
 ## Technical Details
 
-| What | Detail |
-|------|--------|
-| Broken since | ~April 3 (last manual user sync) |
-| Root env var | `SUPABASE_ANON_KEY` — not available in Deno runtime |
-| Cron frequency | Every 5 min (job #24) |
-| Affected users | 8 Gmail accounts (all employees) |
-| Silent failure | `handleRequest` logs "Success" before checking Response type |
+| Change | File | Impact |
+|--------|------|--------|
+| `receive-payment` handler | `quickbooks-oauth/index.ts` | ~60 lines, new case in router |
+| Record Payment dialog | `DraftInvoiceEditor.tsx` | ~80 lines new dialog + button |
+| Pre-flight link check | `DraftInvoiceEditor.tsx` | ~30 lines in handleSendEmail |
+| Link status UI | `DraftInvoiceEditor.tsx` | ~20 lines in email dialog |
+| Warning passthrough | `send-quote-email/index.ts` | ~5 lines |
 
 ## Impact
-- 2 files changed (gmail-sync handler + requestHandler wrapper)
-- Fixes silent cron failure for Gmail sync
-- Fixes misleading "Success" logging for all edge functions returning error responses
-- No schema, auth, or UI changes
+- 3 files changed (1 edge function, 1 component, 1 edge function minor)
+- No database schema changes (uses existing `sales_invoices.status`)
+- No new tables needed
+- QuickBooks ReceivePayment API is standard — same auth flow as BillPayment
 
