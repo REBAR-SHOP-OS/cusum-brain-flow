@@ -12,6 +12,7 @@ import {
   Layers,
   MinusCircle,
   StopCircle,
+  Zap,
 } from "lucide-react";
 import {
   AlertDialog,
