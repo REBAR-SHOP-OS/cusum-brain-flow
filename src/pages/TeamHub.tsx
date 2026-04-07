@@ -35,6 +35,7 @@ export default function TeamHub() {
   const endMeetingMutation = useEndMeeting();
 
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null);
+  const [dmTargetName, setDmTargetName] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createDialogMode, setCreateDialogMode] = useState<"channel" | "group">("channel");
   const [showMeetingDialog, setShowMeetingDialog] = useState(false);
