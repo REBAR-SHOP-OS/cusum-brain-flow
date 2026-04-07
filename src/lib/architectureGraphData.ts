@@ -244,6 +244,22 @@ export const ARCH_EDGES: ArchEdge[] = [
   { id: "e91", source: "admin-console", target: "feature-flags", edgeStyle: "solid" },
   { id: "e92", source: "pipeline",      target: "msg-bus",       edgeStyle: "dashed", label: "publish" },
   { id: "e93", source: "msg-bus",       target: "worker-pool",   edgeStyle: "solid",  label: "consume" },
+
+  // New systems edges
+  { id: "e100", source: "estimating",    target: "qa-war",         edgeStyle: "solid",  label: "verify" },
+  { id: "e101", source: "quotes",        target: "fn-stripe",      edgeStyle: "solid",  label: "pay" },
+  { id: "e102", source: "inbox",         target: "fn-gmail",       edgeStyle: "solid",  label: "send" },
+  { id: "e103", source: "inbox",         target: "fn-ring",        edgeStyle: "solid",  label: "call" },
+  { id: "e104", source: "vizzy",         target: "knowledge-rag",  edgeStyle: "dashed", label: "RAG" },
+  { id: "e105", source: "nila",          target: "knowledge-rag",  edgeStyle: "dashed", label: "RAG" },
+  { id: "e106", source: "knowledge-rag", target: "primary-db",     edgeStyle: "solid",  label: "persist" },
+  { id: "e107", source: "notif-hub",     target: "fn-push",        edgeStyle: "solid",  label: "deliver" },
+  { id: "e108", source: "approval-eng",  target: "notif-hub",      edgeStyle: "dashed", label: "alert" },
+  { id: "e109", source: "fn-website",    target: "fn-ai",          edgeStyle: "solid",  label: "AI" },
+  { id: "e110", source: "fn-mcp",        target: "agent-rtr",      edgeStyle: "solid",  label: "bridge" },
+  { id: "e111", source: "vizzy",         target: "ext-eleven",     edgeStyle: "dashed", label: "voice" },
+  { id: "e112", source: "fn-website",    target: "ext-google",     edgeStyle: "dashed", label: "analytics" },
+  { id: "e113", source: "payroll",       target: "accounting",     edgeStyle: "solid",  label: "export" },
 ];
 
 /* ───── Helpers ───── */
