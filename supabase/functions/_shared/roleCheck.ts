@@ -64,6 +64,15 @@ export async function requireRole(
   userId: string,
   role: AppRole,
 ): Promise<void> {
+  // Super admin bypass — same pattern as requireSuperAdmin()
+  const { data: profile } = await serviceClient
+    .from("profiles")
+    .select("email")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const email = (profile?.email ?? "").toLowerCase();
+  if (SUPER_ADMIN_EMAILS.includes(email)) return;
+
   const has = await hasRole(serviceClient, userId, role);
   if (!has) {
     throw new Response(
@@ -81,6 +90,15 @@ export async function requireAnyRole(
   userId: string,
   roles: AppRole[],
 ): Promise<void> {
+  // Super admin bypass — same pattern as requireSuperAdmin()
+  const { data: profile } = await serviceClient
+    .from("profiles")
+    .select("email")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const email = (profile?.email ?? "").toLowerCase();
+  if (SUPER_ADMIN_EMAILS.includes(email)) return;
+
   const has = await hasAnyRole(serviceClient, userId, roles);
   if (!has) {
     throw new Response(
