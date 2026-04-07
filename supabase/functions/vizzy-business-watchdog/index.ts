@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { sendCeoSmsAlert } from "../_shared/smsAlertHelper.ts";
 
 /**
  * Vizzy Business Watchdog — runs every 15 minutes via pg_cron.
@@ -74,6 +75,19 @@ Deno.serve((req) =>
         metadata: { dedupe_key: a.dedupe, source: "vizzy-business-watchdog" },
       }));
       await supabase.from("notifications").insert(rows);
+
+      // SMS CEO for dangerous/high-priority alerts
+      const dangerAlerts = newAlerts.filter(
+        (a) => a.priority === "high" || 
+               a.dedupe.startsWith("broken-int-") || 
+               a.dedupe.startsWith("missed-delivery-") || 
+               a.dedupe.startsWith("long-shift-")
+      );
+      if (dangerAlerts.length > 0) {
+        const smsLines = dangerAlerts.slice(0, 5).map((a) => `⚠️ ${a.title}`).join("\n");
+        const smsText = `🚨 Watchdog Alert (${dangerAlerts.length} critical):\n${smsLines}`;
+        sendCeoSmsAlert(smsText).catch((e) => console.error("[watchdog] SMS alert error:", e));
+      }
     }
 
     // Save critical findings to vizzy_memory so Vizzy's Brain stays up-to-date
