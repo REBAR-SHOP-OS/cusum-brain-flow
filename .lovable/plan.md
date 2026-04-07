@@ -1,72 +1,63 @@
 
-Goal: stop CEO-facing spam SMS alerts at the source and make inbound SMS spam handling consistent across webhook, cron sync, and auto-reply paths.
 
-What I verified
-- The exact text shown in your screenshot — `📱 New SMS from +16478983690: ...` — is only sent by `supabase/functions/ringcentral-sync/index.ts`.
-- The current spam filter exists, but it is weak and only enforced at the call site.
-- `isSpamSms()` in `supabase/functions/_shared/spamFilter.ts` only does simple lowercase + substring checks. That is brittle against spacing, punctuation, Unicode/confusable characters, and message variations.
-- `sendCeoSmsAlert()` has no spam-awareness, so if any caller misses detection, the CEO still receives the SMS.
-- In both `ringcentral-webhook` and `ringcentral-sync`, spam is currently persisted/logged before filtering, which means noise can still enter internal records even when reply logic is skipped.
+# "All" Tab: Daily Team Activity Report
 
-Root cause
-- Spam suppression is not centralized.
-- Detection is too primitive.
-- The final outbound CEO alert path has no last-line protection.
+## Goal
+When "All" is selected (no specific user), show a comprehensive daily report of **all @rebar.shop users' actions** in collapsible accordion sections — one section per user — with report icons on each. Currently "All" only shows Vizzy memory entries by category; this adds a team activity summary above it.
 
-Implementation plan
-1. Harden the shared spam analyzer
-- Replace the simple boolean-only logic in `supabase/functions/_shared/spamFilter.ts` with a normalized analyzer:
-  - lowercase
-  - trim/collapse whitespace
-  - strip punctuation/invisible chars
-  - normalize Unicode/confusable characters as much as practical
-  - keep keyword/prefix/short-code checks
-  - return structured output like `{ isSpam, reasons, normalizedText }`
-- Keep a compatibility wrapper if needed so existing callers do not break.
+## Design
 
-2. Add a dedicated safe helper for inbound SMS CEO alerts
-- In `supabase/functions/_shared/smsAlertHelper.ts`, add a helper like:
-  - `sendCeoInboundSmsAlert(fromNumber, text)`
-- This helper will call the spam analyzer internally and refuse to send if spam is detected.
-- Keep `sendCeoSmsAlert()` unchanged for legitimate watchdog / operational alerts.
+```text
+┌─────────────────────────────────────┐
+│ All  [A] Ai  [B] Behnam  [K] ...   │
+├─────────────────────────────────────┤
+│ 👥 Team Daily Report                │
+│                                     │
+│ ▸ Behnam (12 activities) 📋        │
+│   Clock: 8:12 AM → Still working    │
+│   • page_visit — Visited Orders     │
+│   • lead_update — Updated lead ...  │
+│                                     │
+│ ▸ Kourosh (8 activities) 📋        │
+│   Clock: 9:00 AM → 5:30 PM         │
+│   • email_sent — Sent email to ...  │
+│                                     │
+│ ▸ Radin (3 activities) 📋          │
+│   Not clocked in today              │
+│   • page_visit — Visited Home       │
+├─────────────────────────────────────┤
+│ 📊 Dashboard (37)        ▸         │
+│ 📥 Inbox (3)             ▸         │
+│ ...existing memory sections...      │
+└─────────────────────────────────────┘
+```
 
-3. Fix the cron sync path that is actually sending these alerts
-- Update `supabase/functions/ringcentral-sync/index.ts` to use the new inbound-SMS-safe helper instead of directly formatting and sending the alert.
-- Compute spam once per message and reuse that result for:
-  - CEO alert suppression
-  - auto-reply suppression
-  - cleaner logging
-- Add spam reason metadata to the stored communication row when detected.
+## Changes
 
-4. Make webhook behavior match cron behavior
-- Update `supabase/functions/ringcentral-webhook/index.ts` to use the same shared spam analysis result before downstream actions.
-- Skip `vizzy-sms-reply` for spam using the same structured analyzer.
-- Avoid creating noisy `sms_received` activity entries for obvious spam, or at minimum mark them clearly as spam in metadata.
+### 1. New hook: `src/hooks/useTeamDailyActivity.ts`
+- Accepts array of profile IDs
+- Fetches `activity_events` for all @rebar.shop users today in a single query (using `.in("actor_id", profileIds)`)
+- Also fetches `time_clock_entries` for all users today
+- Returns grouped data: `Record<profileId, { activities: ActivityEvent[], clockEntries: ClockEntry[] }>`
 
-5. Keep AI reply logic aligned
-- Update `supabase/functions/vizzy-sms-reply/index.ts` to use the same structured spam analyzer so all inbound SMS decisions come from one source of truth.
+### 2. Update `VizzyBrainPanel.tsx`
+- Add a new `TeamDailyReport` component rendered when `!selectedProfile`
+- Shows one accordion item per @rebar.shop user (sorted by activity count descending)
+- Each accordion section contains:
+  - Clock-in/out summary (first/last entry)
+  - Activity list (same format as `UserActivitySection`)
+- Each section header has the `SectionReportButton` for clipboard export
+- Rendered **above** the existing memory category accordions
 
-Validation
-- Confirm the exact screenshot examples are classified as spam:
-  - “Join me on WhatsApp…”
-  - “Let’s chat on WhatsApp…”
-  - “Shares + acquisition reveal”
-- Confirm spam messages do not:
-  - send CEO SMS alerts
-  - trigger auto-replies
-  - create normal `sms_received` operational noise
-- Confirm legitimate customer SMS still:
-  - get stored
-  - can trigger reply flow
-  - can notify when appropriate
+### File Summary
 
-Files to change
-- `supabase/functions/_shared/spamFilter.ts`
-- `supabase/functions/_shared/smsAlertHelper.ts`
-- `supabase/functions/ringcentral-sync/index.ts`
-- `supabase/functions/ringcentral-webhook/index.ts`
-- `supabase/functions/vizzy-sms-reply/index.ts`
+| File | Change |
+|------|--------|
+| `src/hooks/useTeamDailyActivity.ts` | New hook — batch fetch activities + clock entries for all team members |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Add `TeamDailyReport` component, render above memory sections when "All" selected |
 
-Technical notes
-- No database migration is required.
-- This is a minimal, root-level fix: centralize the decision once, enforce it everywhere, and put a final guard on the CEO SMS alert path so this class of bug cannot leak through again.
+## Technical Notes
+- Single query with `.in()` filter instead of N+1 queries per user
+- Reuses existing `formatDateInTimezone` and `SectionReportButton`
+- No database changes needed
+
