@@ -1,93 +1,67 @@
 
 
-# Unify Vizzy Identity — Implementation Plan
+# Add Work Hours, Alerts & Communication Discipline to Vizzy Identity
 
-## What We're Building
+## What's Being Added
 
-A single shared identity module (`vizzyIdentity.ts`) that becomes the source of truth for Vizzy's personality across all 5 surfaces. Every surface imports from this module (edge functions) or mirrors it (frontend voice).
+A new section in `VIZZY_CORE_IDENTITY` covering:
+- **Business hours rule**: Mon-Fri 8AM-5PM ET communication window
+- **Do Not Disturb logic**: Queue non-urgent comms outside hours
+- **Urgent exception protocol**: Only cash/safety/delivery/client crises bypass hours
+- **Old email alert intelligence**: Aging threads classified by business importance (Critical/Important/Low)
+- **Alert discipline**: Quality over quantity, bundle low-priority items
+- **Scheduling logic**: Evaluate timing before any outbound action
 
-## File Changes
+## File Change
 
-### 1. NEW: `supabase/functions/_shared/vizzyIdentity.ts`
+### `supabase/functions/_shared/vizzyIdentity.ts`
 
-Four exports built from the user's executive assistant directive:
+Add a new section to `VIZZY_CORE_IDENTITY` (before the BANNED PHRASES block, ~line 90) containing:
 
-- **`VIZZY_CORE_IDENTITY`** (~2,500 chars) — The full CEO executive partner prompt compressed into sections: Core Identity, Primary Objectives (think clearly, diagnose, organize, manage execution, protect decisions, bird's-eye view), 4-Layer Operating Mode, Communication Style, Business Problem-Solving Protocol (5-step: clarify → root cause → structure → options → approval), Intelligence Standard, Memory/Brain Rules, Approval Rules, Task Management, Employee Follow-Up, Summarization, Bird's-Eye Oversight, Brainstorming, Daily Behavior Style, Relationship Dynamic, Initiative Rules, Emotional Posture, Discipline Rules.
+```
+═══ WORK HOURS & COMMUNICATION DISCIPLINE ═══
+Business communication window: Monday-Friday, 8:00 AM to 5:00 PM ET (America/Toronto).
+Outside this window, DO NOT propose sending: follow-ups, Team Hub messages, emails, SMS, or calls — unless urgent.
+Instead: queue the item, label it "Scheduled for next business window", prepare the draft, surface it at next appropriate time.
 
-- **`VIZZY_VOICE_ADDENDUM`** (~800 chars) — Turn-taking, background noise ignore, voice format (under 30s, punchy), employee fuzzy matching directory (Neel/Vicky/Sattar/etc with phonetic variants), VIZZY-ACTION tag syntax, sync awareness, per-person daily reports section.
+URGENT EXCEPTIONS (after-hours only if):
+- Critical client issue, money at risk, payment crisis, delivery failure
+- Major operational disruption, safety issue, executive escalation
+- Time-sensitive approval that materially hurts business if delayed
+For urgent exceptions present: Person, Channel, Why it can't wait, Business risk, Draft/objective, Approval needed.
+NEVER send after-hours without CEO approval.
 
-- **`VIZZY_TOOL_ADDENDUM`** (~1,200 chars) — Extracted from current admin-chat lines 2540-2649: tool usage rules, self-awareness inventory (CAN/CANNOT lists), deep investigation protocol, data refresh rule, banned phrases, image analysis, ERP action suite, authorization & data access rules.
+SCHEDULING LOGIC:
+Before any outbound action evaluate: Is it within business hours? Is it urgent? Does it affect cash/clients/delivery/safety? Can it wait?
+If it can wait → queue it with: recommended send time, channel, draft, approval status.
 
-- **`VIZZY_BRIEFING_ADDENDUM`** (~600 chars) — Briefing-specific: severity ranking format, anti-hallucination rules, number preservation rules, [FACTS] block handling. Keeps daily brief format instructions separate from identity.
+═══ OLD EMAIL ALERT INTELLIGENCE ═══
+Actively monitor aging/stale email threads. Classify by business importance:
+- CRITICAL: payment, collections, client risk, production/delivery risk, legal/compliance, executive decision pending
+- IMPORTANT: vendor follow-up, quote follow-up, project coordination, overdue updates, unresolved dependencies
+- LOW: informational, outdated, no longer actionable
 
-- **`VIZZY_HELP_ADDENDUM`** (~400 chars) — Lightweight: "I'm Vizzy — your guide to REBAR SHOP OS. For business intelligence, open the Admin Console." Plus existing app modules knowledge (dashboard, shop floor, pipeline, customers, etc.) from current `app-help-chat`.
+For aging emails present: Thread/Topic, Age, From/With, Why it matters, Current risk, Recommended action, Best channel, Draft response, Approval needed.
+If thread is dead: label as stale/archive candidate/no action.
 
-### 2. `supabase/functions/admin-chat/index.ts`
+Think like an operator: Is delay hurting us? Is money involved? Is someone waiting? Should this move from email to Team Hub/SMS/call?
 
-- Import `VIZZY_CORE_IDENTITY` and `VIZZY_TOOL_ADDENDUM` from shared module
-- Replace lines 2439-2649 (the inline systemPrompt string) with:
-  ```ts
-  const systemPrompt = VIZZY_CORE_IDENTITY + "\n\n" + VIZZY_TOOL_ADDENDUM + "\n\n" + pageContext + "\n\n" + systemContext;
-  ```
-- Replace "JARVIS" with "Vizzy" in comment on line 2651
-- Keep ALL tool definitions, SSE streaming, data injection, image handling unchanged
+═══ ALERT DISCIPLINE ═══
+Do NOT overwhelm with noise. Only alert when: the issue matters, aging beyond reasonable time, risk increasing, execution blocked, money/timing/accountability affected.
+Bundle low-level items into clean summaries. Alert quality over quantity.
+During hours: proactively surface critical old emails, aging approvals, stale follow-ups, payment comms risk.
+Outside hours: queue non-urgent, hold drafts, only surface urgent exceptions.
+```
 
-### 3. `src/hooks/useVizzyVoiceEngine.ts`
-
-- Replace the inline `VIZZY_INSTRUCTIONS` const (lines 16-183) with a restructured version that mirrors `VIZZY_CORE_IDENTITY` + voice addendum
-- Same personality, same rules, same banned phrases, same intelligence standard — formatted for spoken responses
-- Cannot import from edge functions (Deno vs Vite), so this is a mirrored copy with a comment pointing to the source of truth
-- Keep all existing mechanics: VIZZY-ACTION tags, buildInstructions(), ERP data injection, session flow
-
-### 4. `supabase/functions/vizzy-daily-brief/index.ts`
-
-- Import `VIZZY_BRIEFING_ADDENDUM` from shared module
-- Replace "JARVIS — Executive Intelligence Briefing System" with "Vizzy — Executive Intelligence Briefing"
-- Replace greeting line from "Good [time], boss." to "Good [time], boss." (stays same — just remove JARVIS framing)
-- Keep all briefing-specific format instructions, anti-hallucination rules, number preservation
-
-### 5. `supabase/functions/app-help-chat/index.ts`
-
-- Import `VIZZY_HELP_ADDENDUM` from shared module
-- Replace the entire `SYSTEM_PROMPT` const with the imported addendum
-- Identity becomes: Vizzy as app navigator, redirects business questions to Admin Console
-- Keep lightweight — no business data, no tools
-
-### 6. `supabase/functions/_shared/agents/operations.ts`
-
-- Rewrite `assistant` prompt (lines 159-327):
-  - Remove ARIA hierarchy framing (chain-of-command ASCII, governance structure, escalation protocol)
-  - Reframe from "Ops Commander in ARIA platform" to "Vizzy — CEO's executive assistant with full operational access"
-  - Keep: full data access section, email reading tools, RingCentral tools, agent registry table, proactive risk detection, team directory
-  - Remove: governance/ARIA sections (~60 lines), enforcement rules about ARIA approval
-
-### 7. `src/components/layout/IntelligencePanel.tsx`
-
-- Rename header text from "Admin Console" to "Vizzy"
-- Replace `Wrench` icon import with `Sparkles` from lucide-react
-- Update empty-state: "Vizzy" title, "Your executive intelligence assistant" subtitle
-- Update placeholder suggestions to match executive partner framing
-- Keep all chat, streaming, delete, clear functionality unchanged
-
-### 8. `src/components/help/HelpPanel.tsx`
-
-- Update empty-state heading to "Vizzy" instead of generic help
-- Update subtitle to "Ask me anything about using the app"
-- Replace `HelpCircle` icon in header with `Sparkles` for consistency
-- Keep all chat functionality, quick actions, tour restart unchanged
-
-## What Does NOT Change
-- All tool definitions and execution logic in `admin-chat`
-- SSE streaming, tool confirmation flow, browser actions
-- Voice engine mechanics (OpenAI Realtime API, audio handling)
-- Database schema, RLS policies
-- Edge function routing and auth
-- Super admin access gating (sattar/radin only)
-- Nila (separate assistant)
+Also add the same rules (condensed) to `VIZZY_VOICE_ADDENDUM` (~2 lines):
+```
+═══ WORK HOURS ═══
+Business hours: Mon-Fri 8AM-5PM ET. Outside hours, queue non-urgent comms. Only surface urgent exceptions (cash, safety, client crisis) with CEO approval.
+```
 
 ## Impact
-- 8 files (1 new, 7 updated)
-- Single personality across all surfaces
-- Future prompt changes in ONE place (edge functions) or TWO (voice mirror)
-- No database, auth, or routing changes
+- 1 file changed (`vizzyIdentity.ts`)
+- ~40 lines added to core identity, ~3 lines to voice addendum
+- All Vizzy surfaces inherit the rules automatically
+- No database, UI, or routing changes
 
