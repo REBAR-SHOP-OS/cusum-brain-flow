@@ -1,25 +1,25 @@
 
 
-# Rename "General Report" to "Agents" and Show Per-Employee Agent Access
+# Unify Chat Icon Widget with Team Hub
+
+## Current State
+The floating chat icon (`DockChatBar`) and Team Hub (`/team-hub`) already share the same data layer (channels, profiles, DMs, messages). However, they are treated as separate systems:
+- The chat icon **hides itself** when the user is on `/team-hub` (line 57, 126 in `DockChatBar.tsx`)
+- The DockChatBox "expand" button navigates to `/team-hub` and **closes** the chat box
 
 ## Problem
-The per-employee section currently labeled "General Report" is misleading — it actually shows agent usage sessions. The user wants it:
-1. Renamed from "General Report" to "Agents"
-2. To clearly show which agents each employee **has access to** alongside which they **actually use**
+The user wants the chat icon to always be visible as a consistent widget — it should never disappear, even on the Team Hub page. The chat icon IS Team Hub's widget form; they must behave as one unified system.
 
 ## Changes
 
-### `src/components/vizzy/VizzyBrainPanel.tsx`
+### 1. `src/components/chat/DockChatBar.tsx`
+- **Remove the Team Hub hide logic**: Delete the `isTeamHub` check (lines 57, 126) so the floating chat button is always visible, including on `/team-hub`
+- The widget remains fully functional everywhere — same channels, same DMs, same data
 
-**1. Rename section header** (line 1079):
-- Change "General Report" → "Agents"
+### 2. `src/components/chat/DockChatBox.tsx`
+- **Update the expand button**: Instead of closing the chat and navigating to `/team-hub`, keep the expand button but don't close the active chat — just navigate to Team Hub so the user can see the full view while keeping the widget available
+- Alternative: on Team Hub page, the expand button could scroll/focus the relevant channel in the sidebar instead of navigating
 
-**2. Update `UserAgentsSections` component** (lines 188-319):
-- Add a list of **all accessible agents** for the employee based on their role from `userAgentMap.ts` and `agentConfigs`
-- Currently it shows assigned agent + used agents from sessions. Enhance to also show agents the user has access to but hasn't used yet (with "No activity yet" label — this already exists in the UI)
-- The `getUserAgentMapping` already provides the primary agent. Add logic to also list all agents available to the user's role (most agents are public to all staff, Penny is restricted to admin/accounting, Pixel to admin/marketing)
-
-**3. Keep the `UserFullReportButton`** as-is — it already generates a per-user report (clipboard copy), not the system-wide PDF
-
-No other files need changes. No database changes.
+### No other changes needed
+The data layer (`useTeamChannels`, `useTeamMessages`, `useSendMessage`, `useOpenDM`) is already shared between both. No database changes required.
 
