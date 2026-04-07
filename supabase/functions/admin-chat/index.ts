@@ -2417,7 +2417,7 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
         }
 
         let qbBody: Record<string, unknown> = { action, company_id: companyId };
-        if (["BalanceSheet", "AgedReceivables", "AgedPayables", "TrialBalance"].includes(args.report_type)) {
+        if (["BalanceSheet", "AgedReceivables", "AgedPayables", "TrialBalance", "CustomerBalance", "CustomerBalanceDetail", "VendorBalance", "ARAgingSummary", "APAgingSummary"].includes(args.report_type)) {
           qbBody.asOfDate = endDate ?? new Date().toISOString().split("T")[0];
         } else {
           if (startDate) qbBody.startDate = startDate;
