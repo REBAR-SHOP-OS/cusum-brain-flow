@@ -1,28 +1,47 @@
 
 
-# Fix: Team Daily Report Shows 0 Activities
+# Enhance Per-Employee Report Button with Comprehensive Report
 
-## Root Cause
-The `activityLogger.ts` stores the **auth user ID** (`auth.uid()`) as `actor_id` in `activity_events`. However, `useTeamDailyActivity` filters activities using `.in("actor_id", profileIds)` where `profileIds` are the **profile table IDs** — a different UUID.
+## Goal
+When the clipboard icon next to each employee in the Team Daily Report is clicked, it should generate and copy a detailed, comprehensive English text report covering all of that employee's daily performance data — not just a simple activity list.
 
-Since `profiles.id ≠ profiles.user_id`, the filter never matches any rows, resulting in 0 activities for every employee.
+## Change
 
-## Fix
+### `src/components/vizzy/VizzyBrainPanel.tsx` (lines 645-660)
+Update the `getText` function in the per-employee `SectionReportButton` to produce a full structured report including:
 
-### `src/hooks/useTeamDailyActivity.ts`
-Instead of filtering by `profileIds`, build a map of `user_id → profile_id` from the profiles passed in, then filter the activity query by user IDs (which match `actor_id`).
+1. **Header** — Employee name, date, total activity count
+2. **Time Clock Summary** — All clock-in/out entries with durations, total hours worked
+3. **Activity Breakdown by Category** — Group activities by `entity_type` (e.g., Dashboard: 12, Inbox: 8, Orders: 5) with counts
+4. **Activity Timeline** — Chronological list of all activities with timestamps, event types, and descriptions
+5. **Summary Stats** — First activity time, last activity time, total active span
 
-**Changes:**
-1. Accept the full profiles array (with `user_id`) instead of just IDs
-2. Extract `userIds` from profiles for the activity query filter
-3. Map results back to profile IDs using the `userId → profileId` mapping
-4. Keep `time_clock_entries` query using `profile_id` as before (that table uses profile IDs)
+The report format will be clean English text, structured with sections and bullet points, ready for pasting into any document or chat.
 
-### `src/components/vizzy/VizzyBrainPanel.tsx`
-Update the call to `useTeamDailyActivity` to pass the full `profiles` array instead of just `profileIds`.
+### Example Output
+```text
+📋 DAILY PERFORMANCE REPORT — Sattar Mohammadi
+Date: April 7, 2026 | Total Activities: 137
+
+⏰ TIME CLOCK
+• Clocked in: 8:15 AM → Still working
+• Total hours: 5h 35m
+
+📊 ACTIVITY BREAKDOWN
+• Dashboard: 37 events
+• Inbox: 25 events
+• Orders: 20 events
+• Team Hub: 15 events
+...
+
+📝 ACTIVITY LOG (137 events)
+• 1:48 PM — page_view · Dashboard: Viewed dashboard
+• 1:45 PM — mutation · Orders: Updated order #1234
+...
+```
 
 ## Impact
-- Two files changed
-- No database changes needed
-- Activities that are already logged will immediately appear in the Team Daily Report
+- Single file changed (`VizzyBrainPanel.tsx`)
+- Only the `getText` callback is updated — no structural or logic changes
+- Calculates clock durations and groups activities by entity type inline
 
