@@ -311,7 +311,26 @@ export default function Architecture() {
     setShowAddPanel(false);
   }, [newNodeLabel, newNodeLayer, setNodes]);
 
+  const activeNode = lockedNode || hoveredNode;
+
+  // Compute connected node IDs for the active node
+  const connectedNodeIds = useMemo(() => {
+    if (!activeNode) return null;
+    const ids = new Set<string>();
+    ids.add(activeNode);
+    edges.forEach((e) => {
+      if (e.source === activeNode) ids.add(e.target);
+      if (e.target === activeNode) ids.add(e.source);
+    });
+    return ids;
+  }, [activeNode, edges]);
+
   const onNodeClick = useCallback((_: unknown, node: ArchitectureFlowNode) => {
+    // Toggle lock
+    setLockedNode((prev) => (prev === node.id ? null : node.id));
+  }, []);
+
+  const onNodeDoubleClick = useCallback((_: unknown, node: ArchitectureFlowNode) => {
     setOpenNode({
       id: node.id,
       hint: node.data.hint,
@@ -320,6 +339,18 @@ export default function Architecture() {
       icon: node.data.Icon,
       detail: { ...node.data.detail, title: node.data.label },
     });
+  }, []);
+
+  const onNodeMouseEnter = useCallback((_: unknown, node: ArchitectureFlowNode) => {
+    setHoveredNode(node.id);
+  }, []);
+
+  const onNodeMouseLeave = useCallback(() => {
+    setHoveredNode(null);
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setLockedNode(null);
   }, []);
 
   const filteredNodeIds = useMemo(() => {
