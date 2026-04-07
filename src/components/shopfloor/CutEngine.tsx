@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronUp, ChevronDown, Lock, Zap, AlertCircle, Scissors, Package, Recycle, XCircle } from "lucide-react";
@@ -58,22 +58,26 @@ export function CutEngine({
   const [selectedStock, setSelectedStock] = useState(12000);
   const [bars, setBars] = useState(suggestedBars || 1);
   const [operatorOverride, setOperatorOverride] = useState(false);
+  const barsLocked = useRef(false);
 
-  // Sync bars from run plan or suggested — but NEVER override operator's manual choice
-  // and NEVER change bars while a run is active
+  // Sync bars from run plan or suggested — but NEVER override operator's manual choice,
+  // NEVER change bars while a run is active, and NEVER change after first lock
   useEffect(() => {
-    if (isRunning || operatorOverride) return;
+    if (isRunning || operatorOverride || barsLocked.current) return;
     if (runPlan?.feasible) {
       setBars(Math.min(runPlan.barsThisRun, maxBars));
+      barsLocked.current = true;
     } else if (suggestedBars && suggestedBars > 0) {
       setBars(Math.min(suggestedBars, maxBars));
+      barsLocked.current = true;
     }
   }, [runPlan?.barsThisRun, runPlan?.feasible, suggestedBars, maxBars, isRunning, operatorOverride]);
 
-  // Reset override flag when item changes (new barCode) or run completes
+  // Reset override flag and bars lock when item changes (new barCode) or run completes
   useEffect(() => {
     if (!isRunning) {
       setOperatorOverride(false);
+      barsLocked.current = false;
     }
   }, [barCode, isRunning]);
 
