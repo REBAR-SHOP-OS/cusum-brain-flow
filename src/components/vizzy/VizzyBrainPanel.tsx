@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3 } from "lucide-react";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3, Download } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
@@ -20,6 +20,7 @@ import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { agentConfigs } from "@/components/agent/agentConfigs";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
   onClose: () => void;
@@ -857,14 +858,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
           <FileBarChart className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground flex-1">General Report</h3>
-          <SectionReportButton
-            label="General Report"
-            getText={() => {
-              const totalItems = sectionsToShow.reduce((sum, g) => sum + g.items.length, 0);
-              const lines = sectionsToShow.map(g => `• ${g.label}: ${g.items.length} events`).join('\n');
-              return `📋 GENERAL REPORT\nTotal Events: ${totalItems}\n\n${lines}`;
-            }}
-          />
+          <GeneralReportPDFButton date={selectedDate} />
         </div>
         <div className="p-3">
           <Accordion type="multiple" className="w-full space-y-1">
