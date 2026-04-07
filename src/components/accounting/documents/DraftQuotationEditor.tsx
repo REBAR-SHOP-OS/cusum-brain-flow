@@ -331,7 +331,14 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
             project_name: projectName,
             tax_rate: taxRate,
             notes,
-            line_items: items,
+            terms,
+            line_items: items.map(li => ({
+              description: li.description,
+              quantity: li.quantity,
+              unitPrice: li.unitPrice,
+              unit_price: li.unitPrice,
+              amount: li.quantity * li.unitPrice,
+            })),
           },
         } as any)
         .eq("id", quoteId);

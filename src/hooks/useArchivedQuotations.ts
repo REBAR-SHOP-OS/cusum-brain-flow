@@ -26,11 +26,17 @@ export function useArchivedQuotations({
 
       if (search.trim()) {
         const s = search.trim();
-        query = query.or(`quote_number.ilike.%${s}%,salesperson.ilike.%${s}%`);
+        query = query.or(`quote_number.ilike.%${s}%,salesperson.ilike.%${s}%,metadata->>customer_name.ilike.%${s}%,metadata->>odoo_customer.ilike.%${s}%`);
       }
 
       if (status && status !== "all") {
-        query = query.eq("odoo_status", status);
+        // Internal statuses use `status` column, Odoo statuses use `odoo_status`
+        const internalStatuses = ["draft", "sent", "accepted", "declined", "cancelled"];
+        if (internalStatuses.includes(status)) {
+          query = query.eq("status", status);
+        } else {
+          query = query.eq("odoo_status", status);
+        }
       }
 
       query = query.order("created_at", { ascending: false }).range(from, to);

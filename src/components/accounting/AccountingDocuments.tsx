@@ -49,11 +49,27 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
 
 const QUOTATION_STATUSES = [
   { value: "all", label: "All Statuses" },
-  { value: "Draft Quotation", label: "Draft Quotation" },
-  { value: "Quotation Sent", label: "Quotation Sent" },
-  { value: "Sales Order", label: "Sales Order" },
+  // Odoo statuses
+  { value: "Draft Quotation", label: "Draft Quotation (Odoo)" },
+  { value: "Quotation Sent", label: "Quotation Sent (Odoo)" },
+  { value: "Sales Order", label: "Sales Order (Odoo)" },
   { value: "Cancelled", label: "Cancelled" },
+  // Internal statuses
+  { value: "draft", label: "Draft" },
+  { value: "sent", label: "Sent" },
+  { value: "accepted", label: "Accepted" },
+  { value: "declined", label: "Declined" },
 ];
+
+const INTERNAL_STATUS_BADGE_COLORS: Record<string, string> = {
+  draft: "bg-muted text-muted-foreground",
+  sent: "bg-blue-500/10 text-blue-600 border-blue-200",
+  accepted: "bg-emerald-500/10 text-emerald-600 border-emerald-200",
+  declined: "bg-red-500/10 text-red-600 border-red-200",
+  cancelled: "bg-zinc-500/10 text-zinc-500 border-zinc-200",
+};
+
+const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed"];
 
 export function AccountingDocuments({ data, initialDocType }: Props) {
   const queryClient = useQueryClient();
@@ -245,7 +261,12 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
     assumptions: ["Standard access for delivery truck at site."],
   });
 
-  const docTabs: { id: DocType; label: string; icon: typeof Package; count: number }[] = [];
+  const docTabs: { id: DocType; label: string; icon: typeof Package; count: number }[] = [
+    { id: "quotation", label: "Quotations", icon: ClipboardList, count: totalCount || quotations.length },
+    { id: "invoice", label: "Invoices", icon: FileText, count: data.invoices.length },
+    { id: "packing-slip", label: "Packing Slips", icon: Package, count: data.invoices.length },
+    { id: "estimation", label: "Estimations", icon: Calculator, count: data.estimates.length },
+  ];
 
 
   return (
@@ -290,7 +311,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search quote # or salesperson…"
+              placeholder="Search quote #, salesperson, or customer…"
               value={qSearchInput}
               onChange={(e) => setQSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearchSubmit()}
@@ -373,7 +394,9 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
             const lineItems = (meta?.line_items as Array<Record<string, unknown>>) || [];
             const metaTotal = lineItems.reduce((s: number, li: any) => s + (Number(li.amount) || 0), 0);
             const displayTotal = Number(q.total_amount) || metaTotal;
-            const isSale = q.odoo_status === "Sales Order";
+            const canConvert = q.odoo_status === "Sales Order" || CONVERTIBLE_STATUSES.includes(q.status || "");
+            const displayStatus = q.status === "accepted" ? "Accepted" : (q.odoo_status || q.status);
+            const badgeColor = STATUS_BADGE_COLORS[q.odoo_status || ""] || INTERNAL_STATUS_BADGE_COLORS[q.status || ""] || "";
             return (
               <Card
                 key={q.id}
@@ -415,28 +438,26 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
                         ✓ Signed
                       </Badge>
                     )}
-                    {isSale && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5 text-xs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setConvertQuote({
-                              id: q.id,
-                              quote_number: q.quote_number,
-                              total_amount: q.total_amount,
-                              customer_name: customer,
-                            });
-                          }}
-                        >
-                          <ArrowRight className="w-3.5 h-3.5" /> Convert to Order
-                        </Button>
-                      </>
+                    {canConvert && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConvertQuote({
+                            id: q.id,
+                            quote_number: q.quote_number,
+                            total_amount: q.total_amount,
+                            customer_name: customer,
+                          });
+                        }}
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" /> Convert to Order
+                      </Button>
                     )}
-                    <Badge variant="outline" className={`text-xs ${STATUS_BADGE_COLORS[q.odoo_status || ""] || ""}`}>
-                      {q.odoo_status || q.status}
+                    <Badge variant="outline" className={`text-xs ${badgeColor}`}>
+                      {displayStatus}
                     </Badge>
                     <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={(e) => { e.stopPropagation(); setViewQuote(q); }}>
                       <Eye className="w-3.5 h-3.5" /> View
@@ -447,6 +468,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
                       className="gap-1 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
                       onClick={async (e) => {
                         e.stopPropagation();
+                        if (!window.confirm(`Are you sure you want to delete ${q.quote_number}? This cannot be undone.`)) return;
                         const { error } = await supabase.from("quotes").delete().eq("id", q.id);
                         if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
                         toast({ title: "Deleted", description: `${q.quote_number} removed` });

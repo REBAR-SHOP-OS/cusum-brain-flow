@@ -117,7 +117,8 @@ export function ESignatureDialog({ open, onOpenChange, quoteId, quoteNumber, onS
           signed_by: signerName.trim(),
           signed_at: new Date().toISOString(),
           status: "accepted",
-        })
+          odoo_status: "Accepted",
+        } as any)
         .eq("id", quoteId);
 
       if (error) throw error;

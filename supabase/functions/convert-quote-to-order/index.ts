@@ -23,6 +23,22 @@ Deno.serve((req) =>
       .maybeSingle();
     if (qErr || !quote) throw new Error("Quote not found");
 
+    // Resolve customer_id from metadata if null
+    let resolvedCustomerId = quote.customer_id;
+    if (!resolvedCustomerId) {
+      const metadata = quote.metadata as Record<string, unknown> | null;
+      const customerName = (metadata?.customer_name as string) || (metadata?.odoo_customer as string);
+      if (customerName) {
+        const { data: cust } = await supabase
+          .from("customers")
+          .select("id")
+          .ilike("name", customerName)
+          .limit(1)
+          .maybeSingle();
+        if (cust) resolvedCustomerId = cust.id;
+      }
+    }
+
     // Validate quote status before conversion
     const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed"];
     if (!CONVERTIBLE_STATUSES.includes(quote.status)) {
@@ -60,7 +76,7 @@ Deno.serve((req) =>
         .from("orders")
         .insert({
           order_number: orderNumber,
-          customer_id: quote.customer_id,
+          customer_id: resolvedCustomerId,
           quote_id: quoteId,
           company_id: companyId,
           total_amount: quote.total_amount || 0,
@@ -83,7 +99,7 @@ Deno.serve((req) =>
             order_id: order.id,
             description: String(line.name || line.description || "Line item"),
             quantity: Number(line.product_uom_qty || line.quantity || 1),
-            unit_price: Number(line.price_unit || line.unit_price || 0),
+            unit_price: Number(line.price_unit || line.unit_price || line.unitPrice || 0),
             notes: line.notes ? String(line.notes) : null,
           }));
 
