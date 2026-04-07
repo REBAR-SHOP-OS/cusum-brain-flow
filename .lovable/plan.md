@@ -1,32 +1,55 @@
 
 
-# Turn Overdue "Scheduled + Approved" Cards Red
+# Fix: "Forbidden: requires one of [admin, marketing] roles" for Super Admins
 
-## Problem
-Posts that are approved and scheduled but missed their publish window (scheduled time is in the past) still show as green "Scheduled · Approved". They should turn red to flag them as overdue/missed.
+## Root Cause
+
+The `requireAnyRole()` function in `supabase/functions/_shared/roleCheck.ts` does a strict database lookup against the `user_roles` table — but has **no super admin bypass**. Compare with `requireSuperAdmin()` in the same file, which correctly checks `SUPER_ADMIN_EMAILS` as a fallback.
+
+Super admins (sattar, radin, zahra) may not have an explicit `marketing` row in `user_roles`, so when they click "Regenerate" on a social post, the `regenerate-post` function's `requireAnyRole: ["admin", "marketing"]` guard rejects them with 403.
 
 ## Fix
 
-### File: `src/components/social/SocialCalendar.tsx`
+### `supabase/functions/_shared/roleCheck.ts` — Add super admin bypass to `requireAnyRole`
 
-Add an `isOverdue` flag per post:
+Before the strict role check, look up the user's email and check against `SUPER_ADMIN_EMAILS`. If they're a super admin, return immediately (no throw).
 
 ```typescript
-const isOverdue = status === "scheduled" && isApproved
-  && post.scheduled_date && new Date(post.scheduled_date) < new Date();
+export async function requireAnyRole(
+  serviceClient: { from: (table: string) => any },
+  userId: string,
+  roles: AppRole[],
+): Promise<void> {
+  // Super admin bypass — same pattern as requireSuperAdmin()
+  const { data: profile } = await serviceClient
+    .from("profiles")
+    .select("email")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const email = (profile?.email ?? "").toLowerCase();
+  if (SUPER_ADMIN_EMAILS.includes(email)) return;
+
+  const has = await hasAnyRole(serviceClient, userId, roles);
+  if (!has) {
+    throw new Response(
+      JSON.stringify({ error: `Forbidden: requires one of [${roles.join(", ")}] roles` }),
+      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+}
 ```
 
-Then update three places:
+Same bypass added to `requireRole()` for consistency.
 
-1. **Card background** (line 277-278): Insert `isOverdue` check before the normal scheduled+approved branch:
-   - `isOverdue` → `"bg-red-500/10 border-red-500/40"` (same as failed)
-   - else scheduled+approved → keep existing green
+## Files Changed
 
-2. **Status text color** (line 333): Insert `isOverdue` check:
-   - `isOverdue` → `"text-red-600 font-medium"`
+| File | Change |
+|------|--------|
+| `supabase/functions/_shared/roleCheck.ts` | Add super admin email bypass to `requireRole()` and `requireAnyRole()` (~12 lines) |
 
-3. **Status label** (line 342-343): Insert `isOverdue` check:
-   - `isOverdue` → `"Overdue · Not Published"` (or `"Missed · Not Published"`)
-
-No database, migration, or hook changes needed. Pure UI logic — one file, ~6 lines added.
+## Impact
+- Super admins can regenerate posts immediately
+- All other `requireAnyRole` / `requireRole` guarded functions also get the bypass
+- No database, UI, or schema changes
+- Non-super-admin users still require explicit roles as before
 
