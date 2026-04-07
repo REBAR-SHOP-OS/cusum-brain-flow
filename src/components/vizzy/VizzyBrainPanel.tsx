@@ -645,17 +645,56 @@ function TeamDailyReport({
                   <SectionReportButton
                     label={firstName}
                     getText={() => {
-                      const lines = activities.map(
-                        (a) => `• ${a.event_type} — ${a.entity_type}${a.description ? `: ${a.description}` : ""}`
-                      );
-                      const clockLine = firstClock
-                        ? `Clock: ${formatDateInTimezone(new Date(firstClock.clock_in), timezone, { hour: "numeric", minute: "2-digit", hour12: true })} → ${
-                            lastClock?.clock_out
-                              ? formatDateInTimezone(new Date(lastClock.clock_out), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
-                              : "Still working"
-                          }`
-                        : "Not clocked in today";
-                      return `📋 ${p.full_name}\n${clockLine}\n${lines.join("\n")}`;
+                      const dateStr = formatDateInTimezone(selectedDate, timezone, { month: "long", day: "numeric", year: "numeric" });
+
+                      // Time clock section
+                      let clockSection = "⏰ TIME CLOCK\n";
+                      let totalMinutes = 0;
+                      if (clockEntries.length > 0) {
+                        for (const ce of clockEntries) {
+                          const inTime = formatDateInTimezone(new Date(ce.clock_in), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+                          const outTime = ce.clock_out
+                            ? formatDateInTimezone(new Date(ce.clock_out), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+                            : "Still working";
+                          const startMs = new Date(ce.clock_in).getTime();
+                          const endMs = ce.clock_out ? new Date(ce.clock_out).getTime() : Date.now();
+                          totalMinutes += (endMs - startMs) / 60000;
+                          clockSection += `• ${inTime} → ${outTime}\n`;
+                        }
+                        const hrs = Math.floor(totalMinutes / 60);
+                        const mins = Math.round(totalMinutes % 60);
+                        clockSection += `• Total hours: ${hrs}h ${mins}m\n`;
+                      } else {
+                        clockSection += "• Not clocked in today\n";
+                      }
+
+                      // Activity breakdown by entity_type
+                      const breakdown: Record<string, number> = {};
+                      for (const a of activities) {
+                        breakdown[a.entity_type] = (breakdown[a.entity_type] || 0) + 1;
+                      }
+                      let breakdownSection = "📊 ACTIVITY BREAKDOWN\n";
+                      const sorted = Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
+                      for (const [type, count] of sorted) {
+                        breakdownSection += `• ${type}: ${count} event${count !== 1 ? "s" : ""}\n`;
+                      }
+
+                      // Activity timeline
+                      let timelineSection = `📝 ACTIVITY LOG (${activities.length} events)\n`;
+                      for (const a of activities) {
+                        const t = formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+                        timelineSection += `• ${t} — ${a.event_type} · ${a.entity_type}${a.description ? `: ${a.description}` : ""}\n`;
+                      }
+
+                      // Summary stats
+                      let summarySection = "";
+                      if (activities.length > 0) {
+                        const firstAct = formatDateInTimezone(new Date(activities[activities.length - 1].created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+                        const lastAct = formatDateInTimezone(new Date(activities[0].created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+                        summarySection = `📈 SUMMARY\n• First activity: ${firstAct}\n• Last activity: ${lastAct}\n• Total activities: ${activities.length}\n`;
+                      }
+
+                      return `📋 DAILY PERFORMANCE REPORT — ${p.full_name}\nDate: ${dateStr} | Total Activities: ${activities.length}\n\n${clockSection}\n${breakdownSection}\n${timelineSection}\n${summarySection}`.trim();
                     }}
                   />
                 </AccordionTrigger>
