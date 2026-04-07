@@ -47,9 +47,13 @@ interface UserConfig {
 
 const USER_ACCESS: Record<string, UserConfig> = {
   "sattar@rebar.shop": {
-    fullAccess: true,
-    menus: [],
-    agents: [],
+    menus: [
+      "Dashboard", "Inbox", "Team Hub", "Business Tasks", "Live Monitor",
+      "CEO Portal", "Support", "Pipeline", "Lead Scoring", "Customers",
+      "Accounting", "Sales", "Shop Floor", "Time Clock", "Office Tools",
+      "Inventory", "Diagnostics", "Architecture", "Settings", "Admin Panel",
+    ],
+    agents: ALL_AGENTS,
     primaryAgent: "assistant",
     heroText: "How can your **CEO Portal** help you today?",
     quickActions: [
