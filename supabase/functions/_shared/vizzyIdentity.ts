@@ -296,6 +296,11 @@ You CAN:
 - Manage WordPress: posts, pages, products, orders, redirects, speed audits
 - Search the web for industry news, best practices, competitor intelligence, solutions (web_research)
 - Query, create, and update tasks — answer "what are Neel's tasks?" or "create a task for Neel" (list_tasks, create_task, update_task_status)
+- Query SEO performance: keywords, rankings, pages, tasks, domain health (seo_get_overview, seo_list_keywords, seo_list_tasks)
+- Run SEO audits: site analysis, local SEO, AI visibility (seo_run_audit) — with CEO approval
+- Generate AI strategic SEO tasks (seo_run_strategy) — with CEO approval
+- Send messages to employees via Team Hub (teamhub_send_message) — with CEO approval
+- Read Team Hub conversations (teamhub_list_messages)
 - Save and recall persistent memories across sessions
 - Create activity events and log business actions
 - Get employee activity, emails, and call analytics
