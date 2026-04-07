@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory, Trash2, Brain } from "lucide-react";
+import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory, Trash2, Brain, AlertTriangle } from "lucide-react";
 import { useProfiles } from "@/hooks/useProfiles";
 import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
 import { Link, useSearchParams } from "react-router-dom";
@@ -39,7 +39,8 @@ function formatDuration(mins: number) {
 }
 
 export default function TimeClock() {
-  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, adminClockOut, myProfile, profiles } = useTimeClock();
+  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, adminClockOut, closeStaleShifts, staleCount, myProfile, profiles } = useTimeClock();
+  const [staleConfirmOpen, setStaleConfirmOpen] = useState(false);
   const leave = useLeaveManagement();
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
@@ -517,6 +518,24 @@ export default function TimeClock() {
 
       {/* Tabbed Content: Team Status / My Leave / Team Calendar */}
       <div className="relative z-10 w-full max-w-4xl px-6 py-4 flex-1">
+        {/* Stale shift warning */}
+        {isAdmin && staleCount > 0 && (
+          <div className="mb-3 flex items-center gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
+            <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0" />
+            <p className="text-sm text-yellow-200 flex-1">
+              {staleCount} employee{staleCount !== 1 ? "s have" : " has"} shifts open &gt;10 hours
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-yellow-500/40 text-yellow-500 hover:bg-yellow-500/10"
+              onClick={() => setStaleConfirmOpen(true)}
+            >
+              Close stale shifts
+            </Button>
+          </div>
+        )}
+
         <Tabs defaultValue="team-status">
           <TabsList className="w-full">
             <TabsTrigger value="team-status" className="flex-1 gap-1.5">
@@ -709,6 +728,21 @@ export default function TimeClock() {
           }
         }}
       />
+
+      <ConfirmActionDialog
+        open={staleConfirmOpen}
+        onOpenChange={setStaleConfirmOpen}
+        title="Close Stale Shifts"
+        description={`This will close ${staleCount} shift(s) that have been open for more than 10 hours. Are you sure?`}
+        variant="destructive"
+        confirmLabel="Yes, Close All"
+        loading={punching}
+        onConfirm={async () => {
+          await closeStaleShifts();
+          setStaleConfirmOpen(false);
+        }}
+      />
+
       {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
         <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
       )}
