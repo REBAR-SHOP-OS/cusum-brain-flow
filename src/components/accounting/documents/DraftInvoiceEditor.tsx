@@ -294,7 +294,11 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
 
       // Load payment links
       const invMeta2 = (inv as any).metadata || {};
-      if (invMeta2.qb_invoice_link) setQbPayUrl(invMeta2.qb_invoice_link);
+      if (invMeta2.qb_invoice_link) {
+        setQbPayUrl(invMeta2.qb_invoice_link);
+      } else if (invMeta2.qb_invoice_id) {
+        setQbPayUrl(`https://app.qbo.intuit.com/app/invoice?txnId=${invMeta2.qb_invoice_id}`);
+      }
       if (invMeta2.stripe_payment_link) setStripePayUrl(invMeta2.stripe_payment_link);
 
       // Check stripe_payment_links table
@@ -1220,16 +1224,61 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
             </div>
 
             {/* QuickBooks */}
-            {qbPayUrl && (
-              <div className="flex-1 flex items-center gap-2">
-                <Button variant="outline" size="sm" className="flex-1 gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50" onClick={() => window.open(qbPayUrl, "_blank")}>
-                  <ExternalLink className="w-3.5 h-3.5" /> Pay via QuickBooks
+            <div className="flex-1 flex items-center gap-2">
+              {qbPayUrl ? (
+                <>
+                  <Button variant="outline" size="sm" className="flex-1 gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50" onClick={() => window.open(qbPayUrl, "_blank")}>
+                    <ExternalLink className="w-3.5 h-3.5" /> Pay via QuickBooks
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { navigator.clipboard.writeText(qbPayUrl!); toast({ title: "Copied!", description: "QuickBooks link copied" }); }}>
+                    <Copy className="w-3.5 h-3.5" />
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 gap-2 bg-white text-gray-900 border-gray-300 hover:bg-gray-50"
+                  onClick={async () => {
+                    try {
+                      toast({ title: "Syncing to QuickBooks…" });
+                      const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
+                        body: {
+                          action: "create-invoice",
+                          customerName: customerName || undefined,
+                          items: items.length > 0
+                            ? items.map(it => ({ description: it.description, unitPrice: it.unitPrice, quantity: it.quantity }))
+                            : [{ description: `Invoice ${invoiceNumber}`, unitPrice: total, quantity: 1 }],
+                          dueDate: dueDate || undefined,
+                          memo: `ERP Invoice ${invoiceNumber}`,
+                        },
+                      });
+                      const link = qbData?.invoiceLink || qbData?.invoice?.InvoiceLink;
+                      const qbId = qbData?.invoice?.Id || qbData?.invoiceId;
+                      const finalUrl = link || (qbId ? `https://app.qbo.intuit.com/app/invoice?txnId=${qbId}` : null);
+                      if (finalUrl) {
+                        setQbPayUrl(finalUrl);
+                        // Persist in metadata
+                        if (invoiceId) {
+                          const { data: inv2 } = await supabase.from("sales_invoices").select("metadata").eq("id", invoiceId).single();
+                          const meta = ((inv2 as any)?.metadata as Record<string, unknown>) || {};
+                          await supabase.from("sales_invoices").update({
+                            metadata: { ...meta, qb_invoice_id: qbId || meta.qb_invoice_id, qb_invoice_link: link || meta.qb_invoice_link },
+                          }).eq("id", invoiceId);
+                        }
+                        toast({ title: "QuickBooks link ready" });
+                      } else {
+                        toast({ title: "No link returned", variant: "destructive" });
+                      }
+                    } catch (e) {
+                      toast({ title: "QB sync failed", description: String(e), variant: "destructive" });
+                    }
+                  }}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Get QuickBooks Link
                 </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { navigator.clipboard.writeText(qbPayUrl); toast({ title: "Copied!", description: "QuickBooks link copied" }); }}>
-                  <Copy className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
