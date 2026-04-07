@@ -70,7 +70,10 @@ export function LeadFormModal({ open, onOpenChange, lead }: LeadFormModalProps) 
   });
 
   const { profiles } = useProfiles();
-  const activeProfiles = (profiles ?? []).filter(p => p.is_active);
+  const SALES_ASSIGNEE_EMAILS = ["neel@rebar.shop", "saurabh@rebar.shop"];
+  const activeProfiles = (profiles ?? []).filter(
+    p => p.is_active && p.email && SALES_ASSIGNEE_EMAILS.includes(p.email.toLowerCase())
+  );
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
