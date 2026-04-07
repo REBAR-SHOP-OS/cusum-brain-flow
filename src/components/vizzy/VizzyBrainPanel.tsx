@@ -197,7 +197,7 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
     sales: ["sales", "support", "estimating", "email", "legal", "eisenhower", "assistant", "copywriting", "growth"],
     accountant: ["accounting", "legal", "email", "eisenhower", "assistant", "growth"],
     social_media_manager: ["social", "eisenhower", "support", "legal"],
-    estimator: ["estimating", "sales", "email", "eisenhower", "assistant", "growth"],
+    estimator: ["sales", "support", "estimating", "eisenhower"],
   };
 
   // Build merged list: accessible agents + any additional agents from sessions
