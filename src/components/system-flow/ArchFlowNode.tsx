@@ -15,6 +15,8 @@ export type ArchFlowNodeData = {
   Icon: LucideIcon;
   detail: ArchNode["detail"];
   isCustom?: boolean;
+  dimmed?: boolean;
+  highlighted?: boolean;
   onDelete?: (id: string) => void;
   onLabelChange?: (id: string, label: string) => void;
 };
@@ -79,12 +81,17 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
       className={cn(
         "group relative rounded-xl text-center transition-all duration-200",
         selected && "ring-2 ring-white/40",
+        nodeData.dimmed && "pointer-events-none",
       )}
       style={{
         width: 130,
         minHeight: 72,
         border: `1.5px solid ${st.border}`,
-        boxShadow: selected ? `${st.glow}, 0 0 0 2px rgba(255,255,255,0.15)` : st.glow,
+        boxShadow: nodeData.highlighted
+          ? `${st.glow}, 0 0 24px ${st.solid}60, 0 0 0 2px ${st.solid}40`
+          : selected
+            ? `${st.glow}, 0 0 0 2px rgba(255,255,255,0.15)`
+            : st.glow,
         backdropFilter: "blur(16px) saturate(1.5)",
         background: `linear-gradient(180deg, rgba(15,23,42,0.6), rgba(8,12,30,0.8))`,
         padding: "10px 8px",
@@ -92,6 +99,8 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
+        opacity: nodeData.dimmed ? 0.15 : 1,
+        transition: "opacity 0.25s ease, box-shadow 0.25s ease",
       }}
     >
       {/* Top glow line */}

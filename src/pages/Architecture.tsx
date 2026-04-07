@@ -216,6 +216,9 @@ export default function Architecture() {
   const [newNodeLabel, setNewNodeLabel] = useState("");
   const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("modules");
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ArchitectureFlowNode, Edge> | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [lockedNode, setLockedNode] = useState<string | null>(null);
+  const [showAllEdges, setShowAllEdges] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
     buildInitialNodes(),
@@ -308,7 +311,26 @@ export default function Architecture() {
     setShowAddPanel(false);
   }, [newNodeLabel, newNodeLayer, setNodes]);
 
+  const activeNode = lockedNode || hoveredNode;
+
+  // Compute connected node IDs for the active node
+  const connectedNodeIds = useMemo(() => {
+    if (!activeNode) return null;
+    const ids = new Set<string>();
+    ids.add(activeNode);
+    edges.forEach((e) => {
+      if (e.source === activeNode) ids.add(e.target);
+      if (e.target === activeNode) ids.add(e.source);
+    });
+    return ids;
+  }, [activeNode, edges]);
+
   const onNodeClick = useCallback((_: unknown, node: ArchitectureFlowNode) => {
+    // Toggle lock
+    setLockedNode((prev) => (prev === node.id ? null : node.id));
+  }, []);
+
+  const onNodeDoubleClick = useCallback((_: unknown, node: ArchitectureFlowNode) => {
     setOpenNode({
       id: node.id,
       hint: node.data.hint,
@@ -317,6 +339,18 @@ export default function Architecture() {
       icon: node.data.Icon,
       detail: { ...node.data.detail, title: node.data.label },
     });
+  }, []);
+
+  const onNodeMouseEnter = useCallback((_: unknown, node: ArchitectureFlowNode) => {
+    setHoveredNode(node.id);
+  }, []);
+
+  const onNodeMouseLeave = useCallback(() => {
+    setHoveredNode(null);
+  }, []);
+
+  const onPaneClick = useCallback(() => {
+    setLockedNode(null);
   }, []);
 
   const filteredNodeIds = useMemo(() => {
@@ -333,21 +367,27 @@ export default function Architecture() {
       const nodeData = n.data;
       const layerHidden = !visibleLayers.has(nodeData.layer);
       const searchHidden = filteredNodeIds ? !filteredNodeIds.has(n.id) : false;
+      const dimmed = !!(activeNode && connectedNodeIds && !connectedNodeIds.has(n.id));
+      const highlighted = !!(activeNode && connectedNodeIds && connectedNodeIds.has(n.id) && n.id !== activeNode);
       return {
         ...n,
         hidden: layerHidden || searchHidden,
-        data: { ...nodeData, onDelete: handleDelete, onLabelChange: handleLabelChange },
+        data: { ...nodeData, onDelete: handleDelete, onLabelChange: handleLabelChange, dimmed, highlighted },
       };
     });
-  }, [nodes, visibleLayers, filteredNodeIds, handleDelete, handleLabelChange]);
+  }, [nodes, visibleLayers, filteredNodeIds, handleDelete, handleLabelChange, activeNode, connectedNodeIds]);
 
   const displayEdges = useMemo(() => {
     const hiddenIds = new Set(displayNodes.filter((n) => n.hidden).map((n) => n.id));
-    return edges.map((e) => ({
-      ...e,
-      hidden: hiddenIds.has(e.source) || hiddenIds.has(e.target),
-    }));
-  }, [edges, displayNodes]);
+    return edges.map((e) => {
+      const nodeHidden = hiddenIds.has(e.source) || hiddenIds.has(e.target);
+      const edgeVisible = showAllEdges || (activeNode && (e.source === activeNode || e.target === activeNode));
+      return {
+        ...e,
+        hidden: nodeHidden || !edgeVisible,
+      };
+    });
+  }, [edges, displayNodes, showAllEdges, activeNode]);
 
   const layerCounts = useMemo(() => {
     return nodes.reduce<Record<ArchLayer, number>>(
@@ -581,12 +621,21 @@ export default function Architecture() {
             </div>
           )}
 
-          <div className="mt-auto pt-3 border-t border-border/40">
+          <div className="mt-auto pt-3 border-t border-border/40 space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAllEdges}
+                onChange={(e) => setShowAllEdges(e.target.checked)}
+                className="h-3 w-3 rounded border-border accent-primary"
+              />
+              <span className="text-[10px] text-muted-foreground">Show all edges</span>
+            </label>
             <button
               onClick={showAllLayers}
               className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
             >
-              Show all
+              Show all layers
             </button>
           </div>
         </div>
@@ -600,6 +649,10 @@ export default function Architecture() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onNodeMouseEnter={onNodeMouseEnter}
+            onNodeMouseLeave={onNodeMouseLeave}
+            onPaneClick={onPaneClick}
             onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
             fitView
@@ -655,7 +708,7 @@ export default function Architecture() {
           {/* Bottom info bar */}
           <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-3">
             <div className="rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 text-[10px] text-zinc-400 backdrop-blur-sm">
-              Drag nodes · Draw edges · Delete with ⌫ · Double-click to rename
+              Hover to reveal edges · Click to lock · Double-click for details · ⌫ to delete
             </div>
             <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-950/60 px-3 py-1.5 backdrop-blur-sm">
               <span
