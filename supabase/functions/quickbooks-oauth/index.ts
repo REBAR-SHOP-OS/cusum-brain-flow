@@ -2749,3 +2749,70 @@ async function handleListAttachments(supabase: ReturnType<typeof createClient>, 
   const data = await qbQuery(config, "Attachable", 1000, whereClause);
   return jsonRes(data);
 }
+
+// ─── Read Invoice (single, with InvoiceLink) ──────────────────────
+
+async function handleReadInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const invoiceId = body.invoiceId as string;
+  if (!invoiceId) throw new Error("invoiceId is required");
+
+  const data = await qbFetch(config, `invoice/${invoiceId}?include=invoiceLink`, {});
+  return jsonRes({ success: true, invoice: data?.Invoice || data });
+}
+
+// ─── Get Invoice as PDF ───────────────────────────────────────────
+
+async function handleGetInvoicePdf(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const invoiceId = body.invoiceId as string;
+  if (!invoiceId) throw new Error("invoiceId is required");
+
+  // QB API returns PDF binary when Accept: application/pdf
+  const separator = "?";
+  const versionedPath = `invoice/${invoiceId}/pdf${separator}minorversion=69`;
+  const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${versionedPath}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${config.access_token}`,
+      Accept: "application/pdf",
+    },
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`QB PDF error (${res.status}): ${errText.slice(0, 300)}`);
+  }
+
+  const pdfBuffer = await res.arrayBuffer();
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+  return jsonRes({ success: true, pdf: base64, contentType: "application/pdf" });
+}
+
+// ─── Update Estimate (sparse) ─────────────────────────────────────
+
+async function handleUpdateEstimate(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { estimateId, updates } = body as { estimateId: string; updates: Record<string, unknown> };
+  if (!estimateId) throw new Error("Estimate ID is required");
+
+  const current = await qbFetch(config, `estimate/${estimateId}`);
+  const estimate = current.Estimate;
+
+  const payload = {
+    ...estimate,
+    ...updates,
+    Id: estimateId,
+    SyncToken: estimate.SyncToken,
+    sparse: true,
+  };
+
+  const data = await qbFetch(config, "estimate", { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_estimate_updated", "Estimate", estimateId, {
+    docNumber: data.Estimate?.DocNumber, updatedFields: Object.keys(updates),
+  });
+
+  return jsonRes({ success: true, estimate: data.Estimate, docNumber: data.Estimate?.DocNumber });
+}
