@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Layers,
   MinusCircle,
+  StopCircle,
 } from "lucide-react";
 import {
   AlertDialog,
