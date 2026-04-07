@@ -1,29 +1,28 @@
 
 
-# Add View and Delete Actions to Invoice List
+# Restrict Zahra's Agent Access to 4 Specific Agents
+
+## Problem
+Zahra (`zahra@rebar.shop`) currently has the `social_media_manager` role mapping, which gives her access to 9 agents (social, copywriting, seo, webbuilder, email, eisenhower, assistant, growth). She should only have access to:
+- **Pixel** (Social Media) — `social`
+- **Eisenhower Matrix** (Priority Matrix) — `eisenhower`
+- **Haven** (Customer Care) — `support`
+- **Tally** (Legal & Compliance) — `legal`
 
 ## Changes
 
-### `src/pages/sales/SalesInvoices.tsx`
+### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
+Update the `roleAgentAccess` map — change `social_media_manager` from its current broad list to exactly these 4 agent keys:
 
-1. **Add an "Actions" column** to the table header
-2. **Add View and Delete buttons** per row:
-   - **View (Eye icon)**: Opens the `DraftInvoiceEditor` (same as clicking the row — just makes it explicit)
-   - **Delete (Trash2 icon)**: Deletes the invoice from `sales_invoices` with a confirmation dialog, then invalidates the query cache
-3. **Delete uses `stopPropagation`** so clicking the delete button doesn't also open the editor
-4. **Delete confirmation** via `window.confirm()` to prevent accidental data loss — consistent with the quotation card delete pattern
-5. **Import** `Eye, Trash2` from lucide-react and `useQueryClient` from tanstack
-
-### Row layout change
-```text
-| Number | Customer | Status | Amount | Issued | Due | Actions      |
-|        |          |        |        |        |     | [👁] [🗑]    |
+```typescript
+social_media_manager: ["social", "eisenhower", "support", "legal"],
 ```
 
-### Delete logic
-- Call `supabase.from("sales_invoices").delete().eq("id", inv.id)`
-- On success: `toast.success`, invalidate `["sales-invoices"]` query
-- On error: `toast.error`
+### 2. `src/lib/userAgentMap.ts`
+Update Zahra's quick actions to match her restricted agent set — replace current quick actions (which are all social-media focused) with actions covering all 4 agents she has access to.
 
-Single file change. No database changes.
+### 3. `src/components/chat/AgentSelector.tsx`
+No changes needed — the agent selector already shows all agents; access filtering happens in VizzyBrainPanel for the report view.
+
+Single-line change in VizzyBrainPanel + quick actions update in userAgentMap. No database changes.
 
