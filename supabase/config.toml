@@ -551,3 +551,6 @@ verify_jwt = false
 
 [functions.send-quote-email]
 verify_jwt = false
+
+[functions.ringcentral-register-webhook]
+verify_jwt = false

@@ -541,7 +541,14 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?:
           }, { onConflict: "source,source_id", ignoreDuplicates: false });
           if (!error) smsUpserted++;
         }
-      } catch (e) { console.error(`CRON: SMS sync failed for extension ${extId}:`, e); }
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        if (errMsg.includes("CMN-102") || errMsg.includes("is not found")) {
+          console.warn(`CRON: Skipping dead extension ${extId} for SMS (404)`);
+        } else {
+          console.error(`CRON: SMS sync failed for extension ${extId}:`, e);
+        }
+      }
     }
   }
 
@@ -570,7 +577,14 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?:
           }, { onConflict: "source,source_id", ignoreDuplicates: false });
           if (!error) voicemailsUpserted++;
         }
-      } catch (e) { console.error(`CRON: Voicemail sync failed for extension ${extId}:`, e); }
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        if (errMsg.includes("CMN-102") || errMsg.includes("is not found")) {
+          console.warn(`CRON: Skipping dead extension ${extId} for Voicemail (404)`);
+        } else {
+          console.error(`CRON: Voicemail sync failed for extension ${extId}:`, e);
+        }
+      }
     }
   }
 
@@ -599,7 +613,14 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?:
           }, { onConflict: "source,source_id", ignoreDuplicates: false });
           if (!error) faxesUpserted++;
         }
-      } catch (e) { console.error(`CRON: Fax sync failed for extension ${extId}:`, e); }
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        if (errMsg.includes("CMN-102") || errMsg.includes("is not found")) {
+          console.warn(`CRON: Skipping dead extension ${extId} for Fax (404)`);
+        } else {
+          console.error(`CRON: Fax sync failed for extension ${extId}:`, e);
+        }
+      }
     }
   }
 

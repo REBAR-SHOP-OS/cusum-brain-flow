@@ -238,6 +238,7 @@ RINGCENTRAL TELEPHONY:
 - Send faxes (rc_send_fax)
 - Check active/live calls in real-time (rc_get_active_calls)
 - View team presence/DND/availability status (rc_get_team_presence)
+- Register and manage RingCentral webhook subscriptions for real-time call/SMS monitoring (rc_register_webhook)
 
 EMAIL:
 - Send emails directly via send_email tool — NEVER say "I can't send emails"
