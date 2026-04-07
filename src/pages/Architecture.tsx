@@ -621,12 +621,21 @@ export default function Architecture() {
             </div>
           )}
 
-          <div className="mt-auto pt-3 border-t border-border/40">
+          <div className="mt-auto pt-3 border-t border-border/40 space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAllEdges}
+                onChange={(e) => setShowAllEdges(e.target.checked)}
+                className="h-3 w-3 rounded border-border accent-primary"
+              />
+              <span className="text-[10px] text-muted-foreground">Show all edges</span>
+            </label>
             <button
               onClick={showAllLayers}
               className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
             >
-              Show all
+              Show all layers
             </button>
           </div>
         </div>
@@ -640,6 +649,10 @@ export default function Architecture() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
+            onNodeMouseEnter={onNodeMouseEnter}
+            onNodeMouseLeave={onNodeMouseLeave}
+            onPaneClick={onPaneClick}
             onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
             fitView
