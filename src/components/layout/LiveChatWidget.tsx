@@ -1,5 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect } from "react";
+import { useAuth } from "@/lib/auth";
 import { Sparkles, X, Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, SpellCheck } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { parseQuickReplies } from "@/lib/parseQuickReplies";
 import { QuickReplies } from "@/components/chat/QuickReplies";
 
 export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function LiveChatWidget(_props, ref) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
 
   // Listen for external toggle requests
@@ -32,6 +34,9 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
+
+  // Block ai@rebar.shop from accessing any agents
+  if (user?.email === "ai@rebar.shop") return null;
 
   // Cancel stream when closing the panel
   const handleClose = () => {

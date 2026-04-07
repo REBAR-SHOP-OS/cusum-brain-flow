@@ -93,7 +93,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {(isInternal || isAppBuilderDashboard) && <ScreenshotFeedbackButton />}
 
             {/* Live Chat Widget — triggered by Vizzy button */}
-            <LiveChatWidget />
+            {user?.email !== "ai@rebar.shop" && <LiveChatWidget />}
 
             {/* Docked team chat boxes */}
             <DockChatBar />
