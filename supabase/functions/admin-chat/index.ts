@@ -29,6 +29,9 @@ const WRITE_TOOLS = new Set([
   "send_email",
   "create_task",
   "update_task_status",
+  "seo_run_audit",
+  "seo_run_strategy",
+  "teamhub_send_message",
 ]);
 
 const JARVIS_TOOLS = [
@@ -792,6 +795,106 @@ const JARVIS_TOOLS = [
           resolution_note: { type: "string", description: "Note about the resolution" },
         },
         required: ["task_id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // ─── SEO Tools ───
+  {
+    type: "function",
+    function: {
+      name: "seo_get_overview",
+      description: "Get SEO domain health: keyword count, average position, traffic trends, top pages, task summary. Use when CEO asks about SEO performance.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "seo_list_keywords",
+      description: "Query tracked SEO keywords with filters. Returns keyword, position, volume, CTR, impressions, trend, opportunity score.",
+      parameters: {
+        type: "object",
+        properties: {
+          min_position: { type: "number", description: "Minimum avg_position (e.g. 1)" },
+          max_position: { type: "number", description: "Maximum avg_position (e.g. 10 for page 1)" },
+          min_volume: { type: "number", description: "Minimum search volume" },
+          trend: { type: "string", enum: ["rising", "falling"], description: "Filter by trend direction" },
+          limit: { type: "number", description: "Max results (default 20, max 100)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "seo_list_tasks",
+      description: "Query SEO tasks by status, priority, or type. Returns actionable SEO recommendations.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: { type: "string", enum: ["open", "in_progress", "completed", "dismissed"], description: "Filter by status" },
+          priority: { type: "string", enum: ["low", "medium", "high", "critical"], description: "Filter by priority" },
+          task_type: { type: "string", enum: ["content", "technical", "internal_link", "local", "ai_visibility"], description: "Filter by type" },
+          limit: { type: "number", description: "Max results (default 30)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "seo_run_audit",
+      description: "Trigger an AI-powered SEO audit. Types: 'analyze' (full site analysis), 'local' (local SEO audit), 'ai-visibility' (AI platform visibility). Requires CEO approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          audit_type: { type: "string", enum: ["analyze", "local", "ai-visibility"], description: "Type of audit to run" },
+        },
+        required: ["audit_type"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "seo_run_strategy",
+      description: "Generate AI strategic SEO tasks based on current keyword and page data. Creates 5-10 high-impact tasks. Requires CEO approval.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  // ─── Team Hub Tools ───
+  {
+    type: "function",
+    function: {
+      name: "teamhub_send_message",
+      description: "Send a message to a Team Hub channel or group on behalf of the CEO. Requires CEO approval. Resolves channel by name.",
+      parameters: {
+        type: "object",
+        properties: {
+          channel_name: { type: "string", description: "Channel or group name (e.g. 'Official Channel', 'Official Group')" },
+          message: { type: "string", description: "Message content to send" },
+        },
+        required: ["channel_name", "message"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "teamhub_list_messages",
+      description: "Read recent messages from a Team Hub channel or group. Returns messages with sender names and timestamps.",
+      parameters: {
+        type: "object",
+        properties: {
+          channel_name: { type: "string", description: "Channel or group name" },
+          limit: { type: "number", description: "Max messages to return (default 20)" },
+        },
+        required: ["channel_name"],
         additionalProperties: false,
       },
     },
