@@ -592,6 +592,12 @@ Deno.serve((req) =>
         return handleVoidInvoice(supabase, userId, body);
       case "update-invoice":
         return handleUpdateInvoice(supabase, userId, body);
+      case "read-invoice":
+        return handleReadInvoice(supabase, userId, body);
+      case "get-invoice-pdf":
+        return handleGetInvoicePdf(supabase, userId, body);
+      case "update-estimate":
+        return handleUpdateEstimate(supabase, userId, body);
 
       // ── Payroll ────────────────────────────────────────────────
       case "list-employees":
@@ -943,16 +949,27 @@ async function handleSyncCustomers(supabase: ReturnType<typeof createClient>, us
   const BATCH_SIZE = 50;
   for (let i = 0; i < customers.length; i += BATCH_SIZE) {
     const batch = customers.slice(i, i + BATCH_SIZE);
-    const records = batch.map((customer: Record<string, unknown>) => ({
-      quickbooks_id: customer.Id as string,
-      name: (customer.DisplayName as string) || "Unknown",
-      company_name: (customer.CompanyName as string) || null,
-      company_id: companyId,
-      notes: (customer.Notes as string) || null,
-      credit_limit: (customer.CreditLimit as number) || null,
-      payment_terms: (customer.SalesTermRef as Record<string, unknown>)?.name as string || null,
-      status: customer.Active ? "active" : "inactive",
-    }));
+    const records = batch.map((customer: Record<string, unknown>) => {
+      const emailAddr = customer.PrimaryEmailAddr as { Address?: string } | undefined;
+      const phoneNum = customer.PrimaryPhone as { FreeFormNumber?: string } | undefined;
+      const billAddr = customer.BillAddr as Record<string, string> | undefined;
+      return {
+        quickbooks_id: customer.Id as string,
+        name: (customer.DisplayName as string) || "Unknown",
+        company_name: (customer.CompanyName as string) || null,
+        company_id: companyId,
+        email: emailAddr?.Address || null,
+        phone: phoneNum?.FreeFormNumber || null,
+        notes: (customer.Notes as string) || null,
+        credit_limit: (customer.CreditLimit as number) || null,
+        payment_terms: (customer.SalesTermRef as Record<string, unknown>)?.name as string || null,
+        status: customer.Active ? "active" : "inactive",
+        address: billAddr?.Line1 || null,
+        city: billAddr?.City || null,
+        province: billAddr?.CountrySubDivisionCode || null,
+        postal_code: billAddr?.PostalCode || null,
+      };
+    });
 
     const { error, count } = await supabase
       .from("customers")
@@ -1337,6 +1354,8 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
         ...(taxCodeIsNumeric && { TaxCodeRef: { value: effectiveTaxCode } }),
       },
     })),
+    GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
     ...(expirationDate && { ExpirationDate: expirationDate }),
     ...(memo && { CustomerMemo: { value: memo } }),
     ...(classRef && { ClassRef: { value: classRef } }),
@@ -1541,6 +1560,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     AllowOnlineACHPayment: true,
     // Canadian locale: tax-exclusive calculation
     GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
     ...(customerEmail && { BillEmail: { Address: customerEmail }, EmailStatus: "NeedToSend" }),
     ...(dueDate && { DueDate: dueDate }),
     ...(memo && { CustomerMemo: { value: memo } }),
@@ -2369,6 +2389,7 @@ async function handleCreateSalesReceipt(supabase: ReturnType<typeof createClient
       Description: item.description,
       SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount, ...(item.serviceId && { ItemRef: { value: item.serviceId } }) },
     })),
+    GlobalTaxCalculation: "TaxExcluded",
     ...(memo && { CustomerMemo: { value: memo } }),
     ...(depositToAccountId && { DepositToAccountRef: { value: depositToAccountId } }),
     ...(paymentMethodId && { PaymentMethodRef: { value: paymentMethodId } }),
@@ -2403,6 +2424,7 @@ async function handleCreateRefundReceipt(supabase: ReturnType<typeof createClien
       Description: item.description,
       SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount, ...(item.serviceId && { ItemRef: { value: item.serviceId } }) },
     })),
+    GlobalTaxCalculation: "TaxExcluded",
     ...(memo && { CustomerMemo: { value: memo } }),
     ...(depositToAccountId && { DepositToAccountRef: { value: depositToAccountId } }),
   };
@@ -2611,7 +2633,7 @@ async function handleCreateCustomer(supabase: ReturnType<typeof createClient>, u
   if (!displayName) throw new Error("Missing displayName for customer creation");
 
   // Check if customer already exists in QB by display name
-  const existingQuery = `SELECT * FROM Customer WHERE DisplayName = '${displayName.replace(/'/g, "\\'")}'`;
+  const existingQuery = `SELECT * FROM Customer WHERE DisplayName = '${displayName.replace(/'/g, "''")}'`;
   const existingData = await qbFetch(config, `query?query=${encodeURIComponent(existingQuery)}`) as Record<string, unknown>;
   const existingCustomers = ((existingData as any)?.QueryResponse?.Customer as any[]) || [];
 
@@ -2728,4 +2750,71 @@ async function handleListAttachments(supabase: ReturnType<typeof createClient>, 
   }
   const data = await qbQuery(config, "Attachable", 1000, whereClause);
   return jsonRes(data);
+}
+
+// ─── Read Invoice (single, with InvoiceLink) ──────────────────────
+
+async function handleReadInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const invoiceId = body.invoiceId as string;
+  if (!invoiceId) throw new Error("invoiceId is required");
+
+  const data = await qbFetch(config, `invoice/${invoiceId}?include=invoiceLink`, {});
+  return jsonRes({ success: true, invoice: data?.Invoice || data });
+}
+
+// ─── Get Invoice as PDF ───────────────────────────────────────────
+
+async function handleGetInvoicePdf(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const invoiceId = body.invoiceId as string;
+  if (!invoiceId) throw new Error("invoiceId is required");
+
+  // QB API returns PDF binary when Accept: application/pdf
+  const separator = "?";
+  const versionedPath = `invoice/${invoiceId}/pdf${separator}minorversion=69`;
+  const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${versionedPath}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${config.access_token}`,
+      Accept: "application/pdf",
+    },
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`QB PDF error (${res.status}): ${errText.slice(0, 300)}`);
+  }
+
+  const pdfBuffer = await res.arrayBuffer();
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+  return jsonRes({ success: true, pdf: base64, contentType: "application/pdf" });
+}
+
+// ─── Update Estimate (sparse) ─────────────────────────────────────
+
+async function handleUpdateEstimate(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { estimateId, updates } = body as { estimateId: string; updates: Record<string, unknown> };
+  if (!estimateId) throw new Error("Estimate ID is required");
+
+  const current = await qbFetch(config, `estimate/${estimateId}`);
+  const estimate = current.Estimate;
+
+  const payload = {
+    ...estimate,
+    ...updates,
+    Id: estimateId,
+    SyncToken: estimate.SyncToken,
+    sparse: true,
+  };
+
+  const data = await qbFetch(config, "estimate", { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_estimate_updated", "Estimate", estimateId, {
+    docNumber: data.Estimate?.DocNumber, updatedFields: Object.keys(updates),
+  });
+
+  return jsonRes({ success: true, estimate: data.Estimate, docNumber: data.Estimate?.DocNumber });
 }
