@@ -11,6 +11,7 @@ import { parseQuickReplies } from "@/lib/parseQuickReplies";
 import { QuickReplies } from "@/components/chat/QuickReplies";
 
 export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function LiveChatWidget(_props, ref) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
 
   // Listen for external toggle requests
