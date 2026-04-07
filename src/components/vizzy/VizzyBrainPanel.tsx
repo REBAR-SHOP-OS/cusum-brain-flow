@@ -47,7 +47,25 @@ const SIDEBAR_GROUPS: { key: string; label: string; categories: string[] }[] = [
   { key: "office_tools", label: "🛠️ Office Tools",     categories: ["office_tools"] },
 ];
 
-/** Live clock component that updates every second */
+/** Maps each SIDEBAR_GROUP key to the MenuKey required to see it */
+const GROUP_TO_MENU: Record<string, string> = {
+  dashboard: "Dashboard",
+  inbox: "Inbox",
+  team_hub: "Team Hub",
+  tasks: "Business Tasks",
+  monitor: "Live Monitor",
+  ceo: "CEO Portal",
+  support: "Support",
+  pipeline: "Pipeline",
+  lead_scoring: "Lead Scoring",
+  customers: "Customers",
+  accounting: "Accounting",
+  sales: "Sales",
+  production: "Shop Floor",
+  shop_floor: "Shop Floor",
+  timeclock: "Time Clock",
+  office_tools: "Office Tools",
+};
 function LiveClock({ timezone }: { timezone: string }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
