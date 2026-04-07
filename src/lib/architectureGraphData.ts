@@ -73,6 +73,10 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "video",      label: "Video",      hint: "Ad Director",    layer: "modules", accent: "orange", icon: Video,       detail: { title: "Video Ad Director", bullets: ["AI video creation", "Storyboard workflow", "Brand kit integration"] } },
   { id: "email",      label: "Email",      hint: "Campaigns",      layer: "modules", accent: "orange", icon: Mail,        detail: { title: "Email Campaigns", bullets: ["Template builder", "Audience segmentation", "Delivery tracking"] } },
   { id: "chat",       label: "Chat",       hint: "Messaging",      layer: "modules", accent: "orange", icon: MessageSquare, detail: { title: "Chat System", bullets: ["Thread-based messaging", "Real-time via Supabase Realtime", "File sharing"] } },
+  { id: "estimating", label: "Estimating", hint: "OCR + AI",       layer: "modules", accent: "orange", icon: Ruler,          detail: { title: "Estimating Engine", bullets: ["PDF extraction & OCR", "AI-powered estimates", "Barlist generation"] } },
+  { id: "quotes",     label: "Quotes",     hint: "Sales quotes",   layer: "modules", accent: "orange", icon: FileSpreadsheet, detail: { title: "Sales Quotes", bullets: ["Quote builder & templates", "Price calculation engine", "Email delivery"] } },
+  { id: "payroll",    label: "Payroll",    hint: "Wages",          layer: "modules", accent: "orange", icon: Banknote,       detail: { title: "Payroll", bullets: ["Pay period processing", "Deductions & benefits", "Export to accounting"] } },
+  { id: "inbox",      label: "Inbox",      hint: "Unified comms",  layer: "modules", accent: "orange", icon: Inbox,          detail: { title: "Inbox / Comms", bullets: ["Unified email + SMS", "AI triage & drafting", "Translation support"] } },
 
   // Layer 4: AI & Automation
   { id: "vizzy",       label: "Vizzy",       hint: "Voice AI",       layer: "ai", accent: "violet", icon: Mic,          detail: { title: "Vizzy — Voice Assistant", bullets: ["WebRTC Realtime", "Sliding window context", "ERP data digest"] } },
@@ -84,6 +88,8 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "approval-eng", label: "Approval",   hint: "Approvals",      layer: "ai", accent: "violet", icon: CheckCircle,  detail: { title: "Approval Engine", bullets: ["Multi-step approval flows", "Role-based approval chains", "Audit trail logging"] } },
   { id: "state-machine", label: "State Machine", hint: "Workflows",  layer: "ai", accent: "violet", icon: Workflow,     detail: { title: "State Machine", bullets: ["Draft → Review → Approved → Complete", "Failed → Retry → Dead Letter", "Configurable transitions"] } },
   { id: "rules-engine", label: "Rules Engine", hint: "Business rules", layer: "ai", accent: "violet", icon: Scale,      detail: { title: "Rules Engine", bullets: ["Conditional logic execution", "Threshold-based triggers", "Dynamic rule evaluation"] } },
+  { id: "knowledge-rag", label: "Knowledge", hint: "RAG store",      layer: "ai", accent: "violet", icon: Library,    detail: { title: "Knowledge / RAG", bullets: ["Document embeddings", "Semantic search", "Context retrieval for AI"] } },
+  { id: "notif-hub",     label: "Notifications", hint: "Alert routing", layer: "ai", accent: "violet", icon: BellRing, detail: { title: "Notification Hub", bullets: ["Multi-channel routing", "Escalation chains", "Digest & batching"] } },
 
   // Layer 5: Integrations (Edge Functions)
   { id: "fn-social",   label: "Social",     hint: "Publish",        layer: "backend", accent: "blue", icon: Share2,     detail: { title: "Social Publish", bullets: ["Meta Graph API", "Multi-platform scheduling", "Content queue"] } },
@@ -95,6 +101,9 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "fn-seo",      label: "SEO Engine", hint: "Audit",          layer: "backend", accent: "blue", icon: FileSearch, detail: { title: "SEO Backend", bullets: ["PageSpeed analysis", "Core Web Vitals", "Keyword tracking"] } },
   { id: "fn-ai",       label: "AI Gateway", hint: "LLM proxy",      layer: "backend", accent: "blue", icon: Zap,        detail: { title: "AI Gateway", bullets: ["Multi-model routing", "Usage logging", "Rate limiting"] } },
   { id: "fn-push",     label: "Push",       hint: "Notifications",  layer: "backend", accent: "blue", icon: Bell,       detail: { title: "Push Notifications", bullets: ["DB trigger pipeline", "Multi-channel delivery", "Escalation rules"] } },
+  { id: "cameras",     label: "Cameras",    hint: "Security",       layer: "backend", accent: "blue", icon: Camera,     detail: { title: "Camera / Security", bullets: ["RTSP camera feeds", "Face recognition", "Event detection & alerts"] } },
+  { id: "fn-website",  label: "Website",    hint: "Agent + chat",   layer: "backend", accent: "blue", icon: Globe2,     detail: { title: "Website Agent", bullets: ["Website chat widget", "AI-powered responses", "Lead capture"] } },
+  { id: "fn-mcp",      label: "MCP",        hint: "Agent protocol", layer: "backend", accent: "blue", icon: Plug,       detail: { title: "MCP Server", bullets: ["Model Context Protocol", "Tool registry", "Agent interop bridge"] } },
 
   // Layer 6: External Services
   { id: "ext-meta",    label: "Meta",       hint: "FB & IG",        layer: "external", accent: "rose", icon: Instagram,   detail: { title: "Meta Platform", bullets: ["Facebook Graph API", "Instagram Business API", "Ad campaigns"] } },
@@ -104,6 +113,7 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "ext-odoo",    label: "Odoo",       hint: "ERP",            layer: "external", accent: "rose", icon: Boxes,       detail: { title: "Odoo ERP", bullets: ["XML-RPC API", "Inventory", "Product catalog"] } },
   { id: "ext-qb",      label: "QuickBooks", hint: "Intuit",         layer: "external", accent: "rose", icon: Receipt,     detail: { title: "QuickBooks Online", bullets: ["REST API v3", "Invoice sync", "OAuth2"] } },
   { id: "ext-openai",  label: "OpenAI",     hint: "GPT & Realtime", layer: "external", accent: "rose", icon: Sparkles,    detail: { title: "OpenAI", bullets: ["GPT-4o", "Realtime API", "Embeddings"] } },
+  { id: "ext-eleven",  label: "ElevenLabs", hint: "Voice + TTS",    layer: "external", accent: "rose", icon: AudioLines,  detail: { title: "ElevenLabs", bullets: ["Text-to-speech", "Voice cloning", "Music generation"] } },
 
   // Layer 7: Data + Platform
   { id: "primary-db",    label: "Primary DB",    hint: "PostgreSQL",   layer: "platform", accent: "emerald", icon: Database,      detail: { title: "Primary Database", bullets: ["Supabase PostgreSQL", "RLS policies", "Source of truth"] } },
