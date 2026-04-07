@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText } from "lucide-react";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
@@ -983,8 +983,8 @@ export function VizzyBrainPanel({ onClose }: Props) {
               {selectedProfile.user_id && selectedProfile.email !== "ai@rebar.shop" && (
                 <div className="rounded-xl border border-border bg-card overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
-                    <Bot className="w-4 h-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground flex-1">Agents</h3>
+                    <FileBarChart className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground flex-1">General Report</h3>
                     <UserFullReportButton
                       profile={selectedProfile}
                       timezone={timezone}
