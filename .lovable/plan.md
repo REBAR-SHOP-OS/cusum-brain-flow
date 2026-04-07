@@ -1,57 +1,75 @@
 
 
-# Vizzy Hallucinated Again — No PageSpeed API Key Needed
+# Fix: Inbound SMS Not Syncing — Root Cause Found
 
-## The Truth
+## Diagnosis Results
 
-The `website-speed-audit` edge function **does not call the Google PageSpeed Insights API at all**. It never has. There is no `PAGESPEED_API_KEY` anywhere in the codebase.
+| Check | Result |
+|-------|--------|
+| CRON job running? | Yes — every 15 min, last at 04:00 |
+| Integration status? | Connected, no errors shown |
+| Last SMS in DB? | March 20, 2026 — **18 days ago** |
+| SMS from +14165870788? | None (only outbound calls) |
+| Webhook active? | No — zero recent webhook logs |
+| SMS sync result? | **SILENTLY FAILING** |
 
-Here's what the function actually does:
-1. Fetches 3 pages (homepage, shop, blog) directly via `fetch()`
-2. Measures TTFB (Time to First Byte)
-3. Parses the HTML to count inline styles, scripts, images without lazy loading, render-blocking resources
-4. Returns hardcoded WordPress-specific recommendations
+## Root Cause
 
-**There is no Google API call. There is no API key. There is no "Unauthorized" error from Google.**
-
-## What Happened
-
-Vizzy fabricated the entire narrative:
-- Claimed `PAGESPEED_API_KEY` was missing → hallucination (the variable doesn't exist)
-- Claimed someone added the key and it resolved the boot error → the boot error was a duplicate `const baseUrl` (already fixed)
-- Now claims the key returns "Unauthorized" from Google → there is no Google API call in this function
-
-## What This Draft Should NOT Be Sent
-
-This email to the "App Builder team" asks them to debug a problem that doesn't exist. Sending it would waste everyone's time.
-
-## What To Do Instead
-
-**Option A — Test the function now.** The boot error was already fixed (duplicate variable removed). The function should work. I can curl it to verify.
-
-**Option B — If you want real Google PageSpeed data**, we'd need to add a `PAGESPEED_API_KEY` secret and write new code to call the Google PageSpeed Insights API (`https://www.googleapis.com/pagespeedonline/v5/runPagespeed`). The current function is a self-contained HTML analyzer — it doesn't integrate with Google at all.
-
-## Recommended: Add Anti-Hallucination Rule to Vizzy
-
-Add to `VIZZY_CORE_IDENTITY` in `vizzyIdentity.ts`:
-
+The account-level SMS endpoint returns **404**:
 ```
-═══ NEVER FABRICATE TOOL ERRORS ═══
-If a tool returns an error, report the EXACT error message.
-Do NOT invent error causes, missing secrets, or API issues.
-Do NOT claim a secret exists or was added unless you verified it with a tool call.
-Do NOT draft emails about problems you have not confirmed with real data.
-If you cannot determine the root cause, say "I don't know the cause" and ask for help.
+RC API error: 404 {"errorCode":"AGW-404","message":"Resource not found"}
+URL: https://platform.ringcentral.com/restapi/v1.0/account/~/message-store?messageType=SMS
 ```
 
-## File Changes
+RingCentral's **account-level** `/account/~/message-store` endpoint is not available for this account (likely requires admin permissions or a different API tier). The per-extension endpoint (`/account/~/extension/~/message-store`) works fine — that's how the 132 SMS records from before were synced.
 
-| File | Change |
-|------|--------|
-| `supabase/functions/_shared/vizzyIdentity.ts` | Add ~8-line anti-fabrication rule to `VIZZY_CORE_IDENTITY` |
+The CRON `syncAllUsers` function uses `fetchCompanyMessages` which calls the account-level endpoint. This fails silently because the error is caught on line 530: `catch (e) { console.warn(...) }`.
+
+**This has been silently broken since the account-level sync was introduced.** No SMS or voicemail has synced since March 20.
+
+## Fix
+
+**File:** `supabase/functions/ringcentral-sync/index.ts`
+
+Change the CRON SMS/voicemail/fax sync to use **per-extension endpoints** instead of account-level ones. The extension map is already built — iterate each extension and fetch their individual message stores.
+
+### Specific Changes
+
+1. **Replace `fetchCompanyMessages` calls in `syncAllUsers`** (lines 510-530, 534-557, 560-583):
+   - Instead of calling the account-level `/account/~/message-store`, iterate through each extension in `extMap` and call `/account/~/extension/{extensionId}/message-store`
+   - Use the existing `fetchMessages` function (line 227) which already targets the per-extension endpoint
+
+2. **Add a helper `fetchExtensionMessages`** that takes an extensionId and fetches from `/restapi/v1.0/account/~/extension/{extensionId}/message-store`:
+   ```typescript
+   async function fetchExtensionMessages(
+     accessToken: string, dateFrom: string, 
+     extensionId: string, messageType: string
+   ): Promise<any[]> {
+     const params = new URLSearchParams({ dateFrom, perPage: "100", messageType });
+     return fetchWithPagination(
+       `${RC_SERVER}/restapi/v1.0/account/~/extension/${extensionId}/message-store?${params}`,
+       accessToken
+     );
+   }
+   ```
+
+3. **Update SMS sync block** (~line 510-530): Loop through `extMap` entries, call `fetchExtensionMessages` for each extension with `messageType: "SMS"`
+
+4. **Update Voicemail sync block** (~line 534-557): Same approach with `messageType: "VoiceMail"`
+
+5. **Update Fax sync block** (~line 560-583): Same approach with `messageType: "Fax"`
+
+6. **Improve error logging**: Change `console.warn` to `console.error` for these failures so they're more visible in logs
+
+### Why This Works
+- The per-extension endpoint (`/account/~/extension/{extId}/message-store`) is what worked before and synced the 132 SMS records
+- The extension map is already built with all RC extensions mapped to user IDs
+- The call log sync (`/account/~/call-log`) works at account level — only message-store doesn't
 
 ## Impact
-- 1 file, ~8 lines added
-- Prevents Vizzy from inventing error causes and drafting emails about non-existent problems
-- No database, UI, or routing changes
+- 1 file changed (`ringcentral-sync/index.ts`)
+- ~40 lines modified (3 sync blocks + new helper function)
+- Fixes 18-day-old silent SMS sync failure
+- Inbound SMS from +14165870788 will appear after next sync
+- No database or UI changes
 
