@@ -23,7 +23,7 @@ export function PaymentLinksSection({ invoice, amountDue }: Props) {
 
   // QuickBooks payment link
   const invoiceLink = rawField(invoice, "InvoiceLink") as string | undefined;
-  const qbPayUrl = invoiceLink || `https://app.qbo.intuit.com/app/customerbalance?invoiceId=${invoice.Id}`;
+  const qbPayUrl = invoiceLink || null;
 
   const generateStripeLink = async () => {
     setLoading(true);
@@ -71,6 +71,7 @@ export function PaymentLinksSection({ invoice, amountDue }: Props) {
 
       <div className="flex flex-col sm:flex-row gap-2">
         {/* QuickBooks Pay */}
+        {qbPayUrl ? (
         <div className="flex-1 flex items-center gap-2">
           <Button
             variant="outline"
@@ -90,6 +91,11 @@ export function PaymentLinksSection({ invoice, amountDue }: Props) {
             <Copy className="w-3.5 h-3.5" />
           </Button>
         </div>
+        ) : (
+        <div className="flex-1 flex items-center">
+          <p className="text-xs text-muted-foreground">QB payment link not available — push invoice to QuickBooks first</p>
+        </div>
+        )}
 
         {/* Stripe Pay */}
         <div className="flex-1 flex items-center gap-2">
