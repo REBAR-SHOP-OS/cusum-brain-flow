@@ -48,11 +48,118 @@ async function getCompanyQBConfig(supabase: ReturnType<typeof createClient>, com
       .select("*")
       .eq("company_id", companyId)
       .maybeSingle();
-    return data || { default_tax_code: "TAX", default_sales_term: "Net 30" };
+    return data || { default_tax_code: null, default_sales_term: "Net 30" };
   } catch {
-    return { default_tax_code: "TAX", default_sales_term: "Net 30" };
+    return { default_tax_code: null, default_sales_term: "Net 30" };
   }
 }
+
+function isUsableSalesTaxCodeName(name?: string): boolean {
+  const normalized = (name || "").trim().toLowerCase();
+  if (!normalized) return true;
+  return ![
+    "adjustment",
+    "exempt",
+    "non",
+    "zero",
+    "free",
+    "out of scope",
+  ].some((token) => normalized.includes(token));
+}
+
+function extractSalesTaxCodeRef(entity: Record<string, unknown> | null | undefined): string | null {
+  const salesTaxCodeRef = entity?.SalesTaxCodeRef as Record<string, unknown> | undefined;
+  const value = salesTaxCodeRef?.value;
+  const name = typeof salesTaxCodeRef?.name === "string" ? salesTaxCodeRef.name : undefined;
+  if (!value || !isUsableSalesTaxCodeName(name)) return null;
+  return String(value);
+}
+
+async function resolveTaxCodeFromItems(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+): Promise<string | null> {
+  try {
+    const result = await qbQuery(config as QBConfigWithContext, "Item", 250) as { QueryResponse?: Record<string, unknown> };
+    const items = result.QueryResponse?.Item as Record<string, unknown>[] | undefined;
+    if (!items?.length) return null;
+
+    for (const item of items) {
+      const salesTaxCode = extractSalesTaxCodeRef(item);
+      if (salesTaxCode) {
+        console.log(`[QB-Tax] Resolved tax code from item ${String(item.Name || item.FullyQualifiedName || item.Id || "unknown")}: ${salesTaxCode}`);
+        return salesTaxCode;
+      }
+    }
+  } catch (err) {
+    console.warn("[QB-Tax] Failed to resolve tax code from items:", err);
+  }
+
+  return null;
+}
+
+async function fetchQBItem(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  itemId: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const result = await qbFetch(config, `item/${itemId}`) as Record<string, unknown>;
+    return (result.Item as Record<string, unknown> | undefined) || result;
+  } catch {
+    return null;
+  }
+}
+
+async function findQBItemByText(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  text?: string,
+): Promise<Record<string, unknown> | null> {
+  const normalizedText = text?.trim();
+  if (!normalizedText) return null;
+
+  const escaped = normalizedText.replace(/'/g, "''");
+  const queries = [
+    `select * from Item where Name = '${escaped}' MAXRESULTS 1`,
+    `select * from Item where Description = '${escaped}' MAXRESULTS 1`,
+  ];
+
+  for (const query of queries) {
+    try {
+      const result = await qbFetch(config, `query?query=${encodeURIComponent(query)}`) as Record<string, unknown>;
+      const items = (result.QueryResponse as Record<string, unknown> | undefined)?.Item as Record<string, unknown>[] | undefined;
+      if (items?.length) return items[0];
+    } catch {
+      // Continue to the next lookup path.
+    }
+  }
+
+  return null;
+}
+
+async function resolveInvoiceLineContext(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  item: { description?: string; serviceId?: string },
+): Promise<{ itemRef: { value: string; name?: string }; taxCodeRef: string | null }> {
+  let qbItem = item.serviceId ? await fetchQBItem(config, item.serviceId) : null;
+
+  if (!qbItem && item.description) {
+    qbItem = await findQBItemByText(config, item.description);
+  }
+
+  if (!qbItem) {
+    qbItem = await fetchQBItem(config, item.serviceId || "1");
+  }
+
+  const itemId = String((qbItem?.Id as string | number | undefined) || item.serviceId || "1");
+  const itemName = typeof qbItem?.Name === "string"
+    ? qbItem.Name
+    : (!item.serviceId && itemId === "1" ? "Services" : undefined);
+
+  return {
+    itemRef: itemName ? { value: itemId, name: itemName } : { value: itemId },
+    taxCodeRef: extractSalesTaxCodeRef(qbItem),
+  };
+}
+
 // ─── Term Resolution Helper ───────────────────────────────────────
 
 async function resolveTermId(
@@ -83,16 +190,18 @@ async function resolveTaxCodeId(
     const codes = (result?.QueryResponse as Record<string, unknown>)?.TaxCode as Record<string, unknown>[] | undefined;
     if (codes && codes.length > 0) return String(codes[0].Id);
 
-    // Fallback: find any active taxable tax code (handles Canadian QBO where "TAX" doesn't exist)
+    const itemTaxCode = await resolveTaxCodeFromItems(config);
+    if (itemTaxCode) return itemTaxCode;
+
+    // Fallback: find any active usable tax code (handles Canadian QBO where "TAX" doesn't exist)
     console.log(`[QB-Tax] Exact match for "${taxCodeName}" not found, querying all active tax codes`);
     const fallbackQuery = `select Id, Name from TaxCode where Active = true MAXRESULTS 20`;
     const fallbackResult = await qbFetch(config, `query?query=${encodeURIComponent(fallbackQuery)}`) as Record<string, unknown>;
     const allCodes = (fallbackResult?.QueryResponse as Record<string, unknown>)?.TaxCode as Record<string, unknown>[] | undefined;
     if (allCodes && allCodes.length > 0) {
-      // Pick the first tax code that is NOT the exempt/non-taxable one (usually Id "NON" or Name contains "Exempt")
       const taxable = allCodes.find(c => {
         const name = String(c.Name || "").toLowerCase();
-        return !name.includes("exempt") && !name.includes("non") && !name.includes("zero") && !name.includes("free");
+        return isUsableSalesTaxCodeName(name);
       });
       if (taxable) {
         console.log(`[QB-Tax] Resolved fallback tax code: ${taxable.Name} (ID: ${taxable.Id})`);
@@ -1201,12 +1310,15 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
   }
 
   const qbConfig = await getCompanyQBConfig(supabase, companyId);
-  let effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || "TAX";
+  let effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || undefined;
   if (effectiveTaxCode && isNaN(Number(effectiveTaxCode))) {
     const resolvedTaxId = await resolveTaxCodeId(config, effectiveTaxCode);
-    effectiveTaxCode = resolvedTaxId || effectiveTaxCode;
+    effectiveTaxCode = resolvedTaxId || undefined;
   }
-  const taxCodeIsNumeric = effectiveTaxCode && !isNaN(Number(effectiveTaxCode));
+  if (!effectiveTaxCode) {
+    effectiveTaxCode = await resolveTaxCodeId(config, "TAX") || undefined;
+  }
+  const taxCodeIsNumeric = Boolean(effectiveTaxCode && !isNaN(Number(effectiveTaxCode)));
 
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
@@ -1217,7 +1329,7 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
       SalesItemLineDetail: {
         Qty: item.quantity || 1,
         UnitPrice: item.amount,
-        TaxCodeRef: { value: effectiveTaxCode },
+        ...(taxCodeIsNumeric && { TaxCodeRef: { value: effectiveTaxCode } }),
       },
     })),
     ...(expirationDate && { ExpirationDate: expirationDate }),
@@ -1341,36 +1453,45 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   }
 
   const qbConfig = await getCompanyQBConfig(supabase, companyId);
-  let effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || "TAX";
+  let effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || undefined;
   if (effectiveTaxCode && isNaN(Number(effectiveTaxCode))) {
     const resolvedTaxId = await resolveTaxCodeId(config, effectiveTaxCode);
-    effectiveTaxCode = resolvedTaxId || effectiveTaxCode;
+    effectiveTaxCode = resolvedTaxId || undefined;
   }
-  const taxCodeIsNumeric = effectiveTaxCode && !isNaN(Number(effectiveTaxCode));
+  if (!effectiveTaxCode) {
+    effectiveTaxCode = await resolveTaxCodeId(config, "TAX") || undefined;
+  }
 
   // Normalize line items: accept either unitPrice or legacy amount
-  const lines: Record<string, unknown>[] = lineItems.map(item => {
+  const normalizedLines = await Promise.all(lineItems.map(async (item) => {
     const qty = item.quantity || 1;
-    // If unitPrice is provided, use it directly; otherwise treat amount as unit price
     const unitPrice = item.unitPrice ?? item.amount ?? 0;
+    const lineContext = await resolveInvoiceLineContext(config, item);
+    const lineTaxCode = lineContext.taxCodeRef || effectiveTaxCode || undefined;
+    const lineTaxCodeIsNumeric = Boolean(lineTaxCode && !isNaN(Number(lineTaxCode)));
     const lineDetail: Record<string, unknown> = {
       Qty: qty,
       UnitPrice: unitPrice,
-      TaxCodeRef: { value: effectiveTaxCode },
+      ItemRef: lineContext.itemRef,
+      ...(lineTaxCodeIsNumeric && { TaxCodeRef: { value: lineTaxCode } }),
     };
-    // ItemRef is required by QuickBooks; fall back to "1" (the default Services item) if not provided
-    if (item.serviceId) {
-      lineDetail.ItemRef = { value: item.serviceId };
-    } else {
-      lineDetail.ItemRef = { value: "1", name: "Services" };
-    }
+
     return {
-      DetailType: "SalesItemLineDetail",
-      Amount: unitPrice * qty,
-      Description: item.description,
-      SalesItemLineDetail: lineDetail,
+      resolvedTaxCode: lineTaxCodeIsNumeric ? String(lineTaxCode) : null,
+      payload: {
+        DetailType: "SalesItemLineDetail",
+        Amount: unitPrice * qty,
+        Description: item.description,
+        SalesItemLineDetail: lineDetail,
+      } as Record<string, unknown>,
     };
-  });
+  }));
+
+  const lines: Record<string, unknown>[] = normalizedLines.map((line) => line.payload);
+  const uniqueLineTaxCodes = Array.from(new Set(normalizedLines.map((line) => line.resolvedTaxCode).filter((value): value is string => Boolean(value))));
+  const transactionTaxCode = uniqueLineTaxCodes.length === 1
+    ? uniqueLineTaxCodes[0]
+    : (effectiveTaxCode && !isNaN(Number(effectiveTaxCode)) ? String(effectiveTaxCode) : null);
 
   // Add discount line if provided
   if (discountPercent && discountPercent > 0) {
@@ -1383,11 +1504,17 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
 
   // Add shipping line if provided
   if (shippingAmount && shippingAmount > 0) {
+    const shippingTaxCode = transactionTaxCode || uniqueLineTaxCodes[0] || null;
     lines.push({
       DetailType: "SalesItemLineDetail",
       Amount: shippingAmount,
       Description: "Shipping",
-      SalesItemLineDetail: { UnitPrice: shippingAmount, Qty: 1, TaxCodeRef: { value: effectiveTaxCode } },
+      SalesItemLineDetail: {
+        UnitPrice: shippingAmount,
+        Qty: 1,
+        ItemRef: { value: "1", name: "Services" },
+        ...(shippingTaxCode && { TaxCodeRef: { value: shippingTaxCode } }),
+      },
     });
   }
 
@@ -1404,7 +1531,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     ...(effectiveTerms && { SalesTermRef: { value: effectiveTerms } }),
     ...(classRef && { ClassRef: { value: classRef } }),
     ...(departmentRef && { DepartmentRef: { value: departmentRef } }),
-    ...(taxCodeIsNumeric && { TxnTaxDetail: { TxnTaxCodeRef: { value: effectiveTaxCode } } }),
+    ...(transactionTaxCode && { TxnTaxDetail: { TxnTaxCodeRef: { value: transactionTaxCode } } }),
   };
 
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
