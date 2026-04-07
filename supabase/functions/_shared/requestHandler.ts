@@ -171,12 +171,17 @@ export async function handleRequest(
       log,
     });
 
-    log.done("Success", { companyId });
-
     // If handler returned a Response, always pass it through directly
     if (result instanceof Response) {
+      if (result.status >= 400) {
+        log.error("Handler returned error response", { status: result.status });
+      } else {
+        log.done("Success", { companyId });
+      }
       return result;
     }
+
+    log.done("Success", { companyId });
 
     // Serialize result — legacy functions use wrapResult: false to preserve API shape
     const payload = options.wrapResult === false ? result : { ok: true, data: result };
