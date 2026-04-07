@@ -1,38 +1,33 @@
 
 
-# Fix "MACHINE LOCKED TO ANOTHER ITEM" False Positive
+# Add Icons to Big Cut Length Display
 
-## Problem
-The machine's `active_job_id` (`59c94793...`) refers to an item that is no longer in the station's filtered list. This happens because `useStationData` only fetches items with `phase = queued | cutting`, but the active job may have transitioned to `cut_done` or its plan status changed. The station view then shows a scary "MACHINE LOCKED TO ANOTHER ITEM" banner with a different item underneath — confusing operators.
+## Goal
+Add a scissors (record strike) icon on the left side and a ruler (length) icon on the right side of the large "1300 MM" cut length display, as annotated in the screenshot.
 
-## Root Cause
-`useStationData.ts` line 107: `.or("phase.eq.queued,phase.eq.cutting")` filters out the item the machine is actively locked to if its phase has changed.
+## Change
 
-## Fix
+### `src/components/shopfloor/CutterStationView.tsx` (lines 874-884)
+Convert the `CardContent` layout from pure `text-center` to a flex row with the number centered and icons on each side:
 
-### `src/hooks/useStationData.ts`
-Accept an optional `activeJobId` parameter. After the main cutter query, check if the active job item is in the results. If not, fetch it separately (without phase filter) and prepend it to the list. This ensures the locked item is always visible in the station view.
-
-```text
-Main query (existing) → returns queued/cutting items
-                    ↓
-Check: is activeJobId in results?
-  YES → done
-  NO  → fetch that single item by ID, prepend to list
+```tsx
+<CardContent className="py-8 px-6">
+  <p className="text-[10px] text-muted-foreground tracking-[0.3em] uppercase font-medium mb-2 text-center">
+    Cut Each Piece To
+  </p>
+  <div className="flex items-center justify-center gap-4">
+    <Scissors className="w-10 h-10 text-primary shrink-0" />
+    <p className="text-7xl sm:text-8xl lg:text-9xl font-black font-mono text-foreground leading-none tracking-tight">
+      {currentItem.cut_length_mm}
+    </p>
+    <Ruler className="w-10 h-10 text-primary shrink-0" />
+  </div>
+  <p className="text-sm text-primary tracking-[0.35em] uppercase mt-3 font-bold text-center">
+    MM
+  </p>
+</CardContent>
 ```
 
-### `src/components/shopfloor/CutterStationView.tsx`
-Pass `machine.active_job_id` to `useStationData` so the hook can ensure the locked item is always included.
-
-## File Changes
-
-| File | Change |
-|------|--------|
-| `src/hooks/useStationData.ts` | Add `activeJobId` param; fetch and prepend missing active item |
-| `src/components/shopfloor/CutterStationView.tsx` | Pass `machine.active_job_id` to `useStationData` call |
-
-## Safety
-- No database changes
-- The extra fetch only fires when the active job is missing from results (rare edge case)
-- Does not change filtering logic for the main queue — only ensures the locked item is always visible
+- `Scissors` and `Ruler` are already imported — no new dependencies
+- Single file, ~10 lines changed
 

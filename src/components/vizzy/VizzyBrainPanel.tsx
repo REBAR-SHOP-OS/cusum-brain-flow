@@ -1,10 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, Copy } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
-import ReactMarkdown from "react-markdown";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
@@ -338,7 +334,7 @@ function SectionReportButton({ label, getText }: { label: string; getText: () =>
   );
 }
 
-/** Comprehensive AI-generated user report button */
+/** Comprehensive user report button — aggregates all performance data */
 function UserFullReportButton({
   profile,
   timezone,
@@ -351,113 +347,84 @@ function UserFullReportButton({
   const { data: perfData } = useUserPerformance(profile.id, profile.user_id, date);
   const { data: agentSessions } = useUserAgentSessions(profile.user_id);
   const { data: activities } = useUserActivityLog(profile.id);
-  const [isLoading, setIsLoading] = useState(false);
-  const [reportText, setReportText] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
 
-  const buildRawContext = () => {
+  const generateReport = () => {
     const name = profile.full_name || "User";
     const dateLabel = date ? format(date, "MMM d, yyyy") : format(new Date(), "MMM d, yyyy");
+    const lines: string[] = [];
 
-    const perfSummary = perfData
-      ? `Status: ${perfData.clockedIn ? "Clocked In" : "Not Clocked In"}, Hours: ${perfData.hoursToday}h, Activities: ${perfData.activitiesToday}, AI Sessions: ${perfData.aiSessionsToday}, Emails Sent: ${perfData.emailsSent}`
-      : "No performance data.";
+    lines.push(`📊 Full Performance Report — ${name}`);
+    lines.push(`📅 Date: ${dateLabel}`);
+    lines.push(`📧 Email: ${profile.email || "N/A"}`);
+    lines.push("");
 
-    const agentDetails = (agentSessions || []).map((a) => {
-      const msgs = (a.recentMessages || []).map((m) => `[${m.role}]: ${m.content.slice(0, 200)}`).join("\n");
-      return `Agent: ${a.agentName} | Sessions: ${a.sessionCount} | Messages: ${a.totalMessages} | Last Used: ${a.lastUsed}\nRecent conversation:\n${msgs || "No messages"}`;
-    }).join("\n\n");
-
-    const activityLines = (activities || []).slice(0, 30).map((a) => {
-      const time = formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
-      return `[${time}] ${a.event_type} — ${a.entity_type}${a.description ? `: ${a.description}` : ""}`;
-    }).join("\n");
-
-    return `Employee: ${name}\nEmail: ${profile.email || "N/A"}\nDate: ${dateLabel}\n\n--- Performance ---\n${perfSummary}\n\n--- Agent Sessions ---\n${agentDetails || "No agent sessions."}\n\n--- Activity Log (Today) ---\n${activityLines || "No activities today."}`;
-  };
-
-  const handleClick = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setIsLoading(true);
-    setDialogOpen(true);
-    setReportText("");
-
-    const rawData = buildRawContext();
-    const name = profile.full_name || "User";
-
-    try {
-      const { reply } = await invokeEdgeFunction<{ reply: string }>("ai-agent", {
-        agent: "assistant",
-        message: `Write a comprehensive professional performance report for this employee based on the following raw data. Summarize what they accomplished with each AI agent, their work patterns, key metrics, and notable activities. Write in third person, professional tone. Use markdown formatting with headers. Be concise but thorough.\n\n${rawData}`,
-        history: [],
-        context: { reportMode: true },
-        preferredModel: "google/gemini-2.5-flash",
-      }, { timeoutMs: 60_000, retries: 1 });
-
-      setReportText(reply || "No report generated.");
-    } catch (err: any) {
-      // Fallback to raw structured report
-      const fallback = rawData.replace(/---/g, "──");
-      setReportText(`⚠️ AI generation failed: ${err.message}\n\nFallback Report:\n\n${fallback}`);
-    } finally {
-      setIsLoading(false);
+    // Performance overview
+    lines.push("── General Overview ──");
+    if (perfData) {
+      lines.push(`⏰ Status: ${perfData.clockedIn ? "Clocked In" : "Not Clocked In"}`);
+      lines.push(`🕐 Hours Worked: ${perfData.hoursToday}h`);
+      lines.push(`📋 Activities: ${perfData.activitiesToday}`);
+      lines.push(`🤖 AI Sessions: ${perfData.aiSessionsToday}`);
+      lines.push(`📧 Emails Sent: ${perfData.emailsSent}`);
+      if (perfData.clockEntries?.length) {
+        lines.push("");
+        lines.push("Clock Entries:");
+        for (const entry of perfData.clockEntries) {
+          const start = formatDateInTimezone(new Date(entry.clock_in), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+          const end = entry.clock_out
+            ? formatDateInTimezone(new Date(entry.clock_out), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+            : "Still working";
+          lines.push(`  • ${start} → ${end}`);
+        }
+      }
+    } else {
+      lines.push("No performance data available.");
     }
+
+    lines.push("");
+
+    // Agents
+    lines.push("── Agent Usage ──");
+    if (agentSessions?.length) {
+      for (const agent of agentSessions) {
+        const lastUsed = agent.lastUsed ? format(new Date(agent.lastUsed), "MMM d, yyyy") : "N/A";
+        lines.push(`  🤖 ${agent.agentName}: ${agent.sessionCount} sessions, ${agent.totalMessages} messages (last: ${lastUsed})`);
+      }
+    } else {
+      lines.push("  No agent sessions recorded.");
+    }
+
+    lines.push("");
+
+    // Activity log
+    lines.push("── Activity Log (Today) ──");
+    if (activities?.length) {
+      for (const a of activities.slice(0, 20)) {
+        const time = formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+        lines.push(`  • [${time}] ${a.event_type} — ${a.entity_type}${a.description ? `: ${a.description}` : ""}`);
+      }
+      if (activities.length > 20) {
+        lines.push(`  ... and ${activities.length - 20} more`);
+      }
+    } else {
+      lines.push("  No activities recorded today.");
+    }
+
+    return lines.join("\n");
   };
 
   return (
-    <>
-      <button
-        onClick={handleClick}
-        disabled={isLoading}
-        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-        title="Generate AI performance report"
-      >
-        {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-      </button>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              Performance Report — {profile.full_name || "User"}
-            </DialogTitle>
-            <DialogDescription>
-              AI-generated summary of all actions and performance
-            </DialogDescription>
-          </DialogHeader>
-
-          <ScrollArea className="flex-1 min-h-0 max-h-[60vh] pr-4">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12 gap-3 text-muted-foreground">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Generating report...</span>
-              </div>
-            ) : (
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <ReactMarkdown>{reportText}</ReactMarkdown>
-              </div>
-            )}
-          </ScrollArea>
-
-          {!isLoading && reportText && (
-            <div className="flex justify-end pt-2 border-t border-border">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(reportText);
-                  sonnerToast.success("Report copied to clipboard");
-                }}
-              >
-                <Copy className="w-3.5 h-3.5 mr-1.5" />
-                Copy Report
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-    </>
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(generateReport());
+        sonnerToast.success("Full user report copied to clipboard");
+      }}
+      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+      title="Generate full user report"
+    >
+      <FileText className="w-3.5 h-3.5" />
+    </button>
   );
 }
 

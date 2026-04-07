@@ -167,16 +167,14 @@ async function handleStartRun(ctx: ActionContext): Promise<{ response?: Response
       return { machineRunId: existingRun.id };
     }
 
-    // ── Auto-recover if active_job_id points to a completed/done/moved-on item ──
+    // ── Auto-recover if active_job_id points to a completed/cut_done item ──
     let activeJobDone = false;
     if (machine.active_job_id && existingRun?.status === "running") {
       const { data: activeItem } = await supabaseService
         .from("cut_plan_items").select("id, phase, completed_pieces, total_pieces")
         .eq("id", machine.active_job_id).maybeSingle();
-      // Recover if item no longer exists, or has moved past the cutting phase, or is fully done
-      const donePhases = ["cut_done", "bending", "bend_done", "done", "complete"];
-      if (!activeItem || donePhases.includes(activeItem.phase) || activeItem.completed_pieces >= activeItem.total_pieces) {
-        console.warn(`[startRun] Active job ${machine.active_job_id} is ${activeItem?.phase ?? 'MISSING'} (${activeItem?.completed_pieces ?? '?'}/${activeItem?.total_pieces ?? '?'}), auto-recovering`);
+      if (activeItem && (activeItem.phase === "cut_done" || activeItem.completed_pieces >= activeItem.total_pieces)) {
+        console.warn(`[startRun] Active job ${machine.active_job_id} is ${activeItem.phase} (${activeItem.completed_pieces}/${activeItem.total_pieces}), auto-recovering`);
         activeJobDone = true;
       }
     }
