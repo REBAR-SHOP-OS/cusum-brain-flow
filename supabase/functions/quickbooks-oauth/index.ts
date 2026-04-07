@@ -481,6 +481,8 @@ Deno.serve((req) =>
         return handleCreateBillPayment(supabase, userId, body);
       case "list-bill-payments":
         return handleListBillPayments(supabase, userId);
+      case "create-customer":
+        return handleCreateCustomer(supabase, userId, body);
       case "update-customer":
         return handleUpdateCustomer(supabase, userId, body);
       case "update-vendor":
@@ -2311,6 +2313,60 @@ async function handleListBillPayments(supabase: ReturnType<typeof createClient>,
 }
 
 // ─── Customer/Vendor Write-Back ───────────────────────────────────
+
+async function handleCreateCustomer(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+
+  const displayName = body.displayName as string;
+  const email = (body.email as string) || undefined;
+  const phone = (body.phone as string) || undefined;
+  const address = body.address as string | undefined;
+  const localCustomerId = body.localCustomerId as string | undefined;
+
+  if (!displayName) throw new Error("Missing displayName for customer creation");
+
+  // Check if customer already exists in QB by display name
+  const existingQuery = `SELECT * FROM Customer WHERE DisplayName = '${displayName.replace(/'/g, "\\'")}'`;
+  const existingData = await qbFetch(config, `query?query=${encodeURIComponent(existingQuery)}`) as Record<string, unknown>;
+  const existingCustomers = ((existingData as any)?.QueryResponse?.Customer as any[]) || [];
+
+  let qbCustomer: Record<string, unknown>;
+
+  if (existingCustomers.length > 0) {
+    qbCustomer = existingCustomers[0];
+  } else {
+    // Create new QB customer
+    const payload: Record<string, unknown> = {
+      DisplayName: displayName,
+      PrimaryEmailAddr: email ? { Address: email } : undefined,
+      PrimaryPhone: phone ? { FreeFormNumber: phone } : undefined,
+    };
+    // Parse address if provided as single string
+    if (address) {
+      payload.BillAddr = { Line1: address };
+    }
+    // Remove undefined
+    Object.keys(payload).forEach(k => { if (payload[k] === undefined) delete payload[k]; });
+
+    const result = await qbFetch(config, "customer", { method: "POST", body: JSON.stringify(payload) }) as Record<string, unknown>;
+    qbCustomer = (result as any).Customer || result;
+  }
+
+  const qbId = String(qbCustomer.Id);
+
+  // Link local customer record to QB
+  if (localCustomerId && qbId) {
+    await supabase
+      .from("customers")
+      .update({ quickbooks_id: qbId })
+      .eq("id", localCustomerId)
+      .eq("company_id", companyId);
+  }
+
+  await updateLastSync(supabase, userId);
+  return jsonRes({ success: true, qbCustomerId: qbId, displayName: qbCustomer.DisplayName });
+}
 
 async function handleUpdateCustomer(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
   const config = await getQBConfig(supabase, userId);

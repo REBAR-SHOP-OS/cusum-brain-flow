@@ -340,6 +340,20 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
     setNewCustName("");
     setNewCustAddress("");
     toast({ title: "Customer created" });
+
+    // Auto-push to QuickBooks (non-blocking)
+    supabase.functions.invoke("quickbooks-oauth", {
+      body: {
+        action: "create-customer",
+        displayName: newCust.name,
+        address: newCustAddress || undefined,
+        localCustomerId: newCust.id,
+      },
+    }).then(({ data: qbRes }) => {
+      if (qbRes?.qbCustomerId) console.log("Customer synced to QB:", qbRes.qbCustomerId);
+    }).catch((err) => {
+      console.warn("QB customer sync failed (non-blocking):", err);
+    });
   };
 
   const selectProduct = (idx: number, p: ProductOption) => {
