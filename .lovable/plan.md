@@ -1,63 +1,29 @@
 
 
-# "All" Tab: Daily Team Activity Report
+# Remove Ryle Lachini from System
 
-## Goal
-When "All" is selected (no specific user), show a comprehensive daily report of **all @rebar.shop users' actions** in collapsible accordion sections — one section per user — with report icons on each. Currently "All" only shows Vizzy memory entries by category; this adds a team activity summary above it.
+## Current State
+- Profile `d950f825-adf4-418f-a4c3-44562631e1c8` exists with email `deleted_d950f825@removed.invalid` (already partially deactivated)
+- No `user_id` linked (no auth account)
+- Only 2 old `time_clock_entries` from Feb 11 exist — no other data
+- Referenced in 4 code files as hardcoded text
 
-## Design
+## Plan
 
-```text
-┌─────────────────────────────────────┐
-│ All  [A] Ai  [B] Behnam  [K] ...   │
-├─────────────────────────────────────┤
-│ 👥 Team Daily Report                │
-│                                     │
-│ ▸ Behnam (12 activities) 📋        │
-│   Clock: 8:12 AM → Still working    │
-│   • page_visit — Visited Orders     │
-│   • lead_update — Updated lead ...  │
-│                                     │
-│ ▸ Kourosh (8 activities) 📋        │
-│   Clock: 9:00 AM → 5:30 PM         │
-│   • email_sent — Sent email to ...  │
-│                                     │
-│ ▸ Radin (3 activities) 📋          │
-│   Not clocked in today              │
-│   • page_visit — Visited Home       │
-├─────────────────────────────────────┤
-│ 📊 Dashboard (37)        ▸         │
-│ 📥 Inbox (3)             ▸         │
-│ ...existing memory sections...      │
-└─────────────────────────────────────┘
-```
+### 1. Database cleanup (via insert tool)
+- DELETE the 2 `time_clock_entries` for this profile
+- DELETE the `profiles` row
 
-## Changes
-
-### 1. New hook: `src/hooks/useTeamDailyActivity.ts`
-- Accepts array of profile IDs
-- Fetches `activity_events` for all @rebar.shop users today in a single query (using `.in("actor_id", profileIds)`)
-- Also fetches `time_clock_entries` for all users today
-- Returns grouped data: `Record<profileId, { activities: ActivityEvent[], clockEntries: ClockEntry[] }>`
-
-### 2. Update `VizzyBrainPanel.tsx`
-- Add a new `TeamDailyReport` component rendered when `!selectedProfile`
-- Shows one accordion item per @rebar.shop user (sorted by activity count descending)
-- Each accordion section contains:
-  - Clock-in/out summary (first/last entry)
-  - Activity list (same format as `UserActivitySection`)
-- Each section header has the `SectionReportButton` for clipboard export
-- Rendered **above** the existing memory category accordions
-
-### File Summary
+### 2. Code cleanup (4 files)
 
 | File | Change |
 |------|--------|
-| `src/hooks/useTeamDailyActivity.ts` | New hook — batch fetch activities + clock entries for all team members |
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Add `TeamDailyReport` component, render above memory sections when "All" selected |
+| `supabase/functions/_shared/vizzyIdentity.ts` | Remove "Ryle Lachini" from name fuzzy-match list |
+| `supabase/functions/_shared/vizzyFullContext.ts` | Remove Ryle's phone number mapping |
+| `src/hooks/useVizzyVoiceEngine.ts` | Remove "Ryle Lachini" from voice engine name list |
+| `src/pages/TimeClock.tsx` | Remove "Ryle Lachini" from the `activeProfiles` exclusion filter (no longer needed) |
 
-## Technical Notes
-- Single query with `.in()` filter instead of N+1 queries per user
-- Reuses existing `formatDateInTimezone` and `SectionReportButton`
-- No database changes needed
+### Technical Notes
+- No foreign key constraints will block deletion since `user_id` is null and only 2 clock entries exist
+- The TimeClock filter already excludes Ryle — after profile deletion the filter entry becomes dead code and should be removed for cleanliness
 
