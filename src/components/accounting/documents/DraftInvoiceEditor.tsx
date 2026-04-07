@@ -396,6 +396,54 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         if (itemsErr) throw itemsErr;
       }
 
+      // Auto-push to QuickBooks on every save
+      try {
+        // Check if already has a QB invoice ID
+        const { data: invData } = await supabase
+          .from("sales_invoices")
+          .select("metadata")
+          .eq("id", invoiceId)
+          .single();
+        const meta = (invData?.metadata as Record<string, unknown>) || {};
+        
+        if (!meta.qb_invoice_id) {
+          const qbItems = items.map(it => ({
+            description: it.description,
+            unitPrice: it.unitPrice,
+            quantity: it.quantity,
+          }));
+
+          const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
+            body: {
+              action: "create-invoice",
+              customerName: customerName || undefined,
+              items: qbItems.length > 0 ? qbItems : [{ description: `Invoice ${invoiceNumber}`, unitPrice: total, quantity: 1 }],
+              dueDate: dueDate || undefined,
+              memo: `ERP Invoice ${invoiceNumber}`,
+            },
+          });
+
+          // Store QB invoice ID and link in metadata
+          const qbInvoiceId = qbData?.invoice?.Id || qbData?.invoiceId;
+          const qbInvoiceLink = qbData?.invoiceLink || qbData?.invoice?.InvoiceLink;
+          if (qbInvoiceId || qbInvoiceLink) {
+            await supabase
+              .from("sales_invoices")
+              .update({
+                metadata: {
+                  ...meta,
+                  qb_invoice_id: qbInvoiceId || meta.qb_invoice_id,
+                  qb_invoice_link: qbInvoiceLink || meta.qb_invoice_link,
+                },
+              })
+              .eq("id", invoiceId);
+          }
+        }
+      } catch (qbErr) {
+        // QB not connected — log warning but don't block save
+        console.warn("QB auto-push failed (non-blocking):", qbErr);
+      }
+
       queryClient.invalidateQueries({ queryKey: ["sales_invoices"] });
       toast({ title: "Invoice saved" });
     } catch (err: any) {
@@ -593,11 +641,48 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         <p style="font-size:14px;color:#333;">Thank you for your business!</p>
       `;
 
+      // Generate invoice PDF and get download link
+      let pdfDownloadUrl = "";
+      try {
+        const { data: pdfResult } = await supabase.functions.invoke("generate-invoice-pdf", {
+          body: {
+            invoiceId,
+            invoiceNumber,
+            invoiceDate,
+            dueDate: dueDate || undefined,
+            customerName: customerName || undefined,
+            customerCompany: customerCompany || undefined,
+            customerAddress: customerAddress || undefined,
+            items: items.map(it => ({ description: it.description, quantity: it.quantity, unitPrice: it.unitPrice })),
+            subtotal,
+            taxRate,
+            taxAmount,
+            total,
+            notes: notes || undefined,
+            stripePayUrl: paymentUrl || undefined,
+            qbPayUrl: qbPayUrl || undefined,
+          },
+        });
+        if (pdfResult?.url) pdfDownloadUrl = pdfResult.url;
+      } catch (pdfErr) {
+        console.warn("PDF generation failed (non-blocking):", pdfErr);
+      }
+
+      // Insert PDF download button into email if available
+      const pdfBtnHtml = pdfDownloadUrl
+        ? `<div style="text-align:center;margin:20px 0;">
+            <a href="${pdfDownloadUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.5px;">📄 Download Invoice PDF</a>
+            <p style="text-align:center;font-size:11px;color:#888;margin-top:6px;">View or print your full invoice document</p>
+          </div>`
+        : "";
+
+      const fullEmailBody = emailBody + pdfBtnHtml;
+
       const { error } = await supabase.functions.invoke("gmail-send", {
         body: {
           to: email,
           subject: `Invoice #${invoiceNumber} - ${fmt(total)} - Rebar.Shop`,
-          body: emailBody,
+          body: fullEmailBody,
         },
       });
       if (error) throw error;
