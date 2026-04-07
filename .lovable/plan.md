@@ -1,64 +1,52 @@
 
 
-# Per-User Menu Access + General Report Filtering
+# Fix: Vizzy Still Hallucinating Clock-In Data — Names Missing from FACTS Block
 
-## Two Changes
+## Root Cause
 
-### 1. Update `src/lib/userAccessConfig.ts` — Menu Items per User
-
-Currently `sattar@rebar.shop` has `fullAccess: true`. The user now wants explicit items listed. Update:
-
-**sattar@rebar.shop**: Remove `fullAccess: true`, set explicit menus:
+The `[FACTS]` block in `vizzyFullContext.ts` (line 849) only outputs **numbers**:
 ```
-Dashboard, Inbox, Team Hub, Business Tasks, Live Monitor, CEO Portal, Support,
-Pipeline, Lead Scoring, Customers, Accounting, Sales, Shop Floor, Time Clock,
-Office Tools, Inventory, Diagnostics, Architecture, Settings, Admin Panel
+[FACTS] staff=9, clocked_in=5, clocked_out_today=3, absent=4, ...
 ```
-(This is effectively all items, but explicitly listed per the user's request.)
 
-**radin@rebar.shop**: Keep `fullAccess: true` (user said "all items").
+The actual **names** of who clocked in vs who is absent are listed much later in a TEAM PRESENCE section. The AI model (both the pre-digest Gemini and the OpenAI Realtime voice model) sees `staff=9` and when asked "how many people clocked in", it reports 9 — then invents a full list of all employees.
 
-All other users are already correct in `userAccessConfig.ts` — verified against the user's list.
+The fix: **Add explicit name lists to the FACTS block** so the ground-truth anchor includes WHO, not just counts.
 
-### 2. Filter General Report Sections by User's Menu Access
+## Changes
 
-**File: `src/components/vizzy/VizzyBrainPanel.tsx`**
+### File: `supabase/functions/_shared/vizzyFullContext.ts`
 
-Add a mapping from SIDEBAR_GROUPS keys to menu names, then filter `sectionsToShow` based on the current user's `getVisibleMenus()`.
+**Change the FACTS block** (line 849) to include names:
 
-**Mapping** (SIDEBAR_GROUP key → MenuKey):
-| Group Key | Menu Name |
-|-----------|-----------|
-| dashboard | Dashboard |
-| inbox | Inbox |
-| team_hub | Team Hub |
-| tasks | Business Tasks |
-| monitor | Live Monitor |
-| ceo | CEO Portal |
-| support | Support |
-| pipeline | Pipeline |
-| lead_scoring | Lead Scoring |
-| customers | Customers |
-| accounting | Accounting |
-| sales | Sales |
-| production | Shop Floor |
-| shop_floor | Shop Floor |
-| timeclock | Time Clock |
-| office_tools | Office Tools |
+```typescript
+const clockedInNames = onNow.map((t: any) => profileIdMap.get(t.profile_id) || "Unknown").join(", ");
+const clockedOutNames = doneToday.map((t: any) => profileIdMap.get(t.profile_id) || "Unknown").join(", ");
+const absentNames = absentProfiles.map((p: any) => p.full_name || "Unknown").join(", ");
 
-**Implementation**:
-1. Import `getVisibleMenus` from `@/lib/userAccessConfig`
-2. Get current user email from `useAuth()`
-3. Compute `visibleMenus = getVisibleMenus(email)`
-4. Create a `GROUP_TO_MENU` constant mapping each group key to its required menu name
-5. In the `sectionsToShow` computation (~line 907), filter groups to only include those whose mapped menu is in the user's visible menus
-6. Super admins (fullAccess) see all sections — no filtering needed since `getVisibleMenus` already returns all menus for them
+const factsBlock = `[FACTS] staff=${totalStaff}, clocked_in=${clockedInCount}, clocked_out_today=${clockedOutTodayCount}, absent=${absentCount}, ...
+clocked_in_names=[${clockedInNames || "none"}]
+clocked_out_names=[${clockedOutNames || "none"}]
+absent_names=[${absentNames || "none"}]
+[/FACTS]
+STAFF PRESENCE: ${clockedInCount} currently clocked in, ${clockedOutTodayCount} clocked out today, ${absentCount} absent, ${totalStaff} total registered staff`;
+```
 
-This ensures Zahra only sees "Business Tasks" and "Support" sections in General Report, Kourosh only sees "Time Clock", "Shop Floor", and "Team Hub", etc.
+This ensures the FACTS block — which both the pre-digest prompt and voice instructions reference as the authoritative anchor — contains the exact names. The model can no longer guess.
+
+### File: `src/hooks/useVizzyVoiceEngine.ts`
+
+**Strengthen the TEAM & PRESENCE QUERIES rule** (line 163-166) to explicitly reference the named lists:
+
+Add after line 166:
+```
+5. "How many clocked in?" = use clocked_in number AND clocked_in_names from [FACTS]. ONLY list names that appear in clocked_in_names. If a name is in absent_names, they did NOT clock in — do NOT include them.
+6. If total in clocked_in_names < staff count, the difference is ABSENT. Say exactly who is absent using absent_names.
+```
 
 ## Files Changed
 | File | Change |
 |------|--------|
-| `src/lib/userAccessConfig.ts` | Update sattar's config to explicit menu list (remove fullAccess) |
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Filter General Report sections by user's menu access |
+| `supabase/functions/_shared/vizzyFullContext.ts` | Add name lists to FACTS block |
+| `src/hooks/useVizzyVoiceEngine.ts` | Strengthen presence query rules to reference named FACTS |
 
