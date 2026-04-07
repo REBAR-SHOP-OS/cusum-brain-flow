@@ -332,8 +332,9 @@ async function handleMessageEvent(supabase: any, body: any) {
       metadata: { msgId, direction, fromAddr, toAddr },
     }, { onConflict: "dedupe_key", ignoreDuplicates: true });
 
-    // ── Trigger AI auto-reply for inbound SMS ──
-    if (direction === "inbound" && fromAddr !== "Unknown" && companyId) {
+    // ── Trigger AI auto-reply for inbound SMS (skip spam) ──
+    const { isSpamSms } = await import("../_shared/spamFilter.ts");
+    if (direction === "inbound" && fromAddr !== "Unknown" && companyId && !isSpamSms(msg.subject || "", fromAddr)) {
       try {
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
