@@ -54,9 +54,9 @@ export const agentConfigs: Record<string, AgentConfig> = {
     role: "Accounting (50yr CPA)",
     image: accountingHelper,
     agentType: "accounting",
-    greeting: "Morning! Let's review your numbers — I've checked your emails and QuickBooks already.",
+    greeting: "Morning! I've already checked QuickBooks, scanned your emails, and reviewed AR aging. Let's talk numbers.",
     placeholder: "Ask about invoices, collections, tasks, emails...",
-    capabilities: ["Check overdue invoices", "Monitor your emails", "Create tasks", "QuickBooks sync", "AR aging reports", "Draft collection emails"],
+    capabilities: ["Live QB reports (AR/AP aging, P&L, Balance Sheet, Cash Flow)", "Record payments against invoices", "Draft & send collection emails", "Schedule collection calls", "Monitor your emails", "Auto-resolve paid invoices", "Customer & vendor balance reports", "QuickBooks sync"],
   },
   legal: {
     name: "Tally",

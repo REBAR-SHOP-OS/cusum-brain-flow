@@ -904,13 +904,13 @@ const JARVIS_TOOLS = [
     type: "function",
     function: {
       name: "fetch_qb_report",
-      description: "Fetch a live financial report from QuickBooks: ProfitAndLoss, BalanceSheet, AgedReceivables, AgedPayables, CashFlow, TaxSummary, TrialBalance, GeneralLedger, or TransactionList.",
+      description: "Fetch a live financial report from QuickBooks: ProfitAndLoss, BalanceSheet, AgedReceivables, AgedPayables, CashFlow, TaxSummary, TrialBalance, GeneralLedger, TransactionList, CustomerBalance, CustomerBalanceDetail, VendorBalance, ARAgingSummary, APAgingSummary, or CustomerIncome.",
       parameters: {
         type: "object",
         properties: {
           report_type: {
             type: "string",
-            enum: ["ProfitAndLoss", "BalanceSheet", "AgedReceivables", "AgedPayables", "CashFlow", "TaxSummary", "TrialBalance", "GeneralLedger", "TransactionList"],
+            enum: ["ProfitAndLoss", "BalanceSheet", "AgedReceivables", "AgedPayables", "CashFlow", "TaxSummary", "TrialBalance", "GeneralLedger", "TransactionList", "CustomerBalance", "CustomerBalanceDetail", "VendorBalance", "ARAgingSummary", "APAgingSummary", "CustomerIncome"],
             description: "Type of report to fetch from QuickBooks",
           },
           start_date: { type: "string", description: "Start date YYYY-MM-DD (optional)" },
@@ -2372,6 +2372,12 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
           TrialBalance: "get-trial-balance",
           GeneralLedger: "get-general-ledger",
           TransactionList: "get-transaction-list",
+          CustomerBalance: "get-customer-balance",
+          CustomerBalanceDetail: "get-customer-balance-detail",
+          VendorBalance: "get-vendor-balance",
+          ARAgingSummary: "get-ar-aging-summary",
+          APAgingSummary: "get-ap-aging-summary",
+          CustomerIncome: "get-customer-income",
         };
 
         function resolvePeriodDates(period: string): { startDate: string; endDate: string } {
@@ -2411,7 +2417,7 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
         }
 
         let qbBody: Record<string, unknown> = { action, company_id: companyId };
-        if (["BalanceSheet", "AgedReceivables", "AgedPayables", "TrialBalance"].includes(args.report_type)) {
+        if (["BalanceSheet", "AgedReceivables", "AgedPayables", "TrialBalance", "CustomerBalance", "CustomerBalanceDetail", "VendorBalance", "ARAgingSummary", "APAgingSummary"].includes(args.report_type)) {
           qbBody.asOfDate = endDate ?? new Date().toISOString().split("T")[0];
         } else {
           if (startDate) qbBody.startDate = startDate;

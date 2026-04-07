@@ -601,6 +601,12 @@ export async function executeToolCall(
         TrialBalance:     "get-trial-balance",
         GeneralLedger:    "get-general-ledger",
         TransactionList:  "get-transaction-list",
+        CustomerBalance:  "get-customer-balance",
+        CustomerBalanceDetail: "get-customer-balance-detail",
+        VendorBalance:    "get-vendor-balance",
+        ARAgingSummary:   "get-ar-aging-summary",
+        APAgingSummary:   "get-ap-aging-summary",
+        CustomerIncome:   "get-customer-income",
       };
 
       // Period → concrete dates helper

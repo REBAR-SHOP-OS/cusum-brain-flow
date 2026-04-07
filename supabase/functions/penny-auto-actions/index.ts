@@ -285,8 +285,8 @@ async function generateAIDraft(
   const tone = type === "send_invoice" ? "firm but professional" : "friendly and polite";
 
   const result = await callAI({
-    provider: "gpt",
-    model: "gpt-4o-mini",
+    provider: "gemini",
+    model: "gemini-2.5-flash",
     messages: [
       { role: "system", content: `You are an AR collections assistant for a Canadian rebar manufacturing company. Write ${tone} collection emails. Be concise. Output ONLY valid JSON with "subject" and "body" keys. The body should be plain text (no HTML).` },
       { role: "user", content: `Write a collection email to ${customer} for:\n${invoiceDetails}\n\nTotal outstanding: $${totalAmount.toLocaleString()}\nOldest overdue: ${maxDays} days\n\nSign off as the Accounts Receivable team at Rebar.shop.` },
@@ -315,8 +315,8 @@ async function generateAICallScript(
   const invoiceDetails = invoices.map(i => `Invoice #${i.docNumber}: $${i.balance.toLocaleString()}, ${i.daysOverdue} days overdue`).join("\n");
 
   const result = await callAI({
-    provider: "gpt",
-    model: "gpt-4o-mini",
+    provider: "gemini",
+    model: "gemini-2.5-flash",
     messages: [
       { role: "system", content: "You are an AR collections assistant for a Canadian rebar company. Write a brief, professional phone call script for collecting overdue payments. Include opening, key talking points, and voicemail script. Plain text only." },
       { role: "user", content: `Write a call script for collecting from ${customer}:\n${invoiceDetails}\n\nTotal: $${totalAmount.toLocaleString()}\nOldest overdue: ${maxDays} days` },
