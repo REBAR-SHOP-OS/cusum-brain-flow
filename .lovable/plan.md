@@ -1,43 +1,38 @@
 
 
-# Generate AI-Written Narrative Report for User Actions
+# Fix "MACHINE LOCKED TO ANOTHER ITEM" False Positive
 
-## Goal
-Replace the current structured clipboard copy with an AI-generated narrative report that describes what the user actually did with each agent — a readable text summary of their interactions and system activity.
+## Problem
+The machine's `active_job_id` (`59c94793...`) refers to an item that is no longer in the station's filtered list. This happens because `useStationData` only fetches items with `phase = queued | cutting`, but the active job may have transitioned to `cut_done` or its plan status changed. The station view then shows a scary "MACHINE LOCKED TO ANOTHER ITEM" banner with a different item underneath — confusing operators.
 
-## Approach
-When clicked, the button will:
-1. Gather all existing data (performance stats, agent sessions with recent messages, activity log)
-2. Send this data to Lovable AI (via the existing `ai-agent` edge function or a lightweight dedicated edge function) to produce a human-readable narrative
-3. Display the generated report in a dialog/modal so the user can read and optionally copy it
+## Root Cause
+`useStationData.ts` line 107: `.or("phase.eq.queued,phase.eq.cutting")` filters out the item the machine is actively locked to if its phase has changed.
 
-## Changes
+## Fix
 
-### 1. Update `UserFullReportButton` in `VizzyBrainPanel.tsx`
-- Add loading state for AI generation
-- On click: aggregate all data (same as now), then call the AI to write a narrative summary
-- Show result in a `Dialog` with scrollable text + copy button
-- Use `invokeEdgeFunction("ai-agent", ...)` with a dedicated prompt that instructs the AI to write a comprehensive report from the raw data
-- The prompt will include: user name, performance stats, agent session details (names, session counts, message previews), and activity log entries
-- AI model: `google/gemini-2.5-flash` (fast, good for summarization)
+### `src/hooks/useStationData.ts`
+Accept an optional `activeJobId` parameter. After the main cutter query, check if the active job item is in the results. If not, fetch it separately (without phase filter) and prepend it to the list. This ensures the locked item is always visible in the station view.
 
-### 2. AI Prompt Design
-The system prompt will instruct the model to:
-- Write in professional tone
-- Summarize what the user accomplished with each agent
-- Highlight key metrics (hours, sessions, activities)
-- Note any patterns or notable items from the activity log
-- Keep it concise (1-2 paragraphs per section)
+```text
+Main query (existing) → returns queued/cutting items
+                    ↓
+Check: is activeJobId in results?
+  YES → done
+  NO  → fetch that single item by ID, prepend to list
+```
+
+### `src/components/shopfloor/CutterStationView.tsx`
+Pass `machine.active_job_id` to `useStationData` so the hook can ensure the locked item is always included.
 
 ## File Changes
 
 | File | Change |
 |------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Rewrite `UserFullReportButton` to call AI and show narrative in a Dialog |
+| `src/hooks/useStationData.ts` | Add `activeJobId` param; fetch and prepend missing active item |
+| `src/components/shopfloor/CutterStationView.tsx` | Pass `machine.active_job_id` to `useStationData` call |
 
-## Technical Notes
-- Reuses existing `invokeEdgeFunction` + `ai-agent` edge function — no new backend code
-- The `recentMessages` from `useUserAgentSessions` provides conversation context for the AI to summarize
-- Dialog uses existing shadcn `Dialog` components
-- Fallback: if AI call fails, show the raw structured report (current behavior)
+## Safety
+- No database changes
+- The extra fetch only fires when the active job is missing from results (rare edge case)
+- Does not change filtering logic for the main queue — only ensures the locked item is always visible
 
