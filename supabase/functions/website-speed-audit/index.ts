@@ -82,7 +82,6 @@ Deno.serve((req) =>
   handleRequest(req, async () => {
 
     const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "https://rebar.shop";
-    const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(/\/wp-json\/wp\/v2\/?$/, "") || "https://rebar.shop";
     const issues: SpeedIssue[] = [];
     const recommendations: Recommendation[] = [];
     const now = new Date();
