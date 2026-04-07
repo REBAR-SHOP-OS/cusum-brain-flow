@@ -1179,7 +1179,11 @@ async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, u
   }
 
   const qbConfig = await getCompanyQBConfig(supabase, companyId);
-  const effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || "TAX";
+  let effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || "TAX";
+  if (effectiveTaxCode && isNaN(Number(effectiveTaxCode))) {
+    const resolvedTaxId = await resolveTaxCodeId(config, effectiveTaxCode);
+    effectiveTaxCode = resolvedTaxId || effectiveTaxCode;
+  }
 
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
