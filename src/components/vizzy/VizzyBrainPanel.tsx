@@ -853,21 +853,37 @@ export function VizzyBrainPanel({ onClose }: Props) {
     }
 
     return (
-      <Accordion type="multiple" className="w-full space-y-1">
-        {sectionsToShow.map((group) => (
-          <AccordionItem key={group.key} value={group.key} className="border border-border rounded-lg px-3">
-            <AccordionTrigger className="text-sm font-medium hover:no-underline">
-              <span className="flex items-center gap-2">
-                {group.label}
-                <span className="text-xs text-muted-foreground font-normal">({group.items.length})</span>
-              </span>
-            </AccordionTrigger>
-            <AccordionContent>
-              <DateGroupedEntries items={group.items} />
-            </AccordionContent>
-          </AccordionItem>
-        ))}
-      </Accordion>
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+          <FileBarChart className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground flex-1">General Report</h3>
+          <SectionReportButton
+            label="General Report"
+            getText={() => {
+              const totalItems = sectionsToShow.reduce((sum, g) => sum + g.items.length, 0);
+              const lines = sectionsToShow.map(g => `• ${g.label}: ${g.items.length} events`).join('\n');
+              return `📋 GENERAL REPORT\nTotal Events: ${totalItems}\n\n${lines}`;
+            }}
+          />
+        </div>
+        <div className="p-3">
+          <Accordion type="multiple" className="w-full space-y-1">
+            {sectionsToShow.map((group) => (
+              <AccordionItem key={group.key} value={group.key} className="border border-border rounded-lg px-3">
+                <AccordionTrigger className="text-sm font-medium hover:no-underline">
+                  <span className="flex items-center gap-2">
+                    {group.label}
+                    <span className="text-xs text-muted-foreground font-normal">({group.items.length})</span>
+                  </span>
+                </AccordionTrigger>
+                <AccordionContent>
+                  <DateGroupedEntries items={group.items} />
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </div>
+      </div>
     );
   };
 
