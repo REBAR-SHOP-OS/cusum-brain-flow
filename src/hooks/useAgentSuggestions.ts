@@ -103,3 +103,124 @@ export function useAgentSuggestions(agentCode: string) {
 
   return { suggestions, isLoading, actOnSuggestion, dismissSuggestion, snoozeSuggestion };
 }
+
+const severityOrder: Record<string, number> = { critical: 0, warning: 1, info: 2 };
+
+export function useAllAgentSuggestions() {
+  const { user } = useAuth();
+  const { companyId } = useCompanyId();
+  const queryClient = useQueryClient();
+
+  const { data: suggestions = [], isLoading } = useQuery({
+    queryKey: ["all-agent-suggestions"],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      // Get all enabled agents
+      const { data: agents } = await supabase
+        .from("agents" as any)
+        .select("id, code, name")
+        .eq("enabled", true);
+
+      if (!agents || agents.length === 0) return [];
+
+      const agentMap = new Map<string, { code: string; name: string }>();
+      for (const a of agents as any[]) {
+        agentMap.set(a.id, { code: a.code, name: a.name });
+      }
+
+      const agentIds = Array.from(agentMap.keys());
+
+      const { data, error } = await supabase
+        .from("suggestions" as any)
+        .select("*")
+        .in("agent_id", agentIds)
+        .in("status", ["open", "new"])
+        .or("snoozed_until.is.null,snoozed_until.lt." + new Date().toISOString())
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      // Attach agent info and sort by severity
+      const enriched = ((data ?? []) as any[]).map((s) => ({
+        ...s,
+        agent_code: agentMap.get(s.agent_id)?.code ?? "unknown",
+        agent_name: agentMap.get(s.agent_id)?.name ?? "Agent",
+      })) as (AgentSuggestion & { agent_code: string; agent_name: string })[];
+
+      enriched.sort((a, b) => {
+        const sa = severityOrder[a.severity] ?? 2;
+        const sb = severityOrder[b.severity] ?? 2;
+        if (sa !== sb) return sa - sb;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      return enriched;
+    },
+    refetchInterval: 60_000,
+  });
+
+  const actOnSuggestion = useMutation({
+    mutationFn: async ({ id, actionType }: { id: string; actionType: string }) => {
+      await supabase.from("agent_action_log" as any).insert({
+        agent_id: null,
+        user_id: user!.id,
+        company_id: companyId,
+        action_type: actionType,
+        entity_type: "suggestion",
+        entity_id: id,
+      });
+      await supabase
+        .from("suggestions" as any)
+        .update({ status: "acted", resolved_at: new Date().toISOString() })
+        .eq("id", id);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["all-agent-suggestions"] }),
+  });
+
+  const dismissSuggestion = useMutation({
+    mutationFn: async (id: string) => {
+      await supabase
+        .from("suggestions" as any)
+        .update({ status: "dismissed", resolved_at: new Date().toISOString() })
+        .eq("id", id);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["all-agent-suggestions"] }),
+  });
+
+  const snoozeSuggestion = useMutation({
+    mutationFn: async (id: string) => {
+      const snoozedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      await supabase
+        .from("suggestions" as any)
+        .update({ snoozed_until: snoozedUntil })
+        .eq("id", id);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["all-agent-suggestions"] }),
+  });
+
+  const bulkDismiss = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map((id) =>
+        supabase.from("suggestions" as any)
+          .update({ status: "dismissed", resolved_at: new Date().toISOString() })
+          .eq("id", id)
+      ));
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["all-agent-suggestions"] }),
+  });
+
+  const bulkSnooze = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const snoozedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      await Promise.all(ids.map((id) =>
+        supabase.from("suggestions" as any)
+          .update({ snoozed_until: snoozedUntil })
+          .eq("id", id)
+      ));
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["all-agent-suggestions"] }),
+  });
+
+  return { suggestions, isLoading, actOnSuggestion, dismissSuggestion, snoozeSuggestion, bulkDismiss, bulkSnooze };
+}
