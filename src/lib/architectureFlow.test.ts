@@ -19,11 +19,11 @@ describe("applyArchitectureLayout", () => {
       { id: "auth-1", layer: "auth" as const },
     ]);
 
-    const baseAuth = base.find((item) => item.id === "auth-1");
-    const wrappedAuth = wrapped.find((item) => item.id === "auth-1");
+    const baseAuth = base.find((item) => item.id === "auth-1")!;
+    const wrappedAuth = wrapped.find((item) => item.id === "auth-1")!;
 
-    expect(baseAuth?.position?.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap);
-    expect(wrappedAuth?.position?.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap * 2);
+    expect(baseAuth.position!.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap);
+    expect(wrappedAuth.position!.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap * 2);
   });
 
   it("keeps a platform node centered regardless of auth-layer node count", () => {
@@ -38,9 +38,9 @@ describe("applyArchitectureLayout", () => {
       { id: "platform-1", layer: "platform" as const },
     ]);
 
-    const basePlatform = platformOnly.find((item) => item.id === "platform-1");
-    const mixedPlatform = mixed.find((item) => item.id === "platform-1");
+    const basePlatform = platformOnly.find((item) => item.id === "platform-1")!;
+    const mixedPlatform = mixed.find((item) => item.id === "platform-1")!;
 
-    expect(mixedPlatform?.position?.x).toBe(basePlatform?.position?.x);
+    expect(mixedPlatform.position!.x).toBe(basePlatform.position!.x);
   });
 });
