@@ -1,35 +1,31 @@
 
 
-# Add "Send Quote" Option from Lead Record on Sales Pipeline
+# Add "Review & Accept" Link to Quotation PDF/Print Templates
 
 ## Problem
-The lead detail drawer on `/sales/pipeline` shows linked quotation counts via `LeadSmartButtons`, but there's no way to send an existing quote to the customer directly from the lead record. Users must navigate away to the Quotations page to send.
+When a quotation is printed or exported as PDF (via the browser Print dialog), there is no clickable link for the customer to accept the quote online. The acceptance link (`/accept-quote/{id}`) only exists in the **email** HTML body, not in the on-screen/print quotation templates.
 
-## Approach
-Enhance `LeadSmartButtons` to show a "Send Quote" action when quotes exist for the lead. Clicking it opens a small dialog listing the lead's quotations with a send button for each, which triggers the existing `send-quote-email` edge function.
+## What Changes
 
-## Changes
+### 1. `src/components/accounting/documents/DraftQuotationEditor.tsx`
+Add a prominent "Accept Online" section between the totals and signature area (visible in print):
+- A styled box with the full acceptance URL: `https://cusum-brain-flow.lovable.app/accept-quote/{quoteId}`
+- Clickable on screen, and printed as visible text so it works on paper PDFs too
+- Text: "To accept this quotation online, visit:" followed by the URL
 
-### 1. `src/components/sales/LeadSmartButtons.tsx`
-- Expand the quotes query to also fetch `quotation_number`, `status`, `customer_name`, `amount`, and `quote_id` (the linked `quotes` table ID used by send-quote-email)
-- Make the Quotes card clickable — clicking opens a dropdown/popover listing each quote with its number, status, and amount
-- Each quote row has a **Send** button (Mail icon) that opens a small email dialog
-- The email dialog collects customer email (pre-filled from lead's `contact_email` passed as a new prop), then calls `invokeEdgeFunction("send-quote-email", { quote_id, customer_email, action: "send_quote" })`
-- After sending, update the quotation status to `sent_to_customer` and show a success toast
+### 2. `src/components/accounting/documents/QuotationTemplate.tsx`
+Add the same acceptance link section to the read-only quotation view template:
+- Requires adding `quoteId` to the `QuotationData` interface (or passing it as a separate prop)
+- Same styled box with the acceptance URL between totals and signature
 
-### 2. Props change
-- Add `contactEmail?: string` prop to `LeadSmartButtons` so the email dialog can pre-fill
-- Update `SalesLeadDrawer` (line 142) to pass `contactEmail={lead.contact_email}`
+### 3. `src/components/accounting/AccountingDocuments.tsx`
+Pass `quoteId` (the `q.id`) to `QuotationTemplate` when rendering the view overlay, so the template can build the acceptance URL.
 
 ## Technical Details
-- Reuses existing `send-quote-email` edge function — no backend changes
-- The `quote_id` field on `sales_quotations` links to the `quotes` table, which is what `send-quote-email` expects
-- Quotation status update uses the existing `sales_quotations` table update
-- UI: Popover with quote list + inline Dialog for email input, matching existing patterns in the codebase
 
-## Files
-| File | Change |
-|------|--------|
-| `src/components/sales/LeadSmartButtons.tsx` | Add send-quote popover + email dialog |
-| `src/components/sales/SalesLeadDrawer.tsx` | Pass `contactEmail` prop |
+**URL format**: `https://cusum-brain-flow.lovable.app/accept-quote/{quoteId}`
+
+**Print styling**: The link section uses `print:block` and renders the URL as plain text (not just a hyperlink) so it remains readable on physical paper.
+
+**Files changed**: 3 files, no backend changes.
 
