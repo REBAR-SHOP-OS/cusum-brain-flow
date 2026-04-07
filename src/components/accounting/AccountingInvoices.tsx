@@ -362,7 +362,14 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
                   return (
                     <TableRow key={inv.id} className="text-base cursor-pointer" onClick={() => setEditorInvoiceId(inv.id)}>
                       <TableCell className="font-mono font-semibold">{inv.invoice_number}</TableCell>
-                      <TableCell className="font-medium">{inv.customer_name || inv.customer_company || "—"}</TableCell>
+                      <TableCell className="font-medium">
+                        {inv.customer_name || inv.customer_company || "—"}
+                        {inv.quotation_id && (
+                          <Badge variant="outline" className="ml-2 text-[10px] bg-primary/5 text-primary border-primary/20">
+                            Linked Quote
+                          </Badge>
+                        )}
+                      </TableCell>
                       <TableCell>{inv.issued_date ? format(new Date(inv.issued_date), "MMM d, yyyy") : "—"}</TableCell>
                       <TableCell>{inv.due_date ? format(new Date(inv.due_date), "MMM d, yyyy") : "—"}</TableCell>
                       <TableCell className="text-right font-semibold">{inv.amount ? fmt(inv.amount) : "—"}</TableCell>
