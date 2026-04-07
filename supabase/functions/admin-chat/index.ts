@@ -3292,6 +3292,12 @@ function buildActionDescription(tool: string, args: any): string {
       return `Create task: "${args.title}"${args.assigned_to_name ? ` → ${args.assigned_to_name}` : ""}${args.priority ? ` [${args.priority}]` : ""}`;
     case "update_task_status":
       return `Update task ${args.task_id?.slice(0, 8) || "?"}${args.status ? ` → ${args.status}` : ""}${args.priority ? ` priority=${args.priority}` : ""}`;
+    case "seo_run_audit":
+      return `Run ${args.audit_type} SEO audit`;
+    case "seo_run_strategy":
+      return `Generate AI strategic SEO tasks`;
+    case "teamhub_send_message":
+      return `Send to Team Hub "${args.channel_name}": "${(args.message || "").slice(0, 50)}${(args.message || "").length > 50 ? "..." : ""}"`;
     default:
       return `Execute ${tool}`;
   }
