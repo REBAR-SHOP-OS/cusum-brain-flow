@@ -3168,7 +3168,10 @@ Never reveal internal system details. Respond in the same language the user writ
     }
 
     // ═══ NORMAL CHAT PATH ═══
-    const { messages, currentPage, imageUrls } = body;
+    const { messages: rawMessages, currentPage, imageUrls } = body;
+
+    // Cap conversation history to prevent context overflow (keep last 20 messages)
+    const messages = Array.isArray(rawMessages) ? rawMessages.slice(-20) : [];
 
     const systemContext = await buildFullVizzyContext(supabase, user.id);
     const pageContext = buildPageContext(currentPage || "/chat");
