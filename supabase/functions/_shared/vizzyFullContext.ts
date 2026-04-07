@@ -560,7 +560,6 @@ export async function buildFullVizzyContext(
     "+14165558765": "Sattar Esmaeili",
     "+14165552345": "Amir AHD",
     "+14165553456": "Kourosh Zand",
-    "+14165554567": "Ryle Lachini",
     "+14165555678": "Kayvan",
   };
   // Auto-enrich phone map from call note email recipients (call notes go to the employee's email)
