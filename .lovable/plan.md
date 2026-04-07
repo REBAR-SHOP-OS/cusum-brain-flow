@@ -1,64 +1,63 @@
 
-Goal: fix the accepted-quote flow so the created invoice always carries both payment links, and make that invoice visible in the invoices UI the user is checking.
 
-What is happening now
-- The public `accept_and_convert` flow already creates a `sales_invoices` row and tries to generate:
-  - Stripe payment link
-  - QuickBooks payment link
-  - invoice PDF
-- But the Sales quotations page is using `AccountingDocuments`, and its Invoice tab only renders `data.invoices` from `useQuickBooksData()` — meaning QuickBooks/mirror invoices only.
-- The newly created ERP invoice lives in `sales_invoices`, so if QuickBooks sync/mirror is delayed or missing, the invoice does exist but does not appear there.
-- Payment links/PDF are generated for the email, but they are not being persisted onto the invoice record metadata for later UI recovery.
+# Root Cause: Straight Items Skip Clearance — Go Directly to Complete
 
-Implementation plan
+## Findings
 
-1. Persist payment artifacts on the created invoice
-- Update `supabase/functions/send-quote-email/index.ts` in `accept_and_convert` so after Stripe/QB/PDF generation it updates the created `sales_invoices` row metadata with:
-  - `stripe_payment_link`
-  - `qb_invoice_link`
-  - `invoice_pdf_url`
-  - optionally `qb_invoice_id` if available later
-- Keep existing email behavior, but make the invoice record itself the source of truth too.
+The `auto_advance_item_phase` database trigger has this flow:
 
-2. Preserve both payment links explicitly
-- Keep the current dual-link generation flow.
-- Tighten the returned/persisted values so both QuickBooks and Stripe links are stored independently, not just used transiently in email HTML.
-- If one link fails, do not block invoice creation; store whichever links succeeded.
+```text
+Cutting done + bend_type = 'bend'     → cut_done → (bending) → clearance → complete
+Cutting done + bend_type = 'straight' → complete  (SKIPS clearance entirely)
+```
 
-3. Make converted invoices visible in the Sales/Accounting document tabs
-- Update `src/components/accounting/AccountingDocuments.tsx` to also read local ERP invoices from `sales_invoices` via `useSalesInvoices()`.
-- For `activeDoc === "invoice"`:
-  - merge/render local `sales_invoices` entries alongside `data.invoices`
-  - prioritize local invoices when QuickBooks data is empty
-  - remove the misleading “Sync from QuickBooks first” empty state when local invoices exist
-- Add explicit “View” behavior for local invoices by opening `DraftInvoiceEditor`, since they are ERP-native records, not QuickBooks-native invoice objects.
+**This means straight rebar items never appear in the Clearance station.** They jump from cutting directly to `complete`, bypassing QC/photo verification.
 
-4. Use stored artifacts when viewing/sending invoices later
-- Ensure the invoice editor/view path can reuse persisted metadata links/PDF if present.
-- This avoids relying only on live regeneration or mirror lookup after public quote acceptance.
+### Data confirms it:
+- 160 items in `clearance` phase — ALL are bend type
+- 127 items in `complete` — ALL straight (never went through clearance)
+- 11 items stuck in `cut_done` — bend items where `bend_completed_pieces = 0` (bending hasn't started)
 
-5. Keep the change minimal and safe
-- No database schema changes needed.
-- No change to quotation acceptance permissions or customer flow.
-- Only unify data visibility and persistence so:
-  - accepted quote → converted invoice appears in invoices list
-  - invoice retains both payment links
-  - PDF remains available after conversion
+### The user's "TDC CUSTOMS" projects likely have straight items that finished cutting and went straight to `complete`, so they never show up in the Clearance view.
 
-Expected result after fix
-- Customer accepts quote
-- Invoice is created
-- Stripe and QuickBooks payment links are both attempted
-- PDF is generated
-- All successful artifacts are saved onto the invoice record
-- The invoice becomes visible in the invoice tab even before QuickBooks mirror/sync catches up
-- Opening the invoice shows a consistent ERP invoice path instead of appearing “missing”
+## Fix
 
-Technical details
-- Files to update:
-  - `supabase/functions/send-quote-email/index.ts`
-  - `src/components/accounting/AccountingDocuments.tsx`
-- Likely supporting import:
-  - `useSalesInvoices`
-  - `DraftInvoiceEditor`
-- No backend schema migration required.
+### Database Migration — Update `auto_advance_item_phase` trigger
+
+Change the straight-bar path so it also goes through clearance:
+
+```text
+BEFORE:  straight + cutting done → complete
+AFTER:   straight + cutting done → clearance
+```
+
+Updated logic:
+```sql
+-- Cutting complete → advance
+IF NEW.completed_pieces >= NEW.total_pieces 
+   AND NEW.total_pieces > 0
+   AND NEW.phase IN ('queued', 'cutting') THEN
+  IF NEW.bend_type = 'bend' THEN
+    NEW.phase := 'cut_done';
+  ELSE
+    NEW.phase := 'clearance';  -- was 'complete', now routes through clearance
+  END IF;
+END IF;
+```
+
+### Also fix the 11 stuck `cut_done` items
+
+These 11 bend items have `completed_pieces >= total_pieces` but `bend_completed_pieces = 0`. They are cut-complete but bending hasn't started. This is correct behavior (they're waiting for bending), not a bug. No action needed for these.
+
+### Optional: Backfill existing straight items that already skipped clearance
+
+Run a one-time update to move straight items that are already `complete` but were never cleared back to `clearance` — **only if the user wants retroactive QC**. This is optional and should be confirmed with the user.
+
+## Summary
+
+| Change | File |
+|--------|------|
+| Update `auto_advance_item_phase` trigger | Database migration (SQL) |
+
+Single trigger change. No frontend changes needed — the Clearance UI already handles all items in the `clearance` phase regardless of bend type.
+
