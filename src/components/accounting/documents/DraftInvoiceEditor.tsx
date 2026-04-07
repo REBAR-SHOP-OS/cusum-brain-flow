@@ -1294,38 +1294,53 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
                   onClick={async () => {
                     try {
                       toast({ title: "Syncing to QuickBooks…" });
-                      const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
-                        body: {
-                          action: "create-invoice",
-                          customerName: customerName || undefined,
-                          items: items.length > 0
-                            ? items.map(it => ({ description: it.description, unitPrice: it.unitPrice, quantity: it.quantity }))
-                            : [{ description: `Invoice ${invoiceNumber}`, unitPrice: total, quantity: 1 }],
-                          dueDate: dueDate || undefined,
-                          memo: `ERP Invoice ${invoiceNumber}`,
-                        },
-                      });
-                      const link = qbData?.invoiceLink || qbData?.invoice?.InvoiceLink;
-                      const qbId = qbData?.invoice?.Id || qbData?.invoiceId;
-                      const finalUrl = link || null;
-                      if (finalUrl) {
-                        setQbPayUrl(finalUrl);
-                        // Persist in metadata
-                        if (invoiceId) {
-                          const { data: inv2 } = await supabase.from("sales_invoices").select("metadata").eq("id", invoiceId).single();
-                          const meta = ((inv2 as any)?.metadata as Record<string, unknown>) || {};
-                          await supabase.from("sales_invoices").update({
-                            metadata: { ...meta, qb_invoice_id: qbId || meta.qb_invoice_id, qb_invoice_link: link || meta.qb_invoice_link },
-                          }).eq("id", invoiceId);
-                        }
+                      const { data: invData } = await supabase
+                        .from("sales_invoices")
+                        .select("metadata")
+                        .eq("id", invoiceId)
+                        .single();
+                      const meta = ((invData as any)?.metadata as Record<string, unknown>) || {};
+                      const storedQbId = meta.qb_invoice_id as string | undefined;
+                      let link: string | null = null;
+                      let qbId: string | undefined = storedQbId;
+
+                      if (storedQbId) {
+                        // Read-only fetch — no duplicate invoice
+                        const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
+                          body: { action: "get-invoice-link", qbInvoiceId: storedQbId, customerEmail: customerEmail || undefined },
+                        });
+                        link = qbData?.invoiceLink || null;
+                      } else {
+                        // Create new QB invoice with email
+                        const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
+                          body: {
+                            action: "create-invoice",
+                            customerName: customerName || undefined,
+                            customerEmail: customerEmail || undefined,
+                            items: items.length > 0
+                              ? items.map(it => ({ description: it.description, unitPrice: it.unitPrice, quantity: it.quantity }))
+                              : [{ description: `Invoice ${invoiceNumber}`, unitPrice: total, quantity: 1 }],
+                            dueDate: dueDate || undefined,
+                            memo: `ERP Invoice ${invoiceNumber}`,
+                          },
+                        });
+                        link = qbData?.invoiceLink || qbData?.invoice?.InvoiceLink || null;
+                        qbId = qbData?.invoice?.Id || qbData?.invoiceId;
+                      }
+
+                      if (link) {
+                        setQbPayUrl(link);
+                        await supabase.from("sales_invoices").update({
+                          metadata: { ...meta, qb_invoice_id: qbId || meta.qb_invoice_id, qb_invoice_link: link } as any,
+                        }).eq("id", invoiceId);
                         toast({ title: "QuickBooks link ready" });
                       } else {
-                        toast({ title: "No link returned", variant: "destructive" });
+                        toast({ title: "No link returned", description: "Customer may need an email in QuickBooks, or online payments may not be enabled.", variant: "destructive" });
                       }
                     } catch (e) {
                       toast({ title: "QB sync failed", description: String(e), variant: "destructive" });
                     }
-                  }}
+                  }
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> Get QuickBooks Link
                 </Button>
