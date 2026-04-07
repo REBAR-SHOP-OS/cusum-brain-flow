@@ -27,6 +27,8 @@ const WRITE_TOOLS = new Set([
   "rc_send_sms",
   "rc_send_fax",
   "send_email",
+  "create_task",
+  "update_task_status",
 ]);
 
 const JARVIS_TOOLS = [
@@ -732,6 +734,64 @@ const JARVIS_TOOLS = [
           limit: { type: "number", description: "Number of results (1-10, default 5)" },
         },
         required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  // Task management tools
+  {
+    type: "function",
+    function: {
+      name: "list_tasks",
+      description: "Query the tasks table. Filter by assigned team member, status, priority, or due date. Returns task details including assignee name and customer name.",
+      parameters: {
+        type: "object",
+        properties: {
+          assigned_to_name: { type: "string", description: "Partial name match for the assigned team member (e.g. 'Neel', 'Radin')" },
+          status: { type: "string", enum: ["open", "in_progress", "completed", "cancelled"], description: "Filter by task status" },
+          priority: { type: "string", enum: ["low", "medium", "high", "urgent"], description: "Filter by priority" },
+          date: { type: "string", description: "Filter by due_date (YYYY-MM-DD)" },
+          limit: { type: "number", description: "Max results (default 30, max 100)" },
+        },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "create_task",
+      description: "Create a new task. Requires CEO approval. Resolve team member names and customer names automatically.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Task title" },
+          description: { type: "string", description: "Task description/details" },
+          priority: { type: "string", enum: ["low", "medium", "high", "urgent"], description: "Task priority (default: medium)" },
+          due_date: { type: "string", description: "Due date (YYYY-MM-DD)" },
+          assigned_to_name: { type: "string", description: "Name of team member to assign to (partial match)" },
+          customer_name: { type: "string", description: "Customer/company name to link (partial match)" },
+          agent_type: { type: "string", enum: ["sales", "accounting", "support", "collections", "estimation"], description: "Agent type (default: sales)" },
+        },
+        required: ["title"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_task_status",
+      description: "Update a task's status, priority, or resolution note. Requires CEO approval.",
+      parameters: {
+        type: "object",
+        properties: {
+          task_id: { type: "string", description: "The task UUID to update" },
+          status: { type: "string", enum: ["open", "in_progress", "completed", "cancelled"], description: "New status" },
+          priority: { type: "string", enum: ["low", "medium", "high", "urgent"], description: "New priority" },
+          resolution_note: { type: "string", description: "Note about the resolution" },
+        },
+        required: ["task_id"],
         additionalProperties: false,
       },
     },
@@ -1988,6 +2048,65 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
 
+    case "list_tasks": {
+      try {
+        const queryLimit = Math.min(args.limit || 30, 100);
+        let assignedProfileIds: string[] | null = null;
+
+        // Resolve assigned_to_name → profile IDs
+        if (args.assigned_to_name) {
+          const { data: profiles } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("company_id", companyId)
+            .ilike("full_name", `%${args.assigned_to_name}%`);
+          assignedProfileIds = (profiles || []).map((p: any) => p.id);
+          if (assignedProfileIds.length === 0) {
+            return JSON.stringify({ tool: "list_tasks", tasks: [], note: `No team member found matching "${args.assigned_to_name}"` });
+          }
+        }
+
+        let query = supabase
+          .from("tasks")
+          .select("id, title, description, status, priority, due_date, assigned_to, customer_id, source, agent_type, created_at, completed_at, resolution_note")
+          .eq("company_id", companyId)
+          .order("created_at", { ascending: false })
+          .limit(queryLimit);
+
+        if (assignedProfileIds) query = query.in("assigned_to", assignedProfileIds);
+        if (args.status) query = query.eq("status", args.status);
+        if (args.priority) query = query.eq("priority", args.priority);
+        if (args.date) query = query.eq("due_date", args.date);
+
+        const { data: tasks, error } = await query;
+        if (error) return JSON.stringify({ error: error.message });
+
+        // Resolve profile names and customer names in bulk
+        const profileIds = [...new Set((tasks || []).map((t: any) => t.assigned_to).filter(Boolean))];
+        const customerIds = [...new Set((tasks || []).map((t: any) => t.customer_id).filter(Boolean))];
+
+        const profileMap: Record<string, string> = {};
+        const customerMap: Record<string, string> = {};
+
+        if (profileIds.length) {
+          const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", profileIds);
+          for (const p of profiles || []) profileMap[p.id] = p.full_name || "Unknown";
+        }
+        if (customerIds.length) {
+          const { data: customers } = await supabase.from("customers").select("id, name, company_name").in("id", customerIds);
+          for (const c of customers || []) customerMap[c.id] = c.company_name || c.name || "Unknown";
+        }
+
+        const enriched = (tasks || []).map((t: any) => ({
+          ...t,
+          assigned_to_name: t.assigned_to ? (profileMap[t.assigned_to] || "Unknown") : null,
+          customer_name: t.customer_id ? (customerMap[t.customer_id] || "Unknown") : null,
+        }));
+
+        return JSON.stringify({ tool: "list_tasks", tasks: enriched, count: enriched.length });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
     default:
       return JSON.stringify({ error: `Unknown read tool: ${toolName}` });
   }
@@ -2266,6 +2385,79 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
       const data = await resp.json();
       if (!resp.ok) throw new Error(`Email send failed: ${data?.error || JSON.stringify(data)}`);
       return { success: true, message: `Email sent to ${args.to}`, messageId: data.messageId || data.id, threadId: data.threadId };
+    }
+
+    case "create_task": {
+      // Resolve assigned_to_name → profile ID
+      let assignedTo: string | null = null;
+      if (args.assigned_to_name) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("company_id", companyId)
+          .ilike("full_name", `%${args.assigned_to_name}%`)
+          .limit(1)
+          .maybeSingle();
+        assignedTo = profile?.id || null;
+      }
+
+      // Resolve customer_name → customer ID
+      let customerId: string | null = null;
+      if (args.customer_name) {
+        const { data: customer } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("company_id", companyId)
+          .or(`name.ilike.%${args.customer_name}%,company_name.ilike.%${args.customer_name}%`)
+          .limit(1)
+          .maybeSingle();
+        customerId = customer?.id || null;
+      }
+
+      // Get CEO's profile ID
+      const { data: ceoProfile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const { data: task, error } = await supabase.from("tasks").insert({
+        title: args.title,
+        description: args.description || null,
+        priority: args.priority || "medium",
+        due_date: args.due_date || null,
+        assigned_to: assignedTo,
+        customer_id: customerId,
+        agent_type: args.agent_type || "sales",
+        source: "vizzy",
+        status: "open",
+        company_id: companyId,
+        created_by_profile_id: ceoProfile?.id || null,
+      }).select("id, title").single();
+
+      if (error) throw new Error(error.message);
+      return { success: true, message: `Task created: "${task.title}" (${task.id.slice(0, 8)})`, task_id: task.id };
+    }
+
+    case "update_task_status": {
+      const updateData: Record<string, any> = {};
+      if (args.status) {
+        updateData.status = args.status;
+        if (args.status === "completed") updateData.completed_at = new Date().toISOString();
+      }
+      if (args.priority) updateData.priority = args.priority;
+      if (args.resolution_note) updateData.resolution_note = args.resolution_note;
+
+      if (Object.keys(updateData).length === 0) throw new Error("No fields to update");
+
+      const { error } = await supabase
+        .from("tasks")
+        .update(updateData)
+        .eq("id", args.task_id)
+        .eq("company_id", companyId);
+
+      if (error) throw new Error(error.message);
+      return { success: true, message: `Task ${args.task_id.slice(0, 8)} updated: ${Object.entries(updateData).map(([k, v]) => `${k}=${v}`).join(", ")}` };
     }
 
     default:
@@ -2618,6 +2810,7 @@ Never reveal internal system details. Respond in the same language the user writ
             get_employee_activity: "employee activity", get_employee_emails: "employee emails",
             rc_get_active_calls: "active calls", rc_get_team_presence: "team presence", rc_get_call_analytics: "call analytics",
             investigate_entity: "investigating entity", deep_business_scan: "scanning business", auto_diagnose_fix: "diagnosing issue",
+            list_tasks: "tasks",
           };
           const checking = toolNames.map((n: string) => progressLabels[n]).filter(Boolean);
           if (checking.length > 0) {
@@ -2832,6 +3025,10 @@ function buildActionDescription(tool: string, args: any): string {
       return `Send fax to ${args.to}${args.cover_page_text ? ` — "${args.cover_page_text.slice(0, 40)}"` : ""}`;
     case "send_email":
       return `Send email to ${args.to}: "${(args.subject || "").slice(0, 50)}${(args.subject || "").length > 50 ? "..." : ""}"`;
+    case "create_task":
+      return `Create task: "${args.title}"${args.assigned_to_name ? ` → ${args.assigned_to_name}` : ""}${args.priority ? ` [${args.priority}]` : ""}`;
+    case "update_task_status":
+      return `Update task ${args.task_id?.slice(0, 8) || "?"}${args.status ? ` → ${args.status}` : ""}${args.priority ? ` priority=${args.priority}` : ""}`;
     default:
       return `Execute ${tool}`;
   }
