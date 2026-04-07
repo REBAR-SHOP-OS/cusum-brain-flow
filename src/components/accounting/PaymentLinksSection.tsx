@@ -23,7 +23,7 @@ export function PaymentLinksSection({ invoice, amountDue }: Props) {
 
   // QuickBooks payment link
   const invoiceLink = rawField(invoice, "InvoiceLink") as string | undefined;
-  const qbPayUrl = invoiceLink || `https://app.qbo.intuit.com/app/customerbalance?invoiceId=${invoice.Id}`;
+  const qbPayUrl = invoiceLink || null;
 
   const generateStripeLink = async () => {
     setLoading(true);

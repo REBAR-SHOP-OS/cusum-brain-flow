@@ -296,8 +296,6 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
       const invMeta2 = (inv as any).metadata || {};
       if (invMeta2.qb_invoice_link) {
         setQbPayUrl(invMeta2.qb_invoice_link);
-      } else if (invMeta2.qb_invoice_id) {
-        setQbPayUrl(`https://app.qbo.intuit.com/app/invoice?txnId=${invMeta2.qb_invoice_id}`);
       }
       if (invMeta2.stripe_payment_link) setStripePayUrl(invMeta2.stripe_payment_link);
 
@@ -1255,7 +1253,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
                       });
                       const link = qbData?.invoiceLink || qbData?.invoice?.InvoiceLink;
                       const qbId = qbData?.invoice?.Id || qbData?.invoiceId;
-                      const finalUrl = link || (qbId ? `https://app.qbo.intuit.com/app/invoice?txnId=${qbId}` : null);
+                      const finalUrl = link || null;
                       if (finalUrl) {
                         setQbPayUrl(finalUrl);
                         // Persist in metadata
