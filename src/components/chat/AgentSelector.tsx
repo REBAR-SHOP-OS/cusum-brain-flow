@@ -3,12 +3,9 @@ import {
   TrendingUp, 
   Calculator, 
   HeadphonesIcon, 
-  Receipt, 
-  Ruler,
   Share2,
   Scale,
   LayoutGrid,
-  Crown
 } from "lucide-react";
 
 export type AgentType = "sales" | "accounting" | "support" | "social" | "eisenhower" | "legal";
