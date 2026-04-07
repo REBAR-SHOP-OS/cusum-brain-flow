@@ -598,6 +598,9 @@ export async function executeToolCall(
         AgedPayables:     "get-aged-payables",
         CashFlow:         "get-cash-flow",
         TaxSummary:       "get-tax-summary",
+        TrialBalance:     "get-trial-balance",
+        GeneralLedger:    "get-general-ledger",
+        TransactionList:  "get-transaction-list",
       };
 
       // Period → concrete dates helper
@@ -642,11 +645,11 @@ export async function executeToolCall(
 
       // Build camelCase body that each QB handler expects
       let qbBody: Record<string, unknown> = { action, company_id: companyId };
-      if (reportType === "BalanceSheet" || reportType === "AgedReceivables" || reportType === "AgedPayables") {
+      if (["BalanceSheet", "AgedReceivables", "AgedPayables", "TrialBalance"].includes(reportType)) {
         // These handlers read body.asOfDate (use endDate as the as-of date)
         qbBody.asOfDate = endDate ?? new Date().toISOString().split("T")[0];
       } else {
-        // P&L, CashFlow, TaxSummary → startDate / endDate
+        // P&L, CashFlow, TaxSummary, GeneralLedger, TransactionList → startDate / endDate
         if (startDate) qbBody.startDate = startDate;
         if (endDate)   qbBody.endDate   = endDate;
       }
