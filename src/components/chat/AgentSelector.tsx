@@ -11,7 +11,7 @@ import {
   Crown
 } from "lucide-react";
 
-export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "legal" | "commander";
+export type AgentType = "sales" | "accounting" | "support" | "social" | "eisenhower" | "legal";
 
 interface Agent {
   id: AgentType;
@@ -25,11 +25,8 @@ const agents: Agent[] = [
   { id: "accounting", name: "Penny", icon: Calculator, description: "Invoices & QB" },
   { id: "legal", name: "Tally", icon: Scale, description: "Legal & Compliance" },
   { id: "support", name: "Haven", icon: HeadphonesIcon, description: "Customer Care" },
-  { id: "collections", name: "Chase", icon: Receipt, description: "AR & Payments" },
-  { id: "estimation", name: "Cal", icon: Ruler, description: "Job Costing" },
   { id: "social", name: "Pixel", icon: Share2, description: "Social Media" },
   { id: "eisenhower", name: "Eisenhower Matrix", icon: LayoutGrid, description: "Priority Matrix" },
-  { id: "commander", name: "Commander", icon: Crown, description: "Sales Manager" },
 ];
 
 interface AgentSelectorProps {

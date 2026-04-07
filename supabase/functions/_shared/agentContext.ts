@@ -47,7 +47,7 @@ export async function fetchContext(
     // 3. Agent-Specific Data Loading
     
     // --- Sales / Support / Estimation Common Data ---
-    if (agent === "sales" || agent === "support" || agent === "estimation") {
+    if (agent === "sales" || agent === "support" || agent === "estimating") {
       const { data: quotes } = await supabase
         .from("quotes")
         .select("id, quote_number, customer_id, total_amount, status, margin_percent")
@@ -64,29 +64,9 @@ export async function fetchContext(
       context.recentOrders = orders;
     }
 
-    // --- Commander (Sales Manager) ---
-    if (agent === "commander") {
-      try {
-        const { data: allLeads } = await supabase
-          .from("leads")
-          .select("id, name, company, status, stage, expected_value, assigned_to, source, created_at, updated_at, notes")
-          .not("status", "eq", "lost")
-          .order("expected_value", { ascending: false })
-          .limit(200);
-        context.allActiveLeads = allLeads;
-
-        // Sales team profiles
-        const { data: salesProfiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, email, title, department")
-          .eq("department", "Sales")
-          .eq("is_active", true);
-        context.salesTeamProfiles = salesProfiles;
-      } catch (e) { console.error("Commander context error", e); }
-    }
 
     // --- Accounting (Penny) ---
-    if (agent === "accounting" || agent === "collections") {
+    if (agent === "accounting") {
       const { data: arData } = await supabase
         .from("accounting_mirror")
         .select("id, entity_type, balance, customer_id, last_synced_at, data")
@@ -242,7 +222,7 @@ export async function fetchContext(
     }
 
     // --- Estimation (Gauge) ---
-    if (agent === "estimation") {
+    if (agent === "estimating") {
       // Rebar Standards — cached 10 min (rarely changes)
       context.rebarStandards = await cachedQuery(`agent:${cid}:rebarStandards`, 10 * 60_000, async () => {
         const { data } = await supabase.from("rebar_standards").select("*");
@@ -305,15 +285,13 @@ ENFORCEMENT RULES:
         const agentStrategyMap: Record<string, string> = {
           accounting: "Penny",
           sales: "Blitz",
-          commander: "Vizzy",
-          estimation: "Gauge",
+          estimating: "Gauge",
           shopfloor: "Forge",
           delivery: "Atlas",
           legal: "Tally",
           empire: "Vizzy",
           data: "Prism",
           support: "Haven",
-          collections: "Penny",
           email: "Relay",
           social: "Pixel",
           talent: "Scouty",

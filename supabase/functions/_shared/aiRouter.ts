@@ -466,7 +466,7 @@ export function selectModel(agent: string, message: string, hasAttachments: bool
   }
 
   // Complex reasoning → Gemini 2.5 Pro (GPT quota exhausted; Pro model for depth & quality)
-  if (["accounting", "legal", "empire", "commander", "data", "rebuild"].includes(agent) || /analyze|strategy|plan/i.test(message)) {
+  if (["accounting", "legal", "empire", "data", "rebuild"].includes(agent) || /analyze|strategy|plan/i.test(message)) {
     return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 6000, temperature: 0.2, reason: "complex reasoning → gemini-pro" };
   }
 

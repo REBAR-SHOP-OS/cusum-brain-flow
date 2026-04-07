@@ -98,11 +98,6 @@ export const agentSuggestions: Record<string, AgentSuggestion[]> = {
     { title: "What are my construction lien rights in Ontario?", category: "Liens" },
     { title: "Check OHSA compliance requirements", category: "Compliance" },
   ],
-  commander: [
-    { title: "Show department KPIs this week", category: "KPIs" },
-    { title: "Which team needs attention right now?", category: "Teams" },
-    { title: "Escalate a critical issue to ARIA", category: "Escalation" },
-  ],
   rebuild: [
     { title: "Audit tenant safety for this feature", category: "Architecture" },
     { title: "Design a safe migration with RLS checks", category: "Database" },

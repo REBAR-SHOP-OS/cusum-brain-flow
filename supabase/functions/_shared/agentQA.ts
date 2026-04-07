@@ -6,7 +6,7 @@
 
 import { callAI, type AIMessage } from "./aiRouter.ts";
 
-const HIGH_RISK_AGENTS = ["accounting", "collections", "empire", "estimation", "commander"];
+const HIGH_RISK_AGENTS = ["accounting", "empire", "estimating"];
 
 const QA_SYSTEM_PROMPT = `You are a QA reviewer for an AI agent system. Your job is to validate agent outputs for:
 

@@ -774,7 +774,7 @@ const JARVIS_TOOLS = [
           due_date: { type: "string", description: "Due date (YYYY-MM-DD)" },
           assigned_to_name: { type: "string", description: "Name of team member to assign to (partial match)" },
           customer_name: { type: "string", description: "Customer/company name to link (partial match)" },
-          agent_type: { type: "string", enum: ["sales", "accounting", "support", "collections", "estimation"], description: "Agent type (default: sales)" },
+          agent_type: { type: "string", enum: ["sales", "accounting", "support", "estimating"], description: "Agent type (default: sales)" },
         },
         required: ["title"],
         additionalProperties: false,

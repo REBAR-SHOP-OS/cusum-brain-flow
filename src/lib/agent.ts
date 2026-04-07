@@ -1,6 +1,6 @@
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
-export type AgentType = "sales" | "accounting" | "support" | "collections" | "estimation" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal" | "shopfloor" | "delivery" | "email" | "data" | "commander" | "empire" | "purchasing" | "azin" | "rebuild";
+export type AgentType = "sales" | "accounting" | "support" | "social" | "eisenhower" | "bizdev" | "webbuilder" | "assistant" | "copywriting" | "talent" | "seo" | "growth" | "legal" | "shopfloor" | "delivery" | "email" | "data" | "empire" | "purchasing" | "azin" | "rebuild" | "estimating";
 
 export interface ChatMessage {
   role: "user" | "assistant";

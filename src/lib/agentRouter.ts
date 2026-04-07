@@ -211,15 +211,6 @@ const agentRoutes: AgentRoute[] = [
     ],
   },
   {
-    id: "commander",
-    route: "/agent/commander",
-    name: "Commander",
-    keywords: [
-      "commander", "department", "kpi", "team performance",
-      "escalate", "escalation", "oversight", "department head",
-    ],
-  },
-  {
     id: "purchasing",
     route: "/agent/purchasing",
     name: "Kala",

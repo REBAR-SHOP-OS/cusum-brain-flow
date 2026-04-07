@@ -34,7 +34,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
     }
   ];
 
-  if (!stripSendCapabilities && (agent === "accounting" || agent === "commander" || agent === "email" || agent === "sales")) {
+  if (!stripSendCapabilities && (agent === "accounting" || agent === "email" || agent === "sales")) {
     tools.push({
       type: "function" as const,
       function: {
@@ -175,7 +175,7 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
   }
 
   // Estimation Tools
-  if (agent === "estimation") {
+  if (agent === "estimating") {
     tools.push(
       {
         type: "function" as const,

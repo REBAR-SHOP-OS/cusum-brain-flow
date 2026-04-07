@@ -22,7 +22,6 @@ const AGENT_DESCRIPTIONS: Record<string, string> = {
   seo: "SEO, search engine optimization, keywords, rankings, backlinks, organic traffic, meta tags",
   growth: "Personal development, coaching, motivation, goals, productivity, habits, mindset",
   empire: "Multi-platform management, ERP diagnostics, Odoo, WordPress, cross-platform fixes",
-  commander: "Department oversight, team KPIs, escalations, department-level performance",
 };
 
 Deno.serve((req) =>
