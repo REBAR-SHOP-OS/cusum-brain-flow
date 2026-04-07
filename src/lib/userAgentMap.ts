@@ -69,9 +69,9 @@ const userAgentMappings: Record<string, UserAgentMapping> = {
     heroText: "How can **Pixel** assist you today?",
     quickActions: [
       { title: "Generate post", prompt: "Create a new social media post for today — pick the best platform and generate a caption and image.", icon: "Sparkles", category: "Content" },
-      { title: "Weekly content plan", prompt: "Plan this week's social media content — suggest topics, platforms, and posting times.", icon: "Calendar", category: "Planning" },
-      { title: "Post performance", prompt: "Show me how our recent social media posts have performed — engagement, reach, and top performers.", icon: "TrendingUp", category: "Analytics" },
-      { title: "Brand consistency", prompt: "Review our latest posts for brand consistency — logo usage, tone, and visual style.", icon: "Eye", category: "Brand" },
+      { title: "Prioritize my tasks", prompt: "Help me organize my tasks using the Eisenhower Matrix — what's urgent vs important right now?", icon: "LayoutGrid", category: "Eisenhower" },
+      { title: "Customer inquiry", prompt: "Show me recent customer inquiries and support tickets that need attention.", icon: "HeadphonesIcon", category: "Customer Care" },
+      { title: "Compliance check", prompt: "Review our recent content and campaigns for legal compliance — disclaimers, permissions, and regulations.", icon: "Shield", category: "Legal" },
     ],
   },
   "vicky@rebar.shop": {
