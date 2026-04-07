@@ -39,7 +39,7 @@ export interface BarSizeGroup {
 }
 
 
-export function useStationData(machineId: string | null, machineType?: string, projectId?: string | null) {
+export function useStationData(machineId: string | null, machineType?: string, projectId?: string | null, activeJobId?: string | null) {
   const { user } = useAuth();
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
