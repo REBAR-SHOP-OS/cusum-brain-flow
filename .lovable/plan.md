@@ -1,95 +1,122 @@
 
 
-# Add Record Payment + Enforce Dual Payment Links on All Invoices
+# Direct Bank Connection — Read-Only, No QB Conflict
 
-## Overview
+## Current State
 
-Two changes:
-1. **Record Payment (ReceivePayment)** — Add ability for office staff to manually record customer payments (check, wire, e-transfer, cash) against an invoice, syncing to QuickBooks as a `ReceivePayment` entity.
-2. **Enforce dual payment links** — Every outgoing invoice email MUST include both Stripe AND QuickBooks payment buttons. If either fails to generate, show a warning before sending (but allow override).
+Your system has **three layers** of bank data today:
 
----
+| Layer | Source | What It Does |
+|-------|--------|-------------|
+| `qb_bank_activity` | QB Sync Engine | Pulls ledger balance, uncleared counts, reconciled-through dates from QB |
+| `bank_feed_balances` | Manual entry | Staff types in the "real" bank balance for comparison |
+| `reconciliation_matches` | Auto-reconcile | Matches QB mirror transactions against Stripe charges |
 
-## 1. Record Payment Feature
+**QB owns the bank feed** — it downloads transactions from BMO, categorizes them, and reconciles. That's the system of record for accounting.
 
-### Backend: `supabase/functions/quickbooks-oauth/index.ts`
+## The Safe Architecture: Read-Only Bank Observer
 
-Add new action `"receive-payment"` in the router (next to `create-bill-payment`):
+The key principle: **QB stays the accounting authority. The ERP becomes a read-only observer of the bank.**
 
-**New handler `handleReceivePayment`:**
-- Accepts: `invoiceId` (QB ID), `amount`, `paymentMethod` (Check/CreditCard/Cash/ETransfer), `referenceNumber`, `memo`, `paymentDate`
-- Looks up the QB invoice to get `CustomerRef` and `Balance`
-- Creates a QB `Payment` entity:
-  ```
-  POST /v3/company/{realmId}/payment
-  {
-    CustomerRef: { value: customerId },
-    TotalAmt: amount,
-    Line: [{ Amount: amount, LinkedTxn: [{ TxnId: invoiceId, TxnType: "Invoice" }] }],
-    PaymentMethodRef: { value: methodId },
-    PaymentRefNum: referenceNumber,
-    TxnDate: paymentDate,
-    PrivateNote: memo
-  }
-  ```
-- After success: update `sales_invoices` status to `"paid"` if full payment, or keep `"sent"` if partial
-- Returns the created payment details
+```text
+BMO Bank ──→ Plaid (read-only) ──→ ERP (observe + alert)
+BMO Bank ──→ QB Bank Feed ──→ QB (reconcile + book)
+                                    │
+                                    └──→ ERP (sync via qb-sync-engine)
+```
 
-### Frontend: `src/components/accounting/documents/DraftInvoiceEditor.tsx`
+**No conflict because:**
+- ERP never writes to the bank
+- ERP never creates QB bank transactions
+- ERP only reads balances + transactions via Plaid for visibility
+- QB continues to be the sole reconciliation engine
 
-Add a **"Record Payment"** button next to the Send Email button (visible when status is `"sent"` or `"draft"` with amount > 0):
+## What This Enables
 
-**New dialog `RecordPaymentDialog`** (inline in same file or separate component):
-- Fields: Amount (pre-filled with total), Payment Method (dropdown: Check, Credit Card, Cash, E-Transfer, Wire), Reference # (optional), Date (default today), Memo (optional)
-- On submit: calls `quickbooks-oauth` with action `"receive-payment"`
-- On success: updates local status to `"paid"`, shows toast, invalidates queries
+1. **Real-time balance visibility** — No more manual entry in `bank_feed_balances`; Plaid pulls the actual balance automatically
+2. **Transaction monitoring** — See deposits/withdrawals before QB processes them (QB bank feeds can lag 1-2 days)
+3. **Variance alerts** — Auto-compare Plaid balance vs QB ledger balance; flag discrepancies immediately
+4. **Cash flow forecasting** — Real transaction data feeds into projections without waiting for QB sync
 
-### Frontend: `src/components/accounting/PaymentLinksSection.tsx`
+## Implementation Plan
 
-Add a "Record Payment" button below the payment links for the QB InvoiceEditor view too.
+### Phase 1: Plaid Integration Setup
 
----
+**New edge function: `supabase/functions/plaid-bank/index.ts`**
+- Actions: `create-link-token`, `exchange-token`, `get-balances`, `get-transactions`, `sync-balances`
+- Uses Plaid API (requires `PLAID_CLIENT_ID` + `PLAID_SECRET` secrets)
+- Read-only access scope: `transactions`, `auth` (balance only)
+- Stores connection tokens in a new `bank_connections` table
 
-## 2. Enforce Dual Payment Links on All Outgoing Invoices
+**New table: `bank_connections`**
+```sql
+CREATE TABLE bank_connections (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL REFERENCES companies(id),
+  institution_name text NOT NULL,
+  plaid_item_id text NOT NULL,
+  access_token_encrypted text NOT NULL,  -- encrypted at rest
+  account_mask text,                      -- last 4 digits
+  account_name text,
+  account_type text,
+  linked_qb_account_id text,             -- maps to QB account for comparison
+  status text DEFAULT 'active',
+  last_balance_sync timestamptz,
+  created_at timestamptz DEFAULT now()
+);
+```
 
-### File: `src/components/accounting/documents/DraftInvoiceEditor.tsx`
+**New table: `bank_transactions_live`**
+```sql
+CREATE TABLE bank_transactions_live (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL,
+  connection_id uuid REFERENCES bank_connections(id),
+  plaid_txn_id text UNIQUE,
+  date date NOT NULL,
+  description text,
+  amount numeric NOT NULL,
+  category text,
+  pending boolean DEFAULT false,
+  synced_at timestamptz DEFAULT now()
+);
+```
 
-In `handleSendEmail` (~line 406-575):
+### Phase 2: Auto-Sync + Replace Manual Entry
 
-**Before dispatching the email**, check if both links were obtained:
-- If `paymentUrl` (Stripe) is missing → show warning in the email dialog: "⚠ Stripe link unavailable"
-- If `qbPayUrl` (QuickBooks) is missing → show warning: "⚠ QuickBooks link unavailable"
-- If EITHER is missing → change "Send" button to "Send Anyway" (orange) with tooltip explaining a link is missing
-- If BOTH present → green "Send" button as normal
+- **Cron job** (every 4 hours): calls `plaid-bank` with action `sync-balances` → updates `bank_feed_balances.bank_balance` automatically from Plaid instead of manual entry
+- **Maps Plaid accounts to QB accounts** via `linked_qb_account_id` on `bank_connections`
+- The existing `BankAccountsCard` UI stays the same — it just shows auto-fetched balances instead of manually entered ones
 
-**Add state variables:**
-- `stripeReady: boolean` and `qbReady: boolean` — set during the link generation phase
-- `linkCheckDone: boolean` — gates the send button until both checks complete
+### Phase 3: Variance Dashboard
 
-**Flow change:**
-1. When email dialog opens → immediately start generating both links in parallel
-2. Show spinners next to each link status
-3. When both resolve → enable the send button with appropriate color
+- In `BankAccountsCard`, add a **variance column**: `Plaid Balance - QB Ledger Balance`
+- Green = within $50, Yellow = $50-500, Red = >$500
+- Auto-generates an alert if variance persists >24 hours
 
-### File: `supabase/functions/send-quote-email/index.ts`
+### Phase 4: Plaid Link UI
 
-The quote acceptance flow already generates both links (lines 398-530). Add a `warnings` array to the response when either link fails, so the UI can surface it.
+- Add "Connect Bank" button on Integrations page
+- Uses Plaid Link (drop-in UI) to securely connect BMO
+- After linking, map each Plaid account to its QB equivalent
 
----
+## Files Changed
 
-## Technical Details
+| File | Change |
+|------|--------|
+| `supabase/functions/plaid-bank/index.ts` | New — Plaid API integration |
+| `src/pages/Integrations.tsx` | Add bank connection card |
+| `src/components/accounting/BankAccountsCard.tsx` | Add variance column, auto-balance indicator |
+| `src/hooks/useBankFeedBalances.ts` | Add Plaid sync status awareness |
+| Migration | 2 new tables + RLS policies |
 
-| Change | File | Impact |
-|--------|------|--------|
-| `receive-payment` handler | `quickbooks-oauth/index.ts` | ~60 lines, new case in router |
-| Record Payment dialog | `DraftInvoiceEditor.tsx` | ~80 lines new dialog + button |
-| Pre-flight link check | `DraftInvoiceEditor.tsx` | ~30 lines in handleSendEmail |
-| Link status UI | `DraftInvoiceEditor.tsx` | ~20 lines in email dialog |
-| Warning passthrough | `send-quote-email/index.ts` | ~5 lines |
+## Secrets Required
+- `PLAID_CLIENT_ID` — from Plaid dashboard
+- `PLAID_SECRET` — from Plaid dashboard (sandbox first, then production)
 
-## Impact
-- 3 files changed (1 edge function, 1 component, 1 edge function minor)
-- No database schema changes (uses existing `sales_invoices.status`)
-- No new tables needed
-- QuickBooks ReceivePayment API is standard — same auth flow as BillPayment
+## Zero-Conflict Guarantee
+- QB bank feed continues unchanged — downloads, categorizes, reconciles
+- Plaid connection is **read-only** (no write permissions)
+- ERP never creates or modifies bank transactions in QB
+- The two systems observe the same bank independently — variance detection is the value add
 
