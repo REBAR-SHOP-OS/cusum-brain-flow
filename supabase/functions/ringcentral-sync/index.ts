@@ -544,10 +544,15 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?:
           }, { onConflict: "source,source_id", ignoreDuplicates: false });
           if (!error) {
             smsUpserted++;
-            // SMS alert to CEO for new inbound SMS
+            // SMS alert to CEO for new inbound SMS (skip spam)
             if (msgDirection === "inbound") {
               const preview = (msg.subject || "").slice(0, 100);
-              sendCeoSmsAlert(`📱 New SMS from ${fromAddress}: ${preview}`).catch(() => {});
+              const { isSpamSms } = await import("../_shared/spamFilter.ts");
+              if (!isSpamSms(preview, fromAddress)) {
+                sendCeoSmsAlert(`📱 New SMS from ${fromAddress}: ${preview}`).catch(() => {});
+              } else {
+                console.log(`CRON: Spam SMS filtered from ${fromAddress}`);
+              }
             }
           }
         }

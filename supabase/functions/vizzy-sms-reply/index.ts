@@ -8,6 +8,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
+import { isSpamSms } from "../_shared/spamFilter.ts";
 
 const CEO_PHONE = "+14165870788";
 const MAX_REPLIES_PER_DAY = 5;
@@ -38,6 +39,14 @@ Deno.serve(async (req) => {
     if (from_number === CEO_PHONE || normalized === "4165870788" || normalized === "14165870788") {
       console.log("[sms-reply] Skipping CEO number");
       return new Response(JSON.stringify({ ok: true, skipped: "ceo_number" }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Spam filter
+    if (isSpamSms(message_text, from_number)) {
+      console.log("[sms-reply] Spam detected, skipping:", from_number);
+      return new Response(JSON.stringify({ ok: true, skipped: "spam" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
