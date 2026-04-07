@@ -1,4 +1,10 @@
 import { agentConfigs, AgentConfig } from "@/components/agent/agentConfigs";
+import {
+  getUserPrimaryAgentKeyFromConfig,
+  getUserHeroText,
+  getUserQuickActions,
+  getVisibleAgents,
+} from "@/lib/userAccessConfig";
 
 interface UserAgentMapping {
   agentKey: string;
@@ -7,104 +13,26 @@ interface UserAgentMapping {
   heroText: string;
 }
 
-const userAgentMappings: Record<string, UserAgentMapping> = {
-  "sattar@rebar.shop": {
-    agentKey: "assistant",
-    userRole: "ceo",
-    heroText: "How can your **CEO Portal** help you today?",
-    quickActions: [
-      { title: "Business Health Score", prompt: "Give me the full business health score — production, revenue, AR, team attendance, and machine status. Highlight anything that needs my attention.", icon: "Activity", category: "Executive" },
-      { title: "Today's exceptions", prompt: "Show me today's exceptions only — anything overdue, blocked, or flagged across all departments.", icon: "AlertTriangle", category: "Executive" },
-      { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
-      { title: "Team attendance", prompt: "Show me today's team attendance — who's clocked in, who's absent, and any patterns to watch.", icon: "Users", category: "HR" },
-    ],
-  },
-  "kourosh@rebar.shop": {
-    agentKey: "shopfloor",
-    userRole: "shop_supervisor",
-    heroText: "Welcome, Kourosh",
-    quickActions: [],
-  },
-  "saurabh@rebar.shop": {
-    agentKey: "sales",
-    userRole: "sales",
-    heroText: "How can **Blitz** help you close deals today?",
-    quickActions: [
-      { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
-      { title: "Follow-up queue", prompt: "Show me leads that need follow-up today — overdue responses, pending quotes, and stale conversations.", icon: "Clock", category: "Sales" },
-      { title: "New RFQs", prompt: "Show me any new RFQ emails that came in today that need quoting.", icon: "FileText", category: "Sales" },
-      { title: "Customer check-in", prompt: "Which customers haven't heard from us in over a week? List them with last contact date.", icon: "Users", category: "Sales" },
-    ],
-  },
-  "neel@rebar.shop": {
-    agentKey: "sales",
-    userRole: "sales",
-    heroText: "How can **Blitz** help you close deals today?",
-    quickActions: [
-      { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
-      { title: "Follow-up queue", prompt: "Show me leads that need follow-up today — overdue responses, pending quotes, and stale conversations.", icon: "Clock", category: "Sales" },
-      { title: "New RFQs", prompt: "Show me any new RFQ emails that came in today that need quoting.", icon: "FileText", category: "Sales" },
-      { title: "Customer check-in", prompt: "Which customers haven't heard from us in over a week? List them with last contact date.", icon: "Users", category: "Sales" },
-    ],
-  },
-  "radin@rebar.shop": {
-    agentKey: "assistant",
-    userRole: "ceo",
-    heroText: "How can **Vizzy** help you today?",
-    quickActions: [
-      { title: "Business Health Score", prompt: "Give me the full business health score — production, revenue, AR, team attendance, and machine status. Highlight anything that needs my attention.", icon: "Activity", category: "Executive" },
-      { title: "Today's exceptions", prompt: "Show me today's exceptions only — anything overdue, blocked, or flagged across all departments.", icon: "AlertTriangle", category: "Executive" },
-      { title: "AI agent activity", prompt: "Show me a summary of all AI agent sessions today — who used which agent, and what actions were taken.", icon: "Bot", category: "AI" },
-      { title: "Team attendance", prompt: "Show me today's team attendance — who's clocked in, who's absent, and any patterns to watch.", icon: "Users", category: "HR" },
-    ],
-  },
-  "zahra@rebar.shop": {
-    agentKey: "social",
-    userRole: "social_media_manager",
-    heroText: "How can **Pixel** assist you today?",
-    quickActions: [
-      { title: "Generate post", prompt: "Create a new social media post for today — pick the best platform and generate a caption and image.", icon: "Sparkles", category: "Content" },
-      { title: "Prioritize my tasks", prompt: "Help me organize my tasks using the Eisenhower Matrix — what's urgent vs important right now?", icon: "LayoutGrid", category: "Eisenhower" },
-      { title: "Customer inquiry", prompt: "Show me recent customer inquiries and support tickets that need attention.", icon: "HeadphonesIcon", category: "Customer Care" },
-      { title: "Compliance check", prompt: "Review our recent content and campaigns for legal compliance — disclaimers, permissions, and regulations.", icon: "Shield", category: "Legal" },
-    ],
-  },
-  "vicky@rebar.shop": {
-    agentKey: "accounting",
-    userRole: "accountant",
-    heroText: "How can **Penny** help you today?",
-    quickActions: [
-      { title: "AR aging", prompt: "Show me the accounts receivable aging report — who owes what and how overdue.", icon: "DollarSign", category: "AR" },
-      { title: "Bills due", prompt: "What bills are due this week? Show amounts and vendors.", icon: "FileText", category: "AP" },
-      { title: "Payroll check", prompt: "Run a payroll pre-check — flag any missing hours, overtime issues, or ESA compliance concerns.", icon: "Users", category: "Payroll" },
-      { title: "Bank reconciliation", prompt: "Help me reconcile recent bank transactions with QuickBooks entries.", icon: "CreditCard", category: "Banking" },
-    ],
-  },
-  "ben@rebar.shop": {
-    agentKey: "estimating",
-    userRole: "estimator",
-    heroText: "How can **Gauge** help you today?",
-    quickActions: [
-      { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
-      { title: "Customer inquiry", prompt: "Show me recent customer inquiries and support tickets that need attention.", icon: "HeadphonesIcon", category: "Customer Care" },
-      { title: "Open takeoffs", prompt: "Show me all open takeoff sessions and their status — pending reviews, QC flags, and deadlines.", icon: "FileText", category: "Estimating" },
-      { title: "Prioritize my tasks", prompt: "Help me organize my tasks using the Eisenhower Matrix — what's urgent vs important right now?", icon: "LayoutGrid", category: "Eisenhower" },
-    ],
-  },
-};
-
 export function getUserAgentMapping(email?: string | null): UserAgentMapping | null {
   if (!email) return null;
-  return userAgentMappings[email.toLowerCase()] || null;
+  const primaryKey = getUserPrimaryAgentKeyFromConfig(email);
+  if (!primaryKey) return null;
+
+  const config = agentConfigs[primaryKey];
+  return {
+    agentKey: primaryKey,
+    userRole: config?.role ?? "",
+    quickActions: getUserQuickActions(email),
+    heroText: getUserHeroText(email) ?? `How can **${config?.name ?? primaryKey}** help you today?`,
+  };
 }
 
 export function getUserPrimaryAgent(email?: string | null): AgentConfig | null {
-  const mapping = getUserAgentMapping(email);
-  if (!mapping) return null;
-  return agentConfigs[mapping.agentKey] || null;
+  const key = getUserPrimaryAgentKeyFromConfig(email);
+  if (!key) return null;
+  return agentConfigs[key] || null;
 }
 
 export function getUserPrimaryAgentKey(email?: string | null): string | null {
-  const mapping = getUserAgentMapping(email);
-  return mapping?.agentKey || null;
+  return getUserPrimaryAgentKeyFromConfig(email);
 }
