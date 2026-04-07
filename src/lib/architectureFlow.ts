@@ -12,7 +12,8 @@ export const ARCHITECTURE_LAYOUT = {
 
 export type ArchitectureLayoutItem = {
   id: string;
-  layer: ArchLayer;
+  layer?: ArchLayer;
+  data?: { layer?: ArchLayer };
   position?: { x: number; y: number };
 };
 
@@ -26,12 +27,16 @@ export function matchesArchitectureQuery(label: string, hint: string, query: str
   );
 }
 
-export function applyArchitectureLayout<T extends ArchitectureLayoutItem>(items: T[]): T[] {
+function resolveLayer(item: ArchitectureLayoutItem): ArchLayer | undefined {
+  return item.layer || item.data?.layer;
+}
+
+export function applyArchitectureLayout<T extends ArchitectureLayoutItem>(items: T[]): (T & { position: { x: number; y: number } })[] {
   const positions = new Map<string, { x: number; y: number }>();
   let layerOffset = 0;
 
   for (const layer of LAYERS) {
-    const layerItems = items.filter((item) => item.layer === layer.key);
+    const layerItems = items.filter((item) => resolveLayer(item) === layer.key);
     if (!layerItems.length) continue;
 
     const rowCount = Math.ceil(layerItems.length / ARCHITECTURE_LAYOUT.maxPerRow);
