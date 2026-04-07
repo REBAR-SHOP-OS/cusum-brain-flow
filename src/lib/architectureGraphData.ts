@@ -12,6 +12,7 @@ import {
   Instagram, DollarSign, PhoneCall, Chrome, Boxes, Receipt, Sparkles,
   HardDrive, Archive, Activity, ServerCrash, Rocket, Lock, DownloadCloud, MonitorCheck,
   RefreshCw, AlertTriangle, CheckCircle, Workflow, Scale, Server,
+  MemoryStick, Radio, Gauge, Key, BarChart3, FileText, HeartPulse, ToggleRight, Bus,
 } from "lucide-react";
 
 export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform";
