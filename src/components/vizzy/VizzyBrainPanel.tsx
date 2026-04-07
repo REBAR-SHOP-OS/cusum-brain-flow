@@ -985,9 +985,10 @@ export function VizzyBrainPanel({ onClose }: Props) {
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                     <Bot className="w-4 h-4 text-primary" />
                     <h3 className="text-sm font-semibold text-foreground flex-1">Agents</h3>
-                    <SectionReportButton
-                      label="Agents"
-                      getText={() => `🤖 Agents Report — ${selectedProfile.full_name || "User"}\nSee agent sessions and activity in Vizzy Brain.`}
+                    <UserFullReportButton
+                      profile={selectedProfile}
+                      timezone={timezone}
+                      date={userSelectedDate}
                     />
                   </div>
                   <div className="p-3">
