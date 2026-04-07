@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect } from "react";
-import { X, Send, Loader2, Wrench, Trash2, Square } from "lucide-react";
+import { X, Send, Loader2, Sparkles, Trash2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,8 +45,8 @@ export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function Inte
       {/* Header */}
       <div className="h-12 flex items-center justify-between px-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
-          <Wrench className="w-4 h-4 text-primary" />
-          <span className="text-xs font-bold tracking-wider uppercase">Admin Console</span>
+          <Sparkles className="w-4 h-4 text-primary" />
+          <span className="text-xs font-bold tracking-wider uppercase">Vizzy</span>
         </div>
         <div className="flex items-center gap-1">
           {messages.length > 0 && (
@@ -65,16 +65,16 @@ export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function Inte
         <div className="p-3 space-y-3">
           {messages.length === 0 && (
             <div className="text-center py-12">
-              <Wrench className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm font-medium text-foreground">Admin Console</p>
+              <Sparkles className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground">Vizzy</p>
               <p className="text-xs text-muted-foreground mt-1">
-                AI-powered system diagnostics & fixes.
+                Your executive intelligence assistant.
               </p>
               <div className="mt-4 space-y-1.5 text-[10px] text-muted-foreground/60">
-                <p>"What machines are idle and why?"</p>
-                <p>"Any stuck orders? How to fix?"</p>
-                <p>"Show me stock that's running low"</p>
-                <p>"Diagnose production bottlenecks"</p>
+                <p>"What's the biggest risk today?"</p>
+                <p>"Diagnose why AR is climbing"</p>
+                <p>"Who needs follow-up this week?"</p>
+                <p>"Plan tomorrow's priorities"</p>
               </div>
             </div>
           )}
