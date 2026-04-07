@@ -1,62 +1,51 @@
 
 
-# Fix: QuickBooks "Invalid Number" Error for SalesTermRef
+# Fix: QuickBooks GST/HST Tax Code Error (Root Cause)
 
 ## Root Cause
 
-The `SalesTermRef.value` field in QuickBooks API requires a **numeric ID** (e.g., `"3"`), not a human-readable name like `"Net 30"`.
+The `resolveTaxCodeId` helper queries QuickBooks for a tax code named `"TAX"` — but this is a **US-only** tax code. This QuickBooks account is **Canadian** (realm `9341452420664446`), where tax codes have names like `"HST ON"`, `"GST"`, `"HST"`, etc. The query returns no results, so `resolveTaxCodeId` returns `null`, and the fallback keeps the string `"TAX"` which is invalid for Canadian QBO.
 
-The `qb_config` table stores `default_sales_term` as `"Net 30"` (the default from the migration). This string is passed directly into `SalesTermRef: { value: "Net 30" }`, which QuickBooks rejects with error code 2090 "Invalid Number".
+Additionally, Canadian QBO requires a **`TxnTaxDetail`** block at the transaction level with a `TxnTaxCodeRef` pointing to the tax code ID. Without this, QB rejects with error 6000.
 
-## Fix
+## Fix (Two Parts)
 
-In `supabase/functions/quickbooks-oauth/index.ts`, before building the invoice payload, resolve the term name to its QuickBooks numeric ID by querying the QB Term endpoint. Add a fallback cache/lookup.
+### Part 1: Smart Tax Code Resolution with Fallback
 
-### Changes to `supabase/functions/quickbooks-oauth/index.ts`
+Update `resolveTaxCodeId` to handle the case where the exact name isn't found:
+- If exact name match fails, query for **any taxable tax code** (`select Id, Name from TaxCode where Active = true`) and pick the first one where `Taxable = true`
+- Cache the resolved ID for the duration of the request
 
-1. **Add a term-resolution helper** (~line 55): Query QuickBooks `Term` entity by name to get the numeric ID.
+### Part 2: Add `TxnTaxDetail` to Invoice and Estimate Payloads
 
+For Canadian QB accounts, the payload must include:
 ```typescript
-async function resolveTermId(config: any, termName: string): Promise<string | null> {
-  try {
-    const result = await qbFetch(config, 
-      `query?query=select Id, Name from Term where Name = '${termName.replace(/'/g, "''")}'`
-    ) as Record<string, any>;
-    const terms = result?.QueryResponse?.Term;
-    if (terms && terms.length > 0) return String(terms[0].Id);
-    return null;
-  } catch { return null; }
+TxnTaxDetail: {
+  TxnTaxCodeRef: { value: resolvedTaxCodeId }
 }
 ```
 
-2. **Update `handleCreateInvoice`** (~line 1328): Resolve the term string to a numeric ID before using it.
+QB will auto-calculate the `TotalTax` when `TxnTaxCodeRef` is provided. This is required for non-US locales.
 
-```typescript
-// Before:
-const effectiveTerms = salesTermRef || (qbConfig as any).default_sales_term;
-// ...
-...(effectiveTerms && { SalesTermRef: { value: effectiveTerms } }),
+### Implementation in `supabase/functions/quickbooks-oauth/index.ts`
 
-// After:
-let effectiveTerms = salesTermRef || (qbConfig as any).default_sales_term;
-if (effectiveTerms && isNaN(Number(effectiveTerms))) {
-  const resolvedId = await resolveTermId(config, effectiveTerms);
-  effectiveTerms = resolvedId || undefined;
-}
-// ...
-...(effectiveTerms && { SalesTermRef: { value: effectiveTerms } }),
+1. **Update `resolveTaxCodeId`** (~line 75): Add fallback query for any active taxable code when exact name match fails.
+
+2. **Update estimate handler** (~line 1188): Add `TxnTaxDetail: { TxnTaxCodeRef: { value: effectiveTaxCode } }` to the payload when `effectiveTaxCode` is a numeric ID.
+
+3. **Update invoice handler** (~line 1374): Same `TxnTaxDetail` addition to the invoice payload.
+
+4. **Update `qb_company_config` default**: Change the DB default from `"TAX"` to `NULL` so the system always auto-resolves from QB rather than assuming US locale. (Migration)
+
+### Migration
+```sql
+ALTER TABLE qb_company_config 
+ALTER COLUMN default_tax_code SET DEFAULT NULL;
 ```
-
-The `isNaN` check ensures that if the value is already a numeric ID (e.g., `"3"`), it skips the lookup. Only human-readable names like `"Net 30"` trigger the QB query.
-
-### Also fix the same pattern in `handleCreateInvoice` for `salesTermRef` passed from the frontend
-
-The frontend may also pass `"Net 30"` as `salesTermRef`. The same resolution handles both cases since we check the merged `effectiveTerms`.
 
 ## Files Changed
 | File | Change |
 |------|--------|
-| `supabase/functions/quickbooks-oauth/index.ts` | Add `resolveTermId` helper, resolve term name to numeric ID before sending to QB |
-
-Single file change. No database or frontend changes needed.
+| `supabase/functions/quickbooks-oauth/index.ts` | Fix tax code resolution fallback + add `TxnTaxDetail` to payloads |
+| Migration | Change `default_tax_code` default from `'TAX'` to `NULL` |
 
