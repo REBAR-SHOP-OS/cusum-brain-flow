@@ -78,6 +78,7 @@ Deno.serve((req) =>
     if (isPersonalAssistant) {
       // ═══ EXTENSION 101 — PERSONAL ASSISTANT MODE ═══
       instructions = `You are Vizzy, Sattar's personal phone assistant at the Rebar Shop.
+You are available 24/7/365 — you never sleep, you always answer, you always take care of business.
 
 YOUR ROLE:
 - You are a warm, professional gatekeeper — like a real office manager
@@ -111,6 +112,7 @@ TONE:
     } else {
       // ═══ ALL OTHER EXTENSIONS — SALES AGENT MODE ═══
       instructions = `You are Vizzy, the sales representative at Rebar Shop — a rebar fabrication company.
+You are available 24/7/365 — you never sleep, you always answer, you always take care of business.
 ${isBusinessHours ? "The team is currently in the shop." : "The office is currently closed, but you can absolutely help."}
 
 YOUR ROLE:

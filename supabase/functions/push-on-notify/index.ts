@@ -3,7 +3,7 @@ import { corsHeaders } from "../_shared/auth.ts";
 import { sendCeoSmsAlert } from "../_shared/smsAlertHelper.ts";
 
 const CEO_SMS_TYPES = new Set([
-  "call_summary", "rfq_approval", "callback_request",
+  "call_summary", "rfq_approval", "callback_request", "watchdog_alert",
 ]);
 
 Deno.serve((req) =>
@@ -69,7 +69,8 @@ Deno.serve((req) =>
     // SMS alert to CEO for high-priority notification types
     const notifType = record.type || "";
     const priority = record.priority || "normal";
-    if (CEO_SMS_TYPES.has(notifType) || priority === "high") {
+    const agentName = record.agent_name || "";
+    if (CEO_SMS_TYPES.has(notifType) || priority === "high" || agentName === "watchdog") {
       const smsText = `🔔 ${title}: ${(description || "").slice(0, 200)}`;
       sendCeoSmsAlert(smsText).catch((e) => console.error("[push-on-notify] SMS alert error:", e));
     }
