@@ -1536,7 +1536,19 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
 
   const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
 
-  const createdInvoice = data.Invoice;
+  let createdInvoice = data.Invoice;
+
+  // QB doesn't return InvoiceLink on POST — read it back to get the customer-facing payment URL
+  if (createdInvoice?.Id && !createdInvoice?.InvoiceLink) {
+    try {
+      const readBack = await qbFetch(config, `invoice/${createdInvoice.Id}`, {});
+      if (readBack?.Invoice?.InvoiceLink) {
+        createdInvoice = readBack.Invoice;
+      }
+    } catch (e) {
+      console.warn("[create-invoice] Read-back for InvoiceLink failed:", e);
+    }
+  }
 
   // Mirror the created invoice to accounting_mirror so InvoiceLink is immediately available
   if (createdInvoice?.Id) {
