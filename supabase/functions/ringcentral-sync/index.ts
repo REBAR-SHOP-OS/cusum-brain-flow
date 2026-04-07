@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
-import { sendCeoSmsAlert } from "../_shared/smsAlertHelper.ts";
+// sendCeoInboundSmsAlert is dynamically imported where needed
 
 const RC_SERVER = "https://platform.ringcentral.com";
 
