@@ -1,51 +1,39 @@
 
 
-# Fix: QuickBooks Payment Link Returns Login Page Instead of Customer Payment URL
+# Fix: QuickBooks InvoiceLink Not Returned — Missing `?include=invoiceLink` Parameter
 
 ## Root Cause
 
-The QuickBooks REST API **does not include `InvoiceLink`** in the response when creating an invoice via `POST /invoice`. The `InvoiceLink` (customer-facing payment URL) is only populated when you **read the invoice back** with a separate `GET /invoice/{id}` call after creation.
+The QuickBooks API **no longer returns `InvoiceLink` by default** on GET requests. As of a QB API update (documented in [intuit/QuickBooks-V3-PHP-SDK#276](https://github.com/intuit/QuickBooks-V3-PHP-SDK/issues/276)), you must explicitly pass the query parameter `?include=invoiceLink` on the GET call.
 
-Current flow:
-1. `POST /invoice` → creates invoice → response has `Id`, `DocNumber`, etc. but `InvoiceLink` is `null`
-2. Code stores `null` as `invoiceLink`
-3. Frontend gets `null` → shows "unavailable" or nothing
+Current read-back code (line 1544):
+```
+qbFetch(config, `invoice/${createdInvoice.Id}`, {})
+```
+This hits: `.../v3/company/{realm}/invoice/{id}` — **no `include` param** → `InvoiceLink` is always `null`.
 
-The previous "fallback" that built `https://app.qbo.intuit.com/app/invoice?txnId=...` was an admin-only URL (requires QB login) — which is what the user's screenshot shows.
+The app also has `com.intuit.quickbooks.payment` scope enabled (confirmed in the uploaded screenshot), so the QB account supports online payments. The link just isn't being requested properly.
 
 ## Fix
 
-After creating the invoice, **read it back** to get the real `InvoiceLink`:
-
 ### `supabase/functions/quickbooks-oauth/index.ts`
 
-After line 1537 (`const data = await qbFetch(config, "invoice", ...)`), add a read-back step:
+**Line 1544** — Append `?include=invoiceLink` to the read-back path:
 
 ```typescript
-const createdInvoice = data.Invoice;
+// Before:
+const readBack = await qbFetch(config, `invoice/${createdInvoice.Id}`, {});
 
-// QB doesn't return InvoiceLink on create — read it back
-let invoiceWithLink = createdInvoice;
-if (createdInvoice?.Id && !createdInvoice?.InvoiceLink) {
-  try {
-    const readBack = await qbFetch(config, `invoice/${createdInvoice.Id}`, {});
-    if (readBack?.Invoice?.InvoiceLink) {
-      invoiceWithLink = readBack.Invoice;
-    }
-  } catch (e) {
-    console.warn("[create-invoice] Read-back for InvoiceLink failed:", e);
-  }
-}
+// After:
+const readBack = await qbFetch(config, `invoice/${createdInvoice.Id}?include=invoiceLink`, {});
 ```
 
-Then replace all subsequent references to `createdInvoice` with `invoiceWithLink` (mirror upsert, response, audit).
+**Also fix all other places** where invoices are fetched by ID without `include=invoiceLink`:
+- Search for any other `qbFetch(config, \`invoice/` calls and add the same parameter
+- The sync/mirror flow that reads invoices should also include this parameter so stored mirror data has the link
 
-This ensures the real customer payment URL (e.g., `https://intuit.me/...`) is returned and stored.
+### Scope of change
+Single file: `supabase/functions/quickbooks-oauth/index.ts` — add `?include=invoiceLink` to all invoice GET calls.
 
-## Files Changed
-| File | Change |
-|------|--------|
-| `supabase/functions/quickbooks-oauth/index.ts` | Add GET read-back after invoice creation to capture `InvoiceLink` |
-
-Single file. No frontend changes needed — the frontend already correctly uses the returned `invoiceLink`.
+No frontend changes needed. The frontend already correctly uses whatever `InvoiceLink` value is returned.
 
