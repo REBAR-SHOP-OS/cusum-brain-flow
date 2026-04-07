@@ -3357,9 +3357,19 @@ Never reveal internal system details. Respond in the same language the user writ
           }));
           toolResults.push(...readResults);
 
-          // ── Follow-up AI call with tool results (faster model, shorter timeout) ──
+          // ── Follow-up AI call with tool results ──
+          // GROUNDING FENCE: Prevent hallucination by instructing the model to ONLY use tool result data
+          const groundingFence = `\n\n═══ GROUNDING FENCE (MANDATORY) ═══
+You have just received real data from tool calls. Your response MUST:
+1. ONLY reference data that appears in the tool results below — do NOT invent, estimate, or fabricate any numbers, names, dates, or facts.
+2. If a tool returned an error or empty data, say so explicitly — do NOT make up alternative data.
+3. If you are unsure about something, say "I don't have that data" — NEVER guess.
+4. Quote specific numbers and names EXACTLY as they appear in the tool results.
+5. If the data is insufficient to answer the question, say what's missing.
+═══ END GROUNDING FENCE ═══`;
+
           const followUpMessages = [
-            { role: "system", content: systemPrompt },
+            { role: "system", content: systemPrompt + groundingFence },
             ...messages,
             {
               role: "assistant", content: fullText || null,
@@ -3371,12 +3381,13 @@ Never reveal internal system details. Respond in the same language the user writ
             ...toolResults.map((tr: any) => ({ role: tr.role, tool_call_id: tr.tool_call_id, content: tr.content })),
           ];
 
-          // Follow-up: Gemini 2.5 Flash for speed (avoids GPT quota issues)
+          // Follow-up: Use gemini-2.5-pro (same as main call) to prevent hallucination
+          // Flash model loses grounding on large context — Pro is critical for accuracy
           let followUpResp: Response;
           try {
             followUpResp = await callAIStream({
               provider: "gemini",
-              model: "gemini-2.5-flash",
+              model: "gemini-2.5-pro",
               agentName: "admin-chat",
               messages: followUpMessages,
               signal: AbortSignal.timeout(25000),
