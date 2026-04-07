@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory, Trash2, Brain } from "lucide-react";
+import { Clock, LogIn, LogOut, ArrowLeft, Timer, ScanFace, Maximize, Users, CalendarDays, Palmtree, DollarSign, Monitor, Factory, Trash2, Brain, AlertTriangle } from "lucide-react";
 import { useProfiles } from "@/hooks/useProfiles";
 import { ConfirmActionDialog } from "@/components/accounting/ConfirmActionDialog";
 import { Link, useSearchParams } from "react-router-dom";
@@ -39,7 +39,8 @@ function formatDuration(mins: number) {
 }
 
 export default function TimeClock() {
-  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, adminClockOut, myProfile, profiles } = useTimeClock();
+  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, adminClockOut, closeStaleShifts, staleCount, myProfile, profiles } = useTimeClock();
+  const [staleConfirmOpen, setStaleConfirmOpen] = useState(false);
   const leave = useLeaveManagement();
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
