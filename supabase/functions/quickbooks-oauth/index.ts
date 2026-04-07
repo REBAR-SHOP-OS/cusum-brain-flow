@@ -1533,6 +1533,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
     Line: lines,
+    ...(customerEmail && { BillEmail: { Address: customerEmail } }),
     ...(dueDate && { DueDate: dueDate }),
     ...(memo && { CustomerMemo: { value: memo } }),
     ...(effectiveTerms && { SalesTermRef: { value: effectiveTerms } }),
