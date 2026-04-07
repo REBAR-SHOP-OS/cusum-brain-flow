@@ -1,7 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { handleRequest } from "../_shared/requestHandler.ts";
 
-serve(async (req) => {
+Deno.serve(async (req) => {
+  console.log(`[rc-webhook] received ${req.method} ${new URL(req.url).pathname}`);
   // RingCentral validation handshake
   const validationToken = req.headers.get("Validation-Token");
   if (validationToken) {

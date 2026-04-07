@@ -550,15 +550,36 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?:
               const preview = (msg.subject || "").slice(0, 100);
               const fromDigits = (fromAddress || "").replace(/\D/g, "");
               const isCeoNumber = fromDigits === "14165870788" || fromDigits === "4165870788";
+              const { isSpamSms } = await import("../_shared/spamFilter.ts");
+              const isSpam = isSpamSms(preview, fromAddress);
+
               if (isCeoNumber) {
                 console.log(`CRON: Skipping CEO self-alert from ${fromAddress}`);
+              } else if (isSpam) {
+                console.log(`CRON: Spam SMS filtered from ${fromAddress}`);
               } else {
-                const { isSpamSms } = await import("../_shared/spamFilter.ts");
-                if (!isSpamSms(preview, fromAddress)) {
-                  sendCeoSmsAlert(`📱 New SMS from ${fromAddress}: ${preview}`).catch(() => {});
-                } else {
-                  console.log(`CRON: Spam SMS filtered from ${fromAddress}`);
-                }
+                sendCeoSmsAlert(`📱 New SMS from ${fromAddress}: ${preview}`).catch(() => {});
+              }
+
+              // Trigger vizzy-sms-reply for genuinely new inbound SMS (fallback for when webhook is down)
+              if (!isSpam) {
+                const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+                const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+                console.log(`CRON: Triggering vizzy-sms-reply for ${fromAddress} (fallback)`);
+                fetch(`${supabaseUrl}/functions/v1/vizzy-sms-reply`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${svcKey}`,
+                  },
+                  body: JSON.stringify({
+                    from_number: fromAddress,
+                    message_text: msg.subject || "",
+                    contact_name: null,
+                    contact_id: null,
+                    company_id: companyId,
+                  }),
+                }).catch((e) => console.error("CRON: vizzy-sms-reply trigger failed:", e));
               }
             }
           }
