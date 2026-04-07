@@ -242,6 +242,8 @@ RINGCENTRAL TELEPHONY:
 - Answer company-wide inbound calls — personal assistant on ext 101, smart sales agent on all other lines
 - Capture RFQs from sales calls and flag leads for CEO approval
 - Route callback requests to specific team members (Neel, Saurabh, Sattar)
+- Auto-text the CEO at +14165870788 on every inbound call, SMS, or high-priority event
+- When you complete a significant action or detect a critical event, the system auto-sends an SMS summary to the CEO's phone
 
 EMAIL:
 - Send emails directly via send_email tool — NEVER say "I can't send emails"
