@@ -580,28 +580,60 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         // Stripe not configured — continue without payment link
       }
 
-      // Auto-push invoice to QuickBooks to get a real InvoiceLink
+      // Get QuickBooks InvoiceLink (read-only if QB invoice already exists)
       let qbPayUrl = "";
       try {
-        const qbItems = items.map(it => ({
-          description: it.description,
-          unitPrice: it.unitPrice,
-          quantity: it.quantity,
-        }));
+        const { data: invData } = await supabase
+          .from("sales_invoices")
+          .select("metadata")
+          .eq("id", invoiceId)
+          .single();
+        const meta = (invData?.metadata as Record<string, unknown>) || {};
+        const storedLink = meta.qb_invoice_link as string | undefined;
+        const storedQbId = meta.qb_invoice_id as string | undefined;
 
-        const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
-          body: {
-            action: "create-invoice",
-            customerName: customerName || undefined,
-            items: qbItems.length > 0 ? qbItems : [{ description: `Invoice ${invoiceNumber}`, unitPrice: total, quantity: 1 }],
-            dueDate: dueDate || undefined,
-            memo: `ERP Invoice ${invoiceNumber}`,
-          },
-        });
-        if (qbData?.invoiceLink) {
-          qbPayUrl = qbData.invoiceLink;
-        } else if (qbData?.invoice?.InvoiceLink) {
-          qbPayUrl = qbData.invoice.InvoiceLink;
+        if (storedLink) {
+          qbPayUrl = storedLink;
+        } else if (storedQbId) {
+          // Read-only fetch with email repair
+          const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
+            body: { action: "get-invoice-link", qbInvoiceId: storedQbId, customerEmail: email || customerEmail || undefined },
+          });
+          if (qbData?.invoiceLink) {
+            qbPayUrl = qbData.invoiceLink;
+            await supabase.from("sales_invoices").update({
+              metadata: { ...meta, qb_invoice_link: qbPayUrl },
+            }).eq("id", invoiceId);
+          }
+        } else {
+          // No QB invoice exists — create one with email
+          const qbItems = items.map(it => ({
+            description: it.description,
+            unitPrice: it.unitPrice,
+            quantity: it.quantity,
+          }));
+          const { data: qbData } = await supabase.functions.invoke("quickbooks-oauth", {
+            body: {
+              action: "create-invoice",
+              customerName: customerName || undefined,
+              customerEmail: email || customerEmail || undefined,
+              items: qbItems.length > 0 ? qbItems : [{ description: `Invoice ${invoiceNumber}`, unitPrice: total, quantity: 1 }],
+              dueDate: dueDate || undefined,
+              memo: `ERP Invoice ${invoiceNumber}`,
+            },
+          });
+          if (qbData?.invoiceLink) {
+            qbPayUrl = qbData.invoiceLink;
+          } else if (qbData?.invoice?.InvoiceLink) {
+            qbPayUrl = qbData.invoice.InvoiceLink;
+          }
+          // Persist QB metadata
+          const qbId = qbData?.invoice?.Id || qbData?.invoiceId;
+          if (qbId || qbPayUrl) {
+            await supabase.from("sales_invoices").update({
+              metadata: { ...meta, qb_invoice_id: qbId || meta.qb_invoice_id, qb_invoice_link: qbPayUrl || meta.qb_invoice_link },
+            }).eq("id", invoiceId);
+          }
         }
       } catch {
         // QB not connected — continue without QB link
