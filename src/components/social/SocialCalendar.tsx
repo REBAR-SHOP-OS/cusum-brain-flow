@@ -256,6 +256,8 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                 const status = post.status;
                 const statusLabel = STATUS_LABELS[status] || status;
                 const isApproved = post.neel_approved || post.qa_status === "approved";
+                const isOverdue = status === "scheduled" && isApproved
+                  && post.scheduled_date && new Date(post.scheduled_date) < new Date();
 
                 return (
                   <button
@@ -274,6 +276,8 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       isSelected && "ring-2 ring-primary",
                       status === "published"
                         ? "bg-green-500/10 border-green-500/40"
+                        : isOverdue
+                        ? "bg-red-500/10 border-red-500/40"
                         : status === "scheduled" && isApproved
                         ? "bg-card border-green-500/30"
                         : status === "scheduled"
@@ -330,6 +334,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       {post.scheduled_date && <span className="text-muted-foreground">·</span>}
                       <span className={cn(
                         status === "published" ? "text-green-600 font-medium"
+                          : isOverdue ? "text-red-600 font-medium"
                           : status === "scheduled" && isApproved ? "text-green-500 font-medium"
                           : status === "scheduled" ? "text-yellow-600"
                           : status === "declined" ? "text-destructive"
@@ -337,7 +342,9 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                           : status === "pending_approval" ? "text-yellow-600"
                           : "text-muted-foreground"
                       )}>
-                        {status === "scheduled" && !isApproved
+                        {isOverdue
+                          ? "Overdue · Not Published"
+                          : status === "scheduled" && !isApproved
                           ? "Pending Approval"
                           : status === "scheduled" && isApproved
                           ? "Scheduled · Approved"
