@@ -1,31 +1,56 @@
 
 
-# Add "Review & Accept" Link to Quotation PDF/Print Templates
+# Agent-to-Menu Mapping PDF Report
 
-## Problem
-When a quotation is printed or exported as PDF (via the browser Print dialog), there is no clickable link for the customer to accept the quote online. The acceptance link (`/accept-quote/{id}`) only exists in the **email** HTML body, not in the on-screen/print quotation templates.
+## What This Delivers
+A comprehensive PDF document listing:
+1. All 22 agents with their current names, roles, and which menu/page they serve
+2. Agent-to-user assignments (who uses which agent)
+3. Renamed agents table (old name vs new name)
 
-## What Changes
+## Data Gathered
 
-### 1. `src/components/accounting/documents/DraftQuotationEditor.tsx`
-Add a prominent "Accept Online" section between the totals and signature area (visible in print):
-- A styled box with the full acceptance URL: `https://cusum-brain-flow.lovable.app/accept-quote/{quoteId}`
-- Clickable on screen, and printed as visible text so it works on paper PDFs too
-- Text: "To accept this quotation online, visit:" followed by the URL
+### Agents (22 total)
+| Agent Code | Name | Role | Connected Menu/Page |
+|---|---|---|---|
+| sales | Blitz | Sales & Pipeline | Pipeline, Lead Scoring, Sales |
+| support | Haven | Customer Support | Support |
+| accounting | Penny | Accounting (50yr CPA) | Accounting |
+| legal | Tally | Legal (55yr Ontario Lawyer) | — (chat only) |
+| estimating | Gauge | Estimating | — (chat only) |
+| shopfloor | Forge | Shop Floor Commander | Shop Floor |
+| delivery | Atlas | Deliveries | Delivery Ops (sub-page) |
+| email | Relay | Email & Inbox | Inbox |
+| social | Pixel | Social Media | Social Media Manager |
+| eisenhower | Eisenhower Matrix | Priority Matrix | Business Tasks |
+| data | Prism | Data & Insights | Live Monitor, CEO Portal |
+| rebuild | Rebuild | System Rebuild | — (internal/dev) |
+| bizdev | Buddy | Business Development | — (chat only) |
+| webbuilder | Commet | Web Builder | Website/SEO pages |
+| assistant | Vizzy | CEO Assistant | Dashboard, CEO Portal |
+| copywriting | Penn | Copywriting | — (chat only) |
+| talent | Scouty | Talent & HR | — (chat only) |
+| seo | Seomi | SEO & Search | SEO |
+| growth | Gigi | Personal Development | — (chat only) |
+| empire | Architect | Venture Builder | — (chat only) |
+| purchasing | Kala | Purchasing & Procurement | — (chat only) |
+| azin | Nila | Real-Time Interpreter | — (voice only) |
 
-### 2. `src/components/accounting/documents/QuotationTemplate.tsx`
-Add the same acceptance link section to the read-only quotation view template:
-- Requires adding `quoteId` to the `QuotationData` interface (or passing it as a separate prop)
-- Same styled box with the acceptance URL between totals and signature
+### Renamed Agents (from AgentSelector and legacy references)
+| Old Name / Code | New Name | Change |
+|---|---|---|
+| collections / Chase | Merged into Penny (Accounting) | AR & Payments folded into accounting agent |
+| commander | Removed from active roster | Was "Sales Manager", functionality in Vizzy |
+| estimation → estimating | Gauge | Code normalized |
 
-### 3. `src/components/accounting/AccountingDocuments.tsx`
-Pass `quoteId` (the `q.id`) to `QuotationTemplate` when rendering the view overlay, so the template can build the acceptance URL.
+### User-Agent Assignments
+From `userAgentMap.ts` — 8 mapped users.
 
-## Technical Details
+## Technical Plan
+1. Run a Python script using `reportlab` to generate a styled PDF at `/mnt/documents/`
+2. Include Rebar Shop OS branding (dark header, structured tables)
+3. Three sections: Agent Registry, Menu Mapping, Renamed Agents
+4. QA via `pdftoppm` visual inspection
 
-**URL format**: `https://cusum-brain-flow.lovable.app/accept-quote/{quoteId}`
-
-**Print styling**: The link section uses `print:block` and renders the URL as plain text (not just a hyperlink) so it remains readable on physical paper.
-
-**Files changed**: 3 files, no backend changes.
-
+## Files Changed
+None — this is a data artifact generation task only.
