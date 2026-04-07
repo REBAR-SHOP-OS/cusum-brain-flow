@@ -800,7 +800,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-8">
+    <div className="light fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-start justify-center overflow-y-auto py-8">
       {/* Email Dialog with link status warnings */}
       {emailDialogOpen && (
         <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center print:hidden" onClick={() => setEmailDialogOpen(false)}>
