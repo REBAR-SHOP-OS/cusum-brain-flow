@@ -1,52 +1,65 @@
 
 
-# Update Vizzy Suggestions Panel
+# Fix: Vizzy Self-Audit is Hallucinated — Add Self-Awareness Grounding
 
-## Issues Found
+## The Problem
 
-1. **Single-agent view for CEO** — The Home page picks ONE agent's suggestions based on role mapping. The CEO (super admin) only sees Vizzy suggestions, missing Penny, Forge, and other agent suggestions entirely. All 20 shown are Vizzy overdue AR cards.
+Vizzy generated a "self-audit" claiming it lacks capabilities it **already has**. This is a hallucination — Vizzy doesn't know its own tool inventory. Here's the truth table:
 
-2. **Grouped card hardcodes "overdue invoices"** — `GroupedSuggestionCard` line 60: `{customerName} — {count} overdue invoices` is hardcoded. If the group contains mixed categories (e.g., blocked production + overdue), the label is wrong.
+| Vizzy's Claim | Reality | Verdict |
+|---|---|---|
+| "Cannot directly update statuses" | Has `update_machine_status`, `update_delivery_status`, `update_lead_status`, `update_cut_plan_status` | FALSE |
+| "Cannot contact customers" | Has `send_email`, `rc_send_sms`, `rc_make_call`, `rc_send_fax` | FALSE |
+| "Static data view, cannot query" | Has `deep_business_scan`, `investigate_entity`, `get_employee_activity`, `get_employee_emails`, `rc_get_call_analytics` | FALSE |
+| "No outbound communication" | Has `send_email`, `rc_send_sms`, `rc_make_call`, `rc_send_fax` | FALSE |
+| "No real-time monitoring" | Has `vizzy-business-watchdog` (cron), `rc_get_active_calls`, `rc_get_team_presence` | FALSE |
+| "Need ERP integration" | Has full ERP read/write via `vizzy-erp-action` + MCP server with 20+ actions | FALSE |
+| "Need production system access" | Has `list_machines`, `list_orders`, `get_stock_levels`, cut plan updates | FALSE |
+| "Need calendar API" | Actually missing | TRUE |
+| "Need Odoo dedup tool" | `vizzy-erp-action` has `merge_customers` action | FALSE |
 
-3. **No bulk actions for the full panel** — Individual cards and groups have Snooze/Dismiss, but there's no way to clear all 20 at once.
+**9 out of 10 claims are wrong.** Vizzy hallucinated its own limitations because its system prompt doesn't include a self-awareness section listing its capabilities.
 
-4. **No severity sorting** — Suggestions display in `created_at desc` order. A critical $190 item (140 days overdue) appears below warning items.
+## Root Cause
 
-5. **Grouping threshold too high** — Only groups when >= 3 items from same customer. Two invoices from the same customer appear as separate cards instead of grouped.
+The system prompt in `admin-chat/index.ts` lists tool usage rules but never says: "Here is what you CAN do." When asked to self-audit, the LLM defaults to generic AI limitations instead of checking its actual tool definitions.
 
-## Plan
+## Fix
 
-### File: `src/hooks/useAgentSuggestions.ts`
-- Add a new hook `useAllAgentSuggestions()` that loads suggestions from ALL agents (no `agent_id` filter) for super admins
-- Sort results: critical first, then warning, then info; within same severity, by `created_at desc`
+### File: `supabase/functions/admin-chat/index.ts`
 
-### File: `src/components/agent/AgentSuggestionsPanel.tsx`
-- For super admins: use `useAllAgentSuggestions()` instead of single-agent hook
-- Show agent name per-card dynamically (e.g., "Vizzy suggests" vs "Penny suggests" vs "Forge suggests")
-- Change grouping threshold from 3 to 2
-- Add "Dismiss All" and "Snooze All" buttons at the panel header level when count > 5
-- Pass agent name from suggestion data rather than hardcoded prop
+Add a `SELF-AWARENESS` section to the system prompt (after the TOOL USAGE RULES block, ~line 2547):
 
-### File: `src/components/agent/GroupedSuggestionCard.tsx`
-- Replace hardcoded "overdue invoices" with dynamic category label
-- Map category to readable text: `overdue_ar` → "overdue invoices", `zero_total` → "$0 orders", `blocked_production` → "blocked orders", etc.
+```
+═══ SELF-AWARENESS (CAPABILITIES INVENTORY) ═══
+When asked about your capabilities, limitations, or what you can/cannot do, 
+ALWAYS reference your ACTUAL tool list — never guess from general AI knowledge.
 
-### File: `src/pages/Home.tsx`
-- Pass `isSuperAdmin` flag to `AgentSuggestionsPanel` to trigger multi-agent mode
-- Keep existing single-agent behavior for non-super-admin users
+You CAN:
+- Query machines, orders, deliveries, leads, stock, employees, emails, calls in real-time
+- Update machine status, delivery status, lead status, cut plan status
+- Send emails via Gmail, make phone calls, send SMS, send fax via RingCentral
+- Deep scan the entire business across all domains (deep_business_scan)
+- Investigate any entity by keyword across all data (investigate_entity)
+- Monitor team presence and active calls in real-time
+- Manage WordPress: posts, pages, products, orders, redirects, speed audits
+- Save and recall persistent memories across sessions
+- Create activity events and log business actions
 
-## Technical Details
+You CANNOT (actual limitations):
+- Access calendar/scheduling (no calendar API connected yet)
+- Write directly to QuickBooks or Odoo (ERP is read-from-mirror, write-to-local)
+- Access support ticket system (none exists in this ERP)
+- Process payments or initiate bank transactions
+- Access camera feeds directly (camera-intelligence is a separate system)
 
-- New `useAllAgentSuggestions` query joins `suggestions` with `agents` table to get agent code/name per suggestion
-- Severity sort order: `{ critical: 0, warning: 1, info: 2 }`
-- Category label map added as a const in `GroupedSuggestionCard`
-- Bulk snooze/dismiss calls `Promise.all` on all visible suggestion IDs
-- No database changes needed
+NEVER claim you lack a capability that exists in your tool list.
+NEVER list generic AI limitations as if they apply to you specifically.
+```
 
 ## Impact
-- 4 files changed
-- CEO sees all agent suggestions in one unified panel, sorted by severity
-- Non-admin users see their agent's suggestions unchanged
-- Grouped cards show accurate category labels
-- Critical items surface to the top
+- 1 file changed (`admin-chat/index.ts`) — ~20 lines added to system prompt
+- Prevents future self-audit hallucinations
+- Vizzy accurately reports what it can and cannot do
+- No tool, schema, or UI changes
 
