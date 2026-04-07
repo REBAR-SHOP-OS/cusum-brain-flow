@@ -83,5 +83,5 @@ Deno.serve((req) =>
     }
 
     return { followed_up: followedUp, marked_lost: markedLost };
-  }, { functionName: "pipeline-lead-recycler", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
+  }, { functionName: "pipeline-lead-recycler", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: false })
 );
