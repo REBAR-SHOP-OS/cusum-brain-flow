@@ -1,63 +1,83 @@
 
 
-# Root Cause: Straight Items Skip Clearance — Go Directly to Complete
+# Add `loading` Phase Between Clearance and Complete
 
-## Findings
-
-The `auto_advance_item_phase` database trigger has this flow:
-
+## Current Flow
 ```text
-Cutting done + bend_type = 'bend'     → cut_done → (bending) → clearance → complete
-Cutting done + bend_type = 'straight' → complete  (SKIPS clearance entirely)
+clearance → (QC cleared) → complete
+LoadingStation queries phase="complete"
+PickupStation queries phase="complete"
 ```
 
-**This means straight rebar items never appear in the Clearance station.** They jump from cutting directly to `complete`, bypassing QC/photo verification.
-
-### Data confirms it:
-- 160 items in `clearance` phase — ALL are bend type
-- 127 items in `complete` — ALL straight (never went through clearance)
-- 11 items stuck in `cut_done` — bend items where `bend_completed_pieces = 0` (bending hasn't started)
-
-### The user's "TDC CUSTOMS" projects likely have straight items that finished cutting and went straight to `complete`, so they never show up in the Clearance view.
-
-## Fix
-
-### Database Migration — Update `auto_advance_item_phase` trigger
-
-Change the straight-bar path so it also goes through clearance:
-
+## Target Flow
 ```text
-BEFORE:  straight + cutting done → complete
-AFTER:   straight + cutting done → clearance
+clearance → (QC cleared) → loading → (loaded on truck) → complete
+LoadingStation queries phase="loading" (instead of "complete")
 ```
 
-Updated logic:
-```sql
--- Cutting complete → advance
-IF NEW.completed_pieces >= NEW.total_pieces 
-   AND NEW.total_pieces > 0
-   AND NEW.phase IN ('queued', 'cutting') THEN
-  IF NEW.bend_type = 'bend' THEN
-    NEW.phase := 'cut_done';
-  ELSE
-    NEW.phase := 'clearance';  -- was 'complete', now routes through clearance
-  END IF;
-END IF;
+## Changes
+
+### 1. Database Migration — No trigger change needed
+The `auto_advance_item_phase` trigger doesn't touch the clearance→complete transition — that's done manually in `ClearanceCard.tsx`. No trigger update required.
+
+### 2. `src/components/clearance/ClearanceCard.tsx` (line 251)
+Change the phase set on clearance approval:
+```
+BEFORE: .update({ phase: "complete" })
+AFTER:  .update({ phase: "loading" })
 ```
 
-### Also fix the 11 stuck `cut_done` items
+### 3. `src/pages/LoadingStation.tsx` (line 52)
+Change the query filter to fetch items in the new `loading` phase:
+```
+BEFORE: .eq("phase", "complete")
+AFTER:  .eq("phase", "loading")
+```
 
-These 11 bend items have `completed_pieces >= total_pieces` but `bend_completed_pieces = 0`. They are cut-complete but bending hasn't started. This is correct behavior (they're waiting for bending), not a bug. No action needed for these.
+### 4. `src/hooks/useCompletedBundles.ts` (line 39)
+Same change — fetch `loading` phase items instead of `complete`:
+```
+BEFORE: .eq("phase", "complete")
+AFTER:  .eq("phase", "loading")
+```
 
-### Optional: Backfill existing straight items that already skipped clearance
+### 5. `src/components/office/PackingSlipsView.tsx` (line 80)
+Same change:
+```
+BEFORE: .eq("phase", "complete")
+AFTER:  .eq("phase", "loading")
+```
 
-Run a one-time update to move straight items that are already `complete` but were never cleared back to `clearance` — **only if the user wants retroactive QC**. This is optional and should be confirmed with the user.
+### 6. `src/pages/PoolView.tsx`
+- Add `"loading"` to the `PoolPhase` type and `PHASES` array (between clearance and complete)
+- Add `loading` entry to `PHASE_CONFIG`:
+  ```
+  loading: { label: "LOADING", shortLabel: "LOADING", icon: Package, color: "text-cyan-400", bg: "bg-cyan-500/10", actionLabel: "Load Truck", actionRoute: "/shopfloor/loading", actionColor: "bg-cyan-500 ..." }
+  ```
+- Update `complete` config label to just "COMPLETE" (no longer "COMPLETE → LOADING")
+
+### 7. `src/components/dashboards/ProductionControl.tsx` (line 9)
+Add `"loading"` to PHASES array:
+```
+["queued", "cutting", "cut_done", "bending", "clearance", "loading", "complete"]
+```
+
+### 8. `src/components/dashboards/ShopControl.tsx` (line 10)
+Add `"loading"` to TASK_PHASES.
+
+### 9. `src/components/shopfloor/MaterialFlowDiagram.tsx`
+Add `loading` phase node between clearance and complete in the flow visualization.
+
+### 10. LoadingStation — mark items complete after loading
+Currently LoadingStation doesn't transition items to a next phase (it's the last step now). Need to add a "Confirm Loaded" action that sets `phase: "complete"` when the loading checklist is done. This ensures items only reach `complete` after being loaded.
+
+### 11. Backfill existing `complete` items (optional)
+Items currently in `complete` that haven't been loaded could be moved to `loading`. This should be confirmed with the user.
 
 ## Summary
-
-| Change | File |
-|--------|------|
-| Update `auto_advance_item_phase` trigger | Database migration (SQL) |
-
-Single trigger change. No frontend changes needed — the Clearance UI already handles all items in the `clearance` phase regardless of bend type.
+- 1 new phase value: `loading`
+- ~8 files updated (mostly single-line filter changes)
+- No database schema migration needed (phase is a text column)
+- ClearanceCard sends items to `loading` instead of `complete`
+- LoadingStation reads from `loading` and transitions to `complete` when done
 
