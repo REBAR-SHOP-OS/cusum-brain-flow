@@ -1,112 +1,97 @@
 
-# Root-cause fix for “still no link returned”
 
-## What I found
-The `?include=invoiceLink` fix is already present in the backend, so the current problem is no longer the missing query param.
+# Maximize QuickBooks API Integration — Findings & Fix Plan
 
-The real blockers are:
+## Critical Finding: Why InvoiceLink Is Still Null
 
-1. **Invoices are being created in QuickBooks without an email**
-   - In recent mirrored QuickBooks invoices, `InvoiceLink = null`
-   - `BillEmail = null`
-   - online payment flags are partially on, but there is still no public link
-   - This means the invoice is not being created with the customer email data needed for the payment-link flow
+From the official QB API docs, `InvoiceLink` is defined as:
 
-2. **The frontend is accidentally creating duplicate QuickBooks invoices**
-   - `DraftInvoiceEditor.tsx` calls `create-invoice` just to:
-     - pre-check link availability when opening email dialog
-     - get a link before sending email
-     - get a link from the “Get QuickBooks Link” button
-   - Those are write actions, not read actions
-   - This is why multiple orphan QB invoices are being created for the same invoice flow
+> "The link is generated only for invoices with **online payment enabled** and having a **valid customer email address**."
 
-3. **Customer email is not being carried through the QB creation path**
-   - `handleCreateInvoice` accepts customer name/items, but not a proper `customerEmail`
-   - when a QB customer is auto-created, it is created with `DisplayName` only
-   - the invoice payload also does not set `BillEmail`
+The app already sends `BillEmail` and uses `?include=invoiceLink` — but it **never sets the online payment flags**:
 
-4. **The invoice editor is not persisting the invoice email strongly enough**
-   - `sales_invoices.customer_email` is available, but save flow is not updating it
-   - so later QB pushes do not reliably have the email they need
+- `AllowOnlineCreditCardPayment: true`
+- `AllowOnlineACHPayment: true`
 
-## Evidence
-- Latest ERP invoice has `qb_invoice_id` but `qb_invoice_link = null`
-- Recent mirrored QB invoices have:
-  - `InvoiceLink = null`
-  - `BillEmail = null`
-- Local customer record has an email, but no `quickbooks_id`, so the code falls into “search/create QB customer” and currently creates that QB customer without email
+Without these, QuickBooks will never generate an `InvoiceLink`, regardless of email or query params.
 
-## Fix plan
+## Additional Gaps Found (from QB API docs)
 
-### 1) Stop creating QB invoices from read-only UI checks
-Update `src/components/accounting/documents/DraftInvoiceEditor.tsx` so:
-- opening the email dialog does **not** call `create-invoice`
-- “Get QuickBooks Link” first checks:
-  - stored `metadata.qb_invoice_link`
-  - stored `metadata.qb_invoice_id`
-  - mirror data
-- only create a QB invoice **once** if none exists
-- if a QB invoice already exists, fetch/read that invoice instead of creating another
+| Gap | Current | Correct (per docs) |
+|-----|---------|---------------------|
+| Online payment flags | Not set | Must set `AllowOnlineCreditCardPayment` and `AllowOnlineACHPayment` to `true` |
+| `GlobalTaxCalculation` | Not set | Required for non-US (Canadian) companies — should be `"TaxExcluded"` |
+| `EmailStatus` | Not set | Should set to `"NeedToSend"` when email is provided, enabling QB's built-in send |
+| QB Payments Charges API | Used in `stripe-payment` for Stripe, but also referenced in `usePaymentSources` | Charges API is **US-only** — should not call for Canadian companies |
+| `ApplyTaxAfterDiscount` | Not set | Should be `false` (standard Canadian behavior — tax before discount) |
+| Minor version | Not specified | Should use `minorVersion=69` or later for `InvoiceLink` (requires `>=36`) and `ProjectRef` support |
 
-### 2) Add a read-only QB invoice fetch path
-Update `supabase/functions/quickbooks-oauth/index.ts` to add a read action such as:
-- `get-invoice-link` or `get-invoice`
-- fetch by QB invoice id using `?include=invoiceLink`
-- return `InvoiceLink`, `BillEmail`, payment flags, and invoice id
+## Changes
 
-This gives the UI a safe way to refresh the link without creating duplicates.
+### 1. `supabase/functions/quickbooks-oauth/index.ts` — Invoice creation payload
 
-### 3) Pass and persist customer email end-to-end
-Update `DraftInvoiceEditor.tsx` so QB calls include `customerEmail`, and save flow persists:
-- `sales_invoices.customer_email`
-- optionally mirror it into metadata fallback as well
+Add to the invoice `POST` payload in `handleCreateInvoice`:
 
-### 4) Create/update the QB customer with email
-Update `handleCreateInvoice` in `supabase/functions/quickbooks-oauth/index.ts` so:
-- request body accepts `customerEmail`
-- if the QB customer is auto-created, include `PrimaryEmailAddr`
-- if an existing QB customer is found but has no email and we have one locally, update that customer email before invoicing
+```typescript
+AllowOnlineCreditCardPayment: true,
+AllowOnlineACHPayment: true,
+GlobalTaxCalculation: "TaxExcluded",
+```
 
-### 5) Set invoice email explicitly on the QB invoice
-When building the QB invoice payload, include:
-- `BillEmail: { Address: customerEmail }` when available
+This is the **primary fix** — without these flags, QB never generates the payment link.
 
-Then keep the existing read-back:
-- `invoice/{id}?include=invoiceLink`
+### 2. Same file — `get-invoice-link` repair path
 
-This is the core backend change that should allow the public payment link to exist.
+When the `get-invoice-link` action reads an existing invoice that has no `InvoiceLink` and the payment flags are `false`, do a sparse update to enable them:
 
-### 6) Repair existing invoices instead of creating more
-For invoices that already have `qb_invoice_id` but no link:
-- fetch the existing QB invoice by id
-- if it has no `BillEmail`, update the invoice/customer email path
-- re-read with `?include=invoiceLink`
-- persist `qb_invoice_link` back to `sales_invoices.metadata`
+```typescript
+const updatePayload = {
+  Id: invoice.Id,
+  SyncToken: invoice.SyncToken,
+  sparse: true,
+  AllowOnlineCreditCardPayment: true,
+  AllowOnlineACHPayment: true,
+  ...(customerEmail && !invoice.BillEmail?.Address && { BillEmail: { Address: customerEmail } }),
+};
+```
 
-### 7) Validate after fix
-I would verify all of these:
+Then re-read with `?include=invoiceLink` to get the newly generated link.
 
-- opening the email dialog creates **zero** new QB invoices
-- clicking “Get QuickBooks Link” on an invoice with existing `qb_invoice_id` does **not** create a duplicate
-- returned QB invoice now has:
-  - `BillEmail.Address`
-  - non-null `InvoiceLink`
-- `sales_invoices.metadata.qb_invoice_link` is saved
-- UI opens the real customer link (`intuit.me/...`), not sign-in
+### 3. Same file — Add `minorversion` query param
 
-## Files to change
-- `supabase/functions/quickbooks-oauth/index.ts`
-- `src/components/accounting/documents/DraftInvoiceEditor.tsx`
+Append `minorversion=69` to all `qbFetch` calls so QB returns `InvoiceLink` and `ProjectRef` fields. Update `qbFetch` to automatically append this:
 
-## Important note
-There is one possible environment check to keep in scope:
-- if this QuickBooks connection is still running in **sandbox**, public payment-link behavior can still be limited/inconsistent
-- but the code-level root issue is already clear: **we are creating invoices without email and using a write endpoint where a read endpoint is needed**
+```typescript
+// In qbFetch, before building the URL:
+const separator = path.includes("?") ? "&" : "?";
+const versionedPath = path.includes("minorversion") ? path : `${path}${separator}minorversion=69`;
+```
 
-## Expected result
-After this fix:
-- no more duplicate QB invoices from UI checks
-- existing invoices reuse stored QB ids
-- QB invoices are created with email
-- read-back returns a real public payment link
-- the button opens the customer payment page instead of showing “No link returned”
+### 4. Same file — `GlobalTaxCalculation` for Canadian locale
+
+Set `GlobalTaxCalculation: "TaxExcluded"` on all invoice creation payloads. This is required for non-US companies and prevents the tax calculation error 6000 that appeared earlier.
+
+### 5. `src/hooks/usePaymentSources.ts` — Guard Charges API for Canadian accounts
+
+The `list-charges` Stripe call is fine, but the QB Payments Charges API query should be skipped for Canadian companies. Currently there's no direct QB Charges call, but ensure we don't add one — the QB Payments Charges entity is explicitly **US-only**.
+
+### 6. Same edge function — `handleCreateEstimate` and `handleConvertEstimateToInvoice`
+
+Apply the same `AllowOnlineCreditCardPayment` and `AllowOnlineACHPayment` flags when converting estimates to invoices.
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `supabase/functions/quickbooks-oauth/index.ts` | Add online payment flags + `GlobalTaxCalculation` to invoice payloads; add `minorversion=69` to `qbFetch`; repair path in `get-invoice-link` to enable payment flags on existing invoices |
+
+Single file change. No frontend or database changes needed.
+
+## Expected Result
+
+- New invoices will have `AllowOnlineCreditCardPayment: true` and `AllowOnlineACHPayment: true`
+- QB will generate real `InvoiceLink` values (e.g., `https://intuit.me/...`)
+- Existing invoices without links can be repaired via the `get-invoice-link` action
+- Canadian tax handling works correctly with `GlobalTaxCalculation: "TaxExcluded"`
+- `minorversion=69` ensures all modern QB API features are available
+
