@@ -953,6 +953,31 @@ Deno.serve((req) =>
         console.warn("[accept_and_convert] PDF error:", pdfErr);
       }
 
+      // Persist payment artifacts on the invoice record
+      try {
+        const artifactMeta: Record<string, unknown> = {};
+        if (stripePaymentUrl) artifactMeta.stripe_payment_link = stripePaymentUrl;
+        if (qbPaymentUrl) artifactMeta.qb_invoice_link = qbPaymentUrl;
+        if (pdfDownloadUrl) artifactMeta.invoice_pdf_url = pdfDownloadUrl;
+
+        if (Object.keys(artifactMeta).length > 0) {
+          // Merge into existing metadata
+          const { data: currentInv } = await svc
+            .from("sales_invoices")
+            .select("metadata")
+            .eq("id", invoiceId)
+            .maybeSingle();
+          const existingMeta = (currentInv?.metadata as Record<string, unknown>) || {};
+          await svc
+            .from("sales_invoices")
+            .update({ metadata: { ...existingMeta, ...artifactMeta } } as any)
+            .eq("id", invoiceId);
+          console.log("[accept_and_convert] Persisted payment artifacts to invoice metadata:", Object.keys(artifactMeta));
+        }
+      } catch (persistErr) {
+        console.warn("[accept_and_convert] Failed to persist payment artifacts:", persistErr);
+      }
+
       // Build dual payment buttons
       const paymentButtons: string[] = [];
       if (stripePaymentUrl) {

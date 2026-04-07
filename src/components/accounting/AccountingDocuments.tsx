@@ -29,6 +29,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { GenerateQuotationDialog } from "./GenerateQuotationDialog";
 import { DraftQuotationEditor } from "./documents/DraftQuotationEditor";
+import { DraftInvoiceEditor } from "./documents/DraftInvoiceEditor";
+import { useSalesInvoices, SalesInvoice } from "@/hooks/useSalesInvoices";
 
 interface Props {
   data: ReturnType<typeof useQuickBooksData>;
