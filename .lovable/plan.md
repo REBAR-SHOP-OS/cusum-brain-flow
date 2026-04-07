@@ -1,65 +1,61 @@
 
 
-# Add Missing Infrastructure Nodes to Architecture Diagram
+# Add 10 Missing Real Systems to Architecture Diagram
 
-## What's Missing
+## What's Missing (verified against codebase)
 
-The diagram is missing several real system components that are actively used:
+| # | System | Evidence in Codebase | Proposed Node |
+|---|--------|---------------------|---------------|
+| 1 | **Knowledge / RAG** | `knowledge` table, `embed-documents`, `search-embeddings` functions | `knowledge-rag` in AI layer |
+| 2 | **Estimating Engine** | `extract_sessions`, `extract_rows`, `ai-estimate`, `manage-extract` | `estimating` in Modules layer |
+| 3 | **Sales Quotes** | `quote-engine`, `sales_quotation_items`, `send-quote-email` | `quotes` in Modules layer |
+| 4 | **Notification Hub** | `notifications` table, `push-on-notify`, `approval-notify`, `comms-alerts` | `notif-hub` in AI layer |
+| 5 | **Payroll** | `payroll-engine` edge function | `payroll` in Modules layer |
+| 6 | **Camera / Security** | `camera-events`, `camera-ping`, `face-recognize`, `synology-proxy` | `cameras` in Backend layer |
+| 7 | **Website Agent** | `website-chat`, `website-agent`, `website-chat-widget` | `fn-website` in Backend layer |
+| 8 | **Inbox / Comms** | `sms_templates`, `translate-message`, `draft-email` | `inbox` in Modules layer |
+| 9 | **ElevenLabs** | `elevenlabs-tts`, `elevenlabs-music`, `elevenlabs-scribe-token` | `ext-eleven` in External layer |
+| 10 | **MCP Server** | `mcp-server` edge function | `fn-mcp` in Backend layer |
 
-1. **Memory System** — `vizzy_memory`, `lead_qualification_memory`, `lead_quote_memory`, `lead_loss_memory`, `lead_outcome_memory`, `client_performance_memory` — these are core to how the AI and CRM actually work. No representation on the diagram.
-2. **Realtime Engine** — Supabase Realtime powers chat, live dashboards, notifications. Not shown.
-3. **Rate Limiter** — mentioned in API Gateway bullets but not a standalone node.
-4. **Session Store** — auth sessions, token management. Not shown.
-5. **Analytics** — system telemetry, usage tracking. Not shown.
-6. **Log Aggregator** — separate from Event Log (audit) — system-level log collection.
-7. **Health Checks** — uptime monitoring, endpoint health.
-8. **Feature Flags** — mentioned in Admin Console bullets but not explicit.
-9. **Message Bus** — event-driven communication between services.
-
-## Plan
+## Changes
 
 ### File: `src/lib/architectureGraphData.ts`
 
-Add **9 new nodes** to the platform layer:
+**Add 10 new nodes** (one per system above):
 
-| ID | Label | Hint | Why |
-|---|---|---|---|
-| `memory-store` | Memory | AI & CRM memory | Vizzy brain, lead qualification/quote/loss/outcome memory, client performance memory |
-| `realtime` | Realtime | Live events | Supabase Realtime — chat, dashboards, presence |
-| `rate-limiter` | Rate Limiter | Throttle | Request rate limiting at API gateway level |
-| `session-store` | Sessions | Auth state | Session management, token storage |
-| `analytics` | Analytics | Telemetry | Usage metrics, system telemetry |
-| `log-agg` | Log Aggregator | System logs | Centralized log collection |
-| `health` | Health Check | Uptime | Endpoint health, liveness probes |
-| `feature-flags` | Feature Flags | Toggles | Feature toggles, gradual rollouts |
-| `msg-bus` | Message Bus | Pub/Sub | Event-driven inter-service communication |
+- **Modules layer** (3 new): `estimating` (Estimating, OCR+AI), `quotes` (Quotes, Sales quotes), `payroll` (Payroll, Wages), `inbox` (Inbox, Unified comms)
+- **AI layer** (2 new): `knowledge-rag` (Knowledge, RAG store), `notif-hub` (Notifications, Alert routing)
+- **Backend layer** (2 new): `cameras` (Cameras, Security), `fn-website` (Website, Agent+chat), `fn-mcp` (MCP, Agent protocol)
+- **External layer** (1 new): `ext-eleven` (ElevenLabs, Voice+TTS)
 
-Add **~12 new edges** connecting these nodes:
+**Add ~15 new edges**:
 
-- `vizzy` → `memory-store` (dashed, label: "remember")
-- `nila` → `memory-store` (dashed, label: "remember")
-- `crm` → `memory-store` (dashed, label: "qualify")
-- `memory-store` → `primary-db` (solid, label: "persist")
-- `chat` → `realtime` (solid, label: "live")
-- `primary-db` → `realtime` (dashed, label: "stream")
-- `api-gw` → `rate-limiter` (solid, label: "throttle")
-- `auth` → `session-store` (solid, label: "session")
-- `monitoring` → `health` (solid)
-- `monitoring` → `analytics` (solid)
-- `monitoring` → `log-agg` (solid)
-- `admin-console` → `feature-flags` (solid)
-- `pipeline` → `msg-bus` (dashed, label: "publish")
-- `msg-bus` → `worker-pool` (solid, label: "consume")
+- `role-guard` → `estimating`, `quotes`, `payroll`, `inbox` (access control)
+- `estimating` → `qa-war` (verification flow)
+- `quotes` → `fn-stripe` (payment)
+- `inbox` → `fn-gmail` + `fn-ring` (send)
+- `knowledge-rag` → `primary-db` (persist)
+- `vizzy` → `knowledge-rag` (RAG lookup)
+- `nila` → `knowledge-rag` (RAG lookup)
+- `notif-hub` → `fn-push` (deliver)
+- `approval-eng` → `notif-hub` (alert)
+- `cameras` → `ext-eleven` or external (not needed — cameras is self-contained)
+- `fn-website` → `fn-ai` (AI responses)
+- `fn-mcp` → `agent-rtr` (protocol bridge)
+- `vizzy` → `ext-eleven` (voice synthesis)
+- `fn-website` → `ext-google` (analytics)
 
-Total nodes: 58 → 67. Total edges: 76 → ~88.
+**Add icon imports**: `Ruler` (estimating), `FileSpreadsheet` (quotes), `Banknote` (payroll), `Inbox` (inbox), `Library` (knowledge), `BellRing` (notif-hub), `Camera` (cameras), `Globe2` (website), `Plug` (MCP), `AudioLines` (ElevenLabs)
+
+Total: 67 → 77 nodes, 90 → ~105 edges.
 
 ### File: `src/pages/Architecture.tsx`
 
-No changes needed — the layout engine already handles row wrapping for layers with >10 nodes (platform layer will go from 16 to 25 nodes, wrapping into 3 rows automatically).
+No changes needed — the wrapping logic (`MAX_PER_ROW = 10`) handles wider layers automatically.
 
 ## Impact
 - Only `architectureGraphData.ts` changes
-- Layout auto-adapts via existing wrapping logic
+- Layout auto-adapts
 - All existing nodes/edges preserved
 - No interaction or style changes
 
