@@ -719,6 +719,23 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Web Research Tool ───
+  {
+    type: "function",
+    function: {
+      name: "web_research",
+      description: "Search the web for industry news, best practices, technical solutions, competitor intelligence, or any external information. Use proactively when investigating problems, suggesting improvements, or when the CEO asks about trends/news. Returns summarized web results.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query — be specific for best results (e.g. 'Core Web Vitals optimization WordPress 2026' or 'rebar industry trends Canada')" },
+          limit: { type: "number", description: "Number of results (1-10, default 5)" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 const RC_SERVER = "https://platform.ringcentral.com";
@@ -1931,6 +1948,43 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
           memory_key: memoryKey,
           note: "Diagnosis saved to memory. Share with App Builder to apply fix.",
         });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    }
+
+    case "web_research": {
+      try {
+        const query = args.query;
+        if (!query) return JSON.stringify({ error: "query is required" });
+
+        const apiKey = Deno.env.get("FIRECRAWL_API_KEY");
+        if (!apiKey) return JSON.stringify({ error: "Web research not available — Firecrawl not configured" });
+
+        const searchLimit = Math.min(args.limit || 5, 10);
+        const response = await fetch("https://api.firecrawl.dev/v1/search", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query,
+            limit: searchLimit,
+            scrapeOptions: { formats: ["markdown"] },
+          }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          return JSON.stringify({ error: data.error || `Search failed (${response.status})` });
+        }
+
+        const results = (data.data || []).map((r: any) => ({
+          title: r.title || "Untitled",
+          url: r.url,
+          snippet: (r.markdown || r.description || "").slice(0, 500),
+        }));
+
+        return JSON.stringify({ tool: "web_research", query, results, count: results.length });
       } catch (e: any) { return JSON.stringify({ error: e.message }); }
     }
 
