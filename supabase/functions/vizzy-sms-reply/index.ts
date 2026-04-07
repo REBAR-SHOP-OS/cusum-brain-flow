@@ -65,9 +65,10 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Rate limit: max 5 auto-replies per number per day
+    // Rate limit: max replies per number per day (higher for CEO)
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const dailyLimit = isCeo ? 50 : MAX_REPLIES_PER_DAY;
 
     const { count } = await supabase
       .from("communications")
@@ -76,21 +77,21 @@ Deno.serve(async (req) => {
       .eq("to_address", from_number)
       .gte("received_at", todayStart.toISOString());
 
-    if ((count || 0) >= MAX_REPLIES_PER_DAY) {
+    if ((count || 0) >= dailyLimit) {
       console.log("[sms-reply] Rate limit hit for", from_number);
       return new Response(JSON.stringify({ ok: true, skipped: "rate_limit" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Skip own company numbers
+    // Skip own company numbers (but NOT the CEO — allow CEO conversation)
     const { data: ownTokens } = await supabase
       .from("user_ringcentral_tokens")
       .select("rc_phone_number")
       .not("rc_phone_number", "is", null);
 
     const ownNumbers = (ownTokens || []).map((t: any) => t.rc_phone_number?.replace(/\D/g, ""));
-    if (ownNumbers.includes(normalized)) {
+    if (!isCeo && ownNumbers.includes(normalized)) {
       console.log("[sms-reply] Skipping own company number");
       return new Response(JSON.stringify({ ok: true, skipped: "own_number" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
