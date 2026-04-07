@@ -719,6 +719,23 @@ const JARVIS_TOOLS = [
       },
     },
   },
+  // ─── Web Research Tool ───
+  {
+    type: "function",
+    function: {
+      name: "web_research",
+      description: "Search the web for industry news, best practices, technical solutions, competitor intelligence, or any external information. Use proactively when investigating problems, suggesting improvements, or when the CEO asks about trends/news. Returns summarized web results.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query — be specific for best results (e.g. 'Core Web Vitals optimization WordPress 2026' or 'rebar industry trends Canada')" },
+          limit: { type: "number", description: "Number of results (1-10, default 5)" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
 ];
 
 const RC_SERVER = "https://platform.ringcentral.com";
