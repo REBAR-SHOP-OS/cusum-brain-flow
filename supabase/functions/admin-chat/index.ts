@@ -2427,10 +2427,29 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
           const reportData = await reportRes.json();
           return JSON.stringify({ success: true, report_type: args.report_type, data: reportData });
         } else {
+          const errStatus = reportRes.status;
           const errText = await reportRes.text();
-          return JSON.stringify({ success: false, error: errText });
+          let errorType = "unknown_error";
+          let userMessage = "QuickBooks report request failed.";
+          let retryable = true;
+          let needsReconnect = false;
+
+          if (errStatus === 401) {
+            errorType = "provider_auth_error";
+            userMessage = "QuickBooks rejected the request after a token refresh attempt. This may be transient — retry in a moment. If it persists, reconnection may be needed.";
+          } else if (errStatus === 404) {
+            errorType = "connection_not_found";
+            userMessage = "No active QuickBooks connection found for this company.";
+            needsReconnect = true;
+            retryable = false;
+          } else if (errStatus >= 500) {
+            errorType = "provider_server_error";
+            userMessage = "QuickBooks servers returned an error. Retry shortly.";
+          }
+
+          return JSON.stringify({ success: false, error_type: errorType, user_message: userMessage, retryable, needs_reconnect: needsReconnect, raw_status: errStatus });
         }
-      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+      } catch (e: any) { return JSON.stringify({ success: false, error_type: "fetch_exception", user_message: "Failed to reach QuickBooks service. This is likely transient.", retryable: true, needs_reconnect: false }); }
     }
 
     case "fetch_gl_anomalies": {
@@ -2489,9 +2508,29 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
           const syncData = await syncRes.json();
           return JSON.stringify({ success: true, message: "QuickBooks sync triggered", ...syncData });
         } else {
-          return JSON.stringify({ success: false, error: await syncRes.text() });
+          const syncStatus = syncRes.status;
+          const syncErrText = await syncRes.text();
+          let syncErrorType = "unknown_error";
+          let syncUserMessage = "QuickBooks sync request failed.";
+          let syncRetryable = true;
+          let syncNeedsReconnect = false;
+
+          if (syncStatus === 401) {
+            syncErrorType = "provider_auth_error";
+            syncUserMessage = "QuickBooks sync auth failed. This may be transient — retry shortly.";
+          } else if (syncStatus === 404) {
+            syncErrorType = "connection_not_found";
+            syncUserMessage = "No active QuickBooks connection found.";
+            syncNeedsReconnect = true;
+            syncRetryable = false;
+          } else if (syncStatus >= 500) {
+            syncErrorType = "provider_server_error";
+            syncUserMessage = "QuickBooks sync service error. Retry shortly.";
+          }
+
+          return JSON.stringify({ success: false, error_type: syncErrorType, user_message: syncUserMessage, retryable: syncRetryable, needs_reconnect: syncNeedsReconnect, raw_status: syncStatus });
         }
-      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+      } catch (e: any) { return JSON.stringify({ success: false, error_type: "fetch_exception", user_message: "Failed to reach sync service. This is likely transient.", retryable: true, needs_reconnect: false }); }
     }
 
     default:
