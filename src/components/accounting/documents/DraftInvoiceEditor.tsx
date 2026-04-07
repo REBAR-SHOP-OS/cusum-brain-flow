@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail } from "lucide-react";
+import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail, DollarSign, AlertTriangle } from "lucide-react";
+import { RecordPaymentDialog } from "@/components/accounting/RecordPaymentDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -68,6 +69,8 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [invoiceAmount, setInvoiceAmount] = useState(0);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [linkCheckStatus, setLinkCheckStatus] = useState<{ stripe: boolean | null; qb: boolean | null }>({ stripe: null, qb: null });
 
   // Customer dropdown state
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
