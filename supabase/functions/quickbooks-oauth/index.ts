@@ -647,6 +647,20 @@ Deno.serve((req) =>
       case "get-transaction-list":
         return handleGetTransactionList(supabase, userId, body);
 
+      // ── Phase 2: Extended Reports ──────────────────────────────
+      case "get-customer-balance":
+        return handleGetCustomerBalance(supabase, userId, body);
+      case "get-customer-balance-detail":
+        return handleGetCustomerBalanceDetail(supabase, userId, body);
+      case "get-vendor-balance":
+        return handleGetVendorBalance(supabase, userId, body);
+      case "get-ar-aging-summary":
+        return handleGetARAgingSummary(supabase, userId, body);
+      case "get-ap-aging-summary":
+        return handleGetAPAgingSummary(supabase, userId, body);
+      case "get-customer-income":
+        return handleGetCustomerIncome(supabase, userId, body);
+
       // ── Phase 17: New Actions ─────────────────────────────────
       case "get-cash-flow":
         return handleGetCashFlow(supabase, userId, body);
