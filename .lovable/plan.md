@@ -1,35 +1,25 @@
 
 
-# Unify Sales Quotations with Accounting Quotation System
+# Rename "General Report" to "Agents" and Show Per-Employee Agent Access
 
 ## Problem
-The Sales `/sales/quotations` page uses its own basic implementation (`sales_quotations` table, simple create dialog, basic table view). The Accounting page has a full-featured quotation system (`quotes` table) with Sign, Convert to Order, View, AI Auto-generation, drag-and-drop, and `DraftQuotationEditor`.
+The per-employee section currently labeled "General Report" is misleading — it actually shows agent usage sessions. The user wants it:
+1. Renamed from "General Report" to "Agents"
+2. To clearly show which agents each employee **has access to** alongside which they **actually use**
 
-## Solution
-Replace the entire `SalesQuotations.tsx` content with a thin wrapper that renders `AccountingDocuments` with `initialDocType="quotation"`, using `useQuickBooksData` to supply the required `data` prop.
+## Changes
 
-## Change
+### `src/components/vizzy/VizzyBrainPanel.tsx`
 
-### `src/pages/sales/SalesQuotations.tsx`
-Replace the entire file with:
-- Import `useQuickBooksData` and `AccountingDocuments`
-- Call `useQuickBooksData()` to get the data prop
-- Render `AccountingDocuments` with `data={qb}` and `initialDocType="quotation"`
-- Keep TakeoffWizard integration if drag-drop is still needed (AccountingDocuments already has its own `DocumentUploadZone`)
+**1. Rename section header** (line 1079):
+- Change "General Report" → "Agents"
 
-```text
-SalesQuotations (new)
-└── AccountingDocuments (initialDocType="quotation")
-    ├── Search + Status Filter
-    ├── Add Quotation (Manual / AI Auto)
-    ├── DocumentUploadZone (drag-and-drop)
-    ├── Quotation Cards (Sign, Convert to Order, View, Delete)
-    └── DraftQuotationEditor / QuotationTemplate viewers
-```
+**2. Update `UserAgentsSections` component** (lines 188-319):
+- Add a list of **all accessible agents** for the employee based on their role from `userAgentMap.ts` and `agentConfigs`
+- Currently it shows assigned agent + used agents from sessions. Enhance to also show agents the user has access to but hasn't used yet (with "No activity yet" label — this already exists in the UI)
+- The `getUserAgentMapping` already provides the primary agent. Add logic to also list all agents available to the user's role (most agents are public to all staff, Penny is restricted to admin/accounting, Pixel to admin/marketing)
 
-### Impact
-- Single file replaced
-- Sales users see the exact same quotation UI as Accounting (screenshot 1)
-- All quotations come from the unified `quotes` table
-- No database changes needed
+**3. Keep the `UserFullReportButton`** as-is — it already generates a per-user report (clipboard copy), not the system-wide PDF
+
+No other files need changes. No database changes.
 
