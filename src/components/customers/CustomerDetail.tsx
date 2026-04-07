@@ -148,7 +148,7 @@ function DeleteCustomerButton({ customer, onDelete }: { customer: Customer; onDe
   );
 }
 
-  const { toast } = useToast();
+  export function CustomerDetail({ customer, onEdit, onDelete }: CustomerDetailProps) {
   const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
   const navigate = useNavigate();
