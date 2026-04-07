@@ -1,43 +1,68 @@
 
 
-# Fix: Vizzy SMS Still Not Responding
+# Fix: Scheduled Posts Not Publishing — Missing Internal Secret
 
 ## Root Cause
 
-**Line 4 of `ringcentral-webhook/index.ts`** calls `serve(async (req) => {` — but `serve` is never imported or defined. It should be `Deno.serve(async (req) => {`. This means the entire webhook handler has been dead since deployment. No inbound SMS or call events reach the system in real time.
+The `social-cron-publish` function was recently updated to require `internalOnly: true`, which demands the `x-internal-secret` header matching the `INTERNAL_FUNCTION_SECRET` environment variable. **Both are missing:**
 
-Meanwhile, `ringcentral-sync` (the 15-min cron) successfully stores inbound SMS, but **never triggers `vizzy-sms-reply`**. So messages are saved but Vizzy never generates a reply.
+1. The **pg_cron job** calls `social-cron-publish` every 5 minutes but does **not** include the `x-internal-secret` header
+2. The **`INTERNAL_FUNCTION_SECRET` env var** is not set as an Edge Function secret
+3. The **vault secret** `INTERNAL_FUNCTION_SECRET` also does not exist in `vault.secrets`
 
-## Changes
+This means every cron invocation immediately fails with `"INTERNAL_FUNCTION_SECRET not configured"` and returns a 500 error. No posts get published. This affects **15 internal functions** including social publishing, push notifications, escalation checks, email automation, and pipeline automation.
 
-### 1. Fix `supabase/functions/ringcentral-webhook/index.ts`
-- **Line 4**: Change `serve(async (req) => {` to `Deno.serve(async (req) => {`
-- Add structured logging at entry point: webhook received, event type, SMS trigger fired/skipped
+**6 posts** scheduled for this morning (10:30 AM, 12:00 PM UTC) are stuck in `scheduled` status despite being approved.
 
-### 2. Add cron fallback in `supabase/functions/ringcentral-sync/index.ts`
-In the SMS sync loop (around line 549), after a new inbound SMS is inserted (`status === 201`):
-- Skip CEO's own number (already done)
-- Skip spam (already done)
-- **Add**: trigger `vizzy-sms-reply` for genuinely new inbound SMS as a catch-up path
-- Fire-and-forget, same pattern as the webhook trigger
-- This ensures replies happen even when the webhook is down
+## Fix — Two Steps
 
-### 3. Improve logging in `supabase/functions/vizzy-sms-reply/index.ts`
-- Add structured log at entry: from_number, isCeo, skip reason
-- Log the specific reason when a reply is skipped (spam/dedupe/rate_limit/own_number/short_code)
-- Already mostly there — just add an entry-point log so we can confirm invocations in edge function logs
+### Step 1: Create the secret
+Generate a random `INTERNAL_FUNCTION_SECRET` value and set it in two places:
+- As an **Edge Function secret** (so `Deno.env.get("INTERNAL_FUNCTION_SECRET")` works)
+- In the **Supabase vault** (so `get_internal_function_secret()` works for DB triggers)
 
-## Files Changed
+### Step 2: Update the cron job to pass the header
+Update the pg_cron job for `social-cron-publish` (and the duplicate job) to include the `x-internal-secret` header in the HTTP request, matching how the DB trigger functions already do it via `get_internal_function_secret()`.
 
-| File | Change |
-|------|--------|
-| `supabase/functions/ringcentral-webhook/index.ts` | Fix `serve` → `Deno.serve`, add entry logging (~3 lines) |
-| `supabase/functions/ringcentral-sync/index.ts` | Add vizzy-sms-reply trigger for new inbound SMS in cron (~15 lines) |
-| `supabase/functions/vizzy-sms-reply/index.ts` | Add entry-point log (~2 lines) |
+Migration SQL:
+```sql
+-- Insert secret into vault
+INSERT INTO vault.secrets (name, secret)
+VALUES ('INTERNAL_FUNCTION_SECRET', gen_random_uuid()::text);
 
-## Impact
-- Webhook path restored — real-time SMS replies work again
-- Cron fallback ensures replies even if webhook is temporarily down
-- Better observability for debugging
-- No database or auth changes
+-- Update cron job to pass the internal secret header
+SELECT cron.unschedule(21);
+SELECT cron.unschedule(32);
+
+SELECT cron.schedule(
+  'social-cron-publish',
+  '*/5 * * * *',
+  $$
+  SELECT net.http_post(
+    url := 'https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/social-cron-publish',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+      'x-internal-secret', (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'INTERNAL_FUNCTION_SECRET' LIMIT 1)
+    ),
+    body := '{"source": "cron"}'::jsonb
+  ) AS request_id;
+  $$
+);
+```
+
+Then set the same secret value as an Edge Function env var using `add_secret`.
+
+### Files Changed
+
+| Change | Detail |
+|--------|--------|
+| **Migration SQL** | Insert vault secret, recreate cron jobs with `x-internal-secret` header |
+| **Edge Function Secret** | Add `INTERNAL_FUNCTION_SECRET` env var |
+
+### Impact
+- Fixes social publishing cron (6 posts will publish on next 5-min tick)
+- Fixes **all 15 internal cron/system functions** that use `internalOnly: true`
+- No code changes needed — the functions already work, they just need the secret
+- The 6 stuck morning posts will auto-publish once the fix is deployed
 
