@@ -37,7 +37,7 @@ export function MaterialFlowDiagram() {
     enabled: !!user,
     refetchInterval: 15000,
     queryFn: async () => {
-      const phases = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
+      const phases = ["queued", "cutting", "cut_done", "bending", "clearance", "loading", "complete"];
       const counts: PhaseCount[] = [];
       for (const phase of phases) {
         const { count, error } = await supabase
