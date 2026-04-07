@@ -1,50 +1,64 @@
 
 
-# Fix: Black Buttons & Invisible Text in Quotation Editor (Dark Mode)
+# Per-User Menu Access + General Report Filtering
 
-## Root Cause
+## Two Changes
 
-The app runs in dark mode. The quotation document container at line 449 has `bg-white text-gray-900`, but all Button components inside it use CSS variable-based classes like `bg-background` (the outline variant) and `bg-primary` (the default variant). In dark mode:
+### 1. Update `src/lib/userAccessConfig.ts` — Menu Items per User
 
-- `bg-background` → `hsl(222 47% 6%)` → nearly black
-- `border-input` → dark border
-- `text-primary-foreground` → may blend into the dark button
+Currently `sattar@rebar.shop` has `fullAccess: true`. The user now wants explicit items listed. Update:
 
-So "Add Line", "Upload", Ship Date picker, and the top action buttons all render with dark backgrounds and invisible text.
+**sattar@rebar.shop**: Remove `fullAccess: true`, set explicit menus:
+```
+Dashboard, Inbox, Team Hub, Business Tasks, Live Monitor, CEO Portal, Support,
+Pipeline, Lead Scoring, Customers, Accounting, Sales, Shop Floor, Time Clock,
+Office Tools, Inventory, Diagnostics, Architecture, Settings, Admin Panel
+```
+(This is effectively all items, but explicitly listed per the user's request.)
 
-## Fix
+**radin@rebar.shop**: Keep `fullAccess: true` (user said "all items").
 
-**Force light theme on the document area** by adding a `data-theme="light"` or simply wrapping with a class that resets CSS variables to light values. The cleanest approach: add the `.light` class (or remove `.dark` context) on the document wrapper so all shadcn components inside render in light mode.
+All other users are already correct in `userAccessConfig.ts` — verified against the user's list.
 
-### File: `src/components/accounting/documents/DraftQuotationEditor.tsx`
+### 2. Filter General Report Sections by User's Menu Access
 
-**Change 1** — Wrap the entire editor return in a div that forces light theme:
+**File: `src/components/vizzy/VizzyBrainPanel.tsx`**
 
-At the outermost wrapper (around line 395-398 where the return starts), add a wrapping `<div className="light">` so all CSS variables resolve to light mode values inside the document.
+Add a mapping from SIDEBAR_GROUPS keys to menu names, then filter `sectionsToShow` based on the current user's `getVisibleMenus()`.
 
-The return currently starts roughly with the email dialog + action buttons + document. Wrap everything inside a `<div className="light bg-transparent">` container.
+**Mapping** (SIDEBAR_GROUP key → MenuKey):
+| Group Key | Menu Name |
+|-----------|-----------|
+| dashboard | Dashboard |
+| inbox | Inbox |
+| team_hub | Team Hub |
+| tasks | Business Tasks |
+| monitor | Live Monitor |
+| ceo | CEO Portal |
+| support | Support |
+| pipeline | Pipeline |
+| lead_scoring | Lead Scoring |
+| customers | Customers |
+| accounting | Accounting |
+| sales | Sales |
+| production | Shop Floor |
+| shop_floor | Shop Floor |
+| timeclock | Time Clock |
+| office_tools | Office Tools |
 
-**Change 2** — The action buttons (Save Draft, Send Email, Print/PDF) at line 434 also need to be inside this light wrapper since they appear over the document.
+**Implementation**:
+1. Import `getVisibleMenus` from `@/lib/userAccessConfig`
+2. Get current user email from `useAuth()`
+3. Compute `visibleMenus = getVisibleMenus(email)`
+4. Create a `GROUP_TO_MENU` constant mapping each group key to its required menu name
+5. In the `sectionsToShow` computation (~line 907), filter groups to only include those whose mapped menu is in the user's visible menus
+6. Super admins (fullAccess) see all sections — no filtering needed since `getVisibleMenus` already returns all menus for them
 
-### File: `src/components/accounting/DocumentAttachments.tsx`
+This ensures Zahra only sees "Business Tasks" and "Support" sections in General Report, Kourosh only sees "Time Clock", "Shop Floor", and "Team Hub", etc.
 
-No changes needed — once the parent forces light theme, the Upload button's `bg-background` will resolve to white automatically.
-
-### File: `src/components/accounting/documents/DraftInvoiceEditor.tsx`
-
-Apply the same light-theme wrapper for consistency (same issue likely exists there).
-
-## Expected Result
-
-- "Add Line" button: white background, visible dark text
-- "Upload" button: white background, visible dark text  
-- Ship Date picker: white background, visible text
-- "Save Draft": teal/primary background with visible white text
-- All inputs, selects, and popovers inside the document render in light mode
-
-## Scope
+## Files Changed
 | File | Change |
 |------|--------|
-| `src/components/accounting/documents/DraftQuotationEditor.tsx` | Add `light` class wrapper around editor |
-| `src/components/accounting/documents/DraftInvoiceEditor.tsx` | Same light class wrapper |
+| `src/lib/userAccessConfig.ts` | Update sattar's config to explicit menu list (remove fullAccess) |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Filter General Report sections by user's menu access |
 
