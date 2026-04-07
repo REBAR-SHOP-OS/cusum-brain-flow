@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon } from "lucide-react";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
@@ -330,6 +330,100 @@ function SectionReportButton({ label, getText }: { label: string; getText: () =>
       title={`Copy ${label} report`}
     >
       <ClipboardList className="w-3.5 h-3.5" />
+    </button>
+  );
+}
+
+/** Comprehensive user report button — aggregates all performance data */
+function UserFullReportButton({
+  profile,
+  timezone,
+  date,
+}: {
+  profile: { id: string; user_id: string; full_name: string | null; email: string | null };
+  timezone: string;
+  date?: Date;
+}) {
+  const { data: perfData } = useUserPerformance(profile.id, profile.user_id, date);
+  const { data: agentSessions } = useUserAgentSessions(profile.user_id);
+  const { data: activities } = useUserActivityLog(profile.id);
+
+  const generateReport = () => {
+    const name = profile.full_name || "User";
+    const dateLabel = date ? format(date, "MMM d, yyyy") : format(new Date(), "MMM d, yyyy");
+    const lines: string[] = [];
+
+    lines.push(`📊 Full Performance Report — ${name}`);
+    lines.push(`📅 Date: ${dateLabel}`);
+    lines.push(`📧 Email: ${profile.email || "N/A"}`);
+    lines.push("");
+
+    // Performance overview
+    lines.push("── General Overview ──");
+    if (perfData) {
+      lines.push(`⏰ Status: ${perfData.clockedIn ? "Clocked In" : "Not Clocked In"}`);
+      lines.push(`🕐 Hours Worked: ${perfData.hoursToday}h`);
+      lines.push(`📋 Activities: ${perfData.activitiesToday}`);
+      lines.push(`🤖 AI Sessions: ${perfData.aiSessionsToday}`);
+      lines.push(`📧 Emails Sent: ${perfData.emailsSent}`);
+      if (perfData.clockEntries?.length) {
+        lines.push("");
+        lines.push("Clock Entries:");
+        for (const entry of perfData.clockEntries) {
+          const start = formatDateInTimezone(new Date(entry.clock_in), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+          const end = entry.clock_out
+            ? formatDateInTimezone(new Date(entry.clock_out), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+            : "Still working";
+          lines.push(`  • ${start} → ${end}`);
+        }
+      }
+    } else {
+      lines.push("No performance data available.");
+    }
+
+    lines.push("");
+
+    // Agents
+    lines.push("── Agent Usage ──");
+    if (agentSessions?.length) {
+      for (const agent of agentSessions) {
+        const lastUsed = agent.lastUsed ? format(new Date(agent.lastUsed), "MMM d, yyyy") : "N/A";
+        lines.push(`  🤖 ${agent.agentName}: ${agent.sessionCount} sessions, ${agent.totalMessages} messages (last: ${lastUsed})`);
+      }
+    } else {
+      lines.push("  No agent sessions recorded.");
+    }
+
+    lines.push("");
+
+    // Activity log
+    lines.push("── Activity Log (Today) ──");
+    if (activities?.length) {
+      for (const a of activities.slice(0, 20)) {
+        const time = formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+        lines.push(`  • [${time}] ${a.event_type} — ${a.entity_type}${a.description ? `: ${a.description}` : ""}`);
+      }
+      if (activities.length > 20) {
+        lines.push(`  ... and ${activities.length - 20} more`);
+      }
+    } else {
+      lines.push("  No activities recorded today.");
+    }
+
+    return lines.join("\n");
+  };
+
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(generateReport());
+        sonnerToast.success("Full user report copied to clipboard");
+      }}
+      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+      title="Generate full user report"
+    >
+      <FileText className="w-3.5 h-3.5" />
     </button>
   );
 }
