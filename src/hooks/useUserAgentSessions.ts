@@ -24,14 +24,20 @@ export function useUserAgentSessions(userId: string | null) {
 
       if (error) throw error;
 
+      // Normalize legacy agent names to canonical display names
+      const AGENT_NAME_ALIASES: Record<string, string> = {
+        eisenhower: "Eisenhower Matrix",
+      };
+
       const agentMap = new Map<string, { count: number; lastUsed: string; sessionIds: string[] }>();
       for (const s of (sessions || [])) {
-        const existing = agentMap.get(s.agent_name);
+        const normalizedName = AGENT_NAME_ALIASES[s.agent_name] ?? s.agent_name;
+        const existing = agentMap.get(normalizedName);
         if (existing) {
           existing.count++;
           existing.sessionIds.push(s.id);
         } else {
-          agentMap.set(s.agent_name, {
+          agentMap.set(normalizedName, {
             count: 1,
             lastUsed: s.updated_at,
             sessionIds: [s.id],
