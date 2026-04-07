@@ -248,7 +248,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
 
       await supabase
         .from("cut_plan_items")
-        .update({ phase: "complete" })
+        .update({ phase: "loading" })
         .eq("id", item.id);
 
       await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
