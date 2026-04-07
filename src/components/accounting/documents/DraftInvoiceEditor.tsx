@@ -641,11 +641,48 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         <p style="font-size:14px;color:#333;">Thank you for your business!</p>
       `;
 
+      // Generate invoice PDF and get download link
+      let pdfDownloadUrl = "";
+      try {
+        const { data: pdfResult } = await supabase.functions.invoke("generate-invoice-pdf", {
+          body: {
+            invoiceId,
+            invoiceNumber,
+            invoiceDate,
+            dueDate: dueDate || undefined,
+            customerName: customerName || undefined,
+            customerCompany: customerCompany || undefined,
+            customerAddress: customerAddress || undefined,
+            items: items.map(it => ({ description: it.description, quantity: it.quantity, unitPrice: it.unitPrice })),
+            subtotal,
+            taxRate,
+            taxAmount,
+            total,
+            notes: notes || undefined,
+            stripePayUrl: paymentUrl || undefined,
+            qbPayUrl: qbPayUrl || undefined,
+          },
+        });
+        if (pdfResult?.url) pdfDownloadUrl = pdfResult.url;
+      } catch (pdfErr) {
+        console.warn("PDF generation failed (non-blocking):", pdfErr);
+      }
+
+      // Insert PDF download button into email if available
+      const pdfBtnHtml = pdfDownloadUrl
+        ? `<div style="text-align:center;margin:20px 0;">
+            <a href="${pdfDownloadUrl}" style="display:inline-block;background:#1a1a2e;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;letter-spacing:0.5px;">📄 Download Invoice PDF</a>
+            <p style="text-align:center;font-size:11px;color:#888;margin-top:6px;">View or print your full invoice document</p>
+          </div>`
+        : "";
+
+      const fullEmailBody = emailBody + pdfBtnHtml;
+
       const { error } = await supabase.functions.invoke("gmail-send", {
         body: {
           to: email,
           subject: `Invoice #${invoiceNumber} - ${fmt(total)} - Rebar.Shop`,
-          body: emailBody,
+          body: fullEmailBody,
         },
       });
       if (error) throw error;
