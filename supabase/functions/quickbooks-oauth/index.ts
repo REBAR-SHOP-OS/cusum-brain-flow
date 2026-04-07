@@ -1547,12 +1547,24 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     : (effectiveTaxCode && !isNaN(Number(effectiveTaxCode)) ? String(effectiveTaxCode) : null);
 
   // Add discount line if provided
+  // Canadian QB requires a GST/HST rate on every transaction line.
+  // Use a taxable sales line instead of DiscountLineDetail so TaxCodeRef is always explicit.
   if (discountPercent && discountPercent > 0) {
-    lines.push({
-      DetailType: "DiscountLineDetail",
-      Amount: 0,
-      DiscountLineDetail: { PercentBased: true, DiscountPercent: discountPercent },
-    });
+    const subtotalBeforeDiscount = normalizedLines.reduce((sum, line) => sum + Number((line.payload.Amount as number) || 0), 0);
+    const discountAmount = Number(((subtotalBeforeDiscount * discountPercent) / 100).toFixed(2));
+    if (discountAmount > 0) {
+      lines.push({
+        DetailType: "SalesItemLineDetail",
+        Amount: -discountAmount,
+        Description: `Discount (${discountPercent}%)`,
+        SalesItemLineDetail: {
+          UnitPrice: -discountAmount,
+          Qty: 1,
+          ItemRef: { value: "1", name: "Services" },
+          TaxCodeRef: { value: String(transactionTaxCode || effectiveTaxCode) },
+        },
+      });
+    }
   }
 
   // Add shipping line if provided
