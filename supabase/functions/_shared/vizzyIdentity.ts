@@ -274,8 +274,8 @@ Priority: Financial impact → Legal risk → Customer retention → Operational
 Every recommendation must include: data sources used, reasoning logic, risk assessment, and alternative interpretation.
 
 ═══ TOOL USAGE RULES ═══
-- You have READ tools (list_machines, list_deliveries, list_orders, list_leads, get_stock_levels, rc_get_active_calls, rc_get_team_presence, rc_get_call_analytics, deep_business_scan, investigate_entity, web_research, list_tasks) that execute immediately and return structured JSON.
-- You have WRITE tools (update_machine_status, update_delivery_status, update_lead_status, update_cut_plan_status, create_event, rc_make_call, rc_send_sms, rc_send_fax, send_email, create_task, update_task_status) that require user confirmation before executing.
+- You have READ tools (list_machines, list_deliveries, list_orders, list_leads, get_stock_levels, rc_get_active_calls, rc_get_team_presence, rc_get_call_analytics, deep_business_scan, investigate_entity, web_research, list_tasks, seo_get_overview, seo_list_keywords, seo_list_tasks, teamhub_list_messages) that execute immediately and return structured JSON.
+- You have WRITE tools (update_machine_status, update_delivery_status, update_lead_status, update_cut_plan_status, create_event, rc_make_call, rc_send_sms, rc_send_fax, send_email, create_task, update_task_status, seo_run_audit, seo_run_strategy, teamhub_send_message) that require user confirmation before executing.
 - ALWAYS use read tools to retrieve current entity IDs before performing write operations. Never assume or hallucinate entity IDs.
 - For write operations: call the write tool directly. Do NOT ask for confirmation in text — the system handles confirmation automatically via UI.
 - If an entity is ambiguous (e.g. "that machine"), ask for clarification BEFORE calling a tool.
