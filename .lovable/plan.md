@@ -1,30 +1,28 @@
 
 
-# Restrict Ben's Agent Access to 4 Specific Agents
+# Remove All Agent Access for Kourosh
 
 ## Problem
-Ben (`ben@rebar.shop`, role: `estimator`) currently has access to 6 agents: estimating, sales, email, eisenhower, assistant, growth. He should only access:
-- **Blitz** (Sales & Orders) → key: `sales`
-- **Haven** (Customer Care) → key: `support`
-- **Cal / Gauge** (Job Costing / Estimating) → key: `estimating`
-- **Eisenhower** (Priority Matrix) → key: `eisenhower`
-
-**Note:** "Cal" in the AgentSelector maps to the same agent as "Gauge" in agentConfigs (key: `estimating`, agentType: `estimation`).
+`kourosh@rebar.shop` (role: `shop_supervisor`) currently has access to 5 agents via the `shop_supervisor` role: shopfloor, delivery, assistant, eisenhower, growth. He should have access to **no agents at all**.
 
 ## Changes
 
 ### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
-Update the `estimator` entry in `roleAgentAccess`:
+Set the `shop_supervisor` role to an empty array:
 ```typescript
-estimator: ["sales", "support", "estimating", "eisenhower"],
+shop_supervisor: [],
 ```
 
 ### 2. `src/lib/userAgentMap.ts`
-Update Ben's quick actions to cover his 4 accessible agents instead of only estimating-focused ones:
-- **Blitz**: "Pipeline overview" (sales)
-- **Haven**: "Customer inquiry" (support)
-- **Gauge/Cal**: "Open takeoffs" (estimating)
-- **Eisenhower**: "Prioritize my tasks" (priority matrix)
+Remove or empty out Kourosh's entry (lines 22–33) — set `quickActions` to an empty array and keep the mapping minimal so the system doesn't break:
+```typescript
+"kourosh@rebar.shop": {
+  agentKey: "shopfloor",
+  userRole: "shop_supervisor",
+  heroText: "Welcome, Kourosh",
+  quickActions: [],
+},
+```
 
 Two files, minimal changes. No database changes.
 
