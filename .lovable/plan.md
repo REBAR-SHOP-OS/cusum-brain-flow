@@ -1,55 +1,46 @@
 
 
-# Fix: "Forbidden: requires one of [admin, marketing] roles" for Super Admins
+# Fix: Add 5xx Retry to Prevent Transient Edge Function Boot Failures (546)
 
-## Root Cause
+## Root Cause Analysis
 
-The `requireAnyRole()` function in `supabase/functions/_shared/roleCheck.ts` does a strict database lookup against the `user_roles` table — but has **no super admin bypass**. Compare with `requireSuperAdmin()` in the same file, which correctly checks `SUPER_ADMIN_EMAILS` as a fallback.
+The screenshot shows `"Edge function ai-agent failed (546)"`. This is NOT about a missing `generate-social-posts` function — there is no such function in this project. The social post generation flows entirely through the `ai-agent` edge function with `agent: "social"`.
 
-Super admins (sattar, radin, zahra) may not have an explicit `marketing` row in `user_roles`, so when they click "Regenerate" on a social post, the `regenerate-post` function's `requireAnyRole: ["admin", "marketing"]` guard rejects them with 403.
+HTTP 546 is a Supabase edge runtime transient error (cold start failure, boot timeout, or resource exhaustion). The function is currently working fine (logs show successful image generation at 14:03-14:05 UTC today). The 09:15 AM failure was transient.
+
+**The gap:** `invokeEdgeFunction.ts` already has `retries: 1` configured for `ai-agent`, but the retry logic (line 66) only retries on `AbortError`, `Failed to fetch`, or `NetworkError`. A 546 response is a successful HTTP response (not a network error), so it is NOT retried — the user sees the error immediately.
 
 ## Fix
 
-### `supabase/functions/_shared/roleCheck.ts` — Add super admin bypass to `requireAnyRole`
+### `src/lib/invokeEdgeFunction.ts` — Add 5xx status codes to retryable conditions
 
-Before the strict role check, look up the user's email and check against `SUPER_ADMIN_EMAILS`. If they're a super admin, return immediately (no throw).
+Add a check: if `response.status >= 500`, treat it as retryable before throwing.
 
 ```typescript
-export async function requireAnyRole(
-  serviceClient: { from: (table: string) => any },
-  userId: string,
-  roles: AppRole[],
-): Promise<void> {
-  // Super admin bypass — same pattern as requireSuperAdmin()
-  const { data: profile } = await serviceClient
-    .from("profiles")
-    .select("email")
-    .eq("user_id", userId)
-    .maybeSingle();
-  const email = (profile?.email ?? "").toLowerCase();
-  if (SUPER_ADMIN_EMAILS.includes(email)) return;
-
-  const has = await hasAnyRole(serviceClient, userId, roles);
-  if (!has) {
-    throw new Response(
-      JSON.stringify({ error: `Forbidden: requires one of [${roles.join(", ")}] roles` }),
-      { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }
+// Line 49-51, after response.ok check:
+if (!response.ok) {
+  const errMsg = data?.error || `Edge function ${functionName} failed (${response.status})`;
+  const err = new Error(errMsg);
+  (err as any).status = response.status;
+  throw err;
 }
-```
 
-Same bypass added to `requireRole()` for consistency.
+// Line 66, in isRetryable check:
+const isRetryable = err.name === "AbortError" 
+  || err.message?.includes("Failed to fetch") 
+  || err.message?.includes("NetworkError")
+  || (err as any).status >= 500;  // <-- NEW: retry on 5xx
+```
 
 ## Files Changed
 
 | File | Change |
 |------|--------|
-| `supabase/functions/_shared/roleCheck.ts` | Add super admin email bypass to `requireRole()` and `requireAnyRole()` (~12 lines) |
+| `src/lib/invokeEdgeFunction.ts` | Add `status` property to error + include 5xx in retryable check (~3 lines) |
 
 ## Impact
-- Super admins can regenerate posts immediately
-- All other `requireAnyRole` / `requireRole` guarded functions also get the bypass
-- No database, UI, or schema changes
-- Non-super-admin users still require explicit roles as before
+- Transient 546/500/502/503 errors are automatically retried once (with backoff) before surfacing to the user
+- No behavior change for non-5xx errors (auth failures, validation errors, etc.)
+- No database, edge function, or UI changes
+- Existing `retries: 1` in `agent.ts` is now effective for boot failures
 
