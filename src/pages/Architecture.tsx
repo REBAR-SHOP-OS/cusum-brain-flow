@@ -10,6 +10,7 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type ReactFlowInstance,
   MarkerType,
   BackgroundVariant,
 } from "@xyflow/react";
@@ -27,7 +28,8 @@ import {
   ARCH_NODES, ARCH_EDGES, LAYERS,
   type ArchNode, type ArchEdge, type ArchLayer, type Accent,
 } from "@/lib/architectureGraphData";
-import { ArchFlowNode } from "@/components/system-flow/ArchFlowNode";
+import { ArchFlowNode, type ArchFlowNodeData } from "@/components/system-flow/ArchFlowNode";
+import { applyArchitectureLayout, matchesArchitectureQuery } from "@/lib/architectureFlow";
 
 /* ───── Style maps ───── */
 const accentColor: Record<Accent, string> = {
@@ -64,52 +66,36 @@ function getEdgeVisuals(archEdge: ArchEdge | undefined, srcAccent: Accent) {
 /* ───── Node types ───── */
 const nodeTypes = { archNode: ArchFlowNode };
 
-/* ───── Layout constants — ADHD-proof spacing ───── */
-const LAYER_GAP = 220;
-const NODE_W = 130;
-const NODE_GAP = 30;
-const LEFT_MARGIN = 40;
-const TOP_MARGIN = 40;
-const CENTER_REF = 2800;
-const MAX_PER_ROW = 10;
+type ArchitectureFlowNode = Node<ArchFlowNodeData>;
+
+type ArchitectureDialogNode = {
+  id: string;
+  hint: string;
+  layer: ArchLayer;
+  accent: Accent;
+  icon: ArchNode["icon"];
+  detail: ArchNode["detail"];
+};
+
+const getAllLayers = () => new Set(LAYERS.map((layer) => layer.key));
 
 /* ───── Convert static data to React Flow nodes/edges ───── */
-function buildInitialNodes(
-  onDelete: (id: string) => void,
-  onLabelChange: (id: string, label: string) => void,
-): Node[] {
-  const nodes: Node[] = [];
-  let layerIdx = 0;
-
-  for (const layer of LAYERS) {
-    const layerNodes = ARCH_NODES.filter((n) => n.layer === layer.key);
-    const rowCount = Math.ceil(layerNodes.length / MAX_PER_ROW);
-
-    for (let row = 0; row < rowCount; row++) {
-      const rowNodes = layerNodes.slice(row * MAX_PER_ROW, (row + 1) * MAX_PER_ROW);
-      const totalW = rowNodes.length * NODE_W + (rowNodes.length - 1) * NODE_GAP;
-      const startX = LEFT_MARGIN + Math.max(0, (CENTER_REF - totalW) / 2);
-      const y = TOP_MARGIN + layerIdx * LAYER_GAP + row * (LAYER_GAP * 0.55);
-
-      rowNodes.forEach((n, i) => {
-        nodes.push({
-          id: n.id,
-          type: "archNode",
-          position: { x: startX + i * (NODE_W + NODE_GAP), y },
-          data: {
-            label: n.label,
-            hint: n.hint,
-            accent: n.accent,
-            Icon: n.icon,
-            onDelete,
-            onLabelChange,
-          },
-        });
-      });
-    }
-    layerIdx += rowCount > 1 ? 2 : 1;
-  }
-  return nodes;
+function buildInitialNodes(): ArchitectureFlowNode[] {
+  return applyArchitectureLayout(
+    ARCH_NODES.map((node) => ({
+      id: node.id,
+      type: "archNode",
+      position: { x: 0, y: 0 },
+      data: {
+        label: node.label,
+        hint: node.hint,
+        accent: node.accent,
+        layer: node.layer,
+        detail: node.detail,
+        Icon: node.icon,
+      },
+    })),
+  );
 }
 
 function buildInitialEdges(): Edge[] {
@@ -221,32 +207,41 @@ const FAILURE_STEPS = [
 ];
 
 export default function Architecture() {
-  const [openNode, setOpenNode] = useState<ArchNode | null>(null);
+  const [openNode, setOpenNode] = useState<ArchitectureDialogNode | null>(null);
   const [searchQ, setSearchQ] = useState("");
   const [visibleLayers, setVisibleLayers] = useState<Set<ArchLayer>>(
-    () => new Set(LAYERS.map((l) => l.key)),
+    getAllLayers,
   );
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [newNodeLabel, setNewNodeLabel] = useState("");
   const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("modules");
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ArchitectureFlowNode, Edge> | null>(null);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
+    buildInitialNodes(),
+  );
+  const [edges, setEdges, onEdgesChange] = useEdgesState(buildInitialEdges());
 
   const handleDelete = useCallback((nodeId: string) => {
-    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+    setNodes((nds) => applyArchitectureLayout(nds.filter((n) => n.id !== nodeId)));
     setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
-  }, []);
+    setOpenNode((current) => (current?.id === nodeId ? null : current));
+  }, [setEdges, setNodes]);
 
   const handleLabelChange = useCallback((nodeId: string, label: string) => {
     setNodes((nds) =>
       nds.map((n) =>
-        n.id === nodeId ? { ...n, data: { ...n.data, label } } : n,
+        n.id === nodeId
+          ? { ...n, data: { ...n.data, label, detail: { ...n.data.detail, title: label } } }
+          : n,
       ),
     );
-  }, []);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState(
-    buildInitialNodes(handleDelete, handleLabelChange),
-  );
-  const [edges, setEdges, onEdgesChange] = useEdgesState(buildInitialEdges());
+    setOpenNode((current) =>
+      current?.id === nodeId
+        ? { ...current, detail: { ...current.detail, title: label } }
+        : current,
+    );
+  }, [setNodes]);
 
   useEffect(() => {
     const id = "arch-futuristic-styles";
@@ -261,7 +256,7 @@ export default function Architecture() {
   const onConnect = useCallback(
     (params: Connection) => {
       const srcNode = nodes.find((n) => n.id === params.source);
-      const color = srcNode ? accentColor[(srcNode.data as any).accent] : accentColor.cyan;
+      const color = srcNode ? accentColor[srcNode.data.accent] : accentColor.cyan;
       setEdges((eds) =>
         addEdge(
           {
@@ -285,52 +280,58 @@ export default function Architecture() {
   const addNode = useCallback(() => {
     if (!newNodeLabel.trim()) return;
     const layer = LAYERS.find((l) => l.key === newNodeLayer)!;
-    const layerIdx = LAYERS.findIndex((l) => l.key === newNodeLayer);
     const newId = `custom-${Date.now()}`;
-    const y = TOP_MARGIN + layerIdx * LAYER_GAP;
-    const existingInLayer = nodes.filter((n) => (n.data as any).accent === layer.accent);
-    const x = LEFT_MARGIN + existingInLayer.length * (NODE_W + NODE_GAP);
 
-    const newNode: Node = {
+    const newNode: ArchitectureFlowNode = {
       id: newId,
       type: "archNode",
-      position: { x, y },
+      position: { x: 0, y: 0 },
       data: {
         label: newNodeLabel.trim(),
         hint: layer.label,
         accent: layer.accent,
+        layer: layer.key,
+        detail: {
+          title: newNodeLabel.trim(),
+          bullets: [
+            `Custom ${layer.label.toLowerCase()} component.`,
+            "Added from the architecture canvas.",
+            "Drag, connect, or rename it to model your flow.",
+          ],
+        },
         Icon: Sparkles,
-        onDelete: handleDelete,
-        onLabelChange: handleLabelChange,
+        isCustom: true,
       },
     };
-    setNodes((nds) => [...nds, newNode]);
+    setNodes((nds) => applyArchitectureLayout([...nds, newNode]));
     setNewNodeLabel("");
     setShowAddPanel(false);
-  }, [newNodeLabel, newNodeLayer, nodes, handleDelete, handleLabelChange, setNodes]);
+  }, [newNodeLabel, newNodeLayer, setNodes]);
 
-  const onNodeClick = useCallback((_: any, node: Node) => {
-    const archNode = ARCH_NODES.find((n) => n.id === node.id);
-    if (archNode) setOpenNode(archNode);
+  const onNodeClick = useCallback((_: unknown, node: ArchitectureFlowNode) => {
+    setOpenNode({
+      id: node.id,
+      hint: node.data.hint,
+      layer: node.data.layer,
+      accent: node.data.accent,
+      icon: node.data.Icon,
+      detail: { ...node.data.detail, title: node.data.label },
+    });
   }, []);
 
   const filteredNodeIds = useMemo(() => {
     if (!searchQ.trim()) return null;
-    const q = searchQ.toLowerCase();
     return new Set(
-      ARCH_NODES.filter(
-        (n) =>
-          n.label.toLowerCase().includes(q) ||
-          n.hint.toLowerCase().includes(q),
-      ).map((n) => n.id),
+      nodes
+        .filter((node) => matchesArchitectureQuery(node.data.label, node.data.hint, searchQ))
+        .map((node) => node.id),
     );
-  }, [searchQ]);
+  }, [nodes, searchQ]);
 
   const displayNodes = useMemo(() => {
     return nodes.map((n) => {
-      const nodeData = n.data as any;
-      const layerKey = ARCH_NODES.find((an) => an.id === n.id)?.layer;
-      const layerHidden = layerKey ? !visibleLayers.has(layerKey) : false;
+      const nodeData = n.data;
+      const layerHidden = !visibleLayers.has(nodeData.layer);
       const searchHidden = filteredNodeIds ? !filteredNodeIds.has(n.id) : false;
       return {
         ...n,
@@ -348,6 +349,25 @@ export default function Architecture() {
     }));
   }, [edges, displayNodes]);
 
+  const layerCounts = useMemo(() => {
+    return nodes.reduce<Record<ArchLayer, number>>(
+      (acc, node) => {
+        acc[node.data.layer] += 1;
+        return acc;
+      },
+      { entry: 0, auth: 0, modules: 0, ai: 0, backend: 0, external: 0, platform: 0 },
+    );
+  }, [nodes]);
+
+  const visibleNodeCount = useMemo(
+    () => displayNodes.filter((node) => !node.hidden).length,
+    [displayNodes],
+  );
+  const visibleEdgeCount = useMemo(
+    () => displayEdges.filter((edge) => !edge.hidden).length,
+    [displayEdges],
+  );
+
   const toggleLayer = (key: ArchLayer) => {
     setVisibleLayers((prev) => {
       const next = new Set(prev);
@@ -357,6 +377,24 @@ export default function Architecture() {
     });
   };
 
+  const showAllLayers = useCallback(() => {
+    setVisibleLayers(getAllLayers());
+  }, []);
+
+  useEffect(() => {
+    if (!reactFlowInstance || !visibleNodeCount) return;
+
+    const timeoutId = window.setTimeout(() => {
+      reactFlowInstance.fitView({
+        padding: 0.18,
+        duration: 250,
+        includeHiddenNodes: false,
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [reactFlowInstance, visibleNodeCount, visibleEdgeCount]);
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col md:h-[calc(100vh-4rem)]">
       {/* Header */}
@@ -364,7 +402,7 @@ export default function Architecture() {
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-lg font-semibold tracking-tight text-foreground">System Architecture</h1>
           <p className="text-xs text-muted-foreground">
-            {nodes.length} components · {edges.length} connections · Drag to move · Connect handles to wire · Double-click to edit
+            {visibleNodeCount} of {nodes.length} components · {visibleEdgeCount} of {edges.length} connections · Drag to move · Connect handles to wire · Double-click to edit
           </p>
         </div>
 
@@ -388,12 +426,72 @@ export default function Architecture() {
             className="h-8 w-48 rounded-md border border-border bg-secondary pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring"
           />
           {searchQ && (
-            <button onClick={() => setSearchQ("")} className="absolute right-2 top-1/2 -translate-y-1/2">
+            <button type="button" onClick={() => setSearchQ("")} className="absolute right-2 top-1/2 -translate-y-1/2">
               <X className="h-3 w-3 text-muted-foreground" />
             </button>
           )}
         </div>
       </header>
+
+      <div className="flex shrink-0 flex-col gap-2 border-b border-border/40 bg-background/70 px-4 py-3 md:hidden">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {LAYERS.map((layer) => {
+            const on = visibleLayers.has(layer.key);
+            return (
+              <button
+                key={layer.key}
+                type="button"
+                onClick={() => toggleLayer(layer.key)}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors",
+                  on
+                    ? "border-border bg-secondary text-foreground"
+                    : "border-border/60 bg-background text-muted-foreground",
+                )}
+              >
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: accentColor[layer.accent] }}
+                />
+                {layer.label}
+                <span className="text-[10px] text-muted-foreground">{layerCounts[layer.key]}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={showAllLayers}
+            className="inline-flex shrink-0 items-center rounded-full border border-border/60 px-3 py-1.5 text-[11px] font-medium text-muted-foreground"
+          >
+            Show all
+          </button>
+        </div>
+
+        {showAddPanel && (
+          <div className="grid gap-2 rounded-xl border border-border/60 bg-background/70 p-3">
+            <input
+              type="text"
+              value={newNodeLabel}
+              onChange={(e) => setNewNodeLabel(e.target.value)}
+              placeholder="Node name…"
+              className="h-9 rounded-md border border-border bg-secondary px-3 text-sm text-foreground placeholder:text-muted-foreground outline-none"
+              onKeyDown={(e) => e.key === "Enter" && addNode()}
+            />
+            <select
+              value={newNodeLayer}
+              onChange={(e) => setNewNodeLayer(e.target.value as ArchLayer)}
+              className="h-9 rounded-md border border-border bg-secondary px-3 text-sm text-foreground outline-none"
+            >
+              {LAYER_PALETTE.map((layer) => (
+                <option key={layer.key} value={layer.key}>{layer.label}</option>
+              ))}
+            </select>
+            <Button size="sm" className="justify-center" onClick={addNode}>
+              Add node
+            </Button>
+          </div>
+        )}
+      </div>
 
       <div className="flex flex-1 min-h-0">
         {/* Layer filter sidebar */}
@@ -401,7 +499,7 @@ export default function Architecture() {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Layers</p>
           {LAYERS.map((layer) => {
             const on = visibleLayers.has(layer.key);
-            const count = ARCH_NODES.filter((n) => n.layer === layer.key).length;
+            const count = layerCounts[layer.key];
             return (
               <button
                 key={layer.key}
@@ -485,7 +583,7 @@ export default function Architecture() {
 
           <div className="mt-auto pt-3 border-t border-border/40">
             <button
-              onClick={() => setVisibleLayers(new Set(LAYERS.map((l) => l.key)))}
+              onClick={showAllLayers}
               className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
             >
               Show all
@@ -502,6 +600,7 @@ export default function Architecture() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
             fitView
             fitViewOptions={{ padding: 0.15 }}
@@ -526,13 +625,24 @@ export default function Architecture() {
             <MiniMap
               position="bottom-right"
               nodeColor={(n) => {
-                const accent = (n.data as any)?.accent as string;
-                return accentColor[accent as Accent] || "rgba(100,100,100,0.5)";
+                const accent = (n.data as ArchFlowNodeData | undefined)?.accent;
+                return accent ? accentColor[accent] : "rgba(100,100,100,0.5)";
               }}
               maskColor="rgba(0,0,0,0.7)"
               style={{ width: 160, height: 100 }}
             />
           </ReactFlow>
+
+          {!visibleNodeCount && (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center p-6">
+              <div className="max-w-sm rounded-2xl border border-white/10 bg-slate-950/80 px-5 py-4 text-center backdrop-blur-md">
+                <p className="text-sm font-semibold text-white">No matching components</p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Clear the search or re-enable layers to bring the architecture back into view.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Scan-line overlay */}
           <div
@@ -593,27 +703,35 @@ export default function Architecture() {
                     <div className="pt-2 border-t border-border/40">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Connected to</p>
                       <div className="flex flex-wrap gap-1.5">
-                        {ARCH_EDGES
+                        {edges
                           .filter((e) => e.source === openNode.id || e.target === openNode.id)
                           .map((e) => {
                             const otherId = e.source === openNode.id ? e.target : e.source;
-                            const other = ARCH_NODES.find((n) => n.id === otherId);
+                            const other = nodes.find((n) => n.id === otherId);
                             if (!other) return null;
                             return (
                               <button
                                 key={e.id}
                                 onClick={() => {
-                                  const next = ARCH_NODES.find((n) => n.id === otherId);
-                                  if (next) setOpenNode(next);
+                                  const next = nodes.find((n) => n.id === otherId);
+                                  if (!next) return;
+                                  setOpenNode({
+                                    id: next.id,
+                                    hint: next.data.hint,
+                                    layer: next.data.layer,
+                                    accent: next.data.accent,
+                                    icon: next.data.Icon,
+                                    detail: { ...next.data.detail, title: next.data.label },
+                                  });
                                 }}
                                 className="rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80"
                                 style={{
-                                  background: accentBg[other.accent],
-                                  color: accentColor[other.accent],
-                                  border: `1px solid ${accentColor[other.accent]}40`,
+                                  background: accentBg[other.data.accent],
+                                  color: accentColor[other.data.accent],
+                                  border: `1px solid ${accentColor[other.data.accent]}40`,
                                 }}
                               >
-                                {other.label}
+                                {other.data.label}
                               </button>
                             );
                           })}
