@@ -1,117 +1,60 @@
 
 
-# Cross-Module Unification: Quotations & Invoices with Attachments
+# Enforce QB Sync + PDF Attachment with Dual Payment Links on Every Invoice
 
 ## Problem
 
-The system has **3 separate quotation tables** and **2 invoice systems** that don't talk to each other properly:
-
-```text
-QUOTATION TABLES (fragmented)
-┌─────────────────────┬───────────────────────┬────────────────────────┐
-│ quotes              │ sales_quotations      │ quotations (view?)     │
-│ (Odoo sync, AI,     │ (Sales module,        │ (quoteService.ts —     │
-│  manual, accounting)│  state machine)       │  dead/broken table)    │
-├─────────────────────┼───────────────────────┼────────────────────────┤
-│ Used by:            │ Used by:              │ Used by:               │
-│ • AccountingDocs    │ • SalesQuotations pg  │ • quoteService.ts only │
-│ • convert-to-order  │ • quote_audit_log     │   (queries nonexistent │
-│ • ai-generate-quote │ • agent tool executor │    "quotations" table) │
-│ • quote-engine      │ • sales_invoices FK   │                        │
-│ • Pipeline (leads)  │ • sales_quotation_    │                        │
-│ • Inbox context     │   items FK            │                        │
-│ • mcp-server        │                       │                        │
-└─────────────────────┴───────────────────────┴────────────────────────┘
-
-INVOICE SYSTEMS (disconnected)
-┌──────────────────────┬──────────────────────┐
-│ sales_invoices       │ QuickBooks Invoices   │
-│ (ERP local table)    │ (QB API via hook)     │
-├──────────────────────┼──────────────────────┤
-│ • SalesInvoices page │ • AccountingInvoices  │
-│ • DraftInvoiceEditor │ • QB attachments      │
-│ • Has quotation_id   │ • No local DB link    │
-│   FK → sales_quotas  │                       │
-└──────────────────────┴──────────────────────┘
-```
-
-### Key Issues
-1. **`quoteService.ts` queries `"quotations"` table** — this table likely doesn't exist (or is a view). Dead code.
-2. **Agent creates in `sales_quotations` AND `quotes`** — dual-writes with brittle linking via `quote_result.quote_id`.
-3. **`convert-quote-to-order` only reads `quotes`** — misses `sales_quotations`-only records.
-4. **`sales_invoices.quotation_id` FK → `sales_quotations`** — but invoices created from accounting use `quotes` table IDs.
-5. **No unified attachment system** — QuickBooks attachments are QB-only; local quotes/invoices have no attachment support.
-6. **Accounting tab shows `quotes` table; Sales tab shows `sales_quotations`** — same data, different views, no cross-reference.
+Currently:
+1. **QB push only at email-send time** — invoices created in the ERP have no QB copy until the user clicks "Send Email." If they just save or print, QB never gets the invoice.
+2. **No PDF attachment** — the email sends inline HTML with line items and payment buttons, but no actual PDF file is attached. The user wants a proper PDF invoice attached to the email.
+3. **Payment links are inline HTML buttons** — these work, but should also appear in the PDF itself so the recipient has them regardless of email client rendering.
 
 ## Plan
 
-### Phase 1: Fix Dead Code & Service Layer
+### 1. Auto-push to QuickBooks on Save (`DraftInvoiceEditor.tsx`)
 
-**`src/lib/serviceLayer/quoteService.ts`** — Fix to query `quotes` (the actual table), not `quotations`.
+In `handleSave`, after successfully saving to the local DB, automatically call `quickbooks-oauth` with `action: "create-invoice"` to ensure every saved invoice has a QB mirror. Store the returned `InvoiceLink` and QB invoice ID in the `sales_invoices.metadata` field for later use.
 
-### Phase 2: Unify Quote Resolution
+- If QB is not connected, log a warning but don't block the save.
+- Skip the QB push if the invoice already has a `metadata.qb_invoice_id` (update instead of create — or just skip since QB deduplication handles it).
 
-**`supabase/functions/convert-quote-to-order/index.ts`** — Add fallback: if quote not found in `quotes`, check `sales_quotations` and resolve the linked `quotes` row via `quote_result.quote_id`.
+### 2. Generate PDF via Edge Function (`generate-invoice-pdf`)
 
-**`src/components/accounting/AccountingDocuments.tsx`** — When clicking a quotation card, check if a `sales_quotations` record exists (via `quote_number` match) and load the richer data (state machine status, audit log, line items).
+Create a new edge function `generate-invoice-pdf` that:
+- Accepts invoice data (line items, customer info, amounts, payment links)
+- Renders a professional PDF using the same layout as the print view
+- Embeds both Stripe and QuickBooks payment links as clickable URLs in the PDF footer
+- Returns the PDF as base64
 
-### Phase 3: Cross-Link Invoice ↔ Quotation
+Technology: Use `jspdf` (available in Deno) or build HTML and convert via a lightweight approach. Since we can't attach files via Lovable's email system directly, we'll use the **download link workaround**:
+- Generate the PDF in the edge function
+- Upload it to Supabase Storage (`invoice-pdfs` bucket)
+- Return a signed URL
 
-**`src/components/accounting/AccountingInvoices.tsx`** — Show the linked quotation number on invoice cards when `quotation_id` is present (query `sales_quotations` for the number).
+### 3. Update Email Flow (`DraftInvoiceEditor.tsx` — `handleSendEmail`)
 
-**`src/components/accounting/documents/DraftInvoiceEditor.tsx`** — Add a "Linked Quotation" badge/link that opens the quotation when `quotation_id` or `metadata.source_quote_id` exists.
+Modify the send flow to:
+1. Generate the PDF by calling `generate-invoice-pdf` with all invoice data + both payment links
+2. The edge function uploads to storage and returns a download URL
+3. Include a prominent "Download Invoice PDF" button in the email HTML alongside the existing payment link buttons
+4. Keep the inline HTML line items table (for email clients that block links)
 
-### Phase 4: Add Document Attachments
+### 4. Storage Bucket for Invoice PDFs
 
-**Database migration** — Create `document_attachments` table:
-```sql
-CREATE TABLE document_attachments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id UUID NOT NULL REFERENCES companies(id),
-  entity_type TEXT NOT NULL, -- 'quote', 'invoice', 'order'
-  entity_id UUID NOT NULL,
-  file_name TEXT NOT NULL,
-  file_path TEXT NOT NULL, -- storage bucket path
-  file_size INTEGER,
-  mime_type TEXT,
-  uploaded_by UUID REFERENCES auth.users(id),
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-ALTER TABLE document_attachments ENABLE ROW LEVEL SECURITY;
-```
-
-**New component: `src/components/accounting/DocumentAttachments.tsx`** — Reusable attachment widget (upload to Supabase Storage, list/download/delete) that can be embedded in:
-- `DraftQuotationEditor` 
-- `DraftInvoiceEditor`
-- `QuotationTemplate` (view-only)
-- Order detail views
-
-**Storage bucket** — Create `document-attachments` bucket for file storage.
-
-### Phase 5: Unified Status Display
-
-**`src/components/accounting/AccountingDocuments.tsx`** — Merge status display logic:
-- Show `sales_quotations` status (state machine) when available
-- Fall back to `quotes.status` / `quotes.odoo_status`
-- Show attachment count badge on cards that have attachments
+Database migration to create a `invoice-pdfs` storage bucket (private, signed URLs for access).
 
 ### Files Changed
 
 | File | Change |
 |------|--------|
-| `src/lib/serviceLayer/quoteService.ts` | Fix table name `quotations` → `quotes` |
-| `supabase/functions/convert-quote-to-order/index.ts` | Add `sales_quotations` fallback lookup |
-| `src/components/accounting/AccountingDocuments.tsx` | Show linked invoice count; show attachment badges |
-| `src/components/accounting/AccountingInvoices.tsx` | Show linked quotation number on invoice cards |
-| `src/components/accounting/documents/DraftInvoiceEditor.tsx` | Add "Linked Quotation" badge |
-| `src/components/accounting/documents/DraftQuotationEditor.tsx` | Embed `DocumentAttachments` widget |
-| `src/components/accounting/DocumentAttachments.tsx` | **New** — reusable attachment upload/list component |
-| Database migration | Create `document_attachments` table + RLS + storage bucket |
+| `src/components/accounting/documents/DraftInvoiceEditor.tsx` | Add QB push in `handleSave`; add PDF generation + download link in `handleSendEmail` |
+| `supabase/functions/generate-invoice-pdf/index.ts` | **New** — generates PDF from invoice data, uploads to storage, returns signed URL |
+| Database migration | Create `invoice-pdfs` storage bucket |
 
 ### Technical Notes
-- The `quotes` table is the canonical source for accounting-facing quotations
-- The `sales_quotations` table is the canonical source for sales-module quotations with state machine
-- Agent dual-writes to both — this is preserved but the link (`quote_result.quote_id`) is made reliable
-- `quoteService.ts` is fixed but remains optional (no consumers currently depend on it working)
-- Attachments use Supabase Storage with RLS scoped to `company_id`
+
+- PDF generation uses `jspdf` in the edge function (Deno-compatible)
+- The PDF includes: company header, bill-to, line items table, subtotal/tax/total, both payment link URLs as text, and terms/notes
+- Since Lovable email doesn't support file attachments natively, the email includes a "Download Invoice PDF" button linking to a signed storage URL (valid 30 days)
+- QB sync is idempotent — if called twice for the same invoice, QB handles deduplication via the memo/DocNumber matching
 
