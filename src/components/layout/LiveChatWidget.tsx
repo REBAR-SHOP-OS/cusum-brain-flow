@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { parseQuickReplies } from "@/lib/parseQuickReplies";
+import { QuickReplies } from "@/components/chat/QuickReplies";
 
 export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function LiveChatWidget(_props, ref) {
   const [open, setOpen] = useState(false);
@@ -84,30 +86,39 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
                 </div>
               )}
 
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "group/msg relative rounded-xl px-3 py-2 text-xs max-w-[90%]",
-                    msg.role === "user"
-                      ? "ml-auto bg-primary text-primary-foreground"
-                      : "mr-auto bg-muted text-foreground"
-                  )}
-                >
-                  <button
-                    onClick={() => deleteMessage(msg.id)}
-                    className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
-                    title="Delete"
+              {messages.map((msg, idx) => {
+                const isLastAssistant = msg.role === "assistant" && idx === messages.length - 1;
+                const parsed = msg.role === "assistant" ? parseQuickReplies(msg.content) : null;
+                const displayContent = parsed ? parsed.content : msg.content;
+
+                return (
+                  <div
+                    key={msg.id}
+                    className={cn(
+                      "group/msg relative rounded-xl px-3 py-2 text-xs max-w-[90%]",
+                      msg.role === "user"
+                        ? "ml-auto bg-primary text-primary-foreground"
+                        : "mr-auto bg-muted text-foreground"
+                    )}
                   >
-                    <Trash2 className="w-2.5 h-2.5" />
-                  </button>
-                  {msg.role === "assistant" ? (
-                    <RichMarkdown content={msg.content} className="text-xs [&_p]:text-xs" />
-                  ) : (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  )}
-                </div>
-              ))}
+                    <button
+                      onClick={() => deleteMessage(msg.id)}
+                      className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
+                    {msg.role === "assistant" ? (
+                      <RichMarkdown content={displayContent} className="text-xs [&_p]:text-xs" />
+                    ) : (
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    )}
+                    {isLastAssistant && !isStreaming && parsed && parsed.replies.length > 0 && (
+                      <QuickReplies replies={parsed.replies} onSelect={sendMessage} disabled={isStreaming || !!pendingAction} />
+                    )}
+                  </div>
+                );
+              })}
 
               {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
                 <div className="mr-auto bg-muted rounded-xl px-3 py-2 text-xs flex items-center gap-2">

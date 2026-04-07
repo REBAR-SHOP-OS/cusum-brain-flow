@@ -1,5 +1,5 @@
 // forwardRef cache bust
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { X, Send, Loader2, Sparkles, Trash2, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,6 +10,8 @@ import { useAdminChat } from "@/hooks/useAdminChat";
 import { cn } from "@/lib/utils";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ContentActions } from "@/components/shared/ContentActions";
+import { parseQuickReplies } from "@/lib/parseQuickReplies";
+import { QuickReplies } from "@/components/chat/QuickReplies";
 
 export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function IntelligencePanel(_props, ref) {
   const { user } = useAuth();
@@ -79,36 +81,45 @@ export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function Inte
             </div>
           )}
 
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn(
-                "group/msg relative rounded-lg px-3 py-2 text-xs max-w-[95%]",
-                msg.role === "user"
-                  ? "ml-auto bg-primary text-primary-foreground"
-                  : "mr-auto bg-muted text-foreground"
-              )}
-            >
-              <button
-                onClick={() => deleteMessage(msg.id)}
-                className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
-                title="Delete"
+          {messages.map((msg, idx) => {
+            const isLastAssistant = msg.role === "assistant" && idx === messages.length - 1;
+            const parsed = msg.role === "assistant" ? parseQuickReplies(msg.content) : null;
+            const displayContent = parsed ? parsed.content : msg.content;
+
+            return (
+              <div
+                key={msg.id}
+                className={cn(
+                  "group/msg relative rounded-lg px-3 py-2 text-xs max-w-[95%]",
+                  msg.role === "user"
+                    ? "ml-auto bg-primary text-primary-foreground"
+                    : "mr-auto bg-muted text-foreground"
+                )}
               >
-                <Trash2 className="w-2.5 h-2.5" />
-              </button>
-              {msg.role === "assistant" ? (
-                <RichMarkdown content={msg.content} className="text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_p]:text-xs" />
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
-              <p className="text-[9px] opacity-50 mt-1">
-                {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-              </p>
-              {msg.role === "assistant" && (
-                <ContentActions content={msg.content} size="xs" source="admin-console" className="mt-1" />
-              )}
-            </div>
-          ))}
+                <button
+                  onClick={() => deleteMessage(msg.id)}
+                  className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
+                  title="Delete"
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+                {msg.role === "assistant" ? (
+                  <RichMarkdown content={displayContent} className="text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_p]:text-xs" />
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
+                <p className="text-[9px] opacity-50 mt-1">
+                  {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </p>
+                {msg.role === "assistant" && (
+                  <ContentActions content={displayContent} size="xs" source="admin-console" className="mt-1" />
+                )}
+                {isLastAssistant && !isStreaming && parsed && parsed.replies.length > 0 && (
+                  <QuickReplies replies={parsed.replies} onSelect={sendMessage} disabled={isStreaming} />
+                )}
+              </div>
+            );
+          })}
 
           {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
             <div className="mr-auto bg-muted rounded-lg px-3 py-2 text-xs flex items-center gap-2">
