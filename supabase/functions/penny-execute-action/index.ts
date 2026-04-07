@@ -19,6 +19,28 @@ serve((req) =>
       .single();
 
     if (loadErr || !action) throw json({ error: "Action not found" }, 404);
+
+    // Pre-execution payment check: if invoice is already paid, auto-resolve
+    if (action.invoice_id) {
+      const { data: mirrorRow } = await serviceClient
+        .from("accounting_mirror")
+        .select("balance")
+        .eq("quickbooks_id", action.invoice_id)
+        .eq("company_id", action.company_id)
+        .maybeSingle();
+      if (mirrorRow && (mirrorRow.balance ?? 0) <= 0) {
+        await serviceClient
+          .from("penny_collection_queue")
+          .update({
+            status: "rejected",
+            execution_result: { reject_reason: "Invoice paid before execution — auto-resolved" },
+            executed_at: new Date().toISOString(),
+          })
+          .eq("id", action_id);
+        return { executed: false, result: { method: "auto_resolved", reason: "Invoice balance is $0 — already paid" }, status: "rejected" };
+      }
+    }
+
     if (action.status !== "approved" && action.status !== "pending_approval") {
       throw json({ error: `Action status is '${action.status}', cannot execute` }, 400);
     }
