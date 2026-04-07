@@ -49,7 +49,7 @@ export default function LoadingStation() {
         .from("cut_plan_items")
         .select("id, mark_number, drawing_ref, bar_code, cut_length_mm, total_pieces, asa_shape_code")
         .eq("cut_plan_id", selectedBundle!.cutPlanId)
-        .eq("phase", "loading");
+        .eq("phase", "complete");
       if (error) throw error;
       return (data || []) as CompletedBundleItem[];
     },
