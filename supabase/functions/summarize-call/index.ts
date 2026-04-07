@@ -19,11 +19,11 @@ serve((req) =>
       });
     }
 
-    const { transcript, fromNumber, toNumber } = ctx.body;
+    const { transcript, fromNumber, toNumber, callMode } = ctx.body;
 
     if (!transcript || transcript.trim().length < 10) {
       return new Response(
-        JSON.stringify({ summary: "Call too short to summarize.", tasks: [] }),
+        JSON.stringify({ summary: "Call too short to summarize.", tasks: [], rfq_details: null, callback_requested: null, lead_info: null }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -32,6 +32,9 @@ serve((req) =>
 You will receive a transcript of a phone call. Your job is to:
 1. Write a concise summary (2-4 sentences) of the call
 2. Extract actionable tasks from the conversation
+3. Detect if the caller requested a quote (RFQ)
+4. Detect if the caller asked to speak with a specific team member
+5. Capture lead/contact information mentioned
 
 Return a JSON object with this exact structure:
 {
@@ -42,7 +45,22 @@ Return a JSON object with this exact structure:
       "description": "Brief description of what needs to be done",
       "priority": "high" | "medium" | "low"
     }
-  ]
+  ],
+  "rfq_details": null or {
+    "bar_sizes": ["20M", "25M"],
+    "quantities": "approximate tonnes or piece counts mentioned",
+    "project_type": "commercial/residential/infrastructure",
+    "bending_required": true/false,
+    "timeline": "when they need it",
+    "delivery_location": "if mentioned"
+  },
+  "callback_requested": null or "Name of person caller asked to speak with (e.g. Neel, Saurabh, Sattar)",
+  "lead_info": null or {
+    "name": "caller's name",
+    "company": "caller's company",
+    "phone": "callback number if mentioned",
+    "project_description": "brief project description"
+  }
 }
 
 Rules:
@@ -50,9 +68,13 @@ Rules:
 - Tasks should be specific and actionable
 - If no tasks are needed, return an empty tasks array
 - Priority: "high" for urgent/time-sensitive, "medium" for normal follow-ups, "low" for nice-to-have
+- rfq_details: ONLY if caller explicitly asked for a quote or pricing for specific items
+- callback_requested: ONLY if caller specifically asked to speak with someone by name
+- lead_info: capture any identifying info the caller shared
 - Return ONLY valid JSON, no markdown formatting`;
 
-    const userMessage = `Call between ${fromNumber || "Unknown"} and ${toNumber || "Unknown"}:
+    const userMessage = `Call mode: ${callMode || "unknown"}
+Call between ${fromNumber || "Unknown"} and ${toNumber || "Unknown"}:
 
 ${transcript}`;
 
@@ -70,12 +92,18 @@ ${transcript}`;
 
     const rawReply = result.content;
 
-    let parsed: { summary: string; tasks: Array<{ title: string; description: string; priority: string }> };
+    let parsed: {
+      summary: string;
+      tasks: Array<{ title: string; description: string; priority: string }>;
+      rfq_details?: any;
+      callback_requested?: string | null;
+      lead_info?: any;
+    };
     try {
       const cleaned = rawReply.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      parsed = { summary: rawReply, tasks: [] };
+      parsed = { summary: rawReply, tasks: [], rfq_details: null, callback_requested: null, lead_info: null };
     }
 
     return new Response(
