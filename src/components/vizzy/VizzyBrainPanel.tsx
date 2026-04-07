@@ -422,7 +422,7 @@ function UserTimeClockSection({ profileId, userId, timezone }: { profileId: stri
 }
 
 
-  const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, analyzeSystem } = useVizzyMemory();
+  export function VizzyBrainPanel({ onClose }: Props) {
   const { timezone } = useWorkspaceSettings();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
