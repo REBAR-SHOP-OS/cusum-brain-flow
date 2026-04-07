@@ -13,6 +13,7 @@ import {
   HardDrive, Archive, Activity, ServerCrash, Rocket, Lock, DownloadCloud, MonitorCheck,
   RefreshCw, AlertTriangle, CheckCircle, Workflow, Scale, Server,
   MemoryStick, Radio, Gauge, Key, BarChart3, FileText, HeartPulse, ToggleRight, Bus,
+  Ruler, FileSpreadsheet, Banknote, Inbox, Library, BellRing, Camera, Globe2, Plug, AudioLines,
 } from "lucide-react";
 
 export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform";
