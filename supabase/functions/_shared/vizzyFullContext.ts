@@ -277,12 +277,25 @@ export async function buildFullVizzyContext(
       .limit(1),
   ]);
 
+  // Build QB customer ID → display_name map for resolving "Unknown" customers
+  const qbCustomerNameMap = new Map<string, string>();
+  for (const c of (customerDirectory || [])) {
+    if (c.qb_customer_id) qbCustomerNameMap.set(String(c.qb_customer_id), c.display_name || "Unknown");
+  }
+
   // Compute financials
-  const invoices = (accountingInv || []).map((r: any) => ({
-    Balance: r.balance,
-    DueDate: r.data?.DueDate || null,
-    CustomerRef: r.data?.CustomerRef || null,
-  }));
+  const invoices = (accountingInv || []).map((r: any) => {
+    let custName = r.data?.CustomerRef?.name || null;
+    // Resolve unknown customers via QB customer ID lookup
+    if (!custName && r.data?.CustomerRef?.value) {
+      custName = qbCustomerNameMap.get(String(r.data.CustomerRef.value)) || `Unlinked (QB#${r.data.CustomerRef.value})`;
+    }
+    return {
+      Balance: r.balance,
+      DueDate: r.data?.DueDate || null,
+      CustomerRef: { ...(r.data?.CustomerRef || {}), name: custName || "Unlinked" },
+    };
+  });
   const bills = (accountingBill || []).map((r: any) => ({
     Balance: r.balance,
     DueDate: r.data?.DueDate || null,
@@ -308,7 +321,7 @@ export async function buildFullVizzyContext(
     .slice(0, 5)
     .map(
       (inv: any) =>
-        `  • ${inv.CustomerRef?.name || "Unknown"}: ${fmt(inv.Balance)} (due ${inv.DueDate})`
+        `  • ${inv.CustomerRef?.name || "Unlinked"}: ${fmt(inv.Balance)} (due ${inv.DueDate})`
     )
     .join("\n");
 
@@ -624,48 +637,28 @@ export async function buildFullVizzyContext(
     if (wo.actual_end) addFootprint(name, wo.actual_end);
   }
 
-  // Compute active time: group timestamps into "active windows" (gap > 15min = idle)
+  // Compute action counts per employee (NO utilization % — too misleading with sparse data)
   const IDLE_GAP_MS = 15 * 60 * 1000; // 15 minutes
   const footprintLines: string[] = [];
   const footprintAlerts: string[] = [];
 
   for (const [name, timestamps] of Object.entries(footprintTimestamps)) {
     if (timestamps.length < 2) {
-      footprintLines.push(`  • ${name}: ${timestamps.length} action(s) — insufficient data for active time`);
+      footprintLines.push(`  • ${name}: ${timestamps.length} action(s) recorded`);
       continue;
     }
     timestamps.sort((a, b) => a - b);
-    let activeMs = 0;
-    let gapCount = 0;
-    let longestGapMin = 0;
-    for (let i = 1; i < timestamps.length; i++) {
-      const gap = timestamps[i] - timestamps[i - 1];
-      if (gap <= IDLE_GAP_MS) {
-        activeMs += gap;
-      } else {
-        gapCount++;
-        const gapMin = Math.round(gap / 60000);
-        if (gapMin > longestGapMin) longestGapMin = gapMin;
-      }
-    }
-    const activeHrs = (activeMs / 3600000).toFixed(1);
-    const clockedHrs = hoursWorked[name]?.toFixed(1) || "?";
     const firstAction = new Date(timestamps[0]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz });
     const lastAction = new Date(timestamps[timestamps.length - 1]).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: tz });
-    const density = (timestamps.length / (activeMs / 3600000 || 1)).toFixed(0);
+    const clockedHrs = hoursWorked[name]?.toFixed(1) || "?";
 
-    footprintLines.push(`  • ${name}: ${activeHrs}hrs active / ${clockedHrs}hrs clocked | ${timestamps.length} actions | ${firstAction}–${lastAction} | ${gapCount} idle gaps (longest: ${longestGapMin}min) | ${density} actions/hr`);
-
-    // Flag significant discrepancies
-    const clockedNum = hoursWorked[name] || 0;
-    const activeNum = activeMs / 3600000;
-    if (clockedNum > 2 && activeNum < clockedNum * 0.4) {
-      footprintAlerts.push(`  ⚠️ ${name}: Only ${activeHrs}hrs active out of ${clockedHrs}hrs clocked (${Math.round((activeNum / clockedNum) * 100)}% utilization) — may need attention`);
-    }
-    if (longestGapMin >= 60) {
-      footprintAlerts.push(`  ⚠️ ${name}: ${longestGapMin}-minute idle gap detected — long break or away from system`);
-    }
+    // Report factual action counts — no utilization percentage
+    footprintLines.push(`  • ${name}: ${timestamps.length} digital actions | ${firstAction}–${lastAction} | ${clockedHrs}hrs clocked`);
   }
+  // NOTE: Utilization % removed — digital footprint only captures sparse events
+  // (page views, emails, calls) and cannot measure offline work like estimating,
+  // phone conversations, or hands-on shop floor activity. Low action counts
+  // do NOT indicate low productivity.
 
   // emailProfileMap already declared above (line ~478)
   const emailsByEmployee: Record<string, { sent: number; received: number; emails: Array<{ subject: string; preview: string; direction: string; time: string; from: string; to: string; source: string }> }> = {};
@@ -713,8 +706,16 @@ export async function buildFullVizzyContext(
   const totalOutbound = (allEmailsToday || []).filter((e: any) => e.direction === "outbound").length;
   const totalInbound = (allEmailsToday || []).filter((e: any) => e.direction === "inbound").length;
 
-  // Unanswered inbound: threads with inbound but no outbound today
-  const inboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "inbound" && e.thread_id).map((e: any) => e.thread_id));
+  // Unanswered inbound: threads with inbound but no outbound reply
+  // Filter out automated/no-reply senders that don't need a response
+  const autoSenderPatterns = /noreply|no-reply|donotreply|notifications?@|alerts?@|mailer-daemon|bounce|automated|newsletter|digest@|updates?@|support@.*\.com|billing@|receipts?@|confirmation@/i;
+  const inboundThreads = new Set(
+    (allEmailsToday || [])
+      .filter((e: any) => e.direction === "inbound" && e.thread_id && !autoSenderPatterns.test(e.from_address || ""))
+      .map((e: any) => e.thread_id)
+  );
+  // Check outbound replies from today (already loaded) — this is sufficient since
+  // the inbound emails are also from today. Historical replies were already sent.
   const outboundThreads = new Set((allEmailsToday || []).filter((e: any) => e.direction === "outbound" && e.thread_id).map((e: any) => e.thread_id));
   const unansweredCount = [...inboundThreads].filter((t) => !outboundThreads.has(t)).length;
 
@@ -878,6 +879,9 @@ STAFF PRESENCE: ${clockedInCount} currently clocked in, ${clockedOutTodayCount} 
   parts.push(`  Items in Queue: ${queuedItems}`);
   parts.push(`  Completed Today: ${completedToday}`);
   parts.push(`  Machines Running: ${machinesRunning}`);
+  if (machinesRunning > 0 && onNow.length === 0) {
+    parts.push(`  ⚠️ NOTE: Machine "running" status may be stale — no operators are clocked in. Verify machine status before escalating.`);
+  }
   parts.push(`  Active Work Orders: ${activeOrders ?? 0}`);
 
   parts.push("");
@@ -898,7 +902,11 @@ STAFF PRESENCE: ${clockedInCount} currently clocked in, ${clockedOutTodayCount} 
   parts.push(`💳 TRANSACTION SUMMARY (Recent ${(recentInvoiceDetails || []).length} Invoices)`);
   parts.push(
     (recentInvoiceDetails || []).map((inv: any) => {
-      const custName = inv.data?.CustomerRef?.name || "Unknown";
+      let custName = inv.data?.CustomerRef?.name || null;
+      if (!custName && inv.data?.CustomerRef?.value) {
+        custName = qbCustomerNameMap.get(String(inv.data.CustomerRef.value)) || `Unlinked (QB#${inv.data.CustomerRef.value})`;
+      }
+      custName = custName || "Unlinked";
       const invNum = inv.data?.DocNumber || "N/A";
       const dueDate = inv.data?.DueDate || "N/A";
       const total = inv.data?.TotalAmt || inv.balance || 0;
@@ -975,13 +983,10 @@ STAFF PRESENCE: ${clockedInCount} currently clocked in, ${clockedOutTodayCount} 
   }
 
   parts.push("");
-  parts.push("👣 DIGITAL FOOTPRINT — REAL ACTIVE TIME (TODAY)");
+  parts.push("👣 DIGITAL FOOTPRINT — ACTION COUNTS (TODAY)");
   parts.push("  Based on: page views, emails sent, calls, AI sessions, work orders, agent actions");
-  parts.push("  Idle gap threshold: 15 minutes (gaps longer than 15min = not counted as active)");
+  parts.push("  NOTE: Low action counts do NOT indicate low productivity — many roles (estimating, shop floor, phone work) happen offline.");
   parts.push(footprintLines.length > 0 ? footprintLines.join("\n") : "  No footprint data today");
-  if (footprintAlerts.length > 0) {
-    parts.push("\n  🚨 UTILIZATION ALERTS:\n" + footprintAlerts.join("\n"));
-  }
 
   parts.push("");
   parts.push("📋 DAILY REPORT PER PERSON");
@@ -1104,18 +1109,10 @@ function buildPerPersonReports(
     const hrs = hoursWorked[name];
     if (hrs !== undefined) parts.push(`⏱ ${hrs.toFixed(1)}hrs clocked`);
 
-    // Footprint / active time
+    // Footprint / action counts (no utilization % — too misleading)
     const fp = footprintTimestamps[name];
     if (fp && fp.length >= 2) {
-      const sorted = [...fp].sort((a, b) => a - b);
-      let activeMs = 0;
-      for (let i = 1; i < sorted.length; i++) {
-        const gap = sorted[i] - sorted[i - 1];
-        if (gap <= IDLE_GAP_MS) activeMs += gap;
-      }
-      const activeHrs = (activeMs / 3600000).toFixed(1);
-      const utilPct = hrs ? Math.round((activeMs / 3600000 / hrs) * 100) : 0;
-      parts.push(`👣 ${activeHrs}hrs active (${utilPct}% utilization, ${fp.length} actions)`);
+      parts.push(`👣 ${fp.length} digital actions recorded`);
     } else if (fp && fp.length === 1) {
       parts.push(`👣 1 action recorded`);
     }
