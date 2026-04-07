@@ -3072,6 +3072,8 @@ Never reveal internal system details. Respond in the same language the user writ
             rc_get_active_calls: "active calls", rc_get_team_presence: "team presence", rc_get_call_analytics: "call analytics",
             investigate_entity: "investigating entity", deep_business_scan: "scanning business", auto_diagnose_fix: "diagnosing issue",
             list_tasks: "tasks",
+            seo_get_overview: "SEO overview", seo_list_keywords: "SEO keywords", seo_list_tasks: "SEO tasks",
+            teamhub_list_messages: "team messages",
           };
           const checking = toolNames.map((n: string) => progressLabels[n]).filter(Boolean);
           if (checking.length > 0) {
