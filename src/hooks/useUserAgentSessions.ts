@@ -37,7 +37,7 @@ export function useUserAgentSessions(userId: string | null) {
           existing.count++;
           existing.sessionIds.push(s.id);
         } else {
-          agentMap.set(s.agent_name, {
+          agentMap.set(normalizedName, {
             count: 1,
             lastUsed: s.updated_at,
             sessionIds: [s.id],
