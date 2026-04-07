@@ -128,7 +128,7 @@ export function DocumentAttachments({ entityType, entityId, readOnly }: Props) {
         {!readOnly && (
           <label className="cursor-pointer">
             <input type="file" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" asChild disabled={uploading}>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs bg-white text-gray-900 border-gray-300 hover:bg-gray-50" asChild disabled={uploading}>
               <span>
                 {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
                 Upload

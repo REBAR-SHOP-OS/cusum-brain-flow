@@ -561,7 +561,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
                   <Button
                     variant="outline"
                     className={cn(
-                      "h-7 text-xs flex-1 justify-start text-left font-normal",
+                      "h-7 text-xs flex-1 justify-start text-left font-normal bg-white text-gray-900 border-gray-300 hover:bg-gray-50",
                       !shipDate && "text-muted-foreground",
                       "print:border-none print:p-0 print:bg-transparent"
                     )}
@@ -710,7 +710,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
           </tbody>
         </table>
 
-        <Button variant="outline" size="sm" onClick={addRow} className="mb-6 print:hidden gap-1 text-xs">
+        <Button variant="outline" size="sm" onClick={addRow} className="mb-6 print:hidden gap-1 text-xs bg-white text-gray-900 border-gray-300 hover:bg-gray-50">
           <Plus className="w-3 h-3" /> Add Line
         </Button>
 
