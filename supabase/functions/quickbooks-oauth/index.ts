@@ -1380,6 +1380,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   let lineItems = (body.lineItems || body.items) as { description: string; amount?: number; unitPrice?: number; quantity?: number; serviceId?: string }[] | undefined;
   let customerId = body.customerId as string | undefined;
   const customerName = body.customerName as string | undefined;
+  const customerEmail = body.customerEmail as string | undefined;
 
   // ── Server-side idempotency guard: order-based ─────────────────
   if (orderId) {
@@ -1591,6 +1592,53 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     docNumber: createdInvoice?.DocNumber,
     totalAmount: createdInvoice?.TotalAmt,
     invoiceLink: createdInvoice?.InvoiceLink || null,
+  });
+}
+
+// ─── Get Invoice Link (read-only) ─────────────────────────────────
+
+async function handleGetInvoiceLink(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const effectiveUserId = (body._qbUserId as string) || userId;
+  const config = await getQBConfig(supabase, effectiveUserId);
+  const qbInvoiceId = body.qbInvoiceId as string;
+
+  if (!qbInvoiceId) {
+    throw new Error("qbInvoiceId is required");
+  }
+
+  // Read the invoice with ?include=invoiceLink
+  const readBack = await qbFetch(config, `invoice/${qbInvoiceId}?include=invoiceLink`, {});
+  const invoice = readBack?.Invoice;
+
+  // If the invoice exists but has no BillEmail, and we have a customerEmail, update it
+  const customerEmail = body.customerEmail as string | undefined;
+  if (invoice && !invoice.BillEmail?.Address && customerEmail) {
+    try {
+      const updatePayload = {
+        Id: invoice.Id,
+        SyncToken: invoice.SyncToken,
+        sparse: true,
+        BillEmail: { Address: customerEmail },
+      };
+      await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(updatePayload) });
+      // Re-read after update to get fresh InvoiceLink
+      const reRead = await qbFetch(config, `invoice/${qbInvoiceId}?include=invoiceLink`, {});
+      if (reRead?.Invoice) {
+        return jsonRes({
+          success: true,
+          invoice: reRead.Invoice,
+          invoiceLink: reRead.Invoice.InvoiceLink || null,
+        });
+      }
+    } catch (e) {
+      console.warn("[get-invoice-link] BillEmail update failed:", e);
+    }
+  }
+
+  return jsonRes({
+    success: true,
+    invoice: invoice || null,
+    invoiceLink: invoice?.InvoiceLink || null,
   });
 }
 
