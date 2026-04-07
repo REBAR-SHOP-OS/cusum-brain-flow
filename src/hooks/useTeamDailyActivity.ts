@@ -10,31 +10,49 @@ export interface TeamMemberActivity {
   clockEntries: ClockEntry[];
 }
 
-export function useTeamDailyActivity(profileIds: string[], date?: Date) {
+interface ProfileSlim {
+  id: string;
+  user_id: string | null;
+}
+
+export function useTeamDailyActivity(profiles: ProfileSlim[], date?: Date) {
   const { timezone } = useWorkspaceSettings();
 
   const targetDate = date ?? new Date();
   const dayStart = getStartOfDayIsoInTimezone(timezone, targetDate);
 
-  // Compute next day start for upper bound
   const nextDay = new Date(targetDate);
   nextDay.setDate(nextDay.getDate() + 1);
   const dayEnd = getStartOfDayIsoInTimezone(timezone, nextDay);
 
+  const profileIds = profiles.map((p) => p.id);
+
   return useQuery({
     queryKey: ["team_daily_activity", profileIds, dayStart],
-    enabled: profileIds.length > 0,
+    enabled: profiles.length > 0,
     staleTime: 1000 * 60 * 2,
     queryFn: async (): Promise<Record<string, TeamMemberActivity>> => {
+      // Build userId → profileId map
+      const userIdToProfileId: Record<string, string> = {};
+      const userIds: string[] = [];
+      for (const p of profiles) {
+        if (p.user_id) {
+          userIdToProfileId[p.user_id] = p.id;
+          userIds.push(p.user_id);
+        }
+      }
+
       const [actRes, clockRes] = await Promise.all([
-        supabase
-          .from("activity_events")
-          .select("id, event_type, entity_type, description, created_at, source, actor_id")
-          .in("actor_id", profileIds)
-          .gte("created_at", dayStart)
-          .lt("created_at", dayEnd)
-          .order("created_at", { ascending: false })
-          .limit(500),
+        userIds.length > 0
+          ? supabase
+              .from("activity_events")
+              .select("id, event_type, entity_type, description, created_at, source, actor_id")
+              .in("actor_id", userIds)
+              .gte("created_at", dayStart)
+              .lt("created_at", dayEnd)
+              .order("created_at", { ascending: false })
+              .limit(500)
+          : Promise.resolve({ data: [], error: null }),
         supabase
           .from("time_clock_entries")
           .select("profile_id, clock_in, clock_out")
@@ -50,8 +68,9 @@ export function useTeamDailyActivity(profileIds: string[], date?: Date) {
       }
 
       for (const row of actRes.data ?? []) {
-        const pid = (row as any).actor_id as string;
-        if (result[pid]) {
+        const actorId = (row as any).actor_id as string;
+        const pid = userIdToProfileId[actorId];
+        if (pid && result[pid]) {
           result[pid].activities.push({
             id: row.id,
             event_type: row.event_type,
