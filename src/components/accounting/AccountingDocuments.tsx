@@ -691,6 +691,7 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
               taxRate: 0.13,
               taxAmount: untaxed * 0.13,
               total: untaxed * 1.13,
+              quoteId: viewQuote.id,
               terms: [
                 "Payment due within 30 days of invoice date.",
                 "Prices valid for the duration specified above.",
