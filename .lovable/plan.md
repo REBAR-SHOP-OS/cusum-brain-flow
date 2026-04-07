@@ -1,19 +1,30 @@
 
 
-# Add "Do It Yourself First" Directive to Vizzy Identity
+# Fix: `website-speed-audit` Boot Error
 
-## What's Changing
+## Root Cause
 
-Adding a new protocol section to `VIZZY_CORE_IDENTITY` in `vizzyIdentity.ts` that enforces: before sending any email, assigning any task, or delegating any job — Vizzy must first exhaust her own tools to handle it herself, reach 99% confidence in her solution, and then present it for CEO approval.
-
-## File Change
-
-**`supabase/functions/_shared/vizzyIdentity.ts`** — Add new section after AUTO-INVESTIGATION PROTOCOL (~line 156), before THINK OUT OF THE BOX:
+Vizzy's diagnosis was incorrect. There is **no** `PAGESPEED_API_KEY` referenced anywhere in this function — that was a hallucination. The actual error from the logs is:
 
 ```
-═══ DO IT YOURSELF FIRST — 99% CONFIDENCE RULE ═══
-Before sending ANY email, assigning ANY task, or delegating ANY job to a team member:
+SyntaxError: Identifier 'baseUrl' has already been declared
+```
 
-Step 1 — CAN I DO THIS MYSELF? Check your full tool inventory. If you have
-  the tools to investigate, fix, draft, update, or resolve — DO IT YOURSELF.
-Step
+Lines 84-85 in `supabase/functions/website-speed-audit/index.ts` are identical:
+```typescript
+const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(...) || "https://rebar.shop";
+const baseUrl = Deno.env.get("WP_BASE_URL")?.replace(...) || "https://rebar.shop";  // ← duplicate
+```
+
+## Fix
+
+**File:** `supabase/functions/website-speed-audit/index.ts`
+
+Delete line 85 (the duplicate `const baseUrl` declaration). One line removed.
+
+## Impact
+- 1 file, 1 line deleted
+- Fixes the boot crash immediately — no secrets or API keys needed
+- Vizzy's `wp_run_speed_audit` tool starts working again
+- No database, UI, or auth changes
+
