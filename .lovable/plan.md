@@ -1,41 +1,26 @@
 
-# QuickBooks Integration Audit — Completed
 
-## Changes Applied (based on official QB API docs)
+# Restrict Sales Lead Assignees to Neel and Saurabh Only
 
-### 1. InvoiceLink Generation — FIXED
-- Added `AllowOnlineCreditCardPayment: true` and `AllowOnlineACHPayment: true` to all invoice creation payloads
-- Added `?include=invoiceLink` read-back after creation
-- `get-invoice-link` action now repairs existing invoices that lack payment flags via sparse update
-- `minorversion=69` auto-appended to ALL QB API calls (both `quickbooks-oauth/index.ts` and shared `qbClient.ts`)
+## Problem
+The Lead Form modal in the Sales Pipeline shows all active profiles in the "Assign To" dropdown. Per business rules, only **Neel Mahajan** (`neel@rebar.shop`) and **Saurabh Seghal** (`saurabh@rebar.shop`) should appear as assignable members.
 
-### 2. Canadian Tax Compliance — FIXED
-- `GlobalTaxCalculation: "TaxExcluded"` added to: invoices, estimates, sales receipts, refund receipts, estimate-to-invoice conversion
-- `ApplyTaxAfterDiscount: false` added to invoices and estimates (standard Canadian behavior)
+## Change
 
-### 3. Customer Sync — ENHANCED
-- Now pulls `email`, `phone`, `address`, `city`, `province`, `postal_code` from QB during sync
-- Previously only synced `name`, `company_name`, `notes`, `credit_limit`, `payment_terms`, `status`
+**File: `src/components/pipeline/LeadFormModal.tsx`** (line 73)
 
-### 4. Query Escaping — FIXED
-- `handleCreateCustomer` used `\'` (backslash) for single-quote escaping — changed to `''` (double single-quote) per QB QDSL spec
+Replace the current `activeProfiles` filter:
+```typescript
+const activeProfiles = (profiles ?? []).filter(p => p.is_active);
+```
 
-### 5. Email Flow — ENHANCED
-- `EmailStatus: "NeedToSend"` set when `BillEmail` is provided on invoices
-- QB's built-in email delivery is now enabled automatically
+With an email-based whitelist filter:
+```typescript
+const SALES_ASSIGNEE_EMAILS = ["neel@rebar.shop", "saurabh@rebar.shop"];
+const activeProfiles = (profiles ?? []).filter(
+  p => p.is_active && p.email && SALES_ASSIGNEE_EMAILS.includes(p.email.toLowerCase())
+);
+```
 
-### 6. New Actions Added
-- `read-invoice` — Read a single invoice by ID with `?include=invoiceLink`
-- `get-invoice-pdf` — Fetch invoice PDF as base64
-- `update-estimate` — Sparse update an estimate
+This ensures only Neel and Saurabh appear in the assignee picker for new and edited leads. One line change, no other files affected.
 
-### 7. Estimate-to-Invoice Conversion — ENHANCED
-- Now carries forward `BillEmail` from estimate
-- Adds `AllowOnlineCreditCardPayment`, `AllowOnlineACHPayment`, `GlobalTaxCalculation`
-
-### 8. QB Payments Charges API — Verified
-- Confirmed US-only — no Canadian-side calls exist (correct)
-
-## Files Changed
-- `supabase/functions/quickbooks-oauth/index.ts`
-- `supabase/functions/_shared/qbClient.ts`
