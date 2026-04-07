@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { useQueryClient } from "@tanstack/react-query";
+import { DocumentAttachments } from "@/components/accounting/DocumentAttachments";
 import brandLogo from "@/assets/brand-logo.png";
 
 interface LineItem {
@@ -990,6 +991,11 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         <Button variant="outline" size="sm" onClick={addRow} className="mb-6 print:hidden gap-1 text-xs">
           <Plus className="w-3 h-3" /> Add Line
         </Button>
+
+        {/* Attachments */}
+        <div className="mb-6 print:hidden">
+          <DocumentAttachments entityType="invoice" entityId={invoiceId} />
+        </div>
 
         {/* Notes */}
         <div className="mb-6">
