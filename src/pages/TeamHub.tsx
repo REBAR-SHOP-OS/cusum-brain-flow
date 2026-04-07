@@ -210,7 +210,10 @@ export default function TeamHub() {
     <ChannelSidebar
       channels={channels}
       selectedId={isNotesView ? TEAM_HUB_SELF_NOTES_ID : activeChannelId}
-      onSelect={setSelectedChannelId}
+      onSelect={(id) => {
+        setDmTargetName(null);
+        setSelectedChannelId(id);
+      }}
       onlineCount={onlineCount}
       profiles={profiles}
       onCreateChannel={() => { setCreateDialogMode("channel"); setShowCreateDialog(true); }}
