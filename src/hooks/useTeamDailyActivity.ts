@@ -10,29 +10,37 @@ export interface TeamMemberActivity {
   clockEntries: ClockEntry[];
 }
 
-export function useTeamDailyActivity(profileIds: string[]) {
+export function useTeamDailyActivity(profileIds: string[], date?: Date) {
   const { timezone } = useWorkspaceSettings();
 
+  const targetDate = date ?? new Date();
+  const dayStart = getStartOfDayIsoInTimezone(timezone, targetDate);
+
+  // Compute next day start for upper bound
+  const nextDay = new Date(targetDate);
+  nextDay.setDate(nextDay.getDate() + 1);
+  const dayEnd = getStartOfDayIsoInTimezone(timezone, nextDay);
+
   return useQuery({
-    queryKey: ["team_daily_activity", profileIds],
+    queryKey: ["team_daily_activity", profileIds, dayStart],
     enabled: profileIds.length > 0,
     staleTime: 1000 * 60 * 2,
     queryFn: async (): Promise<Record<string, TeamMemberActivity>> => {
-      const todayStart = getStartOfDayIsoInTimezone(timezone);
-
       const [actRes, clockRes] = await Promise.all([
         supabase
           .from("activity_events")
           .select("id, event_type, entity_type, description, created_at, source, actor_id")
           .in("actor_id", profileIds)
-          .gte("created_at", todayStart)
+          .gte("created_at", dayStart)
+          .lt("created_at", dayEnd)
           .order("created_at", { ascending: false })
           .limit(500),
         supabase
           .from("time_clock_entries")
           .select("profile_id, clock_in, clock_out")
           .in("profile_id", profileIds)
-          .gte("clock_in", todayStart)
+          .gte("clock_in", dayStart)
+          .lt("clock_in", dayEnd)
           .order("clock_in", { ascending: false }),
       ]);
 
