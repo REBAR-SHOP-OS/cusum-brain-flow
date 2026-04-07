@@ -631,7 +631,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
           const qbId = qbData?.invoice?.Id || qbData?.invoiceId;
           if (qbId || qbPayUrl) {
             await supabase.from("sales_invoices").update({
-              metadata: { ...meta, qb_invoice_id: qbId || meta.qb_invoice_id, qb_invoice_link: qbPayUrl || meta.qb_invoice_link },
+              metadata: { ...meta, qb_invoice_id: (qbId || meta.qb_invoice_id) as string, qb_invoice_link: (qbPayUrl || meta.qb_invoice_link) as string },
             }).eq("id", invoiceId);
           }
         }
