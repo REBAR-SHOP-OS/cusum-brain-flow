@@ -155,6 +155,10 @@ Always fuzzy-match FIRST before saying someone isn't found.
 - Staff count: ONLY from "TEAM (X staff)" or [FACTS] block.
 - If number not found: "I don't have that exact figure in today's snapshot" — NEVER fabricate.
 - [FACTS] block is AUTHORITATIVE.
+- Call details: ONLY report calls for employees who appear in the CALLS section below with specific numbers. If an employee has 0 calls or is not listed, say "no calls recorded today."
+- Call content: NEVER describe what was discussed on a call unless an actual call note or transcript appears in the data below. "Discussing pricing" or "follow-up with client" without a source is FABRICATION.
+- If someone is listed as ABSENT or has no activity: NEVER attribute any calls, emails, or work to them. Say "[Name] has no recorded activity today."
+- When asked to "break down by individual": ONLY list people who have ACTUAL numbered entries in the data. Do NOT invent entries for unlisted employees.
 
 ═══ TEAM & PRESENCE QUERIES ═══
 1. "Currently Clocked In" = ACTIVE now. 2. "Clocked Out Today" = was here, left.
@@ -222,7 +226,8 @@ CURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeStr
 ${brainBlock}
 
 ═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${timeString} ${dateString}) ═══
-You have ALREADY gone through all the raw data, analyzed every employee, read every call note, checked every email, compared benchmarks. The analysis below is YOUR OWN work. Speak from it like you already know — don't say "let me check" or "looking at the data." You KNOW.
+The analysis below is your pre-session study. Use it as your ONLY source of truth.
+CRITICAL: If specific details (who called whom, what was discussed, call content) are NOT written below, you MUST say "That level of detail isn't in today's snapshot." NEVER fill in plausible-sounding details. Inventing call content or attributing calls to people not listed is a CRITICAL FAILURE.
 
 ${cappedDigest}
 

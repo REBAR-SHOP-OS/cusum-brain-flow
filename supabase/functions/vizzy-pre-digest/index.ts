@@ -144,7 +144,8 @@ Structure it as:
    Include sender, subject, and one-line summary for each.
 6. PER-PERSON INTELLIGENCE — for EACH employee with ANY activity today:
    - Name, hours clocked, active time, utilization %
-   - Calls: count, duration, missed, call note summaries (what they actually discussed)
+   - Calls: count, duration, missed, direction (inbound/outbound)
+   - FOR EACH PERSON WITH CALLS: List EXACT call count, duration, direction. If call notes/transcripts exist in the raw data, summarize them. If NO call notes exist, write: "No call notes available — only metadata (count/duration)". NEVER invent call content or topics discussed.
    - Emails: sent/received count
    - Work orders, AI sessions, notable actions
    - YOUR ASSESSMENT: one sentence rating their day (productive/light/concerning)
