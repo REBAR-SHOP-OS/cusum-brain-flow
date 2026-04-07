@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { useSalesInvoices, SalesInvoice } from "@/hooks/useSalesInvoices";
 import { Button } from "@/components/ui/button";
-import { Plus, Receipt } from "lucide-react";
+import { Plus, Receipt, Eye, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { format, isPast } from "date-fns";
@@ -23,6 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function SalesInvoices() {
   const { invoices, isLoading, generateNumber } = useSalesInvoices();
   const { companyId } = useCompanyId();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [editorInvoiceId, setEditorInvoiceId] = useState<string | null>(null);
 
@@ -113,6 +115,7 @@ export default function SalesInvoices() {
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Issued</TableHead>
                 <TableHead>Due</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -126,6 +129,23 @@ export default function SalesInvoices() {
                     <TableCell className="text-right">{inv.amount ? `$ ${Number(inv.amount).toLocaleString()}` : "—"}</TableCell>
                     <TableCell className="text-muted-foreground text-xs">{inv.issued_date ? format(new Date(inv.issued_date), "MMM d, yyyy") : "—"}</TableCell>
                     <TableCell className="text-muted-foreground text-xs">{inv.due_date ? format(new Date(inv.due_date), "MMM d, yyyy") : "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setEditorInvoiceId(inv.id); }} title="View">
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!window.confirm("Delete this invoice?")) return;
+                          const { error } = await supabase.from("sales_invoices").delete().eq("id", inv.id);
+                          if (error) { toast.error(error.message); return; }
+                          toast.success("Invoice deleted");
+                          queryClient.invalidateQueries({ queryKey: ["sales_invoices", companyId] });
+                        }} title="Delete">
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })}
