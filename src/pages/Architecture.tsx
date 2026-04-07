@@ -216,6 +216,9 @@ export default function Architecture() {
   const [newNodeLabel, setNewNodeLabel] = useState("");
   const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("modules");
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ArchitectureFlowNode, Edge> | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const [lockedNode, setLockedNode] = useState<string | null>(null);
+  const [showAllEdges, setShowAllEdges] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
     buildInitialNodes(),
