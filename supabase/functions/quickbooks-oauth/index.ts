@@ -53,6 +53,22 @@ async function getCompanyQBConfig(supabase: ReturnType<typeof createClient>, com
     return { default_tax_code: "TAX", default_sales_term: "Net 30" };
   }
 }
+// ─── Term Resolution Helper ───────────────────────────────────────
+
+async function resolveTermId(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  termName: string,
+): Promise<string | null> {
+  try {
+    const query = `select Id, Name from Term where Name = '${termName.replace(/'/g, "''")}'`;
+    const result = await qbFetch(config, `query?query=${encodeURIComponent(query)}`) as Record<string, unknown>;
+    const terms = (result?.QueryResponse as Record<string, unknown>)?.Term as Record<string, unknown>[] | undefined;
+    if (terms && terms.length > 0) return String(terms[0].Id);
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
@@ -1325,7 +1341,11 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     });
   }
 
-  const effectiveTerms = salesTermRef || (qbConfig as any).default_sales_term;
+  let effectiveTerms: string | undefined = salesTermRef || (qbConfig as any).default_sales_term;
+  if (effectiveTerms && isNaN(Number(effectiveTerms))) {
+    const resolvedId = await resolveTermId(config, effectiveTerms);
+    effectiveTerms = resolvedId || undefined;
+  }
   const payload: Record<string, unknown> = {
     CustomerRef: { value: customerId, name: customerName },
     Line: lines,
