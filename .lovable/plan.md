@@ -1,89 +1,80 @@
 
 
-# CEO SMS Alerts + Push Notification Status Check
+# Make Vizzy 24/7 Active: Always-On Monitoring + Danger SMS Alerts
 
-## What the CEO Wants
+## The Problem
 
-1. **Vizzy should auto-reply to the CEO via SMS** at +14165870788 when she takes actions or has updates
-2. **Push notifications status check** — confirm they're working
-3. **On every inbound call or SMS, text the CEO** on their personal phone number
-4. **Team Hub push notifications** should also be active
+Vizzy's call handling (`VizzyCallHandler`) only works when the CEO's browser is open — it's a React component that runs client-side. If the browser is closed, no calls are answered. The watchdog runs every 15 minutes but only creates in-app notifications — it doesn't SMS the CEO for dangerous situations.
 
-## Current State
+## What Needs to Change
 
-- **Push notifications**: Already implemented — `push-on-notify` edge function fires on every notification insert, `sw-push.js` handles display, `useNotifications` registers push subscriptions on load
-- **SMS to CEO**: `rc_send_sms` tool exists in `admin-chat` but is only used on-demand (Vizzy doesn't auto-text the CEO)
-- **Inbound call/SMS alerts**: `VizzyCallHandler` creates in-app notifications but never sends an SMS to the CEO's phone
-- **Team Hub**: Push notifications already fire via the `notify-on-message` trigger
+### 1. `supabase/functions/vizzy-business-watchdog/index.ts` — SMS CEO on Dangerous Alerts
 
-## Changes
+The watchdog already runs every 15 min via cron and detects: unanswered emails, stalled leads, at-risk production, missed deliveries, overdue invoices, long shifts, broken integrations. Currently it only writes to `notifications` table.
 
-### 1. `supabase/functions/push-on-notify/index.ts` — Add SMS Alert to CEO
+**Add:** After writing each alert, if priority is "high" or the alert type is dangerous (broken integrations, missed deliveries, overdue invoices >$5k, long shifts >12h), also call `sendCeoSmsAlert()` with a short summary.
 
-After sending the push notification, add logic to also send an SMS to the CEO's phone (+14165870788) for high-priority notification types:
-- `call_summary` (Vizzy took a call)
-- `rfq_approval` (RFQ captured)
-- `callback_request` (someone wants a callback)
-- Any notification with `priority: "high"`
+~10 lines added.
 
-Uses the same RingCentral SMS sending pattern already in `admin-chat` (fetch token from `user_ringcentral_tokens`, auto-detect SMS sender number, send via RC API).
+### 2. `supabase/functions/vizzy-call-receptionist/index.ts` — Add 24/7 Always-On Directive
 
-SMS format: Short summary — e.g. "📞 Vizzy took a call from John Smith (Sales mode). RFQ captured for 20M rebar. Check app for details."
+Update the sales agent prompt to explicitly state Vizzy is available 24/7/365 — not just after hours. The prompt already handles business hours vs after hours messaging. Add a line reinforcing that Vizzy never sleeps, always answers, always takes care of business.
 
-~50 lines added.
+~3 lines added to both prompt modes.
 
-### 2. `supabase/functions/ringcentral-sync/index.ts` — SMS Alert on New Inbound SMS
+### 3. `supabase/functions/_shared/vizzyIdentity.ts` — Add 24/7 Operational Directive
 
-After syncing a new inbound SMS to the database, send an SMS notification to the CEO at +14165870788:
-- "📱 New SMS from [contact/number]: [first 100 chars of message]"
-- Only for genuinely new messages (not already in DB)
+Add a new section to `VIZZY_CORE_IDENTITY`:
 
-~15 lines added in the SMS sync loop.
+```
+═══ 24/7 ALWAYS-ON OPERATIONAL MODE ═══
+You are ALWAYS active — 24 hours, 7 days a week, 365 days a year.
+You never sleep. You never go offline. You are the always-on guardian of the business.
 
-### 3. `supabase/functions/_shared/vizzyIdentity.ts` — Update Identity
+DANGER ALERT PROTOCOL:
+When ANY of these are detected, the CEO is immediately texted at +14165870788:
+- Broken integrations (RingCentral, Gmail, QuickBooks disconnected)
+- Missed deliveries or scheduling failures
+- Overdue invoices exceeding $5,000
+- Employee shifts exceeding 12 hours
+- Production stalls (machines idle during active queue)
+- Security anomalies or unauthorized access attempts
+- Any system error that could impact revenue or safety
 
-Add to CAN DO list:
-- "Auto-text the CEO at +14165870788 on every inbound call, SMS, or high-priority event"
+You handle EVERYTHING you can autonomously:
+- Answer every call like a human — warm, knowledgeable, helpful
+- Capture every opportunity — RFQs, leads, inquiries
+- Monitor all systems continuously via watchdog
+- Only escalate to the CEO when human judgment or approval is required
+```
 
-Add directive:
-- "When you complete a significant action or detect a critical event, always send an SMS summary to +14165870788 via rc_send_sms"
+~15 lines added.
 
-~5 lines added.
+### 4. `supabase/functions/push-on-notify/index.ts` — Ensure Danger Notifications Always SMS
 
-### 4. `supabase/functions/_shared/smsAlertHelper.ts` — NEW Shared Helper
+The current SMS trigger fires for `call_summary`, `rfq_approval`, `callback_request`, and `priority: "high"`. Add watchdog alert types to the SMS trigger list:
+- `watchdog_alert` (or whatever type the watchdog uses)
+- Any notification with `agent_name: "watchdog"`
 
-Create a reusable helper function `sendCeoSmsAlert(message: string)` that:
-- Fetches RC token from `user_ringcentral_tokens`
-- Refreshes if expired
-- Auto-detects SMS sender number
-- Sends SMS to +14165870788
-- Returns success/failure (never throws — alerts should not break primary flows)
-
-This avoids duplicating the RC SMS logic across multiple functions. ~60 lines.
+~5 lines updated.
 
 ## File Changes
 
 | File | Change |
 |------|--------|
-| `supabase/functions/_shared/smsAlertHelper.ts` | NEW — reusable `sendCeoSmsAlert()` helper |
-| `supabase/functions/push-on-notify/index.ts` | Add SMS alert to CEO for calls/RFQs/high-priority (~15 lines) |
-| `supabase/functions/ringcentral-sync/index.ts` | SMS alert on new inbound SMS (~15 lines) |
-| `supabase/functions/_shared/vizzyIdentity.ts` | Update CAN DO + add SMS alert directive (~5 lines) |
+| `supabase/functions/vizzy-business-watchdog/index.ts` | Import `sendCeoSmsAlert`, SMS CEO on high-priority/dangerous alerts (~10 lines) |
+| `supabase/functions/_shared/vizzyIdentity.ts` | Add 24/7 always-on directive + danger alert protocol (~15 lines) |
+| `supabase/functions/vizzy-call-receptionist/index.ts` | Add "always available" reinforcement to both prompt modes (~3 lines) |
+| `supabase/functions/push-on-notify/index.ts` | Add watchdog alert types to SMS trigger list (~5 lines) |
 
-## Push Notification Status
+## Important Note on Call Handling
 
-Push notifications are already fully implemented:
-- Service worker (`sw-push.js`) handles display
-- `push-on-notify` sends push on every notification insert
-- `useNotifications` auto-registers push subscription on page load
-- Team Hub messages trigger push via `notify-on-message`
-- VAPID keys are configured
-
-The CEO just needs to have granted notification permission in their browser. No code changes needed for push.
+The `VizzyCallHandler` component runs in the browser — it requires the CEO's browser to be open. This is a WebRTC limitation. The watchdog, SMS alerts, and all backend monitoring run 24/7 on the server via cron regardless of browser state. The call answering system works whenever the app is open (it doesn't need to be in focus — just loaded in a tab).
 
 ## Impact
-- 4 files (1 new, 3 updated)
-- CEO gets SMS on their phone for every call, inbound SMS, and critical event
-- Push notifications already active — no changes needed
+- 4 files updated
+- CEO gets SMS on phone for any dangerous business event — day or night
+- Vizzy identity reinforced as 24/7 always-on operator
+- Watchdog alerts now trigger SMS, not just in-app notifications
 - No database or auth changes
 
