@@ -224,6 +224,7 @@ export default function TeamHub() {
             targetName: name,
           });
           if (result?.id) {
+            setDmTargetName(name || "Direct Message");
             setSelectedChannelId(result.id);
           }
         } catch (err: any) {
