@@ -1560,6 +1560,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
     AllowOnlineACHPayment: true,
     // Canadian locale: tax-exclusive calculation
     GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
     ...(customerEmail && { BillEmail: { Address: customerEmail }, EmailStatus: "NeedToSend" }),
     ...(dueDate && { DueDate: dueDate }),
     ...(memo && { CustomerMemo: { value: memo } }),
@@ -2423,6 +2424,7 @@ async function handleCreateRefundReceipt(supabase: ReturnType<typeof createClien
       Description: item.description,
       SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount, ...(item.serviceId && { ItemRef: { value: item.serviceId } }) },
     })),
+    GlobalTaxCalculation: "TaxExcluded",
     ...(memo && { CustomerMemo: { value: memo } }),
     ...(depositToAccountId && { DepositToAccountRef: { value: depositToAccountId } }),
   };
