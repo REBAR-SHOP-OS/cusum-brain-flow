@@ -1,5 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useRef, useEffect } from "react";
+import { useAuth } from "@/lib/auth";
 import { Sparkles, X, Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, SpellCheck } from "lucide-react";
 import { useGrammarCheck } from "@/hooks/useGrammarCheck";
 import { Button } from "@/components/ui/button";
