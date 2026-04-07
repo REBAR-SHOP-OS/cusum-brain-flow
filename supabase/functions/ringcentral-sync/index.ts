@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
+import { sendCeoSmsAlert } from "../_shared/smsAlertHelper.ts";
 
 const RC_SERVER = "https://platform.ringcentral.com";
 
@@ -530,16 +531,25 @@ async function syncAllUsers(body: { syncType?: string; daysBack?: number; cron?:
 
         for (const msg of messages) {
           const toAddress = msg.to?.map((t: any) => t.phoneNumber || t.name).join(", ") || "Unknown";
+          const fromAddress = msg.from?.phoneNumber || msg.from?.name || "Unknown";
+          const msgDirection = (msg.direction || "").toLowerCase();
 
-          const { error } = await supabaseAdmin.from("communications").upsert({
+          const { error, status } = await supabaseAdmin.from("communications").upsert({
             source: "ringcentral", source_id: String(msg.id), thread_id: msg.conversationId,
-            from_address: msg.from?.phoneNumber || msg.from?.name || "Unknown", to_address: toAddress,
+            from_address: fromAddress, to_address: toAddress,
             subject: msg.subject || "SMS", body_preview: msg.subject || "",
-            received_at: msg.creationTime, direction: (msg.direction || "").toLowerCase(),
+            received_at: msg.creationTime, direction: msgDirection,
             status: msg.readStatus === "Unread" ? "unread" : "read",
             metadata: { type: "sms" }, user_id: userId, company_id: companyId,
           }, { onConflict: "source,source_id", ignoreDuplicates: false });
-          if (!error) smsUpserted++;
+          if (!error) {
+            smsUpserted++;
+            // SMS alert to CEO for new inbound SMS
+            if (msgDirection === "inbound") {
+              const preview = (msg.subject || "").slice(0, 100);
+              sendCeoSmsAlert(`📱 New SMS from ${fromAddress}: ${preview}`).catch(() => {});
+            }
+          }
         }
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);
