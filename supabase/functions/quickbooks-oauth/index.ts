@@ -70,6 +70,23 @@ async function resolveTermId(
   }
 }
 
+// ─── Tax Code Resolution Helper ──────────────────────────────────
+
+async function resolveTaxCodeId(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  taxCodeName: string,
+): Promise<string | null> {
+  try {
+    const query = `select Id, Name from TaxCode where Name = '${taxCodeName.replace(/'/g, "''")}'`;
+    const result = await qbFetch(config, `query?query=${encodeURIComponent(query)}`) as Record<string, unknown>;
+    const codes = (result?.QueryResponse as Record<string, unknown>)?.TaxCode as Record<string, unknown>[] | undefined;
+    if (codes && codes.length > 0) return String(codes[0].Id);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────
 
 // verifyAuth removed — handled by handleRequest
@@ -1296,7 +1313,11 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   }
 
   const qbConfig = await getCompanyQBConfig(supabase, companyId);
-  const effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || "TAX";
+  let effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || "TAX";
+  if (effectiveTaxCode && isNaN(Number(effectiveTaxCode))) {
+    const resolvedTaxId = await resolveTaxCodeId(config, effectiveTaxCode);
+    effectiveTaxCode = resolvedTaxId || effectiveTaxCode;
+  }
 
   // Normalize line items: accept either unitPrice or legacy amount
   const lines: Record<string, unknown>[] = lineItems.map(item => {
@@ -1337,7 +1358,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
       DetailType: "SalesItemLineDetail",
       Amount: shippingAmount,
       Description: "Shipping",
-      SalesItemLineDetail: { UnitPrice: shippingAmount, Qty: 1 },
+      SalesItemLineDetail: { UnitPrice: shippingAmount, Qty: 1, TaxCodeRef: { value: effectiveTaxCode } },
     });
   }
 
