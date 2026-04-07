@@ -18,7 +18,8 @@ import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
 import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { agentConfigs } from "@/components/agent/agentConfigs";
-import { getVisibleAgents, getUserPrimaryAgentKeyFromConfig } from "@/lib/userAccessConfig";
+import { getVisibleAgents, getVisibleMenus, getUserPrimaryAgentKeyFromConfig } from "@/lib/userAccessConfig";
+import { useAuth } from "@/lib/auth";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -46,7 +47,25 @@ const SIDEBAR_GROUPS: { key: string; label: string; categories: string[] }[] = [
   { key: "office_tools", label: "🛠️ Office Tools",     categories: ["office_tools"] },
 ];
 
-/** Live clock component that updates every second */
+/** Maps each SIDEBAR_GROUP key to the MenuKey required to see it */
+const GROUP_TO_MENU: Record<string, string> = {
+  dashboard: "Dashboard",
+  inbox: "Inbox",
+  team_hub: "Team Hub",
+  tasks: "Business Tasks",
+  monitor: "Live Monitor",
+  ceo: "CEO Portal",
+  support: "Support",
+  pipeline: "Pipeline",
+  lead_scoring: "Lead Scoring",
+  customers: "Customers",
+  accounting: "Accounting",
+  sales: "Sales",
+  production: "Shop Floor",
+  shop_floor: "Shop Floor",
+  timeclock: "Time Clock",
+  office_tools: "Office Tools",
+};
 function LiveClock({ timezone }: { timezone: string }) {
   const [now, setNow] = useState(new Date());
   useEffect(() => {
@@ -819,6 +838,7 @@ function TeamDailyReport({
 
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, analyzeSystem } = useVizzyMemory();
+  const { user } = useAuth();
   const { timezone } = useWorkspaceSettings();
   const [analyzing, setAnalyzing] = useState(false);
   const { toast } = useToast();
@@ -904,9 +924,17 @@ export function VizzyBrainPanel({ onClose }: Props) {
       );
     }
 
+    // Filter sections by current user's menu access
+    const userMenus = getVisibleMenus(user?.email);
+    const accessibleGroups = grouped.filter((group) => {
+      const requiredMenu = GROUP_TO_MENU[group.key];
+      if (!requiredMenu) return true; // no mapping = always show
+      return userMenus.includes(requiredMenu);
+    });
+
     const sectionsToShow = selectedProfile
-      ? grouped.filter((group) => group.items.length > 0)
-      : grouped;
+      ? accessibleGroups.filter((group) => group.items.length > 0)
+      : accessibleGroups;
 
     if (selectedProfile && sectionsToShow.length === 0) {
       return (
