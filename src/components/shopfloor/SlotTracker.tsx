@@ -12,6 +12,7 @@ import {
   Layers,
   MinusCircle,
   StopCircle,
+  Zap,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -341,11 +342,14 @@ export function SlotTracker({
         {/* Record stroke */}
         {activeSlots.length > 0 && canWrite && (
           <Button
-            className="flex-1 gap-2 font-bold h-12 text-base"
+            className="flex-1 gap-2 font-bold h-12 text-base justify-between px-4"
             onClick={onRecordStroke}
           >
-            <Scissors className="w-5 h-5" />
-            Record Stroke ({nextStroke}/{maxStrokes}) — {piecesPerStroke} pcs
+            <span className="flex items-center gap-2">
+              <Scissors className="w-5 h-5" />
+              Record Stroke ({nextStroke}/{maxStrokes}) — {piecesPerStroke} pcs
+            </span>
+            <Zap className="w-5 h-5" />
           </Button>
         )}
 
