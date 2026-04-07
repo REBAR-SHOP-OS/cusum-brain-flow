@@ -116,23 +116,25 @@ export function useStationData(machineId: string | null, machineType?: string, p
 
       if (itemsError) throw itemsError;
 
-      return (items || [])
+      const mapItem = (item: Record<string, unknown>): StationItem => ({
+        ...item,
+        bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
+        phase: (item.phase as string) || "queued",
+        bend_dimensions: item.bend_dimensions as Record<string, number> | null,
+        plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
+        project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
+        project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
+        customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
+        project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
+        optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
+      } as StationItem);
+
+      const filtered = (items || [])
         .filter((item: Record<string, unknown>) => {
           const proj = (item.cut_plans as any)?.projects;
           return !proj || proj.status !== 'paused';
         })
-        .map((item: Record<string, unknown>) => ({
-          ...item,
-          bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
-          phase: (item.phase as string) || "queued",
-          bend_dimensions: item.bend_dimensions as Record<string, number> | null,
-          plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
-          project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
-          project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
-            customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
-            project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
-            optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
-          }))
+        .map(mapItem)
         .filter((item: StationItem) => allowedBarCodes.includes(item.bar_code))
         .filter((item: StationItem) => {
           const CUTTER_01_ID = "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3";
@@ -142,7 +144,23 @@ export function useStationData(machineId: string | null, machineType?: string, p
           if (machineId === CUTTER_01_ID && !ALLOWED_ON_CUTTER_01.has(item.bar_code)) return false;
           if (machineId === CUTTER_02_ID && BLOCKED_ON_CUTTER_02.has(item.bar_code)) return false;
           return true;
-        }) as StationItem[];
+        });
+
+      // Ensure the machine's active locked item is always visible
+      if (activeJobId && !filtered.find(i => i.id === activeJobId)) {
+        const { data: lockedItem } = await supabase
+          .from("cut_plan_items")
+          .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, status, optimization_mode, projects(status, customers(name)))")
+          .eq("id", activeJobId)
+          .eq("cut_plans.company_id", companyId!)
+          .maybeSingle();
+
+        if (lockedItem) {
+          filtered.unshift(mapItem(lockedItem as Record<string, unknown>));
+        }
+      }
+
+      return filtered;
     },
   });
 
