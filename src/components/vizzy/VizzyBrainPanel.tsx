@@ -490,7 +490,7 @@ function TeamDailyReport({
               <CalendarIcon className="w-3.5 h-3.5 text-muted-foreground" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
+          <PopoverContent className="w-auto p-0 z-[100001]" align="end">
             <Calendar
               mode="single"
               selected={selectedDate}
