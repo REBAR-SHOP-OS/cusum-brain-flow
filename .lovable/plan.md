@@ -1,42 +1,55 @@
 
 
-# Fix: Architecture Diagram Half Hidden — Nodes Clipped
+# Fix: Architecture Diagram Build Errors + Broken Layout
 
 ## Root Cause
 
-The **Data + Platform** layer has 16 nodes. At 130px width + 30px gap each, that's ~2,720px wide. But `CENTER_REF = 1200` tries to center them around a 1,200px reference — pushing nodes far off the left edge (negative x coordinates). Combined with `fitView` padding of only 0.1, the initial viewport clips many nodes.
-
-Other layers (Entry: 5, Auth: 4, Modules: 8, AI: 9, Integrations: 9, External: 7) also exceed 1,200px in some cases.
+`applyArchitectureLayout` requires `{ id, layer, ... }` at the top level (`ArchitectureLayoutItem`). But `ArchitectureFlowNode` (React Flow Node) has `layer` inside `data`, not at the top level. This causes:
+1. **Build errors** — type mismatch when passing nodes to `applyArchitectureLayout`
+2. **Broken layout** — nodes don't get positioned correctly, everything piles up
 
 ## Fix
 
+### File: `src/lib/architectureFlow.ts`
+
+Update `applyArchitectureLayout` to accept items where `layer` can be either at the top level OR inside `data.layer`. This makes it compatible with both raw layout items AND React Flow nodes.
+
+Change the generic constraint:
+```typescript
+export function applyArchitectureLayout<T extends { id: string; layer?: ArchLayer; data?: { layer?: ArchLayer } }>(items: T[]): T[]
+```
+
+Inside the function, resolve layer via: `item.layer || item.data?.layer`
+
 ### File: `src/pages/Architecture.tsx`
 
-**1. Increase `CENTER_REF` to match widest layer**
+Three fixes:
 
-Change `CENTER_REF` from `1200` to `2800` so all 16 platform nodes fit without negative x positions.
+1. **Line 84**: Add `layer` to mapped objects passed to `applyArchitectureLayout`:
+```typescript
+ARCH_NODES.map((node) => ({
+  id: node.id,
+  layer: node.layer,  // ADD THIS
+  type: "archNode",
+  ...
+}))
+```
 
-**2. Increase `fitView` padding**
+2. **Line 226**: Same fix for delete handler — extract `layer` from `data` before passing:
+```typescript
+setNodes((nds) => applyArchitectureLayout(
+  nds.filter((n) => n.id !== nodeId).map(n => ({ ...n, layer: n.data.layer }))
+) as ArchitectureFlowNode[]);
+```
 
-Change `padding: 0.1` to `padding: 0.15` so the initial zoom level shows all content with breathing room.
+3. **Line 306**: Same fix for add node handler.
 
-**3. Set `LEFT_MARGIN` to `40`**
+### File: `src/lib/architectureFlow.test.ts`
 
-Reduce from `160` to `40` — the sidebar already provides separation; we don't need 160px of empty space inside the canvas.
-
-**4. Split platform layer into 2 sub-rows**
-
-To avoid one impossibly wide row of 16 nodes, split Data + Platform into two visual rows of 8 nodes each. This is done in `buildInitialNodes` by detecting when a layer has >10 nodes and wrapping to a second row with half `LAYER_GAP` offset.
-
-### Result
-
-- All nodes visible on initial load
-- `fitView` auto-zooms to show the full diagram
-- Platform layer wraps cleanly into two rows
-- No other files changed
+Update test items to include a `position` property in the type assertion or use type casting, since the function now returns items with position set.
 
 ## Impact
-- Only layout positioning changes in Architecture.tsx
+- Fixes all 10+ build errors
+- Fixes the broken visual layout (nodes will be properly positioned in 7 layers)
 - No data, edge, or interaction changes
-- All editing features preserved
 
