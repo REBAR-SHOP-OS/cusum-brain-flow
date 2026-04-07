@@ -1,33 +1,43 @@
 
 
-# Add Icons to Big Cut Length Display
+# Generate AI-Written Narrative Report for User Actions
 
 ## Goal
-Add a scissors (record strike) icon on the left side and a ruler (length) icon on the right side of the large "1300 MM" cut length display, as annotated in the screenshot.
+Replace the current structured clipboard copy with an AI-generated narrative report that describes what the user actually did with each agent — a readable text summary of their interactions and system activity.
 
-## Change
+## Approach
+When clicked, the button will:
+1. Gather all existing data (performance stats, agent sessions with recent messages, activity log)
+2. Send this data to Lovable AI (via the existing `ai-agent` edge function or a lightweight dedicated edge function) to produce a human-readable narrative
+3. Display the generated report in a dialog/modal so the user can read and optionally copy it
 
-### `src/components/shopfloor/CutterStationView.tsx` (lines 874-884)
-Convert the `CardContent` layout from pure `text-center` to a flex row with the number centered and icons on each side:
+## Changes
 
-```tsx
-<CardContent className="py-8 px-6">
-  <p className="text-[10px] text-muted-foreground tracking-[0.3em] uppercase font-medium mb-2 text-center">
-    Cut Each Piece To
-  </p>
-  <div className="flex items-center justify-center gap-4">
-    <Scissors className="w-10 h-10 text-primary shrink-0" />
-    <p className="text-7xl sm:text-8xl lg:text-9xl font-black font-mono text-foreground leading-none tracking-tight">
-      {currentItem.cut_length_mm}
-    </p>
-    <Ruler className="w-10 h-10 text-primary shrink-0" />
-  </div>
-  <p className="text-sm text-primary tracking-[0.35em] uppercase mt-3 font-bold text-center">
-    MM
-  </p>
-</CardContent>
-```
+### 1. Update `UserFullReportButton` in `VizzyBrainPanel.tsx`
+- Add loading state for AI generation
+- On click: aggregate all data (same as now), then call the AI to write a narrative summary
+- Show result in a `Dialog` with scrollable text + copy button
+- Use `invokeEdgeFunction("ai-agent", ...)` with a dedicated prompt that instructs the AI to write a comprehensive report from the raw data
+- The prompt will include: user name, performance stats, agent session details (names, session counts, message previews), and activity log entries
+- AI model: `google/gemini-2.5-flash` (fast, good for summarization)
 
-- `Scissors` and `Ruler` are already imported — no new dependencies
-- Single file, ~10 lines changed
+### 2. AI Prompt Design
+The system prompt will instruct the model to:
+- Write in professional tone
+- Summarize what the user accomplished with each agent
+- Highlight key metrics (hours, sessions, activities)
+- Note any patterns or notable items from the activity log
+- Keep it concise (1-2 paragraphs per section)
+
+## File Changes
+
+| File | Change |
+|------|--------|
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Rewrite `UserFullReportButton` to call AI and show narrative in a Dialog |
+
+## Technical Notes
+- Reuses existing `invokeEdgeFunction` + `ai-agent` edge function — no new backend code
+- The `recentMessages` from `useUserAgentSessions` provides conversation context for the AI to summarize
+- Dialog uses existing shadcn `Dialog` components
+- Fallback: if AI call fails, show the raw structured report (current behavior)
 
