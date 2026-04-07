@@ -3390,7 +3390,8 @@ You have just received real data from tool calls. Your response MUST:
               model: "gemini-2.5-pro",
               agentName: "admin-chat",
               messages: followUpMessages,
-              signal: AbortSignal.timeout(25000),
+              signal: AbortSignal.timeout(45000),
+              fallback: { provider: "gemini", model: "gemini-2.5-flash" },
             });
           } catch (followErr: any) {
             console.error("Follow-up AI fetch failed:", followErr.name, followErr.message);
