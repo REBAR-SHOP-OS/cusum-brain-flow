@@ -314,8 +314,114 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
     </div>
   );
 }
+/** Report copy button for section headers */
+function SectionReportButton({ label, getText }: { label: string; getText: () => string }) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(getText());
+        sonnerToast.success(`${label} report copied to clipboard`);
+      }}
+      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+      title={`Copy ${label} report`}
+    >
+      <ClipboardList className="w-3.5 h-3.5" />
+    </button>
+  );
+}
 
-export function VizzyBrainPanel({ onClose }: Props) {
+/** Activity log section for selected user */
+function UserActivitySection({ profileId, timezone }: { profileId: string; timezone: string }) {
+  const { data: activities, isLoading } = useUserActivityLog(profileId);
+
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin mr-2 text-muted-foreground" />
+        <span className="text-xs text-muted-foreground">Loading activities...</span>
+      </div>
+    );
+  }
+
+  if (!activities?.length) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+        <span className="text-xs text-muted-foreground italic">No activities recorded today</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5 max-h-60 overflow-y-auto">
+      {activities.map((a) => (
+        <div key={a.id} className="flex items-start gap-2 rounded border border-border bg-card p-2">
+          <Activity className="w-3.5 h-3.5 mt-0.5 text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span className="font-medium text-foreground">{a.event_type}</span>
+              <span>·</span>
+              <span>{a.entity_type}</span>
+              <span className="ml-auto">
+                {formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
+              </span>
+            </div>
+            {a.description && (
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{a.description}</p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Time clock detail section for selected user */
+function UserTimeClockSection({ profileId, userId, timezone }: { profileId: string; userId: string | null; timezone: string }) {
+  const { data } = useUserPerformance(profileId, userId);
+
+  if (!data?.clockEntries?.length) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+        <span className="text-xs text-muted-foreground italic">No clock entries today</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {data.clockEntries.map((entry, i) => {
+        const start = new Date(entry.clock_in);
+        const end = entry.clock_out ? new Date(entry.clock_out) : null;
+        const durationMs = (end?.getTime() ?? Date.now()) - start.getTime();
+        const durationH = Math.round((durationMs / 3600000) * 10) / 10;
+
+        return (
+          <div key={i} className="flex items-center gap-3 rounded border border-border bg-card p-2.5 text-xs">
+            <LogIn className="w-3.5 h-3.5 text-green-500 shrink-0" />
+            <span className="text-foreground font-medium">
+              {formatDateInTimezone(start, timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
+            </span>
+            <span className="text-muted-foreground">→</span>
+            {end ? (
+              <>
+                <LogOut className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                <span className="text-foreground font-medium">
+                  {formatDateInTimezone(end, timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
+                </span>
+              </>
+            ) : (
+              <span className="text-[10px] bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded-full font-medium">Still working</span>
+            )}
+            <span className="ml-auto text-muted-foreground">{durationH}h</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, analyzeSystem } = useVizzyMemory();
   const { timezone } = useWorkspaceSettings();
   const [analyzing, setAnalyzing] = useState(false);
