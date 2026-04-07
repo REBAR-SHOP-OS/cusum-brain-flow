@@ -300,7 +300,10 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
                   <span className="text-[10px] text-muted-foreground font-normal">— {agent.agentRole}</span>
                 )}
                 {agent.isAssigned && (
-                  <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">Assigned</span>
+                  <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-medium">Primary</span>
+                )}
+                {!agent.isAssigned && agent.hasAccess && (
+                  <span className="text-[9px] bg-accent/50 text-accent-foreground px-1.5 py-0.5 rounded-full font-medium">Access</span>
                 )}
                 {agent.sessionCount > 0 ? (
                   <span className="text-xs text-muted-foreground font-normal">
