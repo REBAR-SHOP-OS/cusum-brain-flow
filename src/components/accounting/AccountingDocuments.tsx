@@ -80,7 +80,9 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [draftEditorId, setDraftEditorId] = useState<string | null>(null);
+  const [invoiceEditorId, setInvoiceEditorId] = useState<string | null>(null);
   const { companyId } = useCompanyId();
+  const { invoices: localInvoices, isLoading: localInvoicesLoading } = useSalesInvoices();
 
   const handleCreateDraft = async () => {
     setCreatingDraft(true);
