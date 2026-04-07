@@ -35,6 +35,7 @@ Deno.serve((req) =>
       provider: "gemini",
       model: "gemini-2.5-flash",
       agentName: "vizzy",
+      temperature: 0.3,
       messages: [
         {
           role: "system",
@@ -56,6 +57,14 @@ REQUIRED ANALYSIS AREAS (include only if noteworthy — skip if nothing to flag)
 5. Pipeline & Leads: Hot leads needing action, stalled opportunities
 6. System Health: Automation failures, sync issues, anomalies
 7. Team: Notable presence/absence, capacity concerns
+
+ANTI-HALLUCINATION RULES:
+- ONLY report facts that appear explicitly in the data below. Do NOT infer, estimate, or dramatize.
+- If a machine shows "running" but no operators are clocked in, note it as a possible data staleness issue — NOT a safety violation.
+- Do NOT compute "utilization %" or "productivity %" from digital action counts. Low digital activity does NOT mean low productivity — many roles work offline (estimating, shop floor, phone calls).
+- If you see "Unlinked" customers in overdue invoices, note it as a QB data mapping issue — NOT a "data integrity crisis."
+- Do NOT use dramatic language like "severe", "illegal", "crisis", "catastrophic" unless there is clear evidence of actual danger.
+- If a metric looks alarming, add context: is it a data issue or a real operational problem?
 
 IMPORTANT: PRESERVE all customer names, employee names, dollar amounts, and invoice numbers from the data. The voice assistant needs these specific details to answer follow-up questions. Do NOT over-summarize — keep granular data points.
 

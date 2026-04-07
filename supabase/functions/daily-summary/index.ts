@@ -362,31 +362,20 @@ Rules:
 - Include specific project names, values, and deadlines from the data
 - Eisenhower should synthesize tasks, overdue items, and calls into a priority matrix`;
 
-      const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-      if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
+      const { callAI } = await import("../_shared/aiRouter.ts");
 
-      const aiResponse = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              { role: "user", parts: [{ text: `${benSystemPrompt}\n\nGenerate Ben's daily digest for ${targetDate}.\n\n${benContext}` }] },
-            ],
-            generationConfig: { temperature: 0.7 },
-          }),
-        }
-      );
+      const result = await callAI({
+        provider: "gemini",
+        model: "gemini-2.5-flash",
+        agentName: "daily-summary-ben",
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: benSystemPrompt },
+          { role: "user", content: `Generate Ben's daily digest for ${targetDate}.\n\n${benContext}` },
+        ],
+      });
 
-      if (!aiResponse.ok) {
-        const errText = await aiResponse.text();
-        console.error("AI error for Ben digest:", aiResponse.status, errText);
-        throw new Error(`Gemini API error: ${aiResponse.status}`);
-      }
-
-      const aiData = await aiResponse.json();
-      const rawContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const rawContent = result.content || "";
       let digest;
       try {
         const cleaned = rawContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -531,7 +520,7 @@ ${rcCalls.length > 0 ? rcCalls.map((c: any, i: number) => { const meta = c.metad
 --- QUICKBOOKS FINANCIALS ---
 Total Accounts Receivable: $${totalAR.toFixed(2)}
 Overdue Invoices: ${overdueInvoices.length} totaling $${totalOverdue.toFixed(2)}
-${overdueInvoices.length > 0 ? overdueInvoices.slice(0, 10).map((inv: any, i: number) => { const d = inv.data || {}; return `${i + 1}. Invoice #${d.DocNumber || inv.quickbooks_id} | Customer: ${d.CustomerRef?.name || "Unknown"} | Balance: $${inv.balance} | Due: ${d.DueDate || "N/A"}`; }).join("\n") : ""}
+${overdueInvoices.length > 0 ? overdueInvoices.slice(0, 10).map((inv: any, i: number) => { const d = inv.data || {}; const custName = d.CustomerRef?.name || "Unlinked"; return `${i + 1}. Invoice #${d.DocNumber || inv.quickbooks_id} | Customer: ${custName} | Balance: $${inv.balance} | Due: ${d.DueDate || "N/A"}`; }).join("\n") : ""}
 Total Vendors on file: ${vendors.length}
 
 --- SOCIAL MEDIA (last 7 days) ---
