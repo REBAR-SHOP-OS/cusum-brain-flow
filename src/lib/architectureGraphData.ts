@@ -12,6 +12,7 @@ import {
   Instagram, DollarSign, PhoneCall, Chrome, Boxes, Receipt, Sparkles,
   HardDrive, Archive, Activity, ServerCrash, Rocket, Lock, DownloadCloud, MonitorCheck,
   RefreshCw, AlertTriangle, CheckCircle, Workflow, Scale, Server,
+  MemoryStick, Radio, Gauge, Key, BarChart3, FileText, HeartPulse, ToggleRight, Bus,
 } from "lucide-react";
 
 export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform";
@@ -120,6 +121,15 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "backups",       label: "Backups",       hint: "Recovery",     layer: "platform", accent: "emerald", icon: DownloadCloud, detail: { title: "Backups", bullets: ["Daily snapshots", "Point-in-time recovery", "Geo-redundant storage"] } },
   { id: "admin-console", label: "Admin",         hint: "Management",   layer: "platform", accent: "emerald", icon: Users,         detail: { title: "Admin Console", bullets: ["User management", "System configuration", "Feature flags"] } },
   { id: "cdn-edge",      label: "CDN / Edge",    hint: "Delivery",     layer: "platform", accent: "emerald", icon: Globe,         detail: { title: "CDN / Edge", bullets: ["Static asset delivery", "Edge caching", "Global distribution"] } },
+  { id: "memory-store",  label: "Memory",        hint: "AI & CRM memory", layer: "platform", accent: "emerald", icon: MemoryStick,   detail: { title: "Memory Store", bullets: ["Vizzy brain & lead memory", "Qualification / quote / loss memory", "Client performance memory"] } },
+  { id: "realtime",      label: "Realtime",      hint: "Live events",  layer: "platform", accent: "emerald", icon: Radio,         detail: { title: "Realtime Engine", bullets: ["Supabase Realtime", "Live chat & dashboards", "Presence & notifications"] } },
+  { id: "rate-limiter",  label: "Rate Limiter",  hint: "Throttle",     layer: "platform", accent: "emerald", icon: Gauge,         detail: { title: "Rate Limiter", bullets: ["Request rate limiting", "Per-user & per-route limits", "Burst protection"] } },
+  { id: "session-store", label: "Sessions",      hint: "Auth state",   layer: "platform", accent: "emerald", icon: Key,           detail: { title: "Session Store", bullets: ["Auth session management", "Token storage & rotation", "SSO state"] } },
+  { id: "analytics",     label: "Analytics",     hint: "Telemetry",    layer: "platform", accent: "emerald", icon: BarChart3,     detail: { title: "Analytics", bullets: ["Usage metrics", "System telemetry", "AI cost tracking"] } },
+  { id: "log-agg",       label: "Log Aggregator", hint: "System logs", layer: "platform", accent: "emerald", icon: FileText,      detail: { title: "Log Aggregator", bullets: ["Centralized log collection", "Structured logging", "Log retention policies"] } },
+  { id: "health",        label: "Health Check",  hint: "Uptime",       layer: "platform", accent: "emerald", icon: HeartPulse,    detail: { title: "Health Checks", bullets: ["Endpoint health probes", "Liveness & readiness", "Uptime monitoring"] } },
+  { id: "feature-flags", label: "Feature Flags", hint: "Toggles",      layer: "platform", accent: "emerald", icon: ToggleRight,   detail: { title: "Feature Flags", bullets: ["Feature toggles", "Gradual rollouts", "A/B testing gates"] } },
+  { id: "msg-bus",       label: "Message Bus",   hint: "Pub/Sub",      layer: "platform", accent: "emerald", icon: Bus,           detail: { title: "Message Bus", bullets: ["Event-driven Pub/Sub", "Inter-service communication", "Async decoupling"] } },
 ];
 
 /* ───── Edges — hub-based routing, 3 styles, micro-labels ───── */
@@ -203,6 +213,22 @@ export const ARCH_EDGES: ArchEdge[] = [
   { id: "e74", source: "monitoring",  target: "error-track",  edgeStyle: "solid" },
   { id: "e75", source: "cdn-edge",    target: "obj-storage",  edgeStyle: "solid" },
   { id: "e76", source: "state-machine", target: "event-log",  edgeStyle: "dashed", label: "audit" },
+
+  // Memory, Realtime, Infrastructure edges
+  { id: "e80", source: "vizzy",         target: "memory-store",  edgeStyle: "dashed", label: "remember" },
+  { id: "e81", source: "nila",          target: "memory-store",  edgeStyle: "dashed", label: "remember" },
+  { id: "e82", source: "crm",           target: "memory-store",  edgeStyle: "dashed", label: "qualify" },
+  { id: "e83", source: "memory-store",  target: "primary-db",    edgeStyle: "solid",  label: "persist" },
+  { id: "e84", source: "chat",          target: "realtime",      edgeStyle: "solid",  label: "live" },
+  { id: "e85", source: "primary-db",    target: "realtime",      edgeStyle: "dashed", label: "stream" },
+  { id: "e86", source: "api-gw",        target: "rate-limiter",  edgeStyle: "solid",  label: "throttle" },
+  { id: "e87", source: "auth",          target: "session-store", edgeStyle: "solid",  label: "session" },
+  { id: "e88", source: "monitoring",    target: "health",        edgeStyle: "solid" },
+  { id: "e89", source: "monitoring",    target: "analytics",     edgeStyle: "solid" },
+  { id: "e90", source: "monitoring",    target: "log-agg",       edgeStyle: "solid" },
+  { id: "e91", source: "admin-console", target: "feature-flags", edgeStyle: "solid" },
+  { id: "e92", source: "pipeline",      target: "msg-bus",       edgeStyle: "dashed", label: "publish" },
+  { id: "e93", source: "msg-bus",       target: "worker-pool",   edgeStyle: "solid",  label: "consume" },
 ];
 
 /* ───── Helpers ───── */
