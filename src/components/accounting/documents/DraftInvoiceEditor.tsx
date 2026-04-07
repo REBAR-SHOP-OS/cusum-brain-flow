@@ -404,6 +404,43 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
     }
   };
 
+  const handleOpenEmailDialog = useCallback(() => {
+    setEmailDialogOpen(true);
+    setLinkCheckStatus({ stripe: null, qb: null });
+
+    // Pre-check Stripe link availability
+    supabase.functions.invoke("stripe-payment", {
+      body: {
+        action: "create-payment-link",
+        amount: total,
+        currency: "cad",
+        invoiceNumber,
+        customerName: customerName || undefined,
+        qbInvoiceId: invoiceId,
+      },
+    }).then(({ data }) => {
+      setLinkCheckStatus(prev => ({ ...prev, stripe: !!data?.paymentLink?.stripe_url }));
+    }).catch(() => {
+      setLinkCheckStatus(prev => ({ ...prev, stripe: false }));
+    });
+
+    // Pre-check QB link availability
+    supabase.functions.invoke("quickbooks-oauth", {
+      body: {
+        action: "create-invoice",
+        customerName: customerName || undefined,
+        items: items.map(it => ({ description: it.description, unitPrice: it.unitPrice, quantity: it.quantity })),
+        dueDate: dueDate || undefined,
+        memo: `ERP Invoice ${invoiceNumber}`,
+      },
+    }).then(({ data }) => {
+      const link = data?.invoiceLink || data?.invoice?.InvoiceLink;
+      setLinkCheckStatus(prev => ({ ...prev, qb: !!link }));
+    }).catch(() => {
+      setLinkCheckStatus(prev => ({ ...prev, qb: false }));
+    });
+  }, [total, invoiceNumber, customerName, invoiceId, items, dueDate]);
+
   const handlePrint = () => window.print();
 
   const handleSendEmail = async () => {
