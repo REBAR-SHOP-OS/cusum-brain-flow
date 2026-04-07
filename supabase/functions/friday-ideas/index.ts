@@ -116,5 +116,5 @@ Keep it practical and prioritized by business impact.`;
 
     console.log(`✅ Friday ideas generated and ${admins?.length || 0} admin(s) notified`);
     return { ok: true, adminsNotified: admins?.length || 0 };
-  }, { functionName: "friday-ideas", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
+  }, { functionName: "friday-ideas", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: false })
 );

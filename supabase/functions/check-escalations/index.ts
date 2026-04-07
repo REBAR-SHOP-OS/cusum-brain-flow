@@ -150,5 +150,5 @@ Deno.serve((req) =>
     }
 
     return { ok: true, checked: pending.length, escalated: escalatedCount };
-  }, { functionName: "check-escalations", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
+  }, { functionName: "check-escalations", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: false })
 );

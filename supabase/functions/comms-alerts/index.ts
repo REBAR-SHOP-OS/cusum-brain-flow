@@ -439,5 +439,5 @@ Deno.serve((req) =>
     } // end per-company loop
 
     return { success: true, alertsProcessed: totalAlerts, skipped: totalSkipped, results: allResults };
-  }, { functionName: "comms-alerts", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
+  }, { functionName: "comms-alerts", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: false })
 );

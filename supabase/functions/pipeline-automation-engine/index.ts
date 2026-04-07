@@ -73,7 +73,7 @@ Deno.serve((req) =>
       JSON.stringify({ matched: rules.length, executed }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-  }, { functionName: "pipeline-automation-engine", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
+  }, { functionName: "pipeline-automation-engine", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: false })
 );
 
 function matchConditions(
