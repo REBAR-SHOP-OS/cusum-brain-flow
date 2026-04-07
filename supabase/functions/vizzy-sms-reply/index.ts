@@ -8,7 +8,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
-import { isSpamSms } from "../_shared/spamFilter.ts";
+import { analyzeSpam } from "../_shared/spamFilter.ts";
 
 const CEO_PHONE = "+14165870788";
 const MAX_REPLIES_PER_DAY = 5;
@@ -40,11 +40,14 @@ Deno.serve(async (req) => {
     const isCeo = from_number === CEO_PHONE || normalized === "4165870788" || normalized === "14165870788";
 
     // Spam filter (skip for CEO — always allow)
-    if (!isCeo && isSpamSms(message_text, from_number)) {
-      console.log("[sms-reply] Spam detected, skipping:", from_number);
-      return new Response(JSON.stringify({ ok: true, skipped: "spam" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (!isCeo) {
+      const spamResult = analyzeSpam(message_text, from_number);
+      if (spamResult.isSpam) {
+        console.log(`[sms-reply] Spam detected from ${from_number} reasons=${spamResult.reasons.join(",")}`);
+        return new Response(JSON.stringify({ ok: true, skipped: "spam", reasons: spamResult.reasons }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Skip short codes (less than 7 digits) — not for CEO
