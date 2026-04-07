@@ -60,7 +60,7 @@ export function AgentSelector({ selected, onSelect }: AgentSelectorProps) {
   );
 }
 
-export function AgentBadge({ agent }: { agent: AgentType }) {
+export function AgentBadge({ agent }: { agent: string }) {
   const agentData = agents.find((a) => a.id === agent);
   if (!agentData) return null;
 
