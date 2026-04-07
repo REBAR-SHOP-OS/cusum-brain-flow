@@ -308,17 +308,21 @@ export default function Home() {
 
         {/* Helpers Section */}
         <div className="relative z-10 w-full">
-          <h2 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-4">Your Helpers</h2>
-          <div className="grid grid-cols-4 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-4">
-            {orderedHelpers.map((helper) => (
-              <HelperCard
-                key={helper.id}
-                helper={helper}
-                isPrimary={mapping?.agentKey === helper.id}
-                onClick={() => handleHelperClick(helper)}
-              />
-            ))}
-          </div>
+        {orderedHelpers.length > 0 && (
+          <>
+            <h2 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-4">Your Helpers</h2>
+            <div className="grid grid-cols-4 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 sm:gap-4">
+              {orderedHelpers.map((helper) => (
+                <HelperCard
+                  key={helper.id}
+                  helper={helper}
+                  isPrimary={mapping?.agentKey === helper.id}
+                  onClick={() => handleHelperClick(helper)}
+                />
+              ))}
+            </div>
+          </>
+        )}
         </div>
       </div>
     </ScrollArea>
