@@ -1340,7 +1340,7 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
                     } catch (e) {
                       toast({ title: "QB sync failed", description: String(e), variant: "destructive" });
                     }
-                  }
+                  }}
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> Get QuickBooks Link
                 </Button>
