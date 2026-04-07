@@ -149,7 +149,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
 
   // Conversation context pruning — sliding window to prevent context overflow
   const conversationItemIdsRef = useRef<string[]>([]);
-  const MAX_CONVERSATION_ITEMS = 6; // Keep last 3 exchanges (3 user + 3 agent)
+  const MAX_CONVERSATION_ITEMS = 12; // Keep last 6 exchanges (6 user + 6 agent)
 
   // Keep transcriptsRef in sync
   useEffect(() => { transcriptsRef.current = transcripts; }, [transcripts]);
@@ -334,22 +334,28 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           setIsSpeaking(false);
           setMode("listening");
 
-          // Prune old conversation items to prevent context overflow
-          const dc = dcRef.current;
+          // Debounced prune: only when exceeding buffer zone, delayed to avoid race conditions
           const items = conversationItemIdsRef.current;
-          if (dc && dc.readyState === "open" && items.length > MAX_CONVERSATION_ITEMS) {
-            const toDelete = items.splice(0, items.length - MAX_CONVERSATION_ITEMS);
-            for (const itemId of toDelete) {
-              try {
-                dc.send(JSON.stringify({
-                  type: "conversation.item.delete",
-                  item_id: itemId,
-                }));
-              } catch (e) {
-                console.warn("[VoiceEngine] Failed to delete conversation item:", e);
+          const PRUNE_BUFFER = MAX_CONVERSATION_ITEMS + 4;
+          if (items.length > PRUNE_BUFFER) {
+            setTimeout(() => {
+              const dc = dcRef.current;
+              const currentItems = conversationItemIdsRef.current;
+              if (dc && dc.readyState === "open" && currentItems.length > MAX_CONVERSATION_ITEMS) {
+                const toDelete = currentItems.splice(0, currentItems.length - MAX_CONVERSATION_ITEMS);
+                for (const itemId of toDelete) {
+                  try {
+                    dc.send(JSON.stringify({
+                      type: "conversation.item.delete",
+                      item_id: itemId,
+                    }));
+                  } catch (e) {
+                    console.warn("[VoiceEngine] Failed to delete conversation item:", e);
+                  }
+                }
+                console.log(`[VoiceEngine] Pruned ${toDelete.length} old items, ${currentItems.length} remaining`);
               }
-            }
-            console.log(`[VoiceEngine] Pruned ${toDelete.length} old items, ${items.length} remaining`);
+            }, 2000);
           }
           break;
         }
@@ -506,12 +512,12 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           }
         }
 
-        // Start keepalive ping every 30s
+        // Start keepalive ping every 30s — use safe no-op session.update instead of input_audio_buffer.clear
         clearKeepalive();
         keepaliveRef.current = setInterval(() => {
           try {
             if (dc.readyState === "open") {
-              dc.send(JSON.stringify({ type: "input_audio_buffer.clear" }));
+              dc.send(JSON.stringify({ type: "session.update", session: {} }));
             } else {
               console.warn("[VoiceEngine] Keepalive: DC not open, triggering reconnect");
               attemptReconnect(startSession);

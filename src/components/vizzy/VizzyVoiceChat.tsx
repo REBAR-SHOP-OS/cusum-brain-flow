@@ -78,7 +78,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const [elapsed, setElapsed] = useState(0);
   const autoRetryCountRef = useRef(0);
   const autoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const MAX_AUTO_RETRIES = 2;
+  const MAX_AUTO_RETRIES = 3;
 
   // Auto-start
   useEffect(() => {

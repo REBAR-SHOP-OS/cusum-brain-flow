@@ -462,6 +462,9 @@ ${brainMemories}` : "";
   }
 
   if (digest) {
+    // Cap pre-digest to 12,000 characters to prevent context overflow
+    const cappedDigest = digest.length > 12000 ? digest.slice(0, 12000) + "\n[... digest truncated for voice context limit]" : digest;
+    
     return `${VIZZY_INSTRUCTIONS}
 ${realTimeClock}
 
@@ -471,7 +474,11 @@ ${brainBlock}
 ═══ YOUR PRE-SESSION STUDY NOTES (you already analyzed everything — as of ${timeString} ${dateString}) ═══
 You have ALREADY gone through all the raw data, analyzed every employee, read every call note, checked every email, compared benchmarks. The analysis below is YOUR OWN work. Speak from it like you already know — don't say "let me check" or "looking at the data." You KNOW.
 
-${digest}`;
+${cappedDigest}
+
+═══ DATA BOUNDARY ═══
+EVERYTHING ABOVE is your data source. If a fact is NOT above, say "I don't have that in today's data."
+NEVER invent numbers, names, or events not found above.`;
   }
 
   // Fallback: raw context only
