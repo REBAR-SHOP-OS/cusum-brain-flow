@@ -1,82 +1,64 @@
 
+Goal: fix the accepted-quote flow so the created invoice always carries both payment links, and make that invoice visible in the invoices UI the user is checking.
 
-# Fix Missing Payment Links and PDF in Auto-Generated Invoices (accept_and_convert)
+What is happening now
+- The public `accept_and_convert` flow already creates a `sales_invoices` row and tries to generate:
+  - Stripe payment link
+  - QuickBooks payment link
+  - invoice PDF
+- But the Sales quotations page is using `AccountingDocuments`, and its Invoice tab only renders `data.invoices` from `useQuickBooksData()` — meaning QuickBooks/mirror invoices only.
+- The newly created ERP invoice lives in `sales_invoices`, so if QuickBooks sync/mirror is delayed or missing, the invoice does exist but does not appear there.
+- Payment links/PDF are generated for the email, but they are not being persisted onto the invoice record metadata for later UI recovery.
 
-## Root Cause Analysis
+Implementation plan
 
-When a customer accepts a quotation via the public portal, the `accept_and_convert` flow in `send-quote-email/index.ts` creates an invoice but has two failures:
+1. Persist payment artifacts on the created invoice
+- Update `supabase/functions/send-quote-email/index.ts` in `accept_and_convert` so after Stripe/QB/PDF generation it updates the created `sales_invoices` row metadata with:
+  - `stripe_payment_link`
+  - `qb_invoice_link`
+  - `invoice_pdf_url`
+  - optionally `qb_invoice_id` if available later
+- Keep existing email behavior, but make the invoice record itself the source of truth too.
 
-### 1. Stripe Payment Link Fails Silently
-The code calls `stripe-payment` edge function via `fetch()` using `SUPABASE_SERVICE_ROLE_KEY` as the Bearer token (line 709). The `stripe-payment` function resolves `companyId` from `profiles` table using the authenticated user's ID (line 67-72). Since the service role key's JWT doesn't correspond to a real user, the profile lookup returns nothing → "No company" → 400 error → silently caught and ignored.
+2. Preserve both payment links explicitly
+- Keep the current dual-link generation flow.
+- Tighten the returned/persisted values so both QuickBooks and Stripe links are stored independently, not just used transiently in email HTML.
+- If one link fails, do not block invoice creation; store whichever links succeeded.
 
-### 2. PDF Not Generated
-The `accept_and_convert` flow never calls `generate-invoice-pdf`. It only builds inline HTML for the email. Compare with `DraftInvoiceEditor.handleSendEmail` which calls `generate-invoice-pdf` and includes a "Download Invoice PDF" button in the email.
+3. Make converted invoices visible in the Sales/Accounting document tabs
+- Update `src/components/accounting/AccountingDocuments.tsx` to also read local ERP invoices from `sales_invoices` via `useSalesInvoices()`.
+- For `activeDoc === "invoice"`:
+  - merge/render local `sales_invoices` entries alongside `data.invoices`
+  - prioritize local invoices when QuickBooks data is empty
+  - remove the misleading “Sync from QuickBooks first” empty state when local invoices exist
+- Add explicit “View” behavior for local invoices by opening `DraftInvoiceEditor`, since they are ERP-native records, not QuickBooks-native invoice objects.
 
-### 3. QuickBooks Link May Also Fail
-The QB push uses `x-qb-user-id` header correctly, but if the connection lookup fails (no matching QB connection for the company), it silently skips — leaving the email without any payment link at all.
+4. Use stored artifacts when viewing/sending invoices later
+- Ensure the invoice editor/view path can reuse persisted metadata links/PDF if present.
+- This avoids relying only on live regeneration or mirror lookup after public quote acceptance.
 
-## Changes
+5. Keep the change minimal and safe
+- No database schema changes needed.
+- No change to quotation acceptance permissions or customer flow.
+- Only unify data visibility and persistence so:
+  - accepted quote → converted invoice appears in invoices list
+  - invoice retains both payment links
+  - PDF remains available after conversion
 
-### File: `supabase/functions/send-quote-email/index.ts`
+Expected result after fix
+- Customer accepts quote
+- Invoice is created
+- Stripe and QuickBooks payment links are both attempted
+- PDF is generated
+- All successful artifacts are saved onto the invoice record
+- The invoice becomes visible in the invoice tab even before QuickBooks mirror/sync catches up
+- Opening the invoice shows a consistent ERP invoice path instead of appearing “missing”
 
-**Fix 1 — Stripe payment link (lines 703-727):**
-Instead of calling `stripe-payment` via `fetch()` (which goes through `handleRequest` auth), call the Stripe API directly inline using `STRIPE_SECRET_KEY` env var and insert the record into `stripe_payment_links` directly via the service client. This mirrors what `stripe-payment/index.ts` does but without the auth layer.
-
-Alternatively (simpler): Pass the `companyId` directly in the body to `stripe-payment` and add a bypass in `stripe-payment` that accepts `companyId` from the body when the caller is using the service role key. This is the safer approach since it reuses existing Stripe logic.
-
-**Chosen approach**: Inline Stripe call in `accept_and_convert` — extract the payment link creation logic (lines 90-143 of `stripe-payment/index.ts`) into a shared helper, or duplicate the ~30 lines of Stripe API calls directly in the `accept_and_convert` block. The duplication is acceptable given the critical nature of this flow.
-
-**Fix 2 — Generate PDF and include download link (after line 797):**
-After creating the invoice and payment links, call `generate-invoice-pdf` via `fetch()` (this function uses `SERVICE_KEY` directly, no `handleRequest` auth) with the invoice data. Include the resulting PDF URL in the email as a download button — same pattern as `DraftInvoiceEditor.handleSendEmail` (lines 658-691).
-
-### File: `supabase/functions/stripe-payment/index.ts`
-
-**Alternative Fix 1 (preferred — less duplication):**
-Add a fallback: if `userId` resolves but profile has no `company_id`, check if `body.companyId` was provided (only trusted when called with service role key). This allows the `accept_and_convert` caller to pass `companyId` directly.
-
-```typescript
-// After line 72
-let companyId = profile?.company_id;
-if (!companyId && body.companyId) {
-  // Trust companyId from body when called internally (service role)
-  companyId = body.companyId;
-}
-if (!companyId) return json({ error: "No company" }, 400);
-```
-
-Then in `send-quote-email/index.ts`, add `companyId` to the Stripe call body (line 712):
-```typescript
-body: JSON.stringify({
-  action: "create-payment-link",
-  amount: rawTotalWithTax,
-  currency: "cad",
-  invoiceNumber,
-  customerName: ...,
-  qbInvoiceId: newInvoice.id,
-  companyId,  // ← ADD THIS
-}),
-```
-
-### Summary of Changes
-
-| File | Change |
-|------|--------|
-| `supabase/functions/stripe-payment/index.ts` | Accept `companyId` from body as fallback when profile lookup fails |
-| `supabase/functions/send-quote-email/index.ts` | 1. Pass `companyId` in Stripe call body. 2. Add `generate-invoice-pdf` call after invoice creation. 3. Include PDF download button in invoice email HTML |
-
-### Technical Flow After Fix
-
-```text
-Customer accepts quote
-  → accept_and_convert runs
-    → Creates sales_invoice ✓
-    → Copies line items ✓
-    → Calls stripe-payment with companyId in body → gets Stripe link ✓ (FIXED)
-    → Calls quickbooks-oauth with x-qb-user-id → gets QB link ✓ (existing)
-    → Calls generate-invoice-pdf → gets PDF URL ✓ (NEW)
-    → Builds email with Stripe button + QB button + PDF download ✓ (FIXED)
-    → Sends via Gmail API ✓
-```
-
-No database changes needed.
-
+Technical details
+- Files to update:
+  - `supabase/functions/send-quote-email/index.ts`
+  - `src/components/accounting/AccountingDocuments.tsx`
+- Likely supporting import:
+  - `useSalesInvoices`
+  - `DraftInvoiceEditor`
+- No backend schema migration required.
