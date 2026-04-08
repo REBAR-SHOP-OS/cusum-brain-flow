@@ -143,14 +143,16 @@ export function LeadSmartButtons({ leadId, contactEmail, companyId }: Props) {
                       </p>
                       <p className="text-[11px] text-muted-foreground">{formatCurrency(item.total)}</p>
                     </div>
-                    <Plus
-                      className="w-4 h-4 text-muted-foreground hover:text-primary shrink-0"
+                    <span
+                      className="shrink-0 cursor-pointer"
                       title="Add Quotation"
                       onClick={(e) => {
                         e.stopPropagation();
                         navigate("/sales/quotations");
                       }}
-                    />
+                    >
+                      <Plus className="w-4 h-4 text-muted-foreground hover:text-primary" />
+                    </span>
                   </button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-72 p-2">
