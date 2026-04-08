@@ -1326,21 +1326,42 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
               {/* Section 2: Agents */}
               {selectedProfile.user_id && selectedProfile.email !== "ai@rebar.shop" && (
-                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="rounded-xl border border-border bg-card overflow-hidden relative">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                     <BotIcon className="w-4 h-4 text-primary" />
                     <h3 className="text-sm font-semibold text-foreground flex-1">Agents</h3>
+                    {canEditAccess && (
+                      <button
+                        onClick={() => { setEditingAgents(!editingAgents); setEditingAutomations(false); }}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Edit agent access"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <UserFullReportButton
                       profile={selectedProfile}
                       timezone={timezone}
                       date={userSelectedDate}
                     />
                   </div>
+                  {editingAgents && canEditAccess && selectedProfile.email && (
+                    <AccessEditorPopover
+                      title={`Agent Access — ${selectedProfile.full_name?.split(" ")[0]}`}
+                      allItems={allAgentItems}
+                      selectedIds={accessOverride?.agents?.length ? accessOverride.agents : getVisibleAgents(selectedProfile.email)}
+                      onSave={(ids) => saveAgents.mutate({ email: selectedProfile.email!, agents: ids, updatedBy: viewerEmail })}
+                      onClose={() => setEditingAgents(false)}
+                    />
+                  )}
                   <div className="p-3">
                     <UserAgentsSections
                       userId={selectedProfile.user_id}
                       name={selectedProfile.full_name?.split(" ")[0] || "User"}
                       email={selectedProfile.email}
+                      overrideAgents={accessOverride?.agents}
+                      onEditAgents={() => setEditingAgents(true)}
+                      canEdit={canEditAccess}
                     />
                   </div>
                 </div>
@@ -1348,7 +1369,23 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
               {/* Section 2.5: Automations */}
               {selectedProfile.email && selectedProfile.email !== "ai@rebar.shop" && (
-                <UserAutomationsSection email={selectedProfile.email} />
+                <div className="relative">
+                  <UserAutomationsSection
+                    email={selectedProfile.email}
+                    overrideAutomations={accessOverride?.automations}
+                    onEditAutomations={() => { setEditingAutomations(!editingAutomations); setEditingAgents(false); }}
+                    canEdit={canEditAccess}
+                  />
+                  {editingAutomations && canEditAccess && (
+                    <AccessEditorPopover
+                      title={`Automations — ${selectedProfile.full_name?.split(" ")[0]}`}
+                      allItems={allAutomationItems}
+                      selectedIds={accessOverride?.automations?.length ? accessOverride.automations : defaultAutomations.filter(a => !ADMIN_ONLY_IDS.has(a.id)).map(a => a.id)}
+                      onSave={(ids) => saveAutomations.mutate({ email: selectedProfile.email!, automations: ids, updatedBy: viewerEmail })}
+                      onClose={() => setEditingAutomations(false)}
+                    />
+                  )}
+                </div>
               )}
 
               {/* Section 3: System Performance Overview */}
