@@ -444,11 +444,21 @@ function GeneralReportPDFButton({ date }: { date: Date }) {
 }
 
 /** Automations visible to a user based on their role */
-function UserAutomationsSection({ email }: { email: string }) {
+function UserAutomationsSection({ email, overrideAutomations, onEditAutomations, canEdit }: {
+  email: string;
+  overrideAutomations?: string[] | null;
+  onEditAutomations?: () => void;
+  canEdit?: boolean;
+}) {
   const normalizedEmail = email.toLowerCase();
   const isSuperAdmin = ACCESS_POLICIES.superAdmins.includes(normalizedEmail);
 
   const visibleAutomations = useMemo(() => {
+    // If DB override exists, use that
+    if (overrideAutomations && overrideAutomations.length > 0) {
+      return defaultAutomations.filter((a) => overrideAutomations.includes(a.id));
+    }
+    // Fallback to hardcoded logic
     if (isSuperAdmin) return defaultAutomations;
     const extraAllowed = normalizedEmail === "zahra@rebar.shop"
       ? new Set(["social-media-manager"])
@@ -456,7 +466,7 @@ function UserAutomationsSection({ email }: { email: string }) {
     return defaultAutomations.filter(
       (a) => !ADMIN_ONLY_IDS.has(a.id) || extraAllowed.has(a.id)
     );
-  }, [normalizedEmail, isSuperAdmin]);
+  }, [normalizedEmail, isSuperAdmin, overrideAutomations]);
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -464,6 +474,15 @@ function UserAutomationsSection({ email }: { email: string }) {
         <Cog className="w-4 h-4 text-primary" />
         <h3 className="text-sm font-semibold text-foreground flex-1">Automations</h3>
         <span className="text-[10px] text-muted-foreground">{visibleAutomations.length} active</span>
+        {canEdit && onEditAutomations && (
+          <button
+            onClick={onEditAutomations}
+            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            title="Edit automations"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <div className="p-3">
         {visibleAutomations.length === 0 ? (
