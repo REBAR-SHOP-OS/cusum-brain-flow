@@ -798,20 +798,13 @@ function TeamDailyReport({
             />
           </PopoverContent>
         </Popover>
-        <SectionReportButton
-          label="Team"
-          getText={() => {
-            const lines = sorted.map((p) => {
-              const d = data[p.id];
-              const actCount = d?.activities.length ?? 0;
-              const clockIn = d?.clockEntries?.[d.clockEntries.length - 1]?.clock_in;
-              const clockLabel = clockIn
-                ? formatDateInTimezone(new Date(clockIn), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
-                : "Not clocked in";
-              return `${p.full_name}: ${actCount} activities, Clock: ${clockLabel}`;
-            });
-            return `👥 Team Daily Report\n${lines.join("\n")}`;
-          }}
+        <SectionDetailReportDialog
+          sectionType="team"
+          profileId={selectedProfile?.id || ""}
+          userId={selectedProfile?.user_id || null}
+          userName="Team"
+          date={selectedDate}
+          timezone={timezone}
         />
       </div>
       <div className="p-3">
@@ -840,7 +833,7 @@ function TeamDailyReport({
                       ({activities.length} activit{activities.length !== 1 ? "ies" : "y"})
                     </span>
                   </span>
-                  <SectionReportButton
+                   <SectionDetailReportDialog
                     label={firstName}
                     getText={() => {
                       const dateStr = formatDateInTimezone(selectedDate, timezone, { month: "long", day: "numeric", year: "numeric" });
