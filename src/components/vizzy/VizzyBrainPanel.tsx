@@ -923,6 +923,62 @@ function TeamDailyReport({
 }
 
 
+/** Checkbox editor popover for agents or automations */
+function AccessEditorPopover({
+  title,
+  allItems,
+  selectedIds,
+  onSave,
+  onClose: onPopoverClose,
+}: {
+  title: string;
+  allItems: { id: string; label: string }[];
+  selectedIds: string[];
+  onSave: (ids: string[]) => void;
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(selectedIds));
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <div className="absolute right-0 top-full mt-1 z-[100002] w-72 max-h-80 overflow-y-auto rounded-xl border border-border bg-card shadow-xl p-3 space-y-2">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-xs font-bold text-foreground">{title}</h4>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => { onSave(Array.from(selected)); onPopoverClose(); }}
+            className="p-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            title="Save"
+          >
+            <Check className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={onPopoverClose} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Cancel">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      {allItems.map((item) => (
+        <label key={item.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted/50 cursor-pointer text-xs">
+          <Checkbox
+            checked={selected.has(item.id)}
+            onCheckedChange={() => toggle(item.id)}
+          />
+          <span className="text-foreground">{item.label}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+const SUPER_EDIT_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
+
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, analyzeSystem } = useVizzyMemory();
   const { user } = useAuth();
@@ -934,6 +990,8 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const [userSelectedDate, setUserSelectedDate] = useState<Date>(new Date());
   const [userCalendarOpen, setUserCalendarOpen] = useState(false);
   const isUserToday = userSelectedDate.toDateString() === new Date().toDateString();
+  const [editingAgents, setEditingAgents] = useState(false);
+  const [editingAutomations, setEditingAutomations] = useState(false);
 
   // Filter @rebar.shop profiles, active first
   const rebarProfiles = useMemo(() => {
