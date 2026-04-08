@@ -381,11 +381,179 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
   );
 }
 
+function TeamFullReport({ profiles, teamData, date, timezone }: {
+  profiles: TeamProfile[];
+  teamData: Record<string, TeamMemberActivity>;
+  date: Date;
+  timezone: string;
+}) {
+  const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" });
+
+  let totalActivities = 0, totalHours = 0, totalEmails = 0, totalAi = 0;
+  for (const p of profiles) {
+    const d = teamData[p.id];
+    if (!d) continue;
+    totalActivities += d.activities.length;
+    totalHours += d.hoursToday;
+    totalEmails += d.emailsSent;
+    totalAi += d.aiSessionsToday;
+  }
+
+  const sorted = [...profiles].sort((a, b) =>
+    (teamData[b.id]?.activities.length ?? 0) - (teamData[a.id]?.activities.length ?? 0)
+  );
+
+  const buildReportText = () => {
+    const lines = [
+      `── Team Daily Report — ${dateStr} ──`,
+      "",
+      "TEAM SUMMARY",
+      `Total Activities: ${totalActivities} | Total Hours: ${totalHours.toFixed(1)}h | Emails: ${totalEmails} | AI Sessions: ${totalAi}`,
+      "",
+    ];
+    for (const p of sorted) {
+      const d = teamData[p.id];
+      if (!d) continue;
+      const actCount = d.activities.length;
+      const clockIn = d.clockEntries.length > 0
+        ? formatDateInTimezone(d.clockEntries[d.clockEntries.length - 1].clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+        : null;
+      const lastEntry = d.clockEntries[0];
+      const clockOut = lastEntry?.clock_out
+        ? formatDateInTimezone(lastEntry.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+        : clockIn ? "Still working" : null;
+      const typeCounts: Record<string, number> = {};
+      for (const ev of d.activities) {
+        typeCounts[ev.event_type] = (typeCounts[ev.event_type] || 0) + 1;
+      }
+      const topTypes = Object.entries(typeCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([t, c]) => `${humanLabel(t)} (${c})`)
+        .join(", ");
+
+      lines.push(`── ${p.full_name}${p.title ? ` — ${p.title}` : ""} (${actCount} activities) ──`);
+      lines.push(`Hours: ${d.hoursToday.toFixed(1)}h | AI: ${d.aiSessionsToday} | Emails: ${d.emailsSent}`);
+      if (clockIn) lines.push(`Clock: ${clockIn} → ${clockOut}`);
+      if (topTypes) lines.push(`Top: ${topTypes}`);
+      lines.push("");
+    }
+    return lines.join("\n");
+  };
+
+  useEffect(() => {
+    const saveToMemory = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!profile?.company_id) return;
+        await supabase.from("vizzy_memory").upsert({
+          user_id: user.id,
+          company_id: profile.company_id,
+          category: "team_daily_report",
+          content: buildReportText(),
+        }, { onConflict: "user_id,category" });
+      } catch (e) {
+        console.warn("Failed to save team report to memory:", e);
+      }
+    };
+    if (totalActivities > 0) saveToMemory();
+  }, [totalActivities, date]);
+
+  const copyAll = () => {
+    navigator.clipboard.writeText(buildReportText());
+    toast.success("Full team report copied to clipboard");
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">{dateStr}</p>
+        <Button variant="outline" size="sm" onClick={copyAll} className="gap-1.5">
+          <Copy className="w-3.5 h-3.5" /> Copy Report
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3">
+        {[
+          { label: "Activities", value: totalActivities },
+          { label: "Hours", value: `${totalHours.toFixed(1)}h` },
+          { label: "Emails", value: totalEmails },
+          { label: "AI Sessions", value: totalAi },
+        ].map((item) => (
+          <div key={item.label} className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+            <p className="text-2xl font-bold text-foreground">{item.value}</p>
+            <p className="text-xs text-muted-foreground">{item.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        {sorted.map((p) => {
+          const d = teamData[p.id];
+          if (!d) return null;
+          const actCount = d.activities.length;
+          const clockIn = d.clockEntries.length > 0
+            ? formatDateInTimezone(d.clockEntries[d.clockEntries.length - 1].clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+            : null;
+          const lastEntry = d.clockEntries[0];
+          const clockOut = lastEntry?.clock_out
+            ? formatDateInTimezone(lastEntry.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+            : clockIn ? "🟢 Still working" : null;
+
+          const typeCounts: Record<string, number> = {};
+          for (const ev of d.activities) {
+            typeCounts[ev.event_type] = (typeCounts[ev.event_type] || 0) + 1;
+          }
+          const topTypes = Object.entries(typeCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5);
+
+          return (
+            <div key={p.id} className="rounded-lg border border-border bg-muted/10 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-semibold text-foreground">{p.full_name}</span>
+                  {p.title && <span className="text-xs text-muted-foreground ml-2">({p.title})</span>}
+                </div>
+                <span className="text-xs font-medium text-primary">{actCount} activities</span>
+              </div>
+              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {d.hoursToday.toFixed(1)}h</span>
+                <span className="flex items-center gap-1"><Sparkles className="w-3 h-3" /> {d.aiSessionsToday} AI</span>
+                <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {d.emailsSent} emails</span>
+                {clockIn && <span className="flex items-center gap-1">🕐 {clockIn} → {clockOut}</span>}
+              </div>
+              {topTypes.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {topTypes.map(([type, count]) => {
+                    const badge = getCategoryBadge(type, "");
+                    return (
+                      <span key={type} className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${badge.className}`}>
+                        {humanLabel(type)}: {count}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const sectionConfig: Record<SectionType, { icon: React.ElementType; title: string }> = {
   activity: { icon: BarChart3, title: "System Performance — Detailed Report" },
   timeclock: { icon: Clock, title: "Time Clock — Detailed Report" },
   overview: { icon: Activity, title: "General Overview — Detailed Report" },
-  team: { icon: Users, title: "Team — Detailed Report" },
+  team: { icon: Users, title: "Team Daily Report — Full Report" },
 };
 
 export function SectionDetailReportDialog({
@@ -395,6 +563,8 @@ export function SectionDetailReportDialog({
   userName,
   date,
   timezone,
+  teamProfiles,
+  teamData,
 }: Props) {
   const config = sectionConfig[sectionType];
   const Icon = config.icon;
@@ -414,7 +584,7 @@ export function SectionDetailReportDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Icon className="w-5 h-5 text-primary" />
-            {config.title} — {userName}
+            {config.title}{sectionType !== "team" ? ` — ${userName}` : ""}
           </DialogTitle>
         </DialogHeader>
         <ScrollArea className="flex-1 pr-3 -mr-3">
@@ -428,8 +598,8 @@ export function SectionDetailReportDialog({
             {sectionType === "overview" && (
               <OverviewReport profileId={profileId} userId={userId} date={date} timezone={timezone} userName={userName} />
             )}
-            {sectionType === "team" && (
-              <ActivityReport userId={userId} date={date} timezone={timezone} userName={userName} />
+            {sectionType === "team" && teamProfiles && teamData && (
+              <TeamFullReport profiles={teamProfiles} teamData={teamData} date={date} timezone={timezone} />
             )}
           </div>
         </ScrollArea>
