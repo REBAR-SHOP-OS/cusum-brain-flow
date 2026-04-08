@@ -498,30 +498,22 @@ export function MessageThread({
 
       {/* Active Meeting Banner */}
       {activeMeetings.length > 0 && (
-        <div className="border-b border-border bg-primary/5 px-5 py-2">
-          {activeMeetings.map((m) => (
-            <div key={m.id} className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-xs font-semibold text-foreground">{m.title}</span>
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1">
-                  {m.meeting_type === "video" && <Video className="w-2.5 h-2.5" />}
-                  {m.meeting_type === "audio" && <Phone className="w-2.5 h-2.5" />}
-                  {m.meeting_type === "screen_share" && <MonitorUp className="w-2.5 h-2.5" />}
-                  LIVE
-                </Badge>
-              </div>
-              <Button
-                size="sm"
-                variant="default"
-                className="h-7 text-xs gap-1.5 rounded-full"
-                onClick={() => onJoinMeeting?.(m)}
-              >
-                <Video className="w-3 h-3" />
-                Join
-              </Button>
-            </div>
-          ))}
+        <div className="border-b border-border bg-primary/5 px-5 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-xs font-medium text-muted-foreground">
+              Active meeting in progress
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="default"
+            className="h-7 text-xs gap-1.5 rounded-full"
+            onClick={() => onJoinMeeting?.(activeMeetings[0])}
+          >
+            <Video className="w-3 h-3" />
+            Join
+          </Button>
         </div>
       )}
 
