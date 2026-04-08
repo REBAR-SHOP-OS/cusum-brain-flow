@@ -1,48 +1,24 @@
 
 
-# Fix: General Report Sections Must Match User Menu Items
+# Hide Kiosk Button for All Users Except ai@rebar.shop
 
-## Problem
-Two issues:
+## Change
 
-1. **Empty sections are hidden** — Line 937 in `VizzyBrainPanel.tsx` filters out groups with no data (`group.items.length > 0`). When Radin (full access) is selected, only "Business Tasks" and "Time Clock" show because other sections have no entries today. The user wants ALL accessible sections to always appear.
+### File: `src/pages/TimeClock.tsx` (lines 416–418)
 
-2. **Neel's config is too broad** — Uses `ALL_MENUS minus CEO Portal`, which includes "Admin Panel" and "Kiosk" not in the user's specified list.
+Wrap the Kiosk button in a conditional that only renders it when `user?.email === "ai@rebar.shop"`:
 
-## Changes
-
-### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
-**Remove the empty-section filter** (line 936–938):
 ```typescript
-// Before:
-const sectionsToShow = selectedProfile
-  ? accessibleGroups.filter((group) => group.items.length > 0)
-  : accessibleGroups;
-
-// After:
-const sectionsToShow = accessibleGroups;
+{user?.email?.toLowerCase() === "ai@rebar.shop" && (
+  <Button variant="outline" size="sm" className="gap-1" onClick={enterKioskMode}>
+    <Maximize className="w-3.5 h-3.5" /> Kiosk
+  </Button>
+)}
 ```
-This ensures all menu-accessible sections appear for every user, showing "(0)" when no data exists.
 
-### 2. `src/lib/userAccessConfig.ts`
-**Replace neel's dynamic filter with an explicit list** (line 95):
-```typescript
-menus: [
-  "Dashboard", "Inbox", "Team Hub", "Business Tasks", "Live Monitor",
-  "Support", "Pipeline", "Lead Scoring", "Customers", "Accounting",
-  "Sales", "Shop Floor", "Time Clock", "Office Tools",
-  "Inventory", "Diagnostics", "Architecture", "Settings",
-],
-```
-This removes "Admin Panel" and "Kiosk" that were being included by the previous `ALL_MENUS.filter()` logic.
-
-## Result
-- Each user's General Report shows exactly the sections matching their menu items
-- Empty sections still appear (with 0 count) so structure is always consistent
-- Neel's access matches the specified 18-item list exactly
+The Face ID toggle (line 411–414) stays visible for all users — only the Kiosk button is hidden.
 
 | File | Change |
 |------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Remove empty-section filter |
-| `src/lib/userAccessConfig.ts` | Explicit menu list for neel |
+| `src/pages/TimeClock.tsx` | Conditionally render Kiosk button for ai@rebar.shop only |
 
