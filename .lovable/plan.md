@@ -1,37 +1,56 @@
 
 
-# Add Menu Items (Items) Edit Capability for Super Admins
+# Enhance Time Clock Section with Detailed Clock-In/Out Report
 
-## Goal
-Allow Sattar and Radin to add/remove menu items (Items section) for users, same pattern as Agents and Automations editing.
+## Problem
+The `UserTimeClockSection` component doesn't pass the selected date to `useUserPerformance`, so it always shows today's data. Also, the section needs more detail: break minutes, notes, and a total hours summary.
 
 ## Changes
 
-### 1. Database Migration
-Add a `menus` column (text array) to the existing `user_access_overrides` table:
-```sql
-ALTER TABLE public.user_access_overrides ADD COLUMN menus text[] DEFAULT '{}';
+### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
+
+**Update `UserTimeClockSection`:**
+- Accept a `date` prop and pass it to `useUserPerformance(profileId, userId, date)`
+- Add a total hours summary row at the bottom
+- Fetch `break_minutes` and `notes` from the clock entries and display them
+- Show status badge: "Still working" for open shifts, duration for closed
+
+**Update the call site (line ~1437):**
+- Pass `date={userSelectedDate}` to `UserTimeClockSection`
+
+### 2. `src/hooks/useUserPerformance.ts`
+
+**Expand `ClockEntry` interface** to include `break_minutes` and `notes`:
+```typescript
+export interface ClockEntry {
+  clock_in: string;
+  clock_out: string | null;
+  break_minutes: number;
+  notes: string | null;
+}
 ```
 
-### 2. `src/hooks/useUserAccessOverrides.ts`
-- Add `menus: string[]` to the `UserAccessOverride` interface
-- Parse `menus` field in the query result
-- Add `saveMenus` mutation (same upsert pattern as `saveAgents`/`saveAutomations`)
-- Return `saveMenus` from the hook
+**Update the query** to select these additional fields:
+```sql
+select("clock_in, clock_out, break_minutes, notes")
+```
 
-### 3. `src/components/vizzy/VizzyBrainPanel.tsx`
-- Add `editingItems` state (alongside `editingAgents`, `editingAutomations`)
-- Create `allMenuItems` list from `ALL_MENUS` constant
-- Add pencil edit icon to the **Items** section header (line ~1129), visible only when `canEditAccess` is true
-- Render `AccessEditorPopover` below the Items header when `editingItems` is true
-- Use `accessOverride?.menus` (when present) instead of `getVisibleMenus()` for:
-  - The menu badges display (line ~1137)
-  - The `accessibleGroups` filter (line ~1108)
-- Remove `overflow-hidden` from the Items section wrapper if present
+### 3. Enhanced UI layout
+
+Each entry row will show:
+- Clock-in time (green icon)
+- Arrow → Clock-out time (red icon) or "Still working" badge
+- Break minutes (if > 0)
+- Net hours worked
+- Notes (if present, shown as small muted text below)
+
+Bottom summary row:
+- Total gross hours
+- Total break time
+- Total net hours
 
 | File | Action |
 |------|--------|
-| Migration SQL | Add `menus` column to `user_access_overrides` |
-| `src/hooks/useUserAccessOverrides.ts` | Add `menus` field + `saveMenus` mutation |
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Add edit UI + override logic for Items section |
+| `src/hooks/useUserPerformance.ts` | Add `break_minutes`, `notes` to ClockEntry and query |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Pass date prop, show detailed entries with totals |
 
