@@ -19,7 +19,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
 import { useSystemAgentSessions, SystemAgentSummary } from "@/hooks/useSystemAgentSessions";
-import { useAgentDomainStats } from "@/hooks/useAgentDomainStats";
+import { useAgentDomainStats, AgentDomainStat } from "@/hooks/useAgentDomainStats";
 import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
 import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
@@ -1181,27 +1181,120 @@ function AccessEditorPopover({
 
 // ── System-Wide Agents Summary (for "All" view) ──────────────────────
 const ALL_KNOWN_AGENTS = [
-  { code: "sales", name: "Blitz" },
-  { code: "accounting", name: "Penny" },
-  { code: "legal", name: "Tally" },
-  { code: "support", name: "Haven" },
-  { code: "social", name: "Pixel" },
-  { code: "estimating", name: "Gauge" },
-  { code: "shopfloor", name: "Forge" },
-  { code: "bizdev", name: "Atlas" },
-  { code: "delivery", name: "Relay" },
-  { code: "data", name: "Rex" },
-  { code: "growth", name: "Prism" },
-  { code: "talent", name: "Ally" },
-  { code: "seo", name: "SEO" },
-  { code: "copywriting", name: "Copywriting" },
-  { code: "webbuilder", name: "Web Builder" },
-  { code: "email", name: "Email" },
-  { code: "empire", name: "Empire" },
-  { code: "rebuild", name: "Rebuild" },
-  { code: "eisenhower", name: "Eisenhower Matrix" },
-  { code: "assistant", name: "Vizzy" },
+  { code: "sales", name: "Blitz", role: "Sales & Pipeline" },
+  { code: "accounting", name: "Penny", role: "Accounting & Invoices" },
+  { code: "legal", name: "Tally", role: "Legal & Compliance" },
+  { code: "support", name: "Haven", role: "Customer Support" },
+  { code: "social", name: "Pixel", role: "Social Media" },
+  { code: "estimating", name: "Gauge", role: "Estimating & Quotes" },
+  { code: "shopfloor", name: "Forge", role: "Shop Floor & Production" },
+  { code: "bizdev", name: "Atlas", role: "Business Development" },
+  { code: "delivery", name: "Relay", role: "Delivery & Logistics" },
+  { code: "data", name: "Rex", role: "Data & Analytics" },
+  { code: "growth", name: "Prism", role: "Growth & Coaching" },
+  { code: "talent", name: "Ally", role: "Talent & HR" },
+  { code: "seo", name: "SEO", role: "Search Engine Optimization" },
+  { code: "copywriting", name: "Copywriting", role: "Content & Copy" },
+  { code: "webbuilder", name: "Web Builder", role: "Website Management" },
+  { code: "email", name: "Email", role: "Email Management" },
+  { code: "empire", name: "Empire", role: "Ventures & Architecture" },
+  { code: "rebuild", name: "Rebuild", role: "System Architecture" },
+  { code: "eisenhower", name: "Eisenhower Matrix", role: "Priority Matrix" },
+  { code: "assistant", name: "Vizzy", role: "Operations Commander" },
 ];
+
+function AgentReportDialog({ agent, data, domainStats }: {
+  agent: { name: string; code: string; role: string };
+  data?: SystemAgentSummary;
+  domainStats?: AgentDomainStat[];
+}) {
+  const [open, setOpen] = useState(false);
+  const hasActivity = !!data && data.totalSessions > 0;
+  const hasStats = domainStats && domainStats.some(s => s.value > 0);
+
+  return (
+    <>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
+        title={`${agent.name} Report`}
+      >
+        <ClipboardList className="w-4 h-4" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bot className="w-5 h-5 text-primary" />
+              {agent.name}
+              <span className="text-sm font-normal text-muted-foreground">— {agent.role}</span>
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-4 pr-2">
+              {/* Domain Metrics */}
+              {domainStats && domainStats.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5 text-primary" /> Domain Metrics
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {domainStats.map((s) => (
+                      <div key={s.label} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
+                        <span className="text-xs text-muted-foreground">{s.label}</span>
+                        <span className="text-sm font-semibold text-foreground">{s.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Today's Activity */}
+              <div>
+                <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-primary" /> Today's Activity
+                </h4>
+                {hasActivity ? (
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                    <span>Sessions: <strong className="text-foreground">{data!.totalSessions}</strong></span>
+                    <span>Messages: <strong className="text-foreground">{data!.totalMessages}</strong></span>
+                    <span>Users: <strong className="text-foreground">{data!.userCount}</strong></span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic px-3 py-2 bg-muted/40 rounded-lg">No activity recorded today</p>
+                )}
+              </div>
+
+              {/* User Breakdown */}
+              {hasActivity && data!.users.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-primary" /> User Breakdown
+                  </h4>
+                  <div className="space-y-1">
+                    {data!.users.map((u) => (
+                      <div key={u.userId} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-muted/40">
+                        <span className="font-medium text-foreground">{u.fullName}</span>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>{u.sessions} sessions</span>
+                          <span>{u.messages} msgs</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!hasActivity && !hasStats && (
+                <p className="text-sm text-muted-foreground text-center py-4 italic">No data available for this agent today</p>
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 function SystemAgentsSummary() {
   const { data: agents, isLoading } = useSystemAgentSessions();
@@ -1226,8 +1319,8 @@ function SystemAgentsSummary() {
   const activeCount = (agents || []).length;
 
   const allRows = [
-    ...ALL_KNOWN_AGENTS.map((a) => ({ displayName: a.name, code: a.code, data: activityMap.get(a.name) })),
-    ...extraAgents.map((a) => ({ displayName: a.agentName, code: "", data: a })),
+    ...ALL_KNOWN_AGENTS.map((a) => ({ displayName: a.name, code: a.code, role: a.role, data: activityMap.get(a.name) })),
+    ...extraAgents.map((a) => ({ displayName: a.agentName, code: "", role: "", data: a })),
   ];
 
   return (
@@ -1238,7 +1331,7 @@ function SystemAgentsSummary() {
         <span className="text-xs text-muted-foreground">{activeCount} active today</span>
       </div>
       <Accordion type="multiple" className="divide-y divide-border">
-        {allRows.map(({ displayName, code, data }) => {
+        {allRows.map(({ displayName, code, role, data }) => {
           const hasActivity = !!data && data.totalSessions > 0;
           const agentStats = code && domainStats ? domainStats[code] : undefined;
           const hasStats = agentStats && agentStats.some(s => s.value > 0);
@@ -1251,7 +1344,10 @@ function SystemAgentsSummary() {
                       <span className={`w-8 h-8 rounded-full flex items-center justify-center ${hasActivity || hasStats ? "bg-primary/20" : "bg-muted"}`}>
                         <Bot className={`w-4 h-4 ${hasActivity || hasStats ? "text-primary" : "text-muted-foreground/50"}`} />
                       </span>
-                      <span className={`font-semibold text-sm ${hasActivity || hasStats ? "text-foreground" : "text-muted-foreground"}`}>{displayName}</span>
+                      <div className="flex flex-col items-start">
+                        <span className={`font-semibold text-sm ${hasActivity || hasStats ? "text-foreground" : "text-muted-foreground"}`}>{displayName}</span>
+                        {role && <span className="text-[10px] text-muted-foreground leading-tight">{role}</span>}
+                      </div>
                       <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground mr-2">
                         <span className="flex items-center gap-1">
                           <Users className="w-3.5 h-3.5" />
@@ -1283,6 +1379,11 @@ function SystemAgentsSummary() {
                     )}
                   </div>
                 </AccordionTrigger>
+                <AgentReportDialog
+                  agent={{ name: displayName, code, role: role || displayName }}
+                  data={data}
+                  domainStats={agentStats}
+                />
               </div>
               <AccordionContent className="px-4 pb-3">
                 <div className="space-y-1.5 ml-11">
