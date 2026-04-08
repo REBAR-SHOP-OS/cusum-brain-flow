@@ -1032,7 +1032,7 @@ function AccessEditorPopover({
   };
 
   return (
-    <div className="absolute right-0 top-full mt-1 z-[100002] w-72 max-h-80 overflow-y-auto rounded-xl border border-border bg-card shadow-xl p-3 space-y-2">
+    <div className="w-full max-h-80 overflow-y-auto border-t border-border bg-muted/20 p-3 space-y-2 mt-2 rounded-b-xl">
       <div className="flex items-center justify-between mb-2">
         <h4 className="text-xs font-bold text-foreground">{title}</h4>
         <div className="flex items-center gap-1">
