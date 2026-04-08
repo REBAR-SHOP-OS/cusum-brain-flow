@@ -1,22 +1,30 @@
 
 
-# Remove Horizontal Scroll — Show All Users in One Line
+# Grant Full Access to sattar@rebar.shop
 
 ## Problem
-The user tab bar currently uses `overflow-x-auto` which creates a horizontal scrollbar. The user wants **no scrollbar at all** — all users must be visible in a single row, even if it means making the entire Vizzy Brain modal wider.
+`sattar@rebar.shop` (the CEO and most important Super Admin) has an explicit menu list instead of `fullAccess: true`, meaning new menus added in the future won't automatically appear for him. He should have the same unrestricted access as `radin@rebar.shop`.
 
 ## Changes
 
-### 1. Widen the modal container (line 1025)
-Change `max-w-5xl` to `max-w-7xl` to give more horizontal space for all user tabs.
+### `src/lib/userAccessConfig.ts` (lines 49–65)
 
-### 2. Remove scroll from user tab bar (line 1055)
-Replace `overflow-x-auto scrollbar-none` with `flex-wrap` so tabs wrap naturally if needed, but with the wider container they should all fit in one line.
+Add `fullAccess: true` and set `agents: []` (resolved to ALL via fullAccess), matching the pattern used by `radin@rebar.shop`:
 
-Alternatively, keep `overflow-visible` and `whitespace-nowrap` to force a single line — combined with the wider modal, all users will be visible without scroll.
+```tsx
+"sattar@rebar.shop": {
+  fullAccess: true,
+  menus: [],
+  agents: [],
+  primaryAgent: "assistant",
+  heroText: "How can your **CEO Portal** help you today?",
+  quickActions: [ /* keep existing 4 quick actions unchanged */ ],
+},
+```
 
-| File | Line | Change |
-|------|------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | 1025 | `max-w-5xl` → `max-w-7xl` |
-| `src/components/vizzy/VizzyBrainPanel.tsx` | 1055 | Remove `overflow-x-auto scrollbar-none`, add `flex-wrap` |
+This ensures `getVisibleMenus` and `getVisibleAgents` both return ALL items for Sattar, just like Radin.
+
+| File | Change |
+|------|--------|
+| `src/lib/userAccessConfig.ts` | Add `fullAccess: true`, clear explicit `menus`/`agents` arrays |
 
