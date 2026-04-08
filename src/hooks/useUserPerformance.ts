@@ -50,7 +50,7 @@ export function useUserPerformance(profileId: string | null, userId: string | nu
         supabase
           .from("activity_events")
           .select("id", { count: "exact", head: true })
-          .eq("actor_id", profileId!)
+          .eq("actor_id", userId || profileId!)
           .gte("created_at", dayStart)
           .lt("created_at", dayEnd),
 
