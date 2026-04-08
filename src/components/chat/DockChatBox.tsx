@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { detectRtl } from "@/utils/textDirection";
 import { useNavigate } from "react-router-dom";
 import {
-  Minus, X, Maximize2, Send, Hash, Users, Paperclip, FileIcon, Loader2, Download, Copy,
+  Minus, X, Maximize2, Send, Hash, Users, Paperclip, FileIcon, Loader2, Download, Copy, FileText,
   Reply, Forward, Trash2, Volume2, Languages, Mic, AudioLines, Square,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
