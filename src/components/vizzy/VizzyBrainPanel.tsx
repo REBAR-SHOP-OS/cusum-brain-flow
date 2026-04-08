@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3, Download } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
@@ -869,6 +870,30 @@ export function VizzyBrainPanel({ onClose }: Props) {
       });
   }, [profiles]);
 
+  // Fetch user roles for display in the user tab bar
+  const { data: userRolesData } = useQuery({
+    queryKey: ["vizzy_brain_user_roles"],
+    queryFn: async () => {
+      const userIds = rebarProfiles.filter(p => p.user_id).map(p => p.user_id);
+      if (userIds.length === 0) return [];
+      const { data } = await supabase.from("user_roles").select("user_id, role").in("user_id", userIds as string[]);
+      return data || [];
+    },
+    enabled: rebarProfiles.length > 0,
+  });
+
+  const roleMap = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    if (userRolesData) {
+      for (const r of userRolesData) {
+        const uid = (r as any).user_id;
+        if (!map[uid]) map[uid] = [];
+        map[uid].push((r as any).role);
+      }
+    }
+    return map;
+  }, [userRolesData]);
+
   const selectedProfile = rebarProfiles.find((p) => p.id === selectedProfileId);
 
   // Filter entries by selected user name if applicable
@@ -1054,10 +1079,21 @@ export function VizzyBrainPanel({ onClose }: Props) {
                   } ${!p.is_active ? "opacity-50" : ""}`}
                   title={`${p.full_name} (${p.email})`}
                 >
-                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${avatarColor}`}>
+                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${avatarColor}`}>
                     {initial}
                   </span>
-                  <span className="text-sm font-bold">{firstName}</span>
+                  <div className="flex flex-col text-left leading-tight">
+                    <span className="text-sm font-bold">{firstName}</span>
+                    {(p.user_id && roleMap[p.user_id]?.length > 0 || p.title) && (
+                      <span className={`text-[10px] ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                        {p.user_id && roleMap[p.user_id]?.length > 0 && (
+                          <span className="uppercase font-semibold">{roleMap[p.user_id].join(", ")}</span>
+                        )}
+                        {p.user_id && roleMap[p.user_id]?.length > 0 && p.title && " · "}
+                        {p.title && <span>{p.title}</span>}
+                      </span>
+                    )}
+                  </div>
                 </button>
               );
             })}
