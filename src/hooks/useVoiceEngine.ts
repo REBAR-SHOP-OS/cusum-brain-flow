@@ -324,6 +324,10 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         case "response.audio_transcript.done": {
           const text = (msg.transcript || agentTextRef.current).trim();
           agentTextRef.current = "";
+          if (isOffTopicOutput(text)) {
+            console.warn("[VoiceEngine] Blocked off-topic/wrong-language agent output:", text.slice(0, 80));
+            break;
+          }
           const lastUser = [...transcriptsRef.current].reverse().find(t => t.role === "user");
           if (text && !isSelfTalk(text, lastUser?.text, configRef.current.translationMode)) {
             setTranscripts(prev => [
