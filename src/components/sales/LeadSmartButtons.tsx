@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { FileText, Package, Receipt, Mail, Send, Loader2 } from "lucide-react";
+import { FileText, Package, Receipt, Mail, Send, Loader2, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -13,14 +14,16 @@ import { getStatusInfo } from "@/hooks/useSalesQuotations";
 interface Props {
   leadId: string;
   contactEmail?: string | null;
+  companyId?: string | null;
 }
 
 function formatCurrency(val: number) {
   return val.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 });
 }
 
-export function LeadSmartButtons({ leadId, contactEmail }: Props) {
+export function LeadSmartButtons({ leadId, contactEmail, companyId }: Props) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [quotesOpen, setQuotesOpen] = useState(false);
   const [sendDialog, setSendDialog] = useState<{ quoteId: string; quotationNumber: string } | null>(null);
   const [email, setEmail] = useState(contactEmail ?? "");
@@ -76,6 +79,20 @@ export function LeadSmartButtons({ leadId, contactEmail }: Props) {
         .from("sales_quotations")
         .update({ status: "sent_to_customer" } as any)
         .eq("id", sendDialog.quoteId);
+
+      // Log to timeline
+      if (companyId) {
+        await supabase.from("sales_lead_activities").insert({
+          sales_lead_id: leadId,
+          company_id: companyId,
+          activity_type: "email",
+          subject: `Quote ${sendDialog.quotationNumber} sent`,
+          body: `Quotation ${sendDialog.quotationNumber} sent to ${email.trim()}`,
+          completed_at: new Date().toISOString(),
+        } as any);
+        qc.invalidateQueries({ queryKey: ["sales_lead_activities", leadId] });
+      }
+
       qc.invalidateQueries({ queryKey: ["lead_smart_quotes", leadId] });
       toast.success(`Quote ${sendDialog.quotationNumber} sent to ${email.trim()}`);
       setSendDialog(null);
@@ -116,16 +133,26 @@ export function LeadSmartButtons({ leadId, contactEmail }: Props) {
             item.label === "Quotes" && (quotes?.length ?? 0) > 0 ? (
               <Popover key={item.label} open={quotesOpen} onOpenChange={setQuotesOpen}>
                 <PopoverTrigger asChild>
-                  <button
+                   <button
                     className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-center hover:bg-accent/30 transition-colors cursor-pointer w-full"
                   >
                     <item.icon className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <div className="min-w-0 text-left">
+                    <div className="min-w-0 text-left flex-1">
                       <p className="text-xs font-semibold text-foreground">
                         {item.count} {item.label}
                       </p>
                       <p className="text-[11px] text-muted-foreground">{formatCurrency(item.total)}</p>
                     </div>
+                    <span
+                      className="shrink-0 cursor-pointer"
+                      title="Add Quotation"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate("/sales/quotations");
+                      }}
+                    >
+                      <Plus className="w-4 h-4 text-muted-foreground hover:text-primary" />
+                    </span>
                   </button>
                 </PopoverTrigger>
                 <PopoverContent align="start" className="w-72 p-2">
@@ -170,12 +197,24 @@ export function LeadSmartButtons({ leadId, contactEmail }: Props) {
                 className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-center hover:bg-accent/30 transition-colors cursor-default"
               >
                 <item.icon className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0 text-left">
+                <div className="min-w-0 text-left flex-1">
                   <p className="text-xs font-semibold text-foreground">
                     {item.count} {item.label}
                   </p>
                   <p className="text-[11px] text-muted-foreground">{formatCurrency(item.total)}</p>
                 </div>
+                {item.label === "Quotes" && (
+                  <span
+                    className="shrink-0 cursor-pointer"
+                    title="Add Quotation"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate("/sales/quotations");
+                    }}
+                  >
+                    <Plus className="w-4 h-4 text-muted-foreground hover:text-primary" />
+                  </span>
+                )}
               </div>
             )
           )}
