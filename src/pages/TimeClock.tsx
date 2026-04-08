@@ -517,8 +517,6 @@ export default function TimeClock() {
 
       {/* Tabbed Content: Team Status / My Leave / Team Calendar */}
       <div className="relative z-10 w-full max-w-4xl px-6 py-4 flex-1">
-        {/* Stale shift warning */}
-        {isAdmin && staleCount > 0 && (
           <div className="mb-3 flex items-center gap-3 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
             <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0" />
             <p className="text-sm text-yellow-200 flex-1">
