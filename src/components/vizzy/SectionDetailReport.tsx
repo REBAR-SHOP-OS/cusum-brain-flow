@@ -320,33 +320,72 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
   const { data: perf, isLoading } = useUserPerformance(profileId, userId, date);
   const { data: report } = useDetailedActivityReport(userId, date);
 
+  const buildFullReport = useCallback(() => {
+    if (!perf) return "";
+    const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" });
+    const sep = "══════════════════════════════════════════";
+    const thin = "──────────────────────────────────────────";
+    const lines: string[] = [];
+
+    lines.push(sep);
+    lines.push(`  DAILY REPORT — ${userName}`);
+    lines.push(`  ${dateStr}`);
+    lines.push(sep);
+    lines.push("");
+
+    // Attendance
+    lines.push("ATTENDANCE");
+    lines.push(`  Status:      ${perf.clockedIn ? "Clocked In" : "Off Clock"}`);
+    lines.push(`  Gross Hours: ${perf.hoursToday}h`);
+
+    if (perf.clockEntries.length > 0) {
+      lines.push("  Clock Entries:");
+      for (const ce of [...perf.clockEntries].reverse()) {
+        const inTime = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+        const outTime = ce.clock_out
+          ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+          : "ongoing";
+        const durMs = (ce.clock_out ? new Date(ce.clock_out).getTime() : Date.now()) - new Date(ce.clock_in).getTime();
+        const durH = Math.round(durMs / 360000) / 10;
+        lines.push(`    • ${inTime} → ${outTime} (${durH}h)`);
+      }
+    } else {
+      lines.push("  Clock Entries: None");
+    }
+
+    lines.push("");
+    lines.push(thin);
+    lines.push("");
+
+    // Performance Summary
+    lines.push("PERFORMANCE SUMMARY");
+    lines.push(`  Activities:   ${perf.activitiesToday}`);
+    lines.push(`  AI Sessions:  ${perf.aiSessionsToday}`);
+    lines.push(`  Emails Sent:  ${perf.emailsSent}`);
+
+    // Activity Breakdown
+    if (report && report.byEventType.length > 0) {
+      lines.push("");
+      lines.push(thin);
+      lines.push("");
+      lines.push("ACTIVITY BREAKDOWN");
+      for (const b of report.byEventType.slice(0, 10)) {
+        const label = humanLabel(b.eventType);
+        const dots = ".".repeat(Math.max(2, 30 - label.length));
+        lines.push(`  ${label} ${dots} ${b.count}`);
+      }
+    }
+
+    lines.push("");
+    lines.push(sep);
+    return lines.join("\n");
+  }, [perf, report, date, timezone, userName]);
+
   // Save report to vizzy_memory for Vizzy access (hook must be before early returns)
   useEffect(() => {
     if (!perf || !userId) return;
-    const lines = [
-      `📋 Overview Report — ${userName}`,
-      `Date: ${formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}`,
-      `Status: ${perf.clockedIn ? "Clocked In" : "Not Clocked In"}`,
-      `Hours Today: ${perf.hoursToday}`,
-      `Activities: ${perf.activitiesToday}`,
-      `AI Sessions: ${perf.aiSessionsToday}`,
-      `Emails Sent: ${perf.emailsSent}`,
-    ];
-    if (report && report.byEventType.length > 0) {
-      lines.push("", "Activity Breakdown:");
-      for (const b of report.byEventType.slice(0, 10)) {
-        lines.push(`  ${b.eventType}: ${b.count}`);
-      }
-    }
-    if (perf.clockEntries.length > 0) {
-      lines.push("", "Clock Entries:");
-      for (const ce of perf.clockEntries) {
-        const inTime = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
-        const outTime = ce.clock_out ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true }) : "ongoing";
-        lines.push(`  ${inTime} → ${outTime}`);
-      }
-    }
-    const reportText = lines.join("\n");
+    const reportText = buildFullReport();
+    if (!reportText) return;
     const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "2-digit", day: "2-digit" });
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
@@ -363,7 +402,7 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
         )
         .then(() => {});
     });
-  }, [perf, report, userId, date, timezone, userName]);
+  }, [perf, report, userId, date, timezone, userName, buildFullReport]);
 
   if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
   if (!perf) return <p className="text-sm text-muted-foreground p-4">No data available.</p>;
