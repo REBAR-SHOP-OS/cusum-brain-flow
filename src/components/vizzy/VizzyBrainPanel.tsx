@@ -28,6 +28,7 @@ import { useAuth } from "@/lib/auth";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useEagerReportPersistence } from "@/hooks/useEagerReportPersistence";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
@@ -934,6 +935,7 @@ function TeamDailyReport({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const profileSlims = useMemo(() => profiles.map((p) => ({ id: p.id, user_id: p.user_id })), [profiles]);
   const { data, isLoading } = useTeamDailyActivity(profileSlims, selectedDate);
+  useEagerReportPersistence(profiles, data, selectedDate, timezone);
 
   const isToday = useMemo(() => {
     const now = new Date();
