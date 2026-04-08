@@ -414,7 +414,7 @@ function SectionReportButton({ label, getText }: { label: string; getText: () =>
 function ItemsFullReportButton({ date, userName, sections, teamStats, timezone }: {
   date: Date;
   userName: string;
-  sections: { key: string; label: string; icon: React.ReactNode; items: VizzyMemoryEntry[] }[];
+  sections: { key: string; label: string; icon?: React.ReactNode; items: VizzyMemoryEntry[] }[];
   teamStats: { totalActivities: number; totalHours: number; totalAI: number; totalEmails: number; profileNames: Map<string, string> } | null;
   timezone?: string;
 }) {
