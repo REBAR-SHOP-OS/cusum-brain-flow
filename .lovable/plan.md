@@ -1,111 +1,85 @@
 
 
-# Full Audit: Penny Agent + QuickBooks Integration — Findings & Optimization Plan
+# Why Text Vizzy Is Great But Voice Vizzy Is Bad — Root Cause & Fix Plan
 
-## Audit Summary
+## The Core Problem
 
-Penny is the accounting agent responsible for AR collections, overdue invoice management, email/call drafting, and QB financial reporting. After reviewing all Penny-related code (penny-auto-actions, penny-execute-action, auto-approve-penny, admin-chat QB tools, agentConfigs, usePennyQueue, vizzyFullContext, vizzyIdentity), and cross-referencing with the official QB Online Accounting API and QB Payments API documentation, here are the findings.
+Text Vizzy (admin-chat) and Voice Vizzy use completely different architectures:
 
----
+```text
+TEXT VIZZY (admin-chat)                    VOICE VIZZY (OpenAI Realtime)
+─────────────────────────                  ──────────────────────────────
+✅ 40+ real tools (investigate_entity,     ❌ ZERO real tools — OpenAI Realtime
+   deep_business_scan, rc_get_call_            has no tool-calling API
+   analytics, list_machines, etc.)
+                                           
+✅ Each tool returns LIVE database          ❌ Only has a STATIC pre-digest snapshot
+   results, then AI reasons over real          (capped at 12K chars) loaded once
+   data                                        at session start
+                                           
+✅ Can do multi-step: investigate →         ❌ [VIZZY-ACTION] tags are a FAKE tool
+   get data → analyze → respond                system — they fire-and-forget via
+                                               vizzy-erp-action but the RESULT
+                                               never goes back to the voice model
+                                           
+✅ Model: GPT-4o with function calling     ❌ Model: gpt-4o-realtime-preview
+                                               (Dec 2024) — older, weaker reasoning
+```
 
-## What Works Well
-- Collection queue with tiered escalation (email → call → re-send → escalate)
-- AI-drafted emails and call scripts with fallback templates
-- Auto-approve automation for low-risk items (<$5K, >30 days)
-- Auto-resolve paid invoices from queue
-- Consolidated per-customer actions (not per-invoice)
-- QB sync before scanning ensures fresh data
-- 9 report types available via fetch_qb_report tool
-- GL anomaly detection (round numbers, imbalanced entries)
+### The Fundamental Gap
 
----
+When you ask text Vizzy "how many calls today?", it calls `rc_get_call_analytics` → gets real data → responds with facts.
 
-## Critical Findings & Fixes
+When you ask voice Vizzy the same question, it reads a 12K-char pre-digest that may or may not have the detail level needed. If the detail isn't there, it **hallucinates** because:
+1. The instructions say "NEVER say you can't access data"
+2. The model has no way to fetch more data mid-conversation
+3. `[VIZZY-ACTION]` tags for `investigate_entity` fire but results never come back to the model
 
-### 1. QB Payments API Completely Unused
-The QB Payments API (charges, refunds, bank accounts, e-checks) is not integrated at all. Penny cannot:
-- Check payment status on invoices
-- Process credit card charges against invoices
-- Issue refunds
-- Accept e-check/ACH payments
+## Fix Plan — 3 Changes
 
-**Fix**: Add `fetch_qb_payment_status` and `record_qb_payment` tools to admin-chat JARVIS_TOOLS, with backend handlers in quickbooks-oauth that call the QB Payments API endpoints.
+### 1. Make VIZZY-ACTION results feed BACK into the voice session
 
-### 2. Penny Has No Direct Chat Tools
-Unlike Vizzy (admin-chat) which has 40+ tools, Penny as an agent in the AgentDataPanel has zero dedicated tools. The accounting agent config in `agentConfigs.ts` lists capabilities like "Check overdue invoices" and "QuickBooks sync" but these are just labels — the agent chat doesn't route to any tool executor. Penny's chat goes through the same admin-chat endpoint as Vizzy, meaning Penny IS Vizzy when chatting.
+**File: `src/components/vizzy/VizzyVoiceChat.tsx`**
 
-**Fix**: This is actually correct architecture — Penny's automated actions run via penny-auto-actions (scan + queue) and penny-execute-action (execute). The chat interface correctly routes through Vizzy who has all the QB tools. No change needed, but the agent greeting should be more specific.
+When a `[VIZZY-ACTION]` fires and returns data (e.g., `investigate_entity` returns employee activity), inject the result back into the voice session via `updateSessionInstructions` or by appending a synthetic "tool result" context block. Currently results are silently discarded.
 
-### 3. Missing QB Report Types in Penny's Toolset
-QB API supports several reports Penny doesn't expose:
-- **CustomerBalance** / **CustomerBalanceDetail** — critical for AR by customer
-- **VendorBalance** / **VendorBalanceDetail** — AP by vendor
-- **APAgingSummary / APAgingDetail** — proper aging buckets
-- **ARAgingSummary / ARAgingDetail** — proper aging buckets (vs generic AgedReceivables)
-- **CustomerIncome** — revenue by customer
+- After `supabase.functions.invoke("vizzy-erp-action")` returns data, for READ actions (investigate_entity, deep_business_scan, rc_get_call_analytics, rc_get_active_calls, rc_get_team_presence), append the result to the session context
+- Use the `updateSessionInstructions` method to push: `\n═══ LIVE TOOL RESULT (${actionType}) ═══\n${JSON.stringify(data)}\n═══ END TOOL RESULT ═══`
+- This closes the loop — voice Vizzy can now read the result and respond accurately
 
-**Fix**: Add these report types to `fetch_qb_report` enum and the `reportTypeToAction` map in admin-chat, plus corresponding handlers in quickbooks-oauth.
+### 2. Fix the contradictory instructions
 
-### 4. Penny Auto-Actions Use Stale AI Model
-`penny-auto-actions` line 289 uses `gpt-4o-mini` for email drafts and call scripts. This should use the Lovable AI gateway supported models instead.
+**File: `src/hooks/useVizzyVoiceEngine.ts`**
 
-**Fix**: Change to `gemini-2.5-flash` via the existing `callAI` router (already imported).
+The voice instructions currently say both:
+- "NEVER say you can't access data" (line 175)
+- "If specific detail isn't in snapshot: say so" (line 179)
 
-### 5. No Payment Receipt Tracking in Collection Queue
-When Penny sends a collection email or schedules a call, there's no mechanism to check if the customer actually paid between the action being queued and executed. The auto-clean only runs during `penny-auto-actions` scan, not on `penny-execute-action`.
+These directly contradict each other. The model picks whichever it wants — usually the first one, leading to fabrication.
 
-**Fix**: Add a payment check at the top of `penny-execute-action` before executing — if the invoice balance is now $0, auto-resolve and skip execution.
+**Fix**: Remove the "NEVER say you can't access" line entirely. Replace with:
+```
+- If data exists in your snapshot → use it confidently
+- If data is NOT in your snapshot → trigger investigate_entity action and say "Let me pull that up"  
+- NEVER fabricate data while waiting for a tool result
+```
 
-### 6. Missing Customer Statement Capability
-QB API supports sending customer statements (summary of all open invoices) via the Statement entity. Penny should offer this as an action type for customers with multiple overdue invoices.
+### 3. Upgrade the voice model
 
-**Fix**: Add `send_statement` action type to penny-auto-actions for customers with 3+ overdue invoices, and implement the QB Statement API call in quickbooks-oauth.
+**File: `src/hooks/useVizzyVoiceEngine.ts`** (line 266)
 
-### 7. No Deposit/Payment Matching
-Penny can see overdue invoices but has no tool to match incoming deposits or payments to invoices. QB's Payment entity allows recording received payments against specific invoices.
+Change from `gpt-4o-realtime-preview-2024-12-17` to `gpt-4o-mini-realtime-preview-2025-06-03` or the latest available realtime model. The Dec 2024 model has weaker instruction-following compared to newer versions.
 
-**Fix**: Add a `record_payment` tool to admin-chat that calls `receive-payment` action in quickbooks-oauth, allowing Vizzy/Penny to record payments directly.
+**Check**: Verify latest available realtime model from OpenAI's API before changing.
 
----
-
-## Implementation Plan
-
-### File: `supabase/functions/penny-auto-actions/index.ts`
-- Change AI model from `gpt-4o-mini` to `gemini-2.5-flash` (lines 289, 319)
-- Add `send_statement` action type for customers with 3+ overdue invoices
-- Add payment receipt check with `receive-payment` tool awareness in reasoning
-
-### File: `supabase/functions/penny-execute-action/index.ts`
-- Add pre-execution payment check (lines 14-24): query accounting_mirror for current balance before executing
-- If balance ≤ 0, auto-resolve the queue item and skip execution
-- Add `send_statement` case that calls QB Statement API
-
-### File: `supabase/functions/admin-chat/index.ts`
-- Add new report types to `fetch_qb_report` enum: `CustomerBalance`, `CustomerBalanceDetail`, `VendorBalance`, `ARAgingSummary`, `APAgingSummary`, `CustomerIncome`
-- Add `record_payment` tool to JARVIS_TOOLS for recording received payments
-- Add `record_payment` to WRITE_TOOLS set
-- Implement `record_payment` handler in executeWriteTool that calls quickbooks-oauth `receive-payment`
-
-### File: `supabase/functions/quickbooks-oauth/index.ts`
-- Add handlers for new report types (CustomerBalance, VendorBalance, ARAgingSummary, APAgingSummary, CustomerIncome)
-- Add `send-statement` action handler
-- Ensure `receive-payment` action properly records payments against specific invoices
-
-### File: `src/components/agent/agentConfigs.ts`
-- Update Penny's capabilities list to reflect actual available features
-- Update greeting to be more data-driven
-
-### File: `supabase/functions/_shared/vizzyIdentity.ts`
-- Add record_payment and new report types to Vizzy's capability list
-- Update the "You CANNOT" section to remove payment processing limitation (since we're adding it)
-
-## Scope
+## Files Changed
 | File | Change |
 |------|--------|
-| `supabase/functions/penny-auto-actions/index.ts` | Fix AI model, add statement action, payment-aware reasoning |
-| `supabase/functions/penny-execute-action/index.ts` | Pre-execution payment check, send_statement handler |
-| `supabase/functions/admin-chat/index.ts` | New report types, record_payment tool |
-| `supabase/functions/quickbooks-oauth/index.ts` | New report handlers, send-statement action |
-| `src/components/agent/agentConfigs.ts` | Update Penny capabilities |
-| `supabase/functions/_shared/vizzyIdentity.ts` | Update capability list |
+| `src/components/vizzy/VizzyVoiceChat.tsx` | Feed VIZZY-ACTION results back into voice session context |
+| `src/hooks/useVizzyVoiceEngine.ts` | Fix contradictory instructions, upgrade model |
+
+## Expected Result
+- Voice Vizzy can now do live data lookups mid-conversation (investigate_entity → result feeds back)
+- No more "can't access" vs "never say can't" contradiction — model knows to fetch then respond
+- Hallucination drops significantly because the model either has real data or is waiting for it
 
