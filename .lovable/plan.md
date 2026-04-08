@@ -1,61 +1,58 @@
 
 
-# Transform Section Report Button into Full Detailed Report Modal
+# Enhance System Performance Overview with Detailed User Actions
 
 ## Problem
-The clipboard icon (`SectionReportButton`) currently only copies a short text to clipboard. The user wants it to open a full, comprehensive report page/modal for that section.
-
-## Approach
-Replace `SectionReportButton` with a new `SectionDetailReportDialog` component that opens a dialog/sheet with a rich, detailed report for each section.
+The System Performance Overview currently shows only raw technical labels (`page_visit · page`) without meaningful context. The user wants to see a comprehensive view of what each person actually did — not just page visits, but all actions with human-readable descriptions, grouped intelligently.
 
 ## Changes
 
-### 1. Create `src/components/vizzy/SectionDetailReport.tsx`
-A new dialog component that:
-- Accepts `sectionType` (`"activity"` | `"timeclock"` | `"overview"` | `"team"`)
-- Accepts the relevant data props (profileId, userId, date, timezone)
-- Opens a large dialog/sheet with a comprehensive report including:
-  - **Activity section**: Full list of all activities (no 50-item limit), grouped by event_type, with counts per category, timeline visualization, and summary stats
-  - **Time Clock section**: All clock entries with total hours, break analysis, shift patterns, overtime detection
-  - **Overview section**: Full performance card data, all metrics expanded with charts
-  - **Team section**: All team members' summary for the day
-- Includes a "Copy Report" and "Download PDF" button in the dialog header
+### 1. Enhance `UserActivitySection` in `VizzyBrainPanel.tsx`
 
-### 2. Update `src/components/vizzy/VizzyBrainPanel.tsx`
-- Replace `SectionReportButton` with the new `SectionDetailReportDialog` trigger button (same icon, same position)
-- Pass appropriate data props to each instance
-- Keep the clipboard icon (`ClipboardList`) as the trigger
+Currently shows a flat list of raw events. Redesign to show:
 
-### 3. Create `src/hooks/useDetailedActivityReport.ts`
-- A new hook that fetches ALL activities for a user on a given date (no limit of 50)
-- Groups activities by `event_type` and `entity_type`
-- Computes summary statistics (total actions, most active hour, breakdown by category)
+**Summary bar at top:**
+- Total actions count, pages visited, emails sent/deleted, mutations, AI sessions — as compact badges
 
-## Report Content Per Section
+**Grouped display by category** (instead of flat chronological):
+- Pages Visited (grouped/deduplicated with visit counts)
+- Emails (sent, deleted, archived — with subject/recipient from description)
+- Data Mutations (lead updates, order changes, barlist actions)
+- AI & Agent Interactions
+- Other actions
 
-**System Performance Overview report:**
-- Total actions count
-- Breakdown by event type (page_visit, email_sent, lead_updated, etc.) with counts
-- Breakdown by entity type
-- Timeline: actions grouped by hour
-- Most visited pages list
-- Full chronological activity log (all entries, not just 50)
+Each group is collapsible, showing count in header. Within each group, items are chronological with timestamps.
 
-**Time Clock report:**
-- All shifts with start/end/duration/breaks
-- Total gross hours, net hours, break time
-- Overtime calculation (>8h)
-- Shift pattern summary
+**Human-readable labels** via a mapping function:
+- `page_visit` → "Visited [page name]"
+- `email_sent` → "Sent email"
+- `email_deleted` → "Deleted email"
+- `barlist_approved` → "Approved barlist"
+- `machine_run_started` → "Started machine run"
+- etc.
+
+### 2. Enhance `SectionDetailReport.tsx` — Activity Report
+
+The detailed report dialog already has breakdowns, but enhance it with:
+- Human-readable event labels (same mapping)
+- Richer full log with color-coded category badges (page=blue, email=green, mutation=orange, AI=purple)
+- Description always visible (not truncated)
+
+### 3. Update `useUserActivityLog.ts`
+
+- Include `metadata` field in the select query so we can extract richer details (page path, email subject, etc.)
+- Increase default limit from 50 to 200 for better day coverage
+
+### 4. Update `useDetailedActivityReport.ts`
+
+- Also select `metadata` field for richer report content
 
 ## Technical Details
-- Use `Dialog` from shadcn for the modal (large size, scrollable)
-- Fetch data using a separate query with higher limit (500+)
-- Group and aggregate data client-side
-- Reuse existing `formatDateInTimezone` utility
 
 | File | Change |
 |------|--------|
-| `SectionDetailReport.tsx` | New component — full report dialog |
-| `useDetailedActivityReport.ts` | New hook — fetch & aggregate all activities |
-| `VizzyBrainPanel.tsx` | Replace `SectionReportButton` with new dialog trigger |
+| `useUserActivityLog.ts` | Add `metadata` to select, increase limit to 200 |
+| `useDetailedActivityReport.ts` | Add `metadata` to select |
+| `VizzyBrainPanel.tsx` (`UserActivitySection`) | Redesign with summary badges + grouped categories + human-readable labels |
+| `SectionDetailReport.tsx` | Enhance ActivityReport with color-coded badges and readable labels |
 
