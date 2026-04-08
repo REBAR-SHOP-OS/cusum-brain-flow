@@ -12,12 +12,13 @@ export interface ActivityEvent {
   source: string;
 }
 
-export function useUserActivityLog(profileId: string | null) {
+export function useUserActivityLog(profileId: string | null, userId?: string | null) {
   const { timezone } = useWorkspaceSettings();
+  const actorId = userId || profileId;
 
   return useQuery({
-    queryKey: ["user_activity_log", profileId],
-    enabled: !!profileId,
+    queryKey: ["user_activity_log", actorId],
+    enabled: !!actorId,
     staleTime: 1000 * 60 * 2,
     queryFn: async (): Promise<ActivityEvent[]> => {
       const todayStart = getStartOfDayIsoInTimezone(timezone);
@@ -25,7 +26,7 @@ export function useUserActivityLog(profileId: string | null) {
       const { data, error } = await supabase
         .from("activity_events")
         .select("id, event_type, entity_type, description, created_at, source")
-        .eq("actor_id", profileId!)
+        .eq("actor_id", actorId!)
         .gte("created_at", todayStart)
         .order("created_at", { ascending: false })
         .limit(50);

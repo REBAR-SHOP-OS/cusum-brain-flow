@@ -600,8 +600,8 @@ function UserFullReportButton({
 }
 
 /** Activity log section for selected user */
-function UserActivitySection({ profileId, timezone }: { profileId: string; timezone: string }) {
-  const { data: activities, isLoading } = useUserActivityLog(profileId);
+function UserActivitySection({ profileId, userId, timezone }: { profileId: string; userId?: string; timezone: string }) {
+  const { data: activities, isLoading } = useUserActivityLog(profileId, userId);
 
   if (isLoading) {
     return (
@@ -1445,7 +1445,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
                   />
                 </div>
                 <div className="p-3">
-                  <UserActivitySection profileId={selectedProfile.id} timezone={timezone} />
+                  <UserActivitySection profileId={selectedProfile.id} userId={selectedProfile.user_id} timezone={timezone} />
                 </div>
               </div>
 
