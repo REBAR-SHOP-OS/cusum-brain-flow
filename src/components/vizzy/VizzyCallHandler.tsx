@@ -225,7 +225,7 @@ export function VizzyCallHandler() {
           body: {
             instructions,
             voice: "alloy",
-            model: "gpt-4o-realtime-preview-2024-12-17",
+            model: "gpt-4o-mini-realtime-preview-2025-06-03",
             vadThreshold: 0.4,
             silenceDurationMs: 500,
             prefixPaddingMs: 300,
@@ -283,7 +283,7 @@ export function VizzyCallHandler() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const sdpResp = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17", {
+      const sdpResp = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${tokenData.client_secret}`,
