@@ -24,6 +24,17 @@ import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
+const USER_AVATAR_COLORS = [
+  "bg-blue-500", "bg-emerald-500", "bg-orange-500", "bg-purple-500",
+  "bg-pink-500", "bg-teal-500", "bg-red-500", "bg-amber-500",
+  "bg-cyan-500", "bg-indigo-500",
+];
+function getUserAvatarColor(name: string): string {
+  let hash = 0;
+  for (const c of name) hash = c.charCodeAt(0) + ((hash << 5) - hash);
+  return USER_AVATAR_COLORS[Math.abs(hash) % USER_AVATAR_COLORS.length];
+}
+
 interface Props {
   onClose: () => void;
 }
