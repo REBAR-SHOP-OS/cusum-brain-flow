@@ -564,30 +564,11 @@ Rules:
             };
           });
 
-          // ── Deduplicate rows before insert ──
-          const dedupeMap = new Map<string, typeof rows[0]>();
-          for (const row of rows) {
-            const key = [
-              (row.mark || "").trim().toLowerCase(),
-              (row.bar_size || "").trim().toLowerCase(),
-              (row.shape_type || "straight").trim().toLowerCase(),
-              String(row.total_length_mm || 0),
-              String(row.dim_a || 0), String(row.dim_b || 0),
-              String(row.dim_c || 0), String(row.dim_d || 0),
-            ].join(":");
-
-            if (dedupeMap.has(key)) {
-              const existing = dedupeMap.get(key)!;
-              existing.quantity = (existing.quantity || 0) + (row.quantity || 0);
-              if (!existing.grade && row.grade) existing.grade = row.grade;
-            } else {
-              dedupeMap.set(key, row);
-            }
-          }
-          const dedupedRows = Array.from(dedupeMap.values())
-            .map((r, idx) => ({ ...r, row_index: idx + 1 }));
+          // Save all rows as-is — deduplication is handled post-extraction
+          // via the advisory detect-duplicates flow with user confirmation
+          const dedupedRows = rows.map((r, idx) => ({ ...r, row_index: idx + 1 }));
           savedCount = dedupedRows.length;
-          console.log(`Dedup: ${rows.length} → ${dedupedRows.length} rows`);
+          console.log(`Rows to insert: ${savedCount}`);
 
           // Batch insert rows (50 at a time) to avoid edge function timeout
           const BATCH_SIZE = 50;
