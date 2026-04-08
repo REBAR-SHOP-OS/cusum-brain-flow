@@ -14,6 +14,7 @@ import { getStatusInfo } from "@/hooks/useSalesQuotations";
 interface Props {
   leadId: string;
   contactEmail?: string | null;
+  companyId?: string | null;
 }
 
 function formatCurrency(val: number) {
