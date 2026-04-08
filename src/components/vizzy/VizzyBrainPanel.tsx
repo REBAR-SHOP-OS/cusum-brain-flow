@@ -19,7 +19,7 @@ import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
 import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { agentConfigs } from "@/components/agent/agentConfigs";
-import { getVisibleAgents, getVisibleMenus, getUserPrimaryAgentKeyFromConfig } from "@/lib/userAccessConfig";
+import { getVisibleAgents, getVisibleMenus, getUserPrimaryAgentKeyFromConfig, ALL_MENUS } from "@/lib/userAccessConfig";
 import { useAuth } from "@/lib/auth";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
@@ -992,6 +992,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const isUserToday = userSelectedDate.toDateString() === new Date().toDateString();
   const [editingAgents, setEditingAgents] = useState(false);
   const [editingAutomations, setEditingAutomations] = useState(false);
+  const [editingItems, setEditingItems] = useState(false);
 
   // Filter @rebar.shop profiles, active first
   const rebarProfiles = useMemo(() => {
@@ -1032,11 +1033,12 @@ export function VizzyBrainPanel({ onClose }: Props) {
   // Super admin edit capability
   const viewerEmail = user?.email?.toLowerCase() ?? "";
   const canEditAccess = SUPER_EDIT_EMAILS.includes(viewerEmail);
-  const { override: accessOverride, saveAgents, saveAutomations } = useUserAccessOverrides(selectedProfile?.email);
+  const { override: accessOverride, saveAgents, saveAutomations, saveMenus } = useUserAccessOverrides(selectedProfile?.email);
 
   // All available agents for the editor
   const allAgentItems = useMemo(() => Object.entries(agentConfigs).map(([key, cfg]) => ({ id: key, label: `${cfg.name} — ${cfg.role}` })), []);
   const allAutomationItems = useMemo(() => defaultAutomations.map((a) => ({ id: a.id, label: a.name })), []);
+  const allMenuItems = useMemo(() => ALL_MENUS.map((m) => ({ id: m, label: m })), []);
 
   // Filter entries by selected user name if applicable
   const filteredEntries = useMemo(() => {
