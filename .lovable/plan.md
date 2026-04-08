@@ -1,80 +1,53 @@
 
 
-# Complete Production Data Reset — Database Cleanup
+# Enable LinkedIn Company Page Publishing
 
-## What This Does
+## Problem
+LinkedIn posts are only published to the personal profile ("Sattar Esmaeili-Oureh") because:
+1. The OAuth scope only requests `w_member_social` — company pages require `w_organization_social` + `r_organization_social`
+2. The OAuth callback never fetches/stores LinkedIn Organization IDs
+3. `socialConstants.ts` only lists the personal profile
+4. The cron publisher always posts as the personal profile (ignores `page_name`)
 
-Deletes ALL transactional production data from the pipeline (AI Extract → Barlists → Cut Plans → Production → Delivery → Packing Slips) so the system starts fresh. No application code changes needed.
+## Changes
 
-## Scope of Deletion
+### 1. `supabase/functions/linkedin-oauth/index.ts` — Update OAuth scope + auto-fetch org IDs
 
-Based on the database analysis, the following tables will be cleared in dependency order (leaf tables first to respect foreign keys):
+**Scope**: Change line 171 from `"openid profile email w_member_social"` to `"openid profile email w_member_social w_organization_social r_organization_social"`
 
-### Tier 1 — Deepest children (no dependents)
-- `delivery_bundles` — delivery bundle records
-- `delivery_stops` — delivery stop records  
-- `clearance_evidence` — QA clearance photos/evidence
-- `inventory_scrap` — scrap records from machine runs
-- `extract_errors` — AI extract error logs
+**Callback**: After token exchange, call the LinkedIn Organizations API to auto-discover admin pages:
+- Fetch `GET /v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR` to find pages the user administers
+- For each org, fetch `GET /v2/organizations/{id}` to get the name
+- Store the result as `organization_ids: { "Rebar.Shop Ontario": "12345", "Rebar.Shop Incorporated": "67890" }` in the config
 
-### Tier 2 — Mid-level children
-- `packing_slips` — packing slip documents
-- `loading_checklist` — loading checklist items
-- `loading_evidence` — loading photos/evidence
-- `cut_output_batches` — cut output batch records
-- `inventory_reservations` — inventory reservation records
-- `machine_queue_items` — machine queue entries
+### 2. `src/lib/socialConstants.ts` — Add company pages
 
-### Tier 3 — Core production tables
-- `production_tasks` — production task records (341 rows)
-- `machine_runs` — machine run history (652 rows)
-- `deliveries` — delivery records
+Add the two company pages to the LinkedIn options:
+```typescript
+linkedin: [
+  { value: "Sattar Esmaeili-Oureh", label: "Sattar Esmaeili-Oureh (Personal)" },
+  { value: "Rebar.Shop Ontario", label: "Rebar.Shop Ontario" },
+  { value: "Rebar.Shop Incorporated", label: "Rebar.Shop Incorporated" },
+],
+```
 
-### Tier 4 — Planning tables
-- `cut_plan_items` — individual items in cut plans (405 rows)
-- `cut_plans` — cut plan headers (37 rows)
+### 3. `supabase/functions/social-cron-publish/index.ts` — Support company page publishing
 
-### Tier 5 — Source data
-- `barlist_items` — barlist line items (394 rows)
-- `barlists` — barlist headers (40 rows)
+The cron publisher currently ignores `page_name` for LinkedIn. Update `publishToLinkedIn` to:
+- Accept `pageName` parameter
+- Look up `organization_ids` from config (same logic as `social-publish`)
+- Use `urn:li:organization:{orgId}` as author when publishing to a company page
 
-### Tier 6 — Extract pipeline
-- `extract_rows` — extracted data rows
-- `extract_raw_files` — uploaded raw files
-- `extract_errors` (already cleared in Tier 1)
-- `optimization_snapshots` — optimization snapshot data
-- `extract_sessions` — AI extract sessions (88 rows)
+### 4. User action required: Reconnect LinkedIn
 
-### Tier 7 — Related operational
-- `work_orders` — work order headers (78 rows)
-- `purchasing_list_items` — purchasing items
-- `camera_events` — camera event links (SET NULL on work_order, safe)
+After deployment, the user must reconnect LinkedIn from Settings → Integrations to grant the new `w_organization_social` scope. The callback will then auto-discover and store organization IDs.
 
-## What is NOT deleted
-- `customers` / `companies` / `contacts` — customer master data
-- `leads` / `quotes` — CRM/sales data
-- `orders` — order records (have RESTRICT FK to customers)
-- `projects` — project records
-- `profiles` / `user_roles` — user accounts
-- `machines` — machine definitions (current_run_id will be set to NULL)
-- All chat, activity, AI logs, email data
-- All configuration/reference tables
+## Summary
 
-## Safety
-
-- A migration will be created with DELETE statements in correct dependency order
-- `machines.current_run_id` will be SET NULL before deleting machine_runs
-- Foreign keys with `SET NULL` or `CASCADE` delete actions are handled automatically
-- No TRUNCATE needed — sequential DELETE FROM is safer and respects RLS/triggers
-
-## Technical Details
-
-One database migration with ~20 DELETE statements executed in the correct order. The migration will use a transaction block to ensure atomicity — if any step fails, nothing is deleted.
-
-| Action | Detail |
-|--------|--------|
-| Migration | Sequential DELETE FROM statements in FK dependency order |
-| Tables affected | ~20 transactional/production tables |
-| Rows to delete | ~2,000+ across all tables |
-| Code changes | None |
+| File | Change |
+|------|--------|
+| `linkedin-oauth/index.ts` | Add org scopes + auto-fetch organization IDs on callback |
+| `socialConstants.ts` | Add 2 company pages to LinkedIn options |
+| `social-cron-publish/index.ts` | Support `page_name` for LinkedIn org publishing |
+| `social-publish/index.ts` | Already supports org URNs — no change needed |
 
