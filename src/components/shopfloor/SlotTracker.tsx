@@ -353,6 +353,18 @@ export function SlotTracker({
           </Button>
         )}
 
+        {/* Stop Run button beside Record Stroke */}
+        {activeSlots.length > 0 && canWrite && !allDone && (
+          <Button
+            variant="destructive"
+            className="h-12 px-3"
+            onClick={onCompleteRun}
+            title="Stop"
+          >
+            <StopCircle className="w-5 h-5" />
+          </Button>
+        )}
+
         {/* Stop run mid-way (partial completion) */}
         {!allDone && totalCutsDone > 0 && canWrite && (
           <Button
