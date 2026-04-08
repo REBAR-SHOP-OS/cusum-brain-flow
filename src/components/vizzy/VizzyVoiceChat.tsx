@@ -147,9 +147,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           // Feed READ action results back into the voice session context
           if (READ_ACTIONS.has(actionData.type) && data) {
             const resultBlock = `\n═══ LIVE TOOL RESULT (${actionData.type}) ═══\n${JSON.stringify(data, null, 1).slice(0, 4000)}\n═══ END TOOL RESULT ═══\nUse ONLY this data to answer the CEO's question. Do NOT fabricate beyond what is shown here.`;
-            liveResultsRef.current.push(resultBlock);
-            // Push accumulated live results into the session
-            updateSessionInstructions(liveResultsRef.current.join("\n"));
+            appendLiveResult(resultBlock);
             console.log(`[VizzyVoice] Fed back ${actionData.type} result (${JSON.stringify(data).length} chars)`);
           }
 
