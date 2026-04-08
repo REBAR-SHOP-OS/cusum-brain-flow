@@ -14,7 +14,6 @@ Deno.serve((req) =>
       silenceDurationMs = 800,
       prefixPaddingMs = 400,
       temperature = 0.8,
-      eagerness,
     } = ctx.body;
 
     const turnDetection: Record<string, unknown> = {
@@ -23,9 +22,6 @@ Deno.serve((req) =>
       prefix_padding_ms: prefixPaddingMs,
       silence_duration_ms: silenceDurationMs,
     };
-    if (eagerness) {
-      turnDetection.eagerness = eagerness;
-    }
 
     const payload = JSON.stringify({
       model,
@@ -38,45 +34,53 @@ Deno.serve((req) =>
     });
 
     const MAX_ATTEMPTS = 2;
-    let lastError: string | null = null;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${GPT_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: payload,
-      });
+      try {
+        const response = await fetch("https://api.openai.com/v1/realtime/sessions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${GPT_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: payload,
+        });
 
-      if (response.status >= 500) {
-        lastError = await response.text();
-        console.warn(`OpenAI ${response.status} (attempt ${attempt + 1}/${MAX_ATTEMPTS}):`, lastError);
+        if (response.status >= 500) {
+          const errText = await response.text();
+          console.warn(`OpenAI ${response.status} (attempt ${attempt + 1}/${MAX_ATTEMPTS}):`, errText);
+          if (attempt < MAX_ATTEMPTS - 1) {
+            await new Promise((r) => setTimeout(r, 2000));
+            continue;
+          }
+          return json({ error: "REALTIME_SESSION_UNAVAILABLE", fallback: true }, 200);
+        }
+
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error("OpenAI Realtime session error:", response.status, errText);
+          return json({ error: "Failed to create realtime session", fallback: true }, 200);
+        }
+
+        const sessionData = await response.json();
+        const clientSecret = sessionData.client_secret?.value;
+
+        if (!clientSecret) {
+          console.error("No client_secret in response:", JSON.stringify(sessionData));
+          return json({ error: "No client secret received", fallback: true }, 200);
+        }
+
+        return { client_secret: clientSecret, expires_at: sessionData.client_secret?.expires_at };
+      } catch (err) {
+        console.error(`Unexpected error (attempt ${attempt + 1}):`, err);
         if (attempt < MAX_ATTEMPTS - 1) {
           await new Promise((r) => setTimeout(r, 2000));
           continue;
         }
-        return json({ error: "Failed to create realtime session (OpenAI unavailable)" }, 502);
+        return json({ error: "SERVICE_FAILED", fallback: true }, 200);
       }
-
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error("OpenAI Realtime session error:", response.status, errText);
-        return json({ error: "Failed to create realtime session" }, 500);
-      }
-
-      const sessionData = await response.json();
-      const clientSecret = sessionData.client_secret?.value;
-
-      if (!clientSecret) {
-        console.error("No client_secret in response:", JSON.stringify(sessionData));
-        return json({ error: "No client secret received" }, 500);
-      }
-
-      return { client_secret: clientSecret, expires_at: sessionData.client_secret?.expires_at };
     }
 
-    return json({ error: "Failed after retries" }, 502);
+    return json({ error: "Failed after retries", fallback: true }, 200);
   }, { functionName: "voice-engine-token", requireCompany: false, wrapResult: false })
 );
