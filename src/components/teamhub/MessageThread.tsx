@@ -295,23 +295,51 @@ export function MessageThread({
     textareaRef.current?.focus();
   };
 
-  // Render text with @mentions highlighted
+  // Render text with @mentions and clickable URLs
   const renderMentionText = (text: string) => {
-    const parts = text.split(/(@\S+)/g);
     const profileNames = new Set(profiles.map(p => p.full_name));
-    return parts.map((part, i) => {
-      if (part.startsWith("@")) {
-        const name = part.slice(1);
-        if (profileNames.has(name)) {
-          return (
-            <span key={i} className="inline-flex items-center px-1 py-0.5 rounded bg-primary/15 text-primary text-xs font-medium">
-              {part}
-            </span>
-          );
-        }
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+    // First split by URLs
+    const urlParts = text.split(urlRegex);
+    const result: React.ReactNode[] = [];
+
+    urlParts.forEach((segment, si) => {
+      if (urlRegex.test(segment)) {
+        urlRegex.lastIndex = 0;
+        result.push(
+          <a
+            key={`url-${si}`}
+            href={segment}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary hover:underline break-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {segment}
+          </a>
+        );
+      } else {
+        // Process mentions within non-URL segments
+        const mentionParts = segment.split(/(@\S+)/g);
+        mentionParts.forEach((part, mi) => {
+          if (part.startsWith("@")) {
+            const name = part.slice(1);
+            if (profileNames.has(name)) {
+              result.push(
+                <span key={`m-${si}-${mi}`} className="inline-flex items-center px-1 py-0.5 rounded bg-primary/15 text-primary text-xs font-medium">
+                  {part}
+                </span>
+              );
+              return;
+            }
+          }
+          if (part) result.push(<span key={`t-${si}-${mi}`}>{part}</span>);
+        });
       }
-      return <span key={i}>{part}</span>;
     });
+
+    return result;
   };
 
   const handleEmojiSelect = (emoji: string) => {
