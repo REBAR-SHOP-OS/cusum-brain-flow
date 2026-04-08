@@ -988,6 +988,19 @@ export function VizzyBrainPanel({ onClose }: Props) {
           <GeneralReportPDFButton date={userSelectedDate} />
         </div>
         <div className="p-3">
+          {/* Accessible menu items for this user */}
+          {selectedProfile?.email && (() => {
+            const userMenuItems = getVisibleMenus(selectedProfile.email);
+            return userMenuItems.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {userMenuItems.map(menu => (
+                  <span key={menu} className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
+                    {menu}
+                  </span>
+                ))}
+              </div>
+            ) : null;
+          })()}
           <Accordion type="multiple" className="w-full space-y-1">
             {sectionsToShow.map((group) => (
               <AccordionItem key={group.key} value={group.key} className="border border-border rounded-lg px-3">
