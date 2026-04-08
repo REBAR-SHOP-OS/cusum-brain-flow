@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
+import { SectionDetailReportDialog } from "@/components/vizzy/SectionDetailReport";
 import { format } from "date-fns";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
