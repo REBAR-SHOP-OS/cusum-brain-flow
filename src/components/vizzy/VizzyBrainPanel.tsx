@@ -24,6 +24,9 @@ import { useAuth } from "@/lib/auth";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
+import { Cog } from "lucide-react";
 
 const USER_AVATAR_COLORS = [
   "bg-blue-500", "bg-emerald-500", "bg-orange-500", "bg-purple-500",
@@ -97,9 +100,6 @@ function LiveClock({ timezone }: { timezone: string }) {
 
   return <span>{timeStr}{abbr ? ` ${abbr}` : ""}</span>;
 }
-import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
-import { ACCESS_POLICIES } from "@/lib/accessPolicies";
-import { Cog } from "lucide-react";
 
 const CATEGORY_TO_GROUP: Record<string, string> = {};
 for (const g of SIDEBAR_GROUPS) {
