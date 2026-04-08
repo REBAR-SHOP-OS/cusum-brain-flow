@@ -24,6 +24,17 @@ import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
+const USER_AVATAR_COLORS = [
+  "bg-blue-500", "bg-emerald-500", "bg-orange-500", "bg-purple-500",
+  "bg-pink-500", "bg-teal-500", "bg-red-500", "bg-amber-500",
+  "bg-cyan-500", "bg-indigo-500",
+];
+function getUserAvatarColor(name: string): string {
+  let hash = 0;
+  for (const c of name) hash = c.charCodeAt(0) + ((hash << 5) - hash);
+  return USER_AVATAR_COLORS[Math.abs(hash) % USER_AVATAR_COLORS.length];
+}
+
 interface Props {
   onClose: () => void;
 }
@@ -1016,10 +1027,10 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
         {/* User avatar bar */}
         {rebarProfiles.length > 0 && (
-          <div className="px-5 py-4 border-b border-border flex items-center gap-4 overflow-x-auto">
+          <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setSelectedProfileId(null)}
-              className={`shrink-0 px-5 py-2.5 rounded-full text-base font-semibold transition-colors ${
+              className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
                 !selectedProfileId
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -1031,23 +1042,22 @@ export function VizzyBrainPanel({ onClose }: Props) {
               const initial = p.full_name?.charAt(0)?.toUpperCase() || "?";
               const firstName = p.full_name?.split(" ")[0] || "?";
               const isSelected = selectedProfileId === p.id;
+              const avatarColor = getUserAvatarColor(p.full_name || "");
               return (
                 <button
                   key={p.id}
                   onClick={() => { setSelectedProfileId(isSelected ? null : p.id); setUserSelectedDate(new Date()); }}
-                  className={`shrink-0 flex items-center gap-3 px-4 py-2.5 rounded-full text-base transition-all ${
+                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm transition-all ${
                     isSelected
                       ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
                       : "bg-muted hover:bg-muted/80"
                   } ${!p.is_active ? "opacity-50" : ""}`}
                   title={`${p.full_name} (${p.email})`}
                 >
-                  <span className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                    isSelected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-primary/10 text-primary"
-                  }`}>
+                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${avatarColor}`}>
                     {initial}
                   </span>
-                  <span className="text-base font-bold">{firstName}</span>
+                  <span className="text-sm font-bold">{firstName}</span>
                 </button>
               );
             })}
