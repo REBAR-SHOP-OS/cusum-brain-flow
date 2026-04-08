@@ -1326,7 +1326,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
               {/* Section 2: Agents */}
               {selectedProfile.user_id && selectedProfile.email !== "ai@rebar.shop" && (
-                <div className="rounded-xl border border-border bg-card overflow-hidden relative">
+                <div className="rounded-xl border border-border bg-card relative">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                     <BotIcon className="w-4 h-4 text-primary" />
                     <h3 className="text-sm font-semibold text-foreground flex-1">Agents</h3>
@@ -1389,7 +1389,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
               )}
 
               {/* Section 3: System Performance Overview */}
-              <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <div className="rounded-xl border border-border bg-card relative">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                   <BarChart3 className="w-4 h-4 text-primary" />
                   <h3 className="text-sm font-semibold text-foreground flex-1">System Performance Overview</h3>
