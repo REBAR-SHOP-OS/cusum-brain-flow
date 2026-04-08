@@ -645,16 +645,19 @@ function UserActivitySection({ profileId, timezone }: { profileId: string; timez
 }
 
 /** Time clock detail section for selected user */
-function UserTimeClockSection({ profileId, userId, timezone }: { profileId: string; userId: string | null; timezone: string }) {
-  const { data } = useUserPerformance(profileId, userId);
+function UserTimeClockSection({ profileId, userId, timezone, date }: { profileId: string; userId: string | null; timezone: string; date?: Date }) {
+  const { data } = useUserPerformance(profileId, userId, date);
 
   if (!data?.clockEntries?.length) {
     return (
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-        <span className="text-xs text-muted-foreground italic">No clock entries today</span>
+        <span className="text-xs text-muted-foreground italic">No clock entries for this day</span>
       </div>
     );
   }
+
+  let totalGrossMin = 0;
+  let totalBreakMin = 0;
 
   return (
     <div className="space-y-1.5">
@@ -662,29 +665,52 @@ function UserTimeClockSection({ profileId, userId, timezone }: { profileId: stri
         const start = new Date(entry.clock_in);
         const end = entry.clock_out ? new Date(entry.clock_out) : null;
         const durationMs = (end?.getTime() ?? Date.now()) - start.getTime();
-        const durationH = Math.round((durationMs / 3600000) * 10) / 10;
+        const grossMin = durationMs / 60000;
+        const breakMin = entry.break_minutes ?? 0;
+        const netMin = Math.max(0, grossMin - breakMin);
+        totalGrossMin += grossMin;
+        totalBreakMin += breakMin;
+        const netH = Math.round((netMin / 60) * 10) / 10;
 
         return (
-          <div key={i} className="flex items-center gap-3 rounded border border-border bg-card p-2.5 text-xs">
-            <LogIn className="w-3.5 h-3.5 text-green-500 shrink-0" />
-            <span className="text-foreground font-medium">
-              {formatDateInTimezone(start, timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
-            </span>
-            <span className="text-muted-foreground">→</span>
-            {end ? (
-              <>
-                <LogOut className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                <span className="text-foreground font-medium">
-                  {formatDateInTimezone(end, timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
-                </span>
-              </>
-            ) : (
-              <span className="text-[10px] bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded-full font-medium">Still working</span>
+          <div key={i} className="rounded border border-border bg-card p-2.5">
+            <div className="flex items-center gap-2 text-xs">
+              <LogIn className="w-3.5 h-3.5 text-green-500 shrink-0" />
+              <span className="text-foreground font-medium">
+                {formatDateInTimezone(start, timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
+              </span>
+              <span className="text-muted-foreground">→</span>
+              {end ? (
+                <>
+                  <LogOut className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                  <span className="text-foreground font-medium">
+                    {formatDateInTimezone(end, timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
+                  </span>
+                </>
+              ) : (
+                <span className="text-[10px] bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded-full font-medium">Still working</span>
+              )}
+              {breakMin > 0 && (
+                <span className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded-full">Break {breakMin}m</span>
+              )}
+              <span className="ml-auto text-muted-foreground font-medium">{netH}h</span>
+            </div>
+            {entry.notes && (
+              <p className="mt-1 text-[10px] text-muted-foreground pl-5 italic">{entry.notes}</p>
             )}
-            <span className="ml-auto text-muted-foreground">{durationH}h</span>
           </div>
         );
       })}
+
+      {/* Summary row */}
+      <div className="flex items-center justify-between rounded border border-primary/20 bg-primary/5 px-3 py-2 text-xs font-medium">
+        <span className="text-foreground">Total</span>
+        <div className="flex items-center gap-3">
+          <span className="text-muted-foreground">Gross {Math.round((totalGrossMin / 60) * 10) / 10}h</span>
+          {totalBreakMin > 0 && <span className="text-amber-600">Break {totalBreakMin}m</span>}
+          <span className="text-primary">Net {Math.round(((totalGrossMin - totalBreakMin) / 60) * 10) / 10}h</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1434,7 +1460,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
                   />
                 </div>
                 <div className="p-3">
-                  <UserTimeClockSection profileId={selectedProfile.id} userId={selectedProfile.user_id} timezone={timezone} />
+                  <UserTimeClockSection profileId={selectedProfile.id} userId={selectedProfile.user_id} timezone={timezone} date={userSelectedDate} />
                 </div>
               </div>
             </div>

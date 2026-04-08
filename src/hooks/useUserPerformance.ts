@@ -6,6 +6,8 @@ import { getStartOfDayIsoInTimezone } from "@/lib/dateConfig";
 export interface ClockEntry {
   clock_in: string;
   clock_out: string | null;
+  break_minutes: number;
+  notes: string | null;
 }
 
 export interface UserPerformance {
@@ -38,7 +40,7 @@ export function useUserPerformance(profileId: string | null, userId: string | nu
         // Time clock entries today
         supabase
           .from("time_clock_entries")
-          .select("clock_in, clock_out")
+          .select("clock_in, clock_out, break_minutes, notes")
           .eq("profile_id", profileId!)
           .gte("clock_in", dayStart)
           .lt("clock_in", dayEnd)
