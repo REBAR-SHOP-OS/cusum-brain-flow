@@ -275,6 +275,7 @@ export default function Home() {
         </div>
 
         {/* Workspaces Section */}
+        {user?.email?.toLowerCase() !== "ben@rebar.shop" && (
         <div className="relative z-10 w-full mb-6 sm:mb-12">
           <h2 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-4">Workspaces</h2>
           <div className="grid grid-cols-4 gap-2 sm:gap-3">
@@ -300,11 +301,14 @@ export default function Home() {
             ))}
           </div>
         </div>
+        )}
 
         {/* Automations Section */}
+        {user?.email?.toLowerCase() !== "ben@rebar.shop" && (
         <div className="relative z-10 w-full mb-6 sm:mb-12">
           <AutomationsSection />
         </div>
+        )}
 
         {/* Helpers Section */}
         <div className="relative z-10 w-full">
