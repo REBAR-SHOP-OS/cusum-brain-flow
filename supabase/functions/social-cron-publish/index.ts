@@ -714,11 +714,18 @@ async function publishToLinkedIn(
       const profile = await profileRes.json();
       authorUrn = `urn:li:person:${profile.sub}`;
     } else {
+      // page_name may be comma-separated (e.g. "Rebar.shop Ontario, Rebar.shop")
       const orgIds = config.organization_ids || {};
-      const orgId = orgIds[pageName!];
+      const cPages = (pageName || "").split(",").map((s: string) => s.trim());
+      let orgId: string | undefined;
+      let matchedPage = pageName;
+      for (const pn of cPages) {
+        if (orgIds[pn]) { orgId = orgIds[pn]; matchedPage = pn; break; }
+      }
       if (!orgId) {
         return { error: `LinkedIn organization ID not configured for "${pageName}". Please reconnect LinkedIn to auto-discover organization pages.` };
       }
+      console.log(`[linkedin-cron] Matched page "${matchedPage}" → org ${orgId}`);
       authorUrn = `urn:li:organization:${orgId}`;
     }
 
