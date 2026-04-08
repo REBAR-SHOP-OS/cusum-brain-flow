@@ -323,6 +323,12 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
   const { data: perf, isLoading } = useUserPerformance(profileId, userId, date);
   const { data: report } = useDetailedActivityReport(userId, date);
 
+  const fmtDuration = (hours: number) => {
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return `${h}h ${m}m`;
+  };
+
   const buildFullReport = useCallback(() => {
     if (!perf) return "";
     const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" });
@@ -366,16 +372,56 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
     lines.push(`  AI Sessions:  ${perf.aiSessionsToday}`);
     lines.push(`  Emails Sent:  ${perf.emailsSent}`);
 
-    // Activity Breakdown
+    // Activity Breakdown by Event Type
     if (report && report.byEventType.length > 0) {
       lines.push("");
       lines.push(thin);
       lines.push("");
-      lines.push("ACTIVITY BREAKDOWN");
-      for (const b of report.byEventType.slice(0, 10)) {
+      lines.push("ACTIVITY BREAKDOWN — BY EVENT TYPE");
+      for (const b of report.byEventType) {
         const label = humanLabel(b.eventType);
         const dots = ".".repeat(Math.max(2, 30 - label.length));
         lines.push(`  ${label} ${dots} ${b.count}`);
+      }
+    }
+
+    // Entity Type Breakdown
+    if (report && report.byEntityType.length > 0) {
+      lines.push("");
+      lines.push(thin);
+      lines.push("");
+      lines.push("ACTIVITY BREAKDOWN — BY ENTITY TYPE");
+      for (const b of report.byEntityType) {
+        const label = b.entityType.replace(/\b\w/g, (c) => c.toUpperCase());
+        const dots = ".".repeat(Math.max(2, 30 - label.length));
+        lines.push(`  ${label} ${dots} ${b.count}`);
+      }
+    }
+
+    // Hourly Timeline
+    if (report && report.hourlyGroups.length > 0) {
+      lines.push("");
+      lines.push(thin);
+      lines.push("");
+      lines.push("HOURLY TIMELINE");
+      for (const g of report.hourlyGroups) {
+        const bar = "█".repeat(Math.min(g.events.length, 30));
+        lines.push(`  ${g.label.padEnd(10)} ${bar} ${g.events.length}`);
+      }
+      if (report.mostActiveHour) {
+        lines.push(`  Peak Hour: ${report.mostActiveHour}`);
+      }
+    }
+
+    // Full Activity Log
+    if (report && report.allEvents.length > 0) {
+      lines.push("");
+      lines.push(thin);
+      lines.push("");
+      lines.push(`FULL ACTIVITY LOG (${report.allEvents.length} events)`);
+      for (const ev of report.allEvents) {
+        const t = formatDateInTimezone(ev.created_at, timezone, { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
+        lines.push(`  [${t}] ${humanLabel(ev.event_type)} — ${ev.description || ev.entity_type}`);
       }
     }
 
@@ -384,7 +430,7 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
     return lines.join("\n");
   }, [perf, report, date, timezone, userName]);
 
-  // Save report to vizzy_memory for Vizzy access (hook must be before early returns)
+  // Save report to vizzy_memory for Vizzy access
   useEffect(() => {
     if (!perf || !userId) return;
     const reportText = buildFullReport();
@@ -415,18 +461,176 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
     toast.success("Overview report copied");
   };
 
-  const reportText = buildFullReport();
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-end">
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          {formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}
+        </p>
         <Button variant="outline" size="sm" onClick={copyAll} className="gap-1.5">
           <Copy className="w-3.5 h-3.5" /> Copy Report
         </Button>
       </div>
-      <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground bg-muted/30 border border-border rounded-lg p-4 overflow-auto max-h-[60vh]">
-        {reportText}
-      </pre>
+
+      {/* Attendance Section */}
+      <div>
+        <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+          <Clock className="w-4 h-4 text-primary" /> Attendance
+        </h4>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+            <span className={`inline-block text-xs px-2 py-0.5 rounded-full font-medium ${perf.clockedIn ? "bg-green-500/15 text-green-400 border border-green-500/20" : "bg-muted text-muted-foreground border border-border"}`}>
+              {perf.clockedIn ? "🟢 Clocked In" : "Off Clock"}
+            </span>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+            <p className="text-2xl font-bold text-foreground">{fmtDuration(perf.hoursToday)}</p>
+            <p className="text-xs text-muted-foreground">Gross Hours</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+            <p className="text-2xl font-bold text-foreground">{perf.clockEntries.length}</p>
+            <p className="text-xs text-muted-foreground">Shifts</p>
+          </div>
+        </div>
+        {perf.clockEntries.length > 0 && (
+          <div className="mt-2 space-y-1.5">
+            {[...perf.clockEntries].reverse().map((ce, i) => {
+              const inT = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+              const outT = ce.clock_out
+                ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+                : "🟢 Active";
+              const durMs = (ce.clock_out ? new Date(ce.clock_out).getTime() : Date.now()) - new Date(ce.clock_in).getTime();
+              const durH = Math.round(durMs / 360000) / 10;
+              return (
+                <div key={i} className="flex items-center justify-between text-xs px-3 py-2 rounded bg-muted/20 border border-border/50">
+                  <span className="text-muted-foreground">Shift {i + 1}: {inT} → {outT}</span>
+                  <span className="font-medium text-primary">{durH}h</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Performance Summary Cards */}
+      <div>
+        <h4 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+          <BarChart3 className="w-4 h-4 text-primary" /> Performance Summary
+        </h4>
+        <div className="grid grid-cols-4 gap-3">
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+            <p className="text-2xl font-bold text-foreground">{perf.activitiesToday}</p>
+            <p className="text-xs text-muted-foreground">Activities</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+            <p className="text-2xl font-bold text-foreground">{perf.aiSessionsToday}</p>
+            <p className="text-xs text-muted-foreground">AI Sessions</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+            <p className="text-2xl font-bold text-foreground">{perf.emailsSent}</p>
+            <p className="text-xs text-muted-foreground">Emails Sent</p>
+          </div>
+          <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
+            <p className="text-2xl font-bold text-primary">{report?.mostActiveHour || "—"}</p>
+            <p className="text-xs text-muted-foreground">Peak Hour</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Activity Breakdown by Event Type */}
+      {report && report.byEventType.length > 0 && (
+        <div>
+          <h4 className="text-sm font-semibold text-foreground mb-2">Breakdown by Event Type</h4>
+          <div className="space-y-1.5">
+            {report.byEventType.map((b) => {
+              const maxCount = report.byEventType[0]?.count || 1;
+              const pct = (b.count / maxCount) * 100;
+              return (
+                <div key={b.eventType} className="flex items-center gap-2 text-sm">
+                  <span className="w-40 text-foreground truncate shrink-0">{humanLabel(b.eventType)}</span>
+                  <div className="flex-1 h-5 bg-muted/30 rounded overflow-hidden">
+                    <div className="h-full bg-primary/50 rounded" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="w-8 text-xs text-right font-medium text-primary">{b.count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Activity Breakdown by Entity Type */}
+      {report && report.byEntityType.length > 0 && (
+        <div>
+          <h4 className="text-sm font-semibold text-foreground mb-2">Breakdown by Entity Type</h4>
+          <div className="space-y-1.5">
+            {report.byEntityType.map((b) => {
+              const maxCount = report.byEntityType[0]?.count || 1;
+              const pct = (b.count / maxCount) * 100;
+              return (
+                <div key={b.entityType} className="flex items-center gap-2 text-sm">
+                  <span className="w-40 text-foreground capitalize truncate shrink-0">{b.entityType}</span>
+                  <div className="flex-1 h-5 bg-muted/30 rounded overflow-hidden">
+                    <div className="h-full bg-accent/60 rounded" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="w-8 text-xs text-right font-medium text-primary">{b.count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Hourly Timeline */}
+      {report && report.hourlyGroups.length > 0 && (
+        <div>
+          <h4 className="text-sm font-semibold text-foreground mb-2">Hourly Timeline</h4>
+          <div className="space-y-1">
+            {report.hourlyGroups.map((g) => {
+              const maxEvents = Math.max(...report.hourlyGroups.map((h) => h.events.length));
+              const pct = maxEvents > 0 ? (g.events.length / maxEvents) * 100 : 0;
+              return (
+                <div key={g.hour} className="flex items-center gap-2 text-sm">
+                  <span className="w-20 text-muted-foreground text-xs shrink-0">{g.label}</span>
+                  <div className="flex-1 h-5 bg-muted/30 rounded overflow-hidden">
+                    <div className="h-full bg-primary/60 rounded" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="w-8 text-xs text-right font-medium">{g.events.length}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Full Activity Log */}
+      {report && report.allEvents.length > 0 && (
+        <div>
+          <h4 className="text-sm font-semibold text-foreground mb-2">Full Activity Log ({report.allEvents.length})</h4>
+          <div className="space-y-1 max-h-[400px] overflow-y-auto pr-1">
+            {report.allEvents.map((ev) => {
+              const badge = getCategoryBadge(ev.event_type, ev.entity_type);
+              return (
+                <div key={ev.id} className="flex items-start gap-2 text-xs px-2 py-1.5 rounded bg-muted/10 border border-border/50">
+                  <span className="text-muted-foreground shrink-0 w-[72px]">
+                    {formatDateInTimezone(ev.created_at, timezone, { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true })}
+                  </span>
+                  <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${badge.className}`}>
+                    {badge.label}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium text-foreground">{humanLabel(ev.event_type)}</span>
+                    {ev.description && (
+                      <p className="text-muted-foreground mt-0.5 leading-tight">{ev.description}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
