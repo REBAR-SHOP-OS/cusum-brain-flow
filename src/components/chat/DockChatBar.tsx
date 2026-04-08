@@ -131,7 +131,7 @@ export function DockChatBar() {
   };
 
   // Calculate visible (non-minimized) boxes for positioning
-  const BOX_WIDTH = 330;
+  const BOX_WIDTH = 380;
   const LAUNCHER_OFFSET = 80; // space for the launcher pill
 
   if (!portalContainer) return null;

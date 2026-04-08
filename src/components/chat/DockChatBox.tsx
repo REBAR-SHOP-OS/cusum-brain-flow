@@ -502,7 +502,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     <div
       style={containerStyle}
       className={cn(
-        "fixed bottom-0 z-[9998] w-[320px] flex flex-col bg-background border border-border rounded-t-xl shadow-2xl transition-colors pointer-events-auto",
+        "fixed bottom-0 z-[9998] w-[370px] flex flex-col bg-background border border-border rounded-t-xl shadow-2xl transition-colors pointer-events-auto",
         dragOver && "ring-2 ring-primary border-primary"
       )}
       onDragOver={handleDragOver}
@@ -540,7 +540,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
       </div>
 
       {/* Messages */}
-      <ScrollArea className="h-[300px] px-3 py-3">
+      <ScrollArea className="h-[400px] px-3 py-3">
         {isLoading ? (
           <p className="text-xs text-muted-foreground text-center py-8">Loading…</p>
         ) : messages.length === 0 ? (
@@ -648,7 +648,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                               {/* Inline images */}
                               {uniqueAttachments.filter((a) => isImageUrl(a.url) && !isAudioUrl(a.url)).map((att, ai) => (
                                 <div key={ai} className="mt-1">
-                                  <img src={att.url} alt={att.name} className="rounded-lg border border-border max-w-[200px] max-h-[160px] object-cover cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(att.url, "_blank")} />
+                                  <img src={att.url} alt={att.name} className="rounded-lg border border-border max-w-[260px] max-h-[220px] object-cover cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(att.url, "_blank")} />
                                   <button onClick={() => downloadFile(att.url, att.name)} className="inline-flex items-center gap-1 mt-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors" title="Download">
                                     <Download className="w-3 h-3" />
                                   </button>
