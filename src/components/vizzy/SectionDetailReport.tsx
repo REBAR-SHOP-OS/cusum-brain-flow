@@ -320,10 +320,9 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
   const { data: perf, isLoading } = useUserPerformance(profileId, userId, date);
   const { data: report } = useDetailedActivityReport(userId, date);
 
-  if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
-  if (!perf) return <p className="text-sm text-muted-foreground p-4">No data available.</p>;
-
-  const copyAll = () => {
+  // Save report to vizzy_memory for Vizzy access (hook must be before early returns)
+  useEffect(() => {
+    if (!perf || !userId) return;
     const lines = [
       `📋 Overview Report — ${userName}`,
       `Date: ${formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}`,
@@ -333,7 +332,71 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
       `AI Sessions: ${perf.aiSessionsToday}`,
       `Emails Sent: ${perf.emailsSent}`,
     ];
-    navigator.clipboard.writeText(lines.join("\n"));
+    if (report && report.byEventType.length > 0) {
+      lines.push("", "Activity Breakdown:");
+      for (const b of report.byEventType.slice(0, 10)) {
+        lines.push(`  ${b.eventType}: ${b.count}`);
+      }
+    }
+    if (perf.clockEntries.length > 0) {
+      lines.push("", "Clock Entries:");
+      for (const ce of perf.clockEntries) {
+        const inTime = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+        const outTime = ce.clock_out ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true }) : "ongoing";
+        lines.push(`  ${inTime} → ${outTime}`);
+      }
+    }
+    const reportText = lines.join("\n");
+    const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "2-digit", day: "2-digit" });
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase
+        .from("vizzy_memory")
+        .upsert(
+          {
+            user_id: userId,
+            company_id: user.user_metadata?.company_id ?? "",
+            category: `user_daily_report_${userId}_${dateStr}`,
+            content: reportText,
+          },
+          { onConflict: "user_id,category" }
+        )
+        .then(() => {});
+    });
+  }, [perf, report, userId, date, timezone, userName]);
+
+  if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
+  if (!perf) return <p className="text-sm text-muted-foreground p-4">No data available.</p>;
+
+  const buildReportLines = () => {
+    const lines = [
+      `📋 Overview Report — ${userName}`,
+      `Date: ${formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}`,
+      `Status: ${perf.clockedIn ? "Clocked In" : "Not Clocked In"}`,
+      `Hours Today: ${perf.hoursToday}`,
+      `Activities: ${perf.activitiesToday}`,
+      `AI Sessions: ${perf.aiSessionsToday}`,
+      `Emails Sent: ${perf.emailsSent}`,
+    ];
+    if (report && report.byEventType.length > 0) {
+      lines.push("", "Activity Breakdown:");
+      for (const b of report.byEventType.slice(0, 10)) {
+        lines.push(`  ${b.eventType}: ${b.count}`);
+      }
+    }
+    if (perf.clockEntries.length > 0) {
+      lines.push("", "Clock Entries:");
+      for (const ce of perf.clockEntries) {
+        const inTime = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+        const outTime = ce.clock_out ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true }) : "ongoing";
+        lines.push(`  ${inTime} → ${outTime}`);
+      }
+    }
+    return lines;
+  };
+
+  const copyAll = () => {
+    navigator.clipboard.writeText(buildReportLines().join("\n"));
     toast.success("Overview report copied");
   };
 
