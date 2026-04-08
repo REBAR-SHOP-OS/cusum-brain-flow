@@ -1241,16 +1241,10 @@ function SystemAgentsSummary() {
               <div className="flex items-center">
                 <AccordionTrigger className="flex-1 px-4 py-3 hover:no-underline">
                   <div className="flex items-center gap-3 w-full">
-                    <span className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center",
-                      hasActivity ? "bg-primary/20" : "bg-muted"
-                    )}>
-                      <Bot className={cn("w-4 h-4", hasActivity ? "text-primary" : "text-muted-foreground/50")} />
+                    <span className={`w-8 h-8 rounded-full flex items-center justify-center ${hasActivity ? "bg-primary/20" : "bg-muted"}`}>
+                      <Bot className={`w-4 h-4 ${hasActivity ? "text-primary" : "text-muted-foreground/50"}`} />
                     </span>
-                    <span className={cn(
-                      "font-semibold text-sm",
-                      hasActivity ? "text-foreground" : "text-muted-foreground"
-                    )}>{displayName}</span>
+                    <span className={`font-semibold text-sm ${hasActivity ? "text-foreground" : "text-muted-foreground"}`}>{displayName}</span>
                     <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground mr-2">
                       <span className="flex items-center gap-1">
                         <Users className="w-3.5 h-3.5" />
