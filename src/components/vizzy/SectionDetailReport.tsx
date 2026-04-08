@@ -358,7 +358,7 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
           <div className="space-y-1.5">
             {report.byEventType.slice(0, 10).map((b) => (
               <div key={b.eventType} className="flex items-center justify-between text-sm px-2 py-1 rounded bg-muted/20">
-                <span className="text-foreground">{formatEventType(b.eventType)}</span>
+                <span className="text-foreground">{humanLabel(b.eventType)}</span>
                 <span className="font-medium text-primary">{b.count}</span>
               </div>
             ))}
