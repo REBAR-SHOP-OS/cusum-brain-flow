@@ -413,9 +413,11 @@ export default function TimeClock() {
               <span className="text-xs text-muted-foreground">Face ID</span>
               <Switch checked={faceMode} onCheckedChange={handleFaceModeToggle} />
             </div>
-            <Button variant="outline" size="sm" className="gap-1" onClick={enterKioskMode}>
-              <Maximize className="w-3.5 h-3.5" /> Kiosk
-            </Button>
+            {user?.email?.toLowerCase() === "ai@rebar.shop" && (
+              <Button variant="outline" size="sm" className="gap-1" onClick={enterKioskMode}>
+                <Maximize className="w-3.5 h-3.5" /> Kiosk
+              </Button>
+            )}
           </div>
         </div>
       </header>
