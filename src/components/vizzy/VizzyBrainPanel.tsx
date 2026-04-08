@@ -423,9 +423,11 @@ function GeneralReportPDFButton({ date, userId, userName }: { date: Date; userId
       }, { timeoutMs: 90000 });
 
       if (data?.error) throw new Error(data.error);
-      if (!data?.url) throw new Error("No download URL returned");
+      if (!data?.html) throw new Error("No report content returned");
 
-      window.open(data.url, "_blank");
+      const blob = new Blob([data.html], { type: "text/html" });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank");
       sonnerToast.success("Report generated — opening in new tab");
     } catch (err: any) {
       console.error("Report generation failed:", err);

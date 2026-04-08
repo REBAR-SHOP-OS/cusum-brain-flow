@@ -94,23 +94,7 @@ Rules:
 
       const htmlDoc = buildHtmlDocument(reportContent, dateStr, targetUserName);
 
-      const fileName = `user-report-${targetUserId.slice(0, 8)}-${dateStr}-${Date.now()}.html`;
-      const { error: uploadError } = await supabase.storage
-        .from("invoice-pdfs")
-        .upload(fileName, new TextEncoder().encode(htmlDoc), {
-          contentType: "text/html",
-          upsert: true,
-        });
-
-      if (uploadError) throw new Error("Failed to upload report");
-
-      const { data: signedData, error: signedError } = await supabase.storage
-        .from("invoice-pdfs")
-        .createSignedUrl(fileName, 60 * 60 * 24 * 30);
-
-      if (signedError || !signedData?.signedUrl) throw new Error("Failed to generate download URL");
-
-      return new Response(JSON.stringify({ url: signedData.signedUrl }), {
+      return new Response(JSON.stringify({ html: htmlDoc }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -177,23 +161,7 @@ Rules:
 
     const htmlDoc = buildHtmlDocument(reportContent, dateStr, "Company-Wide");
 
-    const fileName = `daily-report-${dateStr}-${Date.now()}.html`;
-    const { error: uploadError } = await supabase.storage
-      .from("invoice-pdfs")
-      .upload(fileName, new TextEncoder().encode(htmlDoc), {
-        contentType: "text/html",
-        upsert: true,
-      });
-
-    if (uploadError) throw new Error("Failed to upload report");
-
-    const { data: signedData, error: signedError } = await supabase.storage
-      .from("invoice-pdfs")
-      .createSignedUrl(fileName, 60 * 60 * 24 * 30);
-
-    if (signedError || !signedData?.signedUrl) throw new Error("Failed to generate download URL");
-
-    return new Response(JSON.stringify({ url: signedData.signedUrl }), {
+    return new Response(JSON.stringify({ html: htmlDoc }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
