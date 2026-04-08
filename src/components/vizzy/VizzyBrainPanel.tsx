@@ -18,6 +18,7 @@ import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
+import { useSystemAgentSessions, SystemAgentSummary } from "@/hooks/useSystemAgentSessions";
 import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
 import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
@@ -1466,10 +1467,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {!selectedProfile && rebarProfiles.length > 0 && (
-            <TeamDailyReport
-              profiles={rebarProfiles.filter((p) => p.email !== "ai@rebar.shop")}
-              timezone={timezone}
-            />
+            <>
+              <TeamDailyReport
+                profiles={rebarProfiles.filter((p) => p.email !== "ai@rebar.shop")}
+                timezone={timezone}
+              />
+              <SystemAgentsSummary />
+            </>
           )}
           {selectedProfile && (
             <div className="space-y-4">
