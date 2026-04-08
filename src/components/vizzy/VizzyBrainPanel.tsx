@@ -1307,6 +1307,10 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
   const selectedProfile = rebarProfiles.find((p) => p.id === selectedProfileId);
 
+  // Team daily activity for "All" Items view
+  const allProfileSlims = useMemo(() => rebarProfiles.filter(p => p.email !== "ai@rebar.shop").map(p => ({ id: p.id, user_id: p.user_id })), [rebarProfiles]);
+  const { data: teamDailyData } = useTeamDailyActivity(allProfileSlims, new Date());
+
   // Super admin edit capability
   const viewerEmail = user?.email?.toLowerCase() ?? "";
   const canEditAccess = SUPER_EDIT_EMAILS.includes(viewerEmail);
@@ -1401,6 +1405,21 @@ export function VizzyBrainPanel({ onClose }: Props) {
       );
     }
 
+    // Compute team-wide stats for "All" Items view
+    const teamStats = !selectedProfile && teamDailyData ? (() => {
+      let totalActivities = 0, totalHours = 0, totalAI = 0, totalEmails = 0;
+      const profileNames = new Map<string, string>();
+      for (const p of rebarProfiles) profileNames.set(p.id, p.full_name?.split(" ")[0] || "User");
+      for (const pid of Object.keys(teamDailyData)) {
+        const d = teamDailyData[pid];
+        totalActivities += d.activities.length;
+        totalHours += d.hoursToday;
+        totalAI += d.aiSessionsToday;
+        totalEmails += d.emailsSent;
+      }
+      return { totalActivities, totalHours: Math.round(totalHours * 10) / 10, totalAI, totalEmails, profileNames };
+    })() : null;
+
     return (
       <div className="rounded-xl border border-border bg-card relative">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
@@ -1427,6 +1446,63 @@ export function VizzyBrainPanel({ onClose }: Props) {
           />
         )}
         <div className="p-3">
+          {/* Summary stats banner for "All" view */}
+          {teamStats && (
+            <div className="mb-3 rounded-lg border border-border bg-muted/30 p-3">
+              <div className="flex items-center gap-1 mb-2">
+                <BarChart3 className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold text-foreground">System Summary — Today</span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                <div className="flex items-center gap-1.5 bg-card rounded-lg px-3 py-2 border border-border">
+                  <Activity className="w-4 h-4 text-primary" />
+                  <div>
+                    <div className="text-lg font-bold text-foreground">{teamStats.totalActivities}</div>
+                    <div className="text-[10px] text-muted-foreground">Activities</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 bg-card rounded-lg px-3 py-2 border border-border">
+                  <Clock className="w-4 h-4 text-primary" />
+                  <div>
+                    <div className="text-lg font-bold text-foreground">{teamStats.totalHours}h</div>
+                    <div className="text-[10px] text-muted-foreground">Hours Worked</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 bg-card rounded-lg px-3 py-2 border border-border">
+                  <Sparkles className="w-4 h-4 text-primary" />
+                  <div>
+                    <div className="text-lg font-bold text-foreground">{teamStats.totalAI}</div>
+                    <div className="text-[10px] text-muted-foreground">AI Sessions</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 bg-card rounded-lg px-3 py-2 border border-border">
+                  <Mail className="w-4 h-4 text-primary" />
+                  <div>
+                    <div className="text-lg font-bold text-foreground">{teamStats.totalEmails}</div>
+                    <div className="text-[10px] text-muted-foreground">Emails Sent</div>
+                  </div>
+                </div>
+              </div>
+              {/* Per-user performance row */}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {rebarProfiles.filter(p => p.email !== "ai@rebar.shop").map(p => {
+                  const d = teamDailyData?.[p.id];
+                  if (!d || (d.activities.length === 0 && d.hoursToday === 0)) return null;
+                  const firstName = p.full_name?.split(" ")[0] || "?";
+                  return (
+                    <span key={p.id} className="inline-flex items-center gap-1 text-[10px] bg-card border border-border rounded-full px-2 py-0.5">
+                      <span className={`w-4 h-4 rounded-full ${getUserAvatarColor(p.full_name || "")} text-white flex items-center justify-center text-[8px] font-bold`}>
+                        {firstName.charAt(0)}
+                      </span>
+                      <span className="font-medium text-foreground">{firstName}</span>
+                      <span className="text-muted-foreground">{d.activities.length}act</span>
+                      {d.hoursToday > 0 && <span className="text-muted-foreground">{d.hoursToday.toFixed(1)}h</span>}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           {/* Accessible menu items for this user */}
           {selectedProfile?.email && (() => {
             const userMenuItems = accessOverride?.menus?.length ? accessOverride.menus : getVisibleMenus(selectedProfile.email);
@@ -1441,19 +1517,28 @@ export function VizzyBrainPanel({ onClose }: Props) {
             ) : null;
           })()}
           <Accordion type="multiple" className="w-full space-y-1">
-            {sectionsToShow.map((group) => (
-              <AccordionItem key={group.key} value={group.key} className="border border-border rounded-lg px-3">
-                <AccordionTrigger className="text-base font-medium hover:no-underline">
-                  <span className="flex items-center gap-2">
-                    {group.label}
-                    <span className="text-sm text-muted-foreground font-normal">({group.items.length})</span>
-                  </span>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <DateGroupedEntries items={group.items} />
-                </AccordionContent>
-              </AccordionItem>
-            ))}
+            {sectionsToShow.map((group) => {
+              // For "All" view, compute per-user contributions for this category
+              const categoryUserStats = !selectedProfile && teamDailyData && teamStats ? (() => {
+                // Match category group to activity types is not straightforward,
+                // so show memory entry count per category only
+                return null;
+              })() : null;
+
+              return (
+                <AccordionItem key={group.key} value={group.key} className="border border-border rounded-lg px-3">
+                  <AccordionTrigger className="text-base font-medium hover:no-underline">
+                    <span className="flex items-center gap-2">
+                      {group.label}
+                      <span className="text-sm text-muted-foreground font-normal">({group.items.length})</span>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <DateGroupedEntries items={group.items} />
+                  </AccordionContent>
+                </AccordionItem>
+              );
+            })}
           </Accordion>
         </div>
       </div>
