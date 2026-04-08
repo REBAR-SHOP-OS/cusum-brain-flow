@@ -337,7 +337,7 @@ export function useVizzyVoiceEngine() {
           digest: string;
           rawContext?: string;
           brainMemories?: string;
-        }>("vizzy-pre-digest", {}, { timeoutMs: 45000 });
+        }>("vizzy-pre-digest", {}, { timeoutMs: 120000 });
 
         if (data?.digest) {
           lastDigestRef.current = data.digest;
@@ -350,7 +350,7 @@ export function useVizzyVoiceEngine() {
         const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
           "vizzy-daily-brief",
           {},
-          { timeoutMs: 25000 }
+          { timeoutMs: 60000 }
         );
         const contextData = fallback?.rawContext || fallback?.briefing;
         if (contextData) {
@@ -364,7 +364,7 @@ export function useVizzyVoiceEngine() {
           const fallback = await invokeEdgeFunction<{ briefing: string; rawContext?: string }>(
             "vizzy-daily-brief",
             {},
-            { timeoutMs: 25000 }
+            { timeoutMs: 60000 }
           );
           const contextData = fallback?.rawContext || fallback?.briefing;
           if (contextData) {

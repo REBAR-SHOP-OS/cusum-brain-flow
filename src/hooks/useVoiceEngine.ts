@@ -428,7 +428,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     agentTextRef.current = "";
     conversationItemIdsRef.current = [];
 
-    const timeout = cfg.connectionTimeoutMs ?? 15_000;
+    const timeout = cfg.connectionTimeoutMs ?? 25_000;
     timeoutRef.current = setTimeout(() => {
       console.warn("Voice engine connection timeout");
       setState("error");
