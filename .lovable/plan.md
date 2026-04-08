@@ -1,25 +1,61 @@
 
 
-# Fix: Make URLs Clickable in DockChatBox Messages
+# Fix: Report Dialog Hidden Behind Vizzy Brain Panel
 
-## Problem
-In `DockChatBox.tsx`, the `renderMentionText` function only handles @mentions but does NOT detect or linkify URLs. When a user sends a link (e.g., a YouTube URL), it appears as plain text and is not clickable.
+## Root Cause
 
-The `MessageThread.tsx` already has the correct implementation — it splits text by URLs first, renders them as `<a target="_blank">` links, then processes mentions within non-URL segments.
+The Vizzy Brain panel renders at `z-[100000]`. The `SectionDetailReportDialog` uses the standard Radix `Dialog` component which renders its overlay and content at `z-50`. Since `z-50 < z-100000`, the dialog's black overlay appears behind the Brain panel (making the background go dark) while the dialog content is invisible — trapped underneath.
 
 ## Fix
 
-**File: `src/components/chat/DockChatBox.tsx`** (lines 409-434)
+**File: `src/components/vizzy/SectionDetailReport.tsx`** (lines 631)
 
-Replace the `renderMentionText` function with the same URL-aware version used in `MessageThread.tsx`:
+Add a z-index override to the `DialogContent` so it renders above the Brain panel:
 
-1. Split text by URL regex `/(https?:\/\/[^\s]+)/g` first
-2. Render URL segments as `<a href={url} target="_blank" rel="noopener noreferrer">` links
-3. Process @mentions only within non-URL text segments
-4. Preserve existing mention styling
+```tsx
+<DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col z-[100002]">
+```
 
-This is a direct port of the working logic from `MessageThread.tsx` lines 299-343.
+Also need to ensure the overlay is above too. Since Radix Dialog portal renders overlay + content as siblings, we need to add a custom overlay or use the `DialogOverlay` with a high z-index. The simplest approach: wrap with a portal-level style.
+
+Two changes in `SectionDetailReport.tsx`:
+
+1. Import `DialogOverlay` from the dialog component
+2. Add explicit `DialogOverlay` with `z-[100001]` and set `DialogContent` to `z-[100002]`
+
+Alternatively, the cleanest fix: add a `className` prop to `DialogContent` with `z-[100002]` — but Radix renders the overlay separately. So we need to also add a custom `DialogOverlay`.
+
+**Change in `src/components/vizzy/SectionDetailReport.tsx`:**
+
+```tsx
+// Line 2: Add DialogOverlay to imports
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogOverlay,
+} from "@/components/ui/dialog";
+
+// Lines 631: Add overlay and update content z-index
+<Dialog>
+  <DialogTrigger asChild>
+    ...
+  </DialogTrigger>
+  <DialogOverlay className="z-[100001]" />
+  <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col z-[100002]">
+    ...
+  </DialogContent>
+</Dialog>
+```
+
+We also need to verify `DialogOverlay` is exported from `src/components/ui/dialog.tsx`. If not, we add the export.
+
+**File: `src/components/ui/dialog.tsx`** — Verify `DialogOverlay` is exported (it likely is since it's a standard shadcn component, but we'll confirm and ensure it accepts className).
 
 ## Result
-All URLs in direct messages will be clickable and open in a new browser tab — matching the behavior already present in channel/thread messages.
+- Report dialogs will render above the Vizzy Brain panel
+- No more black screen behind the panel
+- Reports will be fully visible and functional
 
