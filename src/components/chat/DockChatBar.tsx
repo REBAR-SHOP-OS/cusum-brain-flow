@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { MessageSquare, Hash, Users, ChevronRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -84,17 +85,19 @@ export function DockChatBar() {
   }, [channels, openChat]);
 
   // Filter profiles based on domain
-  const visibleProfiles = profiles.filter((p) => {
-    if (p.id === myProfile?.id) return false;
-    
-    if (isInternal) return p.email?.endsWith("@rebar.shop");
-    return true;
-  });
+  const sortedProfiles = useMemo(() => {
+    const filtered = profiles.filter((p) => {
+      if (p.id === myProfile?.id) return false;
+      if (isInternal) return p.email?.endsWith("@rebar.shop");
+      return true;
+    });
+    return filtered.sort((a, b) => (unreadCounts.get(b.id) ?? 0) - (unreadCounts.get(a.id) ?? 0));
+  }, [profiles, myProfile?.id, isInternal, unreadCounts]);
 
   const groupChannels = channels.filter((c) => c.channel_type === "group");
   const dmChannels = channels.filter((c) => {
     if (c.channel_type !== "dm") return false;
-    return visibleProfiles.some(
+    return sortedProfiles.some(
       (p) => c.name.includes(p.full_name)
     );
   });
@@ -111,6 +114,16 @@ export function DockChatBar() {
       if (result?.id) {
         openChat(result.id, name, "dm");
         setLauncherOpen(false);
+        // Mark notifications from this sender as read
+        if (user) {
+          await supabase
+            .from("notifications")
+            .update({ status: "read" } as any)
+            .eq("user_id", user.id)
+            .eq("link_to", "/team-hub")
+            .eq("status", "unread")
+            .filter("metadata->>sender_profile_id", "eq", profileId);
+        }
       }
     } catch (err: any) {
       toast.error("Failed to open DM", { description: err.message });
@@ -163,7 +176,9 @@ export function DockChatBar() {
               {/* Team members - top for visibility */}
               <div className="px-2 pt-2 pb-2">
                 <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Start a Chat</p>
-                {visibleProfiles.map((p) => (
+                {sortedProfiles.map((p) => {
+                  const count = unreadCounts.get(p.id) ?? 0;
+                  return (
                     <button
                       key={p.id}
                       onClick={() => handleOpenDM(p.id, p.full_name)}
@@ -176,13 +191,14 @@ export function DockChatBar() {
                         </AvatarFallback>
                       </Avatar>
                       <span className="text-sm text-foreground truncate flex-1">{p.full_name}</span>
-                      {(unreadCounts.get(p.id) ?? 0) > 0 && (
-                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center shrink-0">
-                          {unreadCounts.get(p.id)}
+                      {count > 0 && (
+                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-destructive text-destructive-foreground text-[11px] font-bold leading-none flex items-center justify-center shrink-0">
+                          {count}
                         </span>
                       )}
                     </button>
-                  ))}
+                  );
+                })}
               </div>
 
               {/* Separator */}
