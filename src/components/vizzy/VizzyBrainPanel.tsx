@@ -1296,10 +1296,12 @@ export function VizzyBrainPanel({ onClose }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" onClick={handleAnalyze} disabled={analyzing || !hasCompanyContext} className="gap-1">
-              {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-              {analyzing ? "Analyzing..." : "Analyze Now"}
-            </Button>
+            {!selectedProfileId && (
+              <Button size="sm" onClick={handleAnalyze} disabled={analyzing || !hasCompanyContext} className="gap-1">
+                {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                {analyzing ? "Analyzing..." : "Analyze Now"}
+              </Button>
+            )}
             <button
               onClick={onClose}
               className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
