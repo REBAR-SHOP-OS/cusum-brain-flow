@@ -425,10 +425,64 @@ function GeneralReportPDFButton({ date, userId, userName }: { date: Date; userId
       if (data?.error) throw new Error(data.error);
       if (!data?.html) throw new Error("No report content returned");
 
-      const blob = new Blob([data.html], { type: "text/html" });
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, "_blank");
-      sonnerToast.success("Report generated — opening in new tab");
+      // Convert HTML to PDF via hidden iframe + html2canvas + jsPDF
+      const iframe = document.createElement("iframe");
+      iframe.style.position = "fixed";
+      iframe.style.left = "-9999px";
+      iframe.style.top = "0";
+      iframe.style.width = "794px"; // A4 width at 96dpi
+      iframe.style.height = "1123px";
+      document.body.appendChild(iframe);
+
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!iframeDoc) throw new Error("Cannot access iframe document");
+      iframeDoc.open();
+      iframeDoc.write(data.html);
+      iframeDoc.close();
+
+      // Wait for fonts/images to load
+      await new Promise(r => setTimeout(r, 800));
+
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+
+      const canvas = await html2canvas(iframeDoc.body, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        width: 794,
+        windowWidth: 794,
+      });
+
+      document.body.removeChild(iframe);
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdfWidth = 210; // A4 mm
+      const pdfHeight = 297;
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = pdfWidth / imgWidth;
+      const scaledHeight = imgHeight * ratio;
+
+      const pdf = new jsPDF("p", "mm", "a4");
+      let position = 0;
+      let remaining = scaledHeight;
+
+      // Multi-page support
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, scaledHeight);
+      remaining -= pdfHeight;
+
+      while (remaining > 0) {
+        position -= pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, "PNG", 0, position, pdfWidth, scaledHeight);
+        remaining -= pdfHeight;
+      }
+
+      const safeName = (userName || "user").replace(/\s+/g, "-");
+      const dateStr2 = date.toISOString().split("T")[0];
+      pdf.save(`report-${safeName}-${dateStr2}.pdf`);
+      sonnerToast.success("PDF دانلود شد");
     } catch (err: any) {
       console.error("Report generation failed:", err);
       sonnerToast.error(err.message || "Failed to generate report");
