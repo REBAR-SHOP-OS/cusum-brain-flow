@@ -1,31 +1,46 @@
 
 
-# Move "Switch Mode" to Top-Left and Rename to "Back to Home"
+# Fix: Vizzy Voice "SDP Failed" — Model Mismatch
 
-## What Changes
+## Root Cause
 
-The "SWITCH MODE" link at the bottom of the Office sidebar will be moved to the top of the sidebar (above the logo/header) and renamed to "Back to Home". It will link to `/home`.
+There are **two different default models** in the same connection flow:
 
-## File: `src/components/office/OfficeSidebar.tsx`
+1. **Token request** (line 437): `cfg.model ?? "gpt-4o-realtime-preview-2024-12-17"` → sent to edge function which overrides to `"gpt-4o-mini-realtime-preview-2025-06-03"`
+2. **SDP exchange** (line 540): `cfg.model ?? "gpt-4o-realtime-preview-2024-12-17"`
 
-### Remove from bottom (lines 78-87)
-Delete the entire footer block containing the "Switch Mode" link.
+The ephemeral token is created for model A, but the browser sends SDP to OpenAI requesting model B. OpenAI rejects because the token is bound to the model it was issued for.
 
-### Add to top of sidebar (before the header/logo block)
-Insert a new top bar with the ArrowLeft icon and "Back to Home" text, linking to `/home`:
+For Vizzy specifically (`useVizzyVoiceEngine.ts` line 268), the model IS explicitly set to `gpt-4o-mini-realtime-preview-2025-06-03`, so the token request works. But the SDP fallback on line 540 uses a stale default.
 
-```tsx
-{/* Back to Home */}
-<div className="px-3 py-2 border-b border-border">
-  <Link
-    to="/home"
-    className="flex items-center gap-2 text-[10px] tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase"
-  >
-    <ArrowLeft className="w-3.5 h-3.5" />
-    Back to Home
-  </Link>
-</div>
+## Fix
+
+**File: `src/hooks/useVoiceEngine.ts`**
+
+### Change 1 — Line 540
+Update the SDP model fallback to match:
+```typescript
+// Before:
+const model = cfg.model ?? "gpt-4o-realtime-preview-2024-12-17";
+
+// After:
+const model = cfg.model ?? "gpt-4o-mini-realtime-preview-2025-06-03";
 ```
 
-This places the navigation link at the very top of the sidebar, before the brand logo and "Office Tools" title.
+### Change 2 — Line 437
+Update the token request model fallback to match:
+```typescript
+// Before:
+model: cfg.model ?? "gpt-4o-realtime-preview-2024-12-17",
+
+// After:
+model: cfg.model ?? "gpt-4o-mini-realtime-preview-2025-06-03",
+```
+
+This ensures both the token creation and SDP negotiation always use the same model, eliminating the mismatch that causes OpenAI to reject the connection.
+
+## Files Modified
+| File | Change |
+|------|--------|
+| `src/hooks/useVoiceEngine.ts` | Align default model in token request (line 437) and SDP exchange (line 540) to `gpt-4o-mini-realtime-preview-2025-06-03` |
 
