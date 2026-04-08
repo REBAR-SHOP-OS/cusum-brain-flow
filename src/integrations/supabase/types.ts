@@ -15153,6 +15153,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_access_overrides: {
+        Row: {
+          agents: string[] | null
+          automations: string[] | null
+          company_id: string
+          email: string
+          id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          agents?: string[] | null
+          automations?: string[] | null
+          company_id?: string
+          email: string
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          agents?: string[] | null
+          automations?: string[] | null
+          company_id?: string
+          email?: string
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       user_agents: {
         Row: {
           agent_id: string
