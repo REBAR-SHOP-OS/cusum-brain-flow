@@ -1,53 +1,39 @@
 
 
-# حذف سیستم Auto-Clockout
+# Fix: General Report Filtering by Selected User's Menu Access
 
-## خلاصه
-حذف کامل منطق بستن خودکار شیفت‌ها. کارمندان فقط از طریق کیوسک یا دستی clock in/out می‌کنند.
+## Problem
+Line 928 in `VizzyBrainPanel.tsx` uses `getVisibleMenus(user?.email)` — the **logged-in user's** menus — to filter General Report sections. This means:
+- When an admin (e.g., Radin with fullAccess) selects another user like Zahra, Zahra's report still shows ALL sections instead of only "Business Tasks" and "Support"
+- The report should reflect **the selected profile's** menu permissions, not the viewer's
 
-## تغییرات
+## Fix
 
-### 1. حذف ۲ کران‌جاب از دیتابیس
-- Job #22: evening sweep (ساعت ۱۰ شب UTC — شنبه تا چهارشنبه)
-- Job #41: end_of_day sweep (ساعت ۹ شب UTC — هر روز)
+### File: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-```sql
-SELECT cron.unschedule(22);
-SELECT cron.unschedule(41);
+**Change lines 927–933**: Use the selected profile's email (when a profile is selected) instead of the logged-in user's email:
+
+```typescript
+// Filter sections by the SELECTED user's menu access (or viewer's if "All")
+const targetEmail = selectedProfile?.email ?? user?.email;
+const userMenus = getVisibleMenus(targetEmail);
+const accessibleGroups = grouped.filter((group) => {
+  const requiredMenu = GROUP_TO_MENU[group.key];
+  if (!requiredMenu) return true;
+  return userMenus.includes(requiredMenu);
+});
 ```
 
-### 2. حذف Edge Function
-- حذف فایل `supabase/functions/auto-clockout/index.ts`
+This single-line change ensures:
+- **Radin views Zahra** → only "Business Tasks" + "Support" sections appear
+- **Radin views Kourosh** → only "Time Clock", "Shop Floor", "Team Hub"
+- **"All" view** → shows sections based on the viewer's own access
+- **Each user's self-view** → matches their own menu items
 
-### 3. پاکسازی `useTimeClock.ts`
-- حذف تابع `closeStaleShifts` (خطوط ۲۴۷–۲۷۸)
-- حذف محاسبه `staleCount` (خطوط ۲۸۰–۲۸۵)
-- حذف خروجی‌های `closeStaleShifts` و `staleCount` از return
-- **نگه داشتن**: منطق بستن شیفت قبلی هنگام clock-in جدید (خطوط ۱۴۵–۱۵۴) — این ضروری است تا اگر کارمند فراموش کرد clock-out کند و فردا clock-in زد، شیفت قدیمی بسته شود
+### Menu config already correct
+The `userAccessConfig.ts` already matches the user's requested menu items exactly — no changes needed there.
 
-### 4. پاکسازی `TimeClock.tsx`
-- حذف `closeStaleShifts` و `staleCount` از destructure
-- حذف `staleConfirmOpen` state
-- حذف بلاک هشدار stale shifts (خطوط ۵۲۲–۵۳۶)
-- حذف `ConfirmActionDialog` مربوط به stale shifts (خطوط ۷۳۲–۷۴۴)
-
-### 5. غیرفعال‌سازی automation config
-- آپدیت `automation_configs` → `enabled = false` برای `auto_clockout`
-
-## آنچه حفظ می‌شود
-- Clock in/out دستی کارمند ✅
-- Kiosk punch (Face ID) ✅
-- Admin clock-out دستی ✅
-- بستن شیفت قبلی هنگام clock-in جدید ✅
-- محدودیت ساعت ۶ صبح ✅
-
-## فایل‌ها
-
-| فایل | تغییر |
+| File | Change |
 |------|--------|
-| `supabase/functions/auto-clockout/index.ts` | حذف |
-| `src/hooks/useTimeClock.ts` | حذف closeStaleShifts و staleCount |
-| `src/pages/TimeClock.tsx` | حذف UI هشدار و دکمه stale shifts |
-| دیتابیس (cron jobs) | حذف ۲ job |
-| دیتابیس (automation_configs) | غیرفعال |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Use selected profile's email for menu filtering |
 
