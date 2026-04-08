@@ -24,10 +24,9 @@ const HAS_FARSI_OR_LATIN = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
 const REPEATED_CHARS = /(.)\1{4,}/;
 const SCRIBE_ANNOTATION = /^\s*\(/;
 const PUNCTUATION_ONLY = /^[\s.,!?…\-–—:;'"]+$/;
-// Foreign scripts: Bengali, Devanagari, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam, Thai, Myanmar, CJK, Korean
 const FOREIGN_SCRIPT = /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0D7F\u0E00-\u0E7F\u1000-\u109F\u3000-\u9FFF\uAC00-\uD7AF]/;
 
-export function useAzinVoiceRelay() {
+export function useNilaVoiceRelay() {
   const [state, setState] = useState<RelayState>("idle");
   const [transcripts, setTranscripts] = useState<RelayTranscript[]>([]);
   const [partialText, setPartialText] = useState("");
@@ -133,7 +132,6 @@ export function useAzinVoiceRelay() {
       if (FOREIGN_SCRIPT.test(trimmed)) return;
       if (REPEATED_CHARS.test(trimmed)) return;
       const wordCount = trimmed.split(/\s+/).length;
-      // Stricter noise gates: minimum 3 words or 8 chars
       if (wordCount < 3 && trimmed.length < 8) return;
       if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 2) return;
       console.log("[relay] committed transcript accepted:", trimmed, `(${wordCount} words, ${trimmed.length} chars)`);
@@ -161,7 +159,6 @@ export function useAzinVoiceRelay() {
           const translation = res?.translations?.[targetLang]?.trim();
           if (!translation) {
             console.warn("[relay] empty translation returned for:", trimmed);
-            // Show original with fallback note instead of silently removing
             setTranscripts((prev) =>
               prev.map((t) => t.id === entryId ? { ...t, translation: targetLang === "fa" ? "(ترجمه موجود نیست)" : "(translation unavailable)", isTranslating: false } : t)
             );
@@ -189,7 +186,6 @@ export function useAzinVoiceRelay() {
   const startSession = useCallback(async () => {
     setState("connecting");
     try {
-      // Fresh abort controller for this session
       abortRef.current = new AbortController();
 
       const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
@@ -210,16 +206,13 @@ export function useAzinVoiceRelay() {
   }, [scribe]);
 
   const endSession = useCallback(() => {
-    // 1. Abort all in-flight fetch requests (translate + TTS)
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
     }
 
-    // 2. Disconnect Scribe STT
     scribe.disconnect();
 
-    // 3. Stop and clean up all queued/playing audio
     audioQueueRef.current.forEach((a) => {
       a.onended = null;
       a.onerror = null;
@@ -229,7 +222,6 @@ export function useAzinVoiceRelay() {
     audioQueueRef.current = [];
     isPlayingRef.current = false;
 
-    // 4. Clear all state
     setState("idle");
     setPartialText("");
     setTranscripts([]);

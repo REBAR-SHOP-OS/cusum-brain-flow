@@ -1,11 +1,11 @@
 import { motion } from "framer-motion";
-import azinAvatar from "@/assets/helpers/azin-helper.png";
+import nilaAvatar from "@/assets/helpers/nila-helper.png";
 
-interface AzinVoiceChatButtonProps {
+interface NilaVoiceChatButtonProps {
   onClick: () => void;
 }
 
-export function AzinVoiceChatButton({ onClick }: AzinVoiceChatButtonProps) {
+export function NilaVoiceChatButton({ onClick }: NilaVoiceChatButtonProps) {
   return (
     <button
       onClick={onClick}
@@ -31,7 +31,7 @@ export function AzinVoiceChatButton({ onClick }: AzinVoiceChatButtonProps) {
 
       {/* Avatar */}
       <div className="w-12 h-12 rounded-full overflow-hidden ring-2 ring-primary/50 group-hover:ring-primary transition-all shadow-lg">
-        <img src={azinAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
+        <img src={nilaAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
       </div>
     </button>
   );

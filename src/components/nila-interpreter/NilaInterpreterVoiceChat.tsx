@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { X, Mic, Loader2, FileText } from "lucide-react";
-import { useAzinVoiceRelay, RelayTranscript } from "@/hooks/useAzinVoiceRelay";
+import { useNilaVoiceRelay, RelayTranscript } from "@/hooks/useNilaVoiceRelay";
 import { cn } from "@/lib/utils";
-import azinAvatar from "@/assets/helpers/azin-helper.png";
+import nilaAvatar from "@/assets/helpers/nila-helper.png";
 import { motion, AnimatePresence } from "framer-motion";
 import { detectRtl } from "@/utils/textDirection";
 import { primeMobileAudio } from "@/lib/audioPlayer";
@@ -13,11 +13,11 @@ interface Props {
   onClose: () => void;
 }
 
-export function AzinInterpreterVoiceChat({ onClose }: Props) {
+export function NilaInterpreterVoiceChat({ onClose }: Props) {
   const {
     state, transcripts, partialText,
     startSession, endSession,
-  } = useAzinVoiceRelay();
+  } = useNilaVoiceRelay();
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const [connectingElapsed, setConnectingElapsed] = useState(0);
@@ -140,7 +140,7 @@ export function AzinInterpreterVoiceChat({ onClose }: Props) {
                 : state === "error" ? "0 0 20px 5px hsl(var(--destructive) / 0.3)" : "none",
             }}
           >
-            <img src={azinAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
+            <img src={nilaAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
           </div>
           {state === "connecting" && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/60 rounded-full">

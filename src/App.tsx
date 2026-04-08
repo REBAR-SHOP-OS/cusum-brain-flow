@@ -108,7 +108,7 @@ import InboxManager from "./pages/InboxManager";
 import OrgChart from "./pages/OrgChart";
 import GlassesCapture from "./pages/GlassesCapture";
 import CameraIntelligence from "./pages/CameraIntelligence";
-import AzinInterpreter from "./pages/AzinInterpreter";
+import NilaInterpreter from "./pages/NilaInterpreter";
 import VizzyLive from "./pages/VizzyLive";
 const queryClient = new QueryClient();
 
@@ -197,7 +197,7 @@ const App = () => (
 
                     {/* AI Agents */}
                     <Route path="/agent/:agentId" element={<P><AgentWorkspace /></P>} />
-                    <Route path="/azin-interpreter" element={<P><AzinInterpreter /></P>} />
+                    <Route path="/nila-interpreter" element={<P><NilaInterpreter /></P>} />
 
                     {/* Operations */}
                     <Route path="/shop-floor" element={<P><ShopFloor /></P>} />

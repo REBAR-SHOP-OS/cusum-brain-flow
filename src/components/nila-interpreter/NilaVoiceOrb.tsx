@@ -3,7 +3,7 @@ import { Mic, MicOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 
-interface AzinVoiceOrbProps {
+interface NilaVoiceOrbProps {
   isConnected: boolean;
   isConnecting: boolean;
   onToggle: () => void;
@@ -14,7 +14,7 @@ const BASE_RADIUS = 46;
 const MAX_BAR_HEIGHT = 28;
 const MIN_BAR_HEIGHT = 3;
 
-export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceOrbProps) {
+export function NilaVoiceOrb({ isConnected, isConnecting, onToggle }: NilaVoiceOrbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animFrameRef = useRef<number>(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -37,7 +37,6 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
   useEffect(() => {
     if (!isConnected) {
       cleanup();
-      // Draw idle state
       drawIdle();
       return;
     }
@@ -96,7 +95,6 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
 
     ctx.clearRect(0, 0, size, size);
 
-    // Draw subtle idle bars
     for (let i = 0; i < NUM_BARS; i++) {
       const angle = (i / NUM_BARS) * Math.PI * 2 - Math.PI / 2;
       const barH = MIN_BAR_HEIGHT * dpr;
@@ -131,7 +129,6 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
       const dataIndex = Math.floor((i / NUM_BARS) * bufferLength);
       const value = dataArray[dataIndex] / 255;
 
-      // Smooth the values
       const target = MIN_BAR_HEIGHT + value * MAX_BAR_HEIGHT;
       smoothedRef.current[i] += (target - smoothedRef.current[i]) * 0.25;
       const barH = smoothedRef.current[i] * dpr;
@@ -143,7 +140,6 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
       const x2 = cx + Math.cos(angle) * (innerR + barH);
       const y2 = cy + Math.sin(angle) * (innerR + barH);
 
-      // Gradient from blue to cyan based on amplitude
       const hue = 245 + value * 20;
       const lightness = 50 + value * 15;
       const alpha = 0.5 + value * 0.5;
@@ -158,7 +154,6 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
     }
   };
 
-  // Setup canvas DPR
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -173,13 +168,11 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
 
   return (
     <div className="relative flex items-center justify-center">
-      {/* Canvas for audio bars */}
       <canvas
         ref={canvasRef}
         className="absolute pointer-events-none"
       />
 
-      {/* Outer glow rings when active */}
       {isConnected && (
         <>
           <motion.div
@@ -195,7 +188,6 @@ export function AzinVoiceOrb({ isConnected, isConnecting, onToggle }: AzinVoiceO
         </>
       )}
 
-      {/* Main button */}
       <motion.button
         onClick={onToggle}
         disabled={isConnecting}

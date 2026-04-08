@@ -5,13 +5,13 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { NilaVoiceAssistant } from "@/components/nila/NilaVoiceAssistant";
-import { LanguageMicButton } from "@/components/azin/LanguageMicButton";
+import { LanguageMicButton } from "@/components/nila-interpreter/LanguageMicButton";
+import nilaAvatar from "@/assets/helpers/nila-helper.png";
+import { NilaInterpreterVoiceChat } from "@/components/nila-interpreter/NilaInterpreterVoiceChat";
 import { AnimatePresence } from "framer-motion";
-import azinAvatar from "@/assets/helpers/azin-helper.png";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 
-export default function AzinInterpreter() {
+export default function NilaInterpreter() {
   const navigate = useNavigate();
   const [showVoiceChat, setShowVoiceChat] = useState(false);
   const enBottomRef = useRef<HTMLDivElement>(null);
@@ -137,7 +137,7 @@ export default function AzinInterpreter() {
         </div>
       </div>
 
-      {/* Bottom bar: EN mic + AZIN avatar + FA mic */}
+      {/* Bottom bar: EN mic + Nila avatar + FA mic */}
       <div className="flex items-center justify-center gap-6 py-6 border-t border-border">
         {/* EN Record Button */}
         <LanguageMicButton
@@ -149,7 +149,7 @@ export default function AzinInterpreter() {
           onToggle={() => handleLangToggle("en")}
         />
 
-        {/* AZIN Voice Interpreter Button */}
+        {/* Nila Voice Interpreter Button */}
         <button
           onClick={() => {
             primeMobileAudio();
@@ -159,7 +159,7 @@ export default function AzinInterpreter() {
           aria-label="Start voice interpreter with Nila"
         >
           <div className="w-14 h-14 rounded-full overflow-hidden ring-2 ring-primary/50 group-hover:ring-primary transition-all shadow-lg">
-            <img src={azinAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
+            <img src={nilaAvatar} alt="Nila" className="w-full h-full object-cover" draggable={false} />
           </div>
         </button>
 
@@ -177,7 +177,7 @@ export default function AzinInterpreter() {
       {/* Voice Chat Overlay */}
       <AnimatePresence>
         {showVoiceChat && (
-          <NilaVoiceAssistant onClose={() => setShowVoiceChat(false)} />
+          <NilaInterpreterVoiceChat onClose={() => setShowVoiceChat(false)} />
         )}
       </AnimatePresence>
     </div>
