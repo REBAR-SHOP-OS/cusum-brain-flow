@@ -1,27 +1,26 @@
 
 
-# Add Delete Profile Photo Button to Settings Page
+# Fix Vizzy Voice Connection Timeout — Root Cause & Solution
 
-## Problem
-There is no way to remove/delete a profile photo on the Settings page. Users can only upload a new one via the camera icon but cannot revert to the default avatar.
+## Root Cause (confirmed from logs)
 
-## Solution
-Add a small "delete" (trash/X) icon button next to the camera icon on the avatar. When clicked, it clears the `avatar_url` on the profile and removes the file from storage.
+OpenAI returns **400 Bad Request**: `Unknown parameter: 'turn_detection.eagerness'`. The model `gpt-4o-mini-realtime-preview-2025-06-03` does not support the `eagerness` parameter in `turn_detection`. Every connection attempt fails immediately, causing the timeout and auto-retry loop seen in the screenshot.
+
+This needs fixing in **two places** — the edge function and the client hook.
 
 ## Changes
 
 | File | Change |
 |------|--------|
-| `src/pages/Settings.tsx` | Add a delete avatar button (Trash2 icon) that appears only when a photo exists. On click: update profile `avatar_url` to `null`, remove file from storage, show toast. Position it opposite the camera button (bottom-left of avatar). |
+| `supabase/functions/voice-engine-token/index.ts` | Remove `eagerness` from destructuring (line 17) and remove the conditional block that adds it to `turnDetection` (lines 26-28). Also update default model from `gpt-4o-realtime-preview-2024-12-17` to `gpt-4o-mini-realtime-preview-2025-06-03` to match what the client actually sends. |
+| `src/hooks/useVoiceEngine.ts` | Remove `eagerness` from the config interface (line 42), remove `eagerness` from the body sent to `voice-engine-token` (line 465). |
+| `src/hooks/useVizzyVoiceEngine.ts` | Remove `eagerness: "low"` from the config passed to `useVoiceEngine` (line 273). |
 
-### Implementation Detail
+## Vizzy Brain Integration
 
-- Import `Trash2` from lucide-react
-- Add a `handleAvatarDelete` function:
-  - Call `supabase.from("profiles").update({ avatar_url: null }).eq("id", myProfile.id)`
-  - Attempt `supabase.storage.from("avatars").remove([profileId + ".*"])` (best-effort cleanup)
-  - Invalidate profiles query
-  - Show success toast
-- Render the delete button at `absolute bottom-0 left-0` (mirroring the camera button on the right), only when `myProfile?.avatar_url` exists
-- Style: same size/shape as camera button but with `hover:bg-destructive/10` and red icon color
+The voice engine already uses Vizzy Brain data — the `useVizzyVoiceEngine` hook fetches `vizzy-pre-digest` (which contains all Brain data including memories) and injects it into the system instructions. The `appendLiveResult` mechanism feeds real-time tool results back into the session. No changes needed for this — it's already working correctly once the connection succeeds.
+
+## Deploy
+
+After code changes, deploy `voice-engine-token` edge function immediately.
 
