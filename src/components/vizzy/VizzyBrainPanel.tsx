@@ -952,11 +952,13 @@ function TeamDailyReport({
         </Popover>
         <SectionDetailReportDialog
           sectionType="team"
-          profileId={sorted[0]?.id || ""}
-          userId={sorted[0]?.user_id || null}
+          profileId=""
+          userId={null}
           userName="Team"
           date={selectedDate}
           timezone={timezone}
+          teamProfiles={profiles}
+          teamData={data}
         />
       </div>
       <div className="p-3">

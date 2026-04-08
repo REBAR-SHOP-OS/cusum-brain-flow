@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,16 +6,26 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ClipboardList, Clock, BarChart3, Users, Copy, Activity, Globe, Mail, Database, Brain } from "lucide-react";
+import { ClipboardList, Clock, BarChart3, Users, Copy, Activity, Globe, Mail, Database, Brain, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useDetailedActivityReport } from "@/hooks/useDetailedActivityReport";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { formatDateInTimezone } from "@/lib/dateConfig";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import type { ActivityEvent } from "@/hooks/useUserActivityLog";
+import type { TeamMemberActivity } from "@/hooks/useTeamDailyActivity";
 
 type SectionType = "activity" | "timeclock" | "overview" | "team";
+
+interface TeamProfile {
+  id: string;
+  full_name: string;
+  email?: string;
+  user_id: string | null;
+  title?: string;
+}
 
 interface Props {
   sectionType: SectionType;
@@ -24,6 +34,8 @@ interface Props {
   userName: string;
   date: Date;
   timezone: string;
+  teamProfiles?: TeamProfile[];
+  teamData?: Record<string, TeamMemberActivity>;
 }
 
 function humanLabel(eventType: string): string {
