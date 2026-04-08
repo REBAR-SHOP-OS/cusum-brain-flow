@@ -1,39 +1,48 @@
 
 
-# Fix: General Report Filtering by Selected User's Menu Access
+# Fix: General Report Sections Must Match User Menu Items
 
 ## Problem
-Line 928 in `VizzyBrainPanel.tsx` uses `getVisibleMenus(user?.email)` — the **logged-in user's** menus — to filter General Report sections. This means:
-- When an admin (e.g., Radin with fullAccess) selects another user like Zahra, Zahra's report still shows ALL sections instead of only "Business Tasks" and "Support"
-- The report should reflect **the selected profile's** menu permissions, not the viewer's
+Two issues:
 
-## Fix
+1. **Empty sections are hidden** — Line 937 in `VizzyBrainPanel.tsx` filters out groups with no data (`group.items.length > 0`). When Radin (full access) is selected, only "Business Tasks" and "Time Clock" show because other sections have no entries today. The user wants ALL accessible sections to always appear.
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx`
+2. **Neel's config is too broad** — Uses `ALL_MENUS minus CEO Portal`, which includes "Admin Panel" and "Kiosk" not in the user's specified list.
 
-**Change lines 927–933**: Use the selected profile's email (when a profile is selected) instead of the logged-in user's email:
+## Changes
 
+### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
+**Remove the empty-section filter** (line 936–938):
 ```typescript
-// Filter sections by the SELECTED user's menu access (or viewer's if "All")
-const targetEmail = selectedProfile?.email ?? user?.email;
-const userMenus = getVisibleMenus(targetEmail);
-const accessibleGroups = grouped.filter((group) => {
-  const requiredMenu = GROUP_TO_MENU[group.key];
-  if (!requiredMenu) return true;
-  return userMenus.includes(requiredMenu);
-});
+// Before:
+const sectionsToShow = selectedProfile
+  ? accessibleGroups.filter((group) => group.items.length > 0)
+  : accessibleGroups;
+
+// After:
+const sectionsToShow = accessibleGroups;
 ```
+This ensures all menu-accessible sections appear for every user, showing "(0)" when no data exists.
 
-This single-line change ensures:
-- **Radin views Zahra** → only "Business Tasks" + "Support" sections appear
-- **Radin views Kourosh** → only "Time Clock", "Shop Floor", "Team Hub"
-- **"All" view** → shows sections based on the viewer's own access
-- **Each user's self-view** → matches their own menu items
+### 2. `src/lib/userAccessConfig.ts`
+**Replace neel's dynamic filter with an explicit list** (line 95):
+```typescript
+menus: [
+  "Dashboard", "Inbox", "Team Hub", "Business Tasks", "Live Monitor",
+  "Support", "Pipeline", "Lead Scoring", "Customers", "Accounting",
+  "Sales", "Shop Floor", "Time Clock", "Office Tools",
+  "Inventory", "Diagnostics", "Architecture", "Settings",
+],
+```
+This removes "Admin Panel" and "Kiosk" that were being included by the previous `ALL_MENUS.filter()` logic.
 
-### Menu config already correct
-The `userAccessConfig.ts` already matches the user's requested menu items exactly — no changes needed there.
+## Result
+- Each user's General Report shows exactly the sections matching their menu items
+- Empty sections still appear (with 0 count) so structure is always consistent
+- Neel's access matches the specified 18-item list exactly
 
 | File | Change |
 |------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Use selected profile's email for menu filtering |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Remove empty-section filter |
+| `src/lib/userAccessConfig.ts` | Explicit menu list for neel |
 
