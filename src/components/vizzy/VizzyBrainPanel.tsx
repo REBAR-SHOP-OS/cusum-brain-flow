@@ -410,100 +410,151 @@ function SectionReportButton({ label, getText }: { label: string; getText: () =>
   );
 }
 
-/** PDF generation button for per-user comprehensive report */
-function GeneralReportPDFButton({ date, userId, userName }: { date: Date; userId?: string; userName?: string }) {
-  const [loading, setLoading] = useState(false);
+/** Comprehensive Items Report Dialog Button */
+function ItemsFullReportButton({ date, userName, sections, teamStats, timezone }: {
+  date: Date;
+  userName: string;
+  sections: { key: string; label: string; icon?: React.ReactNode; items: VizzyMemoryEntry[] }[];
+  teamStats: { totalActivities: number; totalHours: number; totalAI: number; totalEmails: number; profileNames: Map<string, string> } | null;
+  timezone?: string;
+}) {
+  const [open, setOpen] = useState(false);
 
-  const handleGenerate = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (loading) return;
-    setLoading(true);
-    sonnerToast.info(`Generating report for ${userName || "user"}…`);
+  const totalItems = sections.reduce((s, g) => s + g.items.length, 0);
+  const dateStr = timezone ? formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" }) : format(date, "MMMM d, yyyy");
 
-    try {
-      const dateStr = date.toISOString().split("T")[0];
-      const data = await invokeEdgeFunction("generate-daily-report-pdf", {
-        date: dateStr, targetUserId: userId, targetUserName: userName,
-      }, { timeoutMs: 90000 });
-
-      if (data?.error) throw new Error(data.error);
-      if (!data?.html) throw new Error("No report content returned");
-
-      // Convert HTML to PDF via hidden iframe + html2canvas + jsPDF
-      const iframe = document.createElement("iframe");
-      iframe.style.position = "fixed";
-      iframe.style.left = "-9999px";
-      iframe.style.top = "0";
-      iframe.style.width = "794px"; // A4 width at 96dpi
-      iframe.style.height = "1123px";
-      document.body.appendChild(iframe);
-
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!iframeDoc) throw new Error("Cannot access iframe document");
-      iframeDoc.open();
-      iframeDoc.write(data.html);
-      iframeDoc.close();
-
-      // Wait for fonts/images to load
-      await new Promise(r => setTimeout(r, 800));
-
-      const html2canvas = (await import("html2canvas")).default;
-      const { jsPDF } = await import("jspdf");
-
-      const canvas = await html2canvas(iframeDoc.body, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        width: 794,
-        windowWidth: 794,
-      });
-
-      document.body.removeChild(iframe);
-
-      const imgData = canvas.toDataURL("image/png");
-      const pdfWidth = 210; // A4 mm
-      const pdfHeight = 297;
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = pdfWidth / imgWidth;
-      const scaledHeight = imgHeight * ratio;
-
-      const pdf = new jsPDF("p", "mm", "a4");
-      let position = 0;
-      let remaining = scaledHeight;
-
-      // Multi-page support
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, scaledHeight);
-      remaining -= pdfHeight;
-
-      while (remaining > 0) {
-        position -= pdfHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, pdfWidth, scaledHeight);
-        remaining -= pdfHeight;
-      }
-
-      const safeName = (userName || "user").replace(/\s+/g, "-");
-      const dateStr2 = date.toISOString().split("T")[0];
-      pdf.save(`report-${safeName}-${dateStr2}.pdf`);
-      sonnerToast.success("PDF دانلود شد");
-    } catch (err: any) {
-      console.error("Report generation failed:", err);
-      sonnerToast.error(err.message || "Failed to generate report");
-    } finally {
-      setLoading(false);
+  const handleCopy = () => {
+    let text = `=== ITEMS FULL REPORT ===\nDate: ${dateStr}\nUser: ${userName}\nTotal Items: ${totalItems} across ${sections.length} categories\n\n`;
+    if (teamStats) {
+      text += `--- TEAM SUMMARY ---\nActivities: ${teamStats.totalActivities} | Hours: ${teamStats.totalHours}h | AI Sessions: ${teamStats.totalAI} | Emails: ${teamStats.totalEmails}\n\n`;
     }
+    for (const sec of sections) {
+      text += `--- ${sec.label} (${sec.items.length} items) ---\n`;
+      for (const item of sec.items) {
+        const time = item.created_at ? format(new Date(item.created_at), "HH:mm") : "";
+        text += `  [${time}] ${item.category}${item.content ? ` — ${item.content.slice(0, 120)}` : ""}\n`;
+      }
+      text += "\n";
+    }
+    navigator.clipboard.writeText(text);
+    sonnerToast.success("Report copied to clipboard");
   };
 
   return (
-    <button
-      onClick={handleGenerate}
-      disabled={loading}
-      className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-50"
-      title={`Generate comprehensive report for ${userName || "user"}`}
-    >
-      {loading ? <Loader2 className="w-5 h-5 animate-spin text-destructive" /> : <Download className="w-5 h-5 text-destructive" />}
-    </button>
+    <>
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        className="p-1 rounded hover:bg-muted transition-colors"
+        title="View comprehensive items report"
+      >
+        <ClipboardList className="w-5 h-5 text-primary" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogPortal>
+          <DialogOverlay className="z-[100001]" />
+          <DialogPrimitive.Content
+            className="fixed left-[50%] top-[50%] z-[100002] grid w-full max-w-2xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg max-h-[85vh] overflow-hidden flex flex-col"
+          >
+            <DialogHeader className="flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="text-lg font-bold">📋 Comprehensive Items Report</DialogTitle>
+                <button onClick={handleCopy} className="flex items-center gap-1 text-xs px-2 py-1 rounded bg-muted hover:bg-muted/80 text-muted-foreground mr-6">
+                  <Copy className="w-3 h-3" /> Copy
+                </button>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">{userName} — {dateStr}</p>
+            </DialogHeader>
+
+            <ScrollArea className="flex-1 pr-2">
+              <div className="space-y-4">
+                {/* Executive Summary */}
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4 text-primary" /> Executive Summary</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                    <div className="rounded-md border bg-background p-3 text-center">
+                      <div className="text-2xl font-bold text-primary">{totalItems}</div>
+                      <div className="text-xs text-muted-foreground">Total Items</div>
+                    </div>
+                    <div className="rounded-md border bg-background p-3 text-center">
+                      <div className="text-2xl font-bold text-primary">{sections.length}</div>
+                      <div className="text-xs text-muted-foreground">Categories</div>
+                    </div>
+                    {teamStats && (
+                      <>
+                        <div className="rounded-md border bg-background p-3 text-center">
+                          <div className="text-2xl font-bold text-primary">{teamStats.totalHours}h</div>
+                          <div className="text-xs text-muted-foreground">Total Hours</div>
+                        </div>
+                        <div className="rounded-md border bg-background p-3 text-center">
+                          <div className="text-2xl font-bold text-primary">{teamStats.totalEmails}</div>
+                          <div className="text-xs text-muted-foreground">Emails Sent</div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This report covers <strong>{sections.length}</strong> categories with <strong>{totalItems}</strong> total items recorded on <strong>{dateStr}</strong>.
+                    {teamStats && ` Team logged ${teamStats.totalActivities} activities, ${teamStats.totalAI} AI sessions.`}
+                  </p>
+                </div>
+
+                {/* Team Stats Banner */}
+                {teamStats && (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3">
+                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><Users className="w-4 h-4 text-primary" /> Team Breakdown</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(teamStats.profileNames.entries()).map(([pid, name]) => (
+                        <span key={pid} className="text-xs px-2 py-1 rounded-full bg-primary/10 text-primary font-medium">{name}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Per-category breakdown */}
+                {sections.map((sec) => (
+                  <div key={sec.key} className="rounded-lg border border-border bg-card">
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/30">
+                      {sec.icon}
+                      <span className="text-sm font-semibold flex-1">{sec.label}</span>
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{sec.items.length} items</span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {sec.items.length === 0 ? (
+                        <p className="text-xs text-muted-foreground p-3 italic">No items recorded</p>
+                      ) : (
+                        sec.items.map((item) => (
+                          <div key={item.id} className="px-3 py-2">
+                            <div className="flex items-start gap-2">
+                              <span className="text-[10px] text-muted-foreground font-mono mt-0.5 shrink-0">
+                                {item.created_at ? format(new Date(item.created_at), "HH:mm") : "—"}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-foreground leading-snug">{item.category}</p>
+                                {item.content && (
+                                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.content}</p>
+                                )}
+                                {item.category && (
+                                  <span className="inline-block text-[10px] mt-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{item.category}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+
+            <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          </DialogPrimitive.Content>
+        </DialogPortal>
+      </Dialog>
+    </>
   );
 }
 
@@ -1611,7 +1662,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
               <Pencil className="w-3.5 h-3.5" />
             </button>
           )}
-          <GeneralReportPDFButton date={userSelectedDate} userId={selectedProfile?.user_id} userName={selectedProfile?.full_name} />
+          <ItemsFullReportButton date={userSelectedDate} userName={selectedProfile?.full_name || "All Users"} sections={sectionsToShow} teamStats={teamStats} timezone={timezone} />
         </div>
         {editingItems && canEditAccess && selectedProfile?.email && (
           <AccessEditorPopover
