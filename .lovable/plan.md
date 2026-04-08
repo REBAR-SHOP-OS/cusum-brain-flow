@@ -1,35 +1,27 @@
 
 
-# Fix All Clipboard Icons in Vizzy Brain — Root Cause & Solution
+# Add Delete Profile Photo Button to Settings Page
 
-## Root Cause
-
-In `SectionDetailReportDialog` (line 623), the `onClick` handler on the `DialogTrigger` button calls **`e.preventDefault()`**. This was added to prevent the parent `AccordionTrigger` from toggling, but it also **kills the Radix Dialog's open action**. The dialog never opens because its default click behavior is blocked.
-
-```
-onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-```
-
-`e.preventDefault()` → prevents Dialog from opening (the bug)
-`e.stopPropagation()` → prevents Accordion from toggling (needed)
+## Problem
+There is no way to remove/delete a profile photo on the Settings page. Users can only upload a new one via the camera icon but cannot revert to the default avatar.
 
 ## Solution
+Add a small "delete" (trash/X) icon button next to the camera icon on the avatar. When clicked, it clears the `avatar_url` on the profile and removes the file from storage.
 
-**File: `src/components/vizzy/SectionDetailReport.tsx` (line 623)**
-
-Remove `e.preventDefault()` from the `onClick` handler. Keep only `e.stopPropagation()` to prevent accordion toggle. The `onPointerDown` stopPropagation on line 624 already handles the Radix pointer event layer.
-
-```typescript
-// Before (broken):
-onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-
-// After (fixed):
-onClick={(e) => { e.stopPropagation(); }}
-```
-
-This is a single-line fix that resolves the issue for **all** clipboard icons across the entire Vizzy Brain panel (team report, per-user overview, activity, timeclock sections) since they all use the same `SectionDetailReportDialog` component.
+## Changes
 
 | File | Change |
 |------|--------|
-| `src/components/vizzy/SectionDetailReport.tsx` | Remove `e.preventDefault()` from DialogTrigger onClick (line 623) |
+| `src/pages/Settings.tsx` | Add a delete avatar button (Trash2 icon) that appears only when a photo exists. On click: update profile `avatar_url` to `null`, remove file from storage, show toast. Position it opposite the camera button (bottom-left of avatar). |
+
+### Implementation Detail
+
+- Import `Trash2` from lucide-react
+- Add a `handleAvatarDelete` function:
+  - Call `supabase.from("profiles").update({ avatar_url: null }).eq("id", myProfile.id)`
+  - Attempt `supabase.storage.from("avatars").remove([profileId + ".*"])` (best-effort cleanup)
+  - Invalidate profiles query
+  - Show success toast
+- Render the delete button at `absolute bottom-0 left-0` (mirroring the camera button on the right), only when `myProfile?.avatar_url` exists
+- Style: same size/shape as camera button but with `hover:bg-destructive/10` and red icon color
 
