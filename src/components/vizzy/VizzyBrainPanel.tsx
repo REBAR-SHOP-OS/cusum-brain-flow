@@ -421,7 +421,7 @@ function ItemsFullReportButton({ date, userName, sections, teamStats, timezone }
   const [open, setOpen] = useState(false);
 
   const totalItems = sections.reduce((s, g) => s + g.items.length, 0);
-  const dateStr = timezone ? formatDateInTimezone(date, timezone, "MMMM d, yyyy") : format(date, "MMMM d, yyyy");
+  const dateStr = timezone ? formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" }) : format(date, "MMMM d, yyyy");
 
   const handleCopy = () => {
     let text = `=== ITEMS FULL REPORT ===\nDate: ${dateStr}\nUser: ${userName}\nTotal Items: ${totalItems} across ${sections.length} categories\n\n`;
@@ -432,7 +432,7 @@ function ItemsFullReportButton({ date, userName, sections, teamStats, timezone }
       text += `--- ${sec.label} (${sec.items.length} items) ---\n`;
       for (const item of sec.items) {
         const time = item.created_at ? format(new Date(item.created_at), "HH:mm") : "";
-        text += `  [${time}] ${item.title}${item.content ? ` — ${item.content.slice(0, 120)}` : ""}\n`;
+        text += `  [${time}] ${item.category}${item.content ? ` — ${item.content.slice(0, 120)}` : ""}\n`;
       }
       text += "\n";
     }
@@ -529,7 +529,7 @@ function ItemsFullReportButton({ date, userName, sections, teamStats, timezone }
                                 {item.created_at ? format(new Date(item.created_at), "HH:mm") : "—"}
                               </span>
                               <div className="min-w-0 flex-1">
-                                <p className="text-sm font-medium text-foreground leading-snug">{item.title}</p>
+                                <p className="text-sm font-medium text-foreground leading-snug">{item.category}</p>
                                 {item.content && (
                                   <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.content}</p>
                                 )}
@@ -1662,7 +1662,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
               <Pencil className="w-3.5 h-3.5" />
             </button>
           )}
-          <GeneralReportPDFButton date={userSelectedDate} userId={selectedProfile?.user_id} userName={selectedProfile?.full_name} />
+          <ItemsFullReportButton date={userSelectedDate} userName={selectedProfile?.full_name || "All Users"} sections={sectionsToShow} teamStats={teamStats} timezone={timezone} />
         </div>
         {editingItems && canEditAccess && selectedProfile?.email && (
           <AccessEditorPopover
