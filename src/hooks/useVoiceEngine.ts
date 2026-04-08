@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { createRealtimePeerConnection, waitForIceGatheringComplete, countCandidates } from "@/lib/webrtc/realtimeConnection";
 
 /* ------------------------------------------------------------------ */
 /*  useVoiceEngine — Generic OpenAI Realtime WebRTC Voice Engine      */

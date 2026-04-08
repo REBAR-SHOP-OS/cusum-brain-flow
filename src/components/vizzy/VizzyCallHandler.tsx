@@ -13,6 +13,7 @@ import { useWebPhone } from "@/hooks/useWebPhone";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
+import { createRealtimePeerConnection, waitForIceGatheringComplete, countCandidates } from "@/lib/webrtc/realtimeConnection";
 
 const CEO_EXTENSION = "101";
 
@@ -238,8 +239,8 @@ export function VizzyCallHandler() {
         return;
       }
 
-      // Create WebRTC peer connection for OpenAI Realtime
-      const pc = new RTCPeerConnection();
+      // Create WebRTC peer connection for OpenAI Realtime (with STUN servers)
+      const pc = createRealtimePeerConnection();
       activeRealtimeSession.current = pc;
 
       // Get audio from the call session and feed to OpenAI
@@ -279,9 +280,21 @@ export function VizzyCallHandler() {
         } catch { /* ignore parse errors */ }
       };
 
-      // Create and send offer
+      // Create offer and wait for ICE gathering to complete
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+
+      console.log("[VizzyCallHandler] Waiting for ICE gathering...");
+      let fullDescription: RTCSessionDescription;
+      try {
+        fullDescription = await waitForIceGatheringComplete(pc);
+        console.log(`[VizzyCallHandler] ✅ ICE complete — ${countCandidates(fullDescription.sdp)} candidate(s)`);
+      } catch (iceErr: any) {
+        console.error("[VizzyCallHandler] ICE gathering failed:", iceErr?.message);
+        pc.close();
+        activeRealtimeSession.current = null;
+        return;
+      }
 
       let sdpResp: Response;
       try {
@@ -291,7 +304,7 @@ export function VizzyCallHandler() {
             Authorization: `Bearer ${tokenData.client_secret}`,
             "Content-Type": "application/sdp",
           },
-          body: offer.sdp,
+          body: fullDescription.sdp,
         });
       } catch (fetchErr: any) {
         console.error("[VizzyCallHandler] SDP fetch error:", fetchErr?.message);
