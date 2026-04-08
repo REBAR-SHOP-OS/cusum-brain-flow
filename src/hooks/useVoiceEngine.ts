@@ -462,12 +462,11 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           silenceDurationMs: cfg.silenceDurationMs ?? 300,
           prefixPaddingMs: cfg.prefixPaddingMs ?? 200,
           temperature: cfg.temperature ?? 0.8,
-          eagerness: cfg.eagerness ?? "auto",
         },
       });
 
-      if (error || !data?.client_secret) {
-        throw new Error(error?.message || "No ephemeral token received");
+      if (error || data?.fallback || !data?.client_secret) {
+        throw new Error(data?.error || error?.message || "No ephemeral token received");
       }
 
       // 3. Create RTCPeerConnection
