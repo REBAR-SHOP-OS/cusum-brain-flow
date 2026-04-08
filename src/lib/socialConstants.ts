@@ -22,7 +22,9 @@ export const PLATFORM_PAGES: Record<string, SelectionOption[]> = {
     { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
   ],
   linkedin: [
-    { value: "Sattar Esmaeili-Oureh", label: "Sattar Esmaeili-Oureh" },
+    { value: "Sattar Esmaeili-Oureh", label: "Sattar Esmaeili-Oureh (Personal)" },
+    { value: "Rebar.shop Ontario", label: "Rebar.shop Ontario" },
+    { value: "Rebar.shop", label: "Rebar.shop" },
   ],
   youtube: [
     { value: "Ontario Steel Detailing", label: "Ontario Steel Detailing" },

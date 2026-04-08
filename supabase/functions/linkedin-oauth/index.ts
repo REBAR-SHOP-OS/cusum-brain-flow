@@ -133,6 +133,32 @@ async function handleCallback(
     console.error("Failed to fetch LinkedIn profile:", e);
   }
 
+  // Auto-discover LinkedIn Organization pages the user administers
+  let organizationIds: Record<string, string> = {};
+  try {
+    const aclRes = await fetch(
+      "https://api.linkedin.com/v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&projection=(elements*(organization~(localizedName),organization))",
+      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+    );
+    if (aclRes.ok) {
+      const aclData = await aclRes.json();
+      const elements = aclData.elements || [];
+      for (const el of elements) {
+        const orgUrn = el.organization || "";
+        const orgId = orgUrn.split(":").pop() || "";
+        const orgName = el["organization~"]?.localizedName;
+        if (orgId && orgName) {
+          organizationIds[orgName] = orgId;
+          console.log(`[linkedin-oauth] Discovered org: "${orgName}" → ${orgId}`);
+        }
+      }
+    } else {
+      console.warn(`[linkedin-oauth] Organization ACL fetch failed (${aclRes.status}) — org publishing won't be available until reconnect`);
+    }
+  } catch (e) {
+    console.warn("[linkedin-oauth] Failed to fetch organizations:", e);
+  }
+
   const { error: dbError } = await supabase
     .from("integration_connections")
     .upsert({
@@ -145,6 +171,7 @@ async function handleCallback(
         refresh_token: tokens.refresh_token || null,
         profile_name: profileName,
         scope: tokens.scope,
+        organization_ids: organizationIds,
       },
       last_sync_at: new Date().toISOString(),
       error_message: null,
@@ -168,7 +195,7 @@ async function handleCallback(
 
 function handleGetAuthUrl(supabaseUrl: string, clientId: string, userId: string, body: Record<string, unknown>) {
   const redirectUri = `${supabaseUrl}/functions/v1/linkedin-oauth/callback`;
-  const scope = "openid profile email w_member_social";
+  const scope = "openid profile email w_member_social w_organization_social r_organization_social";
   const state = `${userId}|${body.returnUrl || ""}`;
 
   const authUrl = new URL(LINKEDIN_AUTH_URL);

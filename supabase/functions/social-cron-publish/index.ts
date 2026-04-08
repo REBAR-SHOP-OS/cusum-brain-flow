@@ -456,12 +456,15 @@ Deno.serve((req) =>
             }
           }
         } else if (post.platform === "linkedin") {
-          // OWNER-ONLY for LinkedIn too
-          const publishResult = await publishToLinkedIn(supabase, post.user_id, message, post.image_url, true);
-          if (publishResult.error) {
-            pageErrors.push(publishResult.error);
-          } else {
-            pageSuccesses.push("linkedin");
+          // Support multi-page LinkedIn (personal + company pages)
+          const linkedInPages = individualPages.length > 0 ? individualPages : [null];
+          for (const targetPage of linkedInPages) {
+            const publishResult = await publishToLinkedIn(supabase, post.user_id, message, post.image_url, true, targetPage || undefined);
+            if (publishResult.error) {
+              pageErrors.push(`${targetPage || "linkedin"}: ${publishResult.error}`);
+            } else {
+              pageSuccesses.push(targetPage || "linkedin");
+            }
           }
         }
 
@@ -650,7 +653,7 @@ async function publishToInstagram(
 
 async function publishToLinkedIn(
   supabase: ReturnType<typeof createClient>, userId: string, text: string,
-  imageUrl?: string | null, ownerOnly: boolean = false
+  imageUrl?: string | null, ownerOnly: boolean = false, pageName?: string
 ): Promise<{ id?: string; error?: string }> {
   try {
     let { data: connection } = await supabase
@@ -695,19 +698,32 @@ async function publishToLinkedIn(
     }
 
     if (!connection) return { error: "LinkedIn not connected for any team member." };
-    const config = connection.config as { access_token: string; expires_at: number };
+    const config = connection.config as { access_token: string; expires_at: number; organization_ids?: Record<string, string> };
 
     if (config.expires_at < Date.now()) return { error: "LinkedIn token expired — please reconnect LinkedIn in Settings → Integrations" };
 
-    // Get user URN
-    const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
-      headers: { Authorization: `Bearer ${config.access_token}` },
-    });
-    if (!profileRes.ok) return { error: "Failed to get LinkedIn identity" };
-    const profile = await profileRes.json();
+    // Determine author URN based on pageName
+    const isPersonal = !pageName || pageName === "Sattar Esmaeili-Oureh";
+    let authorUrn: string;
+
+    if (isPersonal) {
+      const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+        headers: { Authorization: `Bearer ${config.access_token}` },
+      });
+      if (!profileRes.ok) return { error: "Failed to get LinkedIn identity" };
+      const profile = await profileRes.json();
+      authorUrn = `urn:li:person:${profile.sub}`;
+    } else {
+      const orgIds = config.organization_ids || {};
+      const orgId = orgIds[pageName!];
+      if (!orgId) {
+        return { error: `LinkedIn organization ID not configured for "${pageName}". Please reconnect LinkedIn to auto-discover organization pages.` };
+      }
+      authorUrn = `urn:li:organization:${orgId}`;
+    }
 
     const payload: any = {
-      author: `urn:li:person:${profile.sub}`,
+      author: authorUrn,
       lifecycleState: "PUBLISHED",
       specificContent: {
         "com.linkedin.ugc.ShareContent": {
