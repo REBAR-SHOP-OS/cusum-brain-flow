@@ -244,46 +244,6 @@ export function useTimeClock() {
     }
   };
 
-  const closeStaleShifts = async () => {
-    setPunching(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("auto-clockout", {
-        body: { mode: "evening" },
-      });
-      if (error) {
-        console.error("[TimeClock] closeStaleShifts error:", error);
-        toast.error("Failed to close stale shifts");
-      } else if (data?.skipped) {
-        // Automation disabled — fallback: close manually via direct update
-        const { error: updateErr } = await supabase
-          .from("time_clock_entries")
-          .update({ clock_out: new Date().toISOString(), notes: "[admin: closed stale shift]" } as TimeClockPatch)
-          .is("clock_out", null)
-          .lt("clock_in", new Date(Date.now() - 10 * 60 * 60 * 1000).toISOString());
-        if (updateErr) {
-          toast.error("Failed to close stale shifts: " + updateErr.message);
-        } else {
-          toast.success("Stale shifts closed");
-        }
-      } else {
-        toast.success(`Closed ${data?.closed || 0} stale shifts`);
-      }
-      await fetchEntries();
-    } catch (err) {
-      console.error("[TimeClock] closeStaleShifts exception:", err);
-      toast.error("Failed to close stale shifts: " + getErrorMessage(err));
-    } finally {
-      setPunching(false);
-    }
-  };
-
-  // Count stale entries (open >10 hours)
-  const staleCount = allEntries.filter(e => {
-    if (e.clock_out) return false;
-    const hoursOpen = (Date.now() - new Date(e.clock_in).getTime()) / (1000 * 60 * 60);
-    return hoursOpen > 10;
-  }).length;
-
   return {
     entries,
     allEntries,
@@ -293,8 +253,6 @@ export function useTimeClock() {
     clockIn,
     clockOut,
     adminClockOut,
-    closeStaleShifts,
-    staleCount,
     myProfile,
     profiles,
   };
