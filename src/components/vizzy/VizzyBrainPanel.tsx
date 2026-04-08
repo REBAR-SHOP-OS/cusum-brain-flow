@@ -18,6 +18,7 @@ import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
+import { useSystemAgentSessions, SystemAgentSummary } from "@/hooks/useSystemAgentSessions";
 import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
 import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
@@ -1175,6 +1176,84 @@ function AccessEditorPopover({
   );
 }
 
+// ── System-Wide Agents Summary (for "All" view) ──────────────────────
+function SystemAgentsSummary() {
+  const { data: agents, isLoading } = useSystemAgentSessions();
+
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 flex items-center justify-center gap-2 text-muted-foreground">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        <span className="text-sm">Loading agent activity…</span>
+      </div>
+    );
+  }
+
+  if (!agents || agents.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground text-sm">
+        No agent activity today.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+        <Bot className="w-4 h-4 text-primary" />
+        <h3 className="text-base font-semibold text-foreground flex-1">Agent Activity — All Users</h3>
+        <span className="text-xs text-muted-foreground">{agents.length} agents active</span>
+      </div>
+      <Accordion type="multiple" className="divide-y divide-border">
+        {agents.map((agent) => (
+          <AccordionItem key={agent.agentName} value={agent.agentName} className="border-none">
+            <div className="flex items-center">
+              <AccordionTrigger className="flex-1 px-4 py-3 hover:no-underline">
+                <div className="flex items-center gap-3 w-full">
+                  <span className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                    <Bot className="w-4 h-4 text-primary" />
+                  </span>
+                  <span className="font-semibold text-foreground text-sm">{agent.agentName}</span>
+                  <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground mr-2">
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5" />
+                      {agent.userCount}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {agent.totalSessions} sessions
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Mail className="w-3.5 h-3.5" />
+                      {agent.totalMessages} msgs
+                    </span>
+                  </div>
+                </div>
+              </AccordionTrigger>
+            </div>
+            <AccordionContent className="px-4 pb-3">
+              <div className="space-y-1.5 ml-11">
+                {agent.users.map((u) => (
+                  <div
+                    key={u.userId}
+                    className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-muted/40"
+                  >
+                    <span className="font-medium text-foreground">{u.fullName}</span>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <span>{u.sessions} sessions</span>
+                      <span>{u.messages} msgs</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
+    </div>
+  );
+}
+
 const SUPER_EDIT_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
 
 export function VizzyBrainPanel({ onClose }: Props) {
@@ -1466,10 +1545,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {!selectedProfile && rebarProfiles.length > 0 && (
-            <TeamDailyReport
-              profiles={rebarProfiles.filter((p) => p.email !== "ai@rebar.shop")}
-              timezone={timezone}
-            />
+            <>
+              <TeamDailyReport
+                profiles={rebarProfiles.filter((p) => p.email !== "ai@rebar.shop")}
+                timezone={timezone}
+              />
+              <SystemAgentsSummary />
+            </>
           )}
           {selectedProfile && (
             <div className="space-y-4">
