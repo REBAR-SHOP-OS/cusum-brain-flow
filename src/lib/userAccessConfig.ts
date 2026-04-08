@@ -123,10 +123,10 @@ const USER_ACCESS: Record<string, UserConfig> = {
   },
 
   "ben@rebar.shop": {
-    menus: ["Sales", "Support", "Business Tasks"],
-    agents: ["sales", "support", "eisenhower"],
+    menus: ["Dashboard", "Inbox", "Team Hub", "Pipeline", "Time Clock"],
+    agents: ["sales", "support", "estimating", "eisenhower"],
     primaryAgent: "sales",
-    heroText: "How can **Gauge** help you today?",
+    heroText: "How can **Blitz** help you today?",
     quickActions: [
       { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
       { title: "Customer inquiry", prompt: "Show me recent customer inquiries and support tickets that need attention.", icon: "HeadphonesIcon", category: "Customer Care" },
