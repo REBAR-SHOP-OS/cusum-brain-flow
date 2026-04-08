@@ -935,6 +935,7 @@ function TeamDailyReport({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const profileSlims = useMemo(() => profiles.map((p) => ({ id: p.id, user_id: p.user_id })), [profiles]);
   const { data, isLoading } = useTeamDailyActivity(profileSlims, selectedDate);
+  useEagerReportPersistence(profiles, data, selectedDate, timezone);
 
   const isToday = useMemo(() => {
     const now = new Date();
