@@ -1223,75 +1223,82 @@ function AgentReportDialog({ agent, data, domainStats }: {
         <ClipboardList className="w-4 h-4" />
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Bot className="w-5 h-5 text-primary" />
-              {agent.name}
-              <span className="text-sm font-normal text-muted-foreground">— {agent.role}</span>
-            </DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="max-h-[60vh]">
-            <div className="space-y-4 pr-2">
-              {/* Domain Metrics */}
-              {domainStats && domainStats.length > 0 && (
+        <DialogPortal>
+          <DialogOverlay className="z-[100001]" />
+          <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100002] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg max-h-[80vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Bot className="w-5 h-5 text-primary" />
+                {agent.name}
+                <span className="text-sm font-normal text-muted-foreground">— {agent.role}</span>
+              </DialogTitle>
+            </DialogHeader>
+            <ScrollArea className="flex-1 pr-2">
+              <div className="space-y-4 pr-2">
+                {/* Domain Metrics */}
+                {domainStats && domainStats.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                      <BarChart3 className="w-3.5 h-3.5 text-primary" /> Domain Metrics
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {domainStats.map((s) => (
+                        <div key={s.label} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
+                          <span className="text-xs text-muted-foreground">{s.label}</span>
+                          <span className="text-sm font-semibold text-foreground">{s.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Today's Activity */}
                 <div>
                   <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                    <BarChart3 className="w-3.5 h-3.5 text-primary" /> Domain Metrics
+                    <Activity className="w-3.5 h-3.5 text-primary" /> Today's Activity
                   </h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    {domainStats.map((s) => (
-                      <div key={s.label} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
-                        <span className="text-xs text-muted-foreground">{s.label}</span>
-                        <span className="text-sm font-semibold text-foreground">{s.value}</span>
-                      </div>
-                    ))}
-                  </div>
+                  {hasActivity ? (
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
+                      <span>Sessions: <strong className="text-foreground">{data!.totalSessions}</strong></span>
+                      <span>Messages: <strong className="text-foreground">{data!.totalMessages}</strong></span>
+                      <span>Users: <strong className="text-foreground">{data!.userCount}</strong></span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic px-3 py-2 bg-muted/40 rounded-lg">No activity recorded today</p>
+                  )}
                 </div>
-              )}
 
-              {/* Today's Activity */}
-              <div>
-                <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                  <Activity className="w-3.5 h-3.5 text-primary" /> Today's Activity
-                </h4>
-                {hasActivity ? (
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground bg-muted/40 rounded-lg px-3 py-2">
-                    <span>Sessions: <strong className="text-foreground">{data!.totalSessions}</strong></span>
-                    <span>Messages: <strong className="text-foreground">{data!.totalMessages}</strong></span>
-                    <span>Users: <strong className="text-foreground">{data!.userCount}</strong></span>
+                {/* User Breakdown */}
+                {hasActivity && data!.users.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-primary" /> User Breakdown
+                    </h4>
+                    <div className="space-y-1">
+                      {data!.users.map((u) => (
+                        <div key={u.userId} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-muted/40">
+                          <span className="font-medium text-foreground">{u.fullName}</span>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span>{u.sessions} sessions</span>
+                            <span>{u.messages} msgs</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground italic px-3 py-2 bg-muted/40 rounded-lg">No activity recorded today</p>
+                )}
+
+                {!hasActivity && !hasStats && (
+                  <p className="text-sm text-muted-foreground text-center py-4 italic">No data available for this agent today</p>
                 )}
               </div>
-
-              {/* User Breakdown */}
-              {hasActivity && data!.users.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-primary" /> User Breakdown
-                  </h4>
-                  <div className="space-y-1">
-                    {data!.users.map((u) => (
-                      <div key={u.userId} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-muted/40">
-                        <span className="font-medium text-foreground">{u.fullName}</span>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span>{u.sessions} sessions</span>
-                          <span>{u.messages} msgs</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {!hasActivity && !hasStats && (
-                <p className="text-sm text-muted-foreground text-center py-4 italic">No data available for this agent today</p>
-              )}
-            </div>
-          </ScrollArea>
-        </DialogContent>
+            </ScrollArea>
+            <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </DialogPrimitive.Close>
+          </DialogPrimitive.Content>
+        </DialogPortal>
       </Dialog>
     </>
   );
