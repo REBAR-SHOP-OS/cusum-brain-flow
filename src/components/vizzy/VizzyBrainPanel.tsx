@@ -1022,7 +1022,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.9, opacity: 0, y: 40 }}
         transition={{ type: "spring", stiffness: 300, damping: 25 }}
-        className="relative w-full max-w-5xl max-h-[92vh] mx-4 rounded-2xl border border-border bg-background shadow-2xl flex flex-col overflow-hidden"
+        className="relative w-full max-w-7xl max-h-[92vh] mx-4 rounded-2xl border border-border bg-background shadow-2xl flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-5 border-b border-border bg-muted/30">
@@ -1052,7 +1052,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
         {/* User avatar bar */}
         {rebarProfiles.length > 0 && (
-          <div className="px-5 py-3 border-b border-border flex items-center gap-2 overflow-x-auto scrollbar-none">
+          <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setSelectedProfileId(null)}
               className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
