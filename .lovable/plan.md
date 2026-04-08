@@ -1,30 +1,38 @@
 
 
-# Show Unread Message Count per Team Member
+# Add Performance Metrics to Team Daily Report
 
 ## Problem
-Currently, unread messages from a team member only show a small green dot. The user wants to see the **actual count** of unread messages as a number badge, and it should disappear once messages are read.
+The Team Daily Report currently only shows activity count and clock entries per user. The user wants to also display performance metrics (hours worked, AI sessions, emails sent) alongside activities.
+
+## Approach
+
+Enhance the `useTeamDailyActivity` hook to also fetch performance data (chat sessions, communications) in the same parallel query batch, then display compact performance badges in each team member's row in the `TeamDailyReport` component.
 
 ## Changes
 
-### 1. `src/hooks/useUnreadSenders.ts`
-- Change from `Set<string>` to `Map<string, number>` to track counts per sender
-- Count occurrences of each `sender_profile_id` in unread notifications
-- Return `unreadCounts` (Map) alongside `unreadSenderIds` (Set) for backward compatibility
+### 1. `src/hooks/useTeamDailyActivity.ts`
 
-### 2. `src/components/teamhub/ChannelSidebar.tsx`
-- Import `unreadCounts` from the updated hook
-- Replace the green dot (line 283-285) with a numbered badge:
-  - Show count inside a small red/primary circle (e.g., `3`)
-  - Only render when count > 0
-  - Disappear when messages are read (count becomes 0)
+Expand `TeamMemberActivity` interface and query to include:
+- **hoursToday**: calculated from clock entries (already available)
+- **aiSessionsToday**: count from `chat_sessions` table per user
+- **emailsSent**: count from `communications` table (outbound) per user
 
-### 3. `src/components/chat/DockChatBar.tsx`
-- Same change: replace the green dot with a numbered badge using `unreadCounts`
+Add two more parallel queries:
+- `chat_sessions` filtered by `user_id IN (userIds)` for the day
+- `communications` filtered by `direction = 'outbound'` for the day, grouped by sender
+
+### 2. `src/components/vizzy/VizzyBrainPanel.tsx` — `TeamDailyReport`
+
+For each team member row (line 978-996), add compact performance badges after the activity count:
+- **Hours**: clock icon + hours worked (e.g., `6.2h`)
+- **AI Sessions**: brain/sparkles icon + count
+- **Emails**: mail icon + count
+
+Display as small inline badges similar to `(105 activities)` style, keeping the UI clean and compact.
 
 | File | Change |
 |------|--------|
-| `useUnreadSenders.ts` | Track unread count per sender (Map instead of Set) |
-| `ChannelSidebar.tsx` | Show numeric badge instead of green dot |
-| `DockChatBar.tsx` | Show numeric badge instead of green dot |
+| `useTeamDailyActivity.ts` | Add chat_sessions + communications queries; expand return type with performance metrics |
+| `VizzyBrainPanel.tsx` | Show hours, AI sessions, emails as compact badges per team member |
 
