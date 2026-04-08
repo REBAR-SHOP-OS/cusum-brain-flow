@@ -1,44 +1,27 @@
 
 
-# Vizzy Brain Panel — UI Enlargement & Readability
+# Restrict Sales Pipeline Assignees to Neel & Saurabh
 
-## Current State
-The panel is a modal dialog with:
-- `max-w-2xl` (~672px) width, `max-h-[85vh]` height (line 989)
-- Text sizes mostly `text-sm` / `text-xs`
-- Compact padding throughout
+## Change
 
-## Changes
+### `src/pages/sales/SalesPipeline.tsx` (line 98)
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx`
+Replace the broad `is_active` filter with the same email-based restriction used in `LeadFormModal.tsx`:
 
-**1. Enlarge modal container** (line 989):
-- Change `max-w-2xl` → `max-w-5xl` (wider)
-- Change `max-h-[85vh]` → `max-h-[92vh]` (taller)
+```typescript
+// Before:
+const activeProfiles = (profiles ?? []).filter(p => p.is_active);
 
-**2. Increase header text** (line 992–1014):
-- Title `text-lg` → `text-xl`
-- Entry count badge `text-xs` → `text-sm`
+// After:
+const SALES_ASSIGNEE_EMAILS = ["neel@rebar.shop", "saurabh@rebar.shop"];
+const activeProfiles = (profiles ?? []).filter(
+  p => p.is_active && p.email && SALES_ASSIGNEE_EMAILS.includes(p.email.toLowerCase())
+);
+```
 
-**3. Enlarge content area padding** (line 1057):
-- `px-5 py-4` → `px-6 py-5`
-
-**4. Increase General Report section text** (lines 948–970):
-- Section header `text-sm` → `text-base`
-- Accordion trigger `text-sm` → `text-base`
-- Item count badge stays `text-xs` → `text-sm`
-
-**5. Increase General Overview section text** (lines 1067–1077):
-- Header `text-sm` → `text-base`
-
-**6. Team Daily Report card text** — increase accordion item text sizes similarly
-
-**7. Increase accordion content readability**:
-- Entries inside `DateGroupedEntries` will benefit from the larger container width automatically
-
-All changes are purely visual — no logic or data flow modifications.
+This ensures the assignee dropdown, filter checkboxes, and drawer assignee manager all show only Neel and Saurabh — matching the CRM pipeline behavior exactly.
 
 | File | Change |
 |------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Enlarge modal, increase font sizes and padding |
+| `src/pages/sales/SalesPipeline.tsx` | Filter assignees to neel + saurabh only |
 
