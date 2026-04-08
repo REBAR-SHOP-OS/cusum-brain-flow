@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Mic, MicOff, Loader2, Copy, Check } from "lucide-react";
 import { useVizzyVoiceEngine } from "@/hooks/useVizzyVoiceEngine";
 import type { VizzyVoiceTranscript } from "@/hooks/useVizzyVoiceEngine";
+import type { VoiceConnectionPhase, VoiceErrorKind } from "@/hooks/useVoiceEngine";
 import { cn } from "@/lib/utils";
 import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { motion, AnimatePresence } from "framer-motion";
