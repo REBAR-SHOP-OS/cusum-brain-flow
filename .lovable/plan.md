@@ -1,48 +1,37 @@
 
 
-# Fix "Edge Function returned a non-2xx status code" on Report Download
+# Open Report in a Modal Instead of Copying to Clipboard
 
-## Root Cause
-Two issues combine to produce the opaque error:
+## Problem
+Currently, the "Generate full user report" button (FileText icon) copies the report text to clipboard silently. The user wants it to **open a visible page/modal** displaying the full report text.
 
-1. **Edge function returns HTTP 500 on errors** (line 201) — `supabase.functions.invoke()` swallows the response body on non-2xx status codes, so the client only sees "Edge Function returned a non-2xx status code" instead of the real error message.
+## Solution
+Replace the clipboard-copy behavior with a **Dialog/modal** that displays the generated report text in a readable, scrollable view. Keep a "Copy" button inside the modal for convenience.
 
-2. **Client uses `supabase.functions.invoke()`** instead of the project's existing `invokeEdgeFunction` utility which uses raw `fetch` and properly reads error bodies on any status code.
+### Change: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-Additionally, the edge function may be timing out on large reports (AI generation can take 30+ seconds).
+1. Add `useState` for controlling a report modal (`showReport` + `reportText`)
+2. Change the button's `onClick` to call `generateReport()` and set state to open the modal
+3. Render a `Dialog` with the report text displayed in a `<pre>` block (preserving formatting)
+4. Include a "Copy to clipboard" button inside the modal
 
-## Fix
-
-### 1. Edge Function: Always return 200 with error in body
-**File:** `supabase/functions/generate-daily-report-pdf/index.ts`
-
-Change the error catch block (line 200-205) to return `status: 200` with an `error` field in the JSON body — this ensures the client always receives the error message.
-
-```typescript
-// Before (line 201-202):
-return new Response(JSON.stringify({ error: err.message }), {
-  status: 500, ...
-
-// After:
-return new Response(JSON.stringify({ error: err.message }), {
-  status: 200, ...
-```
-
-### 2. Client: Use `invokeEdgeFunction` with longer timeout
-**File:** `src/components/vizzy/VizzyBrainPanel.tsx`
-
-Replace `supabase.functions.invoke()` with the project's existing `invokeEdgeFunction` utility which handles error bodies correctly and supports configurable timeouts (AI report generation needs more than 30s).
-
-```typescript
-// Before:
-const { data, error } = await supabase.functions.invoke("generate-daily-report-pdf", { body: ... });
-
-// After:
-const data = await invokeEdgeFunction("generate-daily-report-pdf", { ... }, { timeoutMs: 90000 });
+```text
+┌──────────────────────────────────┐
+│  📊 Full Report — Zahra         │  ✕
+│  📅 Date: Apr 8, 2026           │
+│  ─────────────────────────────  │
+│  ⏰ Status: Clocked In          │
+│  🕐 Hours: 3.3h                 │
+│  📋 Activities: 86              │
+│  ...                            │
+│                                 │
+│  [Copy to Clipboard]            │
+└──────────────────────────────────┘
 ```
 
 | File | Change |
 |------|--------|
-| `supabase/functions/generate-daily-report-pdf/index.ts` | Return status 200 on errors (with error field in body) |
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Switch to `invokeEdgeFunction` with 90s timeout, import it |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Add Dialog state to `UserFullReportButton`, show report text in modal instead of silent clipboard copy |
+
+One component change, one file. Uses existing `Dialog` UI components already in the project.
 
