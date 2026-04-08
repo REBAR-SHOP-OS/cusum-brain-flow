@@ -18,7 +18,7 @@ import talentHelper from "@/assets/helpers/talent-helper.png";
 import seoHelper from "@/assets/helpers/seo-helper.png";
 import growthHelper from "@/assets/helpers/growth-helper.png";
 import eisenhowerHelper from "@/assets/helpers/eisenhower-helper.png";
-import azinHelper from "@/assets/helpers/azin-helper.png";
+import nilaHelper from "@/assets/helpers/nila-helper.png";
 
 export interface AgentConfig {
   name: string;
@@ -220,11 +220,11 @@ export const agentConfigs: Record<string, AgentConfig> = {
     placeholder: "Ask about items to buy, list status, etc.",
     capabilities: ["Manage purchasing list", "Add new items", "Track purchase status", "Filter by date"],
   },
-  azin: {
+  nila: {
     name: "Nila",
     role: "Real-Time Interpreter",
-    image: azinHelper,
-    agentType: "azin",
+    image: nilaHelper,
+    agentType: "nila",
     greeting: "Hi! I'm Nila, your real-time English ↔ Farsi interpreter. Press the mic button and start speaking.",
     placeholder: "Use the microphone for live interpretation...",
     capabilities: ["Real-time EN→FA translation", "Real-time FA→EN translation", "Live microphone listening", "Bidirectional interpretation"],
