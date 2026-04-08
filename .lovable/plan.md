@@ -1,43 +1,41 @@
 
-
-# Add Download Button to Voice Messages in DockChatBox
+# Fix Meeting Banner UI in Team Hub
 
 ## Problem
-The `DockChatBox` component renders audio attachments with only a mic icon and `<audio controls>` player — no download button. The Team Hub's `MessageThread.tsx` already has this feature (line 732-738), but the floating chat widget (`DockChatBox`) does not.
+The active meetings banner at the top of the message thread shows multiple meeting entries (one per active meeting), resulting in duplicate "Join" buttons and cluttered display. The user wants:
+1. Only **one** "Join" button visible
+2. The individual meeting detail rows (title, LIVE badge) should not be shown
 
 ## Fix
 
-### `src/components/chat/DockChatBox.tsx`
+### `src/components/teamhub/MessageThread.tsx` (lines 500-525)
 
-Add a download button next to the audio player, matching the pattern already used in `MessageThread.tsx`:
+Replace the current multi-meeting banner with a single, compact Join button that joins the most recent active meeting:
 
-**Before (lines 628-634):**
+**Before:** Loops over all `activeMeetings`, showing title + LIVE badge + Join button for each.
+
+**After:** Show only a single compact banner with one "Join" button for the latest meeting. No meeting title, no LIVE badge — just a simple indicator and button:
+
 ```tsx
-{uniqueAttachments.filter((a) => isAudioUrl(a.url)).map((att, ai) => (
-  <div key={`aud-${ai}`} className="flex items-center gap-1.5 p-1.5 rounded-lg border border-border bg-muted/20 mt-1 max-w-full">
-    <Mic className="w-3 h-3 text-primary shrink-0" />
-    <audio controls preload="metadata" className="h-7 w-full min-w-0" src={att.url} />
-  </div>
-))}
-```
-
-**After:**
-```tsx
-{uniqueAttachments.filter((a) => isAudioUrl(a.url)).map((att, ai) => (
-  <div key={`aud-${ai}`} className="flex items-center gap-1.5 p-1.5 rounded-lg border border-border bg-muted/20 mt-1 max-w-full">
-    <Mic className="w-3 h-3 text-primary shrink-0" />
-    <audio controls preload="metadata" className="h-7 w-full min-w-0" src={att.url} />
-    <button
-      onClick={() => downloadFile(att.url, att.name || "voice-message.webm")}
-      className="shrink-0 p-1 rounded hover:bg-muted/60 transition-colors"
-      title="Download"
+{activeMeetings.length > 0 && (
+  <div className="border-b border-border bg-primary/5 px-5 py-2 flex items-center justify-between">
+    <div className="flex items-center gap-2">
+      <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+      <span className="text-xs font-medium text-muted-foreground">
+        Active meeting in progress
+      </span>
+    </div>
+    <Button
+      size="sm"
+      variant="default"
+      className="h-7 text-xs gap-1.5 rounded-full"
+      onClick={() => onJoinMeeting?.(activeMeetings[0])}
     >
-      <Download className="w-3.5 h-3.5 text-muted-foreground" />
-    </button>
+      <Video className="w-3 h-3" />
+      Join
+    </Button>
   </div>
-))}
+)}
 ```
 
-- Import `downloadFile` from `@/lib/downloadUtils` (the `Download` icon is already imported on line 5)
-- Single file, single change — consistent with `MessageThread.tsx` pattern
-
+Single file, single change. Removes the `.map()` loop, shows one Join button for the first (most recent) meeting, and removes the title/LIVE badge display.
