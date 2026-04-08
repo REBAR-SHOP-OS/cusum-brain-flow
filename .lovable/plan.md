@@ -1,47 +1,59 @@
 
 
-# Fix: Agent Report Dialog Hidden Behind Vizzy Brain Panel
+# Replace PDF Download with Comprehensive Items Report Dialog
 
-## Root Cause
-The `AgentReportDialog` component (line 1206-1296 in `VizzyBrainPanel.tsx`) uses standard `<Dialog>` + `<DialogContent>` which renders at `z-50`. The Vizzy Brain panel renders at `z-[100000]`. Result: clicking the clipboard icon opens the dialog behind the panel — black overlay visible, content hidden.
+## Problem
+The download icon (red arrow in screenshot) in the "Items" section header currently generates a PDF via an edge function + html2canvas + jsPDF. The user wants it to instead **open a dialog** showing a comprehensive, English-language report of all Items sections with a summary.
 
-This is the exact same bug that was previously fixed for `SectionDetailReportDialog` (which now uses `z-[100001]`/`z-[100002]`).
+## Plan
 
-## Fix
+### File: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-**File: `src/components/vizzy/VizzyBrainPanel.tsx`** — Lines 1224-1294
+**1. Replace `GeneralReportPDFButton` with `ItemsFullReportButton`**
 
-Replace the standard `<DialogContent>` with `<DialogPortal>` + `<DialogOverlay>` + `<DialogPrimitive.Content>` using z-indices above `100000`:
+Remove the entire `GeneralReportPDFButton` component (lines 413-508) and replace it with a new component that:
+- Uses a `Dialog` with `DialogPortal` + z-[100002] (same pattern as `SectionDetailReportDialog` and `AgentReportDialog`)
+- Icon changes from `Download` to `FileBarChart` or `ClipboardList`
+- On click, opens a full-screen dialog with all Items data
 
+**2. New dialog content — `ItemsFullReport`**
+
+The dialog will display:
+
+**Executive Summary section** (top):
+- Grid of 4 cards: Total Items, Total Categories, Date, User/Team label
+- A brief text summary: "This report covers X categories with Y total items recorded on [date]"
+
+**Per-category breakdown** (main body):
+- For each `sectionsToShow` group (Dashboard, Inbox, Team Hub, Business Tasks, etc.):
+  - Category header with icon + item count
+  - List of all memory items in that category with timestamps
+  - If "All" view: per-user contribution counts within each category
+
+**Team Summary** (if "All" view, no specific user selected):
+- Same team stats banner already computed (`teamStats`)
+- Per-user performance badges
+
+**Copy Report button** in header — generates plain text version
+
+**3. Wire it up**
+
+Replace `<GeneralReportPDFButton ... />` at line 1614 with:
 ```tsx
-// Before (line 1224-1294):
-<Dialog open={open} onOpenChange={setOpen}>
-  <DialogContent className="max-w-lg">
-    ...
-  </DialogContent>
-</Dialog>
-
-// After:
-<Dialog open={open} onOpenChange={setOpen}>
-  <DialogPortal>
-    <DialogOverlay className="z-[100001]" />
-    <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100002] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out ... sm:rounded-lg max-h-[80vh] overflow-hidden flex flex-col">
-      <DialogHeader>...</DialogHeader>
-      <ScrollArea className="flex-1 pr-2">
-        ... (existing report content stays the same)
-      </ScrollArea>
-      <DialogPrimitive.Close className="absolute right-4 top-4 ...">
-        <X className="h-4 w-4" />
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPortal>
-</Dialog>
+<ItemsFullReportButton 
+  date={userSelectedDate}
+  userName={selectedProfile?.full_name || "All Users"}
+  sections={sectionsToShow}
+  teamStats={teamStats}
+  timezone={timezone}
+/>
 ```
 
-Also ensure that the necessary imports (`DialogPortal`, `DialogOverlay`, `DialogPrimitive`, `X`) are present at the top of the file.
+The new component receives the already-computed `sectionsToShow` (the grouped/filtered memory items) and `teamStats`, so no new data fetching is needed.
 
-## Result
-- Agent report dialogs will render above the Brain panel (z-100002 > z-100000)
-- No more black screen
-- Reports will be fully visible and interactive
+### Result
+- Click opens a high-z-index dialog (not PDF download)
+- Shows executive summary + all category breakdowns
+- Copy-to-clipboard for text version
+- No black screen (z-[100002] above panel's z-[100000])
 
