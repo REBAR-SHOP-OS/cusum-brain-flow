@@ -1,56 +1,43 @@
 
 
-# Enhance Time Clock Section with Detailed Clock-In/Out Report
+# Add Download Button to Voice Messages in DockChatBox
 
 ## Problem
-The `UserTimeClockSection` component doesn't pass the selected date to `useUserPerformance`, so it always shows today's data. Also, the section needs more detail: break minutes, notes, and a total hours summary.
+The `DockChatBox` component renders audio attachments with only a mic icon and `<audio controls>` player — no download button. The Team Hub's `MessageThread.tsx` already has this feature (line 732-738), but the floating chat widget (`DockChatBox`) does not.
 
-## Changes
+## Fix
 
-### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
+### `src/components/chat/DockChatBox.tsx`
 
-**Update `UserTimeClockSection`:**
-- Accept a `date` prop and pass it to `useUserPerformance(profileId, userId, date)`
-- Add a total hours summary row at the bottom
-- Fetch `break_minutes` and `notes` from the clock entries and display them
-- Show status badge: "Still working" for open shifts, duration for closed
+Add a download button next to the audio player, matching the pattern already used in `MessageThread.tsx`:
 
-**Update the call site (line ~1437):**
-- Pass `date={userSelectedDate}` to `UserTimeClockSection`
-
-### 2. `src/hooks/useUserPerformance.ts`
-
-**Expand `ClockEntry` interface** to include `break_minutes` and `notes`:
-```typescript
-export interface ClockEntry {
-  clock_in: string;
-  clock_out: string | null;
-  break_minutes: number;
-  notes: string | null;
-}
+**Before (lines 628-634):**
+```tsx
+{uniqueAttachments.filter((a) => isAudioUrl(a.url)).map((att, ai) => (
+  <div key={`aud-${ai}`} className="flex items-center gap-1.5 p-1.5 rounded-lg border border-border bg-muted/20 mt-1 max-w-full">
+    <Mic className="w-3 h-3 text-primary shrink-0" />
+    <audio controls preload="metadata" className="h-7 w-full min-w-0" src={att.url} />
+  </div>
+))}
 ```
 
-**Update the query** to select these additional fields:
-```sql
-select("clock_in, clock_out, break_minutes, notes")
+**After:**
+```tsx
+{uniqueAttachments.filter((a) => isAudioUrl(a.url)).map((att, ai) => (
+  <div key={`aud-${ai}`} className="flex items-center gap-1.5 p-1.5 rounded-lg border border-border bg-muted/20 mt-1 max-w-full">
+    <Mic className="w-3 h-3 text-primary shrink-0" />
+    <audio controls preload="metadata" className="h-7 w-full min-w-0" src={att.url} />
+    <button
+      onClick={() => downloadFile(att.url, att.name || "voice-message.webm")}
+      className="shrink-0 p-1 rounded hover:bg-muted/60 transition-colors"
+      title="Download"
+    >
+      <Download className="w-3.5 h-3.5 text-muted-foreground" />
+    </button>
+  </div>
+))}
 ```
 
-### 3. Enhanced UI layout
-
-Each entry row will show:
-- Clock-in time (green icon)
-- Arrow → Clock-out time (red icon) or "Still working" badge
-- Break minutes (if > 0)
-- Net hours worked
-- Notes (if present, shown as small muted text below)
-
-Bottom summary row:
-- Total gross hours
-- Total break time
-- Total net hours
-
-| File | Action |
-|------|--------|
-| `src/hooks/useUserPerformance.ts` | Add `break_minutes`, `notes` to ClockEntry and query |
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Pass date prop, show detailed entries with totals |
+- Import `downloadFile` from `@/lib/downloadUtils` (the `Download` icon is already imported on line 5)
+- Single file, single change — consistent with `MessageThread.tsx` pattern
 
