@@ -88,6 +88,8 @@ export function useTeamDailyActivity(profiles: ProfileSlim[], date?: Date) {
           result[pid].clockEntries.push({
             clock_in: row.clock_in,
             clock_out: row.clock_out,
+            break_minutes: (row as any).break_minutes ?? 0,
+            notes: (row as any).notes ?? null,
           });
         }
       }
