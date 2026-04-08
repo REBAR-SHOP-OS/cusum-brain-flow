@@ -25,6 +25,7 @@ import { useAuth } from "@/lib/auth";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { Cog } from "lucide-react";
@@ -415,11 +416,10 @@ function GeneralReportPDFButton({ date, userId, userName }: { date: Date; userId
 
     try {
       const dateStr = date.toISOString().split("T")[0];
-      const { data, error } = await supabase.functions.invoke("generate-daily-report-pdf", {
-        body: { date: dateStr, targetUserId: userId, targetUserName: userName },
-      });
+      const data = await invokeEdgeFunction("generate-daily-report-pdf", {
+        date: dateStr, targetUserId: userId, targetUserName: userName,
+      }, { timeoutMs: 90000 });
 
-      if (error) throw new Error(error.message || "Failed to generate report");
       if (data?.error) throw new Error(data.error);
       if (!data?.url) throw new Error("No download URL returned");
 
