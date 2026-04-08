@@ -1,43 +1,35 @@
 
 
-# Show User Access Permissions in Agents & Items Sections
+# Update Vicky's Access: Agents & Menu Items
 
-## Summary
-Display which agents and menu items each user has access to in the Vizzy Brain panel, based on the centralized access config (`userAccessConfig.ts`).
+## Problem
+Vicky currently has agents `["talent", "bizdev", "eisenhower", "accounting", "rebuild"]` and menus that include "Architecture" but miss "Inbox". The user wants:
+
+**Agents:** Penny (accounting, primary), Eisenhower (eisenhower), Prism (data), Relay (email)
+**Menus:** Dashboard, Accounting, Customers, Business Tasks, Team Hub, Settings, Inbox
 
 ## Changes
 
-### 1. Agents Section — Show accessible agents list (`src/components/vizzy/VizzyBrainPanel.tsx`)
+### `src/lib/userAccessConfig.ts` (lines 108–119)
 
-In the `UserAgentsSections` component, ensure all agents from `getVisibleAgents(email)` are always displayed, even if session data is still loading or empty. Currently the component already does this, but the issue may be that `email` is not being passed. Verify the `email` prop is always provided from `selectedProfile.email`.
-
-Additionally, for `fullAccess` users (Sattar, Radin), all agents should appear since `getVisibleAgents` returns `ALL_AGENTS`.
-
-### 2. Items Section — Add menu access list (`src/components/vizzy/VizzyBrainPanel.tsx`)
-
-Below the existing "Items" header (around line 987), add a compact row showing which **menu items** (pages) the selected user can access, pulled from `getVisibleMenus(selectedProfile.email)`.
-
-Display as a horizontal wrap of small badges:
-
-```tsx
-// Inside the Items section, before the grouped entries
-const userMenuItems = getVisibleMenus(selectedProfile?.email);
-
-// Render as compact badges
-<div className="flex flex-wrap gap-1.5 mb-3">
-  {userMenuItems.map(menu => (
-    <span key={menu} className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border">
-      {menu}
-    </span>
-  ))}
-</div>
+```typescript
+"vicky@rebar.shop": {
+  menus: ["Dashboard", "Inbox", "Accounting", "Customers", "Business Tasks", "Team Hub", "Settings"],
+  agents: ["accounting", "eisenhower", "data", "email"],
+  primaryAgent: "accounting",
+  heroText: "How can **Penny** help you today?",
+  quickActions: [ /* keep existing 4 quick actions unchanged */ ],
+},
 ```
 
-### 3. Fix email prop passing
+| Change | Before | After |
+|--------|--------|-------|
+| `agents` | `["talent", "bizdev", "eisenhower", "accounting", "rebuild"]` | `["accounting", "eisenhower", "data", "email"]` |
+| `menus` | `["Dashboard", "Team Hub", "Business Tasks", "Customers", "Accounting", "Architecture", "Settings"]` | `["Dashboard", "Inbox", "Accounting", "Customers", "Business Tasks", "Team Hub", "Settings"]` |
 
-Ensure `selectedProfile.email` is always passed to `UserAgentsSections` at line 1188. If it's `undefined` for some profiles, the `getVisibleAgents` call returns `[]`, causing "No agents assigned".
+Removed: talent, bizdev, rebuild, Architecture. Added: data (Prism), email (Relay), Inbox.
 
 | File | Change |
 |------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Add menu items badges in Items section; verify email prop in Agents section |
+| `src/lib/userAccessConfig.ts` | Update Vicky's `menus` and `agents` arrays |
 
