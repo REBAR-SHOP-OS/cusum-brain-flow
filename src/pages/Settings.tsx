@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import {
   Lock, Tag, CreditCard, Lightbulb, HelpCircle, LogOut,
   Camera, Settings as SettingsIcon, Users, Loader2, GraduationCap,
-  Brain, Plug, Clock,
+  Brain, Plug, Clock, Trash2,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { useTour } from "@/hooks/useTour";
@@ -24,6 +24,9 @@ import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { TIMEZONE_OPTIONS, DATE_FORMAT_OPTIONS } from "@/lib/dateConfig";
 import { Switch } from "@/components/ui/switch";
 import { useAvatarUpload } from "@/hooks/useAvatarUpload";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "@/assets/brand-logo.png";
 const BrainPage = lazy(() => import("@/pages/Brain"));
@@ -104,6 +107,8 @@ export default function Settings() {
   const userEmail = user?.email ?? "";
   const { profiles, updateProfile } = useProfiles();
   const { uploading, uploadSingle } = useAvatarUpload();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const avatarFileRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("settings");
   const [formData, setFormData] = useState({
@@ -150,6 +155,25 @@ export default function Settings() {
     const file = e.target.files?.[0];
     if (!file || !myProfile) return;
     await uploadSingle(myProfile.id, file);
+  };
+
+  const handleAvatarDelete = async () => {
+    if (!myProfile?.avatar_url) return;
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ avatar_url: null })
+        .eq("id", myProfile.id);
+      if (error) throw error;
+      // Best-effort storage cleanup
+      const extensions = ["png", "jpg", "jpeg", "webp", "gif"];
+      const paths = extensions.map((ext) => `${myProfile.id}.${ext}`);
+      await supabase.storage.from("avatars").remove(paths);
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      toast({ title: "Profile photo removed" });
+    } catch (err: any) {
+      toast({ title: "Error removing photo", description: err.message, variant: "destructive" });
+    }
   };
 
   const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
@@ -243,6 +267,16 @@ export default function Settings() {
                   >
                     {uploading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" /> : <Camera className="w-4 h-4 text-muted-foreground" />}
                   </button>
+                  {myProfile?.avatar_url && (
+                    <button
+                      onClick={handleAvatarDelete}
+                      disabled={uploading}
+                      className="absolute bottom-0 left-0 w-8 h-8 rounded-full bg-secondary border border-border flex items-center justify-center hover:bg-destructive/10 transition-colors"
+                      title="Remove photo"
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </button>
+                  )}
                   <input ref={avatarFileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                 </div>
                 <h2 className="mt-4 text-xl font-semibold">
