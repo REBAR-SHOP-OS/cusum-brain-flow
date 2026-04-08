@@ -10,6 +10,7 @@ export interface ActivityEvent {
   description: string | null;
   created_at: string;
   source: string;
+  metadata: Record<string, unknown> | null;
 }
 
 export function useUserActivityLog(profileId: string | null, userId?: string | null, date?: Date) {
@@ -31,12 +32,12 @@ export function useUserActivityLog(profileId: string | null, userId?: string | n
 
       const { data, error } = await supabase
         .from("activity_events")
-        .select("id, event_type, entity_type, description, created_at, source")
+        .select("id, event_type, entity_type, description, created_at, source, metadata")
         .eq("actor_id", actorId!)
         .gte("created_at", dayStart)
         .lt("created_at", dayEnd)
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(200);
 
       if (error) throw error;
       return (data ?? []) as ActivityEvent[];

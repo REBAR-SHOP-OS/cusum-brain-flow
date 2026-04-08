@@ -78,6 +78,7 @@ export function useTeamDailyActivity(profiles: ProfileSlim[], date?: Date) {
             description: row.description,
             created_at: row.created_at,
             source: row.source,
+            metadata: (row as any).metadata ?? null,
           });
         }
       }

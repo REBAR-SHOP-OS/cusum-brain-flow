@@ -48,7 +48,7 @@ export function useDetailedActivityReport(
     queryFn: async (): Promise<DetailedActivityReport> => {
       const { data, error } = await supabase
         .from("activity_events")
-        .select("id, event_type, entity_type, description, created_at, source")
+        .select("id, event_type, entity_type, description, created_at, source, metadata")
         .eq("actor_id", userId!)
         .gte("created_at", dayStart)
         .lt("created_at", dayEnd)

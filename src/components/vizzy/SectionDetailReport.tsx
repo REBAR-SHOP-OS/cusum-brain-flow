@@ -6,13 +6,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ClipboardList, Clock, BarChart3, Users, Copy, Activity } from "lucide-react";
+import { ClipboardList, Clock, BarChart3, Users, Copy, Activity, Globe, Mail, Database, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useDetailedActivityReport } from "@/hooks/useDetailedActivityReport";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { formatDateInTimezone } from "@/lib/dateConfig";
 import { toast } from "sonner";
+import type { ActivityEvent } from "@/hooks/useUserActivityLog";
 
 type SectionType = "activity" | "timeclock" | "overview" | "team";
 
@@ -25,8 +26,37 @@ interface Props {
   timezone: string;
 }
 
-function formatEventType(s: string): string {
-  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+function humanLabel(eventType: string): string {
+  const map: Record<string, string> = {
+    page_visit: "Visited page",
+    email_sent: "Sent email",
+    email_deleted: "Deleted email",
+    email_archived: "Archived email",
+    agent_query: "AI interaction",
+    lead_created: "Created lead",
+    lead_updated: "Updated lead",
+    lead_deleted: "Deleted lead",
+    order_created: "Created order",
+    order_updated: "Updated order",
+    barlist_approved: "Approved barlist",
+    barlist_created: "Created barlist",
+    machine_run_started: "Started machine run",
+    machine_run_completed: "Completed machine run",
+    delivery_created: "Created delivery",
+    delivery_updated: "Updated delivery",
+    project_created: "Created project",
+    project_updated: "Updated project",
+    customer_created: "Created customer",
+    customer_updated: "Updated customer",
+  };
+  return map[eventType] || eventType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getCategoryBadge(eventType: string, entityType: string): { label: string; className: string } {
+  if (eventType === "page_visit") return { label: "Page", className: "bg-blue-500/15 text-blue-400 border-blue-500/20" };
+  if (eventType.startsWith("email") || entityType === "email") return { label: "Email", className: "bg-green-500/15 text-green-400 border-green-500/20" };
+  if (eventType.includes("agent") || entityType === "agent") return { label: "AI", className: "bg-purple-500/15 text-purple-400 border-purple-500/20" };
+  return { label: "Action", className: "bg-orange-500/15 text-orange-400 border-orange-500/20" };
 }
 
 function ActivityReport({ userId, date, timezone, userName }: { userId: string | null; date: Date; timezone: string; userName: string }) {
@@ -43,10 +73,10 @@ function ActivityReport({ userId, date, timezone, userName }: { userId: string |
       `Most Active Hour: ${report.mostActiveHour || "N/A"}`,
       "",
       "── By Event Type ──",
-      ...report.byEventType.map((b) => `  ${formatEventType(b.eventType)}: ${b.count}`),
+      ...report.byEventType.map((b) => `  ${humanLabel(b.eventType)}: ${b.count}`),
       "",
       "── By Entity Type ──",
-      ...report.byEntityType.map((b) => `  ${formatEventType(b.entityType)}: ${b.count}`),
+      ...report.byEntityType.map((b) => `  ${b.entityType}: ${b.count}`),
       "",
       "── Hourly Timeline ──",
       ...report.hourlyGroups.map((g) => `  ${g.label}: ${g.events.length} action(s)`),
@@ -54,7 +84,7 @@ function ActivityReport({ userId, date, timezone, userName }: { userId: string |
       "── Full Activity Log ──",
       ...report.allEvents.map(
         (ev) =>
-          `  [${formatDateInTimezone(ev.created_at, timezone, { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true })}] ${formatEventType(ev.event_type)} — ${ev.description || ev.entity_type}`
+          `  [${formatDateInTimezone(ev.created_at, timezone, { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true })}] ${humanLabel(ev.event_type)} — ${ev.description || ev.entity_type}`
       ),
     ];
     navigator.clipboard.writeText(lines.join("\n"));
@@ -64,11 +94,9 @@ function ActivityReport({ userId, date, timezone, userName }: { userId: string |
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            {formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}
+        </p>
         <Button variant="outline" size="sm" onClick={copyAll} className="gap-1.5">
           <Copy className="w-3.5 h-3.5" /> Copy Report
         </Button>
@@ -96,7 +124,7 @@ function ActivityReport({ userId, date, timezone, userName }: { userId: string |
         <div className="space-y-1.5">
           {report.byEventType.map((b) => (
             <div key={b.eventType} className="flex items-center justify-between text-sm px-2 py-1 rounded bg-muted/20">
-              <span className="text-foreground">{formatEventType(b.eventType)}</span>
+              <span className="text-foreground">{humanLabel(b.eventType)}</span>
               <span className="font-medium text-primary">{b.count}</span>
             </div>
           ))}
@@ -109,7 +137,7 @@ function ActivityReport({ userId, date, timezone, userName }: { userId: string |
         <div className="space-y-1.5">
           {report.byEntityType.map((b) => (
             <div key={b.entityType} className="flex items-center justify-between text-sm px-2 py-1 rounded bg-muted/20">
-              <span className="text-foreground">{formatEventType(b.entityType)}</span>
+              <span className="text-foreground capitalize">{b.entityType}</span>
               <span className="font-medium text-primary">{b.count}</span>
             </div>
           ))}
@@ -136,19 +164,29 @@ function ActivityReport({ userId, date, timezone, userName }: { userId: string |
         </div>
       </div>
 
-      {/* Full Log */}
+      {/* Full Log with color-coded badges */}
       <div>
         <h4 className="text-sm font-semibold text-foreground mb-2">Full Activity Log ({report.allEvents.length})</h4>
-        <div className="space-y-1 max-h-[300px] overflow-y-auto pr-1">
-          {report.allEvents.map((ev) => (
-            <div key={ev.id} className="flex items-start gap-2 text-xs px-2 py-1.5 rounded bg-muted/10 border border-border/50">
-              <span className="text-muted-foreground shrink-0 w-[72px]">
-                {formatDateInTimezone(ev.created_at, timezone, { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true })}
-              </span>
-              <span className="font-medium text-primary shrink-0">{formatEventType(ev.event_type)}</span>
-              <span className="text-foreground truncate">{ev.description || ev.entity_type}</span>
-            </div>
-          ))}
+        <div className="space-y-1 max-h-[400px] overflow-y-auto pr-1">
+          {report.allEvents.map((ev) => {
+            const badge = getCategoryBadge(ev.event_type, ev.entity_type);
+            return (
+              <div key={ev.id} className="flex items-start gap-2 text-xs px-2 py-1.5 rounded bg-muted/10 border border-border/50">
+                <span className="text-muted-foreground shrink-0 w-[72px]">
+                  {formatDateInTimezone(ev.created_at, timezone, { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true })}
+                </span>
+                <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full border font-medium ${badge.className}`}>
+                  {badge.label}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <span className="font-medium text-foreground">{humanLabel(ev.event_type)}</span>
+                  {ev.description && (
+                    <p className="text-muted-foreground mt-0.5 leading-tight">{ev.description}</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -320,7 +358,7 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
           <div className="space-y-1.5">
             {report.byEventType.slice(0, 10).map((b) => (
               <div key={b.eventType} className="flex items-center justify-between text-sm px-2 py-1 rounded bg-muted/20">
-                <span className="text-foreground">{formatEventType(b.eventType)}</span>
+                <span className="text-foreground">{humanLabel(b.eventType)}</span>
                 <span className="font-medium text-primary">{b.count}</span>
               </div>
             ))}
