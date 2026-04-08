@@ -87,13 +87,13 @@ export function AppLayout({ children }: AppLayoutProps) {
             {isInternal && <VizzyCallHandler />}
 
             {/* Floating Vizzy avatar — force visible on app builder dashboard to match reference */}
-            {((user?.email === "sattar@rebar.shop" || user?.email === "radin@rebar.shop") || isAppBuilderDashboard) && <FloatingVizzyButton />}
+            {(user?.email === "sattar@rebar.shop" || user?.email === "radin@rebar.shop") && <FloatingVizzyButton />}
 
             {/* Screenshot Feedback button — force visible on app builder dashboard to match reference */}
             {(isInternal || isAppBuilderDashboard) && <ScreenshotFeedbackButton />}
 
             {/* Live Chat Widget — triggered by Vizzy button */}
-            {user?.email !== "ai@rebar.shop" && <LiveChatWidget />}
+            {(user?.email === "sattar@rebar.shop" || user?.email === "radin@rebar.shop") && <LiveChatWidget />}
 
             {/* Docked team chat boxes */}
             <DockChatBar />
