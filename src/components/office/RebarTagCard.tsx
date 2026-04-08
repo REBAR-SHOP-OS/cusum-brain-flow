@@ -135,7 +135,7 @@ export function RebarTagCard({
       </div>
 
       {/* Shape image + Dwg/Item */}
-      <div className="flex-1 min-h-0 border-b-2 border-black flex flex-col items-center justify-center p-2 bg-white">
+      <div className="min-h-0 border-b-2 border-black flex flex-col items-center justify-center p-2 bg-white" style={{ flex: "1 1 30%" }}>
         <div className="flex-1 min-h-0 flex items-center justify-center w-full">
           {shapeImageUrl ? (
             <img
@@ -156,7 +156,7 @@ export function RebarTagCard({
       </div>
 
       {/* Ref — full width */}
-      <div className="border-b border-black text-[10px] shrink-0 px-2 py-1 min-h-[3.5rem] overflow-hidden">
+      <div className="border-b border-black text-[10px] flex-1 px-2 py-1 min-h-[3rem] overflow-hidden">
         <div className="flex gap-1">
           <span className="font-bold">Item:</span>
           <span className="font-black">{item}</span>
