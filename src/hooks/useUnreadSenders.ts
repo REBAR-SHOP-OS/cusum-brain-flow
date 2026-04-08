@@ -5,6 +5,7 @@ import { useAuth } from "@/lib/auth";
 export function useUnreadSenders() {
   const { user } = useAuth();
   const [unreadSenderIds, setUnreadSenderIds] = useState<Set<string>>(new Set());
+  const [unreadCounts, setUnreadCounts] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     if (!user?.id) return;
@@ -18,11 +19,16 @@ export function useUnreadSenders() {
         .eq("link_to", "/team-hub");
 
       const ids = new Set<string>();
+      const counts = new Map<string, number>();
       data?.forEach((n: any) => {
         const sid = n.metadata?.sender_profile_id;
-        if (sid) ids.add(sid);
+        if (sid) {
+          ids.add(sid);
+          counts.set(sid, (counts.get(sid) || 0) + 1);
+        }
       });
       setUnreadSenderIds(ids);
+      setUnreadCounts(counts);
     };
 
     fetch();
@@ -41,5 +47,5 @@ export function useUnreadSenders() {
     return () => { supabase.removeChannel(channel); };
   }, [user?.id]);
 
-  return { unreadSenderIds };
+  return { unreadSenderIds, unreadCounts };
 }

@@ -77,7 +77,7 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
   const [profileEditOpen, setProfileEditOpen] = useState(false);
   const [previewProfile, setPreviewProfile] = useState<Profile | null>(null);
   const [channelToDelete, setChannelToDelete] = useState<TeamChannel | null>(null);
-  const { unreadSenderIds } = useUnreadSenders();
+  const { unreadSenderIds, unreadCounts } = useUnreadSenders();
   const isAdmin = isTeamHubAdmin(user?.email);
 
   const officialChannel = channels.filter((c) => c.channel_type === "group" && c.name === "Official Channel");
@@ -280,8 +280,10 @@ export function ChannelSidebar({ channels, selectedId, onSelect, onlineCount, pr
                 <div className="flex-1 min-w-0">
                   <span className="text-xs text-foreground truncate block">{p.full_name}</span>
                 </div>
-                {unreadSenderIds.has(p.id) && (
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                {(unreadCounts.get(p.id) ?? 0) > 0 && (
+                  <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center shrink-0">
+                    {unreadCounts.get(p.id)}
+                  </span>
                 )}
                 {p.preferred_language && p.preferred_language !== "en" && (
                   <span className="text-[9px] text-muted-foreground/60">{p.preferred_language.toUpperCase()}</span>
