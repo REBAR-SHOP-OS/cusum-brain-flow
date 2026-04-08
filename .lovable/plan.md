@@ -1,39 +1,23 @@
 
 
-# Fix Download Button — Generate PDF Instead of Opening HTML in New Tab
+# Per-User Report Dialog in Team Daily Report + Vizzy Memory
 
 ## Problem
+The clipboard icon next to each user in the Team Daily Report currently opens only the "activity" report (just activity events). The user wants a **comprehensive per-user report** (activities + hours + AI + emails + clock entries + breakdown) shown in a dialog, and all per-user reports should also be saved to Vizzy memory.
 
-The download icon (red arrow button) in Vizzy Brain calls the `generate-daily-report-pdf` edge function which returns HTML. The current client code opens this HTML in a new browser tab (`window.open`). The toast "Report generated — opening in new tab" is a **success message**, not an error — but the behavior is wrong. The user expects a **PDF file download**, not an HTML page in a new tab.
+## Changes
 
-## Root Cause
+### 1. `SectionDetailReport.tsx` — Change per-user report to use "overview" type
+The `sectionType="activity"` on each per-user icon (line 1059-1066 in VizzyBrainPanel) will be changed to `sectionType="overview"`, which already shows the full report (status, hours, activities, AI sessions, emails, clock entries, activity breakdown).
 
-In `VizzyBrainPanel.tsx` (line 428-431), the code creates an HTML blob and opens it in a new tab:
-```typescript
-const blob = new Blob([data.html], { type: "text/html" });
-const blobUrl = URL.createObjectURL(blob);
-window.open(blobUrl, "_blank");
-```
+### 2. `SectionDetailReport.tsx` — Auto-save per-user report to `vizzy_memory`
+Add a `useEffect` in `OverviewReport` that saves the report text to `vizzy_memory` with category `user_daily_report_{userId}` when the dialog opens, so Vizzy always has access to each user's report.
 
-There is no PDF conversion happening — the function name says "pdf" but it only generates HTML.
-
-## Solution
-
-Convert the HTML to a real PDF on the client side using `html2canvas` + `jsPDF` (already in the project dependencies), then trigger a file download.
-
-### Change: `src/components/vizzy/VizzyBrainPanel.tsx` — `GeneralReportPDFButton`
-
-Replace the `window.open` logic (lines 428-431) with:
-
-1. Create a hidden iframe, inject the HTML into it
-2. Use `html2canvas` to render the iframe content to a canvas
-3. Convert canvas to PDF pages using `jsPDF` (handling multi-page with A4 dimensions)
-4. Trigger `pdf.save("report-{userName}-{date}.pdf")` for a direct download
-5. Update toast to "PDF downloaded successfully"
-
-This approach handles Unicode/Persian text correctly since `html2canvas` renders exactly what the browser renders, including all fonts and styling.
+### 3. `VizzyBrainPanel.tsx` — Update the per-user icon
+Change `sectionType="activity"` → `sectionType="overview"` for the per-user clipboard icon in the TeamDailyReport accordion.
 
 | File | Change |
 |------|--------|
-| `VizzyBrainPanel.tsx` | Replace `window.open(blob)` with html2canvas → jsPDF → `pdf.save()` for real PDF download |
+| `VizzyBrainPanel.tsx` | Change per-user `sectionType` from `"activity"` to `"overview"` |
+| `SectionDetailReport.tsx` | Add vizzy_memory save in `OverviewReport` for per-user reports |
 
