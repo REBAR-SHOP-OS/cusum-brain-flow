@@ -1,37 +1,22 @@
 
 
-# Fix User Tab Wrapping & Update Zahra's Job Title
+# Remove Horizontal Scroll — Show All Users in One Line
 
 ## Problem
-1. User avatars wrap to a second line (Vicky appears on line 2) — all should be on one line
-2. Zahra's job title is empty — should be "Digital Marketing"
+The user tab bar currently uses `overflow-x-auto` which creates a horizontal scrollbar. The user wants **no scrollbar at all** — all users must be visible in a single row, even if it means making the entire Vizzy Brain modal wider.
 
 ## Changes
 
-### 1. Make user tabs single-line (`src/components/vizzy/VizzyBrainPanel.tsx`, line 1055)
+### 1. Widen the modal container (line 1025)
+Change `max-w-5xl` to `max-w-7xl` to give more horizontal space for all user tabs.
 
-Remove `flex-wrap` and add `overflow-x-auto` with `shrink-0` on buttons so all users stay on one horizontal line with subtle scroll if needed:
+### 2. Remove scroll from user tab bar (line 1055)
+Replace `overflow-x-auto scrollbar-none` with `flex-wrap` so tabs wrap naturally if needed, but with the wider container they should all fit in one line.
 
-```tsx
-// Before:
-<div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
+Alternatively, keep `overflow-visible` and `whitespace-nowrap` to force a single line — combined with the wider modal, all users will be visible without scroll.
 
-// After:
-<div className="px-5 py-3 border-b border-border flex items-center gap-2 overflow-x-auto scrollbar-none">
-```
-
-Also add `shrink-0` to each user button (line 1075) to prevent them from shrinking.
-
-### 2. Update Zahra's job title in database
-
-Run a migration to set `title = 'Digital Marketing'` for `zahra@rebar.shop`:
-
-```sql
-UPDATE profiles SET title = 'Digital Marketing' WHERE email = 'zahra@rebar.shop';
-```
-
-| File / System | Change |
-|------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Remove `flex-wrap`, add horizontal scroll with hidden scrollbar + `shrink-0` on buttons |
-| Database migration | Set Zahra's title to "Digital Marketing" |
+| File | Line | Change |
+|------|------|--------|
+| `src/components/vizzy/VizzyBrainPanel.tsx` | 1025 | `max-w-5xl` → `max-w-7xl` |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | 1055 | Remove `overflow-x-auto scrollbar-none`, add `flex-wrap` |
 
