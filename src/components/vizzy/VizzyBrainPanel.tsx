@@ -1057,7 +1057,7 @@ function TeamDailyReport({
                     )}
                   </span>
                    <SectionDetailReportDialog
-                    sectionType="activity"
+                    sectionType="overview"
                     profileId={p.id}
                     userId={p.user_id || null}
                     userName={firstName}

@@ -323,7 +323,7 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
   if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
   if (!perf) return <p className="text-sm text-muted-foreground p-4">No data available.</p>;
 
-  const copyAll = () => {
+  const buildReportLines = () => {
     const lines = [
       `📋 Overview Report — ${userName}`,
       `Date: ${formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}`,
@@ -333,9 +333,46 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
       `AI Sessions: ${perf.aiSessionsToday}`,
       `Emails Sent: ${perf.emailsSent}`,
     ];
-    navigator.clipboard.writeText(lines.join("\n"));
+    if (report && report.byEventType.length > 0) {
+      lines.push("", "Activity Breakdown:");
+      for (const b of report.byEventType.slice(0, 10)) {
+        lines.push(`  ${b.eventType}: ${b.count}`);
+      }
+    }
+    if (perf.clockEntries.length > 0) {
+      lines.push("", "Clock Entries:");
+      for (const ce of perf.clockEntries) {
+        const inTime = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+        const outTime = ce.clock_out ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true }) : "ongoing";
+        lines.push(`  ${inTime} → ${outTime}`);
+      }
+    }
+    return lines;
+  };
+
+  const copyAll = () => {
+    navigator.clipboard.writeText(buildReportLines().join("\n"));
     toast.success("Overview report copied");
   };
+
+  // Save report to vizzy_memory for Vizzy access
+  useEffect(() => {
+    if (!perf || !userId) return;
+    const reportText = buildReportLines().join("\n");
+    const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "2-digit", day: "2-digit" });
+    supabase
+      .from("vizzy_memory")
+      .upsert(
+        {
+          user_id: userId,
+          category: `user_daily_report_${dateStr}`,
+          content: reportText,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,category" }
+      )
+      .then(() => {});
+  }, [perf, report, userId]);
 
   return (
     <div className="space-y-5">
