@@ -1,58 +1,105 @@
 
+# Fix Vizzy Voice Timeout and Slow Replies
 
-# Fix Empty Agent Activity — Add Domain-Specific Reports per Agent
+## Diagnosis
 
-## Problem
+Do I know what the issue is? Yes.
 
-The "Agent Activity — All Users" section in Vizzy Brain only queries `chat_sessions` for the current day. Today only Pixel has sessions, so all other agents correctly show 0. But this makes the section useless — **agents should show domain-specific system metrics** relevant to their responsibility, not just chat session counts.
+This is no longer mainly a token-creation problem.
 
-## Solution
+What I confirmed from the code and logs:
+- `voice-engine-token` is succeeding repeatedly in roughly `250–600ms`, so the token endpoint is now healthy.
+- `vizzy-pre-digest` is very slow (`~78s` in logs), but it runs in parallel and is not the direct cause of the timeout.
+- The timeout toast comes from the client timer in `src/hooks/useVoiceEngine.ts`, not from the backend.
+- The voice UI only marks the session as connected when it receives `session.created` or `session.updated` over the realtime data channel.
+- The WebRTC SDP handshake is still using the older realtime URL pattern, while current docs use the newer WebRTC call endpoint.
+- After connect, the client does not explicitly trigger an initial response, so Vizzy may connect but still stay silent instead of greeting/responding immediately.
+- The UI also treats `contextLoading` as “still connecting”, so even a live session can look broken while Vizzy Brain is still loading.
 
-Create a new hook `useAgentDomainStats` that fetches real-time domain metrics for each agent from the system database. Each agent gets a compact stats row showing its domain health alongside chat activity.
+## Root Causes
 
-## Agent → Domain Mapping
+1. `useVoiceEngine` has a brittle readiness check:
+   - it waits for specific data-channel events instead of treating WebRTC/data-channel open as a successful connection.
 
-| Agent | Domain | Metrics Source |
-|-------|--------|----------------|
-| **Blitz** (Sales) | Leads pipeline | `leads` — active stages (new, prospecting, qualified, hot_enquiries) |
-| **Penny** (Accounting) | Invoices & AR | `accounting_mirror` — open invoices with balance > 0, `sales_invoices` — unpaid |
-| **Tally** (Legal) | Contracts | `orders` — total + pending |
-| **Haven** (Support) | Customer issues | `suggestions` — open suggestions count |
-| **Pixel** (Social) | Social posts | `social_posts` — total, recent week count |
-| **Gauge** (Estimating) | Estimates | `leads` — estimation stages (estimation_ben, estimation_karthick) |
-| **Forge** (Shop Floor) | Machines & cuts | `machines` — total, `cut_plans` — active |
-| **Atlas** (BizDev) | Growth pipeline | `leads` — won + qualified stages |
-| **Relay** (Delivery) | Deliveries | `leads` — delivery stage, `delivery_bundles` |
-| **Rex** (Data) | System health | `ai_execution_log` — recent entries |
-| **Vizzy** (Commander) | Suggestions | `suggestions` — open critical/warning counts |
-| **Eisenhower** | Task sessions | Chat sessions only (as-is) |
+2. The WebRTC client path is outdated:
+   - SDP is posted to the legacy realtime endpoint instead of the newer WebRTC calls endpoint.
 
-## Changes
+3. Vizzy Brain loading is too slow and is mixed into the transport UX:
+   - users see “connecting” for too long even though the actual voice session should be usable.
 
-| File | Change |
-|------|--------|
-| `src/hooks/useAgentDomainStats.ts` | **New file.** Single hook that runs parallel queries to fetch domain metrics for all agents. Returns a `Map<agentCode, { label: string; value: string }[]>`. Cached 60s, refetch every 60s. |
-| `src/hooks/useSystemAgentSessions.ts` | No change — continues to provide chat session data. |
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Modify `SystemAgentsSummary` to also call `useAgentDomainStats()`. Display domain stats as small badges below the agent name in each row. When expanded, show both user breakdown (existing) AND domain detail stats. |
+4. Vizzy is not kicked off proactively:
+   - no guaranteed `response.create`/startup response after session establishment.
 
-## UI Design
+## Implementation Plan
 
-Each agent row changes from:
-```text
-🤖 Blitz  👥 0  ✦ 0 sessions  ✉ 0 msgs
-```
-To:
-```text
-🤖 Blitz  👥 0  ✦ 0 sessions  ✉ 0 msgs
-   📊 12 active leads · 3 hot enquiries
-```
+### 1) Repair the realtime connection lifecycle
+Update `src/hooks/useVoiceEngine.ts` to:
+- switch the SDP POST to the current WebRTC endpoint
+- clear the timeout and mark the session connected when either:
+  - the data channel opens, or
+  - the peer connection becomes `connected`
+- keep `session.created/session.updated` as secondary signals, not the only success condition
+- add stage-specific diagnostics so failures are clearly separated into:
+  - mic permission
+  - token fetch
+  - SDP exchange
+  - data-channel open
+  - post-connect response failure
 
-The second line shows 1-3 domain-specific stats as a compact text line in muted color below the agent name. If stats are all zero, show "No active items" instead.
+### 2) Make Vizzy speak immediately after connect
+In `src/hooks/useVoiceEngine.ts` / `src/hooks/useVizzyVoiceEngine.ts`:
+- send the session instructions on open
+- trigger an initial short Vizzy response after connection so the session is visibly alive
+- keep server VAD for normal turn-taking after that
 
-## Technical Details
+This solves the “connected but silent” behavior.
 
-- The `useAgentDomainStats` hook runs **one composite query** per agent domain to minimize DB calls (batch where possible using UNION ALL or parallel Promise.all)
-- Stats are computed as simple counts — no heavy aggregations
-- Domain stats only show when chat sessions are zero OR always alongside sessions (always visible for context)
-- `ALL_KNOWN_AGENTS` array gets a `domain` field added to map agent codes to their query functions
+### 3) Separate “voice connected” from “brain syncing”
+Update `src/components/vizzy/VizzyVoiceChat.tsx` so:
+- `voiceState === connected` shows `LIVE SESSION` immediately
+- `contextLoading` becomes a secondary non-blocking state such as:
+  - “Vizzy Brain syncing...”
+- the large blocking “connecting” overlay is only shown for actual transport connection, not for digest loading
 
+This fixes the false-offline / fake-reconnecting experience.
+
+### 4) Make Vizzy Brain fast enough for real use
+Optimize `vizzy-pre-digest` behavior so Vizzy can always answer from brain quickly:
+- add a short-TTL cached digest path for the latest valid brain snapshot
+- start voice with the freshest cached Vizzy Brain immediately
+- refresh the digest in the background and inject the updated instructions live with `session.update`
+
+Goal:
+- first response is fast
+- answers still come from Vizzy Brain, not generic model memory
+
+### 5) Align the other realtime path too
+Update `src/components/vizzy/VizzyCallHandler.tsx` to use the same corrected realtime handshake/model flow, so phone-call voice sessions do not keep a second broken implementation.
+
+### 6) Validation
+After implementation I will verify all of these:
+- token endpoint still returns `client_secret`
+- WebRTC connects within a few seconds
+- UI shows `LIVE SESSION` instead of hanging on `CONNECTING`
+- Vizzy gives an immediate startup response
+- speaking to Vizzy gets a fast spoken reply
+- delayed `vizzy-pre-digest` no longer blocks the voice session
+- once digest arrives, updated Vizzy Brain context is injected live
+- the call-handler path uses the same stable connection behavior
+
+## Files to Update
+
+- `src/hooks/useVoiceEngine.ts`
+- `src/hooks/useVizzyVoiceEngine.ts`
+- `src/components/vizzy/VizzyVoiceChat.tsx`
+- `src/components/vizzy/VizzyCallHandler.tsx`
+- `supabase/functions/vizzy-pre-digest/index.ts` (for fast cached brain delivery)
+
+## Expected Outcome
+
+Vizzy should:
+- connect reliably
+- stop timing out falsely
+- stop showing offline while brain data is still loading
+- answer quickly
+- always answer using Vizzy Brain context, with refreshed intelligence injected as soon as it is ready
