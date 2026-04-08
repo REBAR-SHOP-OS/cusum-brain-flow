@@ -1,40 +1,34 @@
 
 
-# Show Empty State When Team Hub Opens (No Auto-Select)
+# Fix "System Performance Overview" Showing No Data
 
-## Problem
-When clicking the Team Hub icon, the page auto-selects the first channel (`channels[0]?.id`), showing a conversation immediately. The user wants to see a blank/empty state instead — no channel pre-selected.
+## Root Cause
 
-## Change
+The `actor_id` column in `activity_events` stores the **user_id** (from `auth.users`), NOT the **profile_id** (from `profiles`). But both `useUserActivityLog` and `useUserPerformance` query `actor_id` using `profileId` — so they never match any rows.
 
-### `src/pages/TeamHub.tsx`
+For example, Radin's profile_id is `5d948a66-...` but his activity events are stored under actor_id `be3b9444-...` (his user_id). The query `.eq("actor_id", profileId)` returns 0 results.
 
-**Line 76** — Remove the fallback to `channels[0]?.id`:
+## Fix
 
-```tsx
-// Before
-const resolvedChannelId = isNotesView
-  ? selfChannelId
-  : selectedChannelId || (channelsLoading ? null : channels[0]?.id || null);
+### 1. `src/hooks/useUserActivityLog.ts`
+- Accept both `profileId` and `userId` as parameters
+- Query `actor_id` using `userId` instead of `profileId`
 
-// After
-const resolvedChannelId = isNotesView
-  ? selfChannelId
-  : selectedChannelId;
-```
+### 2. `src/hooks/useUserPerformance.ts`
+- The activity_events count query on line 53 already receives `userId` as a parameter but incorrectly uses `profileId` for `actor_id`
+- Change `.eq("actor_id", profileId!)` to `.eq("actor_id", userId!)` (with a guard for null)
 
-**In the JSX** — When `activeChannelId` is null and it's not loading, show an empty welcome state instead of `MessageThread`:
+### 3. `src/components/vizzy/VizzyBrainPanel.tsx`
+- Update `UserActivitySection` to also pass `userId` (from `selectedProfile.user_id`) to `useUserActivityLog`
+- The component already has access to `selectedProfile.user_id`
 
-```tsx
-{!activeChannelId && !channelsLoading ? (
-  <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3">
-    <MessageSquare className="w-12 h-12 opacity-30" />
-    <p className="text-sm">Select a channel or conversation to start</p>
-  </div>
-) : (
-  <MessageThread ... />
-)}
-```
+## Summary
 
-One file, two small edits. No channel auto-selected on load.
+| File | Change |
+|------|--------|
+| `useUserActivityLog.ts` | Accept `userId`, query `actor_id` with it |
+| `useUserPerformance.ts` | Fix activity count to use `userId` for `actor_id` |
+| `VizzyBrainPanel.tsx` | Pass `selectedProfile.user_id` to `UserActivitySection` |
+
+Three files, minimal changes. Fixes the ID mismatch that causes "No activities recorded today."
 
