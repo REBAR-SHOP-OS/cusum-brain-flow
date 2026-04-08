@@ -265,7 +265,8 @@ export function useVizzyVoiceEngine() {
   const engine = useVoiceEngine({
     instructions: () => instructionsRef.current,
     voice: "shimmer",
-    model: "gpt-realtime-mini",
+    model: "gpt-4o-mini-realtime-preview-2025-06-03",
+    temperature: 0.6,
     vadThreshold: 0.85,
     silenceDurationMs: 1500,
     prefixPaddingMs: 500,
