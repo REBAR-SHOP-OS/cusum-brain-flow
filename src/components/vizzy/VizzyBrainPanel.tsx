@@ -1052,7 +1052,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
         {/* User avatar bar */}
         {rebarProfiles.length > 0 && (
-          <div className="px-5 py-3 border-b border-border flex items-center gap-2 flex-wrap">
+          <div className="px-5 py-3 border-b border-border flex items-center gap-2 overflow-x-auto scrollbar-none">
             <button
               onClick={() => setSelectedProfileId(null)}
               className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
@@ -1072,7 +1072,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 <button
                   key={p.id}
                   onClick={() => { setSelectedProfileId(isSelected ? null : p.id); setUserSelectedDate(new Date()); }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm transition-all ${
+                  className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded-full text-sm transition-all ${
                     isSelected
                       ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
                       : "bg-muted hover:bg-muted/80"
