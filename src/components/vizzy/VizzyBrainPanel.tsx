@@ -600,9 +600,52 @@ function UserFullReportButton({
   );
 }
 
-/** Activity log section for selected user */
+/** Human-readable event label mapping */
+function humanLabel(eventType: string, description?: string | null): string {
+  const map: Record<string, string> = {
+    page_visit: "Visited page",
+    email_sent: "Sent email",
+    email_deleted: "Deleted email",
+    email_archived: "Archived email",
+    agent_query: "AI interaction",
+    lead_created: "Created lead",
+    lead_updated: "Updated lead",
+    lead_deleted: "Deleted lead",
+    order_created: "Created order",
+    order_updated: "Updated order",
+    barlist_approved: "Approved barlist",
+    barlist_created: "Created barlist",
+    machine_run_started: "Started machine run",
+    machine_run_completed: "Completed machine run",
+    delivery_created: "Created delivery",
+    delivery_updated: "Updated delivery",
+    project_created: "Created project",
+    project_updated: "Updated project",
+    customer_created: "Created customer",
+    customer_updated: "Updated customer",
+  };
+  return map[eventType] || eventType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** Category for grouping */
+function getCategory(eventType: string, entityType: string): string {
+  if (eventType === "page_visit") return "pages";
+  if (eventType.startsWith("email") || entityType === "email") return "emails";
+  if (eventType.includes("agent") || entityType === "agent") return "ai";
+  return "mutations";
+}
+
+const categoryConfig: Record<string, { label: string; color: string; icon: typeof Activity }> = {
+  pages: { label: "Pages Visited", color: "text-blue-400", icon: Globe },
+  emails: { label: "Emails", color: "text-green-400", icon: Mail },
+  mutations: { label: "Data Actions", color: "text-orange-400", icon: Database },
+  ai: { label: "AI & Agent", color: "text-purple-400", icon: Brain },
+};
+
+/** Activity log section for selected user — grouped & detailed */
 function UserActivitySection({ profileId, userId, timezone, date }: { profileId: string; userId?: string; timezone: string; date?: Date }) {
   const { data: activities, isLoading } = useUserActivityLog(profileId, userId, date);
+  const [openGroups, setOpenGroups] = React.useState<Record<string, boolean>>({ pages: true, emails: true, mutations: true, ai: true });
 
   if (isLoading) {
     return (
@@ -621,26 +664,94 @@ function UserActivitySection({ profileId, userId, timezone, date }: { profileId:
     );
   }
 
+  // Group activities by category
+  const grouped: Record<string, typeof activities> = { pages: [], emails: [], mutations: [], ai: [] };
+  for (const a of activities) {
+    const cat = getCategory(a.event_type, a.entity_type);
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(a);
+  }
+
+  // Summary counts
+  const pageCt = grouped.pages.length;
+  const emailCt = grouped.emails.length;
+  const mutCt = grouped.mutations.length;
+  const aiCt = grouped.ai.length;
+
+  const toggleGroup = (key: string) => setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+
   return (
-    <div className="space-y-1.5 max-h-60 overflow-y-auto">
-      {activities.map((a) => (
-        <div key={a.id} className="flex items-start gap-2 rounded border border-border bg-card p-2">
-          <Activity className="w-3.5 h-3.5 mt-0.5 text-primary shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <span className="font-medium text-foreground">{a.event_type}</span>
-              <span>·</span>
-              <span>{a.entity_type}</span>
-              <span className="ml-auto">
-                {formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
-              </span>
+    <div className="space-y-2">
+      {/* Summary badges */}
+      <div className="flex flex-wrap gap-1.5 mb-2">
+        <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-muted border border-border text-foreground font-medium">
+          Total: {activities.length}
+        </span>
+        {pageCt > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 text-blue-400">
+            <Globe className="w-2.5 h-2.5" /> Pages: {pageCt}
+          </span>
+        )}
+        {emailCt > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-green-500/10 border border-green-500/20 text-green-400">
+            <Mail className="w-2.5 h-2.5" /> Emails: {emailCt}
+          </span>
+        )}
+        {mutCt > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-orange-500/10 border border-orange-500/20 text-orange-400">
+            <Database className="w-2.5 h-2.5" /> Actions: {mutCt}
+          </span>
+        )}
+        {aiCt > 0 && (
+          <span className="inline-flex items-center gap-1 text-[10px] rounded-full px-2 py-0.5 bg-purple-500/10 border border-purple-500/20 text-purple-400">
+            <Brain className="w-2.5 h-2.5" /> AI: {aiCt}
+          </span>
+        )}
+      </div>
+
+      {/* Grouped sections */}
+      <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+        {(["pages", "emails", "mutations", "ai"] as const).map((catKey) => {
+          const items = grouped[catKey];
+          if (!items?.length) return null;
+          const cfg = categoryConfig[catKey];
+          const CatIcon = cfg.icon;
+          const isOpen = openGroups[catKey];
+
+          return (
+            <div key={catKey} className="rounded border border-border overflow-hidden">
+              <button
+                onClick={() => toggleGroup(catKey)}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 bg-muted/40 hover:bg-muted/60 transition-colors text-left"
+              >
+                <CatIcon className={`w-3.5 h-3.5 ${cfg.color} shrink-0`} />
+                <span className="text-xs font-medium text-foreground flex-1">{cfg.label}</span>
+                <span className="text-[10px] text-muted-foreground font-medium">{items.length}</span>
+                <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+              </button>
+              {isOpen && (
+                <div className="divide-y divide-border/50">
+                  {items.map((a) => (
+                    <div key={a.id} className="flex items-start gap-2 px-2.5 py-1.5">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-medium text-foreground">{humanLabel(a.event_type, a.description)}</span>
+                          <span className="text-[10px] text-muted-foreground ml-auto shrink-0">
+                            {formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
+                          </span>
+                        </div>
+                        {a.description && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{a.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {a.description && (
-              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{a.description}</p>
-            )}
-          </div>
-        </div>
-      ))}
+          );
+        })}
+      </div>
     </div>
   );
 }
