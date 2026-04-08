@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -320,33 +320,72 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
   const { data: perf, isLoading } = useUserPerformance(profileId, userId, date);
   const { data: report } = useDetailedActivityReport(userId, date);
 
+  const buildFullReport = useCallback(() => {
+    if (!perf) return "";
+    const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" });
+    const sep = "══════════════════════════════════════════";
+    const thin = "──────────────────────────────────────────";
+    const lines: string[] = [];
+
+    lines.push(sep);
+    lines.push(`  DAILY REPORT — ${userName}`);
+    lines.push(`  ${dateStr}`);
+    lines.push(sep);
+    lines.push("");
+
+    // Attendance
+    lines.push("ATTENDANCE");
+    lines.push(`  Status:      ${perf.clockedIn ? "Clocked In" : "Off Clock"}`);
+    lines.push(`  Gross Hours: ${perf.hoursToday}h`);
+
+    if (perf.clockEntries.length > 0) {
+      lines.push("  Clock Entries:");
+      for (const ce of [...perf.clockEntries].reverse()) {
+        const inTime = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
+        const outTime = ce.clock_out
+          ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true })
+          : "ongoing";
+        const durMs = (ce.clock_out ? new Date(ce.clock_out).getTime() : Date.now()) - new Date(ce.clock_in).getTime();
+        const durH = Math.round(durMs / 360000) / 10;
+        lines.push(`    • ${inTime} → ${outTime} (${durH}h)`);
+      }
+    } else {
+      lines.push("  Clock Entries: None");
+    }
+
+    lines.push("");
+    lines.push(thin);
+    lines.push("");
+
+    // Performance Summary
+    lines.push("PERFORMANCE SUMMARY");
+    lines.push(`  Activities:   ${perf.activitiesToday}`);
+    lines.push(`  AI Sessions:  ${perf.aiSessionsToday}`);
+    lines.push(`  Emails Sent:  ${perf.emailsSent}`);
+
+    // Activity Breakdown
+    if (report && report.byEventType.length > 0) {
+      lines.push("");
+      lines.push(thin);
+      lines.push("");
+      lines.push("ACTIVITY BREAKDOWN");
+      for (const b of report.byEventType.slice(0, 10)) {
+        const label = humanLabel(b.eventType);
+        const dots = ".".repeat(Math.max(2, 30 - label.length));
+        lines.push(`  ${label} ${dots} ${b.count}`);
+      }
+    }
+
+    lines.push("");
+    lines.push(sep);
+    return lines.join("\n");
+  }, [perf, report, date, timezone, userName]);
+
   // Save report to vizzy_memory for Vizzy access (hook must be before early returns)
   useEffect(() => {
     if (!perf || !userId) return;
-    const lines = [
-      `📋 Overview Report — ${userName}`,
-      `Date: ${formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}`,
-      `Status: ${perf.clockedIn ? "Clocked In" : "Not Clocked In"}`,
-      `Hours Today: ${perf.hoursToday}`,
-      `Activities: ${perf.activitiesToday}`,
-      `AI Sessions: ${perf.aiSessionsToday}`,
-      `Emails Sent: ${perf.emailsSent}`,
-    ];
-    if (report && report.byEventType.length > 0) {
-      lines.push("", "Activity Breakdown:");
-      for (const b of report.byEventType.slice(0, 10)) {
-        lines.push(`  ${b.eventType}: ${b.count}`);
-      }
-    }
-    if (perf.clockEntries.length > 0) {
-      lines.push("", "Clock Entries:");
-      for (const ce of perf.clockEntries) {
-        const inTime = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
-        const outTime = ce.clock_out ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true }) : "ongoing";
-        lines.push(`  ${inTime} → ${outTime}`);
-      }
-    }
-    const reportText = lines.join("\n");
+    const reportText = buildFullReport();
+    if (!reportText) return;
     const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "2-digit", day: "2-digit" });
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) return;
@@ -363,83 +402,28 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
         )
         .then(() => {});
     });
-  }, [perf, report, userId, date, timezone, userName]);
+  }, [perf, report, userId, date, timezone, userName, buildFullReport]);
 
   if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
   if (!perf) return <p className="text-sm text-muted-foreground p-4">No data available.</p>;
 
-  const buildReportLines = () => {
-    const lines = [
-      `📋 Overview Report — ${userName}`,
-      `Date: ${formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}`,
-      `Status: ${perf.clockedIn ? "Clocked In" : "Not Clocked In"}`,
-      `Hours Today: ${perf.hoursToday}`,
-      `Activities: ${perf.activitiesToday}`,
-      `AI Sessions: ${perf.aiSessionsToday}`,
-      `Emails Sent: ${perf.emailsSent}`,
-    ];
-    if (report && report.byEventType.length > 0) {
-      lines.push("", "Activity Breakdown:");
-      for (const b of report.byEventType.slice(0, 10)) {
-        lines.push(`  ${b.eventType}: ${b.count}`);
-      }
-    }
-    if (perf.clockEntries.length > 0) {
-      lines.push("", "Clock Entries:");
-      for (const ce of perf.clockEntries) {
-        const inTime = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
-        const outTime = ce.clock_out ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true }) : "ongoing";
-        lines.push(`  ${inTime} → ${outTime}`);
-      }
-    }
-    return lines;
-  };
-
   const copyAll = () => {
-    navigator.clipboard.writeText(buildReportLines().join("\n"));
+    navigator.clipboard.writeText(buildFullReport());
     toast.success("Overview report copied");
   };
 
+  const reportText = buildFullReport();
+
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}
-        </p>
+    <div className="space-y-3">
+      <div className="flex items-center justify-end">
         <Button variant="outline" size="sm" onClick={copyAll} className="gap-1.5">
           <Copy className="w-3.5 h-3.5" /> Copy Report
         </Button>
       </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {[
-          { label: "Status", value: perf.clockedIn ? "🟢 Clocked In" : "⚪ Off Clock" },
-          { label: "Hours Today", value: `${perf.hoursToday}h` },
-          { label: "Activities", value: String(perf.activitiesToday) },
-          { label: "AI Sessions", value: String(perf.aiSessionsToday) },
-          { label: "Emails Sent", value: String(perf.emailsSent) },
-          { label: "Clock Entries", value: String(perf.clockEntries.length) },
-        ].map((item) => (
-          <div key={item.label} className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-            <p className="text-xl font-bold text-foreground">{item.value}</p>
-            <p className="text-xs text-muted-foreground">{item.label}</p>
-          </div>
-        ))}
-      </div>
-
-      {report && report.byEventType.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold text-foreground mb-2">Activity Breakdown</h4>
-          <div className="space-y-1.5">
-            {report.byEventType.slice(0, 10).map((b) => (
-              <div key={b.eventType} className="flex items-center justify-between text-sm px-2 py-1 rounded bg-muted/20">
-                <span className="text-foreground">{humanLabel(b.eventType)}</span>
-                <span className="font-medium text-primary">{b.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground bg-muted/30 border border-border rounded-lg p-4 overflow-auto max-h-[60vh]">
+        {reportText}
+      </pre>
     </div>
   );
 }
