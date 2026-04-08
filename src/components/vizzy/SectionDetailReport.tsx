@@ -9,8 +9,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
-import { ClipboardList, Clock, BarChart3, Users, Copy, Activity, Globe, Mail, Database, Brain, Sparkles } from "lucide-react";
+import { X, ClipboardList, Clock, BarChart3, Users, Copy, Activity, Globe, Mail, Database, Brain, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useDetailedActivityReport } from "@/hooks/useDetailedActivityReport";
