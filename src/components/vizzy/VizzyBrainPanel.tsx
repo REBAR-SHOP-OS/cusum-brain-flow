@@ -1204,6 +1204,7 @@ const ALL_KNOWN_AGENTS = [
 
 function SystemAgentsSummary() {
   const { data: agents, isLoading } = useSystemAgentSessions();
+  const { data: domainStats } = useAgentDomainStats();
 
   if (isLoading) {
     return (
@@ -1224,8 +1225,8 @@ function SystemAgentsSummary() {
   const activeCount = (agents || []).length;
 
   const allRows = [
-    ...ALL_KNOWN_AGENTS.map((a) => ({ displayName: a.name, data: activityMap.get(a.name) })),
-    ...extraAgents.map((a) => ({ displayName: a.agentName, data: a })),
+    ...ALL_KNOWN_AGENTS.map((a) => ({ displayName: a.name, code: a.code, data: activityMap.get(a.name) })),
+    ...extraAgents.map((a) => ({ displayName: a.agentName, code: "", data: a })),
   ];
 
   return (
@@ -1236,31 +1237,49 @@ function SystemAgentsSummary() {
         <span className="text-xs text-muted-foreground">{activeCount} active today</span>
       </div>
       <Accordion type="multiple" className="divide-y divide-border">
-        {allRows.map(({ displayName, data }) => {
+        {allRows.map(({ displayName, code, data }) => {
           const hasActivity = !!data && data.totalSessions > 0;
+          const agentStats = code && domainStats ? domainStats[code] : undefined;
+          const hasStats = agentStats && agentStats.some(s => s.value > 0);
           return (
             <AccordionItem key={displayName} value={displayName} className="border-none">
               <div className="flex items-center">
                 <AccordionTrigger className="flex-1 px-4 py-3 hover:no-underline">
-                  <div className="flex items-center gap-3 w-full">
-                    <span className={`w-8 h-8 rounded-full flex items-center justify-center ${hasActivity ? "bg-primary/20" : "bg-muted"}`}>
-                      <Bot className={`w-4 h-4 ${hasActivity ? "text-primary" : "text-muted-foreground/50"}`} />
-                    </span>
-                    <span className={`font-semibold text-sm ${hasActivity ? "text-foreground" : "text-muted-foreground"}`}>{displayName}</span>
-                    <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground mr-2">
-                      <span className="flex items-center gap-1">
-                        <Users className="w-3.5 h-3.5" />
-                        {data?.userCount ?? 0}
+                  <div className="flex flex-col gap-1 w-full">
+                    <div className="flex items-center gap-3 w-full">
+                      <span className={`w-8 h-8 rounded-full flex items-center justify-center ${hasActivity || hasStats ? "bg-primary/20" : "bg-muted"}`}>
+                        <Bot className={`w-4 h-4 ${hasActivity || hasStats ? "text-primary" : "text-muted-foreground/50"}`} />
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Sparkles className="w-3.5 h-3.5" />
-                        {data?.totalSessions ?? 0} sessions
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Mail className="w-3.5 h-3.5" />
-                        {data?.totalMessages ?? 0} msgs
-                      </span>
+                      <span className={`font-semibold text-sm ${hasActivity || hasStats ? "text-foreground" : "text-muted-foreground"}`}>{displayName}</span>
+                      <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground mr-2">
+                        <span className="flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5" />
+                          {data?.userCount ?? 0}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          {data?.totalSessions ?? 0} sessions
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Mail className="w-3.5 h-3.5" />
+                          {data?.totalMessages ?? 0} msgs
+                        </span>
+                      </div>
                     </div>
+                    {agentStats && (
+                      <div className="ml-11 flex items-center gap-2 text-xs text-muted-foreground">
+                        <BarChart3 className="w-3 h-3 text-primary/60" />
+                        {hasStats
+                          ? agentStats.filter(s => s.value > 0).map((s, i) => (
+                              <span key={s.label}>
+                                {i > 0 && <span className="mx-1">·</span>}
+                                {s.value} {s.label.toLowerCase()}
+                              </span>
+                            ))
+                          : <span>No active items</span>
+                        }
+                      </div>
+                    )}
                   </div>
                 </AccordionTrigger>
               </div>
@@ -1278,7 +1297,16 @@ function SystemAgentsSummary() {
                       </div>
                     </div>
                   ))}
-                  {!hasActivity && (
+                  {agentStats && hasStats && (
+                    <div className="flex flex-wrap gap-2 py-1.5 px-3">
+                      {agentStats.map((s) => (
+                        <span key={s.label} className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                          {s.value} {s.label}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {!hasActivity && !hasStats && (
                     <div className="text-sm text-muted-foreground py-1.5 px-3">
                       No activity today
                     </div>
