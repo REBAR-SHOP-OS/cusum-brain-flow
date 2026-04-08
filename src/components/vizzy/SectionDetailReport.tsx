@@ -620,7 +620,7 @@ export function SectionDetailReportDialog({
     <Dialog>
       <DialogTrigger asChild>
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          onClick={(e) => { e.stopPropagation(); }}
           onPointerDown={(e) => e.stopPropagation()}
           className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
           title={`View detailed ${sectionType} report`}
