@@ -39,8 +39,7 @@ function formatDuration(mins: number) {
 }
 
 export default function TimeClock() {
-  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, adminClockOut, closeStaleShifts, staleCount, myProfile, profiles } = useTimeClock();
-  const [staleConfirmOpen, setStaleConfirmOpen] = useState(false);
+  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, adminClockOut, myProfile, profiles } = useTimeClock();
   const leave = useLeaveManagement();
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
@@ -729,19 +728,6 @@ export default function TimeClock() {
         }}
       />
 
-      <ConfirmActionDialog
-        open={staleConfirmOpen}
-        onOpenChange={setStaleConfirmOpen}
-        title="Close Stale Shifts"
-        description={`This will close ${staleCount} shift(s) that have been open for more than 10 hours. Are you sure?`}
-        variant="destructive"
-        confirmLabel="Yes, Close All"
-        loading={punching}
-        onConfirm={async () => {
-          await closeStaleShifts();
-          setStaleConfirmOpen(false);
-        }}
-      />
 
       {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
         <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
