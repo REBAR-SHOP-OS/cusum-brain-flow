@@ -230,6 +230,17 @@ export default function TeamHub() {
             setDmTargetName(name || "Direct Message");
             setSelectedChannelId(result.id);
           }
+          // Mark unread team-hub notifications from this sender as read
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase
+              .from("notifications")
+              .update({ status: "read" })
+              .eq("user_id", user.id)
+              .eq("link_to", "/team-hub")
+              .eq("status", "unread")
+              .filter("metadata->>sender_profile_id", "eq", profileId);
+          }
         } catch (err: any) {
           toast.error("Failed to open DM", { description: err.message });
         }
