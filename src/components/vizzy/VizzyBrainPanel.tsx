@@ -402,20 +402,20 @@ function SectionReportButton({ label, getText }: { label: string; getText: () =>
   );
 }
 
-/** PDF generation button for the General Report header */
-function GeneralReportPDFButton({ date }: { date: Date }) {
+/** PDF generation button for per-user comprehensive report */
+function GeneralReportPDFButton({ date, userId, userName }: { date: Date; userId?: string; userName?: string }) {
   const [loading, setLoading] = useState(false);
 
   const handleGenerate = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (loading) return;
     setLoading(true);
-    sonnerToast.info("Generating full daily report PDF…");
+    sonnerToast.info(`Generating report for ${userName || "user"}…`);
 
     try {
       const dateStr = date.toISOString().split("T")[0];
       const { data, error } = await supabase.functions.invoke("generate-daily-report-pdf", {
-        body: { date: dateStr },
+        body: { date: dateStr, targetUserId: userId, targetUserName: userName },
       });
 
       if (error) throw new Error(error.message || "Failed to generate report");
@@ -436,10 +436,10 @@ function GeneralReportPDFButton({ date }: { date: Date }) {
     <button
       onClick={handleGenerate}
       disabled={loading}
-      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-      title="Generate full daily report PDF"
+      className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-50"
+      title={`Generate comprehensive report for ${userName || "user"}`}
     >
-      {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+      {loading ? <Loader2 className="w-5 h-5 animate-spin text-destructive" /> : <Download className="w-5 h-5 text-destructive" />}
     </button>
   );
 }
@@ -1222,7 +1222,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
               <Pencil className="w-3.5 h-3.5" />
             </button>
           )}
-          <GeneralReportPDFButton date={userSelectedDate} />
+          <GeneralReportPDFButton date={userSelectedDate} userId={selectedProfile?.user_id} userName={selectedProfile?.full_name} />
         </div>
         {editingItems && canEditAccess && selectedProfile?.email && (
           <AccessEditorPopover
