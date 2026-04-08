@@ -1,36 +1,47 @@
 
 
-# Make Overview Report Comprehensive
+# Fix: Agent Report Dialog Hidden Behind Vizzy Brain Panel
 
-## Problem
-The clipboard icon next to each user in the "All" view opens an `OverviewReport` that only shows a basic monospace text with 3 sections: Attendance, Performance Summary, and Activity Breakdown (top 10 types). The user wants a truly comprehensive English report.
+## Root Cause
+The `AgentReportDialog` component (line 1206-1296 in `VizzyBrainPanel.tsx`) uses standard `<Dialog>` + `<DialogContent>` which renders at `z-50`. The Vizzy Brain panel renders at `z-[100000]`. Result: clicking the clipboard icon opens the dialog behind the panel — black overlay visible, content hidden.
 
-## Current State
-The `OverviewReport` component (lines 322-431 in `SectionDetailReport.tsx`) builds a simple `<pre>` block with limited data. Meanwhile, the `ActivityReport` component in the same file already has rich visual sections (summary cards, event type breakdown, entity type breakdown, hourly timeline bar chart, full activity log with badges) — but is only shown for the "activity" sectionType, not for "overview".
+This is the exact same bug that was previously fixed for `SectionDetailReportDialog` (which now uses `z-[100001]`/`z-[100002]`).
 
-## Plan
+## Fix
 
-**File: `src/components/vizzy/SectionDetailReport.tsx`**
+**File: `src/components/vizzy/VizzyBrainPanel.tsx`** — Lines 1224-1294
 
-Rebuild the `OverviewReport` component to be a comprehensive visual report (not just monospace text) combining ALL available data:
+Replace the standard `<DialogContent>` with `<DialogPortal>` + `<DialogOverlay>` + `<DialogPrimitive.Content>` using z-indices above `100000`:
 
-1. **Keep the "Copy Report" button** — the monospace `buildFullReport()` text stays as the clipboard format, but gets expanded with all sections
-2. **Replace the `<pre>` display** with a rich visual layout combining:
-   - **Attendance Card** — Status badge (Clocked In / Off Clock), gross hours, detailed clock entries with durations
-   - **Performance Summary Cards** — Activities, AI Sessions, Emails Sent, Hours (grid of 4 cards, same style as ActivityReport)
-   - **Activity Breakdown by Event Type** — bar rows with counts (from `useDetailedActivityReport`)
-   - **Activity Breakdown by Entity Type** — bar rows with counts
-   - **Hourly Timeline** — horizontal bar chart showing activity distribution per hour
-   - **Full Activity Log** — color-coded badges (Page/Email/AI/Action) with timestamps and descriptions, scrollable list showing ALL events (not just top 10)
+```tsx
+// Before (line 1224-1294):
+<Dialog open={open} onOpenChange={setOpen}>
+  <DialogContent className="max-w-lg">
+    ...
+  </DialogContent>
+</Dialog>
 
-3. **Expand `buildFullReport()` text** to include entity type breakdown, hourly timeline, and full log for the copy-to-clipboard version
+// After:
+<Dialog open={open} onOpenChange={setOpen}>
+  <DialogPortal>
+    <DialogOverlay className="z-[100001]" />
+    <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100002] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out ... sm:rounded-lg max-h-[80vh] overflow-hidden flex flex-col">
+      <DialogHeader>...</DialogHeader>
+      <ScrollArea className="flex-1 pr-2">
+        ... (existing report content stays the same)
+      </ScrollArea>
+      <DialogPrimitive.Close className="absolute right-4 top-4 ...">
+        <X className="h-4 w-4" />
+      </DialogPrimitive.Close>
+    </DialogPrimitive.Content>
+  </DialogPortal>
+</Dialog>
+```
 
-4. **Keep `useEffect` for vizzy_memory persistence** — update it to save the expanded report text
+Also ensure that the necessary imports (`DialogPortal`, `DialogOverlay`, `DialogPrimitive`, `X`) are present at the top of the file.
 
-This reuses the exact same visual patterns already proven in `ActivityReport` and `TimeClockReport` — just combined into one comprehensive view. No new hooks or data sources needed; `useUserPerformance` and `useDetailedActivityReport` are already imported and used.
-
-## Files Modified
-| File | Change |
-|------|--------|
-| `src/components/vizzy/SectionDetailReport.tsx` | Rebuild `OverviewReport` with comprehensive visual layout |
+## Result
+- Agent report dialogs will render above the Brain panel (z-100002 > z-100000)
+- No more black screen
+- Reports will be fully visible and interactive
 
