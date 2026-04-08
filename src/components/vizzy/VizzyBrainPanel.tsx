@@ -1387,9 +1387,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                   <BarChart3 className="w-4 h-4 text-primary" />
                   <h3 className="text-sm font-semibold text-foreground flex-1">System Performance Overview</h3>
-                  <SectionReportButton
-                    label="System Performance"
-                    getText={() => `📊 System Performance Overview — ${selectedProfile.full_name || "User"}\nToday's system activities.`}
+                  <SectionDetailReportDialog
+                    sectionType="activity"
+                    profileId={selectedProfile.id}
+                    userId={selectedProfile.user_id}
+                    userName={selectedProfile.full_name || "User"}
+                    date={userSelectedDate}
+                    timezone={timezone}
                   />
                 </div>
                 <div className="p-3">
@@ -1402,9 +1406,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                   <Clock className="w-4 h-4 text-primary" />
                   <h3 className="text-sm font-semibold text-foreground flex-1">Time Clock</h3>
-                  <SectionReportButton
-                    label="Time Clock"
-                    getText={() => `⏰ Time Clock — ${selectedProfile.full_name || "User"}\nDetailed clock-in/clock-out entries for today.`}
+                  <SectionDetailReportDialog
+                    sectionType="timeclock"
+                    profileId={selectedProfile.id}
+                    userId={selectedProfile.user_id}
+                    userName={selectedProfile.full_name || "User"}
+                    date={userSelectedDate}
+                    timezone={timezone}
                   />
                 </div>
                 <div className="p-3">
