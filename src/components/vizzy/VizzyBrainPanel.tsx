@@ -1177,6 +1177,29 @@ function AccessEditorPopover({
 }
 
 // ── System-Wide Agents Summary (for "All" view) ──────────────────────
+const ALL_KNOWN_AGENTS = [
+  { code: "sales", name: "Blitz" },
+  { code: "accounting", name: "Penny" },
+  { code: "legal", name: "Tally" },
+  { code: "support", name: "Haven" },
+  { code: "social", name: "Pixel" },
+  { code: "estimating", name: "Gauge" },
+  { code: "shopfloor", name: "Forge" },
+  { code: "bizdev", name: "Atlas" },
+  { code: "delivery", name: "Relay" },
+  { code: "data", name: "Rex" },
+  { code: "growth", name: "Prism" },
+  { code: "talent", name: "Ally" },
+  { code: "seo", name: "SEO" },
+  { code: "copywriting", name: "Copywriting" },
+  { code: "webbuilder", name: "Web Builder" },
+  { code: "email", name: "Email" },
+  { code: "empire", name: "Empire" },
+  { code: "rebuild", name: "Rebuild" },
+  { code: "eisenhower", name: "Eisenhower Matrix" },
+  { code: "assistant", name: "Vizzy" },
+];
+
 function SystemAgentsSummary() {
   const { data: agents, isLoading } = useSystemAgentSessions();
 
@@ -1189,66 +1212,86 @@ function SystemAgentsSummary() {
     );
   }
 
-  if (!agents || agents.length === 0) {
-    return (
-      <div className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground text-sm">
-        No agent activity today.
-      </div>
-    );
+  const activityMap = new Map<string, NonNullable<typeof agents>[number]>();
+  for (const a of agents || []) {
+    activityMap.set(a.agentName, a);
   }
+
+  const knownNames = new Set(ALL_KNOWN_AGENTS.map((a) => a.name));
+  const extraAgents = (agents || []).filter((a) => !knownNames.has(a.agentName));
+  const activeCount = (agents || []).length;
+
+  const allRows = [
+    ...ALL_KNOWN_AGENTS.map((a) => ({ displayName: a.name, data: activityMap.get(a.name) })),
+    ...extraAgents.map((a) => ({ displayName: a.agentName, data: a })),
+  ];
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
         <Bot className="w-4 h-4 text-primary" />
         <h3 className="text-base font-semibold text-foreground flex-1">Agent Activity — All Users</h3>
-        <span className="text-xs text-muted-foreground">{agents.length} agents active</span>
+        <span className="text-xs text-muted-foreground">{activeCount} active today</span>
       </div>
       <Accordion type="multiple" className="divide-y divide-border">
-        {agents.map((agent) => (
-          <AccordionItem key={agent.agentName} value={agent.agentName} className="border-none">
-            <div className="flex items-center">
-              <AccordionTrigger className="flex-1 px-4 py-3 hover:no-underline">
-                <div className="flex items-center gap-3 w-full">
-                  <span className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                    <Bot className="w-4 h-4 text-primary" />
-                  </span>
-                  <span className="font-semibold text-foreground text-sm">{agent.agentName}</span>
-                  <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground mr-2">
-                    <span className="flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5" />
-                      {agent.userCount}
+        {allRows.map(({ displayName, data }) => {
+          const hasActivity = !!data && data.totalSessions > 0;
+          return (
+            <AccordionItem key={displayName} value={displayName} className="border-none">
+              <div className="flex items-center">
+                <AccordionTrigger className="flex-1 px-4 py-3 hover:no-underline">
+                  <div className="flex items-center gap-3 w-full">
+                    <span className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center",
+                      hasActivity ? "bg-primary/20" : "bg-muted"
+                    )}>
+                      <Bot className={cn("w-4 h-4", hasActivity ? "text-primary" : "text-muted-foreground/50")} />
                     </span>
-                    <span className="flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      {agent.totalSessions} sessions
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Mail className="w-3.5 h-3.5" />
-                      {agent.totalMessages} msgs
-                    </span>
-                  </div>
-                </div>
-              </AccordionTrigger>
-            </div>
-            <AccordionContent className="px-4 pb-3">
-              <div className="space-y-1.5 ml-11">
-                {agent.users.map((u) => (
-                  <div
-                    key={u.userId}
-                    className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-muted/40"
-                  >
-                    <span className="font-medium text-foreground">{u.fullName}</span>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{u.sessions} sessions</span>
-                      <span>{u.messages} msgs</span>
+                    <span className={cn(
+                      "font-semibold text-sm",
+                      hasActivity ? "text-foreground" : "text-muted-foreground"
+                    )}>{displayName}</span>
+                    <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground mr-2">
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3.5 h-3.5" />
+                        {data?.userCount ?? 0}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        {data?.totalSessions ?? 0} sessions
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Mail className="w-3.5 h-3.5" />
+                        {data?.totalMessages ?? 0} msgs
+                      </span>
                     </div>
                   </div>
-                ))}
+                </AccordionTrigger>
               </div>
-            </AccordionContent>
-          </AccordionItem>
-        ))}
+              <AccordionContent className="px-4 pb-3">
+                <div className="space-y-1.5 ml-11">
+                  {hasActivity && data!.users.map((u) => (
+                    <div
+                      key={u.userId}
+                      className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-muted/40"
+                    >
+                      <span className="font-medium text-foreground">{u.fullName}</span>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span>{u.sessions} sessions</span>
+                        <span>{u.messages} msgs</span>
+                      </div>
+                    </div>
+                  ))}
+                  {!hasActivity && (
+                    <div className="text-sm text-muted-foreground py-1.5 px-3">
+                      No activity today
+                    </div>
+                  )}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
       </Accordion>
     </div>
   );
