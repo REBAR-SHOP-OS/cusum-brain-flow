@@ -79,6 +79,20 @@ export function LeadSmartButtons({ leadId, contactEmail, companyId }: Props) {
         .from("sales_quotations")
         .update({ status: "sent_to_customer" } as any)
         .eq("id", sendDialog.quoteId);
+
+      // Log to timeline
+      if (companyId) {
+        await supabase.from("sales_lead_activities").insert({
+          sales_lead_id: leadId,
+          company_id: companyId,
+          activity_type: "email",
+          subject: `Quote ${sendDialog.quotationNumber} sent`,
+          body: `Quotation ${sendDialog.quotationNumber} sent to ${email.trim()}`,
+          completed_at: new Date().toISOString(),
+        } as any);
+        qc.invalidateQueries({ queryKey: ["sales_lead_activities", leadId] });
+      }
+
       qc.invalidateQueries({ queryKey: ["lead_smart_quotes", leadId] });
       toast.success(`Quote ${sendDialog.quotationNumber} sent to ${email.trim()}`);
       setSendDialog(null);
