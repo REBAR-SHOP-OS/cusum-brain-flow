@@ -84,7 +84,6 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     retryOutputAudio,
     appendLiveResult,
   } = useVizzyVoiceEngine();
-  const liveResultsRef = useRef<string[]>([]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const [elapsed, setElapsed] = useState(0);
