@@ -1029,6 +1029,15 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
   const selectedProfile = rebarProfiles.find((p) => p.id === selectedProfileId);
 
+  // Super admin edit capability
+  const viewerEmail = user?.email?.toLowerCase() ?? "";
+  const canEditAccess = SUPER_EDIT_EMAILS.includes(viewerEmail);
+  const { override: accessOverride, saveAgents, saveAutomations } = useUserAccessOverrides(selectedProfile?.email);
+
+  // All available agents for the editor
+  const allAgentItems = useMemo(() => Object.entries(agentConfigs).map(([key, cfg]) => ({ id: key, label: `${cfg.name} — ${cfg.role}` })), []);
+  const allAutomationItems = useMemo(() => defaultAutomations.map((a) => ({ id: a.id, label: a.name })), []);
+
   // Filter entries by selected user name if applicable
   const filteredEntries = useMemo(() => {
     if (!selectedProfile) return entries;
