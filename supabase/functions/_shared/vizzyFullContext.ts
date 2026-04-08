@@ -1073,7 +1073,7 @@ STAFF PRESENCE: ${clockedInCount} currently clocked in, ${clockedOutTodayCount} 
     parts.push("  No open tasks");
   }
 
-  return parts.join("\n");
+  return "[BUSINESS CONTEXT — VERIFIED DATA — START]\n" + parts.join("\n") + "\n[BUSINESS CONTEXT — VERIFIED DATA — END]";
 }
 
 /** Build a unified mini daily report per employee combining ALL data sources */
