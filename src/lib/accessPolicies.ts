@@ -29,7 +29,6 @@ export const ACCESS_POLICIES = {
   /** External estimators — email → allowed pipeline stage ids */
   externalEstimators: {
     "info@mavericksrebar.com": ["estimation_karthick"],
-    "swapnil.m183@gmail.com": ["estimation_karthick"],
   } as Record<string, string[]>,
 
   /** Internal domain for basic access checks */
@@ -46,7 +45,6 @@ export const ACCESS_POLICIES = {
     "saurabh@rebar.shop",
     "ben@rebar.shop",
     "ai@rebar.shop",
-    "swapnil.m183@gmail.com",
     "tariq0001010@gmail.com",
   ] as string[],
 };
