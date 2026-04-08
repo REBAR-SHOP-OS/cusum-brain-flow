@@ -19,7 +19,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
 import { useSystemAgentSessions, SystemAgentSummary } from "@/hooks/useSystemAgentSessions";
-import { useAgentDomainStats } from "@/hooks/useAgentDomainStats";
+import { useAgentDomainStats, AgentDomainStat } from "@/hooks/useAgentDomainStats";
 import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
 import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
