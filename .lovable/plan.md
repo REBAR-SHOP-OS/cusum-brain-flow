@@ -1,67 +1,17 @@
 
 
-# Add Role Descriptions & Report Button to Each Agent Row
+# Remove Direct Messages Section from Chat UI
 
-## What Changes
+## Problem
+The user wants the "Direct Messages" section completely removed from the chat popover (circled in the screenshot).
 
-**File:** `src/components/vizzy/VizzyBrainPanel.tsx`
+## Changes
 
-### 1. Add role descriptions to ALL_KNOWN_AGENTS
+### 1. `src/components/chat/DockChatBar.tsx`
+- Delete lines 227-245 (the entire `{/* DM channels */}` block that renders the Direct Messages list)
 
-Each agent gets a `role` field describing its function in English:
+### 2. `src/components/layout/GlobalChatPanel.tsx`
+- Delete lines 155-175 (the entire `{/* DMs */}` block that renders the Direct Messages list)
 
-| Agent | Role |
-|-------|------|
-| Blitz | Sales & Pipeline |
-| Penny | Accounting & Invoices |
-| Tally | Legal & Compliance |
-| Haven | Customer Support |
-| Pixel | Social Media |
-| Gauge | Estimating & Quotes |
-| Forge | Shop Floor & Production |
-| Atlas | Business Development |
-| Relay | Delivery & Logistics |
-| Rex | Data & Analytics |
-| Prism | Growth & Coaching |
-| Ally | Talent & HR |
-| SEO | Search Engine Optimization |
-| Copywriting | Content & Copy |
-| Web Builder | Website Management |
-| Email | Email Management |
-| Empire | Ventures & Architecture |
-| Rebuild | System Architecture |
-| Eisenhower | Priority Matrix |
-| Vizzy | Operations Commander |
-
-### 2. Display role under agent name
-
-Show the role as a small muted subtitle text next to or under the agent name in each row:
-```
-🤖 Blitz — Sales & Pipeline
-```
-
-### 3. Add report icon button
-
-Add a `ClipboardList` icon button next to each agent row (outside the accordion trigger). When clicked, it opens a dialog/modal showing:
-- Agent name + role
-- Domain stats (from `useAgentDomainStats`)
-- Session/message breakdown per user (existing data)
-- Formatted as a clean English report
-
-The report modal will use the existing `Dialog` component pattern already used elsewhere in VizzyBrainPanel.
-
-### 4. Report modal content
-
-The modal will show:
-- **Header:** Agent name + role
-- **Domain Metrics:** All stats for that agent in a clean list
-- **Today's Activity:** Sessions count, messages count, active users
-- **User Breakdown:** Table of users with their session/message counts
-- If no data: "No activity recorded today"
-
-## Files Modified
-
-| File | Change |
-|------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Add `role` to `ALL_KNOWN_AGENTS`, show role subtitle, add report icon button + report dialog |
+Both files will retain the "Start a Chat" / team members section and group channels — only the DM channel listing is removed.
 
