@@ -283,17 +283,26 @@ export function VizzyCallHandler() {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const sdpResp = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${tokenData.client_secret}`,
-          "Content-Type": "application/sdp",
-        },
-        body: offer.sdp,
-      });
+      let sdpResp: Response;
+      try {
+        sdpResp = await fetch("https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${tokenData.client_secret}`,
+            "Content-Type": "application/sdp",
+          },
+          body: offer.sdp,
+        });
+      } catch (fetchErr: any) {
+        console.error("[VizzyCallHandler] SDP fetch error:", fetchErr?.message);
+        pc.close();
+        activeRealtimeSession.current = null;
+        return;
+      }
 
       if (!sdpResp.ok) {
-        console.error("[VizzyCallHandler] SDP exchange failed:", sdpResp.status);
+        const errText = await sdpResp.text().catch(() => "");
+        console.error("[VizzyCallHandler] SDP exchange failed:", sdpResp.status, errText);
         pc.close();
         activeRealtimeSession.current = null;
         return;
@@ -301,6 +310,17 @@ export function VizzyCallHandler() {
 
       const answerSdp = await sdpResp.text();
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+
+      // Monitor connection state
+      pc.onconnectionstatechange = () => {
+        const cs = pc.connectionState;
+        console.log("[VizzyCallHandler] PC state:", cs);
+        if (cs === "failed" || cs === "closed") {
+          console.error("[VizzyCallHandler] Connection lost:", cs);
+          pc.close();
+          activeRealtimeSession.current = null;
+        }
+      };
 
       console.log(`[VizzyCallHandler] OpenAI Realtime connected (${callMode}) for call from`, fromNumber);
 

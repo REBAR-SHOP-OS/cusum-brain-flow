@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Mic, MicOff, Loader2, Copy, Check } from "lucide-react";
 import { useVizzyVoiceEngine } from "@/hooks/useVizzyVoiceEngine";
 import type { VizzyVoiceTranscript } from "@/hooks/useVizzyVoiceEngine";
+import type { VoiceConnectionPhase, VoiceErrorKind } from "@/hooks/useVoiceEngine";
 import { cn } from "@/lib/utils";
 import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { motion, AnimatePresence } from "framer-motion";
@@ -69,9 +70,26 @@ const READ_ACTIONS = new Set([
   "quickbooks_query",
 ]);
 
+// Retryable error kinds — only retry transient failures
+const RETRYABLE_ERRORS: Set<VoiceErrorKind> = new Set([
+  "token_failed", "sdp_failed", "channel_timeout", "webrtc_failed", "network",
+]);
+
+// Phase labels for UI
+const PHASE_LABELS: Record<NonNullable<VoiceConnectionPhase>, string> = {
+  requesting_mic: "Requesting microphone...",
+  getting_token: "Getting secure voice token...",
+  negotiating_sdp: "Negotiating voice session...",
+  waiting_channel: "Waiting for realtime channel...",
+  connected: "Voice connected",
+};
+
 export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const {
     state: voiceState,
+    connectionPhase,
+    lastErrorKind,
+    lastErrorDetail,
     transcripts,
     isSpeaking,
     isMuted,
@@ -214,42 +232,38 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const isConnected = voiceState === "connected";
   const isBrainSyncing = isConnected && contextLoading;
   const isError = voiceState === "error";
-  const isAutoRetrying = isError && autoRetryCountRef.current < MAX_AUTO_RETRIES;
+  // Only auto-retry for retryable error types
+  const canAutoRetry = isError && lastErrorKind != null && RETRYABLE_ERRORS.has(lastErrorKind);
+  const isAutoRetrying = canAutoRetry && autoRetryCountRef.current < MAX_AUTO_RETRIES;
 
-  // Auto-retry on error (up to MAX_AUTO_RETRIES times)
+  // Smart auto-retry: only for transient/retryable errors
   useEffect(() => {
-    if (voiceState === "error" && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
+    if (isError && canAutoRetry && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
       autoRetryCountRef.current += 1;
-      console.log(`[VizzyVoiceChat] Auto-retry ${autoRetryCountRef.current}/${MAX_AUTO_RETRIES}`);
-      autoRetryTimerRef.current = setTimeout(() => {
-        startSession();
-      }, 3000);
-      return () => {
-        if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current);
-      };
+      console.log(`[VizzyVoiceChat] Auto-retry ${autoRetryCountRef.current}/${MAX_AUTO_RETRIES} (${lastErrorKind})`);
+      autoRetryTimerRef.current = setTimeout(() => { startSession(); }, 3000);
+      return () => { if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current); };
     }
-  }, [voiceState, startSession]);
+  }, [isError, canAutoRetry, startSession, lastErrorKind]);
 
   // Reset auto-retry counter on successful connection
   useEffect(() => {
-    if (voiceState === "connected") {
-      autoRetryCountRef.current = 0;
-    }
+    if (voiceState === "connected") { autoRetryCountRef.current = 0; }
   }, [voiceState]);
 
-  const statusText = isConnecting
-    ? elapsed >= 10
-      ? "Connecting voice engine..."
-      : "Initializing Vizzy..."
-    : isAutoRetrying
-    ? "Reconnecting..."
-    : isError
-    ? "Connection failed"
-    : isActive
-    ? "Vizzy is speaking..."
-    : isConnected
-    ? (isMuted ? "Muted" : "Listening...")
-    : "";
+  // Build status text from connection phase
+  let statusText = "";
+  if (isConnecting) {
+    statusText = connectionPhase ? PHASE_LABELS[connectionPhase] || "Connecting..." : "Initializing Vizzy...";
+  } else if (isAutoRetrying) {
+    statusText = "Reconnecting...";
+  } else if (isError) {
+    statusText = "Connection failed";
+  } else if (isActive) {
+    statusText = "Vizzy is speaking...";
+  } else if (isConnected) {
+    statusText = isMuted ? "Muted" : "Listening...";
+  }
 
   // Orbit animation handled via CSS keyframes instead of RAF state updates
 
@@ -401,24 +415,42 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           )}
 
           {isError && !isAutoRetrying && (
-            <button
-              onClick={() => { autoRetryCountRef.current = 0; startSession(); }}
-              className="px-5 py-2 rounded-full text-sm font-medium transition-colors"
-              style={{
-                background: "hsl(172 66% 50%)",
-                color: "hsl(210 30% 6%)",
-              }}
-            >
-              Retry Connection
-            </button>
+            <div className="flex flex-col items-center gap-2">
+              {lastErrorDetail && (
+                <p className="text-[11px] max-w-xs text-center px-3 opacity-70" style={{ color: "hsl(0 84% 70%)" }}>
+                  {lastErrorKind === "mic_denied" ? "Microphone permission denied"
+                    : lastErrorKind === "mic_unavailable" ? "No microphone found"
+                    : lastErrorKind === "sdp_rejected" ? "Voice service unavailable"
+                    : lastErrorKind === "channel_timeout" ? "Token OK but voice channel didn't open"
+                    : lastErrorDetail.slice(0, 120)}
+                </p>
+              )}
+              <button
+                onClick={() => { autoRetryCountRef.current = 0; startSession(); }}
+                className="px-5 py-2 rounded-full text-sm font-medium transition-colors"
+                style={{
+                  background: "hsl(172 66% 50%)",
+                  color: "hsl(210 30% 6%)",
+                }}
+              >
+                Retry Connection
+              </button>
+            </div>
           )}
 
           {isAutoRetrying && (
-            <div className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" style={{ color: "hsl(45 93% 58%)" }} />
-              <span className="text-xs" style={{ color: "hsl(45 93% 58%)" }}>
-                Auto-retry {autoRetryCountRef.current}/{MAX_AUTO_RETRIES}...
-              </span>
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" style={{ color: "hsl(45 93% 58%)" }} />
+                <span className="text-xs" style={{ color: "hsl(45 93% 58%)" }}>
+                  Auto-retry {autoRetryCountRef.current}/{MAX_AUTO_RETRIES}...
+                </span>
+              </div>
+              {lastErrorKind && (
+                <span className="text-[10px] opacity-60" style={{ color: "hsl(0 0% 55%)" }}>
+                  {lastErrorKind === "network" ? "Network issue" : lastErrorKind.replace(/_/g, " ")}
+                </span>
+              )}
             </div>
           )}
 
