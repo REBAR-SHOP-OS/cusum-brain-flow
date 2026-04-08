@@ -1,49 +1,51 @@
 
 
-# Show User Role & Job Title in Vizzy Brain Panel
+# Revert User Tab Bar & Move Role/Title to General Overview
 
-## Summary
-Display each user's **role** (admin, sales, etc.) and **job title** from their profile in the user tab bar, so admins can quickly see who does what.
+## Problem
+The user tab buttons now show role and job title underneath each name, making them too large and visually cluttered. The user wants the tab bar reverted to its previous compact style (avatar + first name only) and the role/title info moved into the **General Overview** section.
 
 ## Changes
 
-### 1. Fetch user roles (`src/components/vizzy/VizzyBrainPanel.tsx`)
+### 1. Revert user tab buttons (`src/components/vizzy/VizzyBrainPanel.tsx`, lines 1085–1096)
 
-Add a query to fetch roles from `user_roles` table, mapped by `user_id`:
-
-```typescript
-const { data: userRoles } = useQuery({
-  queryKey: ["vizzy_brain_user_roles"],
-  queryFn: async () => {
-    const userIds = profiles.filter(p => p.user_id).map(p => p.user_id);
-    const { data } = await supabase.from("user_roles").select("user_id, role").in("user_id", userIds);
-    return data || [];
-  },
-  enabled: profiles.length > 0,
-});
+Remove the `flex-col` wrapper and role/title subtitle. Each button goes back to:
+```
+[Avatar] FirstName
 ```
 
-Build a `roleMap: Record<string, string>` from `user_id → role`.
-
-### 2. Update user tab buttons (lines 1046–1062)
-
-Change each user button from showing only the first name to a **two-line layout**:
-- Line 1: **First name** (bold)
-- Line 2: **Role badge** + **job title** (small, muted)
-
-```text
-Before:  [🔵 R]  Radin
-After:   [🔵 R]  Radin
-                  Admin · CEO
+Replace lines 1085–1096 with:
+```tsx
+<span className="text-sm font-bold">{firstName}</span>
 ```
 
-The role is shown as a small colored badge (e.g., "Admin" in primary, "Sales" in blue, etc.) and the title comes from `p.title` (already in the profile data).
+### 2. Add role & title to General Overview section (lines 1113–1156)
 
-### 3. Layout adjustment
+Inside the General Overview card, after the header and before `<PerformanceCard>`, add a small info row showing:
+- **Role(s)**: uppercase badges (e.g., ADMIN, SALES)
+- **Job Title**: from `selectedProfile.title`
 
-Change buttons from single-line `items-center` to allow wrapping of the subtitle. Keep the compact `px-3 py-2` sizing but allow a second line for role/title info using a `flex-col` wrapper for the text portion.
+```tsx
+{/* User info: role + title */}
+<div className="px-4 py-2 border-b border-border/50 flex items-center gap-2 text-sm">
+  <span className="font-semibold">{selectedProfile.full_name}</span>
+  {selectedProfile.user_id && roleMap[selectedProfile.user_id]?.length > 0 && (
+    <span className="text-[11px] uppercase font-bold text-primary">
+      {roleMap[selectedProfile.user_id].join(", ")}
+    </span>
+  )}
+  {selectedProfile.title && (
+    <>
+      <span className="text-muted-foreground">·</span>
+      <span className="text-muted-foreground text-xs">{selectedProfile.title}</span>
+    </>
+  )}
+</div>
+```
+
+This row appears between the section header and the PerformanceCard. The `roleMap` and `userRolesData` query remain unchanged — just the display location moves.
 
 | File | Change |
 |------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Fetch user roles, display role badge + job title under each user's name |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Revert tab buttons to compact style; add role/title row inside General Overview |
 
