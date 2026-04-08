@@ -152,27 +152,6 @@ export function GlobalChatPanel({ open, onClose }: GlobalChatPanelProps) {
             </div>
           )}
 
-          {/* DMs */}
-          {dmChannels.length > 0 && (
-            <div className="px-2 pt-2">
-              <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Direct Messages</p>
-              {dmChannels.map((ch) => (
-                <button
-                  key={ch.id}
-                  onClick={() => setSelectedChannelId(ch.id)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg hover:bg-muted/60 transition-colors text-left group"
-                >
-                  <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                    <Users className="w-4 h-4 text-muted-foreground" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">{ch.name}</p>
-                  </div>
-                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
-              ))}
-            </div>
-          )}
 
           {/* Team members for quick DM */}
           <div className="px-2 pt-3 pb-2">
