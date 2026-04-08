@@ -924,8 +924,9 @@ export function VizzyBrainPanel({ onClose }: Props) {
       );
     }
 
-    // Filter sections by current user's menu access
-    const userMenus = getVisibleMenus(user?.email);
+    // Filter sections by the SELECTED user's menu access (or viewer's if "All")
+    const targetEmail = selectedProfile?.email ?? user?.email;
+    const userMenus = getVisibleMenus(targetEmail);
     const accessibleGroups = grouped.filter((group) => {
       const requiredMenu = GROUP_TO_MENU[group.key];
       if (!requiredMenu) return true; // no mapping = always show
