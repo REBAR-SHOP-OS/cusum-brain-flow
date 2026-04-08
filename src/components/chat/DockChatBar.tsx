@@ -45,7 +45,7 @@ export function DockChatBar() {
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const openDMMutation = useOpenDM();
   const isMobile = useIsMobile();
-  const { unreadSenderIds } = useUnreadSenders();
+  const { unreadSenderIds, unreadCounts } = useUnreadSenders();
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const [launcherOpen, setLauncherOpen] = useState(false);
 
@@ -176,8 +176,10 @@ export function DockChatBar() {
                         </AvatarFallback>
                       </Avatar>
                       <span className="text-sm text-foreground truncate flex-1">{p.full_name}</span>
-                      {unreadSenderIds.has(p.id) && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                      {(unreadCounts.get(p.id) ?? 0) > 0 && (
+                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold flex items-center justify-center shrink-0">
+                          {unreadCounts.get(p.id)}
+                        </span>
                       )}
                     </button>
                   ))}
