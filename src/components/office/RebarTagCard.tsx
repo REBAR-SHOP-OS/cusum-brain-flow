@@ -153,13 +153,14 @@ export function RebarTagCard({
             <span className="text-[11px] text-black/30 italic">No shape</span>
           )}
         </div>
-        <div className="flex gap-4 text-xs shrink-0 mt-1">
-          <div className="flex gap-1"><span className="font-bold">Item:</span><span className="font-black">{item}</span></div>
-        </div>
       </div>
 
       {/* Ref — full width */}
       <div className="border-b border-black text-[10px] shrink-0 px-2 py-1 min-h-[3.5rem] overflow-hidden">
+        <div className="flex gap-1">
+          <span className="font-bold">Item:</span>
+          <span className="font-black">{item}</span>
+        </div>
         <div className="flex gap-1">
           <span className="font-bold">Ref:</span>
           <span className="font-black uppercase">{reference || "—"}</span>
