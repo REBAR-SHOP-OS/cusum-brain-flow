@@ -670,7 +670,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         toast.error("Could not connect. Try again.");
       }
     }
-  }, [cleanup, handleDataChannelMessage, endSession, attemptReconnect, clearKeepalive, clearIceGrace]);
+  }, [cleanup, handleDataChannelMessage, endSession, attemptReconnect, clearKeepalive, clearIceGrace, markConnected]);
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {

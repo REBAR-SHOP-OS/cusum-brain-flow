@@ -195,14 +195,14 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   // Connecting timer
   useEffect(() => {
     let iv: ReturnType<typeof setInterval>;
-    if (voiceState === "connecting" || contextLoading) {
+    if (voiceState === "connecting") {
       setElapsed(0);
       iv = setInterval(() => setElapsed((e) => e + 1), 1000);
     } else {
       setElapsed(0);
     }
     return () => clearInterval(iv);
-  }, [voiceState, contextLoading]);
+  }, [voiceState]);
 
   const handleClose = useCallback(() => {
     endSession();
@@ -210,8 +210,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   }, [endSession, onClose]);
 
   const isActive = mode === "speaking" || isSpeaking;
-  const isConnecting = voiceState === "connecting" || contextLoading;
+  const isConnecting = voiceState === "connecting";
   const isConnected = voiceState === "connected";
+  const isBrainSyncing = isConnected && contextLoading;
   const isError = voiceState === "error";
   const isAutoRetrying = isError && autoRetryCountRef.current < MAX_AUTO_RETRIES;
 
@@ -505,7 +506,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
         {isConnected && (
           <div className="flex items-center gap-2 text-xs" style={{ color: "hsl(0 0% 45%)" }}>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Live ERP Data Connected
+            {isBrainSyncing ? "Vizzy Brain syncing…" : "Live ERP Data Connected"}
           </div>
         )}
         <div className="flex items-center gap-3">
