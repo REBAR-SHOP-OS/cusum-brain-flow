@@ -401,5 +401,6 @@ export function useVizzyVoiceEngine() {
     startSession,
     endSession,
     contextLoading,
+    appendLiveResult,
   };
 }

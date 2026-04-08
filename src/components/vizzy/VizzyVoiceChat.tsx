@@ -82,7 +82,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     contextLoading,
     outputAudioBlocked,
     retryOutputAudio,
-    updateSessionInstructions,
+    appendLiveResult,
   } = useVizzyVoiceEngine();
   const liveResultsRef = useRef<string[]>([]);
 
