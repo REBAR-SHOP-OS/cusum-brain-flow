@@ -1,56 +1,49 @@
 
 
-# Add Automations Section to Vizzy Brain Panel
+# Add Stop Run Icon Beside Record Stroke Button
 
-## Summary
-Add a new "Automations" section between "Agents" and "System Performance Overview" in the Vizzy Brain panel, showing which dashboard automations each user can see based on their role and email.
+## Analysis
+The screenshot shows the "Record Stroke" button with the red-circled area on the right side (the Zap icon area). The user wants a **Stop** icon button placed next to it.
 
-## How It Works
-The `AutomationsSection` component (in `src/components/integrations/AutomationsSection.tsx`) filters automations using:
-- **Admins** see all 13 automations
-- **Non-admins** are blocked from `ADMIN_ONLY_IDS`: Social Media Manager, Facebook Commenter, Email Marketing, Website Manager, App Builder, SEO Manager
-- **Exception**: `zahra@rebar.shop` also sees Social Media Manager
+Looking at the code in `SlotTracker.tsx`, there's already a "Stop" button (lines 357-366) but it only appears when `totalCutsDone > 0`. The user wants a persistent stop icon **beside** the Record Stroke button (inside the same row), not conditionally hidden.
 
-To replicate this logic in Vizzy Brain for any selected user, we need a pure function that takes an email and admin status and returns the list of visible automation names.
+## Change
 
-## Changes
+### `src/components/shopfloor/SlotTracker.tsx`
 
-### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
-
-Add a new `UserAutomationsSection` component that:
-- Imports `defaultAutomations` and `ADMIN_ONLY_IDS` from `AutomationsSection.tsx` (need to export them)
-- Takes the selected user's email as prop
-- Determines if user is admin (super admin emails or has admin role)
-- Filters automations using the same logic as the dashboard
-- Renders a list of badges showing automation names the user can see
-
-Insert as a new section between Agents (Section 2) and System Performance Overview (Section 3), around line 1205:
+**Add a Stop Run icon button** right after the Record Stroke button (line 353), visible whenever the Record Stroke button is visible and `canWrite` is true. This will call `onCompleteRun` (same handler as the existing stop button).
 
 ```tsx
-{/* Section 2.5: Automations */}
-<div className="rounded-xl border border-border bg-card overflow-hidden">
-  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
-    <Bot className="w-4 h-4 text-primary" />
-    <h3 className="text-sm font-semibold text-foreground flex-1">Automations</h3>
-  </div>
-  <div className="p-3">
-    <div className="flex flex-wrap gap-1.5">
-      {visibleAutomations.map(a => (
-        <span key={a.id} className="text-[10px] px-2 py-0.5 rounded-full bg-muted ...">
-          {a.name}
-        </span>
-      ))}
-    </div>
-  </div>
-</div>
+{/* Record stroke */}
+{activeSlots.length > 0 && canWrite && (
+  <Button
+    className="flex-1 gap-2 font-bold h-12 text-base justify-between px-4"
+    onClick={onRecordStroke}
+  >
+    <span className="flex items-center gap-2">
+      <Scissors className="w-5 h-5" />
+      Record Stroke ({nextStroke}/{maxStrokes}) — {piecesPerStroke} pcs
+    </span>
+    <Zap className="w-5 h-5" />
+  </Button>
+)}
+
+{/* NEW: Stop Run button beside Record Stroke */}
+{activeSlots.length > 0 && canWrite && !allDone && (
+  <Button
+    variant="destructive"
+    className="h-12 px-3"
+    onClick={onCompleteRun}
+    title="Stop"
+  >
+    <StopCircle className="w-5 h-5" />
+  </Button>
+)}
 ```
 
-### 2. `src/components/integrations/AutomationsSection.tsx`
-
-Export `defaultAutomations` and `ADMIN_ONLY_IDS` so they can be imported by the Brain panel.
+`StopCircle` is already imported. No new dependencies needed. The existing conditional stop button (lines 357-366) that shows piece count can remain as-is for when pieces have been cut.
 
 | File | Change |
 |------|--------|
-| `src/components/integrations/AutomationsSection.tsx` | Export `defaultAutomations` and `ADMIN_ONLY_IDS` |
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Add Automations section showing per-user visible automations as badges |
+| `src/components/shopfloor/SlotTracker.tsx` | Add Stop icon button next to Record Stroke |
 
