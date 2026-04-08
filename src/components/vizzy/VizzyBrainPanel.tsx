@@ -223,13 +223,14 @@ function PerformanceCard({ profileId, userId, name, timezone, date }: { profileI
 }
 
 /** Agent sessions accordion for selected user */
-function UserAgentsSections({ userId, name, email, overrideAgents, onEditAgents, canEdit }: {
+function UserAgentsSections({ userId, name, email, overrideAgents, onEditAgents, canEdit, date }: {
   userId: string; name: string; email?: string;
   overrideAgents?: string[] | null;
   onEditAgents?: () => void;
   canEdit?: boolean;
+  date?: Date;
 }) {
-  const { data: sessionAgents, isLoading } = useUserAgentSessions(userId);
+  const { data: sessionAgents, isLoading } = useUserAgentSessions(userId, date);
 
   // Build merged list: accessible agents + any additional agents from sessions
   const mergedAgents = React.useMemo(() => {
@@ -517,8 +518,8 @@ function UserFullReportButton({
   date?: Date;
 }) {
   const { data: perfData } = useUserPerformance(profile.id, profile.user_id, date);
-  const { data: agentSessions } = useUserAgentSessions(profile.user_id);
-  const { data: activities } = useUserActivityLog(profile.id);
+  const { data: agentSessions } = useUserAgentSessions(profile.user_id, date);
+  const { data: activities } = useUserActivityLog(profile.id, null, date);
 
   const generateReport = () => {
     const name = profile.full_name || "User";
@@ -1469,6 +1470,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
                       overrideAgents={accessOverride?.agents}
                       onEditAgents={() => setEditingAgents(true)}
                       canEdit={canEditAccess}
+                      date={userSelectedDate}
                     />
                   </div>
                 </div>
