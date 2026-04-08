@@ -1,26 +1,30 @@
 
 
-# Make URLs Clickable in Team Hub Chat Messages
+# Show Unread Message Count per Team Member
 
 ## Problem
-When a user sends a URL (e.g., YouTube link) in the Team Hub chat, it appears as plain text and is not clickable.
+Currently, unread messages from a team member only show a small green dot. The user wants to see the **actual count** of unread messages as a number badge, and it should disappear once messages are read.
 
-## Root Cause
-The `renderMentionText` function in `MessageThread.tsx` (line 299) only handles `@mentions` — it splits text by `@` tokens and renders them. Plain URLs are rendered as regular `<span>` text with no `<a>` tag wrapping.
+## Changes
 
-## Solution
-Enhance `renderMentionText` to also detect URLs and render them as clickable `<a>` links that open in a new tab.
+### 1. `src/hooks/useUnreadSenders.ts`
+- Change from `Set<string>` to `Map<string, number>` to track counts per sender
+- Count occurrences of each `sender_profile_id` in unread notifications
+- Return `unreadCounts` (Map) alongside `unreadSenderIds` (Set) for backward compatibility
 
-### `src/components/teamhub/MessageThread.tsx`
+### 2. `src/components/teamhub/ChannelSidebar.tsx`
+- Import `unreadCounts` from the updated hook
+- Replace the green dot (line 283-285) with a numbered badge:
+  - Show count inside a small red/primary circle (e.g., `3`)
+  - Only render when count > 0
+  - Disappear when messages are read (count becomes 0)
 
-Update the `renderMentionText` function to:
-1. First split text by URL pattern (`https?://...`)
-2. For each URL segment, render as `<a href={url} target="_blank" rel="noopener noreferrer">` with appropriate styling (text-primary, underline, hover effect)
-3. For non-URL segments, continue applying the existing `@mention` logic
-
-This keeps mentions working and adds clickable link support in a single pass.
+### 3. `src/components/chat/DockChatBar.tsx`
+- Same change: replace the green dot with a numbered badge using `unreadCounts`
 
 | File | Change |
 |------|--------|
-| `MessageThread.tsx` | Update `renderMentionText` to detect and render URLs as clickable `<a>` links |
+| `useUnreadSenders.ts` | Track unread count per sender (Map instead of Set) |
+| `ChannelSidebar.tsx` | Show numeric badge instead of green dot |
+| `DockChatBar.tsx` | Show numeric badge instead of green dot |
 
