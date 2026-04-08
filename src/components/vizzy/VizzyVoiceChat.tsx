@@ -59,6 +59,16 @@ interface VizzyVoiceChatProps {
   onClose: () => void;
 }
 
+// READ actions whose results should be fed back into the voice session context
+const READ_ACTIONS = new Set([
+  "investigate_entity",
+  "deep_business_scan",
+  "rc_get_call_analytics",
+  "rc_get_active_calls",
+  "rc_get_team_presence",
+  "quickbooks_query",
+]);
+
 export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const {
     state: voiceState,
@@ -72,7 +82,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     contextLoading,
     outputAudioBlocked,
     retryOutputAudio,
+    updateSessionInstructions,
   } = useVizzyVoiceEngine();
+  const liveResultsRef = useRef<string[]>([]);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const [elapsed, setElapsed] = useState(0);
@@ -131,6 +143,15 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           });
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
+
+          // Feed READ action results back into the voice session context
+          if (READ_ACTIONS.has(actionData.type) && data) {
+            const resultBlock = `\n═══ LIVE TOOL RESULT (${actionData.type}) ═══\n${JSON.stringify(data, null, 1).slice(0, 4000)}\n═══ END TOOL RESULT ═══\nUse ONLY this data to answer the CEO's question. Do NOT fabricate beyond what is shown here.`;
+            liveResultsRef.current.push(resultBlock);
+            // Push accumulated live results into the session
+            updateSessionInstructions(liveResultsRef.current.join("\n"));
+            console.log(`[VizzyVoice] Fed back ${actionData.type} result (${JSON.stringify(data).length} chars)`);
+          }
 
           if (actionData.type === "create_task") {
             results.tasks++;

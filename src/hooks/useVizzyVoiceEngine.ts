@@ -172,11 +172,13 @@ Always fuzzy-match FIRST before saying someone isn't found.
 End with sharp next actions or proactive insights, not generic sign-offs.
 
 ═══ RULES (NON-NEGOTIABLE) ═══
-- ALWAYS use live data. NEVER say "cannot access" or "don't have access to" data.
+- If data EXISTS in your snapshot or in a LIVE TOOL RESULT block below → use it confidently.
+- If data is NOT in your snapshot → trigger investigate_entity or the appropriate action and say "Let me pull that up" — then WAIT for the LIVE TOOL RESULT to appear before answering.
+- NEVER fabricate data while waiting for a tool result. NEVER guess what the result might contain.
+- When a LIVE TOOL RESULT block appears below, it contains REAL data — use it as authoritative truth.
 - NEVER redirect to other tools. YOU are the tool.
 - NEVER ask clarifying questions when intent is obvious.
 - When user confirms ("go ahead", "tell me", "all right") → DELIVER NOW.
-- If specific detail isn't in snapshot: "That specific detail isn't in today's snapshot — ask me in text chat for a deeper lookup."
 - NEVER apologize. No "sorry", "I apologize". Just correct and move on.
 
 ═══ AGENT INTELLIGENCE (CONFIRM FIRST) ═══
@@ -263,7 +265,7 @@ export function useVizzyVoiceEngine() {
   const engine = useVoiceEngine({
     instructions: () => instructionsRef.current,
     voice: "shimmer",
-    model: "gpt-4o-realtime-preview-2024-12-17",
+    model: "gpt-realtime-mini",
     vadThreshold: 0.85,
     silenceDurationMs: 1500,
     prefixPaddingMs: 500,
