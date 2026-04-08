@@ -1,64 +1,39 @@
 
 
-# Comprehensive Team Report — Full Report Icon & Vizzy Access
+# Fix Download Button — Generate PDF Instead of Opening HTML in New Tab
 
-## What This Does
+## Problem
 
-When the clipboard icon in the Team Daily Report header is clicked, it will open a full-page modal showing a **comprehensive report of ALL users** with their activities, hours, AI sessions, emails, and clock entries — not just one user. The report text will also be saved to the database so Vizzy always has access to it.
+The download icon (red arrow button) in Vizzy Brain calls the `generate-daily-report-pdf` edge function which returns HTML. The current client code opens this HTML in a new browser tab (`window.open`). The toast "Report generated — opening in new tab" is a **success message**, not an error — but the behavior is wrong. The user expects a **PDF file download**, not an HTML page in a new tab.
 
-## Changes
+## Root Cause
 
-### 1. New `TeamFullReport` component in `SectionDetailReport.tsx`
-
-Replace the current `sectionType="team"` rendering (which just shows `ActivityReport` for one user) with a new `TeamFullReport` component that:
-
-- Accepts all profiles and the `useTeamDailyActivity` data
-- Displays a summary section: total team activities, total hours, total emails, total AI sessions
-- Per-user breakdown: each user gets a card with their activity count, hours, AI sessions, emails, clock-in/out times, and top activity types
-- "Copy Report" button generates a structured plain-text version of the full team report
-- **Auto-saves** the report text to `vizzy_memory` table (category: `team_daily_report`) so Vizzy can always reference it
-
-### 2. Update `SectionDetailReportDialog` for `sectionType="team"`
-
-- Pass additional props: `profiles` (all team profiles) and `teamData` (from `useTeamDailyActivity`)
-- When `sectionType === "team"`, render the new `TeamFullReport` instead of `ActivityReport`
-
-### 3. Update `VizzyBrainPanel.tsx` — TeamDailyReport header icon
-
-- Pass `profiles` and `data` (team activity data) into the `SectionDetailReportDialog` with `sectionType="team"`
-- Remove the incorrect `profileId={sorted[0]?.id}` / `userId={sorted[0]?.user_id}` which made it show only one user
-
-### 4. Save report to `vizzy_memory` for Vizzy access
-
-- When the team report modal opens, auto-generate a structured text summary and upsert it into `vizzy_memory` with:
-  - `category: "team_daily_report"`
-  - `content`: the full structured text of all users' activities and performance
-  - This ensures Vizzy (via `buildFullVizzyContext` which already queries `vizzy_memory`) always has access to the latest team report
-
-## Report Content (per user)
-
-```text
-── Team Daily Report — Apr 8, 2026 ──
-
-TEAM SUMMARY
-Total Activities: 509 | Total Hours: 42.3h | Emails: 15 | AI Sessions: 8
-
-── Zahra (109 activities) ──
-Hours: 7.2h | AI: 3 | Emails: 5
-Clock: 8:02 AM → Still working
-Top: page_visit (45), email_sent (22), lead_updated (15)
-
-── Neel (83 activities) ──
-Hours: 6.5h | AI: 2 | Emails: 3
-Clock: 8:15 AM → 5:30 PM
-Top: page_visit (30), order_updated (18)
-...
+In `VizzyBrainPanel.tsx` (line 428-431), the code creates an HTML blob and opens it in a new tab:
+```typescript
+const blob = new Blob([data.html], { type: "text/html" });
+const blobUrl = URL.createObjectURL(blob);
+window.open(blobUrl, "_blank");
 ```
+
+There is no PDF conversion happening — the function name says "pdf" but it only generates HTML.
+
+## Solution
+
+Convert the HTML to a real PDF on the client side using `html2canvas` + `jsPDF` (already in the project dependencies), then trigger a file download.
+
+### Change: `src/components/vizzy/VizzyBrainPanel.tsx` — `GeneralReportPDFButton`
+
+Replace the `window.open` logic (lines 428-431) with:
+
+1. Create a hidden iframe, inject the HTML into it
+2. Use `html2canvas` to render the iframe content to a canvas
+3. Convert canvas to PDF pages using `jsPDF` (handling multi-page with A4 dimensions)
+4. Trigger `pdf.save("report-{userName}-{date}.pdf")` for a direct download
+5. Update toast to "PDF downloaded successfully"
+
+This approach handles Unicode/Persian text correctly since `html2canvas` renders exactly what the browser renders, including all fonts and styling.
 
 | File | Change |
 |------|--------|
-| `SectionDetailReport.tsx` | Add `TeamFullReport` component; update dialog to accept team data for `sectionType="team"` |
-| `VizzyBrainPanel.tsx` | Pass all profiles + team data to the team report dialog |
-
-No database migration needed — `vizzy_memory` table already exists and is already queried by Vizzy's context builder.
+| `VizzyBrainPanel.tsx` | Replace `window.open(blob)` with html2canvas → jsPDF → `pdf.save()` for real PDF download |
 
