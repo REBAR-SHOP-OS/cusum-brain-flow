@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
+import { SectionDetailReportDialog } from "@/components/vizzy/SectionDetailReport";
 import { format } from "date-fns";
 import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 import { formatDateInTimezone, getTimezoneLabel } from "@/lib/dateConfig";
@@ -797,20 +798,13 @@ function TeamDailyReport({
             />
           </PopoverContent>
         </Popover>
-        <SectionReportButton
-          label="Team"
-          getText={() => {
-            const lines = sorted.map((p) => {
-              const d = data[p.id];
-              const actCount = d?.activities.length ?? 0;
-              const clockIn = d?.clockEntries?.[d.clockEntries.length - 1]?.clock_in;
-              const clockLabel = clockIn
-                ? formatDateInTimezone(new Date(clockIn), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
-                : "Not clocked in";
-              return `${p.full_name}: ${actCount} activities, Clock: ${clockLabel}`;
-            });
-            return `👥 Team Daily Report\n${lines.join("\n")}`;
-          }}
+        <SectionDetailReportDialog
+          sectionType="team"
+          profileId={sorted[0]?.id || ""}
+          userId={sorted[0]?.user_id || null}
+          userName="Team"
+          date={selectedDate}
+          timezone={timezone}
         />
       </div>
       <div className="p-3">
@@ -839,61 +833,14 @@ function TeamDailyReport({
                       ({activities.length} activit{activities.length !== 1 ? "ies" : "y"})
                     </span>
                   </span>
-                  <SectionReportButton
-                    label={firstName}
-                    getText={() => {
-                      const dateStr = formatDateInTimezone(selectedDate, timezone, { month: "long", day: "numeric", year: "numeric" });
-
-                      // Time clock section
-                      let clockSection = "⏰ TIME CLOCK\n";
-                      let totalMinutes = 0;
-                      if (clockEntries.length > 0) {
-                        for (const ce of clockEntries) {
-                          const inTime = formatDateInTimezone(new Date(ce.clock_in), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
-                          const outTime = ce.clock_out
-                            ? formatDateInTimezone(new Date(ce.clock_out), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
-                            : "Still working";
-                          const startMs = new Date(ce.clock_in).getTime();
-                          const endMs = ce.clock_out ? new Date(ce.clock_out).getTime() : Date.now();
-                          totalMinutes += (endMs - startMs) / 60000;
-                          clockSection += `• ${inTime} → ${outTime}\n`;
-                        }
-                        const hrs = Math.floor(totalMinutes / 60);
-                        const mins = Math.round(totalMinutes % 60);
-                        clockSection += `• Total hours: ${hrs}h ${mins}m\n`;
-                      } else {
-                        clockSection += "• Not clocked in today\n";
-                      }
-
-                      // Activity breakdown by entity_type
-                      const breakdown: Record<string, number> = {};
-                      for (const a of activities) {
-                        breakdown[a.entity_type] = (breakdown[a.entity_type] || 0) + 1;
-                      }
-                      let breakdownSection = "📊 ACTIVITY BREAKDOWN\n";
-                      const sorted = Object.entries(breakdown).sort((a, b) => b[1] - a[1]);
-                      for (const [type, count] of sorted) {
-                        breakdownSection += `• ${type}: ${count} event${count !== 1 ? "s" : ""}\n`;
-                      }
-
-                      // Activity timeline
-                      let timelineSection = `📝 ACTIVITY LOG (${activities.length} events)\n`;
-                      for (const a of activities) {
-                        const t = formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
-                        timelineSection += `• ${t} — ${a.event_type} · ${a.entity_type}${a.description ? `: ${a.description}` : ""}\n`;
-                      }
-
-                      // Summary stats
-                      let summarySection = "";
-                      if (activities.length > 0) {
-                        const firstAct = formatDateInTimezone(new Date(activities[activities.length - 1].created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
-                        const lastAct = formatDateInTimezone(new Date(activities[0].created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true });
-                        summarySection = `📈 SUMMARY\n• First activity: ${firstAct}\n• Last activity: ${lastAct}\n• Total activities: ${activities.length}\n`;
-                      }
-
-                      return `📋 DAILY PERFORMANCE REPORT — ${p.full_name}\nDate: ${dateStr} | Total Activities: ${activities.length}\n\n${clockSection}\n${breakdownSection}\n${timelineSection}\n${summarySection}`.trim();
-                    }}
-                  />
+                   <SectionDetailReportDialog
+                    sectionType="activity"
+                    profileId={p.id}
+                    userId={p.user_id || null}
+                    userName={firstName}
+                    date={selectedDate}
+                    timezone={timezone}
+                   />
                 </AccordionTrigger>
                 <AccordionContent>
                   <div className="space-y-2 pt-1">
@@ -1336,12 +1283,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
                       Today
                     </button>
                   )}
-                  <SectionReportButton
-                    label="Overview"
-                    getText={() => {
-                      const name = selectedProfile.full_name || "User";
-                      return `📊 General Overview — ${name}\nEmail: ${selectedProfile.email}\nStatus: ${selectedProfile.is_active ? "Active" : "Inactive"}`;
-                    }}
+                  <SectionDetailReportDialog
+                    sectionType="overview"
+                    profileId={selectedProfile.id}
+                    userId={selectedProfile.user_id}
+                    userName={selectedProfile.full_name || "User"}
+                    date={userSelectedDate}
+                    timezone={timezone}
                   />
                 </div>
                 {/* User role & job title */}
@@ -1439,9 +1387,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                   <BarChart3 className="w-4 h-4 text-primary" />
                   <h3 className="text-sm font-semibold text-foreground flex-1">System Performance Overview</h3>
-                  <SectionReportButton
-                    label="System Performance"
-                    getText={() => `📊 System Performance Overview — ${selectedProfile.full_name || "User"}\nToday's system activities.`}
+                  <SectionDetailReportDialog
+                    sectionType="activity"
+                    profileId={selectedProfile.id}
+                    userId={selectedProfile.user_id}
+                    userName={selectedProfile.full_name || "User"}
+                    date={userSelectedDate}
+                    timezone={timezone}
                   />
                 </div>
                 <div className="p-3">
@@ -1454,9 +1406,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                   <Clock className="w-4 h-4 text-primary" />
                   <h3 className="text-sm font-semibold text-foreground flex-1">Time Clock</h3>
-                  <SectionReportButton
-                    label="Time Clock"
-                    getText={() => `⏰ Time Clock — ${selectedProfile.full_name || "User"}\nDetailed clock-in/clock-out entries for today.`}
+                  <SectionDetailReportDialog
+                    sectionType="timeclock"
+                    profileId={selectedProfile.id}
+                    userId={selectedProfile.user_id}
+                    userName={selectedProfile.full_name || "User"}
+                    date={userSelectedDate}
+                    timezone={timezone}
                   />
                 </div>
                 <div className="p-3">
