@@ -1,30 +1,45 @@
 
 
-# Change Ben's Primary Agent to Gauge
+# Fix Vizzy Brain User Tab Bar — Remove Scroll, Add Unique Colors
 
-## Change
+## Problem
+The user avatar bar at the top of the Vizzy Brain panel uses `overflow-x-auto` with `shrink-0` on each button, causing horizontal scrolling. All avatars use the same `bg-primary` color scheme.
 
-### `src/lib/userAccessConfig.ts` (lines 128–129)
+## Changes
 
-Update `primaryAgent` from `"sales"` to `"estimating"` and `heroText` to reference **Gauge**:
+### `src/components/vizzy/VizzyBrainPanel.tsx` (lines 1019–1053)
 
+**1. Remove horizontal scroll, allow wrapping:**
+- Line 1019: Change `flex items-center gap-4 overflow-x-auto` → `flex items-center gap-3 flex-wrap`
+- Remove `shrink-0` from all buttons inside
+
+**2. Add unique colors per user:**
+Define a color palette array (similar to `AssigneeManager.tsx` pattern):
 ```typescript
-primaryAgent: "estimating",
-heroText: "How can **Gauge** help you today?",
+const AVATAR_COLORS = [
+  "bg-blue-500", "bg-emerald-500", "bg-orange-500", "bg-purple-500",
+  "bg-pink-500", "bg-teal-500", "bg-red-500", "bg-amber-500",
+  "bg-cyan-500", "bg-indigo-500",
+];
+function getNameColor(name: string) {
+  let hash = 0;
+  for (const c of name) hash = c.charCodeAt(0) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
 ```
 
-Also reorder `quickActions` so the estimating action comes first (line 130–134):
+**3. Apply per-user color to avatar circle** (line 1045–1048):
+- When not selected: use `getNameColor(p.full_name) + " text-white"` for the avatar circle
+- When selected: use the same color with a ring highlight
+- The button background stays as-is for selected state (`bg-primary`) but uses a subtler style for unselected
 
-```typescript
-quickActions: [
-  { title: "Open takeoffs", prompt: "Show me all open takeoff sessions and their status — pending reviews, QC flags, and deadlines.", icon: "FileText", category: "Estimating" },
-  { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
-  { title: "Customer inquiry", prompt: "Show me recent customer inquiries and support tickets that need attention.", icon: "HeadphonesIcon", category: "Customer Care" },
-  { title: "Prioritize my tasks", prompt: "Help me organize my tasks using the Eisenhower Matrix — what's urgent vs important right now?", icon: "LayoutGrid", category: "Eisenhower" },
-],
-```
+**4. Compact sizing slightly** to fit all users without scroll:
+- Avatar circle: `w-8 h-8` (from `w-10 h-10`)
+- Button padding: `px-3 py-2` (from `px-4 py-2.5`)
+- Font: `text-sm` for names (from `text-base`)
+- Gap between items: `gap-2` (from `gap-4`)
 
 | File | Change |
 |------|--------|
-| `src/lib/userAccessConfig.ts` | Set primaryAgent to "estimating", update heroText to Gauge, reorder quickActions |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Remove scroll, add flex-wrap, unique avatar colors, compact sizing |
 
