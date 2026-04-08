@@ -1204,6 +1204,11 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 </div>
               )}
 
+              {/* Section 2.5: Automations */}
+              {selectedProfile.email && selectedProfile.email !== "ai@rebar.shop" && (
+                <UserAutomationsSection email={selectedProfile.email} />
+              )}
+
               {/* Section 3: System Performance Overview */}
               <div className="rounded-xl border border-border bg-card overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">

@@ -20,7 +20,7 @@ export interface Automation {
   highlights?: string[];
 }
 
-const defaultAutomations: Automation[] = [
+export const defaultAutomations: Automation[] = [
   {
     id: "social-media-manager",
     name: "Social Media Manager",
@@ -268,7 +268,7 @@ const AutomationCard = React.forwardRef<HTMLDivElement, AutomationCardProps>(fun
 });
 AutomationCard.displayName = "AutomationCard";
 
-const ADMIN_ONLY_IDS = new Set([
+export const ADMIN_ONLY_IDS = new Set([
   "social-media-manager", "facebook-commenter", "email-marketing",
   "website-manager", "app-builder", "seo-manager",
 ]);
