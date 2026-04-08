@@ -1,33 +1,31 @@
 
 
-# Delete User swapnil.m183@gmail.com — Permanent Removal
+# Move "Switch Mode" to Top-Left and Rename to "Back to Home"
 
-## What will happen
+## What Changes
 
-The user `swapnil.m183@gmail.com` will be completely removed from the system:
-- Auth account deleted (no login possible)
-- Profile removed from database
-- All access config references removed from code
-- Will no longer appear in Time Clock, Team Status, or anywhere in the app
+The "SWITCH MODE" link at the bottom of the Office sidebar will be moved to the top of the sidebar (above the logo/header) and renamed to "Back to Home". It will link to `/home`.
 
-## Steps
+## File: `src/components/office/OfficeSidebar.tsx`
 
-### 1. Remove from access policies (`src/lib/accessPolicies.ts`)
-- Remove from `externalEstimators` map
-- Remove from `allowedLoginEmails` array
+### Remove from bottom (lines 78-87)
+Delete the entire footer block containing the "Switch Mode" link.
 
-### 2. Remove from user access config (`src/lib/userAccessConfig.ts`)
-- Delete the `"swapnil.m183@gmail.com"` config block (lines 167-170)
+### Add to top of sidebar (before the header/logo block)
+Insert a new top bar with the ArrowLeft icon and "Back to Home" text, linking to `/home`:
 
-### 3. Delete auth user via admin API
-- Use the admin edge function or service client to delete auth user `64d0fce5-70da-4369-9d31-6bf14a25b0ef`
-- This will cascade-delete the profile `61f3d1a2-7a37-40ae-8f6b-793dbd99ef88` (thanks to the FK migration we just applied)
-- References in `sales_lead_activities` and other tables will be set to NULL (preserving history)
+```tsx
+{/* Back to Home */}
+<div className="px-3 py-2 border-b border-border">
+  <Link
+    to="/home"
+    className="flex items-center gap-2 text-[10px] tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase"
+  >
+    <ArrowLeft className="w-3.5 h-3.5" />
+    Back to Home
+  </Link>
+</div>
+```
 
-### Files Modified
-| File | Change |
-|------|--------|
-| `src/lib/accessPolicies.ts` | Remove from `externalEstimators` and `allowedLoginEmails` |
-| `src/lib/userAccessConfig.ts` | Remove config block |
-| Database | Delete auth user (cascades to profile) |
+This places the navigation link at the very top of the sidebar, before the brand logo and "Office Tools" title.
 
