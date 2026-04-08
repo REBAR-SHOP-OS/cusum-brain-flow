@@ -1082,18 +1082,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
                   <span className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${avatarColor}`}>
                     {initial}
                   </span>
-                  <div className="flex flex-col text-left leading-tight">
-                    <span className="text-sm font-bold">{firstName}</span>
-                    {(p.user_id && roleMap[p.user_id]?.length > 0 || p.title) && (
-                      <span className={`text-[10px] ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                        {p.user_id && roleMap[p.user_id]?.length > 0 && (
-                          <span className="uppercase font-semibold">{roleMap[p.user_id].join(", ")}</span>
-                        )}
-                        {p.user_id && roleMap[p.user_id]?.length > 0 && p.title && " · "}
-                        {p.title && <span>{p.title}</span>}
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-sm font-bold">{firstName}</span>
                 </button>
               );
             })}
@@ -1153,6 +1142,21 @@ export function VizzyBrainPanel({ onClose }: Props) {
                       return `📊 General Overview — ${name}\nEmail: ${selectedProfile.email}\nStatus: ${selectedProfile.is_active ? "Active" : "Inactive"}`;
                     }}
                   />
+                </div>
+                {/* User role & job title */}
+                <div className="px-4 py-2 border-b border-border/50 flex items-center gap-2 text-sm">
+                  <span className="font-semibold">{selectedProfile.full_name}</span>
+                  {selectedProfile.user_id && roleMap[selectedProfile.user_id]?.length > 0 && (
+                    <span className="text-[11px] uppercase font-bold text-primary">
+                      {roleMap[selectedProfile.user_id].join(", ")}
+                    </span>
+                  )}
+                  {selectedProfile.title && (
+                    <>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="text-muted-foreground text-xs">{selectedProfile.title}</span>
+                    </>
+                  )}
                 </div>
                 <div className="p-3">
                   <PerformanceCard
