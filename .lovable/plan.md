@@ -1,61 +1,52 @@
 
 
-# Fix: Report Dialog Hidden Behind Vizzy Brain Panel
+# Fix: Extraction Pre-Merging Rows That Should Stay Separate
 
 ## Root Cause
 
-The Vizzy Brain panel renders at `z-[100000]`. The `SectionDetailReportDialog` uses the standard Radix `Dialog` component which renders its overlay and content at `z-50`. Since `z-50 < z-100000`, the dialog's black overlay appears behind the Brain panel (making the background go dark) while the dialog content is invisible — trapped underneath.
+The `extract-manifest` edge function (lines 567-589) has a **pre-insertion deduplication** step that merges rows sharing the same `mark + bar_size + shape_type + total_length_mm + dim_a-d` key before saving to the database.
+
+In the original spreadsheet:
+- Row 2: A1001, 10M, STRAIGHT, 8'4", qty **12**
+- Row 3: A1001, 10M, STRAIGHT, 8'4", qty **28**
+
+These are intentionally separate line items (different DWG items), but the dedup key is identical, so they get merged into one row with qty **40** during extraction — before the user ever sees them.
+
+This is wrong because many bar lists legitimately have multiple rows with the same mark, size, shape, and length but different quantities — they represent different placements or drawing references.
+
+There is also a **second** dedupe layer in `manage-extract/detectDuplicates` that runs post-extraction as an advisory/optional merge. That layer is fine because it's user-controlled (dry-run preview + explicit confirm). The problem is the silent, automatic pre-insertion merge.
 
 ## Fix
 
-**File: `src/components/vizzy/SectionDetailReport.tsx`** (lines 631)
+**File: `supabase/functions/extract-manifest/index.ts`**
 
-Add a z-index override to the `DialogContent` so it renders above the Brain panel:
+Remove the automatic pre-insertion deduplication block (lines 567-589). Instead, save all extracted rows as-is and let the existing post-extraction `detect-duplicates` advisory flow handle duplicate detection with user confirmation.
 
-```tsx
-<DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col z-[100002]">
+Replace:
+```typescript
+// ── Deduplicate rows before insert ──
+const dedupeMap = new Map<...>();
+...
+const dedupedRows = Array.from(dedupeMap.values())...
+savedCount = dedupedRows.length;
 ```
 
-Also need to ensure the overlay is above too. Since Radix Dialog portal renders overlay + content as siblings, we need to add a custom overlay or use the `DialogOverlay` with a high z-index. The simplest approach: wrap with a portal-level style.
-
-Two changes in `SectionDetailReport.tsx`:
-
-1. Import `DialogOverlay` from the dialog component
-2. Add explicit `DialogOverlay` with `z-[100001]` and set `DialogContent` to `z-[100002]`
-
-Alternatively, the cleanest fix: add a `className` prop to `DialogContent` with `z-[100002]` — but Radix renders the overlay separately. So we need to also add a custom `DialogOverlay`.
-
-**Change in `src/components/vizzy/SectionDetailReport.tsx`:**
-
-```tsx
-// Line 2: Add DialogOverlay to imports
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogOverlay,
-} from "@/components/ui/dialog";
-
-// Lines 631: Add overlay and update content z-index
-<Dialog>
-  <DialogTrigger asChild>
-    ...
-  </DialogTrigger>
-  <DialogOverlay className="z-[100001]" />
-  <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col z-[100002]">
-    ...
-  </DialogContent>
-</Dialog>
+With:
+```typescript
+// Save all rows as-is — deduplication is handled post-extraction
+// via the advisory detect-duplicates flow with user confirmation
+const dedupedRows = rows.map((r, idx) => ({ ...r, row_index: idx + 1 }));
+savedCount = dedupedRows.length;
+console.log(`Rows to insert: ${savedCount}`);
 ```
-
-We also need to verify `DialogOverlay` is exported from `src/components/ui/dialog.tsx`. If not, we add the export.
-
-**File: `src/components/ui/dialog.tsx`** — Verify `DialogOverlay` is exported (it likely is since it's a standard shadcn component, but we'll confirm and ensure it accepts className).
 
 ## Result
-- Report dialogs will render above the Vizzy Brain panel
-- No more black screen behind the panel
-- Reports will be fully visible and functional
+- All rows from the original spreadsheet will be preserved individually
+- The existing "possible duplicates" toast and merge confirmation UI still works for cases where the user actually wants to merge
+- No data loss from silent automatic merging
+
+## Files Modified
+| File | Change |
+|------|--------|
+| `supabase/functions/extract-manifest/index.ts` | Remove automatic pre-insertion dedup; preserve all rows |
 
