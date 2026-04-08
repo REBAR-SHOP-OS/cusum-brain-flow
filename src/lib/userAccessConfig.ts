@@ -164,10 +164,6 @@ const USER_ACCESS: Record<string, UserConfig> = {
     primaryAgent: "shopfloor",
   },
 
-  "swapnil.m183@gmail.com": {
-    menus: ["Time Clock", "Team Hub"],
-    agents: ["talent"],
-  },
 
   "tariq0001010@gmail.com": {
     menus: ["Time Clock", "Team Hub"],
