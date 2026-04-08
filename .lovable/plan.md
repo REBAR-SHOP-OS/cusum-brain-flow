@@ -1,30 +1,39 @@
 
 
-# Move "Analyze Now" to All Tab Only & Generate Company-Wide Report
+# Enforce Date-Specific Data Filtering Across All User Sections
 
 ## Problem
-The "Analyze Now" button is always visible in the header. The user wants it **only on the "All" tab** and when clicked it should generate a comprehensive company-wide report aggregating all employees' activities.
+When a date is selected, some data queries ignore it and show all-time data:
+1. **`useUserAgentSessions`** — fetches all agent sessions regardless of date (no date parameter at all)
+2. **`UserFullReportButton`** (line 521) — calls `useUserActivityLog(profile.id)` without passing `date`
+3. **`UserAgentsSections`** (line 232) — calls `useUserAgentSessions(userId)` without date filtering
+
+This means when you pick April 5th, the Agents section and report button still show all-time data.
 
 ## Changes
 
-### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
+### 1. `src/hooks/useUserAgentSessions.ts` — Add date filtering
 
-**Move button conditionally**: Wrap the "Analyze Now" button render with `!selectedProfileId` so it only shows when "All" tab is active.
+- Add optional `date?: Date` parameter
+- Import `useWorkspaceSettings` and `getStartOfDayIsoInTimezone`
+- Filter `chat_sessions` query with `.gte("updated_at", dayStart).lt("updated_at", dayEnd)` when date is provided
+- Filter `chat_messages` total count query similarly
+- Update `queryKey` to include date
 
-```tsx
-{!selectedProfileId && (
-  <Button size="sm" onClick={handleAnalyze} disabled={analyzing || !hasCompanyContext} className="gap-1">
-    {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-    {analyzing ? "Analyzing..." : "Analyze Now"}
-  </Button>
-)}
-```
+### 2. `src/components/vizzy/VizzyBrainPanel.tsx` — Pass date everywhere
 
-This is a single conditional wrapper around the existing button at line ~1299. No other changes needed — the `analyzeSystem` function already performs a full system analysis via the agent, which collects data across all employees.
+- **`UserAgentsSections`**: Add `date` prop, pass it to `useUserAgentSessions(userId, date)`
+- **`UserFullReportButton`** (line 521): Pass `date` to `useUserActivityLog(profile.id, null, date)` and `useUserAgentSessions(profile.user_id, date)`
+- **All call sites** of `UserAgentsSections`: Pass `date={userSelectedDate}`
+
+### 3. Verify all other hooks already respect date
+
+- `useUserPerformance` — already receives and uses `date` ✓
+- `useUserActivityLog` — already supports `date` param ✓
+- `useDetailedActivityReport` — already uses `date` ✓
 
 | File | Change |
 |------|--------|
-| `VizzyBrainPanel.tsx` | Conditionally render "Analyze Now" only when `selectedProfileId` is null (All tab) |
-
-One line change, one file.
+| `src/hooks/useUserAgentSessions.ts` | Add optional `date` param with timezone-aware day boundary filtering |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Pass `date` to `UserAgentsSections`, fix `UserFullReportButton` to pass date to activity log and agent sessions |
 
