@@ -152,6 +152,25 @@ export default function Settings() {
     await uploadSingle(myProfile.id, file);
   };
 
+  const handleAvatarDelete = async () => {
+    if (!myProfile?.avatar_url) return;
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ avatar_url: null })
+        .eq("id", myProfile.id);
+      if (error) throw error;
+      // Best-effort storage cleanup
+      const extensions = ["png", "jpg", "jpeg", "webp", "gif"];
+      const paths = extensions.map((ext) => `${myProfile.id}.${ext}`);
+      await supabase.storage.from("avatars").remove(paths);
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      toast({ title: "Profile photo removed" });
+    } catch (err: any) {
+      toast({ title: "Error removing photo", description: err.message, variant: "destructive" });
+    }
+  };
+
   const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
     { id: "settings", label: "Settings", icon: SettingsIcon },
     { id: "brain", label: "Brain", icon: Brain },
