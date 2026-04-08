@@ -1,60 +1,53 @@
 
 
-# Fix: Vizzy Voice Hallucinating Random Content (French Apartment Listing)
+# حذف سیستم Auto-Clockout
 
-## Problem
+## خلاصه
+حذف کامل منطق بستن خودکار شیفت‌ها. کارمندان فقط از طریق کیوسک یا دستی clock in/out می‌کنند.
 
-Vizzy voice responded with a **French apartment listing** when asked about call data. The model (`gpt-realtime-mini`) completely lost context and generated unrelated content. This indicates:
+## تغییرات
 
-1. **Model `gpt-realtime-mini` is unreliable** — this isn't a valid OpenAI model identifier. The correct model should be `gpt-4o-mini-realtime-preview-2025-06-03` or similar. An invalid model string may cause OpenAI to fall back to unpredictable behavior.
-2. **No output guardrail** — when the model generates non-English/non-Farsi content or clearly off-topic text, nothing catches it.
-3. **No language enforcement on agent output** — the `isSelfTalk` filter only runs in `translationMode`, so random French output passes through unchecked.
+### 1. حذف ۲ کران‌جاب از دیتابیس
+- Job #22: evening sweep (ساعت ۱۰ شب UTC — شنبه تا چهارشنبه)
+- Job #41: end_of_day sweep (ساعت ۹ شب UTC — هر روز)
 
-## Changes
-
-### 1. Fix Model Identifier (`src/hooks/useVizzyVoiceEngine.ts`)
-
-**Line 268**: Change `gpt-realtime-mini` to a valid OpenAI Realtime model:
-```
-model: "gpt-4o-mini-realtime-preview-2025-06-03"
+```sql
+SELECT cron.unschedule(22);
+SELECT cron.unschedule(41);
 ```
 
-### 2. Add Agent Output Language Guard (`src/hooks/useVoiceEngine.ts`)
+### 2. حذف Edge Function
+- حذف فایل `supabase/functions/auto-clockout/index.ts`
 
-In the agent transcript handler (where `response.audio_transcript.done` is processed), add a check that blocks agent output containing unexpected languages. Vizzy should only output English or Farsi (Persian). If the output contains French, Spanish, Chinese, etc. — discard it silently.
+### 3. پاکسازی `useTimeClock.ts`
+- حذف تابع `closeStaleShifts` (خطوط ۲۴۷–۲۷۸)
+- حذف محاسبه `staleCount` (خطوط ۲۸۰–۲۸۵)
+- حذف خروجی‌های `closeStaleShifts` و `staleCount` از return
+- **نگه داشتن**: منطق بستن شیفت قبلی هنگام clock-in جدید (خطوط ۱۴۵–۱۵۴) — این ضروری است تا اگر کارمند فراموش کرد clock-out کند و فردا clock-in زد، شیفت قدیمی بسته شود
 
-Add a detection function:
-```typescript
-const UNEXPECTED_LANG = /\b(appartement|loyer|disponible|découvrir|équipée|chauffage|commerces|caractéristiques|hésitez|contacter|visite|chambres|cuisine|superficie)\b/i;
-const ALLOWED_SCRIPTS = /[a-zA-Z\u0600-\u06FF\u0750-\u077F]/; // Latin + Farsi/Arabic
+### 4. پاکسازی `TimeClock.tsx`
+- حذف `closeStaleShifts` و `staleCount` از destructure
+- حذف `staleConfirmOpen` state
+- حذف بلاک هشدار stale shifts (خطوط ۵۲۲–۵۳۶)
+- حذف `ConfirmActionDialog` مربوط به stale shifts (خطوط ۷۳۲–۷۴۴)
 
-function isOffTopicOutput(text: string): boolean {
-  if (UNEXPECTED_LANG.test(text)) return true;
-  // Block if >50% of words are non-English/non-Farsi
-  const words = text.split(/\s+/);
-  if (words.length > 20) {
-    const frenchIndicators = text.match(/[àâéèêëïîôùûüçœæ]/g);
-    if (frenchIndicators && frenchIndicators.length > 5) return true;
-  }
-  return false;
-}
-```
+### 5. غیرفعال‌سازی automation config
+- آپدیت `automation_configs` → `enabled = false` برای `auto_clockout`
 
-When detected, skip adding the transcript and log a warning.
+## آنچه حفظ می‌شود
+- Clock in/out دستی کارمند ✅
+- Kiosk punch (Face ID) ✅
+- Admin clock-out دستی ✅
+- بستن شیفت قبلی هنگام clock-in جدید ✅
+- محدودیت ساعت ۶ صبح ✅
 
-### 3. Add Temperature Control (`src/hooks/useVizzyVoiceEngine.ts`)
+## فایل‌ها
 
-The engine config doesn't set `temperature`. Add `temperature: 0.6` to reduce creative drift. Lower temperature = more deterministic, less hallucination.
-
-## Files Changed
-
-| File | Change |
+| فایل | تغییر |
 |------|--------|
-| `src/hooks/useVizzyVoiceEngine.ts` | Fix model to valid identifier, add temperature: 0.6 |
-| `src/hooks/useVoiceEngine.ts` | Add off-topic/wrong-language filter on agent output |
-
-## Expected Result
-- Valid model identifier prevents unpredictable fallback behavior
-- Wrong-language outputs (French, Spanish, etc.) are silently blocked
-- Lower temperature reduces creative hallucination
+| `supabase/functions/auto-clockout/index.ts` | حذف |
+| `src/hooks/useTimeClock.ts` | حذف closeStaleShifts و staleCount |
+| `src/pages/TimeClock.tsx` | حذف UI هشدار و دکمه stale shifts |
+| دیتابیس (cron jobs) | حذف ۲ job |
+| دیتابیس (automation_configs) | غیرفعال |
 
