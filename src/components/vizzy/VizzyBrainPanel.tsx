@@ -933,9 +933,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
       return userMenus.includes(requiredMenu);
     });
 
-    const sectionsToShow = selectedProfile
-      ? accessibleGroups.filter((group) => group.items.length > 0)
-      : accessibleGroups;
+    const sectionsToShow = accessibleGroups;
 
     if (selectedProfile && sectionsToShow.length === 0) {
       return (
