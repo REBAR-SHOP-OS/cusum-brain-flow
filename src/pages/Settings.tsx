@@ -267,6 +267,16 @@ export default function Settings() {
                   >
                     {uploading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" /> : <Camera className="w-4 h-4 text-muted-foreground" />}
                   </button>
+                  {myProfile?.avatar_url && (
+                    <button
+                      onClick={handleAvatarDelete}
+                      disabled={uploading}
+                      className="absolute bottom-0 left-0 w-8 h-8 rounded-full bg-secondary border border-border flex items-center justify-center hover:bg-destructive/10 transition-colors"
+                      title="Remove photo"
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </button>
+                  )}
                   <input ref={avatarFileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                 </div>
                 <h2 className="mt-4 text-xl font-semibold">
