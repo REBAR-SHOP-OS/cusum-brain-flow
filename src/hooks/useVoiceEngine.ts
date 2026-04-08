@@ -258,6 +258,32 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       });
   }, []);
 
+  /** Mark session as connected (idempotent) */
+  const markConnected = useCallback(() => {
+    clearTimeout_();
+    setState(prev => {
+      if (prev === "connected") return prev;
+      console.log("[VoiceEngine] ✅ Session marked CONNECTED");
+      reconnectAttemptsRef.current = 0;
+      if (navigator.vibrate) navigator.vibrate(50);
+      return "connected";
+    });
+    setMode(prev => prev ?? "listening");
+  }, []);
+
+  /** Send a response.create to trigger Vizzy's initial greeting */
+  const triggerInitialResponse = useCallback(() => {
+    const dc = dcRef.current;
+    if (dc && dc.readyState === "open") {
+      try {
+        dc.send(JSON.stringify({ type: "response.create" }));
+        console.log("[VoiceEngine] Triggered initial response.create");
+      } catch (e) {
+        console.warn("[VoiceEngine] Failed to trigger initial response:", e);
+      }
+    }
+  }, []);
+
   const handleDataChannelMessage = useCallback((event: MessageEvent) => {
     try {
       const msg = JSON.parse(event.data);
@@ -267,12 +293,12 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       switch (msg.type) {
         case "session.created":
         case "session.updated":
-          clearTimeout_();
-          setState("connected");
-          setMode("listening");
-          reconnectAttemptsRef.current = 0;
-          conversationItemIdsRef.current = []; // Reset on new session
-          if (navigator.vibrate) navigator.vibrate(50);
+          markConnected();
+          if (msg.type === "session.created") {
+            conversationItemIdsRef.current = [];
+            // Trigger proactive greeting after session is created
+            setTimeout(() => triggerInitialResponse(), 300);
+          }
           break;
 
         case "conversation.item.created": {
@@ -389,7 +415,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
     } catch (e) {
       console.warn("Failed to parse data channel message:", e);
     }
-  }, []);
+  }, [markConnected, triggerInitialResponse]);
 
   const endSession = useCallback(async () => {
     reconnectAttemptsRef.current = 0;
@@ -514,7 +540,10 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       dcRef.current = dc;
       dc.onmessage = handleDataChannelMessage;
       dc.onopen = () => {
-        console.log("Voice engine data channel open");
+        console.log("[VoiceEngine] ✅ Data channel OPEN — marking connected");
+        // Mark connected as soon as DC opens (don't wait for session.created)
+        markConnected();
+
         const pending = pendingSessionInstructionsRef.current;
         if (pending) {
           try {
@@ -609,6 +638,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           }, 5000);
         } else if (cs === "connected") {
           clearIceGrace();
+          markConnected();
         }
       };
 
