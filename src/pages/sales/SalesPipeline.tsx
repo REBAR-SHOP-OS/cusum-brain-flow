@@ -95,7 +95,10 @@ export default function SalesPipeline() {
   const { leads, isLoading, createLead, updateLead, deleteLead } = useSalesLeads();
   const { contacts: unifiedContacts } = useSalesContacts();
   const { profiles } = useProfiles();
-  const activeProfiles = (profiles ?? []).filter(p => p.is_active);
+  const SALES_ASSIGNEE_EMAILS = ["neel@rebar.shop", "saurabh@rebar.shop"];
+  const activeProfiles = (profiles ?? []).filter(
+    p => p.is_active && p.email && SALES_ASSIGNEE_EMAILS.includes(p.email.toLowerCase())
+  );
   const { bySalesLeadId, addAssignee, removeAssignee } = useSalesLeadAssignees();
 
   // Find external estimator's profile ID
