@@ -1,40 +1,26 @@
 
 
-# Fix "Failed to upload report" — Root Cause and Permanent Fix
+# Make URLs Clickable in Team Hub Chat Messages
+
+## Problem
+When a user sends a URL (e.g., YouTube link) in the Team Hub chat, it appears as plain text and is not clickable.
 
 ## Root Cause
+The `renderMentionText` function in `MessageThread.tsx` (line 299) only handles `@mentions` — it splits text by `@` tokens and renders them. Plain URLs are rendered as regular `<span>` text with no `<a>` tag wrapping.
 
-The edge function `generate-daily-report-pdf` generates an HTML report via AI, then tries to upload it to the `invoice-pdfs` storage bucket. The upload fails silently — the actual storage error is swallowed (only "Failed to upload report" is thrown without logging `uploadError.message`).
+## Solution
+Enhance `renderMentionText` to also detect URLs and render them as clickable `<a>` links that open in a new tab.
 
-The storage bucket `invoice-pdfs` exists but contains **zero objects**, confirming uploads have never succeeded from this function. This is likely a storage RLS/permissions issue with the bucket configuration for edge function uploads.
+### `src/components/teamhub/MessageThread.tsx`
 
-## Permanent Fix: Eliminate Storage Dependency
+Update the `renderMentionText` function to:
+1. First split text by URL pattern (`https?://...`)
+2. For each URL segment, render as `<a href={url} target="_blank" rel="noopener noreferrer">` with appropriate styling (text-primary, underline, hover effect)
+3. For non-URL segments, continue applying the existing `@mention` logic
 
-Instead of uploading to storage and generating a signed URL, **return the HTML content directly in the edge function response**. The client already opens the result in a new tab — we can use a `data:` URI or a Blob URL instead.
-
-This eliminates the storage upload entirely, making the feature faster and more reliable.
-
-### 1. `supabase/functions/generate-daily-report-pdf/index.ts`
-
-- Remove both storage upload + signed URL blocks (lines 98-115 and 181-197)
-- Instead, return the HTML content directly in the JSON response: `{ html: htmlDoc }`
-- Add proper error logging for debugging: log the full error before throwing
-
-### 2. `src/components/vizzy/VizzyBrainPanel.tsx` — `GeneralReportPDFButton`
-
-- After receiving `data.html`, create a Blob URL and open it in a new tab:
-  ```typescript
-  const blob = new Blob([data.html], { type: "text/html" });
-  const url = URL.createObjectURL(blob);
-  window.open(url, "_blank");
-  ```
-- Remove the old `data.url` handling
-- Keep the existing error handling
+This keeps mentions working and adds clickable link support in a single pass.
 
 | File | Change |
 |------|--------|
-| `generate-daily-report-pdf/index.ts` | Return HTML directly instead of uploading to storage |
-| `VizzyBrainPanel.tsx` | Use Blob URL from returned HTML instead of signed URL |
-
-This fix is permanent because it removes the storage dependency that was causing the failure. The report opens instantly in a new tab as a fully styled HTML document.
+| `MessageThread.tsx` | Update `renderMentionText` to detect and render URLs as clickable `<a>` links |
 
