@@ -48,6 +48,22 @@ const DEFAULT_MAX_SESSION_MS = 30 * 60 * 1000; // 30 minutes
 // RTL character detection for Farsi/Arabic
 const FARSI_RE = /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
+// Off-topic / wrong-language guard — blocks agent output in unexpected languages
+const UNEXPECTED_LANG_KEYWORDS = /\b(appartement|loyer|disponible|découvrir|équipée|chauffage|commerces|caractéristiques|hésitez|contacter|visite|chambres|cuisine|superficie|precio|habitación|dirección|disponibilidad|alquiler)\b/i;
+
+function isOffTopicOutput(text: string): boolean {
+  if (!text || text.length < 30) return false;
+  // Check for French/Spanish keyword markers
+  if (UNEXPECTED_LANG_KEYWORDS.test(text)) return true;
+  // Check for high density of French diacritics
+  const words = text.split(/\s+/);
+  if (words.length > 20) {
+    const foreignIndicators = text.match(/[àâéèêëïîôùûüçœæñ¿¡]/g);
+    if (foreignIndicators && foreignIndicators.length > 5) return true;
+  }
+  return false;
+}
+
 // Patterns that are ALWAYS filtered (empty/filler noise regardless of mode)
 const ALWAYS_FILTER_PATTERNS = [
   /^\.{1,3}$/,  // just dots
@@ -308,6 +324,10 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         case "response.audio_transcript.done": {
           const text = (msg.transcript || agentTextRef.current).trim();
           agentTextRef.current = "";
+          if (isOffTopicOutput(text)) {
+            console.warn("[VoiceEngine] Blocked off-topic/wrong-language agent output:", text.slice(0, 80));
+            break;
+          }
           const lastUser = [...transcriptsRef.current].reverse().find(t => t.role === "user");
           if (text && !isSelfTalk(text, lastUser?.text, configRef.current.translationMode)) {
             setTranscripts(prev => [
