@@ -12,22 +12,29 @@ export interface ActivityEvent {
   source: string;
 }
 
-export function useUserActivityLog(profileId: string | null, userId?: string | null) {
+export function useUserActivityLog(profileId: string | null, userId?: string | null, date?: Date) {
   const { timezone } = useWorkspaceSettings();
   const actorId = userId || profileId;
 
   return useQuery({
-    queryKey: ["user_activity_log", actorId],
+    queryKey: ["user_activity_log", actorId, date?.toISOString() ?? "today"],
     enabled: !!actorId,
     staleTime: 1000 * 60 * 2,
     queryFn: async (): Promise<ActivityEvent[]> => {
-      const todayStart = getStartOfDayIsoInTimezone(timezone);
+      const targetDate = date ?? new Date();
+      const dayStart = getStartOfDayIsoInTimezone(timezone, targetDate);
+
+      // Compute end of day by getting start of next day
+      const nextDay = new Date(targetDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const dayEnd = getStartOfDayIsoInTimezone(timezone, nextDay);
 
       const { data, error } = await supabase
         .from("activity_events")
         .select("id, event_type, entity_type, description, created_at, source")
         .eq("actor_id", actorId!)
-        .gte("created_at", todayStart)
+        .gte("created_at", dayStart)
+        .lt("created_at", dayEnd)
         .order("created_at", { ascending: false })
         .limit(50);
 
