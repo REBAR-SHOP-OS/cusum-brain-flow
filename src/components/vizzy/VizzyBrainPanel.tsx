@@ -959,7 +959,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
           <FileBarChart className="w-4 h-4 text-primary" />
-          <h3 className="text-base font-semibold text-foreground flex-1">General Report</h3>
+          <h3 className="text-base font-semibold text-foreground flex-1">Items</h3>
           <GeneralReportPDFButton date={userSelectedDate} />
         </div>
         <div className="p-3">
