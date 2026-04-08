@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { detectRtl } from "@/utils/textDirection";
 import { useNavigate } from "react-router-dom";
 import {
-  Minus, X, Maximize2, Send, Hash, Users, Paperclip, FileIcon, Loader2, Download, Copy,
+  Minus, X, Maximize2, Send, Hash, Users, Paperclip, FileIcon, Loader2, Download, Copy, FileText,
   Reply, Forward, Trash2, Volume2, Languages, Mic, AudioLines, Square,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -627,12 +627,17 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
 
                               {/* Audio attachments */}
                               {uniqueAttachments.filter((a) => isAudioUrl(a.url)).map((att, ai) => (
-                                <div key={`aud-${ai}`} className="flex items-center gap-1.5 p-1.5 rounded-lg border border-border bg-muted/20 mt-1 max-w-full">
-                                  <Mic className="w-3 h-3 text-primary shrink-0" />
-                                  <audio controls preload="metadata" className="h-7 w-full min-w-0" src={att.url} />
+                                <div key={`aud-${ai}`} className="flex items-center gap-2 p-2 rounded-xl border border-border bg-gradient-to-r from-muted/30 to-muted/10 mt-1 max-w-full backdrop-blur-sm">
+                                  <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                                    <Mic className="w-3 h-3 text-primary" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[9px] text-muted-foreground mb-0.5 truncate">{att.name || "Voice message"}</p>
+                                    <audio controls preload="metadata" className="h-6 w-full min-w-0" src={att.url} />
+                                  </div>
                                   <button
                                     onClick={() => downloadFile(att.url, att.name || "voice-message.webm")}
-                                    className="shrink-0 p-1 rounded hover:bg-muted/60 transition-colors"
+                                    className="shrink-0 p-1 rounded-lg hover:bg-muted/60 transition-colors"
                                     title="Download"
                                   >
                                     <Download className="w-3.5 h-3.5 text-muted-foreground" />
@@ -651,11 +656,25 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
                               ))}
 
                               {/* Non-image, non-audio file cards */}
-                              {uniqueAttachments.filter((a) => !isImageUrl(a.url) && !isAudioUrl(a.url)).map((att, ai) => (
-                                <div key={ai} className="mt-1 max-w-full">
-                                  <InlineFileLink url={att.url} fileName={att.name} />
-                                </div>
-                              ))}
+                              {uniqueAttachments.filter((a) => !isImageUrl(a.url) && !isAudioUrl(a.url)).map((att, ai) => {
+                                const ext = att.name?.split(".").pop()?.toUpperCase() || "FILE";
+                                return (
+                                  <div
+                                    key={ai}
+                                    onClick={() => downloadFile(att.url, att.name)}
+                                    className="flex items-center gap-2 p-2 rounded-xl border border-border bg-gradient-to-r from-muted/30 to-muted/10 mt-1 max-w-full cursor-pointer hover:bg-muted/40 transition-colors"
+                                  >
+                                    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                      <FileText className="w-3.5 h-3.5 text-primary" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[11px] font-medium truncate">{att.name}</p>
+                                      <p className="text-[9px] text-muted-foreground">{ext} file</p>
+                                    </div>
+                                    <Download className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                  </div>
+                                );
+                              })}
 
                               {/* Translation toggle */}
                               {!isMe && msg.original_language !== myLang && msg.translations[myLang] && (

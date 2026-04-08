@@ -718,30 +718,43 @@ export function MessageThread({
 
                                     if (isAud) {
                                       return (
-                                        <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20 max-w-[300px]">
-                                          <Mic className="w-4 h-4 text-primary shrink-0" />
-                                          <audio controls preload="metadata" className="h-8 w-full min-w-0" src={att.url} />
+                                        <div key={i} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-gradient-to-r from-muted/30 to-muted/10 max-w-[320px] backdrop-blur-sm">
+                                          <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                                            <Mic className="w-4 h-4 text-primary" />
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-[10px] text-muted-foreground mb-1 truncate">
+                                              {att.name || "Voice message"}
+                                            </p>
+                                            <audio controls preload="metadata" className="h-7 w-full min-w-0" src={att.url} />
+                                          </div>
                                           <button
                                             onClick={() => downloadFile(att.url, att.name || "voice-message.webm")}
-                                            className="shrink-0 p-1 rounded hover:bg-muted/60 transition-colors"
+                                            className="shrink-0 p-1.5 rounded-lg hover:bg-muted/60 transition-colors"
                                             title="Download"
                                           >
-                                            <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                                            <Download className="w-4 h-4 text-muted-foreground" />
                                           </button>
                                         </div>
                                       );
                                     }
 
+                                    const ext = att.name?.split(".").pop()?.toUpperCase() || "FILE";
                                     return (
-                                      <button
+                                      <div
                                         key={i}
                                         onClick={() => downloadFile(att.url, att.name)}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors text-xs text-foreground/80 cursor-pointer"
+                                        className="flex items-center gap-3 p-3 rounded-xl border border-border bg-gradient-to-r from-muted/30 to-muted/10 max-w-[280px] cursor-pointer hover:bg-muted/40 transition-colors"
                                       >
-                                        <FileText className="w-3.5 h-3.5 text-primary" />
-                                        <span className="truncate max-w-[120px]">{att.name}</span>
-                                        <Download className="w-3.5 h-3.5 text-muted-foreground" />
-                                      </button>
+                                        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                                          <FileText className="w-4 h-4 text-primary" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-xs font-medium truncate">{att.name}</p>
+                                          <p className="text-[10px] text-muted-foreground">{ext} file</p>
+                                        </div>
+                                        <Download className="w-4 h-4 text-muted-foreground shrink-0" />
+                                      </div>
                                     );
                                   })}
                                 </div>
