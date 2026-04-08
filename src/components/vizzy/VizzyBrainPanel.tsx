@@ -28,6 +28,7 @@ import { useAuth } from "@/lib/auth";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useEagerReportPersistence } from "@/hooks/useEagerReportPersistence";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
