@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3, Download } from "lucide-react";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3, Download, Pencil, Plus, XCircle, Check } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
@@ -27,6 +27,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { Cog } from "lucide-react";
+import { useUserAccessOverrides } from "@/hooks/useUserAccessOverrides";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const USER_AVATAR_COLORS = [
   "bg-blue-500", "bg-emerald-500", "bg-orange-500", "bg-purple-500",
@@ -220,7 +222,12 @@ function PerformanceCard({ profileId, userId, name, timezone, date }: { profileI
 }
 
 /** Agent sessions accordion for selected user */
-function UserAgentsSections({ userId, name, email }: { userId: string; name: string; email?: string }) {
+function UserAgentsSections({ userId, name, email, overrideAgents, onEditAgents, canEdit }: {
+  userId: string; name: string; email?: string;
+  overrideAgents?: string[] | null;
+  onEditAgents?: () => void;
+  canEdit?: boolean;
+}) {
   const { data: sessionAgents, isLoading } = useUserAgentSessions(userId);
 
   // Build merged list: accessible agents + any additional agents from sessions
@@ -236,8 +243,10 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
       recentMessages: { role: string; content: string; created_at: string }[];
     }> = [];
 
-    // Use centralized email-based config
-    const accessibleKeys = getVisibleAgents(email);
+    // Use DB overrides if present, else fallback to hardcoded config
+    const accessibleKeys = overrideAgents && overrideAgents.length > 0
+      ? overrideAgents
+      : getVisibleAgents(email);
     const primaryKey = getUserPrimaryAgentKeyFromConfig(email);
 
     // Add all accessible agents (primary first)
@@ -287,7 +296,7 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
     }
 
     return result;
-  }, [email, sessionAgents]);
+  }, [email, sessionAgents, overrideAgents]);
 
   if (isLoading) {
     return (
@@ -302,6 +311,9 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
     return (
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
         <span className="text-xs text-muted-foreground italic">No agents assigned</span>
+        {canEdit && onEditAgents && (
+          <button onClick={onEditAgents} className="ml-2 text-primary text-xs hover:underline">+ Add agents</button>
+        )}
       </div>
     );
   }
@@ -432,11 +444,21 @@ function GeneralReportPDFButton({ date }: { date: Date }) {
 }
 
 /** Automations visible to a user based on their role */
-function UserAutomationsSection({ email }: { email: string }) {
+function UserAutomationsSection({ email, overrideAutomations, onEditAutomations, canEdit }: {
+  email: string;
+  overrideAutomations?: string[] | null;
+  onEditAutomations?: () => void;
+  canEdit?: boolean;
+}) {
   const normalizedEmail = email.toLowerCase();
   const isSuperAdmin = ACCESS_POLICIES.superAdmins.includes(normalizedEmail);
 
   const visibleAutomations = useMemo(() => {
+    // If DB override exists, use that
+    if (overrideAutomations && overrideAutomations.length > 0) {
+      return defaultAutomations.filter((a) => overrideAutomations.includes(a.id));
+    }
+    // Fallback to hardcoded logic
     if (isSuperAdmin) return defaultAutomations;
     const extraAllowed = normalizedEmail === "zahra@rebar.shop"
       ? new Set(["social-media-manager"])
@@ -444,7 +466,7 @@ function UserAutomationsSection({ email }: { email: string }) {
     return defaultAutomations.filter(
       (a) => !ADMIN_ONLY_IDS.has(a.id) || extraAllowed.has(a.id)
     );
-  }, [normalizedEmail, isSuperAdmin]);
+  }, [normalizedEmail, isSuperAdmin, overrideAutomations]);
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -452,6 +474,15 @@ function UserAutomationsSection({ email }: { email: string }) {
         <Cog className="w-4 h-4 text-primary" />
         <h3 className="text-sm font-semibold text-foreground flex-1">Automations</h3>
         <span className="text-[10px] text-muted-foreground">{visibleAutomations.length} active</span>
+        {canEdit && onEditAutomations && (
+          <button
+            onClick={onEditAutomations}
+            className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            title="Edit automations"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <div className="p-3">
         {visibleAutomations.length === 0 ? (
@@ -892,6 +923,62 @@ function TeamDailyReport({
 }
 
 
+/** Checkbox editor popover for agents or automations */
+function AccessEditorPopover({
+  title,
+  allItems,
+  selectedIds,
+  onSave,
+  onClose: onPopoverClose,
+}: {
+  title: string;
+  allItems: { id: string; label: string }[];
+  selectedIds: string[];
+  onSave: (ids: string[]) => void;
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(selectedIds));
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  return (
+    <div className="absolute right-0 top-full mt-1 z-[100002] w-72 max-h-80 overflow-y-auto rounded-xl border border-border bg-card shadow-xl p-3 space-y-2">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-xs font-bold text-foreground">{title}</h4>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => { onSave(Array.from(selected)); onPopoverClose(); }}
+            className="p-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            title="Save"
+          >
+            <Check className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={onPopoverClose} className="p-1 rounded hover:bg-muted text-muted-foreground" title="Cancel">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+      {allItems.map((item) => (
+        <label key={item.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-muted/50 cursor-pointer text-xs">
+          <Checkbox
+            checked={selected.has(item.id)}
+            onCheckedChange={() => toggle(item.id)}
+          />
+          <span className="text-foreground">{item.label}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+const SUPER_EDIT_EMAILS = ["sattar@rebar.shop", "radin@rebar.shop"];
+
 export function VizzyBrainPanel({ onClose }: Props) {
   const { entries, isLoading, error, isCompanyLoading, hasCompanyContext, analyzeSystem } = useVizzyMemory();
   const { user } = useAuth();
@@ -903,6 +990,8 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const [userSelectedDate, setUserSelectedDate] = useState<Date>(new Date());
   const [userCalendarOpen, setUserCalendarOpen] = useState(false);
   const isUserToday = userSelectedDate.toDateString() === new Date().toDateString();
+  const [editingAgents, setEditingAgents] = useState(false);
+  const [editingAutomations, setEditingAutomations] = useState(false);
 
   // Filter @rebar.shop profiles, active first
   const rebarProfiles = useMemo(() => {
@@ -939,6 +1028,15 @@ export function VizzyBrainPanel({ onClose }: Props) {
   }, [userRolesData]);
 
   const selectedProfile = rebarProfiles.find((p) => p.id === selectedProfileId);
+
+  // Super admin edit capability
+  const viewerEmail = user?.email?.toLowerCase() ?? "";
+  const canEditAccess = SUPER_EDIT_EMAILS.includes(viewerEmail);
+  const { override: accessOverride, saveAgents, saveAutomations } = useUserAccessOverrides(selectedProfile?.email);
+
+  // All available agents for the editor
+  const allAgentItems = useMemo(() => Object.entries(agentConfigs).map(([key, cfg]) => ({ id: key, label: `${cfg.name} — ${cfg.role}` })), []);
+  const allAutomationItems = useMemo(() => defaultAutomations.map((a) => ({ id: a.id, label: a.name })), []);
 
   // Filter entries by selected user name if applicable
   const filteredEntries = useMemo(() => {
@@ -1228,21 +1326,42 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
               {/* Section 2: Agents */}
               {selectedProfile.user_id && selectedProfile.email !== "ai@rebar.shop" && (
-                <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="rounded-xl border border-border bg-card overflow-hidden relative">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
                     <BotIcon className="w-4 h-4 text-primary" />
                     <h3 className="text-sm font-semibold text-foreground flex-1">Agents</h3>
+                    {canEditAccess && (
+                      <button
+                        onClick={() => { setEditingAgents(!editingAgents); setEditingAutomations(false); }}
+                        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        title="Edit agent access"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     <UserFullReportButton
                       profile={selectedProfile}
                       timezone={timezone}
                       date={userSelectedDate}
                     />
                   </div>
+                  {editingAgents && canEditAccess && selectedProfile.email && (
+                    <AccessEditorPopover
+                      title={`Agent Access — ${selectedProfile.full_name?.split(" ")[0]}`}
+                      allItems={allAgentItems}
+                      selectedIds={accessOverride?.agents?.length ? accessOverride.agents : getVisibleAgents(selectedProfile.email)}
+                      onSave={(ids) => saveAgents.mutate({ email: selectedProfile.email!, agents: ids, updatedBy: viewerEmail })}
+                      onClose={() => setEditingAgents(false)}
+                    />
+                  )}
                   <div className="p-3">
                     <UserAgentsSections
                       userId={selectedProfile.user_id}
                       name={selectedProfile.full_name?.split(" ")[0] || "User"}
                       email={selectedProfile.email}
+                      overrideAgents={accessOverride?.agents}
+                      onEditAgents={() => setEditingAgents(true)}
+                      canEdit={canEditAccess}
                     />
                   </div>
                 </div>
@@ -1250,7 +1369,23 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
               {/* Section 2.5: Automations */}
               {selectedProfile.email && selectedProfile.email !== "ai@rebar.shop" && (
-                <UserAutomationsSection email={selectedProfile.email} />
+                <div className="relative">
+                  <UserAutomationsSection
+                    email={selectedProfile.email}
+                    overrideAutomations={accessOverride?.automations}
+                    onEditAutomations={() => { setEditingAutomations(!editingAutomations); setEditingAgents(false); }}
+                    canEdit={canEditAccess}
+                  />
+                  {editingAutomations && canEditAccess && (
+                    <AccessEditorPopover
+                      title={`Automations — ${selectedProfile.full_name?.split(" ")[0]}`}
+                      allItems={allAutomationItems}
+                      selectedIds={accessOverride?.automations?.length ? accessOverride.automations : defaultAutomations.filter(a => !ADMIN_ONLY_IDS.has(a.id)).map(a => a.id)}
+                      onSave={(ids) => saveAutomations.mutate({ email: selectedProfile.email!, automations: ids, updatedBy: viewerEmail })}
+                      onClose={() => setEditingAutomations(false)}
+                    />
+                  )}
+                </div>
               )}
 
               {/* Section 3: System Performance Overview */}
