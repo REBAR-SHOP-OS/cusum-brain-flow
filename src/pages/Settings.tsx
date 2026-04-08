@@ -107,6 +107,8 @@ export default function Settings() {
   const userEmail = user?.email ?? "";
   const { profiles, updateProfile } = useProfiles();
   const { uploading, uploadSingle } = useAvatarUpload();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const avatarFileRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<SettingsTab>("settings");
   const [formData, setFormData] = useState({
