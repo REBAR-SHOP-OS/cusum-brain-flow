@@ -24,6 +24,9 @@ import { useAuth } from "@/lib/auth";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
+import { Cog } from "lucide-react";
 
 const USER_AVATAR_COLORS = [
   "bg-blue-500", "bg-emerald-500", "bg-orange-500", "bg-purple-500",
@@ -97,7 +100,6 @@ function LiveClock({ timezone }: { timezone: string }) {
 
   return <span>{timeStr}{abbr ? ` ${abbr}` : ""}</span>;
 }
-
 
 const CATEGORY_TO_GROUP: Record<string, string> = {};
 for (const g of SIDEBAR_GROUPS) {
@@ -426,6 +428,48 @@ function GeneralReportPDFButton({ date }: { date: Date }) {
     >
       {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
     </button>
+  );
+}
+
+/** Automations visible to a user based on their role */
+function UserAutomationsSection({ email }: { email: string }) {
+  const normalizedEmail = email.toLowerCase();
+  const isSuperAdmin = ACCESS_POLICIES.superAdmins.includes(normalizedEmail);
+
+  const visibleAutomations = useMemo(() => {
+    if (isSuperAdmin) return defaultAutomations;
+    const extraAllowed = normalizedEmail === "zahra@rebar.shop"
+      ? new Set(["social-media-manager"])
+      : new Set<string>();
+    return defaultAutomations.filter(
+      (a) => !ADMIN_ONLY_IDS.has(a.id) || extraAllowed.has(a.id)
+    );
+  }, [normalizedEmail, isSuperAdmin]);
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+        <Cog className="w-4 h-4 text-primary" />
+        <h3 className="text-sm font-semibold text-foreground flex-1">Automations</h3>
+        <span className="text-[10px] text-muted-foreground">{visibleAutomations.length} active</span>
+      </div>
+      <div className="p-3">
+        {visibleAutomations.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No automations assigned</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {visibleAutomations.map((a) => (
+              <span
+                key={a.id}
+                className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border"
+              >
+                {a.name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -1202,6 +1246,11 @@ export function VizzyBrainPanel({ onClose }: Props) {
                     />
                   </div>
                 </div>
+              )}
+
+              {/* Section 2.5: Automations */}
+              {selectedProfile.email && selectedProfile.email !== "ai@rebar.shop" && (
+                <UserAutomationsSection email={selectedProfile.email} />
               )}
 
               {/* Section 3: System Performance Overview */}
