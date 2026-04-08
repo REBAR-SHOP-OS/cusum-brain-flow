@@ -3,6 +3,9 @@ import { buildFullVizzyContext } from "../_shared/vizzyFullContext.ts";
 import { callAI } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { cacheGet, cacheSet } from "../_shared/cache.ts";
+
+const DIGEST_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Vizzy Pre-Digest: Before a voice session starts, this function:
@@ -18,6 +21,14 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: supabase } = ctx;
+
+    // Fast path: return cached digest if available (< 5 min old)
+    const cacheKey = `vizzy-pre-digest:${userId}`;
+    const cached = cacheGet<{ digest: string; rawContext: string; brainMemories: string | null; generated_at: string }>(cacheKey);
+    if (cached) {
+      console.log("[vizzy-pre-digest] Returning cached digest for", userId);
+      return cached;
+    }
 
     // Rate limit: 5 per 10 minutes
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
@@ -435,11 +446,16 @@ ${agentAuditContext}`,
     // Remove the benchmark JSON line from the digest (it's internal)
     const cleanDigest = fullDigest.replace(/BENCHMARK_JSON:\{[^}]+\}/, "").trim();
 
-    return {
+    const result = {
       digest: cleanDigest,
       rawContext,
       brainMemories: brainBlock || null,
       generated_at: new Date().toISOString(),
     };
+
+    // Cache the result for fast subsequent requests
+    cacheSet(cacheKey, result, DIGEST_CACHE_TTL_MS);
+
+    return result;
   }, { functionName: "vizzy-pre-digest", requireCompany: false, wrapResult: false })
 );
