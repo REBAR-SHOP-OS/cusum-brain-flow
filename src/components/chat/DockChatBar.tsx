@@ -171,8 +171,8 @@ export function DockChatBar() {
               <MessageSquare className="w-6 h-6 pointer-events-none" />
             </button>
           </PopoverAnchor>
-          <PopoverContent side="top" align="center" className="w-[300px] p-0 mb-2" onPointerDownOutside={(e) => { if ((e.target as HTMLElement)?.closest?.("[data-feedback-btn]")) { e.preventDefault(); return; } setLauncherOpen(false); }} onEscapeKeyDown={() => setLauncherOpen(false)} onInteractOutside={(e) => { if ((e.target as HTMLElement)?.closest?.("[data-feedback-btn]")) { e.preventDefault(); return; } }}>
-            <ScrollArea className="max-h-[400px]">
+          <PopoverContent side="top" align="center" className="w-[340px] p-0 mb-2" onPointerDownOutside={(e) => { if ((e.target as HTMLElement)?.closest?.("[data-feedback-btn]")) { e.preventDefault(); return; } setLauncherOpen(false); }} onEscapeKeyDown={() => setLauncherOpen(false)} onInteractOutside={(e) => { if ((e.target as HTMLElement)?.closest?.("[data-feedback-btn]")) { e.preventDefault(); return; } }}>
+            <ScrollArea className="max-h-[520px]">
               {/* Team members - top for visibility */}
               <div className="px-2 pt-2 pb-2">
                 <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Start a Chat</p>
