@@ -586,18 +586,54 @@ function UserFullReportButton({
     return lines.join("\n");
   };
 
+  const [reportText, setReportText] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!reportText) return;
+    await navigator.clipboard.writeText(reportText);
+    setCopied(true);
+    sonnerToast.success("Report copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        navigator.clipboard.writeText(generateReport());
-        sonnerToast.success("Full user report copied to clipboard");
-      }}
-      className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-      title="Generate full user report"
-    >
-      <FileText className="w-3.5 h-3.5" />
-    </button>
+    <>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setReportText(generateReport());
+        }}
+        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+        title="Generate full user report"
+      >
+        <FileText className="w-3.5 h-3.5" />
+      </button>
+
+      <Dialog open={!!reportText} onOpenChange={(open) => { if (!open) setReportText(null); }}>
+        <DialogContent className="max-w-2xl w-full flex flex-col max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider">
+              📊 Full Report — {profile.full_name || "User"}
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="flex-1 min-h-0 rounded-md border border-border bg-muted/30 p-4">
+            <pre className="text-[12px] leading-6 font-mono text-foreground whitespace-pre-wrap break-words">
+              {reportText}
+            </pre>
+          </ScrollArea>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={handleCopy}>
+              {copied ? (
+                <><Check className="w-3.5 h-3.5 text-emerald-500" /> Copied!</>
+              ) : (
+                <><Copy className="w-3.5 h-3.5" /> Copy to Clipboard</>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
