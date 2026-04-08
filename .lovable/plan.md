@@ -1,52 +1,79 @@
 
+## رفع ریشه‌ای مشکل Vizzy Voice
 
-# Fix: Extraction Pre-Merging Rows That Should Stay Separate
+### جمع‌بندی دقیق ریشه مشکل
+مشکل فعلی دیگر از جنس model mismatch نیست؛ آن بخش قبلاً تا حدی حل شده چون الآن:
+- توکن گرفته می‌شود
+- درخواست SDP با `201` موفق برمی‌گردد
+- ولی بعد از آن اتصال روی `Waiting for realtime channel...` می‌ماند و سپس `ICE disconnected/failed` رخ می‌دهد
 
-## Root Cause
+شواهد کد و لاگ‌ها نشان می‌دهد ریشه اصلی این است:
+1. در `src/hooks/useVoiceEngine.ts` و همین‌طور `src/components/vizzy/VizzyCallHandler.tsx` بعد از `createOffer()` و `setLocalDescription()`، SDP فوراً ارسال می‌شود
+2. هیچ صبری برای کامل شدن `ICE gathering` وجود ندارد
+3. در درخواست ثبت‌شده، offer ارسالی عملاً بدون `a=candidate` ارسال شده
+4. علاوه بر آن، `RTCPeerConnection` بدون `iceServers` ساخته شده است
 
-The `extract-manifest` edge function (lines 567-589) has a **pre-insertion deduplication** step that merges rows sharing the same `mark + bar_size + shape_type + total_length_mm + dim_a-d` key before saving to the database.
+نتیجه: سمت مقابل پاسخ SDP می‌دهد، اما چون candidateهای محلی کامل/قابل‌استفاده ارسال نشده‌اند، مسیر WebRTC پایدار شکل نمی‌گیرد، data channel باز نمی‌شود، و اتصال وارد loop شکست می‌شود.
 
-In the original spreadsheet:
-- Row 2: A1001, 10M, STRAIGHT, 8'4", qty **12**
-- Row 3: A1001, 10M, STRAIGHT, 8'4", qty **28**
+### کاری که باید انجام شود
+1. یک helper مشترک WebRTC اضافه شود تا:
+   - `RTCPeerConnection` را با `iceServers` مناسب بسازد
+   - تا کامل شدن `iceGatheringState === "complete"` صبر کند
+   - اگر candidate واقعی جمع نشد، خطای دقیق بدهد
 
-These are intentionally separate line items (different DWG items), but the dedup key is identical, so they get merged into one row with qty **40** during extraction — before the user ever sees them.
+2. در `src/hooks/useVoiceEngine.ts`:
+   - مسیر handshake اصلاح شود:
+     - `createOffer`
+     - `setLocalDescription`
+     - انتظار برای تکمیل ICE
+     - سپس ارسال SDP کامل
+   - اگر candidate جمع نشد، خطای واقعی مثل failure شبکه/NAT نشان داده شود
+   - وضعیت `waiting_channel` فقط بعد از ارسال offer کامل شروع شود
 
-This is wrong because many bar lists legitimately have multiple rows with the same mark, size, shape, and length but different quantities — they represent different placements or drawing references.
+3. در `src/components/vizzy/VizzyCallHandler.tsx`:
+   - همان اصلاح دقیق اعمال شود
+   - چون همین باگ handshake در این فایل هم تکرار شده و اگر فقط یک مسیر اصلاح شود، مشکل دوباره برمی‌گردد
 
-There is also a **second** dedupe layer in `manage-extract/detectDuplicates` that runs post-extraction as an advisory/optional merge. That layer is fine because it's user-controlled (dry-run preview + explicit confirm). The problem is the silent, automatic pre-insertion merge.
+4. منطق retry سخت‌گیرتر شود:
+   - برای failureهای ناشی از نبود candidate یا بلاک شبکه، retry کور تکرار نشود
+   - فقط failureهای transient دوباره تلاش شوند
 
-## Fix
+5. پیام‌های UI/diagnostics اصلاح شوند:
+   - به‌جای stuck روی `Waiting for realtime channel...`، وضعیت‌های واقعی‌تر نمایش داده شود
+   - خطای نهایی روشن بگوید مشکل از route شبکه/WebRTC است، نه اینکه کاربر فکر کند برنامه فقط لود مانده
 
-**File: `supabase/functions/extract-manifest/index.ts`**
+### فایل‌های درگیر
+- `src/hooks/useVoiceEngine.ts`
+- `src/components/vizzy/VizzyCallHandler.tsx`
+- ترجیحاً یک helper جدید کوچک مثل:
+  - `src/lib/webrtc/realtimeConnection.ts`
 
-Remove the automatic pre-insertion deduplication block (lines 567-589). Instead, save all extracted rows as-is and let the existing post-extraction `detect-duplicates` advisory flow handle duplicate detection with user confirmation.
+### نتیجه مورد انتظار بعد از اصلاح
+- دیگر اتصال روی waiting channel گیر نمی‌کند
+- data channel واقعاً باز می‌شود
+- session به حالت connected می‌رسد
+- retry loop بی‌دلیل تکرار نمی‌شود
+- هر دو مسیر صوتی Vizzy و call-handler پایدار می‌شوند
 
-Replace:
-```typescript
-// ── Deduplicate rows before insert ──
-const dedupeMap = new Map<...>();
-...
-const dedupedRows = Array.from(dedupeMap.values())...
-savedCount = dedupedRows.length;
+### اعتبارسنجی بعد از اجرا
+- در body درخواست SDP باید `a=candidate:` دیده شود
+- در لاگ باید بعد از SDP، `Data channel OPEN` یا `session.created` ثبت شود
+- وضعیت از `CONNECTING` به `LIVE SESSION` برسد
+- دیگر بلافاصله `ICE disconnected/failed` رخ ندهد
+- تست روی هر دو مسیر:
+  - Vizzy voice UI
+  - `VizzyCallHandler`
+
+### جزئیات فنی
+```text
+before:
+createOffer -> setLocalDescription -> POST SDP immediately
+
+after:
+createOffer -> setLocalDescription -> wait ICE gathering complete
+           -> verify candidates exist
+           -> POST full SDP
+           -> wait for data channel open / connected state
 ```
 
-With:
-```typescript
-// Save all rows as-is — deduplication is handled post-extraction
-// via the advisory detect-duplicates flow with user confirmation
-const dedupedRows = rows.map((r, idx) => ({ ...r, row_index: idx + 1 }));
-savedCount = dedupedRows.length;
-console.log(`Rows to insert: ${savedCount}`);
-```
-
-## Result
-- All rows from the original spreadsheet will be preserved individually
-- The existing "possible duplicates" toast and merge confirmation UI still works for cases where the user actually wants to merge
-- No data loss from silent automatic merging
-
-## Files Modified
-| File | Change |
-|------|--------|
-| `supabase/functions/extract-manifest/index.ts` | Remove automatic pre-insertion dedup; preserve all rows |
-
+این بار اصلاح روی خودِ لایه transport/WebRTC انجام می‌شود، نه فقط روی یکی از علائم ظاهری.
