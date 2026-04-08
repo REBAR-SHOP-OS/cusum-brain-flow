@@ -1,46 +1,25 @@
 
 
-# Fix: Vizzy Voice "SDP Failed" — Model Mismatch
+# Fix: Make URLs Clickable in DockChatBox Messages
 
-## Root Cause
+## Problem
+In `DockChatBox.tsx`, the `renderMentionText` function only handles @mentions but does NOT detect or linkify URLs. When a user sends a link (e.g., a YouTube URL), it appears as plain text and is not clickable.
 
-There are **two different default models** in the same connection flow:
-
-1. **Token request** (line 437): `cfg.model ?? "gpt-4o-realtime-preview-2024-12-17"` → sent to edge function which overrides to `"gpt-4o-mini-realtime-preview-2025-06-03"`
-2. **SDP exchange** (line 540): `cfg.model ?? "gpt-4o-realtime-preview-2024-12-17"`
-
-The ephemeral token is created for model A, but the browser sends SDP to OpenAI requesting model B. OpenAI rejects because the token is bound to the model it was issued for.
-
-For Vizzy specifically (`useVizzyVoiceEngine.ts` line 268), the model IS explicitly set to `gpt-4o-mini-realtime-preview-2025-06-03`, so the token request works. But the SDP fallback on line 540 uses a stale default.
+The `MessageThread.tsx` already has the correct implementation — it splits text by URLs first, renders them as `<a target="_blank">` links, then processes mentions within non-URL segments.
 
 ## Fix
 
-**File: `src/hooks/useVoiceEngine.ts`**
+**File: `src/components/chat/DockChatBox.tsx`** (lines 409-434)
 
-### Change 1 — Line 540
-Update the SDP model fallback to match:
-```typescript
-// Before:
-const model = cfg.model ?? "gpt-4o-realtime-preview-2024-12-17";
+Replace the `renderMentionText` function with the same URL-aware version used in `MessageThread.tsx`:
 
-// After:
-const model = cfg.model ?? "gpt-4o-mini-realtime-preview-2025-06-03";
-```
+1. Split text by URL regex `/(https?:\/\/[^\s]+)/g` first
+2. Render URL segments as `<a href={url} target="_blank" rel="noopener noreferrer">` links
+3. Process @mentions only within non-URL text segments
+4. Preserve existing mention styling
 
-### Change 2 — Line 437
-Update the token request model fallback to match:
-```typescript
-// Before:
-model: cfg.model ?? "gpt-4o-realtime-preview-2024-12-17",
+This is a direct port of the working logic from `MessageThread.tsx` lines 299-343.
 
-// After:
-model: cfg.model ?? "gpt-4o-mini-realtime-preview-2025-06-03",
-```
-
-This ensures both the token creation and SDP negotiation always use the same model, eliminating the mismatch that causes OpenAI to reject the connection.
-
-## Files Modified
-| File | Change |
-|------|--------|
-| `src/hooks/useVoiceEngine.ts` | Align default model in token request (line 437) and SDP exchange (line 540) to `gpt-4o-mini-realtime-preview-2025-06-03` |
+## Result
+All URLs in direct messages will be clickable and open in a new browser tab — matching the behavior already present in channel/thread messages.
 
