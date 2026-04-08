@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
+import { getStartOfDayIsoInTimezone } from "@/lib/dateConfig";
 
 export interface AgentSessionSummary {
   agentName: string;
@@ -9,9 +11,17 @@ export interface AgentSessionSummary {
   recentMessages: { role: string; content: string; created_at: string }[];
 }
 
-export function useUserAgentSessions(userId: string | null) {
+export function useUserAgentSessions(userId: string | null, date?: Date) {
+  const { timezone } = useWorkspaceSettings();
+
+  const targetDate = date ?? new Date();
+  const dayStart = getStartOfDayIsoInTimezone(timezone, targetDate);
+  const nextDay = new Date(targetDate);
+  nextDay.setDate(nextDay.getDate() + 1);
+  const dayEnd = getStartOfDayIsoInTimezone(timezone, nextDay);
+
   return useQuery({
-    queryKey: ["user_agent_sessions", userId],
+    queryKey: ["user_agent_sessions", userId, dayStart],
     enabled: !!userId,
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -20,6 +30,8 @@ export function useUserAgentSessions(userId: string | null) {
         .from("chat_sessions")
         .select("id, agent_name, updated_at")
         .eq("user_id", userId!)
+        .gte("updated_at", dayStart)
+        .lt("updated_at", dayEnd)
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
@@ -53,13 +65,17 @@ export function useUserAgentSessions(userId: string | null) {
           .from("chat_messages")
           .select("role, content, created_at")
           .eq("session_id", latestSessionId)
+          .gte("created_at", dayStart)
+          .lt("created_at", dayEnd)
           .order("created_at", { ascending: false })
           .limit(10);
 
         const { count: totalMsgCount } = await supabase
           .from("chat_messages")
           .select("id", { count: "exact", head: true })
-          .in("session_id", info.sessionIds);
+          .in("session_id", info.sessionIds)
+          .gte("created_at", dayStart)
+          .lt("created_at", dayEnd);
 
         results.push({
           agentName,
