@@ -1,95 +1,49 @@
 
 
-# Enforce Strict Message Privacy — No Cross-User Message Visibility
+# Strengthen Vizzy's Data Grounding — Always Use Brain Reports
 
 ## Problem
-The current RLS policy on `team_messages` includes an **admin bypass**:
-```sql
--- Current SELECT policy:
-is_channel_member(auth.uid(), channel_id) OR has_any_role(auth.uid(), ARRAY['admin'::app_role])
+The Vizzy text assistant sometimes generates answers without strictly referencing the injected business data (Vizzy Brain reports). The user wants a mandatory rule: Vizzy must ALWAYS base its answers on the real data from the Brain system.
+
+## Current State
+- `buildFullVizzyContext` already injects comprehensive data (financials, production, time clock, activity events, knowledge, memory, agent actions, communications) into every admin-chat call (line 3182)
+- The system prompt (VIZZY_CORE_IDENTITY) has a soft mention at line 57: "ALWAYS scan persistent memory BEFORE answering"
+- There is NO explicit grounding fence that forbids fabrication of data
+
+## Change
+
+### 1. `supabase/functions/_shared/vizzyIdentity.ts` — Add mandatory data grounding block
+
+Add a new section to `VIZZY_CORE_IDENTITY` (after the MEMORY/BRAIN RULES section, around line 58):
+
 ```
-This allows any user with the `admin` role to read **ALL messages** in **ALL channels**, including private DMs between other users. This violates the mandatory privacy rule.
-
-Similarly, `team_channels` and `team_channel_members` have admin bypasses allowing admins to see all channels and memberships.
-
-## Solution
-Remove the admin bypass from SELECT policies on DM channels. Admins should only bypass for **group** channels, not **DM** channels.
-
-### 1. Database Migration — Tighten RLS Policies
-
-**`team_messages` SELECT policy** — Replace:
-```sql
--- OLD: admins see everything
-is_channel_member(auth.uid(), channel_id) 
-  OR has_any_role(auth.uid(), ARRAY['admin'::app_role])
-
--- NEW: members-only for DMs, admin bypass only for group channels
-is_channel_member(auth.uid(), channel_id) 
-  OR (
-    has_any_role(auth.uid(), ARRAY['admin'::app_role]) 
-    AND EXISTS (
-      SELECT 1 FROM team_channels tc 
-      WHERE tc.id = channel_id 
-      AND tc.channel_type != 'dm'
-    )
-  )
+═══ DATA GROUNDING — MANDATORY ═══
+You receive a [BUSINESS CONTEXT] block with every message containing REAL-TIME data from the Vizzy Brain system.
+This is your ONLY source of truth for business data. RULES:
+1. ALWAYS reference and cite data from the injected context when answering questions about the business.
+2. NEVER fabricate, estimate, or guess numbers, names, statuses, or counts. If the data is not in your context, say "I don't have that data right now" and offer to investigate using tools.
+3. When quoting data, use EXACT values from the context — do not round, approximate, or paraphrase numbers.
+4. If the user asks about something not covered in the context, use your tools (investigate_entity, deep_business_scan, etc.) to fetch it. Do NOT make up an answer.
+5. If tool results contradict the context, present BOTH and explain the discrepancy.
+6. For employee activity, time clock, performance — ONLY report what the context shows. Zero activity means zero activity, not "data unavailable."
 ```
 
-**`team_channels` SELECT policy** — Replace:
-```sql
--- OLD
-is_channel_member(auth.uid(), id) OR created_by = auth.uid() 
-  OR has_any_role(auth.uid(), ARRAY['admin'::app_role])
+### 2. `supabase/functions/_shared/vizzyFullContext.ts` — Label context block
 
--- NEW: admin bypass only for non-DM channels
-is_channel_member(auth.uid(), id) OR created_by = auth.uid()
-  OR (has_any_role(auth.uid(), ARRAY['admin'::app_role]) AND channel_type != 'dm')
+Wrap the returned context string with clear markers so the AI model can identify it:
+
+```
+[BUSINESS CONTEXT — VERIFIED DATA — START]
+{existing context output}
+[BUSINESS CONTEXT — VERIFIED DATA — END]
 ```
 
-**`team_channel_members` SELECT policy** — Replace:
-```sql
--- OLD
-is_channel_member(auth.uid(), channel_id) 
-  OR has_any_role(auth.uid(), ARRAY['admin'::app_role])
+This makes it explicit to the model which data is verified and which is not.
 
--- NEW: admin bypass only for non-DM channels  
-is_channel_member(auth.uid(), channel_id)
-  OR (
-    has_any_role(auth.uid(), ARRAY['admin'::app_role])
-    AND EXISTS (
-      SELECT 1 FROM team_channels tc 
-      WHERE tc.id = channel_id 
-      AND tc.channel_type != 'dm'
-    )
-  )
-```
+| File | Change |
+|------|--------|
+| `supabase/functions/_shared/vizzyIdentity.ts` | Add mandatory DATA GROUNDING section to VIZZY_CORE_IDENTITY |
+| `supabase/functions/_shared/vizzyFullContext.ts` | Wrap output with `[BUSINESS CONTEXT]` markers |
 
-**`team_messages` DELETE policy** — Also restrict admin delete to non-DM:
-```sql
--- NEW: admins can delete in group channels, or own messages in DMs
-(sender_profile_id = (SELECT id FROM profiles WHERE user_id = auth.uid() LIMIT 1))
-OR (
-  has_any_role(auth.uid(), ARRAY['admin'::app_role])
-  AND EXISTS (
-    SELECT 1 FROM team_channels tc 
-    WHERE tc.id = channel_id 
-    AND tc.channel_type != 'dm'
-  )
-)
-```
-
-### 2. No Frontend Changes Needed
-The frontend already filters by `channel_id` and only shows channels the user is a member of. The RLS changes ensure the database enforces privacy at the deepest level — even if someone bypasses the UI.
-
-## Summary
-
-| Layer | Change |
-|-------|--------|
-| `team_messages` SELECT RLS | Remove admin bypass for DM channels |
-| `team_messages` DELETE RLS | Restrict admin delete to group channels only |
-| `team_channels` SELECT RLS | Remove admin bypass for DM channels |
-| `team_channel_members` SELECT RLS | Remove admin bypass for DM channels |
-| Frontend | No changes needed |
-
-This ensures **no user, regardless of role**, can see DM messages they are not a participant of. Group channels retain admin oversight as expected.
+Two small additions, no logic changes. This enforces that Vizzy always grounds answers in real Brain data.
 
