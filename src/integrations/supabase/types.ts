@@ -15160,6 +15160,7 @@ export type Database = {
           company_id: string
           email: string
           id: string
+          menus: string[] | null
           updated_at: string | null
           updated_by: string | null
         }
@@ -15169,6 +15170,7 @@ export type Database = {
           company_id?: string
           email: string
           id?: string
+          menus?: string[] | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -15178,6 +15180,7 @@ export type Database = {
           company_id?: string
           email?: string
           id?: string
+          menus?: string[] | null
           updated_at?: string | null
           updated_by?: string | null
         }
