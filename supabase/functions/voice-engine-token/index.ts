@@ -9,12 +9,11 @@ Deno.serve((req) =>
     const {
       instructions = "You are a helpful assistant.",
       voice = "alloy",
-      model = "gpt-4o-realtime-preview-2024-12-17",
+      model = "gpt-4o-mini-realtime-preview-2025-06-03",
       vadThreshold = 0.6,
       silenceDurationMs = 800,
       prefixPaddingMs = 400,
       temperature = 0.8,
-      eagerness,
     } = ctx.body;
 
     const turnDetection: Record<string, unknown> = {
@@ -23,9 +22,6 @@ Deno.serve((req) =>
       prefix_padding_ms: prefixPaddingMs,
       silence_duration_ms: silenceDurationMs,
     };
-    if (eagerness) {
-      turnDetection.eagerness = eagerness;
-    }
 
     const payload = JSON.stringify({
       model,

@@ -270,7 +270,6 @@ export function useVizzyVoiceEngine() {
     vadThreshold: 0.85,
     silenceDurationMs: 1500,
     prefixPaddingMs: 500,
-    eagerness: "low",
     connectionTimeoutMs: 20_000,
   });
 
