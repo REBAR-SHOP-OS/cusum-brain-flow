@@ -1,24 +1,44 @@
 
 
-# Hide Kiosk Button for All Users Except ai@rebar.shop
+# Vizzy Brain Panel — UI Enlargement & Readability
 
-## Change
+## Current State
+The panel is a modal dialog with:
+- `max-w-2xl` (~672px) width, `max-h-[85vh]` height (line 989)
+- Text sizes mostly `text-sm` / `text-xs`
+- Compact padding throughout
 
-### File: `src/pages/TimeClock.tsx` (lines 416–418)
+## Changes
 
-Wrap the Kiosk button in a conditional that only renders it when `user?.email === "ai@rebar.shop"`:
+### File: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-```typescript
-{user?.email?.toLowerCase() === "ai@rebar.shop" && (
-  <Button variant="outline" size="sm" className="gap-1" onClick={enterKioskMode}>
-    <Maximize className="w-3.5 h-3.5" /> Kiosk
-  </Button>
-)}
-```
+**1. Enlarge modal container** (line 989):
+- Change `max-w-2xl` → `max-w-5xl` (wider)
+- Change `max-h-[85vh]` → `max-h-[92vh]` (taller)
 
-The Face ID toggle (line 411–414) stays visible for all users — only the Kiosk button is hidden.
+**2. Increase header text** (line 992–1014):
+- Title `text-lg` → `text-xl`
+- Entry count badge `text-xs` → `text-sm`
+
+**3. Enlarge content area padding** (line 1057):
+- `px-5 py-4` → `px-6 py-5`
+
+**4. Increase General Report section text** (lines 948–970):
+- Section header `text-sm` → `text-base`
+- Accordion trigger `text-sm` → `text-base`
+- Item count badge stays `text-xs` → `text-sm`
+
+**5. Increase General Overview section text** (lines 1067–1077):
+- Header `text-sm` → `text-base`
+
+**6. Team Daily Report card text** — increase accordion item text sizes similarly
+
+**7. Increase accordion content readability**:
+- Entries inside `DateGroupedEntries` will benefit from the larger container width automatically
+
+All changes are purely visual — no logic or data flow modifications.
 
 | File | Change |
 |------|--------|
-| `src/pages/TimeClock.tsx` | Conditionally render Kiosk button for ai@rebar.shop only |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Enlarge modal, increase font sizes and padding |
 
