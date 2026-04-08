@@ -125,12 +125,12 @@ const USER_ACCESS: Record<string, UserConfig> = {
   "ben@rebar.shop": {
     menus: ["Dashboard", "Inbox", "Team Hub", "Pipeline", "Time Clock"],
     agents: ["sales", "support", "estimating", "eisenhower"],
-    primaryAgent: "sales",
-    heroText: "How can **Blitz** help you today?",
+    primaryAgent: "estimating",
+    heroText: "How can **Gauge** help you today?",
     quickActions: [
+      { title: "Open takeoffs", prompt: "Show me all open takeoff sessions and their status — pending reviews, QC flags, and deadlines.", icon: "FileText", category: "Estimating" },
       { title: "Pipeline overview", prompt: "Give me a pipeline summary — active leads, expected close dates, and any deals that need attention.", icon: "TrendingUp", category: "Sales" },
       { title: "Customer inquiry", prompt: "Show me recent customer inquiries and support tickets that need attention.", icon: "HeadphonesIcon", category: "Customer Care" },
-      { title: "Open takeoffs", prompt: "Show me all open takeoff sessions and their status — pending reviews, QC flags, and deadlines.", icon: "FileText", category: "Estimating" },
       { title: "Prioritize my tasks", prompt: "Help me organize my tasks using the Eisenhower Matrix — what's urgent vs important right now?", icon: "LayoutGrid", category: "Eisenhower" },
     ],
   },
