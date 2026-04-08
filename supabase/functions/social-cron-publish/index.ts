@@ -745,7 +745,7 @@ async function publishToLinkedIn(
           body: JSON.stringify({
             registerUploadRequest: {
               recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
-              owner: `urn:li:person:${profile.sub}`,
+              owner: authorUrn,
               serviceRelationships: [{ relationshipType: "OWNER", identifier: "urn:li:userGeneratedContent" }],
             },
           }),
