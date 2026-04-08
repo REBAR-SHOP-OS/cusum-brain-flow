@@ -199,7 +199,7 @@ Rules:
   } catch (err) {
     console.error("generate-daily-report-pdf error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
