@@ -105,7 +105,7 @@ const USER_ACCESS: Record<string, UserConfig> = {
     ],
   },
 
-  "vicky@rebar.shop": {
+  "anderson@rebar.shop": {
     menus: ["Dashboard", "Inbox", "Accounting", "Customers", "Business Tasks", "Team Hub", "Settings"],
     agents: ["accounting", "eisenhower", "data", "email"],
     primaryAgent: "accounting",
