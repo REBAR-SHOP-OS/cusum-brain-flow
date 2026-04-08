@@ -38,8 +38,6 @@ export interface VoiceEngineConfig {
   temperature?: number;
   /** Enable translation-mode filtering (language-mismatch + aggressive phrase blocking). Default: false */
   translationMode?: boolean;
-  /** Eagerness for turn-taking: "low" | "medium" | "high" | "auto". Lower = waits longer before responding. Default: "auto" */
-  eagerness?: string;
 }
 
 const OPENAI_REALTIME_URL = "https://api.openai.com/v1/realtime";
