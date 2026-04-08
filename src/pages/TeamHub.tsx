@@ -73,7 +73,7 @@ export default function TeamHub() {
 
   const resolvedChannelId = isNotesView
     ? selfChannelId
-    : selectedChannelId || (channelsLoading ? null : channels[0]?.id || null);
+    : selectedChannelId;
   const activeChannelId = resolvedChannelId;
   const activeChannel = channels.find((c) => c.id === activeChannelId);
 
