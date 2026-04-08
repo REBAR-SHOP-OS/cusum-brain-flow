@@ -222,7 +222,12 @@ function PerformanceCard({ profileId, userId, name, timezone, date }: { profileI
 }
 
 /** Agent sessions accordion for selected user */
-function UserAgentsSections({ userId, name, email }: { userId: string; name: string; email?: string }) {
+function UserAgentsSections({ userId, name, email, overrideAgents, onEditAgents, canEdit }: {
+  userId: string; name: string; email?: string;
+  overrideAgents?: string[] | null;
+  onEditAgents?: () => void;
+  canEdit?: boolean;
+}) {
   const { data: sessionAgents, isLoading } = useUserAgentSessions(userId);
 
   // Build merged list: accessible agents + any additional agents from sessions
@@ -238,8 +243,10 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
       recentMessages: { role: string; content: string; created_at: string }[];
     }> = [];
 
-    // Use centralized email-based config
-    const accessibleKeys = getVisibleAgents(email);
+    // Use DB overrides if present, else fallback to hardcoded config
+    const accessibleKeys = overrideAgents && overrideAgents.length > 0
+      ? overrideAgents
+      : getVisibleAgents(email);
     const primaryKey = getUserPrimaryAgentKeyFromConfig(email);
 
     // Add all accessible agents (primary first)
@@ -289,7 +296,7 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
     }
 
     return result;
-  }, [email, sessionAgents]);
+  }, [email, sessionAgents, overrideAgents]);
 
   if (isLoading) {
     return (
@@ -304,6 +311,9 @@ function UserAgentsSections({ userId, name, email }: { userId: string; name: str
     return (
       <div className="rounded-lg border border-border bg-muted/30 p-3 text-center">
         <span className="text-xs text-muted-foreground italic">No agents assigned</span>
+        {canEdit && onEditAgents && (
+          <button onClick={onEditAgents} className="ml-2 text-primary text-xs hover:underline">+ Add agents</button>
+        )}
       </div>
     );
   }
