@@ -984,6 +984,21 @@ function TeamDailyReport({
                     <span className="text-xs text-muted-foreground font-normal">
                       ({activities.length} activit{activities.length !== 1 ? "ies" : "y"})
                     </span>
+                    {d?.hoursToday != null && d.hoursToday > 0 && (
+                      <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Clock className="w-3 h-3" />{d.hoursToday.toFixed(1)}h
+                      </span>
+                    )}
+                    {d?.aiSessionsToday != null && d.aiSessionsToday > 0 && (
+                      <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />{d.aiSessionsToday}
+                      </span>
+                    )}
+                    {d?.emailsSent != null && d.emailsSent > 0 && (
+                      <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Mail className="w-3 h-3" />{d.emailsSent}
+                      </span>
+                    )}
                   </span>
                    <SectionDetailReportDialog
                     sectionType="activity"

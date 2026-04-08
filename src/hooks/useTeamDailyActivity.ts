@@ -45,7 +45,7 @@ export function useTeamDailyActivity(profiles: ProfileSlim[], date?: Date) {
         }
       }
 
-      const [actRes, clockRes] = await Promise.all([
+      const [actRes, clockRes, chatRes, commsRes] = await Promise.all([
         userIds.length > 0
           ? supabase
               .from("activity_events")
@@ -63,11 +63,42 @@ export function useTeamDailyActivity(profiles: ProfileSlim[], date?: Date) {
           .gte("clock_in", dayStart)
           .lt("clock_in", dayEnd)
           .order("clock_in", { ascending: false }),
+        userIds.length > 0
+          ? supabase
+              .from("chat_sessions")
+              .select("user_id")
+              .in("user_id", userIds)
+              .gte("created_at", dayStart)
+              .lt("created_at", dayEnd)
+          : Promise.resolve({ data: [], error: null }),
+        userIds.length > 0
+          ? supabase
+              .from("communications")
+              .select("user_id")
+              .in("user_id", userIds)
+              .eq("direction", "outbound")
+              .gte("created_at", dayStart)
+              .lt("created_at", dayEnd)
+          : Promise.resolve({ data: [], error: null }),
       ]);
+
+      // Count AI sessions per user
+      const aiSessionCounts: Record<string, number> = {};
+      for (const row of chatRes.data ?? []) {
+        const uid = (row as any).user_id as string;
+        aiSessionCounts[uid] = (aiSessionCounts[uid] || 0) + 1;
+      }
+
+      // Count emails sent per user
+      const emailCounts: Record<string, number> = {};
+      for (const row of commsRes.data ?? []) {
+        const uid = (row as any).user_id as string;
+        emailCounts[uid] = (emailCounts[uid] || 0) + 1;
+      }
 
       const result: Record<string, TeamMemberActivity> = {};
       for (const id of profileIds) {
-        result[id] = { activities: [], clockEntries: [] };
+        result[id] = { activities: [], clockEntries: [], hoursToday: 0, aiSessionsToday: 0, emailsSent: 0 };
       }
 
       for (const row of actRes.data ?? []) {
@@ -95,6 +126,27 @@ export function useTeamDailyActivity(profiles: ProfileSlim[], date?: Date) {
             break_minutes: (row as any).break_minutes ?? 0,
             notes: (row as any).notes ?? null,
           });
+        }
+      }
+
+      // Calculate hours & assign performance metrics
+      for (const p of profiles) {
+        const pid = p.id;
+        const uid = p.user_id;
+        if (!result[pid]) continue;
+
+        // Hours from clock entries
+        let totalMs = 0;
+        for (const ce of result[pid].clockEntries) {
+          const start = new Date(ce.clock_in).getTime();
+          const end = ce.clock_out ? new Date(ce.clock_out).getTime() : Date.now();
+          totalMs += end - start - (ce.break_minutes ?? 0) * 60000;
+        }
+        result[pid].hoursToday = Math.max(0, totalMs / 3600000);
+
+        if (uid) {
+          result[pid].aiSessionsToday = aiSessionCounts[uid] || 0;
+          result[pid].emailsSent = emailCounts[uid] || 0;
         }
       }
 
