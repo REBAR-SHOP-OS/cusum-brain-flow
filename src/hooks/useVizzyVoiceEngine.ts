@@ -277,15 +277,32 @@ export function useVizzyVoiceEngine() {
   const originalEndSession = engine.endSession;
   const updateSessionInstructions = engine.updateSessionInstructions;
 
-  // Rebuild instructions from scratch with fresh time
+  // Store live tool results that get appended to instructions
+  const liveToolResultsRef = useRef<string[]>([]);
+
+  // Rebuild instructions from scratch with fresh time + any live tool results
   const rebuildAndPush = useCallback(() => {
-    instructionsRef.current = buildInstructions(
+    const base = buildInstructions(
       lastDigestRef.current,
       lastRawContextRef.current,
       lastBrainRef.current
     );
+    const liveBlock = liveToolResultsRef.current.length > 0
+      ? "\n" + liveToolResultsRef.current.join("\n")
+      : "";
+    instructionsRef.current = base + liveBlock;
     updateSessionInstructions(instructionsRef.current);
   }, [updateSessionInstructions]);
+
+  // Append a live tool result and push updated instructions
+  const appendLiveResult = useCallback((resultBlock: string) => {
+    liveToolResultsRef.current.push(resultBlock);
+    // Keep only last 5 results to avoid context overflow
+    if (liveToolResultsRef.current.length > 5) {
+      liveToolResultsRef.current = liveToolResultsRef.current.slice(-5);
+    }
+    rebuildAndPush();
+  }, [rebuildAndPush]);
 
   const startSession = useCallback(async () => {
     // Always rebuild instructions with fresh time
