@@ -98,8 +98,7 @@ export function useAgentDomainStats() {
         // Delivery bundles — for Relay
         supabase
           .from("delivery_bundles")
-          .select("id", { count: "exact", head: true })
-          .eq("company_id", cid),
+          .select("id", { count: "exact", head: true }),
       ]);
 
       // Blitz (Sales)
