@@ -8,6 +8,9 @@ import type { ClockEntry } from "@/hooks/useUserPerformance";
 export interface TeamMemberActivity {
   activities: ActivityEvent[];
   clockEntries: ClockEntry[];
+  hoursToday: number;
+  aiSessionsToday: number;
+  emailsSent: number;
 }
 
 interface ProfileSlim {
