@@ -1,50 +1,64 @@
 
 
-# Fix LinkedIn Publishing — Root Cause Audit
+# Fix: Cannot Delete User — Foreign Key Blocking
 
-## Two Root Causes Found
+## Root Cause
 
-### 1. OAuth Scopes Missing from Stored Connections
-The code requests `w_organization_social` and `r_organization_social` scopes (line 198), but **both stored LinkedIn connections were authorized before these scopes were added**. The DB shows:
-- `scope: "email,openid,profile,w_member_social"` — no org scopes
-- `organization_ids` field is completely absent from both connections' config
+The user `swapnil.m183@gmail.com` cannot be deleted because **`sales_lead_activities`** has 3 rows referencing this user's ID, and the foreign key uses the default `ON DELETE RESTRICT` (no cascade, no set null). This means the database blocks deletion of the auth user.
 
-**Result:** The org auto-discovery API call at line 139-157 either fails silently (403) or returns empty because the token lacks permission. So `organization_ids` is `{}`.
+There are also 4 other tables with the same unsafe FK pattern (no delete action specified):
+- `backup_restore_logs.performed_by`
+- `invite_tokens.created_by`
+- `pipeline_automation_rules.created_by`
+- `system_backups.created_by`
 
-### 2. `page_name` is a Comma-Separated List, Not a Single Page
-Posts are stored with `page_name` values like:
-- `"Rebar.shop Ontario, Rebar.shop"`
-- `"Ontario Steel Detailing, Ontario Logistics, Ontario Steels, Rebar.shop, Rebar.shop Ontario, Sattar Esmaeili-Oureh"`
+These don't have data for this user currently, but will cause the same problem for other users in the future.
 
-The publish code does `orgIds[pageName]` — a direct key lookup using the entire comma-separated string. This will **never match** even when org IDs are correctly stored, because the keys in `organization_ids` are individual names like `"Rebar.shop Ontario"`.
+## Fix — One Migration
 
-## Fix Plan
+Change all 5 foreign keys from `RESTRICT` (default) to `ON DELETE SET NULL`, which matches the project's historical preservation posture (per project memory).
 
-### Step 1: Reconnect LinkedIn with Org Scopes
-Use the `standard_connectors--reconnect` tool to prompt the user to reconnect LinkedIn so the new scopes (`w_organization_social`, `r_organization_social`) are granted. This triggers the OAuth callback which auto-discovers and stores `organization_ids`.
+```sql
+-- sales_lead_activities
+ALTER TABLE sales_lead_activities
+  DROP CONSTRAINT sales_lead_activities_user_id_fkey,
+  ADD CONSTRAINT sales_lead_activities_user_id_fkey
+    FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
 
-### Step 2: Fix page_name Lookup in `social-publish/index.ts`
-When `pageName` contains commas, split it and find the first matching org ID:
-```typescript
-// Instead of: const orgId = orgIds[pageName];
-// Split comma-separated page names and find first org match
-const pageNames = pageName.split(",").map(s => s.trim());
-let orgId: string | undefined;
-let matchedPage = pageName;
-for (const pn of pageNames) {
-  if (orgIds[pn]) { orgId = orgIds[pn]; matchedPage = pn; break; }
-}
+-- backup_restore_logs
+ALTER TABLE backup_restore_logs
+  DROP CONSTRAINT backup_restore_logs_performed_by_fkey,
+  ADD CONSTRAINT backup_restore_logs_performed_by_fkey
+    FOREIGN KEY (performed_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+-- invite_tokens
+ALTER TABLE invite_tokens
+  DROP CONSTRAINT invite_tokens_created_by_fkey,
+  ADD CONSTRAINT invite_tokens_created_by_fkey
+    FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+-- pipeline_automation_rules
+ALTER TABLE pipeline_automation_rules
+  DROP CONSTRAINT pipeline_automation_rules_created_by_fkey,
+  ADD CONSTRAINT pipeline_automation_rules_created_by_fkey
+    FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+-- system_backups
+ALTER TABLE system_backups
+  DROP CONSTRAINT system_backups_created_by_fkey,
+  ADD CONSTRAINT system_backups_created_by_fkey
+    FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
 ```
 
-### Step 3: Same fix in `social-cron-publish/index.ts`
-Apply identical comma-split logic at lines 717-720.
+Additionally, fix the 26 RESTRICT foreign keys on `profiles` to use `ON DELETE SET NULL` so that cascading profile deletion (triggered by auth user deletion) doesn't get blocked by referencing tables. Key tables include: `team_messages`, `machine_runs`, `orders`, `tasks`, `task_comments`, `bid_board`, `expense_claims`, `deliveries`, etc.
+
+## Result
+After this migration, deleting a user will:
+1. Set their references to `NULL` in activity/audit tables (preserving history)
+2. Cascade-delete their `profiles` row (existing behavior)
+3. Set profile references to `NULL` in all operational tables
+4. Complete successfully without foreign key violations
 
 ## Files Modified
-| File | Change |
-|------|--------|
-| `supabase/functions/social-publish/index.ts` | Split comma page_name, find first org match |
-| `supabase/functions/social-cron-publish/index.ts` | Same split logic |
-
-## User Action Required
-LinkedIn must be reconnected to grant org scopes — code fix alone won't work without fresh tokens.
+- Database migration only (no app code changes needed)
 
