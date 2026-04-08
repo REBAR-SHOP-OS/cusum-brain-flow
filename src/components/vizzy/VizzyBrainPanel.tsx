@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3, Download } from "lucide-react";
+import { X, Brain, Zap, Loader2, AlertTriangle, Clock, Activity, Mail, Bot, Users, ClipboardList, LogIn, LogOut, CalendarIcon, FileText, FileBarChart, BarChart3, Download, Pencil, Plus, XCircle, Check } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useVizzyMemory, VizzyMemoryEntry } from "@/hooks/useVizzyMemory";
@@ -27,6 +27,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { Cog } from "lucide-react";
+import { useUserAccessOverrides } from "@/hooks/useUserAccessOverrides";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const USER_AVATAR_COLORS = [
   "bg-blue-500", "bg-emerald-500", "bg-orange-500", "bg-purple-500",
