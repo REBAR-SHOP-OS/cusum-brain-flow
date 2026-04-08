@@ -1,22 +1,34 @@
 
 
-# Move "Item" from Shape Section to Ref/Customer Section
-
-## Problem
-The "Item: X" label is currently inside the shape image area (position #1 in the screenshot). The user wants it moved down to the Ref/Customer/Remark section (position #2).
+# Add Quotation Icon + Log Sent Quotes to Timeline
 
 ## Changes
 
-### 1. `src/components/office/RebarTagCard.tsx`
-- **Remove** the `Item` display from the shape section (lines 156-158 — the `div` with `flex gap-4`)
-- **Add** an "Item" row inside the Ref/Customer/Remark block (line 162 area), as a new line like: `Item: {item}` — same style as Ref/Customer/Remark lines
+### 1. `src/components/sales/LeadSmartButtons.tsx`
 
-### 2. `src/utils/generateZpl.ts`
-- **Remove** `ITEM: ${item}` from line 119 (currently combined with DWG)
-- **Add** a new `ITEM:` line in the Ref section (after REMARK), repositioning Y coordinates to fit 4 lines instead of 3
+**Add "+" icon to Quotes smart button:**
+- Import `Plus` from lucide-react, `useNavigate` from react-router-dom
+- Add a small Plus icon button at the right edge of the Quotes card (both popover and empty states)
+- On click: `navigate('/sales/quotations')` to create a new quotation
+
+**Log sent quotes to timeline:**
+- After successful quote send (line 79, after status update), insert a record into `sales_lead_activities`:
+  - `sales_lead_id`: leadId
+  - `company_id`: fetched from the lead or passed as new prop
+  - `activity_type`: "email"
+  - `subject`: "Quote {quotationNumber} sent"
+  - `body`: "Quotation {quotationNumber} sent to {email}"
+  - `completed_at`: now
+- Invalidate chatter queries so the timeline updates immediately
+
+### 2. `src/components/sales/SalesLeadDrawer.tsx`
+
+- Pass `companyId={lead.company_id}` as a new prop to `<LeadSmartButtons>`
+
+### Summary
 
 | File | Change |
 |------|--------|
-| `RebarTagCard.tsx` | Move Item from shape section to ref/customer block |
-| `generateZpl.ts` | Move ITEM from DWG line to its own line in ref section |
+| `LeadSmartButtons.tsx` | Add Plus icon for new quotation + insert activity on quote send |
+| `SalesLeadDrawer.tsx` | Pass `companyId` prop to LeadSmartButtons |
 
