@@ -21,8 +21,9 @@ function formatCurrency(val: number) {
   return val.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 });
 }
 
-export function LeadSmartButtons({ leadId, contactEmail }: Props) {
+export function LeadSmartButtons({ leadId, contactEmail, companyId }: Props) {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [quotesOpen, setQuotesOpen] = useState(false);
   const [sendDialog, setSendDialog] = useState<{ quoteId: string; quotationNumber: string } | null>(null);
   const [email, setEmail] = useState(contactEmail ?? "");
