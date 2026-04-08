@@ -1307,6 +1307,10 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
   const selectedProfile = rebarProfiles.find((p) => p.id === selectedProfileId);
 
+  // Team daily activity for "All" Items view
+  const allProfileSlims = useMemo(() => rebarProfiles.filter(p => p.email !== "ai@rebar.shop").map(p => ({ id: p.id, user_id: p.user_id })), [rebarProfiles]);
+  const { data: teamDailyData } = useTeamDailyActivity(allProfileSlims, new Date());
+
   // Super admin edit capability
   const viewerEmail = user?.email?.toLowerCase() ?? "";
   const canEditAccess = SUPER_EDIT_EMAILS.includes(viewerEmail);
