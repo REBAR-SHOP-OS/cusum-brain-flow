@@ -457,7 +457,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       setConnectionPhase("negotiating_sdp");
       console.log("[VoiceEngine] Phase: negotiating_sdp");
 
-      const pc = new RTCPeerConnection();
+      const pc = createRealtimePeerConnection();
       pcRef.current = pc;
 
       // Audio output
@@ -536,10 +536,22 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
         attemptReconnect(startSession);
       };
 
-      // SDP exchange
+      // SDP exchange — wait for ICE gathering to complete before sending
       const model = cfg.model ?? "gpt-4o-mini-realtime-preview-2025-06-03";
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+
+      console.log("[VoiceEngine] Waiting for ICE gathering to complete...");
+      let fullDescription: RTCSessionDescription;
+      try {
+        fullDescription = await waitForIceGatheringComplete(pc);
+        const candidateCount = countCandidates(fullDescription.sdp);
+        console.log(`[VoiceEngine] ✅ ICE gathering complete — ${candidateCount} candidate(s)`);
+      } catch (iceErr: any) {
+        failWithError("webrtc_failed", iceErr?.message || "ICE gathering failed — no candidates");
+        toast.error("Network issue — could not establish voice connection.");
+        return;
+      }
 
       let sdpResponse: Response;
       try {
@@ -549,7 +561,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
             Authorization: `Bearer ${tokenData.client_secret}`,
             "Content-Type": "application/sdp",
           },
-          body: offer.sdp,
+          body: fullDescription.sdp,
         });
       } catch (fetchErr: any) {
         failWithError("network", `SDP fetch failed: ${fetchErr?.message || "Network error"}`);
