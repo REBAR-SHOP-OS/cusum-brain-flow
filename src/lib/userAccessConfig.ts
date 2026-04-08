@@ -92,7 +92,12 @@ const USER_ACCESS: Record<string, UserConfig> = {
   },
 
   "neel@rebar.shop": {
-    menus: (ALL_MENUS as readonly string[]).filter((m) => m !== "CEO Portal") as MenuKey[],
+    menus: [
+      "Dashboard", "Inbox", "Team Hub", "Business Tasks", "Live Monitor",
+      "Support", "Pipeline", "Lead Scoring", "Customers", "Accounting",
+      "Sales", "Shop Floor", "Time Clock", "Office Tools",
+      "Inventory", "Diagnostics", "Architecture", "Settings",
+    ] as MenuKey[],
     agents: ALL_AGENTS.filter((a) => a !== "assistant"),
     primaryAgent: "sales",
     heroText: "How can **Blitz** help you close deals today?",
