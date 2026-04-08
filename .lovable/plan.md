@@ -1,28 +1,44 @@
 
 
-# Show All Agents with Accordion in System Agent Activity Section
+# Fix Clipboard Icon: Always Persist Reports + Fix Click-to-Open
 
 ## Problem
-The "Agent Activity — All Users" section currently shows "No agent activity today" when no sessions exist, and only lists agents that have activity. The user wants ALL agent names to always be listed, each with an expandable accordion — showing activity data if available, or "No activity today" if not.
+1. The clipboard icon next to each user in the Team Daily Report does nothing when clicked — the dialog doesn't open.
+2. The report data is only saved to `vizzy_memory` when the dialog is manually opened, meaning Vizzy's voice assistant has no access to it unless someone clicks it first.
+
+## Root Cause
+- The `SectionDetailReportDialog` renders an `OverviewReport` component **only when the dialog is open**. The `useEffect` that persists the report to `vizzy_memory` only runs when `OverviewReport` mounts (i.e., when clicked).
+- The dialog click may fail because the button is inside an `AccordionItem` wrapper — Radix's `AccordionTrigger` can interfere with nested interactive elements depending on DOM structure.
+
+## Solution
+
+### 1. Always persist reports (for Vizzy voice context)
+**New hook: `src/hooks/useEagerReportPersistence.ts`**
+- Called once in `VizzyBrainPanel` when the "All" view loads
+- For each profile, generates the same report text as `OverviewReport` (attendance, performance, activity breakdown)
+- Upserts each user's report to `vizzy_memory` with the same category pattern (`user_daily_report_{userId}_{date}`)
+- This runs automatically, independent of any dialog being opened
+- Uses `useUserPerformance` and `useDetailedActivityReport` data that's already available in the panel
+
+### 2. Fix the dialog click
+**File: `src/components/vizzy/VizzyBrainPanel.tsx`** (lines 1035-1070)
+- Move `SectionDetailReportDialog` outside the `AccordionItem` flex container to prevent click interference
+- Or: Replace the embedded `SectionDetailReportDialog` with a controlled `Dialog` (state-managed `open`/`setOpen`) triggered by a standalone button with proper `e.stopPropagation()` and `e.preventDefault()` to prevent accordion toggle
+
+**File: `src/components/vizzy/SectionDetailReport.tsx`** (lines 619-629)
+- Add `e.preventDefault()` alongside `e.stopPropagation()` on the trigger button to fully prevent accordion/parent interference
+
+### 3. Keep existing behavior intact
+- The `OverviewReport` component's internal `useEffect` that saves to `vizzy_memory` remains as a backup
+- The eager persistence hook provides the same data proactively
 
 ## Changes
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx` — `SystemAgentsSummary` component (lines 1180-1255)
-
-1. Define a static list of ALL known agents with their display names (from `agentTypes.ts` + `useChatSessions.ts`):
-   - Blitz (sales), Penny (accounting), Tally (legal), Haven (support), Pixel (social), Eisenhower Matrix, Gauge (estimating), Forge (shopfloor), Atlas (bizdev), Relay (delivery), Rex (data), Prism (growth), Ally (talent), plus others from the agent system
-
-2. Remove the "No agent activity today" empty state — always render the full agent list
-
-3. Merge the static agent list with the fetched `useSystemAgentSessions()` data:
-   - For agents with activity: show sessions, messages, user count, expandable user breakdown (as currently done)
-   - For agents without activity: show "0 sessions, 0 msgs" in muted style, accordion still expandable but shows "No activity today"
-
-4. Each agent row remains an `AccordionItem` with the same expand/collapse behavior
-
-### No new files needed. No database changes.
-
 | File | Change |
 |------|--------|
-| `VizzyBrainPanel.tsx` | Replace empty state with full static agent list merged with activity data |
+| `src/hooks/useEagerReportPersistence.ts` | New hook — auto-generates and persists daily reports for all users to `vizzy_memory` |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Call `useEagerReportPersistence` in "All" view; fix dialog button placement/propagation |
+| `src/components/vizzy/SectionDetailReport.tsx` | Add `e.preventDefault()` to trigger button to fix click issue |
+
+No database changes needed.
 
