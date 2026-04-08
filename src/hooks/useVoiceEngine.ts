@@ -434,7 +434,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
           body: {
             instructions: resolvedInstructions,
             voice: cfg.voice ?? "alloy",
-            model: cfg.model ?? "gpt-4o-realtime-preview-2024-12-17",
+            model: cfg.model ?? "gpt-4o-mini-realtime-preview-2025-06-03",
             vadThreshold: cfg.vadThreshold ?? 0.4,
             silenceDurationMs: cfg.silenceDurationMs ?? 300,
             prefixPaddingMs: cfg.prefixPaddingMs ?? 200,
@@ -537,7 +537,7 @@ export function useVoiceEngine(config: VoiceEngineConfig) {
       };
 
       // SDP exchange
-      const model = cfg.model ?? "gpt-4o-realtime-preview-2024-12-17";
+      const model = cfg.model ?? "gpt-4o-mini-realtime-preview-2025-06-03";
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
