@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -407,78 +407,23 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
   if (isLoading) return <p className="text-sm text-muted-foreground p-4">Loading…</p>;
   if (!perf) return <p className="text-sm text-muted-foreground p-4">No data available.</p>;
 
-  const buildReportLines = () => {
-    const lines = [
-      `📋 Overview Report — ${userName}`,
-      `Date: ${formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}`,
-      `Status: ${perf.clockedIn ? "Clocked In" : "Not Clocked In"}`,
-      `Hours Today: ${perf.hoursToday}`,
-      `Activities: ${perf.activitiesToday}`,
-      `AI Sessions: ${perf.aiSessionsToday}`,
-      `Emails Sent: ${perf.emailsSent}`,
-    ];
-    if (report && report.byEventType.length > 0) {
-      lines.push("", "Activity Breakdown:");
-      for (const b of report.byEventType.slice(0, 10)) {
-        lines.push(`  ${b.eventType}: ${b.count}`);
-      }
-    }
-    if (perf.clockEntries.length > 0) {
-      lines.push("", "Clock Entries:");
-      for (const ce of perf.clockEntries) {
-        const inTime = formatDateInTimezone(ce.clock_in, timezone, { hour: "numeric", minute: "2-digit", hour12: true });
-        const outTime = ce.clock_out ? formatDateInTimezone(ce.clock_out, timezone, { hour: "numeric", minute: "2-digit", hour12: true }) : "ongoing";
-        lines.push(`  ${inTime} → ${outTime}`);
-      }
-    }
-    return lines;
-  };
-
   const copyAll = () => {
-    navigator.clipboard.writeText(buildReportLines().join("\n"));
+    navigator.clipboard.writeText(buildFullReport());
     toast.success("Overview report copied");
   };
 
+  const reportText = buildFullReport();
+
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {formatDateInTimezone(date, timezone, { year: "numeric", month: "long", day: "numeric" })}
-        </p>
+    <div className="space-y-3">
+      <div className="flex items-center justify-end">
         <Button variant="outline" size="sm" onClick={copyAll} className="gap-1.5">
           <Copy className="w-3.5 h-3.5" /> Copy Report
         </Button>
       </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        {[
-          { label: "Status", value: perf.clockedIn ? "🟢 Clocked In" : "⚪ Off Clock" },
-          { label: "Hours Today", value: `${perf.hoursToday}h` },
-          { label: "Activities", value: String(perf.activitiesToday) },
-          { label: "AI Sessions", value: String(perf.aiSessionsToday) },
-          { label: "Emails Sent", value: String(perf.emailsSent) },
-          { label: "Clock Entries", value: String(perf.clockEntries.length) },
-        ].map((item) => (
-          <div key={item.label} className="rounded-lg border border-border bg-muted/30 p-3 text-center">
-            <p className="text-xl font-bold text-foreground">{item.value}</p>
-            <p className="text-xs text-muted-foreground">{item.label}</p>
-          </div>
-        ))}
-      </div>
-
-      {report && report.byEventType.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold text-foreground mb-2">Activity Breakdown</h4>
-          <div className="space-y-1.5">
-            {report.byEventType.slice(0, 10).map((b) => (
-              <div key={b.eventType} className="flex items-center justify-between text-sm px-2 py-1 rounded bg-muted/20">
-                <span className="text-foreground">{humanLabel(b.eventType)}</span>
-                <span className="font-medium text-primary">{b.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground bg-muted/30 border border-border rounded-lg p-4 overflow-auto max-h-[60vh]">
+        {reportText}
+      </pre>
     </div>
   );
 }
