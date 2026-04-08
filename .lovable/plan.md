@@ -1,59 +1,20 @@
 
 
-# Replace PDF Download with Comprehensive Items Report Dialog
+# Adjust Tag Card Section Heights
 
 ## Problem
-The download icon (red arrow in screenshot) in the "Items" section header currently generates a PDF via an edge function + html2canvas + jsPDF. The user wants it to instead **open a dialog** showing a comprehensive, English-language report of all Items sections with a summary.
+The shape image section (#1) takes too much vertical space, while the metadata section (#2, Item/Ref/Customer/Remark) is too compressed.
 
-## Plan
+## Changes
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx`
+**File: `src/components/office/RebarTagCard.tsx`**
 
-**1. Replace `GeneralReportPDFButton` with `ItemsFullReportButton`**
+1. **Shape image section (line 138)**: Change from `flex-1` to a fixed/smaller height — replace `className="flex-1 min-h-0 ..."` with a max-height constraint like `style={{ height: "35%" }}` or `className="shrink min-h-0"` with a reduced flex basis
+2. **Metadata section (line 159)**: Increase `min-h-[3.5rem]` to `min-h-[5rem]` and give it `flex-1` so it takes remaining space
 
-Remove the entire `GeneralReportPDFButton` component (lines 413-508) and replace it with a new component that:
-- Uses a `Dialog` with `DialogPortal` + z-[100002] (same pattern as `SectionDetailReportDialog` and `AgentReportDialog`)
-- Icon changes from `Download` to `FileBarChart` or `ClipboardList`
-- On click, opens a full-screen dialog with all Items data
+Specifically:
+- Line 138: Change `flex-1 min-h-0` → `min-h-0` with `style={{ flex: "1 1 30%" }}` (shrink shape area)
+- Line 159: Change `min-h-[3.5rem]` → `flex-1 min-h-[3rem]` (expand metadata area)
 
-**2. New dialog content — `ItemsFullReport`**
-
-The dialog will display:
-
-**Executive Summary section** (top):
-- Grid of 4 cards: Total Items, Total Categories, Date, User/Team label
-- A brief text summary: "This report covers X categories with Y total items recorded on [date]"
-
-**Per-category breakdown** (main body):
-- For each `sectionsToShow` group (Dashboard, Inbox, Team Hub, Business Tasks, etc.):
-  - Category header with icon + item count
-  - List of all memory items in that category with timestamps
-  - If "All" view: per-user contribution counts within each category
-
-**Team Summary** (if "All" view, no specific user selected):
-- Same team stats banner already computed (`teamStats`)
-- Per-user performance badges
-
-**Copy Report button** in header — generates plain text version
-
-**3. Wire it up**
-
-Replace `<GeneralReportPDFButton ... />` at line 1614 with:
-```tsx
-<ItemsFullReportButton 
-  date={userSelectedDate}
-  userName={selectedProfile?.full_name || "All Users"}
-  sections={sectionsToShow}
-  teamStats={teamStats}
-  timezone={timezone}
-/>
-```
-
-The new component receives the already-computed `sectionsToShow` (the grouped/filtered memory items) and `teamStats`, so no new data fetching is needed.
-
-### Result
-- Click opens a high-z-index dialog (not PDF download)
-- Shows executive summary + all category breakdowns
-- Copy-to-clipboard for text version
-- No black screen (z-[100002] above panel's z-[100000])
+This redistributes vertical space: less for shape image, more for the Item/Ref/Customer/Remark block.
 
