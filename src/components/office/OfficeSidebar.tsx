@@ -44,6 +44,17 @@ const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }
 export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
   return (
     <aside className="flex w-[180px] shrink-0 border-r border-border bg-card flex-col h-full">
+      {/* Back to Home */}
+      <div className="px-3 py-2 border-b border-border">
+        <Link
+          to="/home"
+          className="flex items-center gap-2 text-[10px] tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to Home
+        </Link>
+      </div>
+
       {/* Header */}
       <div className="px-4 py-4 flex items-center gap-2">
         <img src={brandLogo} alt="Rebar.shop" className="w-7 h-7 rounded-full object-contain" />
@@ -75,16 +86,6 @@ export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
 
       </ScrollArea>
 
-      {/* Footer: Switch Mode */}
-      <div className="border-t border-border p-3">
-        <Link
-          to="/shop-floor"
-          className="flex items-center gap-2 text-[10px] tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Switch Mode
-        </Link>
-      </div>
     </aside>
   );
 }
