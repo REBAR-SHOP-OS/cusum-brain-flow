@@ -7,6 +7,7 @@ export interface UserAccessOverride {
   email: string;
   agents: string[];
   automations: string[];
+  menus: string[];
   updated_by: string | null;
   updated_at: string;
 }
@@ -31,6 +32,7 @@ export function useUserAccessOverrides(email?: string | null) {
         email: (data as any).email,
         agents: (data as any).agents ?? [],
         automations: (data as any).automations ?? [],
+        menus: (data as any).menus ?? [],
         updated_by: (data as any).updated_by,
         updated_at: (data as any).updated_at,
       } as UserAccessOverride;
@@ -40,7 +42,6 @@ export function useUserAccessOverrides(email?: string | null) {
   const saveAgents = useMutation({
     mutationFn: async ({ email, agents, updatedBy }: { email: string; agents: string[]; updatedBy: string }) => {
       const normalized = email.toLowerCase();
-      // Upsert
       const { data: existing } = await supabase
         .from("user_access_overrides" as any)
         .select("id")
@@ -56,7 +57,7 @@ export function useUserAccessOverrides(email?: string | null) {
       } else {
         const { error } = await supabase
           .from("user_access_overrides" as any)
-          .insert({ email: normalized, agents, automations: [], updated_by: updatedBy, company_id: "rebar" } as any);
+          .insert({ email: normalized, agents, automations: [], menus: [], updated_by: updatedBy, company_id: "rebar" } as any);
         if (error) throw error;
       }
     },
@@ -87,7 +88,7 @@ export function useUserAccessOverrides(email?: string | null) {
       } else {
         const { error } = await supabase
           .from("user_access_overrides" as any)
-          .insert({ email: normalized, agents: [], automations, updated_by: updatedBy, company_id: "rebar" } as any);
+          .insert({ email: normalized, agents: [], automations, menus: [], updated_by: updatedBy, company_id: "rebar" } as any);
         if (error) throw error;
       }
     },
@@ -100,5 +101,36 @@ export function useUserAccessOverrides(email?: string | null) {
     },
   });
 
-  return { override, isLoading, saveAgents, saveAutomations };
+  const saveMenus = useMutation({
+    mutationFn: async ({ email, menus, updatedBy }: { email: string; menus: string[]; updatedBy: string }) => {
+      const normalized = email.toLowerCase();
+      const { data: existing } = await supabase
+        .from("user_access_overrides" as any)
+        .select("id")
+        .eq("email", normalized)
+        .maybeSingle();
+
+      if ((existing as any)?.id) {
+        const { error } = await supabase
+          .from("user_access_overrides" as any)
+          .update({ menus, updated_by: updatedBy, updated_at: new Date().toISOString() } as any)
+          .eq("id", (existing as any).id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("user_access_overrides" as any)
+          .insert({ email: normalized, agents: [], automations: [], menus, updated_by: updatedBy, company_id: "rebar" } as any);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["user-access-overrides"] });
+      toast({ title: "✅ Menu access updated" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
+    },
+  });
+
+  return { override, isLoading, saveAgents, saveAutomations, saveMenus };
 }

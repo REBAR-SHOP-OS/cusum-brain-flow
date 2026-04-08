@@ -19,7 +19,7 @@ import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
 import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { agentConfigs } from "@/components/agent/agentConfigs";
-import { getVisibleAgents, getVisibleMenus, getUserPrimaryAgentKeyFromConfig } from "@/lib/userAccessConfig";
+import { getVisibleAgents, getVisibleMenus, getUserPrimaryAgentKeyFromConfig, ALL_MENUS } from "@/lib/userAccessConfig";
 import { useAuth } from "@/lib/auth";
 import { Bot as BotIcon } from "lucide-react";
 import { toast as sonnerToast } from "sonner";
@@ -992,6 +992,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const isUserToday = userSelectedDate.toDateString() === new Date().toDateString();
   const [editingAgents, setEditingAgents] = useState(false);
   const [editingAutomations, setEditingAutomations] = useState(false);
+  const [editingItems, setEditingItems] = useState(false);
 
   // Filter @rebar.shop profiles, active first
   const rebarProfiles = useMemo(() => {
@@ -1032,11 +1033,12 @@ export function VizzyBrainPanel({ onClose }: Props) {
   // Super admin edit capability
   const viewerEmail = user?.email?.toLowerCase() ?? "";
   const canEditAccess = SUPER_EDIT_EMAILS.includes(viewerEmail);
-  const { override: accessOverride, saveAgents, saveAutomations } = useUserAccessOverrides(selectedProfile?.email);
+  const { override: accessOverride, saveAgents, saveAutomations, saveMenus } = useUserAccessOverrides(selectedProfile?.email);
 
   // All available agents for the editor
   const allAgentItems = useMemo(() => Object.entries(agentConfigs).map(([key, cfg]) => ({ id: key, label: `${cfg.name} — ${cfg.role}` })), []);
   const allAutomationItems = useMemo(() => defaultAutomations.map((a) => ({ id: a.id, label: a.name })), []);
+  const allMenuItems = useMemo(() => ALL_MENUS.map((m) => ({ id: m, label: m })), []);
 
   // Filter entries by selected user name if applicable
   const filteredEntries = useMemo(() => {
@@ -1104,10 +1106,10 @@ export function VizzyBrainPanel({ onClose }: Props) {
 
     // Filter sections by the SELECTED user's menu access (or viewer's if "All")
     const targetEmail = selectedProfile?.email ?? user?.email;
-    const userMenus = getVisibleMenus(targetEmail);
+    const userMenus = accessOverride?.menus?.length ? accessOverride.menus : getVisibleMenus(targetEmail);
     const accessibleGroups = grouped.filter((group) => {
       const requiredMenu = GROUP_TO_MENU[group.key];
-      if (!requiredMenu) return true; // no mapping = always show
+      if (!requiredMenu) return true;
       return userMenus.includes(requiredMenu);
     });
 
@@ -1123,16 +1125,34 @@ export function VizzyBrainPanel({ onClose }: Props) {
     }
 
     return (
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
+      <div className="rounded-xl border border-border bg-card relative">
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
           <FileBarChart className="w-4 h-4 text-primary" />
           <h3 className="text-base font-semibold text-foreground flex-1">Items</h3>
+          {canEditAccess && selectedProfile?.email && (
+            <button
+              onClick={() => { setEditingItems(!editingItems); setEditingAgents(false); setEditingAutomations(false); }}
+              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+              title="Edit menu access"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
           <GeneralReportPDFButton date={userSelectedDate} />
         </div>
+        {editingItems && canEditAccess && selectedProfile?.email && (
+          <AccessEditorPopover
+            title={`Menu Access — ${selectedProfile.full_name?.split(" ")[0]}`}
+            allItems={allMenuItems}
+            selectedIds={accessOverride?.menus?.length ? accessOverride.menus : getVisibleMenus(selectedProfile.email)}
+            onSave={(ids) => saveMenus.mutate({ email: selectedProfile.email!, menus: ids, updatedBy: viewerEmail })}
+            onClose={() => setEditingItems(false)}
+          />
+        )}
         <div className="p-3">
           {/* Accessible menu items for this user */}
           {selectedProfile?.email && (() => {
-            const userMenuItems = getVisibleMenus(selectedProfile.email);
+            const userMenuItems = accessOverride?.menus?.length ? accessOverride.menus : getVisibleMenus(selectedProfile.email);
             return userMenuItems.length > 0 ? (
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {userMenuItems.map(menu => (
