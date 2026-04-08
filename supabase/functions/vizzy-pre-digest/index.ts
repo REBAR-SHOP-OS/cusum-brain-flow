@@ -446,7 +446,7 @@ ${agentAuditContext}`,
     // Remove the benchmark JSON line from the digest (it's internal)
     const cleanDigest = fullDigest.replace(/BENCHMARK_JSON:\{[^}]+\}/, "").trim();
 
-    const result = {
+    const finalResult = {
       digest: cleanDigest,
       rawContext,
       brainMemories: brainBlock || null,
@@ -454,8 +454,8 @@ ${agentAuditContext}`,
     };
 
     // Cache the result for fast subsequent requests
-    cacheSet(cacheKey, result, DIGEST_CACHE_TTL_MS);
+    cacheSet(cacheKey, finalResult, DIGEST_CACHE_TTL_MS);
 
-    return result;
+    return finalResult;
   }, { functionName: "vizzy-pre-digest", requireCompany: false, wrapResult: false })
 );

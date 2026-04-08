@@ -238,8 +238,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   }, [voiceState]);
 
   const statusText = isConnecting
-    ? elapsed >= 8
-      ? "Loading ERP intelligence..."
+    ? elapsed >= 10
+      ? "Connecting voice engine..."
       : "Initializing Vizzy..."
     : isAutoRetrying
     ? "Reconnecting..."
