@@ -1,44 +1,56 @@
 
 
-# Analysis: No "Restricted Area" Component Exists
+# Add Automations Section to Vizzy Brain Panel
 
-## Finding
+## Summary
+Add a new "Automations" section between "Agents" and "System Performance Overview" in the Vizzy Brain panel, showing which dashboard automations each user can see based on their role and email.
 
-After thorough investigation of the codebase, **there is no "Restricted Area" section or component** anywhere in the station detail pages. The components in `/src/components/shopfloor/` include:
+## How It Works
+The `AutomationsSection` component (in `src/components/integrations/AutomationsSection.tsx`) filters automations using:
+- **Admins** see all 13 automations
+- **Non-admins** are blocked from `ADMIN_ONLY_IDS`: Social Media Manager, Facebook Commenter, Email Marketing, Website Manager, App Builder, SEO Manager
+- **Exception**: `zahra@rebar.shop` also sees Social Media Manager
 
-- `CutterStationView.tsx` — the cutter station (shown in the screenshot)
-- `BenderStationView.tsx` — bender station
-- `StationHeader.tsx` — shared header with Supervisor toggle
-- `ProductionCard.tsx` — individual production items
-- `SlotTracker.tsx` — bar slot management
-- `CutEngine.tsx` — cut configuration panel
+To replicate this logic in Vizzy Brain for any selected user, we need a pure function that takes an email and admin status and returns the list of visible automation names.
 
-None of these contain a "Restricted Area" card with a user list and action icons. The screenshot shows a standard cutter station page with production controls — no user management section is visible.
+## Changes
 
-## What Needs to Happen
+### 1. `src/components/vizzy/VizzyBrainPanel.tsx`
 
-Since this is a **new feature** (not a bug fix), we need to **create** a Restricted Area component. Here's the plan:
+Add a new `UserAutomationsSection` component that:
+- Imports `defaultAutomations` and `ADMIN_ONLY_IDS` from `AutomationsSection.tsx` (need to export them)
+- Takes the selected user's email as prop
+- Determines if user is admin (super admin emails or has admin role)
+- Filters automations using the same logic as the dashboard
+- Renders a list of badges showing automation names the user can see
 
-### 1. Create `src/components/shopfloor/RestrictedAreaCard.tsx`
+Insert as a new section between Agents (Section 2) and System Performance Overview (Section 3), around line 1205:
 
-A new card component that:
-- Displays a list of users with special access to the station
-- Shows each user's name, role, and avatar
-- Has two action buttons per user:
-  - **Ban** (temporary block) — `Ban` icon, logs to console as placeholder
-  - **Remove** (permanent) — `Trash2` icon, logs to console as placeholder
-- Both actions wrapped in `Tooltip` for clarity
+```tsx
+{/* Section 2.5: Automations */}
+<div className="rounded-xl border border-border bg-card overflow-hidden">
+  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border bg-muted/40">
+    <Bot className="w-4 h-4 text-primary" />
+    <h3 className="text-sm font-semibold text-foreground flex-1">Automations</h3>
+  </div>
+  <div className="p-3">
+    <div className="flex flex-wrap gap-1.5">
+      {visibleAutomations.map(a => (
+        <span key={a.id} className="text-[10px] px-2 py-0.5 rounded-full bg-muted ...">
+          {a.name}
+        </span>
+      ))}
+    </div>
+  </div>
+</div>
+```
 
-### 2. Integrate into `CutterStationView.tsx`
+### 2. `src/components/integrations/AutomationsSection.tsx`
 
-Add the `RestrictedAreaCard` to the station view, likely in the right sidebar area alongside the CutEngine panel, or below it. Since no data source exists yet, the component will use a static mock list of users initially.
+Export `defaultAutomations` and `ADMIN_ONLY_IDS` so they can be imported by the Brain panel.
 
-### 3. Data model consideration
-
-Currently there is no database table for station-level user access restrictions. The initial implementation will use **mock data** with a `TODO` comment indicating where a database query should be added later.
-
-| File | Action |
+| File | Change |
 |------|--------|
-| `src/components/shopfloor/RestrictedAreaCard.tsx` | **Create** — new component with user list + Ban/Remove actions |
-| `src/components/shopfloor/CutterStationView.tsx` | **Edit** — import and render RestrictedAreaCard in the station layout |
+| `src/components/integrations/AutomationsSection.tsx` | Export `defaultAutomations` and `ADMIN_ONLY_IDS` |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Add Automations section showing per-user visible automations as badges |
 
