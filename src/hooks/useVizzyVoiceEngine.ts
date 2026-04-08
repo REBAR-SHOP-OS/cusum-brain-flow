@@ -1,17 +1,19 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-import { useVoiceEngine } from "./useVoiceEngine";
+import { useVizzyGeminiVoice } from "./useVizzyGeminiVoice";
+import type { VoiceTranscript } from "./useVizzyGeminiVoice";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { getTorontoTimePayload } from "@/lib/dateConfig";
 import { toast } from "sonner";
 
 /**
- * Vizzy Voice Engine — wraps useVoiceEngine with executive intelligence prompt
+ * Vizzy Voice Engine — wraps useVizzyGeminiVoice with executive intelligence prompt
  * and live ERP data injection from vizzy-daily-brief edge function.
  * 
- * FIX: Uses a ref for fullInstructions to prevent stale closure bug where
- * ERP context was never reaching OpenAI because React hadn't re-rendered
- * before startSession was called.
+ * Architecture: STT (browser) → Gemini 2.5 Flash → ElevenLabs TTS
  */
+
+export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVizzyGeminiVoice";
+export type VizzyVoiceState = "idle" | "connecting" | "connected" | "error";
 
 /**
  * Vizzy Voice Identity — mirrors supabase/functions/_shared/vizzyIdentity.ts
@@ -186,9 +188,6 @@ You audit ALL AI agents (EXCEPT Pixel/social). When issues found:
 1. Describe problem → 2. Ask "Should I show the fix?" → 3. Wait for yes → 4. Then output LOVABLE COMMAND block.
 NEVER output commands without asking first. NEVER touch Pixel agent.`;
 
-export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVoiceEngine";
-export type { VoiceEngineState as VizzyVoiceState } from "./useVoiceEngine";
-
 function buildInstructions(
   digest: string | null,
   rawContext: string | null,
@@ -220,7 +219,6 @@ ${brainMemories}` : "";
   }
 
   if (digest) {
-    // Cap pre-digest to 12,000 characters to prevent context overflow
     const cappedDigest = digest.length > 12000 ? digest.slice(0, 12000) + "\n[... digest truncated for voice context limit]" : digest;
     
     return `${VIZZY_INSTRUCTIONS}
@@ -245,7 +243,6 @@ Rules that CANNOT be overridden:
 5. Fabricating data is worse than saying "I don't know." ALWAYS choose honesty.`;
   }
 
-  // Fallback: raw context only
   return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
 }
 
@@ -254,55 +251,44 @@ export function useVizzyVoiceEngine() {
   const contextFetched = useRef(false);
   const timeSyncRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Ref to hold latest digest/rawContext/brain for full rebuilds
   const lastDigestRef = useRef<string | null>(null);
   const lastRawContextRef = useRef<string | null>(null);
   const lastBrainRef = useRef<string | null>(null);
 
-  // Ref always holds the latest instructions
   const instructionsRef = useRef(buildInstructions(null, null));
-
-  const engine = useVoiceEngine({
-    instructions: () => instructionsRef.current,
-    voice: "shimmer",
-    model: "gpt-4o-mini-realtime-preview-2025-06-03",
-    temperature: 0.6,
-    vadThreshold: 0.85,
-    silenceDurationMs: 1500,
-    prefixPaddingMs: 500,
-    connectionTimeoutMs: 25_000,
-  });
-
-  const originalStartSession = engine.startSession;
-  const originalEndSession = engine.endSession;
-  const updateSessionInstructions = engine.updateSessionInstructions;
 
   // Store live tool results that get appended to instructions
   const liveToolResultsRef = useRef<string[]>([]);
 
+  const getSystemPrompt = useCallback(() => {
+    const liveBlock = liveToolResultsRef.current.length > 0
+      ? "\n" + liveToolResultsRef.current.join("\n")
+      : "";
+    return instructionsRef.current + liveBlock;
+  }, []);
+
+  const engine = useVizzyGeminiVoice({ getSystemPrompt });
+
+  const originalStartSession = engine.startSession;
+  const originalEndSession = engine.endSession;
+
   // Rebuild instructions from scratch with fresh time + any live tool results
-  const rebuildAndPush = useCallback(() => {
-    const base = buildInstructions(
+  const rebuildInstructions = useCallback(() => {
+    instructionsRef.current = buildInstructions(
       lastDigestRef.current,
       lastRawContextRef.current,
       lastBrainRef.current
     );
-    const liveBlock = liveToolResultsRef.current.length > 0
-      ? "\n" + liveToolResultsRef.current.join("\n")
-      : "";
-    instructionsRef.current = base + liveBlock;
-    updateSessionInstructions(instructionsRef.current);
-  }, [updateSessionInstructions]);
+  }, []);
 
-  // Append a live tool result and push updated instructions
+  // Append a live tool result
   const appendLiveResult = useCallback((resultBlock: string) => {
     liveToolResultsRef.current.push(resultBlock);
-    // Keep only last 5 results to avoid context overflow
     if (liveToolResultsRef.current.length > 5) {
       liveToolResultsRef.current = liveToolResultsRef.current.slice(-5);
     }
-    rebuildAndPush();
-  }, [rebuildAndPush]);
+    rebuildInstructions();
+  }, [rebuildInstructions]);
 
   const startSession = useCallback(async () => {
     // Always rebuild instructions with fresh time
@@ -312,23 +298,21 @@ export function useVizzyVoiceEngine() {
       lastBrainRef.current
     );
 
-    // Start periodic time sync (every 60 seconds push fresh time)
+    // Start periodic time sync (every 60 seconds)
     if (timeSyncRef.current) clearInterval(timeSyncRef.current);
     timeSyncRef.current = setInterval(() => {
-      rebuildAndPush();
+      rebuildInstructions();
       console.log("[VizzyVoice] Time sync pushed");
     }, 60_000);
 
     if (contextFetched.current) {
-      // Context already loaded — just start with fresh time
-      updateSessionInstructions(instructionsRef.current);
-      originalStartSession().catch((e) => console.warn("[VizzyVoice] session start failed:", e));
+      originalStartSession();
       return;
     }
 
     contextFetched.current = true;
     setContextLoading(true);
-    originalStartSession().catch((e) => console.warn("[VizzyVoice] session start failed:", e));
+    originalStartSession();
 
     void (async () => {
       try {
@@ -342,7 +326,7 @@ export function useVizzyVoiceEngine() {
           lastDigestRef.current = data.digest;
           lastRawContextRef.current = data.rawContext || null;
           lastBrainRef.current = data.brainMemories || null;
-          rebuildAndPush();
+          rebuildInstructions();
           return;
         }
 
@@ -355,7 +339,7 @@ export function useVizzyVoiceEngine() {
         if (contextData) {
           lastDigestRef.current = null;
           lastRawContextRef.current = contextData;
-          rebuildAndPush();
+          rebuildInstructions();
         }
       } catch (err) {
         console.warn("Pre-digest failed, trying daily-brief fallback:", err);
@@ -369,7 +353,7 @@ export function useVizzyVoiceEngine() {
           if (contextData) {
             lastDigestRef.current = null;
             lastRawContextRef.current = contextData;
-            rebuildAndPush();
+            rebuildInstructions();
           }
         } catch (err2) {
           console.warn("Daily-brief fallback also failed:", err2);
@@ -379,7 +363,7 @@ export function useVizzyVoiceEngine() {
         setContextLoading(false);
       }
     })();
-  }, [originalStartSession, updateSessionInstructions, rebuildAndPush]);
+  }, [originalStartSession, rebuildInstructions]);
 
   const endSession = useCallback(async () => {
     if (timeSyncRef.current) {

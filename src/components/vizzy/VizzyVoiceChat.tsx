@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { X, Mic, MicOff, Loader2, Copy, Check } from "lucide-react";
 import { useVizzyVoiceEngine } from "@/hooks/useVizzyVoiceEngine";
 import type { VizzyVoiceTranscript } from "@/hooks/useVizzyVoiceEngine";
-import type { VoiceConnectionPhase, VoiceErrorKind } from "@/hooks/useVoiceEngine";
 import { cn } from "@/lib/utils";
 import vizzyAvatar from "@/assets/vizzy-avatar.png";
 import { motion, AnimatePresence } from "framer-motion";
@@ -70,26 +69,9 @@ const READ_ACTIONS = new Set([
   "quickbooks_query",
 ]);
 
-// Retryable error kinds — only retry transient failures
-const RETRYABLE_ERRORS: Set<VoiceErrorKind> = new Set([
-  "token_failed", "sdp_failed", "channel_timeout", "webrtc_failed", "network",
-]);
-
-// Phase labels for UI
-const PHASE_LABELS: Record<NonNullable<VoiceConnectionPhase>, string> = {
-  requesting_mic: "Requesting microphone...",
-  getting_token: "Getting secure voice token...",
-  negotiating_sdp: "Negotiating voice session...",
-  waiting_channel: "Waiting for realtime channel...",
-  connected: "Voice connected",
-};
-
 export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const {
     state: voiceState,
-    connectionPhase,
-    lastErrorKind,
-    lastErrorDetail,
     transcripts,
     isSpeaking,
     isMuted,
@@ -98,8 +80,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     endSession,
     toggleMute,
     contextLoading,
-    outputAudioBlocked,
-    retryOutputAudio,
+    lastErrorDetail,
     appendLiveResult,
   } = useVizzyVoiceEngine();
 
@@ -107,7 +88,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const [elapsed, setElapsed] = useState(0);
   const autoRetryCountRef = useRef(0);
   const autoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const MAX_AUTO_RETRIES = 3;
+  const MAX_AUTO_RETRIES = 2;
 
   // Auto-start
   useEffect(() => {
@@ -125,13 +106,11 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
 
-    // Parse ALL VIZZY-ACTION tags from agent transcripts and batch-execute
     const pendingActions: { actionData: any; transcriptId: string }[] = [];
 
     for (const t of transcripts) {
       if (t.role !== "agent" || processedActionsRef.current.has(t.id)) continue;
       
-      // Find ALL action tags in this transcript (supports multiple per message)
       const actionRegex = /\[VIZZY-ACTION\]([\s\S]*?)\[\/VIZZY-ACTION\]/g;
       let match;
       let foundAny = false;
@@ -149,7 +128,6 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
 
     if (pendingActions.length === 0) return;
 
-    // Execute all actions and show summary toast
     (async () => {
       const results = { tasks: 0, emails: 0, calls: 0, other: 0, errors: 0 };
 
@@ -161,11 +139,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           if (error) throw error;
           if (data?.error) throw new Error(data.error);
 
-          // Feed READ action results back into the voice session context
           if (READ_ACTIONS.has(actionData.type) && data) {
             const resultBlock = `\n═══ LIVE TOOL RESULT (${actionData.type}) ═══\n${JSON.stringify(data, null, 1).slice(0, 4000)}\n═══ END TOOL RESULT ═══\nUse ONLY this data to answer the CEO's question. Do NOT fabricate beyond what is shown here.`;
             appendLiveResult(resultBlock);
-            console.log(`[VizzyVoice] Fed back ${actionData.type} result (${JSON.stringify(data).length} chars)`);
           }
 
           if (actionData.type === "create_task") {
@@ -194,19 +170,14 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
         }
       }
 
-      // Build summary toast
       const parts: string[] = [];
       if (results.tasks > 0) parts.push(`${results.tasks} task${results.tasks > 1 ? "s" : ""} created`);
       if (results.emails > 0) parts.push(`${results.emails} message${results.emails > 1 ? "s" : ""} sent`);
       if (results.calls > 0) parts.push(`${results.calls} call${results.calls > 1 ? "s" : ""} placed`);
       if (results.other > 0) parts.push(`${results.other} action${results.other > 1 ? "s" : ""} executed`);
       
-      if (parts.length > 0) {
-        toast.success(`Vizzy auto-${parts.join(" and ")}`);
-      }
-      if (results.errors > 0) {
-        toast.error(`${results.errors} action${results.errors > 1 ? "s" : ""} failed`);
-      }
+      if (parts.length > 0) toast.success(`Vizzy auto-${parts.join(" and ")}`);
+      if (results.errors > 0) toast.error(`${results.errors} action${results.errors > 1 ? "s" : ""} failed`);
     })();
   }, [transcripts]);
 
@@ -232,30 +203,25 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   const isConnected = voiceState === "connected";
   const isBrainSyncing = isConnected && contextLoading;
   const isError = voiceState === "error";
-  // Only auto-retry for retryable error types
-  const canAutoRetry = isError && lastErrorKind != null && RETRYABLE_ERRORS.has(lastErrorKind);
-  const isAutoRetrying = canAutoRetry && autoRetryCountRef.current < MAX_AUTO_RETRIES;
 
-  // Smart auto-retry: only for transient/retryable errors
+  // Auto-retry on error
   useEffect(() => {
-    if (isError && canAutoRetry && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
+    if (isError && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
       autoRetryCountRef.current += 1;
-      console.log(`[VizzyVoiceChat] Auto-retry ${autoRetryCountRef.current}/${MAX_AUTO_RETRIES} (${lastErrorKind})`);
+      console.log(`[VizzyVoiceChat] Auto-retry ${autoRetryCountRef.current}/${MAX_AUTO_RETRIES}`);
       autoRetryTimerRef.current = setTimeout(() => { startSession(); }, 3000);
       return () => { if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current); };
     }
-  }, [isError, canAutoRetry, startSession, lastErrorKind]);
+  }, [isError, startSession]);
 
-  // Reset auto-retry counter on successful connection
   useEffect(() => {
     if (voiceState === "connected") { autoRetryCountRef.current = 0; }
   }, [voiceState]);
 
-  // Build status text from connection phase
   let statusText = "";
   if (isConnecting) {
-    statusText = connectionPhase ? PHASE_LABELS[connectionPhase] || "Connecting..." : "Initializing Vizzy...";
-  } else if (isAutoRetrying) {
+    statusText = "Connecting to Vizzy...";
+  } else if (isError && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
     statusText = "Reconnecting...";
   } else if (isError) {
     statusText = "Connection failed";
@@ -265,8 +231,6 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     statusText = isMuted ? "Muted" : "Listening...";
   }
 
-  // Orbit animation handled via CSS keyframes instead of RAF state updates
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -275,9 +239,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
       transition={{ duration: 0.3 }}
       className="fixed inset-0 flex flex-col items-center justify-between"
       style={{
-      zIndex: 100000,
-      pointerEvents: "auto",
-      background: "radial-gradient(ellipse at center, hsl(200 25% 10%) 0%, hsl(210 30% 6%) 100%)",
+        zIndex: 100000,
+        pointerEvents: "auto",
+        background: "radial-gradient(ellipse at center, hsl(200 25% 10%) 0%, hsl(210 30% 6%) 100%)",
       }}
     >
       {/* Top bar */}
@@ -333,7 +297,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             }}
           />
 
-          {/* Orbiting dot — CSS animation */}
+          {/* Orbiting dot */}
           {isConnected && (
             <div
               className="absolute w-3 h-3 rounded-full"
@@ -369,7 +333,6 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               style={{ transform: "scale(1.8)", objectPosition: "center 38%" }}
               draggable={false}
             />
-            {/* Connecting overlay */}
             {isConnecting && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm rounded-full">
                 <Loader2 className="w-10 h-10 animate-spin" style={{ color: "hsl(172 66% 55%)" }} />
@@ -393,7 +356,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             {statusText}
           </p>
 
-          {/* Audio wave indicator when connected */}
+          {/* Audio wave indicator when listening */}
           {isConnected && !isActive && !isMuted && (
             <div className="flex items-center gap-1 h-4">
               {[...Array(5)].map((_, i) => (
@@ -414,15 +377,11 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             </div>
           )}
 
-          {isError && !isAutoRetrying && (
+          {isError && autoRetryCountRef.current >= MAX_AUTO_RETRIES && (
             <div className="flex flex-col items-center gap-2">
               {lastErrorDetail && (
                 <p className="text-[11px] max-w-xs text-center px-3 opacity-70" style={{ color: "hsl(0 84% 70%)" }}>
-                  {lastErrorKind === "mic_denied" ? "Microphone permission denied"
-                    : lastErrorKind === "mic_unavailable" ? "No microphone found"
-                    : lastErrorKind === "sdp_rejected" ? "Voice service unavailable"
-                    : lastErrorKind === "channel_timeout" ? "Token OK but voice channel didn't open"
-                    : lastErrorDetail.slice(0, 120)}
+                  {lastErrorDetail.slice(0, 120)}
                 </p>
               )}
               <button
@@ -438,34 +397,13 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             </div>
           )}
 
-          {isAutoRetrying && (
-            <div className="flex flex-col items-center gap-1">
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" style={{ color: "hsl(45 93% 58%)" }} />
-                <span className="text-xs" style={{ color: "hsl(45 93% 58%)" }}>
-                  Auto-retry {autoRetryCountRef.current}/{MAX_AUTO_RETRIES}...
-                </span>
-              </div>
-              {lastErrorKind && (
-                <span className="text-[10px] opacity-60" style={{ color: "hsl(0 0% 55%)" }}>
-                  {lastErrorKind === "network" ? "Network issue" : lastErrorKind.replace(/_/g, " ")}
-                </span>
-              )}
+          {isError && autoRetryCountRef.current < MAX_AUTO_RETRIES && (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" style={{ color: "hsl(45 93% 58%)" }} />
+              <span className="text-xs" style={{ color: "hsl(45 93% 58%)" }}>
+                Auto-retry {autoRetryCountRef.current}/{MAX_AUTO_RETRIES}...
+              </span>
             </div>
-          )}
-
-          {isConnected && outputAudioBlocked && (
-            <button
-              type="button"
-              onClick={retryOutputAudio}
-              className="px-5 py-2 rounded-full text-sm font-medium transition-colors animate-pulse"
-              style={{
-                background: "hsl(45 93% 48%)",
-                color: "hsl(210 30% 8%)",
-              }}
-            >
-              Enable sound (tap here)
-            </button>
           )}
 
           {isConnecting && elapsed >= 12 && (
@@ -521,7 +459,6 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               >
                 {t.role === "user" ? "YOU" : "VIZZY"}
               </span>
-              {/* Detect LOVABLE COMMAND blocks and render with copy button */}
               {t.text.includes("LOVABLE COMMAND:") ? (
                 <LovableCommandRenderer text={t.text} />
               ) : (
