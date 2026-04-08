@@ -1,26 +1,58 @@
 
 
-# Fix Vizzy Voice Connection Timeout — Root Cause & Solution
+# Fix Empty Agent Activity — Add Domain-Specific Reports per Agent
 
-## Root Cause (confirmed from logs)
+## Problem
 
-OpenAI returns **400 Bad Request**: `Unknown parameter: 'turn_detection.eagerness'`. The model `gpt-4o-mini-realtime-preview-2025-06-03` does not support the `eagerness` parameter in `turn_detection`. Every connection attempt fails immediately, causing the timeout and auto-retry loop seen in the screenshot.
+The "Agent Activity — All Users" section in Vizzy Brain only queries `chat_sessions` for the current day. Today only Pixel has sessions, so all other agents correctly show 0. But this makes the section useless — **agents should show domain-specific system metrics** relevant to their responsibility, not just chat session counts.
 
-This needs fixing in **two places** — the edge function and the client hook.
+## Solution
+
+Create a new hook `useAgentDomainStats` that fetches real-time domain metrics for each agent from the system database. Each agent gets a compact stats row showing its domain health alongside chat activity.
+
+## Agent → Domain Mapping
+
+| Agent | Domain | Metrics Source |
+|-------|--------|----------------|
+| **Blitz** (Sales) | Leads pipeline | `leads` — active stages (new, prospecting, qualified, hot_enquiries) |
+| **Penny** (Accounting) | Invoices & AR | `accounting_mirror` — open invoices with balance > 0, `sales_invoices` — unpaid |
+| **Tally** (Legal) | Contracts | `orders` — total + pending |
+| **Haven** (Support) | Customer issues | `suggestions` — open suggestions count |
+| **Pixel** (Social) | Social posts | `social_posts` — total, recent week count |
+| **Gauge** (Estimating) | Estimates | `leads` — estimation stages (estimation_ben, estimation_karthick) |
+| **Forge** (Shop Floor) | Machines & cuts | `machines` — total, `cut_plans` — active |
+| **Atlas** (BizDev) | Growth pipeline | `leads` — won + qualified stages |
+| **Relay** (Delivery) | Deliveries | `leads` — delivery stage, `delivery_bundles` |
+| **Rex** (Data) | System health | `ai_execution_log` — recent entries |
+| **Vizzy** (Commander) | Suggestions | `suggestions` — open critical/warning counts |
+| **Eisenhower** | Task sessions | Chat sessions only (as-is) |
 
 ## Changes
 
 | File | Change |
 |------|--------|
-| `supabase/functions/voice-engine-token/index.ts` | Remove `eagerness` from destructuring (line 17) and remove the conditional block that adds it to `turnDetection` (lines 26-28). Also update default model from `gpt-4o-realtime-preview-2024-12-17` to `gpt-4o-mini-realtime-preview-2025-06-03` to match what the client actually sends. |
-| `src/hooks/useVoiceEngine.ts` | Remove `eagerness` from the config interface (line 42), remove `eagerness` from the body sent to `voice-engine-token` (line 465). |
-| `src/hooks/useVizzyVoiceEngine.ts` | Remove `eagerness: "low"` from the config passed to `useVoiceEngine` (line 273). |
+| `src/hooks/useAgentDomainStats.ts` | **New file.** Single hook that runs parallel queries to fetch domain metrics for all agents. Returns a `Map<agentCode, { label: string; value: string }[]>`. Cached 60s, refetch every 60s. |
+| `src/hooks/useSystemAgentSessions.ts` | No change — continues to provide chat session data. |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | Modify `SystemAgentsSummary` to also call `useAgentDomainStats()`. Display domain stats as small badges below the agent name in each row. When expanded, show both user breakdown (existing) AND domain detail stats. |
 
-## Vizzy Brain Integration
+## UI Design
 
-The voice engine already uses Vizzy Brain data — the `useVizzyVoiceEngine` hook fetches `vizzy-pre-digest` (which contains all Brain data including memories) and injects it into the system instructions. The `appendLiveResult` mechanism feeds real-time tool results back into the session. No changes needed for this — it's already working correctly once the connection succeeds.
+Each agent row changes from:
+```text
+🤖 Blitz  👥 0  ✦ 0 sessions  ✉ 0 msgs
+```
+To:
+```text
+🤖 Blitz  👥 0  ✦ 0 sessions  ✉ 0 msgs
+   📊 12 active leads · 3 hot enquiries
+```
 
-## Deploy
+The second line shows 1-3 domain-specific stats as a compact text line in muted color below the agent name. If stats are all zero, show "No active items" instead.
 
-After code changes, deploy `voice-engine-token` edge function immediately.
+## Technical Details
+
+- The `useAgentDomainStats` hook runs **one composite query** per agent domain to minimize DB calls (batch where possible using UNION ALL or parallel Promise.all)
+- Stats are computed as simple counts — no heavy aggregations
+- Domain stats only show when chat sessions are zero OR always alongside sessions (always visible for context)
+- `ALL_KNOWN_AGENTS` array gets a `domain` field added to map agent codes to their query functions
 
