@@ -1,44 +1,50 @@
 
 
-# Fix Clipboard Icon: Always Persist Reports + Fix Click-to-Open
+# Mark Team Hub Messages as Read When Viewed
 
 ## Problem
-1. The clipboard icon next to each user in the Team Daily Report does nothing when clicked — the dialog doesn't open.
-2. The report data is only saved to `vizzy_memory` when the dialog is manually opened, meaning Vizzy's voice assistant has no access to it unless someone clicks it first.
+The unread message count badges (teal circles with numbers) next to team members in Team Hub persist even after the user opens and views the conversation. They should be cleared when the user opens a DM with that person.
 
 ## Root Cause
-- The `SectionDetailReportDialog` renders an `OverviewReport` component **only when the dialog is open**. The `useEffect` that persists the report to `vizzy_memory` only runs when `OverviewReport` mounts (i.e., when clicked).
-- The dialog click may fail because the button is inside an `AccordionItem` wrapper — Radix's `AccordionTrigger` can interfere with nested interactive elements depending on DOM structure.
+When a user clicks a team member in the sidebar (`onClickMember`), the DM channel opens but the corresponding `notifications` records (with `status: "unread"` and `link_to: "/team-hub"`) are never updated to `"read"`. The `useUnreadSenders` hook queries these notifications and keeps showing the badge.
 
 ## Solution
+Mark all unread notifications from a sender as read when the user opens that sender's DM conversation.
 
-### 1. Always persist reports (for Vizzy voice context)
-**New hook: `src/hooks/useEagerReportPersistence.ts`**
-- Called once in `VizzyBrainPanel` when the "All" view loads
-- For each profile, generates the same report text as `OverviewReport` (attendance, performance, activity breakdown)
-- Upserts each user's report to `vizzy_memory` with the same category pattern (`user_daily_report_{userId}_{date}`)
-- This runs automatically, independent of any dialog being opened
-- Uses `useUserPerformance` and `useDetailedActivityReport` data that's already available in the panel
+### File: `src/pages/TeamHub.tsx`
 
-### 2. Fix the dialog click
-**File: `src/components/vizzy/VizzyBrainPanel.tsx`** (lines 1035-1070)
-- Move `SectionDetailReportDialog` outside the `AccordionItem` flex container to prevent click interference
-- Or: Replace the embedded `SectionDetailReportDialog` with a controlled `Dialog` (state-managed `open`/`setOpen`) triggered by a standalone button with proper `e.stopPropagation()` and `e.preventDefault()` to prevent accordion toggle
+In the `onClickMember` handler (line 222-236), after successfully opening the DM channel, call a Supabase update to set `status = 'read'` on all notifications where:
+- `user_id = current user`
+- `link_to = '/team-hub'`
+- `status = 'unread'`
+- `metadata->sender_profile_id = clicked profileId`
 
-**File: `src/components/vizzy/SectionDetailReport.tsx`** (lines 619-629)
-- Add `e.preventDefault()` alongside `e.stopPropagation()` on the trigger button to fully prevent accordion/parent interference
+This will trigger the realtime subscription in `useUnreadSenders` to refresh, clearing the badge automatically.
 
-### 3. Keep existing behavior intact
-- The `OverviewReport` component's internal `useEffect` that saves to `vizzy_memory` remains as a backup
-- The eager persistence hook provides the same data proactively
+Also apply the same logic when selecting an existing DM channel from the sidebar (if channel maps to a profile).
 
-## Changes
+### File: `src/components/teamhub/ChannelSidebar.tsx`
+
+In the `handleClickMember` function (line 102-109), pass the `profileId` up so the parent can mark notifications as read.
+
+### Implementation detail
+```typescript
+// In TeamHub.tsx onClickMember handler, after setting selectedChannelId:
+const { data: { user } } = await supabase.auth.getUser();
+if (user) {
+  await supabase
+    .from("notifications")
+    .update({ status: "read" })
+    .eq("user_id", user.id)
+    .eq("link_to", "/team-hub")
+    .eq("status", "unread")
+    .filter("metadata->>sender_profile_id", "eq", profileId);
+}
+```
 
 | File | Change |
 |------|--------|
-| `src/hooks/useEagerReportPersistence.ts` | New hook — auto-generates and persists daily reports for all users to `vizzy_memory` |
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Call `useEagerReportPersistence` in "All" view; fix dialog button placement/propagation |
-| `src/components/vizzy/SectionDetailReport.tsx` | Add `e.preventDefault()` to trigger button to fix click issue |
+| `src/pages/TeamHub.tsx` | Mark notifications as read when opening a DM with a team member |
 
-No database changes needed.
+No database changes needed — uses existing `notifications` table and existing realtime subscription.
 
