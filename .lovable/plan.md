@@ -1,50 +1,42 @@
 
 
-# Mark Team Hub Messages as Read When Viewed
+# Fix Chat Popover UI — Unread Badge Display
 
 ## Problem
-The unread message count badges (teal circles with numbers) next to team members in Team Hub persist even after the user opens and views the conversation. They should be cleared when the user opens a DM with that person.
+In the "Start a Chat" popover (floating chat button), the unread message count badges next to team member names are either not appearing or visually broken. The `useUnreadSenders` hook fetches notification counts correctly, but the badge rendering in the popover needs UI fixes.
 
-## Root Cause
-When a user clicks a team member in the sidebar (`onClickMember`), the DM channel opens but the corresponding `notifications` records (with `status: "unread"` and `link_to: "/team-hub"`) are never updated to `"read"`. The `useUnreadSenders` hook queries these notifications and keeps showing the badge.
+## Root Cause Analysis
+The badge code at line 179-182 of `DockChatBar.tsx` looks correct logically, but two issues may cause display problems:
+1. The badge uses `bg-primary text-primary-foreground` which may blend into the popover background depending on theme
+2. Additionally, when `handleOpenDM` is called, notifications should also be marked as read (same fix applied in TeamHub.tsx but missing here)
 
-## Solution
-Mark all unread notifications from a sender as read when the user opens that sender's DM conversation.
+## Changes
 
-### File: `src/pages/TeamHub.tsx`
+### File: `src/components/chat/DockChatBar.tsx`
 
-In the `onClickMember` handler (line 222-236), after successfully opening the DM channel, call a Supabase update to set `status = 'read'` on all notifications where:
-- `user_id = current user`
-- `link_to = '/team-hub'`
-- `status = 'unread'`
-- `metadata->sender_profile_id = clicked profileId`
+1. **Sort members by unread count** — members with unread messages should appear at the top of the list, making badges immediately visible
 
-This will trigger the realtime subscription in `useUnreadSenders` to refresh, clearing the badge automatically.
+2. **Improve badge styling** — make the unread count badge more prominent with a distinct color (e.g., `bg-destructive` or brighter `bg-primary`) and ensure proper sizing/positioning
 
-Also apply the same logic when selecting an existing DM channel from the sidebar (if channel maps to a profile).
+3. **Mark notifications as read on DM open** — in `handleOpenDM` (line 107-118), after successfully opening the DM, mark the sender's notifications as read (same pattern already applied in `TeamHub.tsx`):
+   ```typescript
+   await supabase
+     .from("notifications")
+     .update({ status: "read" })
+     .eq("user_id", user.id)
+     .eq("link_to", "/team-hub")
+     .eq("status", "unread")
+     .filter("metadata->>sender_profile_id", "eq", profileId);
+   ```
 
-### File: `src/components/teamhub/ChannelSidebar.tsx`
-
-In the `handleClickMember` function (line 102-109), pass the `profileId` up so the parent can mark notifications as read.
-
-### Implementation detail
-```typescript
-// In TeamHub.tsx onClickMember handler, after setting selectedChannelId:
-const { data: { user } } = await supabase.auth.getUser();
-if (user) {
-  await supabase
-    .from("notifications")
-    .update({ status: "read" })
-    .eq("user_id", user.id)
-    .eq("link_to", "/team-hub")
-    .eq("status", "unread")
-    .filter("metadata->>sender_profile_id", "eq", profileId);
-}
-```
+4. **Badge UI fix** — update the badge element to use more visible styling:
+   - Use `bg-destructive text-white` for better contrast
+   - Add `leading-none` for proper vertical centering
+   - Ensure `min-w-[20px]` keeps the badge round for single digits
 
 | File | Change |
 |------|--------|
-| `src/pages/TeamHub.tsx` | Mark notifications as read when opening a DM with a team member |
+| `src/components/chat/DockChatBar.tsx` | Sort by unread count, improve badge styling, mark as read on open |
 
-No database changes needed — uses existing `notifications` table and existing realtime subscription.
+No database changes needed.
 
