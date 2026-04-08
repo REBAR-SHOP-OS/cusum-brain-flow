@@ -1,56 +1,46 @@
 
 
-# Convert Per-User Report to Plain Text English Format
+# Fix Vizzy Voice — Context Loading Timeout + Connection Failures
 
-## Problem
-The per-user report dialog currently shows data in a grid of metric cards (Status, Hours, Activities, etc.). The user wants a **plain English text report** showing clock in/out times and a comprehensive daily summary — not card-based UI widgets.
+## Root Cause Analysis
 
-## Change
+Two separate issues are causing the failures shown in the screenshots:
 
-### File: `src/components/vizzy/SectionDetailReport.tsx` — `OverviewReport` component (lines 403-444)
+### Issue 1: "context loading failed"
+The `vizzy-pre-digest` edge function takes 60–92 seconds to complete (confirmed in logs), but the client timeout is only **45 seconds**. It always times out. The fallback to `vizzy-daily-brief` has only a **25-second** timeout and also fails. Result: Vizzy starts without business data.
 
-Replace the card grid UI with a formatted text report rendered as a `<pre>` / monospace block:
+### Issue 2: "Could not connect"
+The `voice-engine-token` edge function does not retry on OpenAI 503 errors (confirmed in logs: "upstream connect error or disconnect/reset before headers"). A single transient failure kills the entire session. Additionally, the `eagerness` parameter sent by the client is silently dropped — it is never forwarded to OpenAI's session creation API.
 
-**New report format:**
-```text
-══════════════════════════════════════════
-  DAILY REPORT — {userName}
-  {date}
-══════════════════════════════════════════
+## Changes
 
-ATTENDANCE
-  Status:     Clocked In / Off Clock
-  Gross Hours: 5.1h
-  Clock Entries:
-    • 07:42 AM → 12:50 PM (5.1h)
-    • 01:15 PM → ongoing
+### 1. `src/hooks/useVizzyVoiceEngine.ts` — Increase context loading timeouts
 
-──────────────────────────────────────────
+| Parameter | Current | New |
+|-----------|---------|-----|
+| `vizzy-pre-digest` timeout | 45s | 120s |
+| `vizzy-daily-brief` fallback timeout | 25s | 60s |
 
-PERFORMANCE SUMMARY
-  Activities:   12
-  AI Sessions:  3
-  Emails Sent:  5
+These match the actual observed execution times (60–92s).
 
-──────────────────────────────────────────
+### 2. `supabase/functions/voice-engine-token/index.ts` — Add retry + forward `eagerness`
 
-ACTIVITY BREAKDOWN
-  Visited page ........... 6
-  Sent email ............. 5
-  AI interaction ......... 3
+- Accept `eagerness` from request body
+- Include `eagerness` in the `turn_detection` object sent to OpenAI
+- Add a 2-attempt retry loop with 2s backoff for OpenAI 503/504 errors
+- This prevents a single transient OpenAI outage from killing the connection
 
-══════════════════════════════════════════
-```
+### 3. `src/hooks/useVoiceEngine.ts` — Increase connection timeout default
 
-**Implementation details:**
-- Replace the `return (...)` JSX block (lines 403-444) with a single `<pre>` element styled with `whitespace-pre-wrap`, `font-mono`, and proper padding
-- Build the report string from the same data already fetched (`perf`, `report`)
-- Include clock entry durations (calculate from clock_in/clock_out)
-- Keep the "Copy Report" button at the top
-- Update the `buildReportLines()` function to match the same format
-- Update the `vizzy_memory` save (lines 324-366) to use the same comprehensive text
+Change the default `connectionTimeoutMs` from 15s to 25s to give more room for retries in the token function.
+
+## Summary
 
 | File | Change |
 |------|--------|
-| `SectionDetailReport.tsx` | Replace OverviewReport card grid with plain text English report |
+| `useVizzyVoiceEngine.ts` | Increase pre-digest timeout to 120s, daily-brief fallback to 60s |
+| `voice-engine-token/index.ts` | Add retry on 503/504, forward `eagerness` parameter |
+| `useVoiceEngine.ts` | Increase default connection timeout to 25s |
+
+No database changes. Edge function redeployment required for `voice-engine-token`.
 
