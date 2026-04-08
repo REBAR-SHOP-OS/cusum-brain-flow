@@ -1,37 +1,22 @@
 
 
-# Open Report in a Modal Instead of Copying to Clipboard
+# Move "Item" from Shape Section to Ref/Customer Section
 
 ## Problem
-Currently, the "Generate full user report" button (FileText icon) copies the report text to clipboard silently. The user wants it to **open a visible page/modal** displaying the full report text.
+The "Item: X" label is currently inside the shape image area (position #1 in the screenshot). The user wants it moved down to the Ref/Customer/Remark section (position #2).
 
-## Solution
-Replace the clipboard-copy behavior with a **Dialog/modal** that displays the generated report text in a readable, scrollable view. Keep a "Copy" button inside the modal for convenience.
+## Changes
 
-### Change: `src/components/vizzy/VizzyBrainPanel.tsx`
+### 1. `src/components/office/RebarTagCard.tsx`
+- **Remove** the `Item` display from the shape section (lines 156-158 — the `div` with `flex gap-4`)
+- **Add** an "Item" row inside the Ref/Customer/Remark block (line 162 area), as a new line like: `Item: {item}` — same style as Ref/Customer/Remark lines
 
-1. Add `useState` for controlling a report modal (`showReport` + `reportText`)
-2. Change the button's `onClick` to call `generateReport()` and set state to open the modal
-3. Render a `Dialog` with the report text displayed in a `<pre>` block (preserving formatting)
-4. Include a "Copy to clipboard" button inside the modal
-
-```text
-┌──────────────────────────────────┐
-│  📊 Full Report — Zahra         │  ✕
-│  📅 Date: Apr 8, 2026           │
-│  ─────────────────────────────  │
-│  ⏰ Status: Clocked In          │
-│  🕐 Hours: 3.3h                 │
-│  📋 Activities: 86              │
-│  ...                            │
-│                                 │
-│  [Copy to Clipboard]            │
-└──────────────────────────────────┘
-```
+### 2. `src/utils/generateZpl.ts`
+- **Remove** `ITEM: ${item}` from line 119 (currently combined with DWG)
+- **Add** a new `ITEM:` line in the Ref section (after REMARK), repositioning Y coordinates to fit 4 lines instead of 3
 
 | File | Change |
 |------|--------|
-| `src/components/vizzy/VizzyBrainPanel.tsx` | Add Dialog state to `UserFullReportButton`, show report text in modal instead of silent clipboard copy |
-
-One component change, one file. Uses existing `Dialog` UI components already in the project.
+| `RebarTagCard.tsx` | Move Item from shape section to ref/customer block |
+| `generateZpl.ts` | Move ITEM from DWG line to its own line in ref section |
 
