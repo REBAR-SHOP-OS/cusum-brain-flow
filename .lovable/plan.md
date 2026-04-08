@@ -1,49 +1,86 @@
 
 
-# Add Stop Run Icon Beside Record Stroke Button
+# User Access Management from Vizzy Brain Panel
 
-## Analysis
-The screenshot shows the "Record Stroke" button with the red-circled area on the right side (the Zap icon area). The user wants a **Stop** icon button placed next to it.
+## Goal
+Allow **sattar@rebar.shop** and **radin@rebar.shop** to add/remove agents and automations for any @rebar.shop user directly from the Vizzy Brain panel — replacing the need to edit hardcoded config files.
 
-Looking at the code in `SlotTracker.tsx`, there's already a "Stop" button (lines 357-366) but it only appears when `totalCutsDone > 0`. The user wants a persistent stop icon **beside** the Record Stroke button (inside the same row), not conditionally hidden.
+## Architecture
 
-## Change
+Currently, user access is hardcoded in `src/lib/userAccessConfig.ts`. We will add a **database-driven override layer** so super admins can manage access dynamically.
 
-### `src/components/shopfloor/SlotTracker.tsx`
-
-**Add a Stop Run icon button** right after the Record Stroke button (line 353), visible whenever the Record Stroke button is visible and `canWrite` is true. This will call `onCompleteRun` (same handler as the existing stop button).
-
-```tsx
-{/* Record stroke */}
-{activeSlots.length > 0 && canWrite && (
-  <Button
-    className="flex-1 gap-2 font-bold h-12 text-base justify-between px-4"
-    onClick={onRecordStroke}
-  >
-    <span className="flex items-center gap-2">
-      <Scissors className="w-5 h-5" />
-      Record Stroke ({nextStroke}/{maxStrokes}) — {piecesPerStroke} pcs
-    </span>
-    <Zap className="w-5 h-5" />
-  </Button>
-)}
-
-{/* NEW: Stop Run button beside Record Stroke */}
-{activeSlots.length > 0 && canWrite && !allDone && (
-  <Button
-    variant="destructive"
-    className="h-12 px-3"
-    onClick={onCompleteRun}
-    title="Stop"
-  >
-    <StopCircle className="w-5 h-5" />
-  </Button>
-)}
+```text
+┌─────────────────────────┐
+│  userAccessConfig.ts    │  ← hardcoded defaults (fallback)
+└──────────┬──────────────┘
+           │
+┌──────────▼──────────────┐
+│  user_access_overrides  │  ← DB table (takes priority when present)
+│  email, agents[], automations[]
+└──────────┬──────────────┘
+           │
+┌──────────▼──────────────┐
+│  Vizzy Brain Panel UI   │  ← edit buttons for super admins
+└─────────────────────────┘
 ```
 
-`StopCircle` is already imported. No new dependencies needed. The existing conditional stop button (lines 357-366) that shows piece count can remain as-is for when pieces have been cut.
+## Changes
 
-| File | Change |
+### 1. Database: Create `user_access_overrides` table
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid PK | |
+| email | text UNIQUE NOT NULL | user email |
+| agents | text[] | agent keys (e.g. `{sales,accounting}`) |
+| automations | text[] | automation ids (e.g. `{inbox-manager,daily-summarizer}`) |
+| updated_by | text | email of admin who last modified |
+| updated_at | timestamptz | default now() |
+| company_id | uuid FK | tenant isolation |
+
+RLS: SELECT/UPDATE/INSERT/DELETE restricted to users with `admin` role via `has_role()`.
+
+### 2. Hook: `useUserAccessOverrides`
+
+- Fetches override row for a given email from `user_access_overrides`
+- Provides `saveAgents(email, agentKeys[])` and `saveAutomations(email, automationIds[])` mutations
+- Invalidates query cache on save
+
+### 3. Update `getVisibleAgents` / automation filtering
+
+- Modify `getVisibleAgents()` to accept an optional override parameter
+- In `VizzyBrainPanel`, when DB override exists for the selected user, pass those agent keys instead of the hardcoded ones
+- Same pattern for automations in `UserAutomationsSection`
+
+### 4. UI: Edit controls in Vizzy Brain Panel (super admins only)
+
+**Agents section** — when viewer is sattar@ or radin@:
+- Show a small **edit** (pencil) icon in the Agents header
+- Clicking opens a dropdown/popover listing ALL available agents as checkboxes
+- Checked agents = user has access; primary agent marked separately
+- Save button persists to `user_access_overrides`
+- Add/remove reflected immediately
+
+**Automations section** — same pattern:
+- Edit icon in Automations header
+- Popover with all automation checkboxes
+- Save persists to DB
+
+**Visual indicators**:
+- Small `×` badge on each agent/automation for quick removal
+- `+` button at the end of the list to add new ones
+
+### 5. Files to modify
+
+| File | Action |
 |------|--------|
-| `src/components/shopfloor/SlotTracker.tsx` | Add Stop icon button next to Record Stroke |
+| **Migration SQL** | Create `user_access_overrides` table + RLS policies |
+| `src/hooks/useUserAccessOverrides.ts` | **Create** — fetch/save override data |
+| `src/components/vizzy/VizzyBrainPanel.tsx` | **Edit** — add edit UI to Agents & Automations sections for super admins |
+| `src/lib/userAccessConfig.ts` | **No change** — remains as fallback; override layer is applied at the component level |
+
+### 6. Security
+- Only sattar@ and radin@ see the edit controls (client-side gate)
+- RLS on `user_access_overrides` enforces admin-only access server-side
+- Non-admin users cannot modify the table even with direct API calls
 
