@@ -224,7 +224,7 @@ export function useIntegrations() {
           : undefined;
 
         if (reportWarning) {
-          toast.warning("QuickBooks connected, but report access is denied. The authorizing user needs Admin-level access in QuickBooks.", { duration: 8000 });
+          toast({ title: "QuickBooks Report Access Denied", description: "The authorizing user needs Admin-level access in QuickBooks.", variant: "destructive" });
         }
 
         setIntegrations((prev) =>
