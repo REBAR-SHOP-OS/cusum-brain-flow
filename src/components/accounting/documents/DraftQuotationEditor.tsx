@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -51,6 +52,8 @@ const inputCls = "bg-white text-gray-900 border-gray-300 placeholder:text-gray-4
 
 export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const { companyId } = useCompanyId();
+  const [searchParams] = useSearchParams();
+  const urlLeadId = searchParams.get("lead_id");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [leadId, setLeadId] = useState<string | null>(null);
@@ -134,7 +137,14 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
       }
 
       const data = quoteRes.data;
-      setLeadId((data as any).lead_id || null);
+      const dbLeadId = (data as any).lead_id || null;
+      const effectiveLeadId = dbLeadId || urlLeadId || null;
+      setLeadId(effectiveLeadId);
+
+      // Auto-persist lead_id from URL if missing in DB
+      if (!dbLeadId && urlLeadId) {
+        supabase.from("quotes").update({ lead_id: urlLeadId } as any).eq("id", quoteId).then();
+      }
       setQuoteNumber(data.quote_number);
       setQuoteDate(data.created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10));
       if (data.valid_until) setExpirationDate(data.valid_until.slice(0, 10));
@@ -342,6 +352,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
           total_amount: total,
           valid_until: expirationDate || null,
           salesperson: customerName || null,
+          lead_id: leadId || urlLeadId || null,
           metadata: {
             customer_name: customerName,
             customer_email: customerEmail || undefined,
