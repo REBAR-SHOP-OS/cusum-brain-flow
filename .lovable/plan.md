@@ -1,48 +1,32 @@
 
 
-# Add "All Agents Report" Dialog to Per-User Agents Section
+# Make Team Daily Report Show All Users & Open Detailed Reports on Click
 
-## What happens now
-The clipboard icon next to "Agents" in the per-user view opens a general user performance report (`UserFullReportButton`). It does not show a dedicated agents report.
+## Current State
+- The Team Daily Report already shows all @rebar.shop users (including inactive ones like Sattar and Vicky, shown with reduced opacity).
+- Each user row has a small clipboard icon that opens a detailed "Overview" report dialog.
+- Clicking the user row itself only expands/collapses an accordion with raw activity items — not a detailed report.
 
-## What will change
-Clicking the clipboard icon next to "Agents" will open a new dialog with a comprehensive English text report covering **all agents** assigned to that user — their activity, sessions, messages, and recent conversation excerpts.
+## What Will Change
 
-## Changes
+### 1. Make User Rows Clickable to Open Detailed Report
+Instead of just expanding an accordion with raw activity logs, clicking on a user row in the Team Daily Report will open the full **Overview Report Dialog** (`SectionDetailReportDialog` with `sectionType="overview"`). This provides the rich, categorized report with attendance, performance breakdown, activity timeline, and action log — exactly like the one the clipboard icon already opens.
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx`
+### 2. Keep All Users Visible
+All @rebar.shop profiles are already shown (including inactive ones). No change needed here — confirmed both in code and database.
 
-1. **Create `UserAgentsFullReportButton` component** — a new button+dialog that:
-   - Iterates over all agents assigned to the user (from `mergedAgents` data already available via `useUserAgentSessions`)
-   - Generates a structured English report with sections per agent: name, role, session count, message count, last active time, and recent message excerpts
-   - Displays the report in a scrollable dialog with a "Copy to Clipboard" button
-   - Format: plain English text, structured with headers per agent
+## Technical Changes
 
-2. **Replace** the `UserFullReportButton` on line 1958 (inside the Agents section header) with the new `UserAgentsFullReportButton`, passing the user's ID, name, email, override agents, and selected date.
+### File: `src/components/vizzy/VizzyBrainPanel.tsx` — `TeamDailyReport` component (lines 1239–1337)
 
-3. The existing `UserFullReportButton` stays available in the General Overview section — it is not removed, just no longer duplicated in the Agents header.
+- Replace the `Accordion`/`AccordionItem`/`AccordionTrigger` pattern with simple clickable cards
+- Each card click opens a `SectionDetailReportDialog` with `sectionType="overview"` for that user
+- Use a controlled `Dialog` state (tracked by `openProfileId`) instead of accordion expand
+- Keep the same visual layout: avatar circle, name, activity count, hours, AI sessions, emails badges
+- The small clipboard icon per row can be removed since the whole row now triggers the report
 
-### Report format example
-```text
-🤖 Agent Activity Report — Zahra
-📅 Date: Apr 9, 2026
-
-── Pixel (Social Media) ──
-  Status: Primary Agent
-  Sessions: 3 | Messages: 24 | Last Active: Apr 9, 2:30 PM
-  Recent:
-    • [User] Schedule a post for tomorrow
-    • [Pixel] Done. Post scheduled for Apr 10 at 9:00 AM.
-
-── Eisenhower Matrix ──
-  Status: Access
-  Sessions: 0 | No activity today
-
-── Blitz (Sales & Pipeline) ──
-  Status: Access
-  Sessions: 1 | Messages: 8 | Last Active: Apr 9, 11:15 AM
-```
-
-### No database changes needed
-All data is already fetched by `useUserAgentSessions` hook.
+### Result
+- Clicking anywhere on a user row opens the full detailed report dialog for that user
+- All rebar.shop users remain visible (active and inactive)
+- The same rich Overview Report that the clipboard icon opened is now accessible by clicking the row itself
 
