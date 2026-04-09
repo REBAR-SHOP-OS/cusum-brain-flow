@@ -1,6 +1,7 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { decryptToken } from "../_shared/tokenEncryption.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { analyzeSpam } from "../_shared/spamFilter.ts";
 
 interface CommsConfig {
   external_sender: string;
@@ -294,6 +295,11 @@ Deno.serve((req) =>
       const skipReason = shouldSkipAlert(comm, config.internal_domain);
       if (skipReason) { skippedCount++; continue; }
 
+      // Spam/scam content filter
+      const spamText = `${comm.subject || ""} ${comm.body_preview || ""}`;
+      const spamResult = analyzeSpam(spamText, comm.from_address || "");
+      if (spamResult.isSpam) { skippedCount++; continue; }
+
       const highestThreshold = highestBreachedThreshold(comm.received_at, config.response_thresholds_hours, now);
       if (!highestThreshold) continue;
 
@@ -351,6 +357,19 @@ Deno.serve((req) =>
     for (const comm of missedCalls || []) {
       const meta = comm.metadata as any;
       if (meta?.result !== "Missed" && meta?.type !== "missed") continue;
+
+      // Check if someone already called back
+      const callerPhone = (comm.from_address || "").replace(/\D/g, "");
+      if (callerPhone.length >= 7) {
+        const { count: callbackCount } = await svc
+          .from("communications")
+          .select("id", { count: "exact", head: true })
+          .eq("source", "ringcentral")
+          .eq("direction", "outbound")
+          .ilike("to_address", `%${callerPhone.slice(-7)}%`)
+          .gt("received_at", comm.received_at);
+        if (callbackCount && callbackCount > 0) { skippedCount++; continue; }
+      }
 
       const { count: alertExists } = await svc
         .from("comms_alerts")
