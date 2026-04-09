@@ -452,11 +452,15 @@ Deno.serve((req) =>
         }
       }
     } else if (platform === "linkedin") {
-      const result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url, page_name);
-      if (result.error) {
-        pageErrors.push(result.error);
-      } else {
-        pageSuccesses.push(page_name || "linkedin");
+      // Support multi-page LinkedIn (personal + company pages)
+      const linkedInPages = individualPages.length > 0 ? individualPages : [null];
+      for (const targetPage of linkedInPages) {
+        const result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url, targetPage || undefined);
+        if (result.error) {
+          pageErrors.push(`${targetPage || "linkedin"}: ${result.error}`);
+        } else {
+          pageSuccesses.push(targetPage || "linkedin");
+        }
       }
     } else if (platform === "twitter") {
       const result = await publishToTwitter(message, image_url);
@@ -830,7 +834,8 @@ async function publishToLinkedIn(
     }
 
     // Determine author URN based on page_name
-    const isPersonal = !pageName || pageName === "Sattar Esmaeili-Oureh";
+    const personalName = (config as any).profile_name || "Sattar Esmaeili-Oureh";
+    const isPersonal = !pageName || pageName === personalName;
     let authorUrn: string;
 
     if (isPersonal) {
