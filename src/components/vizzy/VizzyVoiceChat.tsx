@@ -82,6 +82,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     contextLoading,
     lastErrorDetail,
     appendLiveResult,
+    lang,
+    setLang,
   } = useVizzyVoiceEngine();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -473,9 +475,36 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
       {/* Bottom controls */}
       <div className="pb-8 pt-2 flex flex-col items-center gap-3">
         {isConnected && (
-          <div className="flex items-center gap-2 text-xs" style={{ color: "hsl(0 0% 45%)" }}>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {isBrainSyncing ? "Vizzy Brain syncing…" : "Live ERP Data Connected"}
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex items-center gap-2 text-xs" style={{ color: "hsl(0 0% 45%)" }}>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              {isBrainSyncing ? "Vizzy Brain syncing…" : "Live ERP Data Connected"}
+            </div>
+            {/* Language toggle */}
+            <div className="flex items-center gap-1 rounded-full p-0.5" style={{ background: "hsl(0 0% 100% / 0.06)", border: "1px solid hsl(0 0% 100% / 0.1)" }}>
+              <button
+                onClick={() => setLang("en-US")}
+                className="px-3 py-1 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: lang === "en-US" ? "hsl(172 66% 50% / 0.2)" : "transparent",
+                  color: lang === "en-US" ? "hsl(172 66% 65%)" : "hsl(0 0% 50%)",
+                  border: lang === "en-US" ? "1px solid hsl(172 66% 50% / 0.3)" : "1px solid transparent",
+                }}
+              >
+                🇬🇧 EN
+              </button>
+              <button
+                onClick={() => setLang("fa-IR")}
+                className="px-3 py-1 rounded-full text-xs font-medium transition-all"
+                style={{
+                  background: lang === "fa-IR" ? "hsl(172 66% 50% / 0.2)" : "transparent",
+                  color: lang === "fa-IR" ? "hsl(172 66% 65%)" : "hsl(0 0% 50%)",
+                  border: lang === "fa-IR" ? "1px solid hsl(172 66% 50% / 0.3)" : "1px solid transparent",
+                }}
+              >
+                🇮🇷 فا
+              </button>
+            </div>
           </div>
         )}
         <div className="flex items-center gap-3">

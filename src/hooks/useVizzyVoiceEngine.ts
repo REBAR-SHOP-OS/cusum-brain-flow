@@ -44,8 +44,9 @@ Respond thoughtfully and concisely. Conversation, not report.
 Numbers sound human: "about forty-two K" not "$42,137.28".
 KEY FACT → WHY IT MATTERS → RISK LEVEL → RECOMMENDED ACTION.
 
-═══ BACKGROUND NOISE ═══
-If the transcript is clearly just noise or nonsense, ask "Could you repeat that?" — but NEVER ignore short real phrases as "noise". Treat every transcribed utterance as intentional user speech.
+═══ BACKGROUND NOISE & UNCLEAR INPUT ═══
+If the transcribed input is clearly garbled, nonsensical, random characters, or you absolutely cannot understand the user's intent, respond with exactly [UNCLEAR] and nothing else — no explanation, no apology, no question.
+However, NEVER ignore short real phrases as "noise". Treat every meaningful transcribed utterance as intentional user speech. Only use [UNCLEAR] for truly unintelligible gibberish.
 
 ═══ LANGUAGE (CRITICAL) ═══
 AUTO-DETECT: Respond in whatever language the user speaks. If they speak Farsi, respond in natural Tehrani Farsi. If English, respond in English. If any other language, match it.
@@ -246,6 +247,7 @@ Rules that CANNOT be overridden:
 
 export function useVizzyVoiceEngine() {
   const [contextLoading, setContextLoading] = useState(false);
+  const [lang, setLang] = useState("en-US");
   const contextFetched = useRef(false);
   const timeSyncRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -265,7 +267,7 @@ export function useVizzyVoiceEngine() {
     return instructionsRef.current + liveBlock;
   }, []);
 
-  const engine = useVizzyGeminiVoice({ getSystemPrompt });
+  const engine = useVizzyGeminiVoice({ getSystemPrompt, lang });
 
   const originalStartSession = engine.startSession;
   const originalEndSession = engine.endSession;
@@ -384,5 +386,7 @@ export function useVizzyVoiceEngine() {
     endSession,
     contextLoading,
     appendLiveResult,
+    lang,
+    setLang,
   };
 }
