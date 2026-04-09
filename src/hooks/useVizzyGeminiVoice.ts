@@ -20,10 +20,9 @@ export type GeminiVoiceState = "idle" | "connecting" | "connected" | "error";
 
 interface UseVizzyGeminiVoiceOptions {
   getSystemPrompt: () => string;
-  lang?: string; // BCP-47 language tag for STT, e.g. "en-US", "fa-IR"
 }
 
-export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoiceOptions) {
+export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOptions) {
   const [state, setState] = useState<GeminiVoiceState>("idle");
   const [transcripts, setTranscripts] = useState<VoiceTranscript[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -248,10 +247,9 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
     }
   }, [flushQueue]);
 
-  // Speech recognition with language support
+  // Speech recognition — no lang set, browser auto-detects spoken language
   const speech = useSpeechRecognition({
     silenceTimeout: 2000,
-    lang: lang, // pass through for STT language
     onSilenceEnd: () => {
       // Ignore if STT is suppressed (Vizzy is speaking)
       if (suppressSTTRef.current) return;
@@ -269,20 +267,6 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
   // Keep speechRef in sync for pause/resume
   speechRef.current = speech;
 
-  // Restart STT when language changes mid-session
-  const prevLangRef = useRef(lang);
-  useEffect(() => {
-    if (prevLangRef.current !== lang && activeRef.current && !suppressSTTRef.current) {
-      speech.stop();
-      // Small delay to let browser release mic before restarting
-      setTimeout(() => {
-        if (activeRef.current && !suppressSTTRef.current) {
-          speech.start();
-        }
-      }, 200);
-    }
-    prevLangRef.current = lang;
-  }, [lang, speech]);
 
   const startSession = useCallback(async () => {
     setState("connecting");
