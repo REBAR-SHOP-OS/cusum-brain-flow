@@ -725,7 +725,20 @@ export async function executeToolCall(
 
       if (reportRes.ok) {
         const reportData = await reportRes.json();
-        result.result = { success: true, report_type: reportType, data: reportData };
+        if (reportData.fallback === true) {
+          result.result = {
+            success: false,
+            error_type: reportData.error === "PERMISSION_DENIED" ? "permission_denied" : "service_unavailable",
+            user_message: reportData.error === "PERMISSION_DENIED"
+              ? "QuickBooks reports are blocked — the authorizing user needs Admin access in QuickBooks. Disconnect and reconnect with full Accounting permissions."
+              : "QuickBooks report temporarily unavailable. Use local snapshot data instead.",
+            retryable: reportData.error !== "PERMISSION_DENIED",
+            needs_reconnect: reportData.error === "PERMISSION_DENIED",
+            use_snapshot: true,
+          };
+        } else {
+          result.result = { success: true, report_type: reportType, data: reportData };
+        }
       } else {
         const errText = await reportRes.text();
         result.result = { success: false, error: errText };
