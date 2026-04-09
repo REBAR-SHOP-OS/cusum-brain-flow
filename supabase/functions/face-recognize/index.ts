@@ -53,7 +53,7 @@ Deno.serve((req) =>
     for (const e of enrollments) {
       profileEnrollmentCounts.set(e.profile_id, (profileEnrollmentCounts.get(e.profile_id) || 0) + 1);
       const urls = profileEnrollments.get(e.profile_id) || [];
-      if (urls.length < 1) {
+      if (urls.length < 3) {
         urls.push(e.photo_url);
         profileEnrollments.set(e.profile_id, urls);
       }
@@ -131,16 +131,20 @@ Deno.serve((req) =>
     const contentParts: any[] = [
       {
         type: "text",
-        text: `Facial recognition system. Compare CAPTURED photo against enrolled reference photos.
+        text: `Facial recognition system. Compare the CAPTURED photo against ALL enrolled reference photos below.
 
-Enrolled:
+Enrolled employees:
 ${employeeList}
 
+Each employee may have multiple reference photos taken from different angles and lighting conditions. Use ALL provided reference photos to build a complete understanding of each person's facial features.
+
 Rules:
-- Match ONLY on facial features: nose, eyes, jaw, facial hair, glasses, face shape.
-- Confidence 85+: highly certain. 60-84: resemblance. Below 50: no match (matched_profile_id="null").
-- Multiple faces → use center face only.
-- Prefer "no match" over wrong match.
+- Match ONLY on facial features: bone structure, nose shape, eye shape/spacing, jawline, facial hair, glasses, face shape, skin tone.
+- Cross-reference ALL reference photos for each person — if the captured face matches consistently across multiple references, increase confidence.
+- Account for variations in lighting, angle, expression, and camera quality between the captured photo and references.
+- Confidence 85+: highly certain match. 60-84: likely resemblance. Below 50: no match (set matched_profile_id="null").
+- Multiple faces in captured photo → identify the center/largest face only.
+- When uncertain, prefer "no match" over a wrong match.
 
 Call face_match_result with your answer.`,
       },
@@ -183,7 +187,7 @@ Call face_match_result with your answer.`,
       console.log(`[face-recognize] Calling AI with ${enrolledFaces.length} enrolled faces`);
       aiResult = await callAI({
         provider: "gemini",
-        model: "gemini-2.5-flash-lite",
+        model: "gemini-2.5-flash",
         agentName: "shopfloor",
         messages: [{ role: "user", content: contentParts }],
         tools: [toolDef],

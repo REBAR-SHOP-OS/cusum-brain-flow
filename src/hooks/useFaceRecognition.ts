@@ -49,12 +49,12 @@ export function useFaceRecognition() {
     const canvas = canvasRef.current;
     if (!video || !canvas) return null;
 
-    canvas.width = 480;
-    canvas.height = 360;
+    canvas.width = 640;
+    canvas.height = 480;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
 
-    ctx.drawImage(video, 0, 0, 480, 360);
+    ctx.drawImage(video, 0, 0, 640, 480);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
     return dataUrl.split(",")[1];
   }, []);
