@@ -463,6 +463,20 @@ export default function Tasks() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // ─── Realtime subscription for auto-refresh ───────────
+  useEffect(() => {
+    const channelId = `tasks-realtime-${crypto.randomUUID()}`;
+    const channel = supabase
+      .channel(channelId)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks' },
+        () => { loadData(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadData]);
+
   // ─── Audit log loading ────────────────────────────────
   const loadAudit = async (taskId: string) => {
     setAuditLoading(true);
