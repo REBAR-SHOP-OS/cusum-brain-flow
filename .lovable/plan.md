@@ -1,90 +1,38 @@
 
 
-# Security Incident: Remove Unauthorized User & Add Server-Side Login Restriction
+# Fix: Image Edit Rate Limit — Increase Retry Budget
 
-## Incident Report — aw.danandeh@gmail.com
+## Problem
+The image edit feature in `generate-image` edge function has a retry loop (3 attempts) for AI gateway 429 responses, with short delays (2s, 4s). When the Lovable AI gateway is rate-limiting (common with image generation models which are expensive), all 3 attempts fail and the user sees "Rate limit exceeded — retries exhausted."
 
-| Field | Detail |
-|---|---|
-| **Name** | Amir AHD |
-| **Email** | aw.danandeh@gmail.com |
-| **Registered** | 2026-04-09 13:21:24 UTC (today, ~14 minutes ago) |
-| **Method** | Google OAuth |
-| **Roles** | None assigned |
-| **Company** | Auto-assigned to default company |
-| **Pages visited** | /shop-floor, /home, /timeclock (3 page visits total) |
-| **Data access** | No data modifications, no chat sessions, no agent interactions |
-| **Tokens/integrations** | None |
+## Root Cause
+- Line 225-246 in `supabase/functions/generate-image/index.ts`: Only 3 attempts with 2s/4s waits
+- Image generation models have stricter rate limits on the AI gateway
+- The client (`ImageEditDialog.tsx` line 151) also only does 1 retry — so total budget is very thin
 
-**How they got in**: Google OAuth creates the user in auth.users *before* the client-side whitelist check runs. The client then signs them out, but the auth record persists.
+## Fix
 
----
+### File: `supabase/functions/generate-image/index.ts`
 
-## Plan
+1. Increase retry attempts from 3 to 5
+2. Use longer exponential backoff: 3s, 6s, 12s, 20s (instead of 2s, 4s)
+3. This gives the gateway ~41 seconds total window to free up capacity
 
-### Step 1 — Delete User & Related Data (Migration)
-
-Delete `aw.danandeh@gmail.com` from the system completely:
-
-```sql
--- Delete activity events
-DELETE FROM activity_events WHERE actor_id = '864b8382-9c57-4648-9d68-f958af801e01';
-
--- Delete profile (cascade from auth.users should handle this, but be explicit)
-DELETE FROM profiles WHERE user_id = '864b8382-9c57-4648-9d68-f958af801e01';
-
--- Delete from auth.users (this cascades to all FK-linked tables)
-DELETE FROM auth.users WHERE id = '864b8382-9c57-4648-9d68-f958af801e01';
+Change the retry loop (lines 223-246):
+```
+// Current:  3 attempts, wait = (attempt+1)*2000
+// New:      5 attempts, wait = min(3000 * 2^attempt, 20000)
 ```
 
-### Step 2 — Server-Side Signup Restriction (Edge Function Hook)
+### File: `src/components/social/ImageEditDialog.tsx`
 
-Create a **database webhook / auth hook** that blocks unauthorized signups at the server level, so no user record is even created for non-whitelisted emails.
+4. Increase client timeout from 90s to 120s to accommodate longer server-side retries
+5. Add a more descriptive loading message when waiting
 
-**Option A — Auth Hook (Custom Access Token)**: Not suitable here since we need to block *before* user creation.
+### Result
+- Up to 5 server-side retries with proper backoff before giving up
+- Client timeout extended to cover the retry window
+- If still failing after 5 attempts, the error message stays the same (user should wait and retry)
 
-**Option B — Database trigger on auth.users**: Create a `BEFORE INSERT` trigger on `auth.users` that checks the email against the allowed list and raises an exception if not whitelisted. This prevents the row from being created at all.
-
-```sql
-CREATE OR REPLACE FUNCTION public.restrict_signups()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  allowed_emails text[] := ARRAY[
-    'sattar@rebar.shop', 'radin@rebar.shop', 'zahra@rebar.shop',
-    'neel@rebar.shop', 'vicky@rebar.shop', 'kourosh@rebar.shop',
-    'saurabh@rebar.shop', 'ben@rebar.shop', 'ai@rebar.shop',
-    'tariq0001010@gmail.com'
-  ];
-BEGIN
-  IF NOT (lower(NEW.email) = ANY(allowed_emails)) THEN
-    RAISE EXCEPTION 'Signup not allowed for this email'
-      USING ERRCODE = 'P0001';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER enforce_allowed_signups
-  BEFORE INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.restrict_signups();
-```
-
-> **Note**: This is a trigger on `auth.users` (a reserved schema). This is one of the rare cases where it's justified — it acts as a hard security gate. However, if this causes issues with Supabase internals, we can fall back to a post-signup cleanup approach using a database webhook.
-
-### Step 3 — Keep Client-Side Guards (No Changes)
-
-The existing client-side guards in `auth.tsx`, `Login.tsx`, and `ProtectedRoute.tsx` remain as UX-level backup. No changes needed.
-
----
-
-## Summary
-
-- **1 migration**: Delete user + create signup restriction trigger
-- **0 code changes**: Client-side whitelist already works correctly as UX gate
-- **Result**: `aw.danandeh@gmail.com` fully removed; no unauthorized email can create an account
+### Single edge function change + 1 client timeout tweak. No database changes.
 
