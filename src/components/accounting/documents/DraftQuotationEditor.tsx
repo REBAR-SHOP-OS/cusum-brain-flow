@@ -137,7 +137,14 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
       }
 
       const data = quoteRes.data;
-      setLeadId((data as any).lead_id || null);
+      const dbLeadId = (data as any).lead_id || null;
+      const effectiveLeadId = dbLeadId || urlLeadId || null;
+      setLeadId(effectiveLeadId);
+
+      // Auto-persist lead_id from URL if missing in DB
+      if (!dbLeadId && urlLeadId) {
+        supabase.from("quotes").update({ lead_id: urlLeadId } as any).eq("id", quoteId).then();
+      }
       setQuoteNumber(data.quote_number);
       setQuoteDate(data.created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10));
       if (data.valid_until) setExpirationDate(data.valid_until.slice(0, 10));
