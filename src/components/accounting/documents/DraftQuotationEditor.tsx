@@ -803,18 +803,6 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
           </div>
         </div>
 
-        {/* Accept Online Link */}
-        <div className="mt-8 p-4 border-2 border-dashed border-primary/30 rounded-lg bg-primary/5 text-center print:border-gray-400 print:bg-gray-50">
-          <p className="text-sm font-semibold text-gray-700 mb-1">To accept this quotation online, visit:</p>
-          <a
-            href={`https://cusum-brain-flow.lovable.app/accept-quote/${quoteId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary underline break-all print:text-black"
-          >
-            https://cusum-brain-flow.lovable.app/accept-quote/{quoteId}
-          </a>
-        </div>
 
         {/* Signature area */}
         <div className="mt-12 grid grid-cols-2 gap-12">
