@@ -1,37 +1,33 @@
 
 
-# Improve Face Recognition Accuracy
+# Redirect ai@rebar.shop Directly to Shop Floor — Zero Flash
 
 ## Problem
-The Face ID Kiosk uses a weak AI model and only sends 1 reference photo per person (despite having 3 enrolled). The camera capture resolution is also low. These factors reduce matching accuracy.
+When `ai@rebar.shop` logs in or navigates to `/home`, the Home dashboard briefly renders before `RoleGuard` redirects to `/shop-floor`. The user sees the dashboard flash for ~1 second.
 
-## Root Causes Found
-
-1. **Only 1 photo per person sent to AI** — Line 56 in `face-recognize/index.ts`: `if (urls.length < 1)` limits to 1 reference photo, wasting the other 2-3 enrolled photos
-2. **Weakest AI model** — Using `gemini-2.5-flash-lite` (line 186), the cheapest/fastest but least accurate vision model
-3. **Low capture resolution** — Camera captures at 480x360 (in `useFaceRecognition.ts` line 53-54), losing facial detail
+## Root Cause
+Three places redirect to `/home` without checking if the user is a shopfloor device:
+1. `Login.tsx` line 54: `<Navigate to="/home" replace />` after auth
+2. `Login.tsx` line 38: `navigate("/home")` after email/password sign-in
+3. `Home.tsx` renders its full dashboard before `RoleGuard` kicks in
 
 ## Changes
 
-### 1. Send all enrolled photos to AI (`supabase/functions/face-recognize/index.ts`)
-- Change `urls.length < 1` → `urls.length < 3` to send up to 3 reference photos per person
-- More reference angles = much better matching accuracy
+### 1. `src/pages/Login.tsx` — Redirect device accounts directly
+- In the `if (user)` check (line 53-54): if user email is in `ACCESS_POLICIES.shopfloorDevices`, redirect to `/shop-floor` instead of `/home`
+- In `handleSubmit` success (line 38): same check before `navigate("/home")`
+- In Google OAuth success: same check
 
-### 2. Upgrade AI model
-- Change `gemini-2.5-flash-lite` → `gemini-2.5-flash` for stronger vision capability
-- Still fast (~2-3s) but significantly better at facial comparison
-
-### 3. Increase capture resolution (`src/hooks/useFaceRecognition.ts`)
-- Change canvas capture from 480x360 → 640x480
-- Better facial detail for the AI to analyze
-
-### 4. Improve prompt precision
-- Add instruction to compare each enrolled person's multiple photos for consistency
-- Emphasize that lighting/angle variations should be accounted for
+### 2. `src/pages/Home.tsx` — Early bail for device accounts
+- At the top of the component, before any rendering: if `user?.email` is in `ACCESS_POLICIES.shopfloorDevices`, return `<Navigate to="/shop-floor" replace />` immediately
+- This is the safety net — even if someone navigates to `/home` directly, they get redirected before any dashboard UI renders
 
 ## Files Modified
 | File | Change |
 |------|--------|
-| `supabase/functions/face-recognize/index.ts` | Send 3 photos per person, upgrade to gemini-2.5-flash, refine prompt |
-| `src/hooks/useFaceRecognition.ts` | Increase capture resolution to 640x480 |
+| `src/pages/Login.tsx` | Route device accounts to `/shop-floor` instead of `/home` |
+| `src/pages/Home.tsx` | Early redirect before dashboard renders |
+
+## Result
+`ai@rebar.shop` never sees the dashboard — not even for a frame. All paths (login, direct URL, OAuth) go straight to `/shop-floor`.
 
