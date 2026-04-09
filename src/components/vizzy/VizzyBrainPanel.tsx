@@ -1368,6 +1368,70 @@ const ALL_KNOWN_AGENTS = [
   { code: "assistant", name: "Vizzy", role: "Operations Commander" },
 ];
 
+const AGENT_DESCRIPTIONS: Record<string, string> = {
+  sales: "Blitz manages the full sales pipeline — from new lead intake and prospecting through qualification, hot enquiry follow-up, and deal closing. It tracks every lead stage, monitors conversion velocity, and ensures no opportunity is missed.",
+  accounting: "Penny handles all accounting operations including invoice generation, payment tracking, accounts receivable monitoring, and QuickBooks synchronization. It flags overdue invoices and maintains financial accuracy.",
+  legal: "Tally oversees legal compliance, order management, and contract workflows. It tracks order statuses, ensures regulatory adherence, and manages documentation for all business transactions.",
+  support: "Haven manages customer support interactions, processes feedback and suggestions, and routes issues to the appropriate teams. It monitors open tickets and ensures timely resolution.",
+  social: "Pixel creates and schedules social media content across platforms. It manages the content calendar, generates captions and visuals, and tracks engagement metrics.",
+  estimating: "Gauge handles estimation workflows — receiving project specifications, generating material takeoffs, calculating costs, and producing professional quotes for clients.",
+  shopfloor: "Forge manages shop floor operations including machine scheduling, cut plan optimization, production tracking, bend operations, and quality control across the manufacturing process.",
+  bizdev: "Atlas drives business development by identifying new opportunities, managing strategic partnerships, tracking won deals, and analyzing market positioning for growth.",
+  delivery: "Relay coordinates delivery logistics — scheduling dispatches, optimizing routes, tracking shipments in real-time, managing delivery bundles, and confirming successful deliveries.",
+  data: "Rex is the data and analytics engine — monitoring AI execution logs, tracking system performance, analyzing usage patterns, and generating insights across all agent operations.",
+  growth: "Prism focuses on growth strategy and team coaching — identifying performance bottlenecks, suggesting improvements, and helping team members optimize their workflows.",
+  talent: "Ally manages talent and HR operations including recruitment, onboarding, performance reviews, and employee engagement tracking.",
+  seo: "SEO Agent optimizes search engine visibility — managing keywords, tracking rankings, analyzing competitor strategies, and implementing on-page and technical SEO improvements.",
+  copywriting: "Copywriting Agent creates compelling marketing copy, product descriptions, email campaigns, and brand messaging aligned with the company's voice and target audience.",
+  webbuilder: "Web Builder manages the company website — updating pages, optimizing performance, implementing design changes, and ensuring mobile responsiveness.",
+  email: "Email Agent manages email campaigns, automated sequences, newsletter distribution, and email deliverability monitoring.",
+  empire: "Empire handles venture architecture and strategic planning — managing multi-business operations, resource allocation, and long-term growth blueprints.",
+  rebuild: "Rebuild manages system architecture and technical infrastructure — overseeing code quality, system migrations, performance optimization, and technical debt reduction.",
+  eisenhower: "Eisenhower Matrix helps prioritize tasks using the urgent/important framework — categorizing work items, suggesting delegation, and ensuring focus on high-impact activities.",
+  assistant: "Vizzy is the Operations Commander — providing a unified view of all agents, monitoring system health, issuing warnings, and coordinating cross-agent workflows.",
+};
+
+function generatePerformanceSummary(
+  agent: { name: string; code: string; role: string },
+  data?: SystemAgentSummary,
+  domainStats?: AgentDomainStat[],
+): string {
+  const parts: string[] = [];
+
+  // Domain metrics narrative
+  if (domainStats && domainStats.length > 0) {
+    const statParts = domainStats
+      .filter(s => s.value > 0)
+      .map(s => `${s.value} ${s.label.toLowerCase()}`);
+    if (statParts.length > 0) {
+      parts.push(`${agent.name} is currently tracking ${statParts.join(", ")}.`);
+    }
+  }
+
+  // Activity narrative
+  if (data && data.totalSessions > 0) {
+    parts.push(
+      `Today, ${data.userCount} user${data.userCount !== 1 ? "s" : ""} engaged in ${data.totalSessions} session${data.totalSessions !== 1 ? "s" : ""} with ${data.totalMessages} total message${data.totalMessages !== 1 ? "s" : ""}.`
+    );
+    if (data.users.length > 0) {
+      const topUser = data.users[0];
+      parts.push(`Most active user: ${topUser.fullName} (${topUser.messages} messages across ${topUser.sessions} session${topUser.sessions !== 1 ? "s" : ""}).`);
+    }
+  } else {
+    parts.push(`No user interactions recorded today.`);
+  }
+
+  return parts.join(" ");
+}
+
+function getAgentStatus(data?: SystemAgentSummary, domainStats?: AgentDomainStat[]): { label: string; color: string } {
+  const hasActivity = data && data.totalSessions > 0;
+  const hasDomainWork = domainStats && domainStats.some(s => s.value > 0);
+  if (hasActivity) return { label: "Active", color: "bg-green-500/20 text-green-400 border-green-500/30" };
+  if (hasDomainWork) return { label: "Idle — Has Pending Work", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" };
+  return { label: "No Activity", color: "bg-muted text-muted-foreground border-border" };
+}
+
 function AgentReportDialog({ agent, data, domainStats }: {
   agent: { name: string; code: string; role: string };
   data?: SystemAgentSummary;
@@ -1376,6 +1440,42 @@ function AgentReportDialog({ agent, data, domainStats }: {
   const [open, setOpen] = useState(false);
   const hasActivity = !!data && data.totalSessions > 0;
   const hasStats = domainStats && domainStats.some(s => s.value > 0);
+  const status = getAgentStatus(data, domainStats);
+  const description = AGENT_DESCRIPTIONS[agent.code] || `${agent.name} handles ${agent.role.toLowerCase()} operations for the organization.`;
+  const perfSummary = generatePerformanceSummary(agent, data, domainStats);
+
+  const handleCopyReport = () => {
+    const lines: string[] = [];
+    lines.push(`═══ ${agent.name} — ${agent.role} ═══`);
+    lines.push(`Status: ${status.label}`);
+    if (data?.lastUsed) lines.push(`Last Active: ${new Date(data.lastUsed).toLocaleString()}`);
+    lines.push("");
+    lines.push("── Role & Responsibilities ──");
+    lines.push(description);
+    lines.push("");
+    lines.push("── Performance Summary ──");
+    lines.push(perfSummary);
+    if (domainStats && domainStats.length > 0) {
+      lines.push("");
+      lines.push("── Domain Metrics ──");
+      domainStats.forEach(s => lines.push(`  ${s.label}: ${s.value}`));
+    }
+    if (hasActivity) {
+      lines.push("");
+      lines.push("── Today's Activity ──");
+      lines.push(`  Sessions: ${data!.totalSessions} | Messages: ${data!.totalMessages} | Users: ${data!.userCount}`);
+      if (data!.users.length > 0) {
+        lines.push("");
+        lines.push("── User Breakdown ──");
+        data!.users.forEach(u => {
+          const pct = data!.totalMessages > 0 ? Math.round((u.messages / data!.totalMessages) * 100) : 0;
+          lines.push(`  ${u.fullName}: ${u.sessions} sessions, ${u.messages} msgs (${pct}%)`);
+        });
+      }
+    }
+    navigator.clipboard.writeText(lines.join("\n"));
+    toast.success("Report copied to clipboard");
+  };
 
   return (
     <>
@@ -1389,16 +1489,46 @@ function AgentReportDialog({ agent, data, domainStats }: {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogPortal>
           <DialogOverlay className="z-[100001]" />
-          <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100002] grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100002] grid w-full max-w-xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg max-h-[85vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Bot className="w-5 h-5 text-primary" />
                 {agent.name}
                 <span className="text-sm font-normal text-muted-foreground">— {agent.role}</span>
               </DialogTitle>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full border ${status.color}`}>
+                  {status.label}
+                </span>
+                {data?.lastUsed && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Last active: {new Date(data.lastUsed).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </div>
             </DialogHeader>
-            <ScrollArea className="flex-1 pr-2">
+            <ScrollArea className="flex-1 min-h-0 pr-2">
               <div className="space-y-4 pr-2">
+                {/* Role & Responsibilities */}
+                <div>
+                  <h4 className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-primary" /> Role & Responsibilities
+                  </h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed bg-muted/30 rounded-lg px-3 py-2 border border-border/50">
+                    {description}
+                  </p>
+                </div>
+
+                {/* Performance Summary */}
+                <div>
+                  <h4 className="text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
+                    <TrendingUp className="w-3.5 h-3.5 text-primary" /> Performance Summary
+                  </h4>
+                  <p className="text-xs text-foreground leading-relaxed bg-primary/5 rounded-lg px-3 py-2 border border-primary/10">
+                    {perfSummary}
+                  </p>
+                </div>
+
                 {/* Domain Metrics */}
                 {domainStats && domainStats.length > 0 && (
                   <div>
@@ -1439,15 +1569,19 @@ function AgentReportDialog({ agent, data, domainStats }: {
                       <Users className="w-3.5 h-3.5 text-primary" /> User Breakdown
                     </h4>
                     <div className="space-y-1">
-                      {data!.users.map((u) => (
-                        <div key={u.userId} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-muted/40">
-                          <span className="font-medium text-foreground">{u.fullName}</span>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            <span>{u.sessions} sessions</span>
-                            <span>{u.messages} msgs</span>
+                      {data!.users.map((u) => {
+                        const pct = data!.totalMessages > 0 ? Math.round((u.messages / data!.totalMessages) * 100) : 0;
+                        return (
+                          <div key={u.userId} className="flex items-center justify-between text-sm py-1.5 px-3 rounded-lg bg-muted/40">
+                            <span className="font-medium text-foreground">{u.fullName}</span>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              <span>{u.sessions} sessions</span>
+                              <span>{u.messages} msgs</span>
+                              <span className="text-primary font-medium">{pct}%</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1457,6 +1591,15 @@ function AgentReportDialog({ agent, data, domainStats }: {
                 )}
               </div>
             </ScrollArea>
+            {/* Footer with Copy */}
+            <div className="flex justify-end pt-2 border-t border-border">
+              <button
+                onClick={handleCopyReport}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors px-3 py-1.5 rounded-md hover:bg-muted"
+              >
+                <Copy className="w-3.5 h-3.5" /> Copy Report
+              </button>
+            </div>
             <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
               <X className="h-4 w-4" />
               <span className="sr-only">Close</span>
@@ -1467,7 +1610,6 @@ function AgentReportDialog({ agent, data, domainStats }: {
     </>
   );
 }
-
 function SystemAgentsSummary() {
   const { data: agents, isLoading } = useSystemAgentSessions();
   const { data: domainStats } = useAgentDomainStats();
