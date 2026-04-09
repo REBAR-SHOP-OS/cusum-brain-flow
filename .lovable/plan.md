@@ -1,38 +1,28 @@
 
 
-# Fix: Add User Dialog Hidden Behind Vizzy Brain Panel
+# Fix: Add User Dialog Closes When Typing Email
 
 ## Problem
-Clicking the UserPlus icon makes the screen go black but the dialog is invisible. The Vizzy Brain panel renders at `z-[100000]`, but the `AddUserDialog` uses standard `shadcn/ui` `Dialog` which defaults to ~z-50. The overlay darkens the screen while the dialog content is hidden behind the panel.
+When the user clicks on the email input field inside the Add User dialog, the dialog closes immediately. The screen "jumps out" — the dialog disappears.
+
+## Root Cause
+The `DialogPrimitive.Content` used in `AddUserDialog.tsx` lacks `onInteractOutside` and `onPointerDownOutside` event handlers. Radix Dialog treats certain pointer events as "outside interaction" and calls `onOpenChange(false)`. Because the dialog is rendered inside a high-z-index Vizzy Brain panel with complex layering, Radix's focus/interaction detection may misidentify clicks on the input as outside the dialog content.
 
 ## Fix
 
-### File: `src/components/vizzy/AddUserDialog.tsx`
+### File: `src/components/vizzy/AddUserDialog.tsx` (line 87-88)
 
-Replace the standard `DialogContent` with `DialogPortal` + explicit high z-index layering, matching the pattern used by all other dialogs in VizzyBrainPanel:
+Add `onInteractOutside` and `onPointerDownOutside` handlers to `DialogPrimitive.Content` to prevent the dialog from closing when interacting with elements inside it:
 
 ```tsx
-import { DialogPortal, DialogOverlay } from "@/components/ui/dialog";
-import * as DialogPrimitive from "@radix-ui/react-dialog";
-
-// Replace:
-<Dialog open={open} onOpenChange={onOpenChange}>
-  <DialogContent className="sm:max-w-md">
-    ...
-  </DialogContent>
-</Dialog>
-
-// With:
-<Dialog open={open} onOpenChange={onOpenChange}>
-  <DialogPortal>
-    <DialogOverlay className="z-[100001]" />
-    <DialogPrimitive.Content className="fixed left-[50%] top-[50%] z-[100002] grid w-full max-w-md translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out ... sm:rounded-lg">
-      {/* Same inner content: DialogHeader, form fields, DialogFooter */}
-      {/* Add manual close button (X) in top-right */}
-    </DialogPrimitive.Content>
-  </DialogPortal>
-</Dialog>
+<DialogPrimitive.Content
+  onInteractOutside={(e) => e.preventDefault()}
+  onPointerDownOutside={(e) => e.preventDefault()}
+  className="fixed left-[50%] top-[50%] z-[100002] ..."
+>
 ```
 
-This is the exact same pattern used by the Activity Report Dialog, Time Clock Dialog, and Overview Dialog in the same panel. Single file change, no logic changes.
+This stops Radix from interpreting clicks inside the dialog (on the input, buttons, etc.) as "outside" interactions. The user can still close the dialog via Cancel, the X button, or pressing Escape.
+
+Single two-line addition in one file. No logic or database changes.
 
