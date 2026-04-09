@@ -1,68 +1,82 @@
 
 
-# Improve Vizzy Employee Report Quality
+# Audit & Fix: Email/Call Alert Reconciliation System
 
-## Problem
-When asked for an employee report (e.g., "vicky report"), Vizzy produces a shallow report that:
-- Flags "not clocked in" at midnight (nobody works at midnight)
-- Does not query the Employee Tasks board for their actual workload
-- Does not check RingCentral call logs for the person
-- Does not thoroughly check emails sent/received with date ranges
-- Gives a generic summary instead of a comprehensive operational picture
+## Problems Identified
 
-## Root Cause
-The Vizzy system prompt (`vizzyIdentity.ts`) has no specific protocol for generating employee reports. Vizzy ad-hocs it using `investigate_entity` (which searches by keyword, not employee-specific) instead of systematically calling the right tools.
+### Problem 1: Neel's email appears in Sattar's "To Respond"
+**Root cause**: The alert system sends the unanswered-email alert to BOTH the owner (neel@rebar.shop) AND the CEO (sattar@rebar.shop). When Gmail syncs Sattar's inbox, the alert email `[Alert] Unanswered email - 24h - Request for quote` arrives with `to_address = "neel@rebar.shop"` in the original email data. The inbox categorization has **no concept of "this is someone else's responsibility"** — it defaults to "To Respond" for any email without AI classification, including alert emails about other people's unanswered items.
 
-## Fix: Add Employee Report Protocol to Vizzy System Prompt
+Additionally, alert emails from `ai@rebar.shop` are NOT in the `SKIP_SENDERS` list for inbox categorization, so they show up as actionable items.
 
+### Problem 2: No sent-box reconciliation before alerts
+The `comms-alerts` function DOES check for outbound replies (lines 302-321) via thread_id and direct-reply matching. However, it only checks the `communications` table — if a reply was sent but Gmail sync hasn't run yet, the reply won't be in the DB and a false alert fires.
+
+### Problem 3: No callback check before missed-call alerts
+The missed-call alert logic (lines 343-375) has **zero outbound call reconciliation**. It fires an alert for every missed call without checking if someone called back.
+
+### Problem 4: Scam/spam emails trigger alerts
+The `shouldSkipAlert` function has sender patterns but no content-based spam detection (no `analyzeSpam` integration).
+
+---
+
+## Plan
+
+### 1. Fix Inbox Categorization — Alert emails → "Notification" not "To Respond"
+**File: `src/components/inbox/inboxCategorization.ts`**
+
+In `categorizeCommunication()`, add an early check: if `from` contains `ai@rebar.shop` (the alert sender), categorize as "Notification" instead of falling through to "To Respond". This prevents ALL alert emails from showing as actionable items.
+
+Additionally, add TO/CC-based logic (from the previously approved plan):
+- If the logged-in user's email matches the `to_address` → keep current label (DIRECT)
+- If the user is only in CC → force label to "FYI"
+- Alert emails always → "Notification"
+
+### 2. Fix Missed Call Alerts — Add callback reconciliation
+**File: `supabase/functions/comms-alerts/index.ts`**
+
+In the missed-call alert section (after line 353), before creating an alert:
+- Query `communications` for an outbound call to the same `from_address` (phone number) after the missed call's `received_at`
+- If an outbound call exists → skip alert (callback was made)
+
+```
+// Pseudocode:
+const callerPhone = comm.from_address;
+const { count: callbackExists } = await svc
+  .from("communications")
+  .select("id", { count: "exact", head: true })
+  .eq("source", "ringcentral")
+  .eq("direction", "outbound")
+  .ilike("to_address", `%${callerPhone}%`)
+  .gt("received_at", comm.received_at);
+if (callbackExists && callbackExists > 0) continue;
+```
+
+### 3. Add Spam Filter to comms-alerts
+**File: `supabase/functions/comms-alerts/index.ts`**
+
+Import `analyzeSpam` from `../_shared/spamFilter.ts` and add a spam check in the unanswered email loop — if `analyzeSpam(subject + preview, from_address).isSpam`, skip the alert.
+
+### 4. Update Vizzy System Prompt — Reconciliation rule
 **File: `supabase/functions/_shared/vizzyIdentity.ts`**
 
-Add a new section `═══ EMPLOYEE REPORT PROTOCOL ═══` to the system prompt that instructs Vizzy to follow a structured multi-tool investigation when asked for a report on any team member:
+Add to the alert/monitoring section:
+- "Always check sent box / outbound calls before flagging unanswered"
+- "Do not alert for scam/spam emails"
+- "If person is in CC, classify as FYI not actionable"
 
-```
-═══ EMPLOYEE REPORT PROTOCOL ═══
-When asked for a report on an employee (e.g., "vicky report", "what did Neel do?", "report on Saurabh"):
-
-STEP 1 — TIME AWARENESS:
-- Check current time in ET (America/Toronto). 
-- Business hours: Mon-Fri 8AM-5PM ET. 
-- Do NOT flag "not clocked in" outside business hours.
-- Do NOT flag absence on weekends or holidays.
-- Frame attendance relative to business hours only.
-
-STEP 2 — GATHER ALL DATA (run these tools IN PARALLEL):
-a) list_tasks → filter by assigned_to_name = employee name, status = open/in_progress
-b) get_employee_activity → today + last 7 days
-c) get_employee_emails → last 7 days, direction = all
-d) rc_get_call_analytics → last 7 days (check for calls by this person)
-e) investigate_entity → search by employee name for cross-domain context
-
-STEP 3 — COMPILE COMPREHENSIVE REPORT with these sections:
-1. **Current Status**: Clock-in status (only relevant during business hours), last active timestamp
-2. **Open Tasks** (from tasks table): List ALL open/in-progress tasks with due dates, priorities, who assigned them. Flag overdue tasks.
-3. **Completed Tasks** (last 7 days): What they finished recently
-4. **Email Activity** (last 7 days): Total sent/received, key threads, unresolved threads, response time patterns
-5. **Phone Activity** (last 7 days): Calls made/received, duration, missed calls
-6. **Digital Activity** (today): Page visits, actions taken in the system
-7. **Workload Assessment**: Is their plate full or light? Are deadlines realistic?
-8. **Risk Flags**: Overdue tasks, unanswered emails >48h, missed calls pattern, no activity during business hours
-9. **Recommended Actions**: Specific, actionable next steps
-
-CRITICAL RULES:
-- NEVER report "0 calls" without actually calling rc_get_call_analytics
-- NEVER say "no tasks" without calling list_tasks with their name
-- ALWAYS use multiple date ranges — today AND last 7 days — for a complete picture
-- Frame findings in business context, not raw data dumps
-```
-
-## Result
-- Employee reports will be comprehensive: tasks + emails + calls + activity
-- Time-aware: no false alarms at midnight or weekends
-- Data-complete: uses all available tools instead of just `investigate_entity`
-- Actionable: clear risk flags and recommendations
+---
 
 ## Files Modified
 | File | Change |
 |------|--------|
-| `supabase/functions/_shared/vizzyIdentity.ts` | Add EMPLOYEE REPORT PROTOCOL section to system prompt |
+| `src/components/inbox/inboxCategorization.ts` | Add `ai@rebar.shop` → Notification; add TO vs CC logic |
+| `supabase/functions/comms-alerts/index.ts` | Add callback reconciliation for missed calls; add spam filter |
+| `supabase/functions/_shared/vizzyIdentity.ts` | Add reconciliation-before-alert rules |
+
+## Result
+- Alert emails from ai@rebar.shop → "Notification" column (not "To Respond")
+- Missed call alerts only fire when no callback was made
+- Spam/scam emails never trigger alerts
+- Emails where user is CC'd → "FYI" not "To Respond"
 
