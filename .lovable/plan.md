@@ -1,32 +1,36 @@
 
 
-# Make the Red Stop Button Bigger with "STOP" Label
+# Fix: Double "X" Close Icon in Sales Lead Drawer
 
-## Current State
-The red stop button next to "Record Stroke" (line 358-365 in `SlotTracker.tsx`) is a small square button with only a `StopCircle` icon (`w-5 h-5`, `h-12 px-3`).
+## Root Cause
 
-## Change
+Two close buttons are rendered simultaneously:
 
-### File: `src/components/shopfloor/SlotTracker.tsx` (lines 358-365)
+1. **`SheetContent`** in `src/components/ui/sheet.tsx` (line 60) — the `shadcn/ui` Sheet component automatically appends a `<SheetPrimitive.Close>` with an `<X />` icon at `absolute right-4 top-4` inside every `SheetContent`.
 
-Make the button larger and add "STOP" text:
+2. **`SalesLeadDrawer`** in `src/components/sales/SalesLeadDrawer.tsx` (line 89-91) — a manual `<Button>` with `<X />` is rendered in the drawer header.
+
+Both icons land in the top-right corner, creating the overlapping double-X visible in the screenshot.
+
+## Fix
+
+### File: `src/components/sales/SalesLeadDrawer.tsx` (lines 88-92)
+
+Remove the manually rendered close button since `SheetContent` already provides one:
 
 ```tsx
-// From:
-<Button variant="destructive" className="h-12 px-3" onClick={onCompleteRun} title="Stop">
-  <StopCircle className="w-5 h-5" />
-</Button>
-
-// To:
-<Button variant="destructive" className="h-16 w-20 px-3 flex flex-col items-center gap-1" onClick={onCompleteRun} title="Stop">
-  <StopCircle className="w-8 h-8" />
-  <span className="text-xs font-bold tracking-wide">STOP</span>
-</Button>
+// Remove this block:
+<div className="flex items-center gap-1 shrink-0">
+  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onClose()}>
+    <X className="w-3.5 h-3.5" />
+  </Button>
+</div>
 ```
 
-- Icon: `w-5 h-5` → `w-8 h-8`
-- Button: `h-12` → `h-16 w-20`, flex column layout
-- Added "STOP" text label below the icon
+The built-in `SheetPrimitive.Close` in `SheetContent` already calls `onOpenChange(false)` which triggers `onClose()` via the Sheet's `onOpenChange` prop on line 78.
 
-Single line change in one file. No database or logic changes.
+### Result
+Single close button in the top-right corner, no visual overlap.
+
+### Single deletion in one file. No database or logic changes.
 
