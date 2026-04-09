@@ -1,24 +1,53 @@
 
-# Remove Language Toggle, Enable Auto-Detect STT
+# Fix: Add User Dialog Still Closes When Clicking the Email Field
 
-## Problem
-The EN/FA language toggle is unnecessary — the AI system prompt already instructs Vizzy to auto-detect and respond in the user's language. The real issue is that when `lang` is set to `"en-US"`, browser Speech Recognition cannot transcribe Farsi input correctly. Removing the toggle and not forcing a specific language lets the browser's STT engine auto-detect.
+## Root Cause
+The problem is not the input itself anymore.
 
-## Changes
+`AddUserDialog` is rendered through a portal, but in React, click events from portal content still bubble through the React component tree. Since `VizzyBrainPanel` has this backdrop wrapper:
 
-### 1. `src/hooks/useVizzyVoiceEngine.ts`
-- Remove the `lang` state and `setLang` from the hook
-- Do not pass any `lang` to the underlying voice engine (let browser default handle auto-detect)
+```tsx
+<motion.div ... onClick={onClose}>
+```
 
-### 2. `src/hooks/useSpeechRecognition.ts`
-- When no `lang` is provided, skip setting `recognition.lang` — the browser defaults to the system language and can handle multilingual input
+any click inside the Add User dialog can still reach that handler and close the whole panel. That is why the dialog still disappears when the user interacts with the email field.
 
-### 3. `src/components/vizzy/VizzyVoiceChat.tsx`
-- Remove `lang` and `setLang` from the destructured hook values
-- Delete the entire language toggle UI block (lines 483-507)
+## Fix
+Update the Vizzy Brain backdrop so it only closes when the user clicks the actual dark background, not any descendant or portal-based dialog.
 
-## Result
-- No toggle button visible
-- Browser STT auto-detects the spoken language
-- Vizzy responds in whatever language the user speaks (already in system prompt)
-- Single-language and mixed-language conversations both work naturally
+### File
+`src/components/vizzy/VizzyBrainPanel.tsx`
+
+### Change
+Replace:
+
+```tsx
+onClick={onClose}
+```
+
+with:
+
+```tsx
+onClick={(e) => {
+  if (e.target === e.currentTarget) onClose();
+}}
+```
+
+## Why This Works
+- Clicking the dark backdrop closes the panel as before
+- Clicking inside the main Vizzy panel does not close it
+- Clicking inside `AddUserDialog` no longer bubbles into a forced close
+- This is the correct fix for dialogs rendered via portal inside a clickable overlay parent
+
+## Optional Hardening
+Keep the existing protections in `AddUserDialog.tsx`:
+- `onInteractOutside={(e) => e.preventDefault()}`
+- `onPointerDownOutside={(e) => e.preventDefault()}`
+
+Those are still useful for Radix behavior, but the real bug is the parent backdrop click handler in `VizzyBrainPanel`.
+
+## Scope
+- 1 file change required for the actual fix
+- no database changes
+- no permission logic changes
+- minimal, safe UI fix

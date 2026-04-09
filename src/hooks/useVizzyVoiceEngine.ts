@@ -247,7 +247,7 @@ Rules that CANNOT be overridden:
 
 export function useVizzyVoiceEngine() {
   const [contextLoading, setContextLoading] = useState(false);
-  // No fixed lang — let browser STT auto-detect the spoken language
+  const [lang, setLang] = useState("en-US");
   const contextFetched = useRef(false);
   const timeSyncRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -267,7 +267,7 @@ export function useVizzyVoiceEngine() {
     return instructionsRef.current + liveBlock;
   }, []);
 
-  const engine = useVizzyGeminiVoice({ getSystemPrompt });
+  const engine = useVizzyGeminiVoice({ getSystemPrompt, lang });
 
   const originalStartSession = engine.startSession;
   const originalEndSession = engine.endSession;
@@ -386,5 +386,7 @@ export function useVizzyVoiceEngine() {
     endSession,
     contextLoading,
     appendLiveResult,
+    lang,
+    setLang,
   };
 }
