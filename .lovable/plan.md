@@ -1,41 +1,45 @@
 
 
-# Add to Timeline: Link Quotation to Sales Lead Timeline
+# Link Draft Quotations to Source Sales Lead
 
-## What It Does
-When the user clicks "Add to Timeline" in the Draft Quotation Editor, it inserts a new activity entry into the associated sales lead's timeline — visible under the "Timeline" tab in the Sales Lead Drawer.
+## Problem
+When creating a quotation from a sales lead's "+" button, the `lead_id` is never passed along. The draft quote is created without a `lead_id`, so "Add to Timeline" fails with "not linked to any sales lead."
 
-## How It Works
+## Fix — 3 touch points
 
-### File: `src/components/accounting/documents/DraftQuotationEditor.tsx`
+### 1. `src/components/sales/LeadSmartButtons.tsx`
+Pass `lead_id` as a URL parameter when navigating to quotations:
+```tsx
+navigate(`/sales/quotations?lead_id=${leadId}`);
+```
+Both the "+" icon clicks (lines 151 and 212) need this change.
 
-1. **Store `lead_id`** from the loaded quote data (the `quotes` table already has a `lead_id` column):
-   - Add state: `const [leadId, setLeadId] = useState<string | null>(null)`
-   - In the load function after line 135: `setLeadId(data.lead_id || null)`
+### 2. `src/components/accounting/AccountingDocuments.tsx`
+Read `lead_id` from `useSearchParams` and include it in the `handleCreateDraft` insert:
+```tsx
+const [searchParams] = useSearchParams();
+const leadIdParam = searchParams.get("lead_id");
 
-2. **Replace the placeholder toast** on the "Add to Timeline" button (line 435) with actual logic:
-   - If `leadId` exists: insert into `sales_lead_activities` with `activity_type: "quotation"`, subject like `"Quotation #QE-DRAFT-xxx added to timeline"`, and body with the total amount
-   - If no `leadId`: show a toast error saying "This quote is not linked to any sales lead"
-   - On success: show success toast
+// In the insert:
+.insert({
+  quote_number: quoteNumber,
+  status: "draft",
+  source: "manual",
+  total_amount: 0,
+  company_id: companyId,
+  lead_id: leadIdParam || null,  // NEW
+})
+```
 
-3. **Activity insert** follows the existing pattern from `GenerateQuotationDialog.tsx`:
-   ```ts
-   await supabase.from("sales_lead_activities").insert({
-     sales_lead_id: leadId,
-     company_id: companyId,
-     activity_type: "quotation",
-     subject: `Quotation ${quoteNumber} added to timeline`,
-     body: `Draft quotation. Total: $${total.toLocaleString()}`,
-     user_id: user?.id,
-     user_name: user?.email || "User",
-     completed_at: new Date().toISOString(),
-   });
-   ```
+### 3. No changes to `DraftQuotationEditor.tsx`
+It already reads `lead_id` from the quote record (line 137) and uses it for "Add to Timeline."
 
-## No Database Changes
-- `quotes.lead_id` already exists
-- `sales_lead_activities` table already supports this activity type
-- No migrations needed
+## Files Changed
 
-## Single file change: `DraftQuotationEditor.tsx`
+| File | Change |
+|---|---|
+| `src/components/sales/LeadSmartButtons.tsx` | Add `lead_id` query param to navigation |
+| `src/components/accounting/AccountingDocuments.tsx` | Read `lead_id` from URL, pass to insert |
+
+No database changes needed — `quotes.lead_id` column already exists.
 
