@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
-import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail, CalendarIcon } from "lucide-react";
+import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail, CalendarIcon, CalendarPlus } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -431,7 +431,10 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
       </Dialog>
 
       {/* Action buttons */}
-      <div className="fixed top-4 right-4 flex gap-2 print:hidden z-50">
+      <div className="fixed top-4 right-4 flex items-center gap-2 print:hidden z-50">
+        <Button size="sm" variant="ghost" onClick={() => toast({ title: "Add to Timeline coming soon" })} className="gap-2" title="Add to Timeline">
+          <CalendarPlus className="w-4 h-4" /> Add to Timeline
+        </Button>
         <Button size="sm" onClick={handleSave} disabled={saving} className="gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Draft
         </Button>
