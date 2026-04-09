@@ -1,43 +1,90 @@
 
 
-# Fix Vizzy Voice: Persian Language Support & Silence on Unclear Input
+# Security Incident: Remove Unauthorized User & Add Server-Side Login Restriction
 
-## Problems
-1. **Persian not recognized**: Browser SpeechRecognition defaults to `en-US` when no `lang` is set. Persian speech gets mangled into English gibberish, then sent to Gemini which responds to nonsense.
-2. **Responds to unclear input**: Even garbled/misrecognized text triggers a full Gemini response + TTS, creating noise.
+## Incident Report — aw.danandeh@gmail.com
 
-## Solution
+| Field | Detail |
+|---|---|
+| **Name** | Amir AHD |
+| **Email** | aw.danandeh@gmail.com |
+| **Registered** | 2026-04-09 13:21:24 UTC (today, ~14 minutes ago) |
+| **Method** | Google OAuth |
+| **Roles** | None assigned |
+| **Company** | Auto-assigned to default company |
+| **Pages visited** | /shop-floor, /home, /timeclock (3 page visits total) |
+| **Data access** | No data modifications, no chat sessions, no agent interactions |
+| **Tokens/integrations** | None |
 
-### 1. Add Language Toggle (EN / FA) to Vizzy Voice UI
-Add a small toggle button in `VizzyVoiceChat.tsx` so the user can switch STT language between English and Farsi. When switched, the SpeechRecognition restarts with the correct `lang` (`en-US` or `fa-IR`).
+**How they got in**: Google OAuth creates the user in auth.users *before* the client-side whitelist check runs. The client then signs them out, but the auth record persists.
 
-### 2. Pass Language Through the Chain
-- **`useVizzyGeminiVoice.ts`**: Accept a `lang` parameter, pass it to `useSpeechRecognition({ lang })`. When lang changes, restart recognition with new language.
-- **`useVizzyVoiceEngine.ts`**: Expose `lang` / `setLang` and forward to the Gemini voice hook.
+---
 
-### 3. Silent Handling of Unclear Input
-- **System prompt** (in `useVizzyVoiceEngine.ts`): Add instruction: "If the transcribed input is clearly garbled, nonsensical, or you cannot understand the user's intent, respond with exactly `[UNCLEAR]` and nothing else."
-- **`useVizzyGeminiVoice.ts` → `processOneInput`**: After getting Gemini's response, if `fullResponse.trim() === "[UNCLEAR]"`, skip adding the agent transcript and skip TTS entirely. Also remove the user transcript that was just added (since it was noise). This means the UI stays clean — no bubble appears for unclear input.
+## Plan
 
-## Technical Changes
+### Step 1 — Delete User & Related Data (Migration)
 
-### File: `src/hooks/useSpeechRecognition.ts`
-- No changes needed — already supports `lang` option.
+Delete `aw.danandeh@gmail.com` from the system completely:
 
-### File: `src/hooks/useVizzyGeminiVoice.ts`
-- Add `lang` to the options interface
-- Pass `lang` to `useSpeechRecognition({ lang, silenceTimeout: 2000, ... })`
-- In `processOneInput`: after getting `fullResponse`, check if it's `[UNCLEAR]` → if so, remove the user transcript entry and return without adding agent transcript or calling TTS
-- Handle `lang` changes by restarting recognition
+```sql
+-- Delete activity events
+DELETE FROM activity_events WHERE actor_id = '864b8382-9c57-4648-9d68-f958af801e01';
 
-### File: `src/hooks/useVizzyVoiceEngine.ts`
-- Add `lang` / `setLang` state
-- Pass `lang` to `useVizzyGeminiVoice`
-- Expose `lang` and `setLang` in the return object
-- Add to system prompt (BACKGROUND NOISE section): "If the input is garbled or you cannot determine user intent, respond with exactly `[UNCLEAR]` — no other text."
+-- Delete profile (cascade from auth.users should handle this, but be explicit)
+DELETE FROM profiles WHERE user_id = '864b8382-9c57-4648-9d68-f958af801e01';
 
-### File: `src/components/vizzy/VizzyVoiceChat.tsx`
-- Add a small EN/FA toggle near the mic/mute button
-- Wire it to `setLang` from the engine
-- Visual indicator showing current language
+-- Delete from auth.users (this cascades to all FK-linked tables)
+DELETE FROM auth.users WHERE id = '864b8382-9c57-4648-9d68-f958af801e01';
+```
+
+### Step 2 — Server-Side Signup Restriction (Edge Function Hook)
+
+Create a **database webhook / auth hook** that blocks unauthorized signups at the server level, so no user record is even created for non-whitelisted emails.
+
+**Option A — Auth Hook (Custom Access Token)**: Not suitable here since we need to block *before* user creation.
+
+**Option B — Database trigger on auth.users**: Create a `BEFORE INSERT` trigger on `auth.users` that checks the email against the allowed list and raises an exception if not whitelisted. This prevents the row from being created at all.
+
+```sql
+CREATE OR REPLACE FUNCTION public.restrict_signups()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  allowed_emails text[] := ARRAY[
+    'sattar@rebar.shop', 'radin@rebar.shop', 'zahra@rebar.shop',
+    'neel@rebar.shop', 'vicky@rebar.shop', 'kourosh@rebar.shop',
+    'saurabh@rebar.shop', 'ben@rebar.shop', 'ai@rebar.shop',
+    'tariq0001010@gmail.com'
+  ];
+BEGIN
+  IF NOT (lower(NEW.email) = ANY(allowed_emails)) THEN
+    RAISE EXCEPTION 'Signup not allowed for this email'
+      USING ERRCODE = 'P0001';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER enforce_allowed_signups
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.restrict_signups();
+```
+
+> **Note**: This is a trigger on `auth.users` (a reserved schema). This is one of the rare cases where it's justified — it acts as a hard security gate. However, if this causes issues with Supabase internals, we can fall back to a post-signup cleanup approach using a database webhook.
+
+### Step 3 — Keep Client-Side Guards (No Changes)
+
+The existing client-side guards in `auth.tsx`, `Login.tsx`, and `ProtectedRoute.tsx` remain as UX-level backup. No changes needed.
+
+---
+
+## Summary
+
+- **1 migration**: Delete user + create signup restriction trigger
+- **0 code changes**: Client-side whitelist already works correctly as UX gate
+- **Result**: `aw.danandeh@gmail.com` fully removed; no unauthorized email can create an account
 
