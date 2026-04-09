@@ -352,6 +352,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
           total_amount: total,
           valid_until: expirationDate || null,
           salesperson: customerName || null,
+          lead_id: leadId || urlLeadId || null,
           metadata: {
             customer_name: customerName,
             customer_email: customerEmail || undefined,
