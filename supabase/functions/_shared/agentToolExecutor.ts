@@ -97,7 +97,7 @@ export async function executeToolCall(
           priority: args.priority || "medium",
           due_date: args.due_date || null,
           status: "open",
-          company_id: context.companyId,
+          company_id: companyId,
           created_by_profile_id: creatorProfileId,
           source: "vizzy",
         }).select("id, title").single();
