@@ -1,36 +1,43 @@
 
 
-# Enhance Agent Report Dialog with Detailed English Summaries
+# Fix Vizzy Voice: Persian Language Support & Silence on Unclear Input
 
-## Problem
-The current `AgentReportDialog` is minimal — it only shows domain metric numbers, session/message counts, and a user breakdown list. There is no narrative description of what the agent does, no performance assessment, and no actionable insights.
+## Problems
+1. **Persian not recognized**: Browser SpeechRecognition defaults to `en-US` when no `lang` is set. Persian speech gets mangled into English gibberish, then sent to Gemini which responds to nonsense.
+2. **Responds to unclear input**: Even garbled/misrecognized text triggers a full Gemini response + TTS, creating noise.
 
 ## Solution
-Expand `AgentReportDialog` to include rich, detailed English content with:
-1. **Agent Description** — A static paragraph explaining the agent's purpose and capabilities
-2. **Performance Summary** — An auto-generated English narrative interpreting the metrics (e.g., "Blitz is managing 39 active leads with 137 hot enquiries requiring follow-up")
-3. **Domain Metrics** — Keep existing grid but add context labels
-4. **Activity Details** — Expanded: sessions, messages, users, last active time
-5. **User Breakdown** — Keep existing but add message percentages
-6. **Status Assessment** — Auto-generated health indicator (Active/Idle/Needs Attention)
+
+### 1. Add Language Toggle (EN / FA) to Vizzy Voice UI
+Add a small toggle button in `VizzyVoiceChat.tsx` so the user can switch STT language between English and Farsi. When switched, the SpeechRecognition restarts with the correct `lang` (`en-US` or `fa-IR`).
+
+### 2. Pass Language Through the Chain
+- **`useVizzyGeminiVoice.ts`**: Accept a `lang` parameter, pass it to `useSpeechRecognition({ lang })`. When lang changes, restart recognition with new language.
+- **`useVizzyVoiceEngine.ts`**: Expose `lang` / `setLang` and forward to the Gemini voice hook.
+
+### 3. Silent Handling of Unclear Input
+- **System prompt** (in `useVizzyVoiceEngine.ts`): Add instruction: "If the transcribed input is clearly garbled, nonsensical, or you cannot understand the user's intent, respond with exactly `[UNCLEAR]` and nothing else."
+- **`useVizzyGeminiVoice.ts` → `processOneInput`**: After getting Gemini's response, if `fullResponse.trim() === "[UNCLEAR]"`, skip adding the agent transcript and skip TTS entirely. Also remove the user transcript that was just added (since it was noise). This means the UI stays clean — no bubble appears for unclear input.
 
 ## Technical Changes
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx`
+### File: `src/hooks/useSpeechRecognition.ts`
+- No changes needed — already supports `lang` option.
 
-**1. Add `AGENT_DESCRIPTIONS` constant** (near `ALL_KNOWN_AGENTS`, ~line 1370)
-A Record mapping agent codes to detailed English descriptions of each agent's function, responsibilities, and key capabilities.
+### File: `src/hooks/useVizzyGeminiVoice.ts`
+- Add `lang` to the options interface
+- Pass `lang` to `useSpeechRecognition({ lang, silenceTimeout: 2000, ... })`
+- In `processOneInput`: after getting `fullResponse`, check if it's `[UNCLEAR]` → if so, remove the user transcript entry and return without adding agent transcript or calling TTS
+- Handle `lang` changes by restarting recognition
 
-**2. Rewrite `AgentReportDialog` component** (lines 1371–1469)
-- Add a "Role & Responsibilities" section with the agent description text
-- Add a "Performance Summary" section that generates a dynamic English paragraph based on domain stats and activity data (e.g., "Blitz currently tracks 39 active leads and 137 hot enquiries. Today, 3 users engaged in 5 sessions with 42 total messages.")
-- Add a "Status" badge: green "Active" if sessions > 0, yellow "Idle" if has domain items but no sessions, gray "No Activity"
-- Add "Last Active" timestamp when available
-- Keep existing Domain Metrics grid, User Breakdown list
-- Add "Copy Report" button that copies a plain-text English version to clipboard
-- Ensure `ScrollArea` has `min-h-0` for proper scrolling
-- Dialog width increased to `max-w-xl` for readability
+### File: `src/hooks/useVizzyVoiceEngine.ts`
+- Add `lang` / `setLang` state
+- Pass `lang` to `useVizzyGeminiVoice`
+- Expose `lang` and `setLang` in the return object
+- Add to system prompt (BACKGROUND NOISE section): "If the input is garbled or you cannot determine user intent, respond with exactly `[UNCLEAR]` — no other text."
 
-### No new files, hooks, or database changes needed
-All data is already available from `SystemAgentSummary` and `AgentDomainStat`.
+### File: `src/components/vizzy/VizzyVoiceChat.tsx`
+- Add a small EN/FA toggle near the mic/mute button
+- Wire it to `setLang` from the engine
+- Visual indicator showing current language
 
