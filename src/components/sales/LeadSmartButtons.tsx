@@ -148,7 +148,7 @@ export function LeadSmartButtons({ leadId, contactEmail, companyId }: Props) {
                       title="Add Quotation"
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate("/sales/quotations");
+                        navigate(`/sales/quotations?lead_id=${leadId}`);
                       }}
                     >
                       <Plus className="w-4 h-4 text-muted-foreground hover:text-primary" />
@@ -209,7 +209,7 @@ export function LeadSmartButtons({ leadId, contactEmail, companyId }: Props) {
                     title="Add Quotation"
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigate("/sales/quotations");
+                      navigate(`/sales/quotations?lead_id=${leadId}`);
                     }}
                   >
                     <Plus className="w-4 h-4 text-muted-foreground hover:text-primary" />

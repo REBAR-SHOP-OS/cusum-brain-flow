@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,8 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   const [invoiceEditorId, setInvoiceEditorId] = useState<string | null>(null);
   const { companyId } = useCompanyId();
   const { invoices: localInvoices, isLoading: localInvoicesLoading } = useSalesInvoices();
+  const [searchParams] = useSearchParams();
+  const leadIdParam = searchParams.get("lead_id");
 
   const handleCreateDraft = async () => {
     setCreatingDraft(true);
@@ -97,7 +100,8 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
           source: "manual",
           total_amount: 0,
           company_id: companyId,
-        })
+          lead_id: leadIdParam || null,
+        } as any)
         .select("id, quote_number")
         .single();
       if (error) throw error;
