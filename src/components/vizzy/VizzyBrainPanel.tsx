@@ -750,6 +750,170 @@ function UserFullReportButton({
   );
 }
 
+/** Per-user agents report button — shows all agent activity for a specific user */
+function UserAgentsFullReportButton({
+  userId,
+  userName,
+  email,
+  overrideAgents,
+  date,
+}: {
+  userId: string;
+  userName: string;
+  email?: string | null;
+  overrideAgents?: string[] | null;
+  date?: Date;
+}) {
+  const { data: sessionAgents } = useUserAgentSessions(userId, date);
+  const { timezone } = useWorkspaceSettings();
+  const [reportText, setReportText] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const mergedAgents = useMemo(() => {
+    const result: Array<{
+      agentName: string;
+      agentRole: string;
+      status: string;
+      sessionCount: number;
+      totalMessages: number;
+      lastUsed: string;
+      recentMessages: { role: string; content: string; created_at: string }[];
+    }> = [];
+
+    const accessibleKeys = overrideAgents?.length ? overrideAgents : getVisibleAgents(email ?? undefined);
+    const primaryKey = getUserPrimaryAgentKeyFromConfig(email ?? undefined);
+    const orderedKeys = primaryKey
+      ? [primaryKey, ...accessibleKeys.filter((k) => k !== primaryKey)]
+      : accessibleKeys;
+
+    const addedNames = new Set<string>();
+
+    for (const key of orderedKeys) {
+      const config = agentConfigs[key];
+      if (!config) continue;
+      const nameLower = config.name.toLowerCase();
+      if (addedNames.has(nameLower)) continue;
+      addedNames.add(nameLower);
+
+      const sessionData = sessionAgents?.find((s) => s.agentName.toLowerCase() === nameLower);
+      result.push({
+        agentName: config.name,
+        agentRole: config.role,
+        status: key === primaryKey ? "Primary Agent" : "Access",
+        sessionCount: sessionData?.sessionCount ?? 0,
+        totalMessages: sessionData?.totalMessages ?? 0,
+        lastUsed: sessionData?.lastUsed ?? "",
+        recentMessages: sessionData?.recentMessages ?? [],
+      });
+    }
+
+    for (const s of sessionAgents ?? []) {
+      if (!addedNames.has(s.agentName.toLowerCase())) {
+        addedNames.add(s.agentName.toLowerCase());
+        result.push({
+          agentName: s.agentName,
+          agentRole: "",
+          status: "Unassigned",
+          sessionCount: s.sessionCount,
+          totalMessages: s.totalMessages,
+          lastUsed: s.lastUsed,
+          recentMessages: s.recentMessages,
+        });
+      }
+    }
+
+    return result;
+  }, [email, sessionAgents, overrideAgents]);
+
+  const generateReport = () => {
+    const dateLabel = date ? format(date, "MMM d, yyyy") : format(new Date(), "MMM d, yyyy");
+    const lines: string[] = [];
+
+    lines.push(`🤖 Agent Activity Report — ${userName}`);
+    lines.push(`📅 Date: ${dateLabel}`);
+    lines.push("");
+
+    for (const agent of mergedAgents) {
+      const roleLabel = agent.agentRole ? ` (${agent.agentRole})` : "";
+      lines.push(`── ${agent.agentName}${roleLabel} ──`);
+      lines.push(`  Status: ${agent.status}`);
+
+      if (agent.sessionCount > 0) {
+        const lastActive = agent.lastUsed
+          ? formatDateInTimezone(new Date(agent.lastUsed), timezone, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", hour12: true })
+          : "N/A";
+        lines.push(`  Sessions: ${agent.sessionCount} | Messages: ${agent.totalMessages} | Last Active: ${lastActive}`);
+
+        if (agent.recentMessages.length > 0) {
+          lines.push("  Recent:");
+          for (const msg of agent.recentMessages.slice(0, 5)) {
+            const sender = msg.role === "user" ? "User" : agent.agentName;
+            const content = msg.content.length > 120 ? msg.content.slice(0, 120) + "…" : msg.content;
+            lines.push(`    • [${sender}] ${content}`);
+          }
+        }
+      } else {
+        lines.push("  Sessions: 0 | No activity today");
+      }
+
+      lines.push("");
+    }
+
+    if (!mergedAgents.length) {
+      lines.push("No agents assigned or active.");
+    }
+
+    return lines.join("\n");
+  };
+
+  const handleCopy = async () => {
+    if (!reportText) return;
+    await navigator.clipboard.writeText(reportText);
+    setCopied(true);
+    sonnerToast.success("Report copied to clipboard");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setReportText(generateReport());
+        }}
+        className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+        title="Generate agents report"
+      >
+        <ClipboardList className="w-3.5 h-3.5" />
+      </button>
+
+      <Dialog open={!!reportText} onOpenChange={(open) => { if (!open) setReportText(null); }}>
+        <DialogContent className="max-w-2xl w-full flex flex-col max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider">
+              🤖 Agent Report — {userName}
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="flex-1 min-h-0 rounded-md border border-border bg-muted/30 p-4">
+            <pre className="text-[12px] leading-6 font-mono text-foreground whitespace-pre-wrap break-words">
+              {reportText}
+            </pre>
+          </ScrollArea>
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={handleCopy}>
+              {copied ? (
+                <><Check className="w-3.5 h-3.5 text-emerald-500" /> Copied!</>
+              ) : (
+                <><Copy className="w-3.5 h-3.5" /> Copy to Clipboard</>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 /** Human-readable event label mapping */
 function humanLabel(eventType: string, description?: string | null): string {
   const map: Record<string, string> = {
@@ -1955,9 +2119,11 @@ export function VizzyBrainPanel({ onClose }: Props) {
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <UserFullReportButton
-                      profile={selectedProfile}
-                      timezone={timezone}
+                    <UserAgentsFullReportButton
+                      userId={selectedProfile.user_id}
+                      userName={selectedProfile.full_name?.split(" ")[0] || "User"}
+                      email={selectedProfile.email}
+                      overrideAgents={accessOverride?.agents}
                       date={userSelectedDate}
                     />
                   </div>
