@@ -45,6 +45,7 @@ const activityIcons: Record<string, React.ElementType> = {
   follow_up: Clock,
   stage_change: ArrowRight,
   system: Zap,
+  quotation: FileText,
 };
 
 function getInitials(name: string): string {
