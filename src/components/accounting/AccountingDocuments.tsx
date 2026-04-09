@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, Sparkles, ChevronDown, Trash2 } from "lucide-react";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, Sparkles, ChevronDown, Trash2, ArrowLeft } from "lucide-react";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
@@ -75,6 +75,7 @@ const INTERNAL_STATUS_BADGE_COLORS: Record<string, string> = {
 const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed"];
 
 export function AccountingDocuments({ data, initialDocType }: Props) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
@@ -292,6 +293,16 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
 
   return (
     <div className="space-y-4">
+      {leadIdParam && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1 text-muted-foreground hover:text-foreground"
+          onClick={() => navigate(`/sales/pipeline?lead=${leadIdParam}`)}
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Lead
+        </Button>
+      )}
       {/* Doc type tabs */}
       <div className="flex gap-2 flex-wrap items-center">
         {docTabs.map((tab) => (
