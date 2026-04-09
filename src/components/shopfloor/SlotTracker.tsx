@@ -342,7 +342,7 @@ export function SlotTracker({
         {/* Record stroke */}
         {activeSlots.length > 0 && canWrite && (
           <Button
-            className="flex-1 gap-2 font-bold h-12 text-base justify-between px-4"
+            className="flex-1 gap-2 font-bold h-16 text-base justify-between px-4"
             onClick={onRecordStroke}
           >
             <span className="flex items-center gap-2">
