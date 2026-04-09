@@ -2801,21 +2801,25 @@ async function handleGetCustomerIncome(supabase: ReturnType<typeof createClient>
 // ─── Cash Flow Report ─────────────────────────────────────────────
 
 async function handleGetCashFlow(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
-  const config = await getQBConfig(supabase, userId);
-  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
-  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
-  const data = await qbFetch(config, `reports/CashFlow?start_date=${startDate}&end_date=${endDate}`);
-  return jsonRes({ report: data });
+  return withReportFallback("CashFlow", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/CashFlow?start_date=${startDate}&end_date=${endDate}`);
+    return jsonRes({ report: data });
+  });
 }
 
 // ─── Tax Summary Report ───────────────────────────────────────────
 
 async function handleGetTaxSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
-  const config = await getQBConfig(supabase, userId);
-  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
-  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
-  const data = await qbFetch(config, `reports/TaxSummary?start_date=${startDate}&end_date=${endDate}`);
-  return jsonRes({ report: data });
+  return withReportFallback("TaxSummary", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/TaxSummary?start_date=${startDate}&end_date=${endDate}`);
+    return jsonRes({ report: data });
+  });
 }
 
 // ─── Bill Payments ────────────────────────────────────────────────
