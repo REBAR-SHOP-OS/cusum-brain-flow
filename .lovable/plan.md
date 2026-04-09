@@ -1,33 +1,62 @@
 
 
-# Delete TYPE T3a and Add TYPE T3 + TYPE T3A
+# Fix: LinkedIn Publishing Failed — Organization ID Not Configured
 
-## Current State
-- One record exists: `TYPE T3a` (id: `c4aa6c87-...`) — needs to be deleted
+## Problem
+LinkedIn posts fail with: *"LinkedIn organization ID not configured for 'Rebar.shop Ontario, Rebar.shop, Sattar Esmaeili-Oureh'"*
 
-## Steps
+## Root Cause (Two Issues)
 
-### Step 1 — Upload Images to Storage
-Upload the two user-provided images to the `shape-schematics` bucket:
-- `user-uploads://image-377.png` → `TYPE_T3.png` (T3 — simple hoop with G=LAP, C=CIRCUM, O)
-- `user-uploads://image-378.png` → `TYPE_T3A.png` (T3A — hoop with K=LAP, A, G, C=CIRCUM, O)
+### Issue 1 — Personal profile not detected in comma-separated page_name
+Both `social-publish` and `social-cron-publish` check:
+```ts
+const isPersonal = !pageName || pageName === "Sattar Esmaeili-Oureh";
+```
+When `page_name` is `"Rebar.shop Ontario, Rebar.shop, Sattar Esmaeili-Oureh"`, `isPersonal` is `false`. The code falls through to the org branch, which has no `organization_ids` and fails.
 
-### Step 2 — Delete Old Record
-```sql
-DELETE FROM custom_shape_schematics WHERE id = 'c4aa6c87-b9b2-4c05-9760-b93a04e1dcdc';
+### Issue 2 — LinkedIn connection missing org scopes
+The two existing LinkedIn connections have scope `w_member_social` only. The OAuth flow requests `w_organization_social` and `r_organization_social`, but these connections were created before that code was added. Without those scopes, the auto-discovery of organization IDs cannot work.
+
+## Fix
+
+### Step 1 — Code: Smarter personal vs org detection (2 files)
+
+**Files:** `supabase/functions/social-publish/index.ts` and `supabase/functions/social-cron-publish/index.ts`
+
+Replace the rigid `isPersonal` check with logic that splits comma-separated pages and handles the personal profile name correctly:
+
+```ts
+// Before:
+const isPersonal = !pageName || pageName === "Sattar Esmaeili-Oureh";
+
+// After:
+const pageList = (pageName || "").split(",").map(s => s.trim()).filter(Boolean);
+const personalName = config.profile_name || "Sattar Esmaeili-Oureh";
+const isPersonal = pageList.length === 0 || (pageList.length === 1 && pageList[0] === personalName);
+
+// For org publishing, filter out the personal name from the page list
+const orgPages = pageList.filter(p => p !== personalName);
 ```
 
-### Step 3 — Insert Two New Records
-```sql
-INSERT INTO custom_shape_schematics (shape_code, image_url, ai_analysis, uploaded_by)
-VALUES
-  ('TYPE T3', '<storage_url>/TYPE_T3.png', '{"shape_code":"T3","confidence":1,"description":"Hoop or spiral shape with lap (G=LAP), circumference (C=CIRCUM), and diameter (O)."}', 'system'),
-  ('TYPE T3A', '<storage_url>/TYPE_T3A.png', '{"shape_code":"T3A","confidence":1,"description":"Hoop or spiral shape with lap (K=LAP), internal dimensions (A, G), circumference (C=CIRCUM), and diameter (O)."}', 'system');
-```
+Then when looking up org IDs, iterate only over `orgPages` instead of the full comma-separated string.
 
-### Result
-- `TYPE T3a` removed
-- `TYPE T3` added (simple hoop)
-- `TYPE T3A` added (hoop with A/G internal dimensions)
-- No code changes needed — UI reads dynamically from the database
+### Step 2 — Reconnect LinkedIn with organization scopes
+
+After deploying the code fix, LinkedIn must be reconnected so the OAuth flow grants `w_organization_social` + `r_organization_social` and auto-discovers org IDs for "Rebar.shop Ontario" and "Rebar.shop".
+
+### Step 3 — Retry failed posts
+
+Once reconnected, the failed LinkedIn posts can be retried using the existing "Retry Publishing" button.
+
+## Files Changed
+
+| File | Change |
+|---|---|
+| `supabase/functions/social-publish/index.ts` | Fix `isPersonal` detection + filter org pages |
+| `supabase/functions/social-cron-publish/index.ts` | Same fix |
+
+## What Won't Change
+- OAuth flow already requests correct scopes (line 198 in `linkedin-oauth`)
+- Auto-discovery logic already works in callback
+- No database changes needed
 
