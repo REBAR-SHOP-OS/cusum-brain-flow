@@ -85,11 +85,6 @@ export default function SalesLeadDrawer({ lead, open, onClose, onUpdate, onDelet
                 {lead.title}
               </SheetTitle>
             </SheetHeader>
-            <div className="flex items-center gap-1 shrink-0">
-              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onClose()}>
-                <X className="w-3.5 h-3.5" />
-              </Button>
-            </div>
           </div>
 
           {/* Badges */}
