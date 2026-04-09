@@ -269,10 +269,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Agent Suggestions (replaces Quick Actions) */}
-        <div className="relative z-10 w-full mb-6 sm:mb-12">
-          <AgentSuggestionsPanel agentCode={agentSuggestion.code} agentName={agentSuggestion.name} isSuperAdmin={isSuperAdmin} />
-        </div>
 
         {/* Workspaces Section */}
         {user?.email?.toLowerCase() !== "ben@rebar.shop" && (
