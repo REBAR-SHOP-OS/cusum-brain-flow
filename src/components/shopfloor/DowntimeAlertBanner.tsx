@@ -1,6 +1,14 @@
 import { useMemo } from "react";
-import { AlertTriangle, Clock } from "lucide-react";
+import { AlertTriangle, Clock, Pause } from "lucide-react";
 import type { LiveMachine } from "@/types/machine";
+
+function formatTime(dateStr: string): string {
+  return new Date(dateStr).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
 
 interface DowntimeAlertBannerProps {
   machines: LiveMachine[];
@@ -45,17 +53,27 @@ export function DowntimeAlertBanner({ machines }: DowntimeAlertBannerProps) {
           )}
         </div>
       ))}
-      {idleMachines.map((m) => (
-        <div
-          key={m.id}
-          className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-warning/10 border border-warning/30"
-        >
-          <Clock className="w-4 h-4 text-warning shrink-0" />
-          <span className="text-sm font-bold text-warning">
-            {m.name} idle for {minutesSince(m.last_event_at)}+ min
-          </span>
-        </div>
-      ))}
+      {idleMachines.map((m) => {
+        const mins = minutesSince(m.last_event_at);
+        const isPaused = mins > 5;
+        return (
+          <div
+            key={m.id}
+            className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-warning/10 border border-warning/30"
+          >
+            {isPaused ? (
+              <Pause className="w-4 h-4 text-warning shrink-0" />
+            ) : (
+              <Clock className="w-4 h-4 text-warning shrink-0" />
+            )}
+            <span className="text-sm font-bold text-warning">
+              {isPaused
+                ? `${m.name} idle – paused since ${formatTime(m.last_event_at!)}`
+                : `${m.name} idle for ${mins}+ min`}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
