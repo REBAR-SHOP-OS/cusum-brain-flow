@@ -220,9 +220,10 @@ Instructions:
           contentParts.push({ type: "image_url", image_url: { url: referenceImage } });
         }
 
-        // Retry loop for rate limits
+        // Retry loop for rate limits (5 attempts with exponential backoff)
         let resp: Response | null = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
+        const maxAttempts = 5;
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
           resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -239,9 +240,9 @@ Instructions:
             }),
           });
 
-          if (resp.status !== 429 || attempt === 2) break;
-          const wait = (attempt + 1) * 2000;
-          console.log(`Rate limited on edit attempt ${attempt + 1}, waiting ${wait}ms...`);
+          if (resp.status !== 429 || attempt === maxAttempts - 1) break;
+          const wait = Math.min(3000 * Math.pow(2, attempt), 20000);
+          console.log(`Rate limited on edit attempt ${attempt + 1}/${maxAttempts}, waiting ${wait}ms...`);
           await new Promise(r => setTimeout(r, wait));
         }
 
