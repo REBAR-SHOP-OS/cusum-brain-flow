@@ -100,10 +100,7 @@ export default function Home() {
   const { user } = useAuth();
   const { isSuperAdmin } = useSuperAdmin();
 
-  // Device accounts must never see the dashboard — redirect before any UI renders
-  if (user?.email && ACCESS_POLICIES.shopfloorDevices.includes(user.email.toLowerCase())) {
-    return <Navigate to="/shop-floor" replace />;
-  }
+  const isShopfloorDevice = !!user?.email && ACCESS_POLICIES.shopfloorDevices.includes(user.email.toLowerCase());
 
   useEffect(() => {
     if (isTablet && !isSuperAdmin && !ACCESS_POLICIES.blockedFromShopFloor.includes(user?.email?.toLowerCase() ?? "")) {
@@ -148,6 +145,11 @@ export default function Home() {
   const handleHelperClick = (helper: Helper) => {
     navigate(helper.route);
   };
+
+  // Device accounts must never see the dashboard — redirect before any UI renders
+  if (isShopfloorDevice) {
+    return <Navigate to="/shop-floor" replace />;
+  }
 
   // heroTitle is now rendered inline in JSX (no dangerouslySetInnerHTML)
 
