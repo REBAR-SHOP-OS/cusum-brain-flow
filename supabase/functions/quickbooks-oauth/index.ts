@@ -954,7 +954,21 @@ async function handleCheckStatus(
     }
   }
 
-  return jsonRes({ status: "connected", realmId: config.realm_id });
+  // Quick report-access probe
+  let reportAccess = "unknown";
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    await qbFetch(config, `reports/ProfitAndLoss?start_date=${today}&end_date=${today}`, undefined, 0, config._refreshContext);
+    reportAccess = "granted";
+  } catch (err) {
+    if (String(err).includes("5020") || String(err).includes("Permission Denied")) {
+      reportAccess = "denied";
+    } else {
+      reportAccess = "error";
+    }
+  }
+
+  return jsonRes({ status: "connected", realmId: config.realm_id, reportAccess });
 }
 
 // ─── Disconnect ────────────────────────────────────────────────────

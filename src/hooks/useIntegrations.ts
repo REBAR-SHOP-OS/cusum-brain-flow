@@ -219,13 +219,21 @@ export function useIntegrations() {
 
         if (statusError) throw new Error(statusError.message);
 
+        const reportWarning = statusData.reportAccess === "denied"
+          ? "Connected, but report access is denied. The authorizing user needs Admin-level access in QuickBooks."
+          : undefined;
+
+        if (reportWarning) {
+          toast({ title: "QuickBooks Report Access Denied", description: "The authorizing user needs Admin-level access in QuickBooks.", variant: "destructive" });
+        }
+
         setIntegrations((prev) =>
           prev.map((i) =>
             i.id === "quickbooks"
               ? {
                   ...i,
                   status: statusData.status,
-                  error: statusData.error,
+                  error: reportWarning || statusData.error,
                   lastSync: statusData.status === "connected" ? new Date().toLocaleTimeString() : undefined,
                 }
               : i
