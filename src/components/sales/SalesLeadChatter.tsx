@@ -17,6 +17,7 @@ import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { InlineFileLink } from "@/components/pipeline/InlineFileLink";
+import { useNavigate } from "react-router-dom";
 
 interface Props {
   salesLeadId: string;
