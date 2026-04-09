@@ -1236,105 +1236,54 @@ function TeamDailyReport({
         />
       </div>
       <div className="p-3">
-        <Accordion type="multiple" className="w-full space-y-1">
+        <div className="w-full space-y-1">
           {sorted.map((p) => {
             const d = data[p.id];
             const activities = d?.activities ?? [];
-            const clockEntries = d?.clockEntries ?? [];
             const firstName = p.full_name?.split(" ")[0] || "User";
-            const firstClock = clockEntries.length > 0 ? clockEntries[clockEntries.length - 1] : null;
-            const lastClock = clockEntries.length > 0 ? clockEntries[0] : null;
 
             return (
-              <AccordionItem
+              <SectionDetailReportDialog
                 key={p.id}
-                value={`team-${p.id}`}
-                className="border border-border rounded-lg px-3"
-              >
-                <div className="flex items-center">
-                  <AccordionTrigger className="text-sm font-medium hover:no-underline flex-1">
-                    <span className="flex items-center gap-2 flex-1">
-                      <span className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
-                        {firstName.charAt(0).toUpperCase()}
-                      </span>
-                      <span>{firstName}</span>
-                      <span className="text-xs text-muted-foreground font-normal">
-                        ({activities.length} activit{activities.length !== 1 ? "ies" : "y"})
-                      </span>
-                      {d?.hoursToday != null && d.hoursToday > 0 && (
-                        <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                          <Clock className="w-3 h-3" />{d.hoursToday.toFixed(1)}h
-                        </span>
-                      )}
-                      {d?.aiSessionsToday != null && d.aiSessionsToday > 0 && (
-                        <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                          <Sparkles className="w-3 h-3" />{d.aiSessionsToday}
-                        </span>
-                      )}
-                      {d?.emailsSent != null && d.emailsSent > 0 && (
-                        <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
-                          <Mail className="w-3 h-3" />{d.emailsSent}
-                        </span>
-                      )}
+                sectionType="overview"
+                profileId={p.id}
+                userId={p.user_id || null}
+                userName={firstName}
+                date={selectedDate}
+                timezone={timezone}
+                renderTrigger={(openDialog) => (
+                  <button
+                    onClick={openDialog}
+                    className="w-full border border-border rounded-lg px-3 py-2.5 flex items-center gap-2 text-sm font-medium hover:bg-muted/50 transition-colors text-left cursor-pointer"
+                  >
+                    <span className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+                      {firstName.charAt(0).toUpperCase()}
                     </span>
-                  </AccordionTrigger>
-                  <SectionDetailReportDialog
-                    sectionType="overview"
-                    profileId={p.id}
-                    userId={p.user_id || null}
-                    userName={firstName}
-                    date={selectedDate}
-                    timezone={timezone}
-                  />
-                </div>
-                <AccordionContent>
-                  <div className="space-y-2 pt-1">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 rounded-md px-3 py-1.5">
-                      <Clock className="w-3.5 h-3.5 text-primary" />
-                      {firstClock ? (
-                        <span>
-                          {formatDateInTimezone(new Date(firstClock.clock_in), timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
-                          {" → "}
-                          {lastClock?.clock_out ? (
-                            formatDateInTimezone(new Date(lastClock.clock_out), timezone, { hour: "numeric", minute: "2-digit", hour12: true })
-                          ) : (
-                            <span className="text-[10px] bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded-full font-medium">Still working</span>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="italic">Not clocked in today</span>
-                      )}
-                    </div>
-                    {activities.length > 0 ? (
-                      <div className="space-y-1 max-h-48 overflow-y-auto">
-                        {activities.map((a) => (
-                          <div key={a.id} className="flex items-start gap-2 rounded border border-border bg-card p-2">
-                            <Activity className="w-3.5 h-3.5 mt-0.5 text-primary shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                                <span className="font-medium text-foreground">{a.event_type}</span>
-                                <span>·</span>
-                                <span>{a.entity_type}</span>
-                                <span className="ml-auto">
-                                  {formatDateInTimezone(new Date(a.created_at), timezone, { hour: "numeric", minute: "2-digit", hour12: true })}
-                                </span>
-                              </div>
-                              {a.description && (
-                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{a.description}</p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic text-center py-2">No activities today</p>
+                    <span>{firstName}</span>
+                    <span className="text-xs text-muted-foreground font-normal">
+                      ({activities.length} activit{activities.length !== 1 ? "ies" : "y"})
+                    </span>
+                    {d?.hoursToday != null && d.hoursToday > 0 && (
+                      <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Clock className="w-3 h-3" />{d.hoursToday.toFixed(1)}h
+                      </span>
                     )}
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
+                    {d?.aiSessionsToday != null && d.aiSessionsToday > 0 && (
+                      <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />{d.aiSessionsToday}
+                      </span>
+                    )}
+                    {d?.emailsSent != null && d.emailsSent > 0 && (
+                      <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Mail className="w-3 h-3" />{d.emailsSent}
+                      </span>
+                    )}
+                  </button>
+                )}
+              />
             );
           })}
-        </Accordion>
+        </div>
       </div>
     </div>
   );
