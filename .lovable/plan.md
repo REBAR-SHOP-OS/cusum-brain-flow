@@ -1,42 +1,33 @@
 
 
-# Fix: QuickBooks Report Calls Fail with "User has no company assigned"
+# Create Missing CON-FRAME Invoice #1971 Task for Vicky
 
-## Root Cause
-
-When Vizzy (admin-chat) calls `quickbooks-oauth` to fetch a live report, it passes:
-- `Authorization: Bearer ${serviceRoleKey}` (not a real user token)
-- `x-qb-user-id: <actual-user-id>` header
-
-The `quickbooks-oauth` function stores the override as `body._qbUserId` (line 486-488), but then passes the original `ctx.userId` (from the service role token — which has no profile row) to all report handlers. Only `handleCreateInvoice` actually checks for `body._qbUserId`.
-
-So every report handler calls `getUserCompanyId(supabase, serviceRoleUserId)` → profile not found → **"User has no company assigned"**.
+## Problem
+Vizzy claimed it created the task "Investigate Unpaid CON-FRAME Invoice #1971" for Vicky Anderson, but the database confirms it was **never actually inserted**. Vicky's profile ID is `e82c7ca3-126f-4f88-a368-4774aa8d450e`. The task does not exist.
 
 ## Fix
+**Direct database insert** — create the task now via a migration or edge function call.
 
-**File: `supabase/functions/quickbooks-oauth/index.ts`**, lines 480-488
+Insert into the `tasks` table:
 
-After resolving `qbUserIdOverride`, override the `userId` variable itself so ALL downstream handlers automatically use the correct user:
-
-```typescript
-// Line ~482-488 — replace current block:
-let effectiveUserId = ctx.userId;
-const qbUserIdOverride = rawReq.headers.get("x-qb-user-id");
-if (qbUserIdOverride) {
-  effectiveUserId = qbUserIdOverride;
-  body._qbUserId = qbUserIdOverride;
-}
+```sql
+INSERT INTO tasks (title, description, assigned_to, priority, due_date, status, company_id, source)
+SELECT
+  'Investigate Unpaid CON-FRAME Invoice #1971',
+  'Please investigate why invoice #1971 for $8,362.00, due Nov 18, 2025, remains unpaid. CON-FRAME LTD is an active customer and has paid many invoices issued after this one. Find the root cause (e.g., dispute, lost invoice, error) and recommend the next action.',
+  'e82c7ca3-126f-4f88-a368-4774aa8d450e',
+  'high',
+  '2026-04-09',
+  'open',
+  company_id,
+  'vizzy'
+FROM profiles
+WHERE id = 'e82c7ca3-126f-4f88-a368-4774aa8d450e';
 ```
 
-Then replace all occurrences of `userId` in the switch-case routing (lines 516-690) with `effectiveUserId`. This is a single variable rename at the top — every `handleXxx(supabase, userId, ...)` call automatically gets the correct user.
-
-## Files Modified
-| File | Change |
-|------|--------|
-| `supabase/functions/quickbooks-oauth/index.ts` | Use `effectiveUserId` from `x-qb-user-id` header for all handler routing |
+This uses a subquery to get the correct `company_id` from Vicky's profile.
 
 ## Result
-- All QB report calls from Vizzy will correctly resolve the CEO's company and QB connection
-- No more "User has no company assigned" errors
-- Existing direct-user calls unaffected (effectiveUserId = ctx.userId when no override header)
+- Task will appear immediately in Vicky's column on the Employee Tasks board
+- Realtime subscription will highlight it with the green glow animation
 
