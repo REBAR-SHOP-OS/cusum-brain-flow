@@ -182,6 +182,11 @@ export default function AgentWorkspace() {
           .join("\n");
         replyContent += `\n\n---\n📋 **Created ${undelivered.createdNotifications.length} item(s):**\n${notifSummary}`;
       }
+      if (undelivered.createdTasks?.length) {
+        const taskSummary = undelivered.createdTasks
+          .map((t: any) => `✅ **${t.title}** → ${t.assigned_to}`)
+          .join("\n");
+        replyContent += `\n\n---\n📋 **Created ${undelivered.createdTasks.length} task(s):**\n${taskSummary}`;
       setMessages((prev) => [...prev, {
         id: crypto.randomUUID(),
         role: "agent",
@@ -204,6 +209,11 @@ export default function AgentWorkspace() {
           .join("\n");
         replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
       }
+      if (response.createdTasks?.length) {
+        const taskSummary = response.createdTasks
+          .map((t: any) => `✅ **${t.title}** → ${t.assigned_to}`)
+          .join("\n");
+        replyContent += `\n\n---\n📋 **Created ${response.createdTasks.length} task(s):**\n${taskSummary}`;
       if (agentId === "social" && response.nextSlot) {
         setPendingPixelSlot(response.nextSlot);
       }
@@ -435,6 +445,13 @@ export default function AgentWorkspace() {
             .map((n) => `${n.type === "todo" ? "✅" : n.type === "idea" ? "💡" : "🔔"} **${n.title}**${n.assigned_to_name ? ` → ${n.assigned_to_name}` : ""}`)
             .join("\n");
           replyContent += `\n\n---\n📋 **Created ${response.createdNotifications.length} item(s):**\n${notifSummary}`;
+        }
+
+        if (response.createdTasks?.length) {
+          const taskSummary = response.createdTasks
+            .map((t: any) => `✅ **${t.title}** → ${t.assigned_to}`)
+            .join("\n");
+          replyContent += `\n\n---\n📋 **Created ${response.createdTasks.length} task(s):**\n${taskSummary}`;
         }
 
         const agentMsg: Message = {
