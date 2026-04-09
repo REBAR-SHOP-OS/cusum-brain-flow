@@ -54,6 +54,63 @@ export async function executeToolCall(
       result.sideEffects.notifications = notifications;
     }
 
+    // 1b. Create Employee Task (on Tasks board)
+    else if (name === "create_employee_task") {
+      let assignedTo: string | null = null;
+      const assigneeName = args.assigned_to_name;
+      
+      if (assigneeName && context.availableEmployees) {
+        const match = context.availableEmployees.find((e: any) =>
+          e.name.toLowerCase().includes(assigneeName.toLowerCase())
+        );
+        if (match) assignedTo = match.id;
+      }
+
+      if (!assignedTo) {
+        // Try direct profile lookup
+        const { data: profileMatch } = await svcClient
+          .from("profiles")
+          .select("id")
+          .ilike("full_name", `%${assigneeName}%`)
+          .eq("is_active", true)
+          .limit(1)
+          .maybeSingle();
+        if (profileMatch) assignedTo = profileMatch.id;
+      }
+
+      if (!assignedTo) {
+        result.result = { success: false, error: `Could not find employee "${assigneeName}"` };
+      } else {
+        // Get creator's profile id
+        let creatorProfileId: string | null = null;
+        const { data: creatorProfile } = await svcClient
+          .from("profiles")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (creatorProfile) creatorProfileId = creatorProfile.id;
+
+        const { data: inserted, error: taskErr } = await svcClient.from("tasks").insert({
+          title: args.title,
+          description: args.description || null,
+          assigned_to: assignedTo,
+          priority: args.priority || "medium",
+          due_date: args.due_date || null,
+          status: "open",
+          company_id: context.companyId,
+          created_by_profile_id: creatorProfileId,
+          source: "vizzy",
+        }).select("id, title").single();
+
+        if (taskErr) {
+          result.result = { success: false, error: taskErr.message };
+        } else {
+          result.result = { success: true, taskId: inserted.id, title: inserted.title, assignedTo: assigneeName };
+          result.sideEffects.tasks = [{ id: inserted.id, title: args.title, assigned_to: assigneeName }];
+        }
+      }
+    }
+
     // 2. Send Email
     else if (name === "send_email") {
       const emailRes = await fetch(
