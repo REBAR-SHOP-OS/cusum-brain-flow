@@ -1127,6 +1127,7 @@ Deno.serve((req) =>
     
     // Metrics
     const createdNotifications: any[] = [];
+    const createdTasks: any[] = [];
     const emailResults: any[] = [];
 
     // Main Loop
@@ -1148,6 +1149,7 @@ Deno.serve((req) =>
         
         // Track side effects
         if (result.sideEffects?.notifications) createdNotifications.push(...result.sideEffects.notifications);
+        if (result.sideEffects?.tasks) createdTasks.push(...result.sideEffects.tasks);
         if (result.sideEffects?.emails) emailResults.push(...result.sideEffects.emails);
         
         toolResults.push({
@@ -1314,6 +1316,7 @@ Deno.serve((req) =>
         context: mergedContext,
         modelUsed: modelConfig.model,
         createdNotifications,
+        createdTasks,
         emailsSent: emailResults,
         qaReview: qaFlags ? { pass: qaResult.pass, severity: qaResult.severity, flags: qaFlags } : undefined,
       }),
