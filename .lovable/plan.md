@@ -1,62 +1,27 @@
 
 
-# Fix: LinkedIn Publishing Failed — Organization ID Not Configured
+# Fix: Make "Add to Timeline" Button Visible and Consistent
 
 ## Problem
-LinkedIn posts fail with: *"LinkedIn organization ID not configured for 'Rebar.shop Ontario, Rebar.shop, Sattar Esmaeili-Oureh'"*
-
-## Root Cause (Two Issues)
-
-### Issue 1 — Personal profile not detected in comma-separated page_name
-Both `social-publish` and `social-cron-publish` check:
-```ts
-const isPersonal = !pageName || pageName === "Sattar Esmaeili-Oureh";
-```
-When `page_name` is `"Rebar.shop Ontario, Rebar.shop, Sattar Esmaeili-Oureh"`, `isPersonal` is `false`. The code falls through to the org branch, which has no `organization_ids` and fails.
-
-### Issue 2 — LinkedIn connection missing org scopes
-The two existing LinkedIn connections have scope `w_member_social` only. The OAuth flow requests `w_organization_social` and `r_organization_social`, but these connections were created before that code was added. Without those scopes, the auto-discovery of organization IDs cannot work.
+The "Add to Timeline" button uses `variant="ghost"` which is nearly invisible against the dark top bar. Other buttons (Save Draft, Send Email, Print/PDF) use solid/secondary/outline variants and are clearly visible.
 
 ## Fix
 
-### Step 1 — Code: Smarter personal vs org detection (2 files)
+### File: `src/components/accounting/documents/DraftQuotationEditor.tsx` (line 435)
 
-**Files:** `supabase/functions/social-publish/index.ts` and `supabase/functions/social-cron-publish/index.ts`
+Change the button variant from `ghost` to `outline` to match the style of "Print / PDF" and the close button:
 
-Replace the rigid `isPersonal` check with logic that splits comma-separated pages and handles the personal profile name correctly:
+```tsx
+// From:
+<Button size="sm" variant="ghost" onClick={...} className="gap-2" title="Add to Timeline">
+  <CalendarPlus className="w-4 h-4" /> Add to Timeline
+</Button>
 
-```ts
-// Before:
-const isPersonal = !pageName || pageName === "Sattar Esmaeili-Oureh";
-
-// After:
-const pageList = (pageName || "").split(",").map(s => s.trim()).filter(Boolean);
-const personalName = config.profile_name || "Sattar Esmaeili-Oureh";
-const isPersonal = pageList.length === 0 || (pageList.length === 1 && pageList[0] === personalName);
-
-// For org publishing, filter out the personal name from the page list
-const orgPages = pageList.filter(p => p !== personalName);
+// To:
+<Button size="sm" variant="outline" onClick={...} className="gap-2" title="Add to Timeline">
+  <CalendarPlus className="w-4 h-4" /> Add to Timeline
+</Button>
 ```
 
-Then when looking up org IDs, iterate only over `orgPages` instead of the full comma-separated string.
-
-### Step 2 — Reconnect LinkedIn with organization scopes
-
-After deploying the code fix, LinkedIn must be reconnected so the OAuth flow grants `w_organization_social` + `r_organization_social` and auto-discovers org IDs for "Rebar.shop Ontario" and "Rebar.shop".
-
-### Step 3 — Retry failed posts
-
-Once reconnected, the failed LinkedIn posts can be retried using the existing "Retry Publishing" button.
-
-## Files Changed
-
-| File | Change |
-|---|---|
-| `supabase/functions/social-publish/index.ts` | Fix `isPersonal` detection + filter org pages |
-| `supabase/functions/social-cron-publish/index.ts` | Same fix |
-
-## What Won't Change
-- OAuth flow already requests correct scopes (line 198 in `linkedin-oauth`)
-- Auto-discovery logic already works in callback
-- No database changes needed
+Single prop change in one file. No logic or database changes.
 
