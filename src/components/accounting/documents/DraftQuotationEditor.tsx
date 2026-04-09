@@ -5,7 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
-import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail, CalendarIcon } from "lucide-react";
+import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus, Mail, CalendarIcon, CalendarPlus } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
