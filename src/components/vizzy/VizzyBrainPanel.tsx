@@ -2317,6 +2317,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
           {renderContent()}
         </div>
       </motion.div>
+      {isSuperAdmin && (
+        <AddUserDialog
+          open={addUserOpen}
+          onOpenChange={setAddUserOpen}
+          adminEmail={user?.email ?? ""}
+        />
+      )}
     </motion.div>
   );
 }
