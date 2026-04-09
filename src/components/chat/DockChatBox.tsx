@@ -450,7 +450,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary underline break-all hover:opacity-80"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(part, '_blank', 'noopener'); }}
           >
             {part}
           </a>

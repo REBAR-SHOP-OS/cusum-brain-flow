@@ -305,6 +305,7 @@ export function MessageThread({
     const result: React.ReactNode[] = [];
 
     urlParts.forEach((segment, si) => {
+      urlRegex.lastIndex = 0;
       if (urlRegex.test(segment)) {
         urlRegex.lastIndex = 0;
         result.push(
@@ -314,7 +315,7 @@ export function MessageThread({
             target="_blank"
             rel="noopener noreferrer"
             className="text-primary hover:underline break-all"
-            onClick={(e) => e.stopPropagation()}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(segment, '_blank', 'noopener'); }}
           >
             {segment}
           </a>
