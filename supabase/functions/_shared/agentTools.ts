@@ -31,6 +31,24 @@ export function getTools(agent: string, stripSendCapabilities: boolean = false) 
           required: ["items"]
         }
       }
+    },
+    {
+      type: "function" as const,
+      function: {
+        name: "create_employee_task",
+        description: "Create a task on the Employee Tasks board assigned to a specific team member. Use this when the user asks to delegate, assign, or create a task for someone. The task will appear in the assignee's column on the Tasks board.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Short task title" },
+            description: { type: "string", description: "Detailed task description" },
+            assigned_to_name: { type: "string", description: "Full name of the employee to assign the task to (e.g. 'Vicky Anderson', 'Saurabh Seghal', 'Radin Lachini')" },
+            priority: { type: "string", enum: ["low", "medium", "high", "urgent"], description: "Task priority level" },
+            due_date: { type: "string", description: "Due date in YYYY-MM-DD format (optional)" }
+          },
+          required: ["title", "assigned_to_name"]
+        }
+      }
     }
   ];
 
