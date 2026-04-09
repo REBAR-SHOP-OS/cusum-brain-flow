@@ -1,33 +1,24 @@
 
 
-# Redirect ai@rebar.shop Directly to Shop Floor — Zero Flash
+# Fix Links Not Opening Correctly in Team Hub Chat
 
-## Problem
-When `ai@rebar.shop` logs in or navigates to `/home`, the Home dashboard briefly renders before `RoleGuard` redirects to `/shop-floor`. The user sees the dashboard flash for ~1 second.
+## Problems Found
 
-## Root Cause
-Three places redirect to `/home` without checking if the user is a shopfloor device:
-1. `Login.tsx` line 54: `<Navigate to="/home" replace />` after auth
-2. `Login.tsx` line 38: `navigate("/home")` after email/password sign-in
-3. `Home.tsx` renders its full dashboard before `RoleGuard` kicks in
+1. **Links open inside the iframe instead of a new browser tab** — `target="_blank"` on `<a>` tags inside the Lovable preview iframe can be blocked by the iframe sandbox. YouTube and similar sites refuse to load inside the frame, showing "ERR_BLOCKED_BY_RESPONSE". The fix is to use `window.open()` via an `onClick` handler instead of relying on the default `<a>` behavior.
+
+2. **Regex bug in MessageThread.tsx** — The `urlRegex` uses the `g` flag, but `test()` is called *before* resetting `lastIndex` (line 308-309). This causes alternating URLs to not be detected as links. The `lastIndex` reset needs to move before the `test()` call.
 
 ## Changes
 
-### 1. `src/pages/Login.tsx` — Redirect device accounts directly
-- In the `if (user)` check (line 53-54): if user email is in `ACCESS_POLICIES.shopfloorDevices`, redirect to `/shop-floor` instead of `/home`
-- In `handleSubmit` success (line 38): same check before `navigate("/home")`
-- In Google OAuth success: same check
+### File: `src/components/teamhub/MessageThread.tsx` (lines 298-320)
 
-### 2. `src/pages/Home.tsx` — Early bail for device accounts
-- At the top of the component, before any rendering: if `user?.email` is in `ACCESS_POLICIES.shopfloorDevices`, return `<Navigate to="/shop-floor" replace />` immediately
-- This is the safety net — even if someone navigates to `/home` directly, they get redirected before any dashboard UI renders
+1. **Fix regex lastIndex bug**: Move `urlRegex.lastIndex = 0` to *before* `urlRegex.test(segment)` (like DockChatBox already does correctly)
+2. **Force new tab with window.open()**: Change the `<a>` onClick handler to call `e.preventDefault(); window.open(segment, '_blank', 'noopener')` so links always open in a real browser tab, bypassing iframe restrictions
 
-## Files Modified
-| File | Change |
-|------|--------|
-| `src/pages/Login.tsx` | Route device accounts to `/shop-floor` instead of `/home` |
-| `src/pages/Home.tsx` | Early redirect before dashboard renders |
+### File: `src/components/chat/DockChatBox.tsx` (lines 441-456)
+
+1. **Force new tab with window.open()**: Same onClick fix — `e.preventDefault(); e.stopPropagation(); window.open(part, '_blank', 'noopener')` to ensure links open outside the iframe
 
 ## Result
-`ai@rebar.shop` never sees the dashboard — not even for a frame. All paths (login, direct URL, OAuth) go straight to `/shop-floor`.
+All URLs shared in Team Hub and the dock chat widget will open in a new browser tab reliably, even when the app runs inside the Lovable preview iframe.
 
