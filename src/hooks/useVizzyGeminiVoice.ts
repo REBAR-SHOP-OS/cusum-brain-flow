@@ -269,6 +269,21 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
   // Keep speechRef in sync for pause/resume
   speechRef.current = speech;
 
+  // Restart STT when language changes mid-session
+  const prevLangRef = useRef(lang);
+  useEffect(() => {
+    if (prevLangRef.current !== lang && activeRef.current && !suppressSTTRef.current) {
+      speech.stop();
+      // Small delay to let browser release mic before restarting
+      setTimeout(() => {
+        if (activeRef.current && !suppressSTTRef.current) {
+          speech.start();
+        }
+      }, 200);
+    }
+    prevLangRef.current = lang;
+  }, [lang, speech]);
+
   const startSession = useCallback(async () => {
     setState("connecting");
     setErrorDetail(null);
