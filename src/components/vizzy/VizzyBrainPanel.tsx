@@ -2039,7 +2039,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/60 backdrop-blur-sm"
       style={{ pointerEvents: "auto" }}
-      onClick={onClose}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <motion.div
         initial={{ scale: 0.9, opacity: 0, y: 40 }}
