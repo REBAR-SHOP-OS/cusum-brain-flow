@@ -214,6 +214,7 @@ export default function AgentWorkspace() {
           .map((t: any) => `✅ **${t.title}** → ${t.assigned_to}`)
           .join("\n");
         replyContent += `\n\n---\n📋 **Created ${response.createdTasks.length} task(s):**\n${taskSummary}`;
+      }
       if (agentId === "social" && response.nextSlot) {
         setPendingPixelSlot(response.nextSlot);
       }
