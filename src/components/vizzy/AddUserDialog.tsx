@@ -85,6 +85,8 @@ export function AddUserDialog({ open, onOpenChange, adminEmail }: AddUserDialogP
       <DialogPortal>
         <DialogOverlay className="z-[100001]" />
         <DialogPrimitive.Content
+          onInteractOutside={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => e.preventDefault()}
           className="fixed left-[50%] top-[50%] z-[100002] grid w-full max-w-md translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg"
         >
           <DialogHeader>
