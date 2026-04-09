@@ -75,6 +75,7 @@ const INTERNAL_STATUS_BADGE_COLORS: Record<string, string> = {
 const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed"];
 
 export function AccountingDocuments({ data, initialDocType }: Props) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
