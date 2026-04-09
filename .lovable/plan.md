@@ -1,28 +1,53 @@
 
-
-# Fix: Add User Dialog Closes When Typing Email
-
-## Problem
-When the user clicks on the email input field inside the Add User dialog, the dialog closes immediately. The screen "jumps out" — the dialog disappears.
+# Fix: Add User Dialog Still Closes When Clicking the Email Field
 
 ## Root Cause
-The `DialogPrimitive.Content` used in `AddUserDialog.tsx` lacks `onInteractOutside` and `onPointerDownOutside` event handlers. Radix Dialog treats certain pointer events as "outside interaction" and calls `onOpenChange(false)`. Because the dialog is rendered inside a high-z-index Vizzy Brain panel with complex layering, Radix's focus/interaction detection may misidentify clicks on the input as outside the dialog content.
+The problem is not the input itself anymore.
 
-## Fix
-
-### File: `src/components/vizzy/AddUserDialog.tsx` (line 87-88)
-
-Add `onInteractOutside` and `onPointerDownOutside` handlers to `DialogPrimitive.Content` to prevent the dialog from closing when interacting with elements inside it:
+`AddUserDialog` is rendered through a portal, but in React, click events from portal content still bubble through the React component tree. Since `VizzyBrainPanel` has this backdrop wrapper:
 
 ```tsx
-<DialogPrimitive.Content
-  onInteractOutside={(e) => e.preventDefault()}
-  onPointerDownOutside={(e) => e.preventDefault()}
-  className="fixed left-[50%] top-[50%] z-[100002] ..."
->
+<motion.div ... onClick={onClose}>
 ```
 
-This stops Radix from interpreting clicks inside the dialog (on the input, buttons, etc.) as "outside" interactions. The user can still close the dialog via Cancel, the X button, or pressing Escape.
+any click inside the Add User dialog can still reach that handler and close the whole panel. That is why the dialog still disappears when the user interacts with the email field.
 
-Single two-line addition in one file. No logic or database changes.
+## Fix
+Update the Vizzy Brain backdrop so it only closes when the user clicks the actual dark background, not any descendant or portal-based dialog.
 
+### File
+`src/components/vizzy/VizzyBrainPanel.tsx`
+
+### Change
+Replace:
+
+```tsx
+onClick={onClose}
+```
+
+with:
+
+```tsx
+onClick={(e) => {
+  if (e.target === e.currentTarget) onClose();
+}}
+```
+
+## Why This Works
+- Clicking the dark backdrop closes the panel as before
+- Clicking inside the main Vizzy panel does not close it
+- Clicking inside `AddUserDialog` no longer bubbles into a forced close
+- This is the correct fix for dialogs rendered via portal inside a clickable overlay parent
+
+## Optional Hardening
+Keep the existing protections in `AddUserDialog.tsx`:
+- `onInteractOutside={(e) => e.preventDefault()}`
+- `onPointerDownOutside={(e) => e.preventDefault()}`
+
+Those are still useful for Radix behavior, but the real bug is the parent backdrop click handler in `VizzyBrainPanel`.
+
+## Scope
+- 1 file change required for the actual fix
+- no database changes
+- no permission logic changes
+- minimal, safe UI fix
