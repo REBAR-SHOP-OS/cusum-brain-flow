@@ -35,8 +35,9 @@ import { useEagerReportPersistence } from "@/hooks/useEagerReportPersistence";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
-import { Cog } from "lucide-react";
+import { Cog, UserPlus } from "lucide-react";
 import { useUserAccessOverrides } from "@/hooks/useUserAccessOverrides";
+import { AddUserDialog } from "@/components/vizzy/AddUserDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const USER_AVATAR_COLORS = [
