@@ -551,6 +551,27 @@ export type Database = {
         }
         Relationships: []
       }
+      allowed_login_emails: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          email: string
+          id: string
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          email: string
+          id?: string
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+        }
+        Relationships: []
+      }
       automation_configs: {
         Row: {
           agent_name: string | null
