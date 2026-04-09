@@ -1152,12 +1152,15 @@ export default function Tasks() {
                         const isFeedbackVerification = (task as any).source === "feedback_verification";
                         return (
                         <div
+                          id={`task-${task.id}`}
                           key={task.id}
                           className={cn(
-                            "flex items-start gap-2 px-2.5 py-2 rounded-md border transition-colors group",
-                            isFeedbackVerification
-                              ? "bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50"
-                              : "bg-background border-border/50 hover:border-border"
+                            "flex items-start gap-2 px-2.5 py-2 rounded-md border transition-all group",
+                            highlightedTaskIds.has(task.id)
+                              ? "ring-2 ring-emerald-500 animate-pulse bg-emerald-500/15 border-emerald-500/50"
+                              : isFeedbackVerification
+                                ? "bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50"
+                                : "bg-background border-border/50 hover:border-border"
                           )}
                         >
                           {isFeedbackVerification ? (
