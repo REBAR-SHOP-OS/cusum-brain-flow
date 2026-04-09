@@ -20,9 +20,10 @@ export type GeminiVoiceState = "idle" | "connecting" | "connected" | "error";
 
 interface UseVizzyGeminiVoiceOptions {
   getSystemPrompt: () => string;
+  lang?: string; // BCP-47 language tag for STT, e.g. "en-US", "fa-IR"
 }
 
-export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOptions) {
+export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoiceOptions) {
   const [state, setState] = useState<GeminiVoiceState>("idle");
   const [transcripts, setTranscripts] = useState<VoiceTranscript[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -165,6 +166,14 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
         return;
       }
 
+      // If Gemini signals unclear input, silently discard the user transcript
+      if (fullResponse.trim() === "[UNCLEAR]") {
+        // Remove the user transcript we just added
+        setTranscripts((prev) => prev.filter((t) => t.id !== userTranscript.id));
+        conversationRef.current.pop(); // remove the user entry
+        return; // skip agent transcript + TTS entirely
+      }
+
       // Add agent transcript
       const agentTranscript: VoiceTranscript = {
         id: `vt-${++idCounter.current}`,
@@ -239,9 +248,10 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
     }
   }, [flushQueue]);
 
-  // Speech recognition — no lang set so browser auto-detects user's language
+  // Speech recognition with language support
   const speech = useSpeechRecognition({
     silenceTimeout: 2000,
+    lang: lang, // pass through for STT language
     onSilenceEnd: () => {
       // Ignore if STT is suppressed (Vizzy is speaking)
       if (suppressSTTRef.current) return;
