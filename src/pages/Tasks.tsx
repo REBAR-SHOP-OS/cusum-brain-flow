@@ -319,6 +319,9 @@ export default function Tasks() {
   const [fullScreenOpen, setFullScreenOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Highlighted new tasks (realtime)
+  const [highlightedTaskIds, setHighlightedTaskIds] = useState<Set<string>>(new Set());
+
   // Approval flow state
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
@@ -471,11 +474,33 @@ export default function Tasks() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tasks' },
-        () => { loadData(); }
+        (payload) => {
+          loadData();
+          if (payload.eventType === 'INSERT') {
+            const newTask = payload.new as any;
+            const taskId = newTask?.id;
+            if (taskId) {
+              setHighlightedTaskIds(prev => new Set(prev).add(taskId));
+              const assigneeName = employees.find(e => e.id === newTask.assigned_to)?.full_name || "Someone";
+              toast.success(`New task: ${newTask.title || "Untitled"} → ${assigneeName}`);
+              setTimeout(() => {
+                setHighlightedTaskIds(prev => {
+                  const next = new Set(prev);
+                  next.delete(taskId);
+                  return next;
+                });
+              }, 6000);
+              // Auto-scroll to new task after data loads
+              setTimeout(() => {
+                document.getElementById(`task-${taskId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }, 500);
+            }
+          }
+        }
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [loadData]);
+  }, [loadData, employees]);
 
   // ─── Audit log loading ────────────────────────────────
   const loadAudit = async (taskId: string) => {
