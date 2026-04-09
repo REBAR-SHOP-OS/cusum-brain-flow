@@ -691,6 +691,65 @@ async function publishToInstagram(
   }
 }
 
+/** Attempt to refresh a LinkedIn access token using the stored refresh_token */
+async function refreshLinkedInToken(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  config: Record<string, any>,
+): Promise<string | null> {
+  const refreshToken = config.refresh_token;
+  if (!refreshToken) {
+    console.error("[linkedin-refresh] No refresh_token stored");
+    return null;
+  }
+
+  const clientId = Deno.env.get("LINKEDIN_CLIENT_ID");
+  const clientSecret = Deno.env.get("LINKEDIN_CLIENT_SECRET");
+  if (!clientId || !clientSecret) {
+    console.error("[linkedin-refresh] Missing LINKEDIN_CLIENT_ID or LINKEDIN_CLIENT_SECRET");
+    return null;
+  }
+
+  try {
+    const res = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("[linkedin-refresh] Refresh failed:", res.status, errText);
+      return null;
+    }
+
+    const tokens = await res.json();
+    const newConfig = {
+      ...config,
+      access_token: tokens.access_token,
+      expires_at: Date.now() + (tokens.expires_in * 1000),
+      ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+    };
+
+    await supabase
+      .from("integration_connections")
+      .update({ config: newConfig, status: "connected", error_message: null })
+      .eq("user_id", userId)
+      .eq("integration_id", "linkedin");
+
+    console.log("[linkedin-refresh] Token refreshed successfully for user", userId);
+    return tokens.access_token;
+  } catch (err) {
+    console.error("[linkedin-refresh] Exception:", err);
+    return null;
+  }
+}
+
 async function publishToLinkedIn(
   supabase: ReturnType<typeof createClient>,
   userId: string,
@@ -730,11 +789,28 @@ async function publishToLinkedIn(
             .eq("integration_id", "linkedin")
             .maybeSingle();
           if (tmConn) {
-            const tmConfig = tmConn.config as { expires_at: number };
+            const tmConfig = tmConn.config as { expires_at: number; refresh_token?: string };
             if (tmConfig.expires_at > Date.now()) {
               connection = tmConn;
               console.log(`[social-publish] LinkedIn team fallback: using token from user ${tm.user_id}`);
               break;
+            }
+            // Try refresh for teammate token too
+            if (tmConfig.refresh_token) {
+              const newToken = await refreshLinkedInToken(supabase, tm.user_id, tmConfig as any);
+              if (newToken) {
+                const { data: refreshedConn } = await supabase
+                  .from("integration_connections")
+                  .select("config")
+                  .eq("user_id", tm.user_id)
+                  .eq("integration_id", "linkedin")
+                  .maybeSingle();
+                if (refreshedConn) {
+                  connection = refreshedConn;
+                  console.log(`[social-publish] LinkedIn team fallback: refreshed token for user ${tm.user_id}`);
+                  break;
+                }
+              }
             }
           }
         }
@@ -742,9 +818,16 @@ async function publishToLinkedIn(
 
       if (!connection) return { error: "LinkedIn not connected for any team member. Please connect from Settings → Integrations." };
     }
-    const config = connection.config as { access_token: string; expires_at: number; organization_ids?: Record<string, string> };
+    const config = connection.config as { access_token: string; expires_at: number; organization_ids?: Record<string, string>; refresh_token?: string };
 
-    if (config.expires_at < Date.now()) return { error: "LinkedIn token expired. Please reconnect." };
+    // Auto-refresh expired token
+    let accessToken = config.access_token;
+    if (config.expires_at < Date.now()) {
+      console.log("[social-publish] LinkedIn token expired, attempting refresh...");
+      const refreshed = await refreshLinkedInToken(supabase, userId, config as any);
+      if (!refreshed) return { error: "LinkedIn token expired and refresh failed. Please reconnect from Settings → Integrations." };
+      accessToken = refreshed;
+    }
 
     // Determine author URN based on page_name
     const isPersonal = !pageName || pageName === "Sattar Esmaeili-Oureh";
@@ -752,11 +835,33 @@ async function publishToLinkedIn(
 
     if (isPersonal) {
       const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
-        headers: { Authorization: `Bearer ${config.access_token}` },
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!profileRes.ok) return { error: "Failed to get LinkedIn identity" };
-      const profile = await profileRes.json();
-      authorUrn = `urn:li:person:${profile.sub}`;
+      if (!profileRes.ok) {
+        // If 401 on profile fetch, try refresh once
+        if (profileRes.status === 401) {
+          const refreshed = await refreshLinkedInToken(supabase, userId, config as any);
+          if (refreshed) {
+            accessToken = refreshed;
+            const retryRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (retryRes.ok) {
+              const profile = await retryRes.json();
+              authorUrn = `urn:li:person:${profile.sub}`;
+            } else {
+              return { error: "Failed to get LinkedIn identity after token refresh" };
+            }
+          } else {
+            return { error: "LinkedIn token expired and refresh failed. Please reconnect." };
+          }
+        } else {
+          return { error: "Failed to get LinkedIn identity" };
+        }
+      } else {
+        const profile = await profileRes.json();
+        authorUrn = `urn:li:person:${profile.sub}`;
+      }
     } else {
       // Company page publishing — look up org ID from config
       // page_name may be comma-separated (e.g. "Rebar.shop Ontario, Rebar.shop")
@@ -791,7 +896,7 @@ async function publishToLinkedIn(
         const registerRes = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${config.access_token}`,
+            Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -814,7 +919,7 @@ async function publishToLinkedIn(
               const imgBlob = await imgRes.blob();
               await fetch(uploadUrl, {
                 method: "PUT",
-                headers: { Authorization: `Bearer ${config.access_token}`, "Content-Type": imgBlob.type || "image/png" },
+                headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": imgBlob.type || "image/png" },
                 body: imgBlob,
               });
               payload.specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory = "IMAGE";
@@ -827,15 +932,29 @@ async function publishToLinkedIn(
       }
     }
 
-    const postRes = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+    // Post to LinkedIn with 401 retry
+    const doPost = async (token: string) => fetch("https://api.linkedin.com/v2/ugcPosts", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.access_token}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         "X-Restli-Protocol-Version": "2.0.0",
       },
       body: JSON.stringify(payload),
     });
+
+    let postRes = await doPost(accessToken);
+
+    // If 401, attempt token refresh and retry once
+    if (postRes.status === 401) {
+      console.log("[social-publish] LinkedIn ugcPosts returned 401, attempting token refresh...");
+      await postRes.text(); // consume body
+      const refreshed = await refreshLinkedInToken(supabase, userId, config as any);
+      if (refreshed) {
+        accessToken = refreshed;
+        postRes = await doPost(accessToken);
+      }
+    }
 
     if (!postRes.ok) {
       const errText = await postRes.text();

@@ -222,9 +222,55 @@ async function handleCheckStatus(supabase: ReturnType<typeof createClient>, user
     return jsonRes({ status: "available" });
   }
 
-  const config = connection.config as { access_token: string; expires_at: number; profile_name: string };
+  const config = connection.config as { access_token: string; expires_at: number; profile_name: string; refresh_token?: string };
 
   if (config.expires_at < Date.now()) {
+    // Attempt auto-refresh before marking as error
+    if (config.refresh_token) {
+      const clientId = Deno.env.get("LINKEDIN_CLIENT_ID");
+      const clientSecret = Deno.env.get("LINKEDIN_CLIENT_SECRET");
+
+      if (clientId && clientSecret) {
+        try {
+          const res = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              grant_type: "refresh_token",
+              refresh_token: config.refresh_token,
+              client_id: clientId,
+              client_secret: clientSecret,
+            }),
+          });
+
+          if (res.ok) {
+            const tokens = await res.json();
+            const newConfig = {
+              ...config,
+              access_token: tokens.access_token,
+              expires_at: Date.now() + (tokens.expires_in * 1000),
+              ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+            };
+
+            await supabase
+              .from("integration_connections")
+              .update({ config: newConfig, status: "connected", error_message: null, last_sync_at: new Date().toISOString() })
+              .eq("user_id", userId)
+              .eq("integration_id", "linkedin");
+
+            console.log("[linkedin-oauth] Token auto-refreshed during status check for user", userId);
+            return jsonRes({ status: "connected", profileName: config.profile_name });
+          } else {
+            const errText = await res.text();
+            console.error("[linkedin-oauth] Refresh failed during status check:", res.status, errText);
+          }
+        } catch (err) {
+          console.error("[linkedin-oauth] Refresh exception during status check:", err);
+        }
+      }
+    }
+
+    // Refresh failed or no refresh token — mark as error
     await supabase
       .from("integration_connections")
       .update({ status: "error", error_message: "Token expired, please reconnect" })
