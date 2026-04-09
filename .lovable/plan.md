@@ -1,26 +1,36 @@
 
 
-# Fix: Make Report Dialog Content Scrollable
+# Enhance Agent Report Dialog with Detailed English Summaries
 
 ## Problem
-The detailed report dialog has `ScrollArea` but it doesn't scroll properly because the `ScrollArea` has no bounded height — `flex-1` alone may not constrain it when content overflows.
+The current `AgentReportDialog` is minimal — it only shows domain metric numbers, session/message counts, and a user breakdown list. There is no narrative description of what the agent does, no performance assessment, and no actionable insights.
 
-## Fix
+## Solution
+Expand `AgentReportDialog` to include rich, detailed English content with:
+1. **Agent Description** — A static paragraph explaining the agent's purpose and capabilities
+2. **Performance Summary** — An auto-generated English narrative interpreting the metrics (e.g., "Blitz is managing 39 active leads with 137 hot enquiries requiring follow-up")
+3. **Domain Metrics** — Keep existing grid but add context labels
+4. **Activity Details** — Expanded: sessions, messages, users, last active time
+5. **User Breakdown** — Keep existing but add message percentages
+6. **Status Assessment** — Auto-generated health indicator (Active/Idle/Needs Attention)
 
-### File: `src/components/vizzy/SectionDetailReport.tsx` (line 854)
+## Technical Changes
 
-Change the `ScrollArea` wrapper to have an explicit constrained height so it activates scrolling:
+### File: `src/components/vizzy/VizzyBrainPanel.tsx`
 
-```tsx
-// Line 854: Change from
-<ScrollArea className="flex-1 pr-3 -mr-3">
+**1. Add `AGENT_DESCRIPTIONS` constant** (near `ALL_KNOWN_AGENTS`, ~line 1370)
+A Record mapping agent codes to detailed English descriptions of each agent's function, responsibilities, and key capabilities.
 
-// To
-<ScrollArea className="flex-1 min-h-0 pr-3 -mr-3">
-```
+**2. Rewrite `AgentReportDialog` component** (lines 1371–1469)
+- Add a "Role & Responsibilities" section with the agent description text
+- Add a "Performance Summary" section that generates a dynamic English paragraph based on domain stats and activity data (e.g., "Blitz currently tracks 39 active leads and 137 hot enquiries. Today, 3 users engaged in 5 sessions with 42 total messages.")
+- Add a "Status" badge: green "Active" if sessions > 0, yellow "Idle" if has domain items but no sessions, gray "No Activity"
+- Add "Last Active" timestamp when available
+- Keep existing Domain Metrics grid, User Breakdown list
+- Add "Copy Report" button that copies a plain-text English version to clipboard
+- Ensure `ScrollArea` has `min-h-0` for proper scrolling
+- Dialog width increased to `max-w-xl` for readability
 
-The key fix is adding `min-h-0` — in a flex column container, flex children default to `min-height: auto` which prevents them from shrinking below their content size. Adding `min-h-0` allows the `ScrollArea` to shrink and activate its internal scrollbar when content exceeds the dialog's `max-h-[90vh]`.
-
-### Single line change
-One CSS class addition in `SectionDetailReport.tsx`, line 854.
+### No new files, hooks, or database changes needed
+All data is already available from `SystemAgentSummary` and `AgentDomainStat`.
 
