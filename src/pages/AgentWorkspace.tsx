@@ -187,6 +187,7 @@ export default function AgentWorkspace() {
           .map((t: any) => `✅ **${t.title}** → ${t.assigned_to}`)
           .join("\n");
         replyContent += `\n\n---\n📋 **Created ${undelivered.createdTasks.length} task(s):**\n${taskSummary}`;
+      }
       setMessages((prev) => [...prev, {
         id: crypto.randomUUID(),
         role: "agent",
