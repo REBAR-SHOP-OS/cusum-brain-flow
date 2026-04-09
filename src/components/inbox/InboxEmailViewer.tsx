@@ -327,10 +327,14 @@ export function InboxEmailViewer({ email, onClose }: InboxEmailViewerProps) {
               </div>
               <div>
                 <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-medium">From:</span>
                   <span className="font-medium text-sm">{email.sender}</span>
                   <span className="text-xs text-muted-foreground">&lt;{email.senderEmail}&gt;</span>
                 </div>
-                <p className="text-xs text-muted-foreground">To: {email.toAddress}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-medium">To:</span>
+                  <span className="text-xs text-muted-foreground">{email.toAddress}</span>
+                </div>
               </div>
             </div>
             <span className="text-xs text-muted-foreground shrink-0">{email.fullDate}</span>
