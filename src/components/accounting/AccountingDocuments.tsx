@@ -293,6 +293,16 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
 
   return (
     <div className="space-y-4">
+      {leadIdParam && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1 text-muted-foreground hover:text-foreground"
+          onClick={() => navigate(`/sales/pipeline?lead=${leadIdParam}`)}
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Lead
+        </Button>
+      )}
       {/* Doc type tabs */}
       <div className="flex gap-2 flex-wrap items-center">
         {docTabs.map((tab) => (
