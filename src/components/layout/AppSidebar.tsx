@@ -223,7 +223,10 @@ export function AppSidebar() {
 
   const { isSuperAdmin } = useSuperAdmin();
 
-  const visibleMenus = getVisibleMenus(email);
+  const { override } = useUserAccessOverrides(email);
+  const visibleMenus = override?.menus?.length
+    ? override.menus
+    : getVisibleMenus(email);
 
   const hasAccess = (item: NavItem) => {
     if (isSuperAdmin) return true;
