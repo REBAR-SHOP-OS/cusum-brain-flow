@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useUserAccessOverrides } from "@/hooks/useUserAccessOverrides";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { getVisibleMenus } from "@/lib/userAccessConfig";
 import { Link, useLocation } from "react-router-dom";
@@ -222,7 +223,10 @@ export function AppSidebar() {
 
   const { isSuperAdmin } = useSuperAdmin();
 
-  const visibleMenus = getVisibleMenus(email);
+  const { override } = useUserAccessOverrides(email);
+  const visibleMenus = override?.menus?.length
+    ? override.menus
+    : getVisibleMenus(email);
 
   const hasAccess = (item: NavItem) => {
     if (isSuperAdmin) return true;
