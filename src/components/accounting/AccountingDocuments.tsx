@@ -86,6 +86,13 @@ export function AccountingDocuments({ data, initialDocType }: Props) {
   const { invoices: localInvoices, isLoading: localInvoicesLoading } = useSalesInvoices();
   const [searchParams] = useSearchParams();
   const leadIdParam = searchParams.get("lead_id");
+  const editQuoteId = searchParams.get("edit");
+
+  useEffect(() => {
+    if (editQuoteId) {
+      setDraftEditorId(editQuoteId);
+    }
+  }, [editQuoteId]);
 
   const handleCreateDraft = async () => {
     setCreatingDraft(true);

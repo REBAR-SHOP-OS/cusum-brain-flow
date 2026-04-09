@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   MessageSquare, Phone, Mail, Calendar, Clock, Send,
   CheckCircle2, XCircle, Loader2, ArrowRight, Zap, Paperclip, X, Image, Video,
-  MessageCircle, RefreshCw,
+  MessageCircle, RefreshCw, FileText,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -17,6 +17,7 @@ import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { InlineFileLink } from "@/components/pipeline/InlineFileLink";
+import { useNavigate } from "react-router-dom";
 
 interface Props {
   salesLeadId: string;
@@ -44,6 +45,7 @@ const activityIcons: Record<string, React.ElementType> = {
   follow_up: Clock,
   stage_change: ArrowRight,
   system: Zap,
+  quotation: FileText,
 };
 
 function getInitials(name: string): string {
@@ -588,6 +590,14 @@ function ActivityItem({ activity, onMarkDone, emailOutcome, onRetry }: { activit
   const Icon = activityIcons[activity.activity_type] || MessageSquare;
   const isScheduled = !!activity.scheduled_date && !activity.completed_at;
   const initials = activity.user_name ? getInitials(activity.user_name) : "??";
+  const navigate = useNavigate();
+
+  // Parse quote_id from body for quotation activities
+  const quoteId = activity.activity_type === "quotation" && activity.body
+    ? activity.body.match(/\[quote_id:([^\]]+)\]/)?.[1] ?? null
+    : null;
+
+  const bodyDisplay = activity.body?.replace(/\s*\[quote_id:[^\]]+\]/, "") ?? null;
 
   return (
     <div className="flex gap-3 py-2.5 border-b border-border/50 last:border-0 group">
@@ -605,11 +615,18 @@ function ActivityItem({ activity, onMarkDone, emailOutcome, onRetry }: { activit
           <span>·</span>
           <span>{formatDistanceToNow(new Date(activity.created_at), { addSuffix: true })}</span>
         </div>
-        {activity.subject && (
+        {activity.subject && quoteId ? (
+          <button
+            className="text-[13px] font-medium mt-0.5 text-primary hover:underline cursor-pointer text-left"
+            onClick={() => navigate(`/sales/quotations?lead_id=${activity.sales_lead_id}&edit=${quoteId}`)}
+          >
+            {renderBodyWithMedia(activity.subject)}
+          </button>
+        ) : activity.subject ? (
           <div className="text-[13px] font-medium mt-0.5">{renderBodyWithMedia(activity.subject)}</div>
-        )}
-        {activity.body && (
-          <div className="text-[13px] text-muted-foreground mt-0.5 whitespace-pre-wrap">{renderBodyWithMedia(activity.body)}</div>
+        ) : null}
+        {bodyDisplay && (
+          <div className="text-[13px] text-muted-foreground mt-0.5 whitespace-pre-wrap">{renderBodyWithMedia(bodyDisplay)}</div>
         )}
         {isScheduled && (
           <div className="flex items-center gap-2 mt-1">

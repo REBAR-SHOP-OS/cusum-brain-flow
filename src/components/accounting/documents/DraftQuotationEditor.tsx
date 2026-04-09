@@ -457,7 +457,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
               company_id: companyId,
               activity_type: "quotation",
               subject: `Quotation ${quoteNumber} added to timeline`,
-              body: `Draft quotation. Total: ${fmt(total)}`,
+              body: `Draft quotation. Total: ${fmt(total)} [quote_id:${quoteId}]`,
               user_id: user?.id,
               user_name: user?.email || "User",
               completed_at: new Date().toISOString(),
