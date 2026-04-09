@@ -1929,12 +1929,32 @@ async function executeReadTool(supabase: any, toolName: string, args: any, compa
         }
 
         // Emails + Calls (communications)
+        // First, resolve the query to employee emails if it matches an employee name
         if (includeDomains.has("emails") || includeDomains.has("calls")) {
           pass1.push((async () => {
+            // Try to resolve query as employee name → email address for better matching
+            const { data: nameMatches } = await supabase
+              .from("profiles")
+              .select("email, full_name")
+              .ilike("full_name", q);
+            const resolvedEmails = (nameMatches || []).map((p: any) => p.email).filter(Boolean);
+            
+            // Build OR filter: original query terms + resolved employee emails
+            const orParts = [
+              `subject.ilike.${q}`,
+              `body_preview.ilike.${q}`,
+              `from_address.ilike.${q}`,
+              `to_address.ilike.${q}`,
+            ];
+            for (const em of resolvedEmails) {
+              orParts.push(`from_address.ilike.%${em}%`);
+              orParts.push(`to_address.ilike.%${em}%`);
+            }
+
             let commQuery = supabase
               .from("communications")
               .select("id, subject, from_address, to_address, body_preview, direction, received_at, ai_urgency, ai_category, thread_id, source")
-              .or(`subject.ilike.${q},body_preview.ilike.${q},from_address.ilike.${q},to_address.ilike.${q}`)
+              .or(orParts.join(","))
               .eq("company_id", companyId)
               .order("received_at", { ascending: false })
               .limit(100);
