@@ -22,6 +22,7 @@ export interface AgentResponse {
   reply: string;
   context?: Record<string, unknown>;
   createdNotifications?: { type: string; title: string; assigned_to_name?: string }[];
+  createdTasks?: { id: string; title: string; assigned_to: string }[];
   nextSlot?: number | null;
   pixelPost?: PixelPost;
 }
