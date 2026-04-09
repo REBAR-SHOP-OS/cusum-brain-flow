@@ -1,40 +1,39 @@
 
 
-# Fix Vizzy Voice: Multi-Language, Listen-First, Clean Disconnect
+# Fix: Menu Access Overrides Not Enforced in Navigation
 
-## Problems Identified
+## Problem
+The menu access overrides saved in Vizzy Brain (stored in `user_access_overrides` table) are only used for **display purposes** inside VizzyBrainPanel. The actual sidebar navigation (`AppSidebar.tsx`) calls `getVisibleMenus()` from the hardcoded `userAccessConfig.ts` file — it never checks the database overrides. So changing menu checkboxes in Vizzy Brain has zero effect on what the user actually sees.
 
-1. **Language locked to English** — `useSpeechRecognition` is hardcoded to `lang: "en-US"` (line 195 in `useVizzyGeminiVoice.ts`). User speaks Persian but STT only recognizes English.
+## Root Cause
+`AppSidebar.tsx` line 225: `const visibleMenus = getVisibleMenus(email)` — this only reads from the static `USER_ACCESS` config object. The `useUserAccessOverrides` hook is never called in the sidebar.
 
-2. **Vizzy talks before listening** — On session start (line 226), a greeting prompt is immediately sent: `processUserInput("(Session started — give your morning briefing greeting)")`. Vizzy starts speaking a long morning briefing before the user says anything. The user wants Vizzy to listen first, then respond.
+## Fix
 
-3. **Vizzy not calm/precise enough** — The system prompt says "Keep responses under 30 seconds. Punchy." and the morning briefing protocol tells Vizzy to immediately dump alerts, email triage, call data. Needs a calmer, more measured tone instruction.
+### File: `src/components/layout/AppSidebar.tsx`
 
-4. **End Session doesn't fully disconnect** — `endSession()` stops speech recognition and clears audio queue, but currently playing audio (`isPlayingRef.current`) is not stopped. The `currentlyPlayingRef` audio element is not tracked, so clicking End Session while Vizzy is speaking leaves the current audio playing.
+1. Import and call `useUserAccessOverrides` with the current user's email
+2. If the database override has a non-empty `menus` array, use that instead of the hardcoded `getVisibleMenus()` result
+3. Fallback to hardcoded config when no database override exists
 
-## Changes
+```
+// Before:
+const visibleMenus = getVisibleMenus(email);
 
-### File: `src/hooks/useSpeechRecognition.ts`
-- Remove the single `lang` option and instead **omit** setting `recognition.lang` so the browser auto-detects language, OR set it to empty string for auto-detect mode
+// After:
+const { override } = useUserAccessOverrides(email);
+const visibleMenus = override?.menus?.length 
+  ? override.menus 
+  : getVisibleMenus(email);
+```
 
-### File: `src/hooks/useVizzyGeminiVoice.ts`
-1. **Auto-detect language**: Remove hardcoded `lang: "en-US"` from speech recognition config (line 195)
-2. **Remove auto-greeting**: Remove the `setTimeout` that sends the morning briefing prompt on session start (lines 225-227). Instead, just connect silently and wait for the user to speak first
-3. **Track current audio element**: Store the currently-playing `Audio` in a ref so `endSession` can `.pause()` it
-4. **Fix endSession**: Pause the currently-playing audio element, not just clear the queue
-
-### File: `src/hooks/useVizzyVoiceEngine.ts`
-- Update the system prompt's `VOICE FORMAT` and `COMMUNICATION STYLE` sections to emphasize: respond calmly, listen fully before responding, be precise and unhurried
-- Update `LANGUAGE` section: "Respond in whatever language the user speaks. If Farsi, respond in Farsi. If English, respond in English. Auto-detect and match."
-- Remove or soften the `MORNING BRIEFING` section that forces an immediate data dump
-
-### File: `src/components/vizzy/VizzyVoiceChat.tsx`
-- Remove the initial `"(Session started — give your morning briefing greeting)"` transcript that appears in the chat on connect (this is added by the engine, so the engine change handles it)
+This is a single-point fix — the `hasAccess` function already uses `visibleMenus` for all filtering, so overriding its source is sufficient.
 
 ## Files Modified
 | File | Change |
 |------|--------|
-| `src/hooks/useSpeechRecognition.ts` | Support auto-detect language (no hardcoded lang) |
-| `src/hooks/useVizzyGeminiVoice.ts` | Remove `lang: "en-US"`, remove auto-greeting, track + stop current audio on end |
-| `src/hooks/useVizzyVoiceEngine.ts` | Update prompts: calm tone, multi-language, no forced briefing |
+| `src/components/layout/AppSidebar.tsx` | Use database overrides for menu visibility when available |
+
+## Result
+When an admin sets menu access for a user in Vizzy Brain, that user's sidebar will immediately reflect the allowed menus (after page refresh or query invalidation).
 
