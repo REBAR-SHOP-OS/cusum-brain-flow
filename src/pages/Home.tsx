@@ -1,6 +1,6 @@
 // forwardRef cache bust
 import React, { useState, useCallback, useMemo, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, Navigate } from "react-router-dom";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { routeToAgent } from "@/lib/agentRouter";
@@ -99,6 +99,11 @@ export default function Home() {
   const isTablet = useMediaQuery("(max-width: 1024px)");
   const { user } = useAuth();
   const { isSuperAdmin } = useSuperAdmin();
+
+  // Device accounts must never see the dashboard — redirect before any UI renders
+  if (user?.email && ACCESS_POLICIES.shopfloorDevices.includes(user.email.toLowerCase())) {
+    return <Navigate to="/shop-floor" replace />;
+  }
 
   useEffect(() => {
     if (isTablet && !isSuperAdmin && !ACCESS_POLICIES.blockedFromShopFloor.includes(user?.email?.toLowerCase() ?? "")) {

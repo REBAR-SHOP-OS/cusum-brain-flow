@@ -33,7 +33,8 @@ export default function Login() {
         variant: "destructive",
       });
     } else {
-      navigate("/home");
+      const isDevice = ACCESS_POLICIES.shopfloorDevices.includes(email.toLowerCase());
+      navigate(isDevice ? "/shop-floor" : "/home");
     }
 
     setLoading(false);
@@ -51,7 +52,8 @@ export default function Login() {
   }
 
   if (user) {
-    return <Navigate to="/home" replace />;
+    const isDevice = ACCESS_POLICIES.shopfloorDevices.includes(user.email?.toLowerCase() ?? "");
+    return <Navigate to={isDevice ? "/shop-floor" : "/home"} replace />;
   }
 
   return (
@@ -147,7 +149,8 @@ export default function Login() {
                 return;
               }
 
-              navigate("/home");
+              const isDevice = ACCESS_POLICIES.shopfloorDevices.includes(oauthEmail);
+              navigate(isDevice ? "/shop-floor" : "/home");
             } catch (err: any) {
               toast({
                 title: "Google sign in failed",
