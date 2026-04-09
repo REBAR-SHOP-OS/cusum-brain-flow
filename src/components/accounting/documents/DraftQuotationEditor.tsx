@@ -52,6 +52,8 @@ const inputCls = "bg-white text-gray-900 border-gray-300 placeholder:text-gray-4
 
 export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const { companyId } = useCompanyId();
+  const [searchParams] = useSearchParams();
+  const urlLeadId = searchParams.get("lead_id");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [leadId, setLeadId] = useState<string | null>(null);
