@@ -38,15 +38,35 @@ export function categorizeCommunication(
   preview: string,
   type: "email" | "call" | "sms" | "voicemail" | "fax",
   aiCategory?: string | null,
-  aiUrgency?: string | null
+  aiUrgency?: string | null,
+  options?: { userEmail?: string; ccAddresses?: string }
 ): { label: string; labelColor: string; priority: number } {
   // Use AI classification if available
   if (aiCategory) {
     return aiCategoryToLabel(aiCategory, aiUrgency || "medium");
   }
 
-  // Fallback to keyword-based
   const fromLower = from.toLowerCase();
+
+  // Alert emails from ai@rebar.shop → always "Notification"
+  if (fromLower.includes("ai@rebar.shop")) {
+    return { label: "Notification", labelColor: "bg-cyan-400", priority: 4 };
+  }
+
+  // CC-based classification: if user is only in CC (not in TO), it's FYI
+  if (options?.userEmail && options?.ccAddresses) {
+    const userEmailLower = options.userEmail.toLowerCase();
+    const ccLower = (options.ccAddresses || "").toLowerCase();
+    const isInCC = ccLower.includes(userEmailLower);
+    // Check if user is NOT in the primary to_address but IS in CC
+    // (from is the sender, so we can't check to_address here directly,
+    //  but if user is in CC, treat as FYI)
+    if (isInCC) {
+      return { label: "FYI", labelColor: "bg-amber-400", priority: 2 };
+    }
+  }
+
+  // Fallback to keyword-based
   const subjectLower = (subject || "").toLowerCase();
   const previewLower = (preview || "").toLowerCase();
 
