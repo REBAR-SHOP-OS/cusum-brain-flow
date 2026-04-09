@@ -35,8 +35,9 @@ import { useEagerReportPersistence } from "@/hooks/useEagerReportPersistence";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { defaultAutomations, ADMIN_ONLY_IDS } from "@/components/integrations/AutomationsSection";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
-import { Cog } from "lucide-react";
+import { Cog, UserPlus } from "lucide-react";
 import { useUserAccessOverrides } from "@/hooks/useUserAccessOverrides";
+import { AddUserDialog } from "@/components/vizzy/AddUserDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const USER_AVATAR_COLORS = [
@@ -1754,6 +1755,8 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const [editingAgents, setEditingAgents] = useState(false);
   const [editingAutomations, setEditingAutomations] = useState(false);
   const [editingItems, setEditingItems] = useState(false);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const isSuperAdmin = ACCESS_POLICIES.superAdmins.includes(user?.email ?? "");
 
   // Filter @rebar.shop profiles, active first
   const rebarProfiles = useMemo(() => {
@@ -2109,6 +2112,15 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 </button>
               );
             })}
+            {isSuperAdmin && (
+              <button
+                onClick={() => setAddUserOpen(true)}
+                className="shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-muted hover:bg-primary/20 transition-all"
+                title="Add new user"
+              >
+                <UserPlus className="w-5 h-5 text-muted-foreground" />
+              </button>
+            )}
           </div>
         )}
 
@@ -2305,6 +2317,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
           {renderContent()}
         </div>
       </motion.div>
+      {isSuperAdmin && (
+        <AddUserDialog
+          open={addUserOpen}
+          onOpenChange={setAddUserOpen}
+          adminEmail={user?.email ?? ""}
+        />
+      )}
     </motion.div>
   );
 }
