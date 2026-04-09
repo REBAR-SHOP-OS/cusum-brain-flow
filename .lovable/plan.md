@@ -1,58 +1,40 @@
 
 
-# Add LinkedIn OAuth Token Auto-Refresh to Social Publishing
+# Fix Vizzy Voice: Multi-Language, Listen-First, Clean Disconnect
 
-## Problem
-When LinkedIn's access token expires (every 60 days), all LinkedIn publishing fails with "Token expired. Please reconnect." The `refresh_token` is already stored in the database during OAuth callback but is never used. Users must manually disconnect and reconnect LinkedIn every time.
+## Problems Identified
 
-## Root Cause
-Two locations fail without attempting refresh:
-1. **`publishToLinkedIn`** (social-publish, line 747): returns error `"LinkedIn token expired. Please reconnect."`
-2. **`handleCheckStatus`** (linkedin-oauth, line 227-234): marks connection as error immediately
+1. **Language locked to English** — `useSpeechRecognition` is hardcoded to `lang: "en-US"` (line 195 in `useVizzyGeminiVoice.ts`). User speaks Persian but STT only recognizes English.
 
-The refresh token IS stored in `integration_connections.config.refresh_token` (line 171 of linkedin-oauth) but never consumed.
+2. **Vizzy talks before listening** — On session start (line 226), a greeting prompt is immediately sent: `processUserInput("(Session started — give your morning briefing greeting)")`. Vizzy starts speaking a long morning briefing before the user says anything. The user wants Vizzy to listen first, then respond.
+
+3. **Vizzy not calm/precise enough** — The system prompt says "Keep responses under 30 seconds. Punchy." and the morning briefing protocol tells Vizzy to immediately dump alerts, email triage, call data. Needs a calmer, more measured tone instruction.
+
+4. **End Session doesn't fully disconnect** — `endSession()` stops speech recognition and clears audio queue, but currently playing audio (`isPlayingRef.current`) is not stopped. The `currentlyPlayingRef` audio element is not tracked, so clicking End Session while Vizzy is speaking leaves the current audio playing.
 
 ## Changes
 
-### File: `supabase/functions/social-publish/index.ts` (publishToLinkedIn function, ~line 694)
+### File: `src/hooks/useSpeechRecognition.ts`
+- Remove the single `lang` option and instead **omit** setting `recognition.lang` so the browser auto-detects language, OR set it to empty string for auto-detect mode
 
-Add a `refreshLinkedInToken` helper and modify `publishToLinkedIn`:
+### File: `src/hooks/useVizzyGeminiVoice.ts`
+1. **Auto-detect language**: Remove hardcoded `lang: "en-US"` from speech recognition config (line 195)
+2. **Remove auto-greeting**: Remove the `setTimeout` that sends the morning briefing prompt on session start (lines 225-227). Instead, just connect silently and wait for the user to speak first
+3. **Track current audio element**: Store the currently-playing `Audio` in a ref so `endSession` can `.pause()` it
+4. **Fix endSession**: Pause the currently-playing audio element, not just clear the queue
 
-1. **New helper** `refreshLinkedInToken(supabase, userId, config)`:
-   - Uses stored `refresh_token` to call `https://www.linkedin.com/oauth/v2/accessToken` with `grant_type=refresh_token`
-   - On success: updates `integration_connections.config` with new `access_token`, `expires_at`, and (if returned) new `refresh_token`
-   - Returns new access token or null on failure
+### File: `src/hooks/useVizzyVoiceEngine.ts`
+- Update the system prompt's `VOICE FORMAT` and `COMMUNICATION STYLE` sections to emphasize: respond calmly, listen fully before responding, be precise and unhurried
+- Update `LANGUAGE` section: "Respond in whatever language the user speaks. If Farsi, respond in Farsi. If English, respond in English. Auto-detect and match."
+- Remove or soften the `MORNING BRIEFING` section that forces an immediate data dump
 
-2. **Modify token expiry check** (line 747):
-   - Instead of returning error immediately, call `refreshLinkedInToken`
-   - If refresh succeeds, continue with new token
-   - If refresh fails, THEN return the "please reconnect" error
-
-3. **Add 401 retry**: After the `ugcPosts` API call (line 840), if response is 401:
-   - Attempt token refresh
-   - Retry the post with new token
-   - If still fails, return error with reconnect guidance
-
-### File: `supabase/functions/linkedin-oauth/index.ts` (handleCheckStatus, ~line 213)
-
-1. **Auto-refresh on status check** (line 227): Instead of marking as error when `expires_at < Date.now()`:
-   - Attempt refresh using stored `refresh_token`
-   - If refresh succeeds, update DB and return `status: "connected"`
-   - If no refresh token or refresh fails, THEN mark as error
-
-### Secret Requirements
-- `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` are already configured (used in linkedin-oauth callback)
-- The `social-publish` function needs access to these same secrets for the refresh call
+### File: `src/components/vizzy/VizzyVoiceChat.tsx`
+- Remove the initial `"(Session started — give your morning briefing greeting)"` transcript that appears in the chat on connect (this is added by the engine, so the engine change handles it)
 
 ## Files Modified
 | File | Change |
 |------|--------|
-| `supabase/functions/social-publish/index.ts` | Add `refreshLinkedInToken` helper, auto-refresh on expiry + 401 retry |
-| `supabase/functions/linkedin-oauth/index.ts` | Auto-refresh in `handleCheckStatus` instead of immediate error |
-
-## Result
-- LinkedIn tokens auto-refresh seamlessly — users never see "token expired"
-- If refresh token itself is invalid (rare), user gets clear "please reconnect" message
-- Existing publishing flow unchanged for non-expired tokens
-- Status checks also trigger refresh, keeping connection green proactively
+| `src/hooks/useSpeechRecognition.ts` | Support auto-detect language (no hardcoded lang) |
+| `src/hooks/useVizzyGeminiVoice.ts` | Remove `lang: "en-US"`, remove auto-greeting, track + stop current audio on end |
+| `src/hooks/useVizzyVoiceEngine.ts` | Update prompts: calm tone, multi-language, no forced briefing |
 
