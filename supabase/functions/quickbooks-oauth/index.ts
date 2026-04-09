@@ -481,8 +481,9 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: supabase, body, req: rawReq } = ctx;
 
-    // Support x-qb-user-id header for cross-function calls (e.g. public acceptance)
+    // Support x-qb-user-id header for cross-function calls (e.g. admin-chat, vizzy)
     const qbUserIdOverride = rawReq.headers.get("x-qb-user-id");
+    const effectiveUserId = qbUserIdOverride || userId;
     if (qbUserIdOverride) {
       body._qbUserId = qbUserIdOverride;
     }
