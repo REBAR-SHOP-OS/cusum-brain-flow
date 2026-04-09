@@ -464,6 +464,34 @@ function jsonRes(data: unknown, status = 200) {
   });
 }
 
+/**
+ * Wraps a QB report handler with graceful degradation.
+ * On QB API errors (e.g. 5020 Permission Denied, 5xx), returns a 200 with
+ * fallback signal so the client/Vizzy can use snapshot data instead of crashing.
+ */
+async function withReportFallback(
+  reportName: string,
+  handler: () => Promise<Response>,
+): Promise<Response> {
+  try {
+    return await handler();
+  } catch (err) {
+    const msg = String(err);
+    const isPermission = msg.includes("5020") || msg.includes("Permission Denied");
+    const isTransient = msg.includes("timed out") || msg.includes("502") || msg.includes("503") || msg.includes("504") || msg.includes("429");
+    console.error(`[QB-Report-Fallback] ${reportName} failed: ${msg}`);
+    return jsonRes({
+      error: isPermission ? "PERMISSION_DENIED" : isTransient ? "SERVICE_UNAVAILABLE" : "QB_API_ERROR",
+      fallback: true,
+      report: reportName,
+      message: isPermission
+        ? "QuickBooks token lacks report permissions. Please reconnect QuickBooks with full accounting access."
+        : `QuickBooks report temporarily unavailable. Use snapshot data as fallback.`,
+      detail: msg.slice(0, 500),
+    }, 200);
+  }
+}
+
 async function updateLastSync(supabase: ReturnType<typeof createClient>, userId: string) {
   // Update the company-wide connection's last_sync_at
   const connection = await getUserQBConnection(supabase, userId);
@@ -2735,29 +2763,35 @@ async function handleGetVendorBalance(supabase: ReturnType<typeof createClient>,
 // ─── AR Aging Summary Report ──────────────────────────────────────
 
 async function handleGetARAgingSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
-  const config = await getQBConfig(supabase, userId);
-  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
-  const data = await qbFetch(config, `reports/AgedReceivable?report_date=${asOfDate}`);
-  return jsonRes({ report: data });
+  return withReportFallback("AgedReceivable", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/AgedReceivable?report_date=${asOfDate}`);
+    return jsonRes({ report: data });
+  });
 }
 
 // ─── AP Aging Summary Report ──────────────────────────────────────
 
 async function handleGetAPAgingSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
-  const config = await getQBConfig(supabase, userId);
-  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
-  const data = await qbFetch(config, `reports/AgedPayable?report_date=${asOfDate}`);
-  return jsonRes({ report: data });
+  return withReportFallback("AgedPayable", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/AgedPayable?report_date=${asOfDate}`);
+    return jsonRes({ report: data });
+  });
 }
 
 // ─── Customer Income Report ───────────────────────────────────────
 
 async function handleGetCustomerIncome(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
-  const config = await getQBConfig(supabase, userId);
-  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
-  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
-  const data = await qbFetch(config, `reports/CustomerIncome?start_date=${startDate}&end_date=${endDate}`);
-  return jsonRes({ report: data });
+  return withReportFallback("CustomerIncome", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/CustomerIncome?start_date=${startDate}&end_date=${endDate}`);
+    return jsonRes({ report: data });
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -2767,21 +2801,25 @@ async function handleGetCustomerIncome(supabase: ReturnType<typeof createClient>
 // ─── Cash Flow Report ─────────────────────────────────────────────
 
 async function handleGetCashFlow(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
-  const config = await getQBConfig(supabase, userId);
-  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
-  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
-  const data = await qbFetch(config, `reports/CashFlow?start_date=${startDate}&end_date=${endDate}`);
-  return jsonRes({ report: data });
+  return withReportFallback("CashFlow", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/CashFlow?start_date=${startDate}&end_date=${endDate}`);
+    return jsonRes({ report: data });
+  });
 }
 
 // ─── Tax Summary Report ───────────────────────────────────────────
 
 async function handleGetTaxSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
-  const config = await getQBConfig(supabase, userId);
-  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
-  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
-  const data = await qbFetch(config, `reports/TaxSummary?start_date=${startDate}&end_date=${endDate}`);
-  return jsonRes({ report: data });
+  return withReportFallback("TaxSummary", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/TaxSummary?start_date=${startDate}&end_date=${endDate}`);
+    return jsonRes({ report: data });
+  });
 }
 
 // ─── Bill Payments ────────────────────────────────────────────────
