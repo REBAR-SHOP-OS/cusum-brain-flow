@@ -30,6 +30,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
   const conversationRef = useRef<Array<{ role: string; content: string }>>([]);
   const audioQueueRef = useRef<HTMLAudioElement[]>([]);
   const isPlayingRef = useRef(false);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const processingRef = useRef(false);
   const idCounter = useRef(0);
   const activeRef = useRef(false);
@@ -43,6 +44,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
     isPlayingRef.current = true;
     setIsSpeaking(true);
     const audio = audioQueueRef.current.shift()!;
+    currentAudioRef.current = audio;
     try {
       await audio.play();
       await new Promise<void>((resolve) => {
@@ -53,6 +55,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
       console.warn("[VizzyGemini] Audio playback failed:", e);
     }
     URL.revokeObjectURL(audio.src);
+    currentAudioRef.current = null;
     isPlayingRef.current = false;
     playNext();
   }, []);
@@ -190,9 +193,8 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
     }
   }, [getSystemPrompt, playNext]);
 
-  // Speech recognition
+  // Speech recognition — no lang set so browser auto-detects user's language
   const speech = useSpeechRecognition({
-    lang: "en-US",
     silenceTimeout: 2000,
     onSilenceEnd: () => {
       if (speech.fullTranscript.trim() && activeRef.current) {
@@ -220,11 +222,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
 
       speech.start();
       setState("connected");
-
-      // Send greeting prompt after a short delay
-      setTimeout(() => {
-        processUserInput("(Session started — give your morning briefing greeting)");
-      }, 1000);
+      // Listen-first: no auto-greeting — wait for the user to speak
     } catch (err) {
       setState("error");
       setErrorDetail(err instanceof Error ? err.message : String(err));
@@ -234,6 +232,12 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
   const endSession = useCallback(() => {
     activeRef.current = false;
     speech.stop();
+    // Stop currently playing audio immediately
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      URL.revokeObjectURL(currentAudioRef.current.src);
+      currentAudioRef.current = null;
+    }
     audioQueueRef.current.forEach((a) => {
       a.pause();
       URL.revokeObjectURL(a.src);
