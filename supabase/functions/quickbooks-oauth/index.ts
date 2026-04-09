@@ -481,8 +481,9 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: supabase, body, req: rawReq } = ctx;
 
-    // Support x-qb-user-id header for cross-function calls (e.g. public acceptance)
+    // Support x-qb-user-id header for cross-function calls (e.g. admin-chat, vizzy)
     const qbUserIdOverride = rawReq.headers.get("x-qb-user-id");
+    const effectiveUserId = qbUserIdOverride || userId;
     if (qbUserIdOverride) {
       body._qbUserId = qbUserIdOverride;
     }
@@ -517,183 +518,183 @@ Deno.serve((req) =>
       case "get-auth-url":
         return handleGetAuthUrl(supabaseUrl, clientId, userId, body);
       case "check-status":
-        return handleCheckStatus(supabase, userId, clientId, clientSecret);
+        return handleCheckStatus(supabase, effectiveUserId, clientId, clientSecret);
       case "disconnect":
-        return handleDisconnect(supabase, userId);
+        return handleDisconnect(supabase, effectiveUserId);
 
       // ── Read / Sync ────────────────────────────────────────────
       case "sync-customers":
-        return handleSyncCustomers(supabase, userId);
+        return handleSyncCustomers(supabase, effectiveUserId);
       case "sync-invoices":
-        return handleSyncInvoices(supabase, userId);
+        return handleSyncInvoices(supabase, effectiveUserId);
       case "sync-vendors":
-        return handleSyncVendors(supabase, userId);
+        return handleSyncVendors(supabase, effectiveUserId);
       case "get-company-info":
-        return handleGetCompanyInfo(supabase, userId);
+        return handleGetCompanyInfo(supabase, effectiveUserId);
       case "dashboard-summary":
-        return handleDashboardSummary(supabase, userId);
+        return handleDashboardSummary(supabase, effectiveUserId);
       case "list-accounts":
-        return handleListAccounts(supabase, userId);
+        return handleListAccounts(supabase, effectiveUserId);
       case "list-bank-accounts":
-        return handleListBankAccounts(supabase, userId);
+        return handleListBankAccounts(supabase, effectiveUserId);
       case "list-items":
-        return handleListItems(supabase, userId);
+        return handleListItems(supabase, effectiveUserId);
       case "list-invoices":
-        return handleListInvoices(supabase, userId);
+        return handleListInvoices(supabase, effectiveUserId);
       case "list-estimates":
-        return handleListEstimates(supabase, userId);
+        return handleListEstimates(supabase, effectiveUserId);
       case "list-bills":
-        return handleListBills(supabase, userId);
+        return handleListBills(supabase, effectiveUserId);
       case "list-payments":
-        return handleListPayments(supabase, userId);
+        return handleListPayments(supabase, effectiveUserId);
       case "list-purchase-orders":
-        return handleListPurchaseOrders(supabase, userId);
+        return handleListPurchaseOrders(supabase, effectiveUserId);
       case "list-credit-memos":
-        return handleListCreditMemos(supabase, userId);
+        return handleListCreditMemos(supabase, effectiveUserId);
       case "list-vendors":
-        return handleListVendors(supabase, userId);
+        return handleListVendors(supabase, effectiveUserId);
       case "get-profit-loss":
-        return handleGetProfitLoss(supabase, userId, body);
+        return handleGetProfitLoss(supabase, effectiveUserId, body);
       case "get-balance-sheet":
-        return handleGetBalanceSheet(supabase, userId, body);
+        return handleGetBalanceSheet(supabase, effectiveUserId, body);
 
       // ── Write / Create ─────────────────────────────────────────
       case "create-estimate":
-        return handleCreateEstimate(supabase, userId, body);
+        return handleCreateEstimate(supabase, effectiveUserId, body);
       case "create-invoice":
-        return handleCreateInvoice(supabase, userId, body);
+        return handleCreateInvoice(supabase, effectiveUserId, body);
       case "get-invoice-link":
-        return handleGetInvoiceLink(supabase, userId, body);
+        return handleGetInvoiceLink(supabase, effectiveUserId, body);
       case "create-payment":
-        return handleCreatePayment(supabase, userId, body);
+        return handleCreatePayment(supabase, effectiveUserId, body);
       case "receive-payment":
-        return handleReceivePayment(supabase, userId, body);
+        return handleReceivePayment(supabase, effectiveUserId, body);
       case "create-bill":
-        return handleCreateBill(supabase, userId, body);
+        return handleCreateBill(supabase, effectiveUserId, body);
       case "create-credit-memo":
-        return handleCreateCreditMemo(supabase, userId, body);
+        return handleCreateCreditMemo(supabase, effectiveUserId, body);
       case "create-purchase-order":
-        return handleCreatePurchaseOrder(supabase, userId, body);
+        return handleCreatePurchaseOrder(supabase, effectiveUserId, body);
       case "create-vendor":
-        return handleCreateVendor(supabase, userId, body);
+        return handleCreateVendor(supabase, effectiveUserId, body);
       case "create-account":
-        return handleCreateAccount(supabase, userId, body);
+        return handleCreateAccount(supabase, effectiveUserId, body);
       case "delete-transaction":
-        return handleDeleteTransaction(supabase, userId, body);
+        return handleDeleteTransaction(supabase, effectiveUserId, body);
       case "void-transaction":
-        return handleVoidTransaction(supabase, userId, body);
+        return handleVoidTransaction(supabase, effectiveUserId, body);
       case "create-item":
-        return handleCreateItem(supabase, userId, body);
+        return handleCreateItem(supabase, effectiveUserId, body);
       case "convert-estimate-to-invoice":
-        return handleConvertEstimateToInvoice(supabase, userId, body);
+        return handleConvertEstimateToInvoice(supabase, effectiveUserId, body);
       case "send-invoice":
-        return handleSendInvoice(supabase, userId, body);
+        return handleSendInvoice(supabase, effectiveUserId, body);
       case "void-invoice":
-        return handleVoidInvoice(supabase, userId, body);
+        return handleVoidInvoice(supabase, effectiveUserId, body);
       case "update-invoice":
-        return handleUpdateInvoice(supabase, userId, body);
+        return handleUpdateInvoice(supabase, effectiveUserId, body);
       case "read-invoice":
-        return handleReadInvoice(supabase, userId, body);
+        return handleReadInvoice(supabase, effectiveUserId, body);
       case "get-invoice-pdf":
-        return handleGetInvoicePdf(supabase, userId, body);
+        return handleGetInvoicePdf(supabase, effectiveUserId, body);
       case "update-estimate":
-        return handleUpdateEstimate(supabase, userId, body);
+        return handleUpdateEstimate(supabase, effectiveUserId, body);
 
       // ── Payroll ────────────────────────────────────────────────
       case "list-employees":
-        return handleListEmployees(supabase, userId);
+        return handleListEmployees(supabase, effectiveUserId);
       case "get-employee":
-        return handleGetEmployee(supabase, userId, body);
+        return handleGetEmployee(supabase, effectiveUserId, body);
       case "update-employee":
-        return handleUpdateEmployee(supabase, userId, body);
+        return handleUpdateEmployee(supabase, effectiveUserId, body);
       case "list-time-activities":
-        return handleListTimeActivities(supabase, userId);
+        return handleListTimeActivities(supabase, effectiveUserId);
       case "create-payroll-correction":
-        return handleCreatePayrollCorrection(supabase, userId, body);
+        return handleCreatePayrollCorrection(supabase, effectiveUserId, body);
 
       // ── Reports ────────────────────────────────────────────────
       case "account-quick-report":
-        return handleAccountQuickReport(supabase, userId, body);
+        return handleAccountQuickReport(supabase, effectiveUserId, body);
 
       // ── Phase 1: New Transaction Types ─────────────────────────
       case "list-sales-receipts":
-        return handleListSalesReceipts(supabase, userId);
+        return handleListSalesReceipts(supabase, effectiveUserId);
       case "create-sales-receipt":
-        return handleCreateSalesReceipt(supabase, userId, body);
+        return handleCreateSalesReceipt(supabase, effectiveUserId, body);
       case "list-refund-receipts":
-        return handleListRefundReceipts(supabase, userId);
+        return handleListRefundReceipts(supabase, effectiveUserId);
       case "create-refund-receipt":
-        return handleCreateRefundReceipt(supabase, userId, body);
+        return handleCreateRefundReceipt(supabase, effectiveUserId, body);
       case "list-deposits":
-        return handleListDeposits(supabase, userId);
+        return handleListDeposits(supabase, effectiveUserId);
       case "create-deposit":
-        return handleCreateDeposit(supabase, userId, body);
+        return handleCreateDeposit(supabase, effectiveUserId, body);
       case "create-transfer":
-        return handleCreateTransfer(supabase, userId, body);
+        return handleCreateTransfer(supabase, effectiveUserId, body);
       case "list-journal-entries":
-        return handleListJournalEntries(supabase, userId);
+        return handleListJournalEntries(supabase, effectiveUserId);
       case "create-journal-entry":
-        return handleCreateJournalEntry(supabase, userId, body);
+        return handleCreateJournalEntry(supabase, effectiveUserId, body);
 
       // ── Phase 1: New Reports ───────────────────────────────────
       case "get-aged-receivables":
-        return handleGetAgedReceivables(supabase, userId, body);
+        return handleGetAgedReceivables(supabase, effectiveUserId, body);
       case "get-aged-payables":
-        return handleGetAgedPayables(supabase, userId, body);
+        return handleGetAgedPayables(supabase, effectiveUserId, body);
       case "get-general-ledger":
-        return handleGetGeneralLedger(supabase, userId, body);
+        return handleGetGeneralLedger(supabase, effectiveUserId, body);
       case "get-trial-balance":
-        return handleGetTrialBalance(supabase, userId, body);
+        return handleGetTrialBalance(supabase, effectiveUserId, body);
       case "get-transaction-list":
-        return handleGetTransactionList(supabase, userId, body);
+        return handleGetTransactionList(supabase, effectiveUserId, body);
 
       // ── Phase 2: Extended Reports ──────────────────────────────
       case "get-customer-balance":
-        return handleGetCustomerBalance(supabase, userId, body);
+        return handleGetCustomerBalance(supabase, effectiveUserId, body);
       case "get-customer-balance-detail":
-        return handleGetCustomerBalanceDetail(supabase, userId, body);
+        return handleGetCustomerBalanceDetail(supabase, effectiveUserId, body);
       case "get-vendor-balance":
-        return handleGetVendorBalance(supabase, userId, body);
+        return handleGetVendorBalance(supabase, effectiveUserId, body);
       case "get-ar-aging-summary":
-        return handleGetARAgingSummary(supabase, userId, body);
+        return handleGetARAgingSummary(supabase, effectiveUserId, body);
       case "get-ap-aging-summary":
-        return handleGetAPAgingSummary(supabase, userId, body);
+        return handleGetAPAgingSummary(supabase, effectiveUserId, body);
       case "get-customer-income":
-        return handleGetCustomerIncome(supabase, userId, body);
+        return handleGetCustomerIncome(supabase, effectiveUserId, body);
 
       // ── Phase 17: New Actions ─────────────────────────────────
       case "get-cash-flow":
-        return handleGetCashFlow(supabase, userId, body);
+        return handleGetCashFlow(supabase, effectiveUserId, body);
       case "get-tax-summary":
-        return handleGetTaxSummary(supabase, userId, body);
+        return handleGetTaxSummary(supabase, effectiveUserId, body);
       case "create-bill-payment":
-        return handleCreateBillPayment(supabase, userId, body);
+        return handleCreateBillPayment(supabase, effectiveUserId, body);
       case "list-bill-payments":
-        return handleListBillPayments(supabase, userId);
+        return handleListBillPayments(supabase, effectiveUserId);
       case "create-customer":
-        return handleCreateCustomer(supabase, userId, body);
+        return handleCreateCustomer(supabase, effectiveUserId, body);
       case "update-customer":
-        return handleUpdateCustomer(supabase, userId, body);
+        return handleUpdateCustomer(supabase, effectiveUserId, body);
       case "update-vendor":
-        return handleUpdateVendor(supabase, userId, body);
+        return handleUpdateVendor(supabase, effectiveUserId, body);
       case "list-classes":
-        return handleListClasses(supabase, userId);
+        return handleListClasses(supabase, effectiveUserId);
       case "list-departments":
-        return handleListDepartments(supabase, userId);
+        return handleListDepartments(supabase, effectiveUserId);
       case "create-class":
-        return handleCreateClass(supabase, userId, body);
+        return handleCreateClass(supabase, effectiveUserId, body);
       case "create-purchase":
-        return handleCreatePurchase(supabase, userId, body);
+        return handleCreatePurchase(supabase, effectiveUserId, body);
       case "upload-attachment":
-        return handleUploadAttachment(supabase, userId, body);
+        return handleUploadAttachment(supabase, effectiveUserId, body);
       case "list-attachments":
-        return handleListAttachments(supabase, userId, body);
+        return handleListAttachments(supabase, effectiveUserId, body);
 
       // ── Sync Engine Delegation ─────────────────────────────────
       case "full-sync":
       case "incremental-sync":
       case "reconcile": {
-        const companyId = await getUserCompanyId(supabase, userId);
+        const companyId = await getUserCompanyId(supabase, effectiveUserId);
         const syncAction = action === "full-sync" ? "backfill" : action === "incremental-sync" ? "incremental" : "reconcile";
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -710,7 +711,7 @@ Deno.serve((req) =>
       case "query": {
         const queryStr = body.query as string;
         if (!queryStr) return jsonRes({ error: "Missing 'query' parameter" }, 400);
-        const config = await getQBConfig(supabase, userId);
+        const config = await getQBConfig(supabase, effectiveUserId);
         const data = await qbFetch(config, `query?query=${encodeURIComponent(queryStr)}`, undefined, 0, config._refreshContext);
         return jsonRes(data);
       }
