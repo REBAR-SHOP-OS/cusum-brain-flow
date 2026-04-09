@@ -1,32 +1,26 @@
 
 
-# Make Team Daily Report Show All Users & Open Detailed Reports on Click
+# Fix: Make Report Dialog Content Scrollable
 
-## Current State
-- The Team Daily Report already shows all @rebar.shop users (including inactive ones like Sattar and Vicky, shown with reduced opacity).
-- Each user row has a small clipboard icon that opens a detailed "Overview" report dialog.
-- Clicking the user row itself only expands/collapses an accordion with raw activity items — not a detailed report.
+## Problem
+The detailed report dialog has `ScrollArea` but it doesn't scroll properly because the `ScrollArea` has no bounded height — `flex-1` alone may not constrain it when content overflows.
 
-## What Will Change
+## Fix
 
-### 1. Make User Rows Clickable to Open Detailed Report
-Instead of just expanding an accordion with raw activity logs, clicking on a user row in the Team Daily Report will open the full **Overview Report Dialog** (`SectionDetailReportDialog` with `sectionType="overview"`). This provides the rich, categorized report with attendance, performance breakdown, activity timeline, and action log — exactly like the one the clipboard icon already opens.
+### File: `src/components/vizzy/SectionDetailReport.tsx` (line 854)
 
-### 2. Keep All Users Visible
-All @rebar.shop profiles are already shown (including inactive ones). No change needed here — confirmed both in code and database.
+Change the `ScrollArea` wrapper to have an explicit constrained height so it activates scrolling:
 
-## Technical Changes
+```tsx
+// Line 854: Change from
+<ScrollArea className="flex-1 pr-3 -mr-3">
 
-### File: `src/components/vizzy/VizzyBrainPanel.tsx` — `TeamDailyReport` component (lines 1239–1337)
+// To
+<ScrollArea className="flex-1 min-h-0 pr-3 -mr-3">
+```
 
-- Replace the `Accordion`/`AccordionItem`/`AccordionTrigger` pattern with simple clickable cards
-- Each card click opens a `SectionDetailReportDialog` with `sectionType="overview"` for that user
-- Use a controlled `Dialog` state (tracked by `openProfileId`) instead of accordion expand
-- Keep the same visual layout: avatar circle, name, activity count, hours, AI sessions, emails badges
-- The small clipboard icon per row can be removed since the whole row now triggers the report
+The key fix is adding `min-h-0` — in a flex column container, flex children default to `min-height: auto` which prevents them from shrinking below their content size. Adding `min-h-0` allows the `ScrollArea` to shrink and activate its internal scrollbar when content exceeds the dialog's `max-h-[90vh]`.
 
-### Result
-- Clicking anywhere on a user row opens the full detailed report dialog for that user
-- All rebar.shop users remain visible (active and inactive)
-- The same rich Overview Report that the clipboard icon opened is now accessible by clicking the row itself
+### Single line change
+One CSS class addition in `SectionDetailReport.tsx`, line 854.
 
