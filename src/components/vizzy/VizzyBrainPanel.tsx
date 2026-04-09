@@ -1755,6 +1755,8 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const [editingAgents, setEditingAgents] = useState(false);
   const [editingAutomations, setEditingAutomations] = useState(false);
   const [editingItems, setEditingItems] = useState(false);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const isSuperAdmin = ACCESS_POLICIES.superAdmins.includes(user?.email ?? "");
 
   // Filter @rebar.shop profiles, active first
   const rebarProfiles = useMemo(() => {
@@ -2110,6 +2112,15 @@ export function VizzyBrainPanel({ onClose }: Props) {
                 </button>
               );
             })}
+            {isSuperAdmin && (
+              <button
+                onClick={() => setAddUserOpen(true)}
+                className="shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-muted hover:bg-primary/20 transition-all"
+                title="Add new user"
+              >
+                <UserPlus className="w-5 h-5 text-muted-foreground" />
+              </button>
+            )}
           </div>
         )}
 
