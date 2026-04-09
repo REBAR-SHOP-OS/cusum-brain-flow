@@ -432,7 +432,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
 
       {/* Action buttons */}
       <div className="fixed top-4 right-4 flex items-center gap-2 print:hidden z-50">
-        <Button size="sm" variant="ghost" onClick={() => toast({ title: "Add to Timeline coming soon" })} className="gap-2" title="Add to Timeline">
+        <Button size="sm" variant="outline" onClick={() => toast({ title: "Add to Timeline coming soon" })} className="gap-2" title="Add to Timeline">
           <CalendarPlus className="w-4 h-4" /> Add to Timeline
         </Button>
         <Button size="sm" onClick={handleSave} disabled={saving} className="gap-2">
