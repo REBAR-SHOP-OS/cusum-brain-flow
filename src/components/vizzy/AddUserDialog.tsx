@@ -1,12 +1,13 @@
 import React, { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogPortal, DialogOverlay, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 
 interface AddUserDialogProps {
   open: boolean;
@@ -28,7 +29,6 @@ export function AddUserDialog({ open, onOpenChange, adminEmail }: AddUserDialogP
 
     setSaving(true);
     try {
-      // 1. Insert into allowed_login_emails
       const { error: emailErr } = await supabase
         .from("allowed_login_emails" as any)
         .insert({ email: normalized, added_by: adminEmail } as any);
@@ -41,7 +41,6 @@ export function AddUserDialog({ open, onOpenChange, adminEmail }: AddUserDialogP
         throw emailErr;
       }
 
-      // 2. Insert into user_access_overrides with zero access
       const { error: overrideErr } = await supabase
         .from("user_access_overrides" as any)
         .insert({
@@ -56,7 +55,6 @@ export function AddUserDialog({ open, onOpenChange, adminEmail }: AddUserDialogP
         console.warn("user_access_overrides insert warning:", overrideErr.message);
       }
 
-      // 3. Insert stub profile so user appears in avatar bar
       const namePart = normalized.split("@")[0].replace(/[._]/g, " ");
       const { error: profileErr } = await supabase
         .from("profiles")
@@ -84,34 +82,43 @@ export function AddUserDialog({ open, onOpenChange, adminEmail }: AddUserDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add New User</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3 py-2">
-          <Label htmlFor="new-user-email">Email Address</Label>
-          <Input
-            id="new-user-email"
-            type="email"
-            placeholder="user@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-          />
-          <p className="text-xs text-muted-foreground">
-            User will be added with zero access. Configure permissions after adding.
-          </p>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleAdd} disabled={saving || !email.trim()}>
-            {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
-            Add User
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+      <DialogPortal>
+        <DialogOverlay className="z-[100001]" />
+        <DialogPrimitive.Content
+          className="fixed left-[50%] top-[50%] z-[100002] grid w-full max-w-md translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 sm:rounded-lg"
+        >
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label htmlFor="new-user-email">Email Address</Label>
+            <Input
+              id="new-user-email"
+              type="email"
+              placeholder="user@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+            />
+            <p className="text-xs text-muted-foreground">
+              User will be added with zero access. Configure permissions after adding.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+              Cancel
+            </Button>
+            <Button onClick={handleAdd} disabled={saving || !email.trim()}>
+              {saving && <Loader2 className="w-4 h-4 mr-1 animate-spin" />}
+              Add User
+            </Button>
+          </DialogFooter>
+          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </DialogPrimitive.Close>
+        </DialogPrimitive.Content>
+      </DialogPortal>
     </Dialog>
   );
 }
