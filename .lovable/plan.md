@@ -1,30 +1,26 @@
 
 
-# Task Was Created — Board Needs Auto-Refresh
+# Make Newly Created Tasks Visible Immediately
 
-## What happened
-The task "Update CRA Status for All Companies" **was successfully created** in the database (ID: `f96b00a9...`), correctly assigned to Vicky Anderson, with status `open` and `company_id` matching your account. It IS in the database right now.
+## Root Cause
+The task **does exist** in the database (confirmed: ID `f96b00a9`, title "Update CRA Status for All Companies", assigned to Vicky Anderson, due April 10). It is task #16 out of 17 in her column because the sort order puts it near the bottom (sorted by due date, and April 10 is the latest date). The user would need to scroll down in Vicky's column to see it.
 
-The reason you don't see it on the Employee Tasks board is that the board **does not auto-refresh** — it only loads data when the page first opens or when you click the ↻ refresh button in the top-right corner.
-
-## Fix: Add realtime subscription to Tasks page
+## Proposed Fix: Auto-scroll + highlight new tasks
 
 **File: `src/pages/Tasks.tsx`**
 
-Add a Supabase Realtime subscription on the `tasks` table so that any INSERT/UPDATE/DELETE triggers an automatic data reload. This way, when Vizzy (or any agent) creates a task, it appears on the board within seconds — no manual refresh needed.
+1. **Track newly arrived task IDs** — When the realtime subscription fires an INSERT event, capture the new task's ID
+2. **Highlight new tasks** — Add a temporary green/cyan border glow animation to tasks that appeared via realtime (fades after 5 seconds)
+3. **Show a toast with task info** — When a Vizzy-created task appears, show a toast like "✅ New task: Update CRA Status → Vicky Anderson" so the user knows it arrived
 
 Changes:
-1. Subscribe to `postgres_changes` on `public.tasks` table inside the existing `useEffect`
-2. On any change event → call `loadData()` to refresh the board
-3. Cleanup subscription on unmount
-
-Additionally, ensure the `tasks` table has realtime enabled:
-```sql
-ALTER PUBLICATION supabase_realtime ADD TABLE public.tasks;
-```
+- Add state `highlightedTaskIds: Set<string>` that tracks recently inserted task IDs
+- In the realtime callback, on INSERT events, add the task ID to the highlight set and show a toast
+- In the task card renderer, add a `ring-2 ring-emerald-500 animate-pulse` class for highlighted tasks
+- Use `setTimeout` to remove highlight after 5 seconds
+- Optionally scroll the column to show the new task using `scrollIntoView`
 
 ## Result
-- Tasks created by Vizzy or any agent will appear on the board automatically within 1-2 seconds
-- No need to manually click refresh
-- Existing manual refresh button still works
+- New tasks from Vizzy will be immediately noticeable with a glow effect and toast notification
+- No more "where is my task?" confusion
 
