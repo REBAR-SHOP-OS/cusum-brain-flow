@@ -39,6 +39,7 @@ interface Props {
   timezone: string;
   teamProfiles?: TeamProfile[];
   teamData?: Record<string, TeamMemberActivity>;
+  renderTrigger?: (openDialog: () => void) => React.ReactNode;
 }
 
 function humanLabel(eventType: string): string {
