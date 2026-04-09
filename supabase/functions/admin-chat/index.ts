@@ -551,14 +551,15 @@ const JARVIS_TOOLS = [
     type: "function",
     function: {
       name: "get_employee_emails",
-      description: "Query emails sent or received by a specific employee. Returns subjects, recipients, timestamps. Use to answer 'what emails did X send?' questions.",
+      description: "Query emails sent or received by a specific employee. Returns subjects, recipients, timestamps. Use to answer 'what emails did X send?' questions. Supports date ranges via days_back param.",
       parameters: {
         type: "object",
         properties: {
           employee_name: { type: "string", description: "Employee name (partial match). Leave empty for all." },
-          date: { type: "string", description: "Date filter YYYY-MM-DD. Defaults to today." },
+          date: { type: "string", description: "Date filter YYYY-MM-DD. Defaults to today. Used as end date when days_back > 1." },
+          days_back: { type: "number", description: "Number of days to look back from date. Default: 1. Use 7 for weekly, 30 for monthly." },
           direction: { type: "string", enum: ["inbound", "outbound", "all"], description: "Email direction filter. Default: all" },
-          limit: { type: "number", description: "Max results (default 30)" },
+          limit: { type: "number", description: "Max results (default 30, max 200)" },
         },
         additionalProperties: false,
       },
@@ -1305,12 +1306,19 @@ async function executeReadTool(supabase: any, toolName: string, args: any, compa
 
     // ─── Employee Email Tool ───
     case "get_employee_emails": {
-      const date = args.date || new Date().toISOString().split("T")[0];
-      const limit = Math.min(args.limit || 30, 100);
+      const endDate = args.date || new Date().toISOString().split("T")[0];
+      const daysBack = Math.min(Math.max(args.days_back || 1, 1), 90);
+      const limit = Math.min(args.limit || 30, 200);
       const direction = args.direction || "all";
+
+      // Calculate start date
+      const startDt = new Date(endDate + "T00:00:00Z");
+      startDt.setDate(startDt.getDate() - (daysBack - 1));
+      const startDate = startDt.toISOString().split("T")[0];
 
       // Resolve employee name to email addresses
       let emailFilter: string[] | null = null;
+      let resolvedName = "";
       if (args.employee_name) {
         const { data: matchedProfiles } = await supabase
           .from("profiles")
@@ -1320,13 +1328,15 @@ async function executeReadTool(supabase: any, toolName: string, args: any, compa
           return JSON.stringify({ message: `No employee found matching "${args.employee_name}"`, results: [] });
         }
         emailFilter = matchedProfiles.map((p: any) => p.email).filter(Boolean);
+        resolvedName = matchedProfiles[0]?.full_name || args.employee_name;
       }
 
+      // Build query with email filter pushed to the DB level for efficiency
       let q = supabase
         .from("communications")
         .select("subject, from_address, to_address, body_preview, direction, received_at, ai_urgency, thread_id")
-        .gte("received_at", date + "T00:00:00")
-        .lte("received_at", date + "T23:59:59")
+        .gte("received_at", startDate + "T00:00:00")
+        .lte("received_at", endDate + "T23:59:59")
         .order("received_at", { ascending: false })
         .limit(limit);
       
@@ -1334,29 +1344,36 @@ async function executeReadTool(supabase: any, toolName: string, args: any, compa
         q = q.eq("direction", direction);
       }
 
+      // If we have email filters, push filter to DB
+      if (emailFilter && emailFilter.length > 0) {
+        const orFilters = emailFilter.flatMap((em) => [
+          `from_address.ilike.%${em}%`,
+          `to_address.ilike.%${em}%`,
+        ]).join(",");
+        q = q.or(orFilters);
+      }
+
       const { data, error } = await q;
       if (error) return JSON.stringify({ error: error.message });
 
-      // Filter by employee email if specified
-      let results = data || [];
-      if (emailFilter && emailFilter.length > 0) {
-        results = results.filter((e: any) => {
-          const fromMatch = emailFilter!.some((em) => e.from_address?.toLowerCase().includes(em.toLowerCase()));
-          const toMatch = emailFilter!.some((em) => e.to_address?.toLowerCase().includes(em.toLowerCase()));
-          return fromMatch || toMatch;
-        });
-      }
-
-      return JSON.stringify({ date, direction, total: results.length, results: results.map((e: any) => ({
-        subject: e.subject,
-        from: e.from_address,
-        to: e.to_address,
-        direction: e.direction,
-        preview: e.body_preview?.slice(0, 500),
-        urgency: e.ai_urgency,
-        time: e.received_at,
-        thread_id: e.thread_id,
-      }))});
+      const results = data || [];
+      return JSON.stringify({
+        employee: resolvedName || "all",
+        email_addresses: emailFilter || [],
+        date_range: { from: startDate, to: endDate, days: daysBack },
+        direction,
+        total: results.length,
+        results: results.map((e: any) => ({
+          subject: e.subject,
+          from: e.from_address,
+          to: e.to_address,
+          direction: e.direction,
+          preview: e.body_preview?.slice(0, 500),
+          urgency: e.ai_urgency,
+          time: e.received_at,
+          thread_id: e.thread_id,
+        })),
+      });
     }
 
     // ─── RingCentral Read Tools ───
@@ -1912,12 +1929,32 @@ async function executeReadTool(supabase: any, toolName: string, args: any, compa
         }
 
         // Emails + Calls (communications)
+        // First, resolve the query to employee emails if it matches an employee name
         if (includeDomains.has("emails") || includeDomains.has("calls")) {
           pass1.push((async () => {
+            // Try to resolve query as employee name → email address for better matching
+            const { data: nameMatches } = await supabase
+              .from("profiles")
+              .select("email, full_name")
+              .ilike("full_name", q);
+            const resolvedEmails = (nameMatches || []).map((p: any) => p.email).filter(Boolean);
+            
+            // Build OR filter: original query terms + resolved employee emails
+            const orParts = [
+              `subject.ilike.${q}`,
+              `body_preview.ilike.${q}`,
+              `from_address.ilike.${q}`,
+              `to_address.ilike.${q}`,
+            ];
+            for (const em of resolvedEmails) {
+              orParts.push(`from_address.ilike.%${em}%`);
+              orParts.push(`to_address.ilike.%${em}%`);
+            }
+
             let commQuery = supabase
               .from("communications")
               .select("id, subject, from_address, to_address, body_preview, direction, received_at, ai_urgency, ai_category, thread_id, source")
-              .or(`subject.ilike.${q},body_preview.ilike.${q},from_address.ilike.${q},to_address.ilike.${q}`)
+              .or(orParts.join(","))
               .eq("company_id", companyId)
               .order("received_at", { ascending: false })
               .limit(100);
