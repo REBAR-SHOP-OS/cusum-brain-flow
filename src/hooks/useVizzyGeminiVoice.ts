@@ -4,7 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Vizzy Gemini Voice — STT → Gemini 2.5 Flash → ElevenLabs TTS pipeline.
- * Replaces WebRTC-based OpenAI Realtime with a reliable text-based pipeline.
+ * 
+ * Turn-taking: STT is paused during TTS playback to prevent feedback loops.
+ * Input queue: user speech is queued (not dropped) while processing.
  */
 
 export interface VoiceTranscript {
@@ -34,15 +36,45 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
   const processingRef = useRef(false);
   const idCounter = useRef(0);
   const activeRef = useRef(false);
+  
+  // Input queue: user turns are queued instead of dropped
+  const inputQueueRef = useRef<string[]>([]);
+  // Track if STT should be suppressed (during TTS playback)
+  const suppressSTTRef = useRef(false);
 
-  // Audio queue player
+  const speechRef = useRef<ReturnType<typeof useSpeechRecognition> | null>(null);
+
+  // Resume STT listening after TTS finishes
+  const resumeListening = useCallback(() => {
+    suppressSTTRef.current = false;
+    if (activeRef.current && !isMuted && speechRef.current) {
+      speechRef.current.start();
+    }
+  }, [isMuted]);
+
+  // Pause STT listening before TTS starts
+  const pauseListening = useCallback(() => {
+    suppressSTTRef.current = true;
+    if (speechRef.current) {
+      speechRef.current.stop();
+    }
+  }, []);
+
+  // Audio queue player — pauses STT during playback
   const playNext = useCallback(async () => {
     if (isPlayingRef.current || audioQueueRef.current.length === 0) {
-      if (audioQueueRef.current.length === 0) setIsSpeaking(false);
+      if (audioQueueRef.current.length === 0) {
+        setIsSpeaking(false);
+        // TTS done — resume listening
+        resumeListening();
+      }
       return;
     }
     isPlayingRef.current = true;
     setIsSpeaking(true);
+    // Pause STT before playing
+    pauseListening();
+
     const audio = audioQueueRef.current.shift()!;
     currentAudioRef.current = audio;
     try {
@@ -58,11 +90,11 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
     currentAudioRef.current = null;
     isPlayingRef.current = false;
     playNext();
-  }, []);
+  }, [pauseListening, resumeListening]);
 
-  // Send text to Gemini, get response, TTS it
-  const processUserInput = useCallback(async (text: string) => {
-    if (!text.trim() || processingRef.current) return;
+  // Process one user input through Gemini + TTS
+  const processOneInput = useCallback(async (text: string) => {
+    if (!text.trim()) return;
     processingRef.current = true;
 
     const userTranscript: VoiceTranscript = {
@@ -75,12 +107,10 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
     conversationRef.current.push({ role: "user", content: text });
 
     try {
-      // Get auth token
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) throw new Error("Not authenticated");
 
-      // Stream from Gemini via edge function
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/vizzy-voice-chat`,
         {
@@ -132,7 +162,6 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
       }
 
       if (!fullResponse.trim()) {
-        processingRef.current = false;
         return;
       }
 
@@ -153,7 +182,6 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
         .trim();
 
       if (ttsText && ttsText.length > 0 && ttsText.length <= 5000) {
-        // Send to ElevenLabs TTS
         try {
           const ttsResp = await fetch(
             `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
@@ -166,7 +194,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
               },
               body: JSON.stringify({
                 text: ttsText.slice(0, 4500),
-                voiceId: "EXAVITQu4vr4xnSDxMaL", // Sarah - clear female voice
+                voiceId: "EXAVITQu4vr4xnSDxMaL",
                 speed: 1.0,
               }),
             }
@@ -188,15 +216,35 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
     } catch (err) {
       console.error("[VizzyGemini] Processing error:", err);
       setErrorDetail(err instanceof Error ? err.message : String(err));
-    } finally {
-      processingRef.current = false;
     }
   }, [getSystemPrompt, playNext]);
+
+  // Flush the input queue sequentially
+  const flushQueue = useCallback(async () => {
+    if (processingRef.current) return;
+    while (inputQueueRef.current.length > 0 && activeRef.current) {
+      const next = inputQueueRef.current.shift()!;
+      processingRef.current = true;
+      await processOneInput(next);
+      processingRef.current = false;
+    }
+  }, [processOneInput]);
+
+  // Public entry: queue user input instead of dropping
+  const processUserInput = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    inputQueueRef.current.push(text);
+    if (!processingRef.current) {
+      await flushQueue();
+    }
+  }, [flushQueue]);
 
   // Speech recognition — no lang set so browser auto-detects user's language
   const speech = useSpeechRecognition({
     silenceTimeout: 2000,
     onSilenceEnd: () => {
+      // Ignore if STT is suppressed (Vizzy is speaking)
+      if (suppressSTTRef.current) return;
       if (speech.fullTranscript.trim() && activeRef.current) {
         const text = speech.fullTranscript.trim();
         speech.clearTranscripts();
@@ -208,15 +256,19 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
     },
   });
 
+  // Keep speechRef in sync for pause/resume
+  speechRef.current = speech;
+
   const startSession = useCallback(async () => {
     setState("connecting");
     setErrorDetail(null);
     activeRef.current = true;
+    suppressSTTRef.current = false;
     conversationRef.current = [];
+    inputQueueRef.current = [];
     setTranscripts([]);
 
     try {
-      // Test auth
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Not authenticated");
 
@@ -227,19 +279,30 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
       setState("error");
       setErrorDetail(err instanceof Error ? err.message : String(err));
     }
-  }, [speech, processUserInput]);
+  }, [speech]);
 
   const endSession = useCallback(() => {
     activeRef.current = false;
+    suppressSTTRef.current = true;
+    
+    // Clear input queue
+    inputQueueRef.current = [];
+    processingRef.current = false;
+    
     speech.stop();
+    
     // Stop currently playing audio immediately
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
+      currentAudioRef.current.onended = null;
+      currentAudioRef.current.onerror = null;
       URL.revokeObjectURL(currentAudioRef.current.src);
       currentAudioRef.current = null;
     }
     audioQueueRef.current.forEach((a) => {
       a.pause();
+      a.onended = null;
+      a.onerror = null;
       URL.revokeObjectURL(a.src);
     });
     audioQueueRef.current = [];
@@ -258,7 +321,6 @@ export function useVizzyGeminiVoice({ getSystemPrompt }: UseVizzyGeminiVoiceOpti
     }
   }, [isMuted, speech]);
 
-  // Update session instructions (called by VizzyVoiceEngine for context refresh)
   const updateSessionInstructions = useCallback((_instructions: string) => {
     // Instructions are fetched lazily via getSystemPrompt — no-op here
   }, []);
