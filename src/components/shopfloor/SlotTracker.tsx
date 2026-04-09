@@ -357,11 +357,12 @@ export function SlotTracker({
         {activeSlots.length > 0 && canWrite && !allDone && (
           <Button
             variant="destructive"
-            className="h-12 px-3"
+            className="h-16 w-20 px-3 flex flex-col items-center gap-1"
             onClick={onCompleteRun}
             title="Stop"
           >
-            <StopCircle className="w-5 h-5" />
+            <StopCircle className="w-8 h-8" />
+            <span className="text-xs font-bold tracking-wide">STOP</span>
           </Button>
         )}
 
