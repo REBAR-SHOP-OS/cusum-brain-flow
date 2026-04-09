@@ -711,7 +711,7 @@ Deno.serve((req) =>
       case "query": {
         const queryStr = body.query as string;
         if (!queryStr) return jsonRes({ error: "Missing 'query' parameter" }, 400);
-        const config = await getQBConfig(supabase, userId);
+        const config = await getQBConfig(supabase, effectiveUserId);
         const data = await qbFetch(config, `query?query=${encodeURIComponent(queryStr)}`, undefined, 0, config._refreshContext);
         return jsonRes(data);
       }
