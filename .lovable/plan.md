@@ -1,38 +1,32 @@
 
 
-# Fix: Image Edit Rate Limit — Increase Retry Budget
+# Make the Red Stop Button Bigger with "STOP" Label
 
-## Problem
-The image edit feature in `generate-image` edge function has a retry loop (3 attempts) for AI gateway 429 responses, with short delays (2s, 4s). When the Lovable AI gateway is rate-limiting (common with image generation models which are expensive), all 3 attempts fail and the user sees "Rate limit exceeded — retries exhausted."
+## Current State
+The red stop button next to "Record Stroke" (line 358-365 in `SlotTracker.tsx`) is a small square button with only a `StopCircle` icon (`w-5 h-5`, `h-12 px-3`).
 
-## Root Cause
-- Line 225-246 in `supabase/functions/generate-image/index.ts`: Only 3 attempts with 2s/4s waits
-- Image generation models have stricter rate limits on the AI gateway
-- The client (`ImageEditDialog.tsx` line 151) also only does 1 retry — so total budget is very thin
+## Change
 
-## Fix
+### File: `src/components/shopfloor/SlotTracker.tsx` (lines 358-365)
 
-### File: `supabase/functions/generate-image/index.ts`
+Make the button larger and add "STOP" text:
 
-1. Increase retry attempts from 3 to 5
-2. Use longer exponential backoff: 3s, 6s, 12s, 20s (instead of 2s, 4s)
-3. This gives the gateway ~41 seconds total window to free up capacity
+```tsx
+// From:
+<Button variant="destructive" className="h-12 px-3" onClick={onCompleteRun} title="Stop">
+  <StopCircle className="w-5 h-5" />
+</Button>
 
-Change the retry loop (lines 223-246):
+// To:
+<Button variant="destructive" className="h-16 w-20 px-3 flex flex-col items-center gap-1" onClick={onCompleteRun} title="Stop">
+  <StopCircle className="w-8 h-8" />
+  <span className="text-xs font-bold tracking-wide">STOP</span>
+</Button>
 ```
-// Current:  3 attempts, wait = (attempt+1)*2000
-// New:      5 attempts, wait = min(3000 * 2^attempt, 20000)
-```
 
-### File: `src/components/social/ImageEditDialog.tsx`
+- Icon: `w-5 h-5` → `w-8 h-8`
+- Button: `h-12` → `h-16 w-20`, flex column layout
+- Added "STOP" text label below the icon
 
-4. Increase client timeout from 90s to 120s to accommodate longer server-side retries
-5. Add a more descriptive loading message when waiting
-
-### Result
-- Up to 5 server-side retries with proper backoff before giving up
-- Client timeout extended to cover the retry window
-- If still failing after 5 attempts, the error message stays the same (user should wait and retry)
-
-### Single edge function change + 1 client timeout tweak. No database changes.
+Single line change in one file. No database or logic changes.
 
