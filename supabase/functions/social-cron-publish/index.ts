@@ -703,7 +703,8 @@ async function publishToLinkedIn(
     if (config.expires_at < Date.now()) return { error: "LinkedIn token expired — please reconnect LinkedIn in Settings → Integrations" };
 
     // Determine author URN based on pageName
-    const isPersonal = !pageName || pageName === "Sattar Esmaeili-Oureh";
+    const personalName = (config as any).profile_name || "Sattar Esmaeili-Oureh";
+    const isPersonal = !pageName || pageName === personalName;
     let authorUrn: string;
 
     if (isPersonal) {
