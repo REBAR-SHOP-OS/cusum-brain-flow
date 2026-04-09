@@ -835,11 +835,33 @@ async function publishToLinkedIn(
 
     if (isPersonal) {
       const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
-        headers: { Authorization: `Bearer ${config.access_token}` },
+        headers: { Authorization: `Bearer ${accessToken}` },
       });
-      if (!profileRes.ok) return { error: "Failed to get LinkedIn identity" };
-      const profile = await profileRes.json();
-      authorUrn = `urn:li:person:${profile.sub}`;
+      if (!profileRes.ok) {
+        // If 401 on profile fetch, try refresh once
+        if (profileRes.status === 401) {
+          const refreshed = await refreshLinkedInToken(supabase, userId, config as any);
+          if (refreshed) {
+            accessToken = refreshed;
+            const retryRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+            if (retryRes.ok) {
+              const profile = await retryRes.json();
+              authorUrn = `urn:li:person:${profile.sub}`;
+            } else {
+              return { error: "Failed to get LinkedIn identity after token refresh" };
+            }
+          } else {
+            return { error: "LinkedIn token expired and refresh failed. Please reconnect." };
+          }
+        } else {
+          return { error: "Failed to get LinkedIn identity" };
+        }
+      } else {
+        const profile = await profileRes.json();
+        authorUrn = `urn:li:person:${profile.sub}`;
+      }
     } else {
       // Company page publishing — look up org ID from config
       // page_name may be comma-separated (e.g. "Rebar.shop Ontario, Rebar.shop")
@@ -874,7 +896,7 @@ async function publishToLinkedIn(
         const registerRes = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${config.access_token}`,
+            Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -897,7 +919,7 @@ async function publishToLinkedIn(
               const imgBlob = await imgRes.blob();
               await fetch(uploadUrl, {
                 method: "PUT",
-                headers: { Authorization: `Bearer ${config.access_token}`, "Content-Type": imgBlob.type || "image/png" },
+                headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": imgBlob.type || "image/png" },
                 body: imgBlob,
               });
               payload.specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory = "IMAGE";
@@ -910,15 +932,29 @@ async function publishToLinkedIn(
       }
     }
 
-    const postRes = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+    // Post to LinkedIn with 401 retry
+    const doPost = async (token: string) => fetch("https://api.linkedin.com/v2/ugcPosts", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${config.access_token}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
         "X-Restli-Protocol-Version": "2.0.0",
       },
       body: JSON.stringify(payload),
     });
+
+    let postRes = await doPost(accessToken);
+
+    // If 401, attempt token refresh and retry once
+    if (postRes.status === 401) {
+      console.log("[social-publish] LinkedIn ugcPosts returned 401, attempting token refresh...");
+      await postRes.text(); // consume body
+      const refreshed = await refreshLinkedInToken(supabase, userId, config as any);
+      if (refreshed) {
+        accessToken = refreshed;
+        postRes = await doPost(accessToken);
+      }
+    }
 
     if (!postRes.ok) {
       const errText = await postRes.text();
