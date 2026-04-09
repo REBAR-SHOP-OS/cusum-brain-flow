@@ -851,7 +851,7 @@ export function SectionDetailReportDialog({
               {config.title}{sectionType !== "team" ? ` — ${userName}` : ""}
             </DialogTitle>
           </DialogHeader>
-          <ScrollArea className="flex-1 pr-3 -mr-3">
+          <ScrollArea className="flex-1 min-h-0 pr-3 -mr-3">
             <div className="pb-4">
               {sectionType === "activity" && (
                 <ActivityReport userId={userId} date={date} timezone={timezone} userName={userName} />
