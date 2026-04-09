@@ -53,6 +53,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
   const { companyId } = useCompanyId();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [leadId, setLeadId] = useState<string | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [customerEmail, setCustomerEmail] = useState("");
   const [sendingEmail, setSendingEmail] = useState(false);
@@ -133,6 +134,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
       }
 
       const data = quoteRes.data;
+      setLeadId((data as any).lead_id || null);
       setQuoteNumber(data.quote_number);
       setQuoteDate(data.created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10));
       if (data.valid_until) setExpirationDate(data.valid_until.slice(0, 10));
@@ -432,7 +434,29 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
 
       {/* Action buttons */}
       <div className="fixed top-4 right-4 flex items-center gap-2 print:hidden z-50">
-        <Button size="sm" variant="outline" onClick={() => toast({ title: "Add to Timeline coming soon" })} className="gap-2" title="Add to Timeline">
+        <Button size="sm" variant="outline" onClick={async () => {
+          if (!leadId) {
+            toast({ title: "This quote is not linked to any sales lead", variant: "destructive" });
+            return;
+          }
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase.from("sales_lead_activities").insert({
+              sales_lead_id: leadId,
+              company_id: companyId,
+              activity_type: "quotation",
+              subject: `Quotation ${quoteNumber} added to timeline`,
+              body: `Draft quotation. Total: ${fmt(total)}`,
+              user_id: user?.id,
+              user_name: user?.email || "User",
+              completed_at: new Date().toISOString(),
+            } as any);
+            if (error) throw error;
+            toast({ title: "Added to timeline" });
+          } catch (e: any) {
+            toast({ title: "Failed to add to timeline", description: e.message, variant: "destructive" });
+          }
+        }} className="gap-2" title="Add to Timeline">
           <CalendarPlus className="w-4 h-4" /> Add to Timeline
         </Button>
         <Button size="sm" onClick={handleSave} disabled={saving} className="gap-2">
