@@ -158,19 +158,29 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     playNext();
   }, [pauseListening, resumeListening]);
 
-  // Process one user input through Gemini + TTS
-  const processOneInput = useCallback(async (text: string) => {
-    if (!text.trim()) return;
+  // Core processing: send messages to Gemini, stream response, TTS
+  const processMessages = useCallback(async (
+    userText: string | null, // null = follow-up (no visible user transcript)
+    internalPrompt?: string  // hidden system/user message for follow-ups
+  ): Promise<string> => {
     processingRef.current = true;
 
-    const userTranscript: VoiceTranscript = {
-      id: `vt-${++idCounter.current}`,
-      role: "user",
-      text,
-      timestamp: Date.now(),
-    };
-    setTranscripts((prev) => [...prev, userTranscript]);
-    conversationRef.current.push({ role: "user", content: text });
+    let userTranscript: VoiceTranscript | null = null;
+
+    if (userText) {
+      userTranscript = {
+        id: `vt-${++idCounter.current}`,
+        role: "user",
+        text: userText,
+        timestamp: Date.now(),
+      };
+      setTranscripts((prev) => [...prev, userTranscript!]);
+      conversationRef.current.push({ role: "user", content: userText });
+    }
+
+    if (internalPrompt) {
+      conversationRef.current.push({ role: "user", content: internalPrompt });
+    }
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -227,13 +237,16 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
         }
       }
 
-      if (!fullResponse.trim()) return;
+      if (!fullResponse.trim()) return "";
 
       // If Gemini signals unclear input, silently discard
       if (fullResponse.trim() === "[UNCLEAR]") {
-        setTranscripts((prev) => prev.filter((t) => t.id !== userTranscript.id));
-        conversationRef.current.pop();
-        return;
+        if (userTranscript) {
+          setTranscripts((prev) => prev.filter((t) => t.id !== userTranscript!.id));
+          conversationRef.current.pop();
+        }
+        if (internalPrompt) conversationRef.current.pop();
+        return "";
       }
 
       // Add agent transcript
@@ -289,11 +302,20 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
           console.warn("[VizzyGemini] TTS error:", ttsErr);
         }
       }
+
+      return fullResponse;
     } catch (err) {
       console.error("[VizzyGemini] Processing error:", err);
       setErrorDetail(err instanceof Error ? err.message : String(err));
+      return "";
     }
   }, [getSystemPrompt, playNext]);
+
+  // Process one user input through Gemini + TTS
+  const processOneInput = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+    await processMessages(text);
+  }, [processMessages]);
 
   // Flush the input queue sequentially
   const flushQueue = useCallback(async () => {
