@@ -2070,7 +2070,7 @@ export function AIExtractView() {
                                   {row.bar_size_mapped || row.bar_size || "—"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-xs font-mono p-1.5">{displayLength(row.total_length_mm, row.raw_total_length_mm)}</TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{displayLength(row)}</TableCell>
                               <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
                               <TableCell className="text-xs p-1.5">
                                 {survivorRow ? (
@@ -2266,7 +2266,7 @@ export function AIExtractView() {
                                   <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
                                   <span className="text-[9px] text-muted-foreground whitespace-nowrap">{lengthUnitLabelByMode(displayUnit as LengthDisplayMode)}</span>
                                 </div>
-                              ) : (displayLength(row.total_length_mm, row.raw_total_length_mm))}
+                              ) : (displayLength(row))}
                             </TableCell>
                             {dimCols.map((d) => {
                               const key = `dim_${d.toLowerCase()}`;
@@ -2278,7 +2278,7 @@ export function AIExtractView() {
                                       <span className="text-[9px] text-muted-foreground whitespace-nowrap">{lengthUnitLabelByMode(displayUnit as LengthDisplayMode)}</span>
                                     </div>
                                   ) : (
-                                    displayDim((row as any)[key], key, (row as any).raw_dims_json)
+                                    displayDim((row as any)[key], key, row)
                                   )}
                                 </TableCell>
                               );
