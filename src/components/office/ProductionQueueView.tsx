@@ -66,6 +66,10 @@ export function ProductionQueueView() {
   const queryClient = useQueryClient();
 
   const handleDeleteBarlist = async (barlistId: string) => {
+    // Capture extract_session_id before deleting barlist so we can clean up Tags & Export
+    const barlist = barlists.find(b => b.id === barlistId);
+    const sessionId = barlist?.extract_session_id;
+
     // work_orders.barlist_id → SET NULL via FK; barlist_items, machine_queue_items, production_tasks → CASCADE via FK
     const { data, error } = await supabase.from("barlists").delete().eq("id", barlistId).select();
     if (error) {
@@ -76,9 +80,16 @@ export function ProductionQueueView() {
       toast({ title: "Permission denied", description: "You don't have permission to delete this barlist.", variant: "destructive" });
       return;
     }
+
+    // Delete linked extract_session (CASCADE removes extract_rows, extract_raw_files, extract_errors)
+    if (sessionId) {
+      await supabase.from("extract_sessions").delete().eq("id", sessionId);
+    }
+
     toast({ title: "Barlist deleted" });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["production-queues"] });
+    queryClient.invalidateQueries({ queryKey: ["extract-sessions"] });
     await fetchPlans();
   };
 
