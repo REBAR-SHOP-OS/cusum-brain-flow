@@ -912,6 +912,8 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
         total_pieces: totalPieces,
         work_order_id: workOrder.id,
         bend_dimensions: buildDimensions(row),
+        source_total_length_text: row.source_total_length_text || null,
+        source_dims_json: row.source_dims_json || null,
       };
     });
 

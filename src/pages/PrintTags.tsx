@@ -109,10 +109,15 @@ export default function PrintTags() {
           const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
           const weight = getWeight(size, row.total_length_mm, row.quantity);
           const dims: Record<string, number | null> = {};
+          const sourceDimsRaw = (row as any).source_dims_json;
+          const sourceDims: Record<string, string> = {};
           DIM_COLS.forEach((d) => {
             const key = `dim_${d.toLowerCase()}` as keyof typeof row;
             const v = row[key];
             dims[d] = typeof v === "number" ? v : null;
+            if (sourceDimsRaw?.[d] != null && sourceDimsRaw[d] !== "") {
+              sourceDims[d] = String(sourceDimsRaw[d]);
+            }
           });
 
           return (
@@ -133,6 +138,8 @@ export default function PrintTags() {
               dims={dims}
               shapeImageUrl={getShapeImageUrl(shapeType)}
               unitSystem={unitSystem}
+              sourceLength={(row as any).source_total_length_text || undefined}
+              sourceDims={Object.keys(sourceDims).length > 0 ? sourceDims : undefined}
             />
           );
         })}
