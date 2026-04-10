@@ -470,6 +470,22 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             </motion.div>
           ))}
         </AnimatePresence>
+        {/* Live partial transcript from Scribe */}
+        {partialText && (
+          <div
+            className="mb-2 px-4 py-2 rounded-2xl text-sm max-w-[85%] ml-auto animate-pulse"
+            style={{
+              background: "hsl(172 66% 50% / 0.06)",
+              color: "hsl(0 0% 60%)",
+              border: "1px dashed hsl(172 66% 50% / 0.15)",
+            }}
+          >
+            <span className="text-[10px] font-semibold tracking-wider block mb-0.5" style={{ color: "hsl(172 66% 40%)" }}>
+              LISTENING...
+            </span>
+            {partialText}
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
