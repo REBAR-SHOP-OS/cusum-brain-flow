@@ -833,6 +833,87 @@ Deno.serve((req) =>
         break;
       }
 
+      case "investigate_entity": {
+        const query = (params?.query || "").toString().trim().toLowerCase();
+        if (!query) {
+          result = { success: false, message: "No query provided for investigation" };
+          break;
+        }
+
+        const pattern = `%${query}%`;
+        const results: Record<string, any> = {};
+
+        // Search profiles
+        const { data: profiles } = await supabaseAdmin
+          .from("profiles")
+          .select("id, full_name, email, role, company_id")
+          .or(`full_name.ilike.${pattern},email.ilike.${pattern}`)
+          .limit(10);
+        if (profiles?.length) results.profiles = profiles;
+
+        // Search customers
+        const { data: customers } = await supabaseAdmin
+          .from("customers")
+          .select("id, name, email, phone, company_id")
+          .or(`name.ilike.${pattern},email.ilike.${pattern}`)
+          .limit(10);
+        if (customers?.length) results.customers = customers;
+
+        // Search leads
+        const { data: leads } = await supabaseAdmin
+          .from("leads")
+          .select("id, company_name, contact_name, status, source, company_id")
+          .or(`company_name.ilike.${pattern},contact_name.ilike.${pattern}`)
+          .limit(10);
+        if (leads?.length) results.leads = leads;
+
+        // Search projects
+        const { data: projects } = await supabaseAdmin
+          .from("projects")
+          .select("id, name, status, company_id")
+          .ilike("name", pattern)
+          .limit(10);
+        if (projects?.length) results.projects = projects;
+
+        // Search work orders
+        const { data: workOrders } = await supabaseAdmin
+          .from("work_orders")
+          .select("id, order_number, status, company_id")
+          .ilike("order_number", pattern)
+          .limit(10);
+        if (workOrders?.length) results.work_orders = workOrders;
+
+        // Search contacts
+        const { data: contacts } = await supabaseAdmin
+          .from("contacts")
+          .select("id, first_name, last_name, email, phone, company_id")
+          .or(`first_name.ilike.${pattern},last_name.ilike.${pattern},email.ilike.${pattern}`)
+          .limit(10);
+        if (contacts?.length) results.contacts = contacts;
+
+        // Recent activity events for matched profiles
+        if (profiles?.length) {
+          const userIds = profiles.map((p: any) => p.id);
+          const { data: activity } = await supabaseAdmin
+            .from("activity_events")
+            .select("*")
+            .in("actor_id", userIds)
+            .order("created_at", { ascending: false })
+            .limit(20);
+          if (activity?.length) results.recent_activity = activity;
+        }
+
+        const totalFound = Object.values(results).reduce((sum: number, arr: any) => sum + (arr?.length || 0), 0);
+        result = {
+          success: true,
+          message: totalFound > 0
+            ? `Found ${totalFound} result(s) across ${Object.keys(results).length} categories for "${query}"`
+            : `No results found for "${query}"`,
+          data: results,
+        };
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400, headers: corsHeaders });
     }
