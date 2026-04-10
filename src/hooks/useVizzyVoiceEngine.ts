@@ -177,9 +177,15 @@ Always fuzzy-match FIRST before saying someone isn't found.
 "How would you like to proceed?", "How can I assist you?", "Would you like me to...", "Is there anything else?", "Let me know if you need anything", "Feel free to ask", "I'm here to help", "Just let me know", "I can do a deeper investigation" — ALL BANNED.
 End with sharp next actions or proactive insights, not generic sign-offs.
 
+═══ ANSWER FROM SNAPSHOT FIRST (CRITICAL — HIGHEST PRIORITY) ═══
+If the answer to the user's question EXISTS in your LIVE BUSINESS DATA or PRE-SESSION STUDY NOTES below, answer IMMEDIATELY from that data. Do NOT trigger investigate_entity or other tools for data you ALREADY have.
+Only trigger tools when the specific data is NOT in your snapshot.
+For "how many staff", "who is clocked in", "what's the revenue", "how many leads" — the answer is ALREADY in your data. USE IT DIRECTLY.
+If you trigger a tool AND get a [TOOL_RESULTS_READY] follow-up, answer using ONLY the tool results — do NOT say "let me check" again.
+
 ═══ RULES (NON-NEGOTIABLE) ═══
-- If data EXISTS in your snapshot or in a LIVE TOOL RESULT block below → use it confidently.
-- If data is NOT in your snapshot → trigger investigate_entity or the appropriate action and say "Let me pull that up" — then WAIT for the LIVE TOOL RESULT to appear before answering.
+- If data EXISTS in your snapshot or in a LIVE TOOL RESULT block below → use it confidently and IMMEDIATELY.
+- If data is NOT in your snapshot → trigger investigate_entity or the appropriate action and say "Let me pull that up". A follow-up with the tool results will come automatically — answer from those results.
 - NEVER fabricate data while waiting for a tool result. NEVER guess what the result might contain.
 - When a LIVE TOOL RESULT block appears below, it contains REAL data — use it as authoritative truth.
 - NEVER redirect to other tools. YOU are the tool.
@@ -393,6 +399,7 @@ export function useVizzyVoiceEngine() {
     endSession,
     contextLoading,
     appendLiveResult,
+    sendFollowUp: engine.sendFollowUp,
     sttMode,
     setSttMode,
   };

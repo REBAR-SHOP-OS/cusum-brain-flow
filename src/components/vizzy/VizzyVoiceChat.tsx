@@ -82,6 +82,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     contextLoading,
     lastErrorDetail,
     appendLiveResult,
+    sendFollowUp,
     sttMode,
     setSttMode,
     partialText,
@@ -133,6 +134,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
 
     (async () => {
       const results = { tasks: 0, emails: 0, calls: 0, other: 0, errors: 0 };
+      let hasReadResults = false;
 
       for (const { actionData } of pendingActions) {
         try {
@@ -145,6 +147,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           if (READ_ACTIONS.has(actionData.type) && data) {
             const resultBlock = `\n═══ LIVE TOOL RESULT (${actionData.type}) ═══\n${JSON.stringify(data, null, 1).slice(0, 4000)}\n═══ END TOOL RESULT ═══\nUse ONLY this data to answer the CEO's question. Do NOT fabricate beyond what is shown here.`;
             appendLiveResult(resultBlock);
+            hasReadResults = true;
           }
 
           if (actionData.type === "create_task") {
@@ -181,6 +184,12 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
       
       if (parts.length > 0) toast.success(`Vizzy auto-${parts.join(" and ")}`);
       if (results.errors > 0) toast.error(`${results.errors} action${results.errors > 1 ? "s" : ""} failed`);
+
+      // Auto-follow-up: trigger a hidden AI call so Vizzy answers using the tool results
+      if (hasReadResults && sendFollowUp) {
+        console.log("[VizzyVoiceChat] Triggering auto-follow-up after READ_ACTION results");
+        sendFollowUp("[TOOL_RESULTS_READY] The tool results have been loaded into your context above. Now answer the CEO's original question using ONLY the real data from the LIVE TOOL RESULT blocks. Be direct and specific.");
+      }
     })();
   }, [transcripts]);
 
