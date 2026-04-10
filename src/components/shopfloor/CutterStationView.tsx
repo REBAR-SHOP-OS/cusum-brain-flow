@@ -756,6 +756,32 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               Active: {currentItem.mark_number || currentItem.id.slice(0, 8)}
             </span>
           )}
+          {!isRunning && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="shrink-0 ml-2"
+              onClick={async () => {
+                try {
+                  await manageMachine({
+                    action: "complete-run",
+                    machineId: machine.id,
+                    outputQty: 0,
+                    scrapQty: 0,
+                    notes: "Cleared lock via station unlock button",
+                  });
+                  setCompletedLocally(true);
+                  queryClient.invalidateQueries({ queryKey: ["live-machines"] });
+                  toast({ title: "Lock cleared", description: "Machine is now idle. You can start a new run." });
+                } catch (err: any) {
+                  toast({ title: "Clear failed", description: err.message, variant: "destructive" });
+                }
+              }}
+            >
+              <Unlock className="w-4 h-4 mr-1" />
+              Clear Lock
+            </Button>
+          )}
         </div>
       )}
       {!machine.machine_lock && machine.cut_session_status === "idle" && (

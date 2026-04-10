@@ -15,7 +15,8 @@ import { useForemanBrain } from "@/hooks/useForemanBrain";
 import { useBenderBatches } from "@/hooks/useBenderBatches";
 import { BenderBatchPanel } from "./BenderBatchPanel";
 import { recordCompletion } from "@/lib/foremanLearningService";
-import { Check, ChevronLeft, ChevronRight, Loader2, AlertCircle } from "lucide-react";
+import { manageMachine } from "@/lib/manageMachineService";
+import { Check, ChevronLeft, ChevronRight, Loader2, AlertCircle, Lock, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
@@ -189,6 +190,40 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
         onBack={onBack}
         showBedsSuffix={false}
       />
+
+      {/* ── MACHINE LOCK STATUS BAR ── */}
+      {machine.machine_lock && (
+        <div className="flex items-center gap-3 px-6 py-2 border-b border-border bg-destructive/10">
+          <Lock className="w-4 h-4 text-destructive" />
+          <span className="text-xs font-bold text-destructive uppercase tracking-wider">
+            LOCKED — {machine.job_assigned_by === "optimizer" ? "Optimizer" : machine.job_assigned_by === "supervisor" ? "Supervisor" : "Manual"} Assignment
+          </span>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="shrink-0 ml-auto"
+            onClick={async () => {
+              try {
+                await manageMachine({
+                  action: "complete-run",
+                  machineId: machine.id,
+                  outputQty: 0,
+                  scrapQty: 0,
+                  notes: "Cleared lock via bender station unlock button",
+                });
+                queryClient.invalidateQueries({ queryKey: ["live-machines"] });
+                queryClient.invalidateQueries({ queryKey: ["station-data", machine.id, "bender"] });
+                toast({ title: "Lock cleared", description: "Machine is now idle." });
+              } catch (err: any) {
+                toast({ title: "Clear failed", description: err.message, variant: "destructive" });
+              }
+            }}
+          >
+            <Unlock className="w-4 h-4 mr-1" />
+            Clear Lock
+          </Button>
+        </div>
+      )}
 
       {/* Remaining progress strip */}
       {(() => {
