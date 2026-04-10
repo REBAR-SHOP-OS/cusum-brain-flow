@@ -1437,7 +1437,79 @@ function getAgentStatus(data?: SystemAgentSummary, domainStats?: AgentDomainStat
   return { label: "No Activity", color: "bg-muted text-muted-foreground border-border" };
 }
 
-function AgentReportDialog({ agent, data, domainStats }: {
+function DomainMetricsDrilldown({ agentCode, domainStats }: { agentCode: string; domainStats: AgentDomainStat[] }) {
+  const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+  const { data: records, isLoading } = useAgentDomainDrilldown({
+    agentCode: selectedMetric ? agentCode : null,
+    metricLabel: selectedMetric,
+  });
+
+  const statusColor = (s?: string) => {
+    if (!s) return "";
+    const lower = s.toLowerCase();
+    if (["won", "paid", "completed", "active", "success"].includes(lower)) return "bg-green-500/15 text-green-700 dark:text-green-400";
+    if (["pending", "draft", "new", "in_progress"].includes(lower)) return "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400";
+    if (["overdue", "failed", "error"].includes(lower)) return "bg-red-500/15 text-red-700 dark:text-red-400";
+    return "bg-muted text-muted-foreground";
+  };
+
+  return (
+    <div>
+      <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
+        <BarChart3 className="w-3.5 h-3.5 text-primary" /> Domain Metrics
+      </h4>
+      <div className="grid grid-cols-2 gap-2">
+        {domainStats.map((s) => (
+          <button
+            key={s.label}
+            onClick={() => setSelectedMetric(prev => prev === s.label ? null : s.label)}
+            className={`flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors cursor-pointer
+              ${selectedMetric === s.label
+                ? "border-primary bg-primary/10"
+                : "border-border bg-muted/30 hover:border-primary/50 hover:bg-muted/60"
+              }`}
+          >
+            <span className="text-xs text-muted-foreground">{s.label}</span>
+            <span className="text-sm font-semibold text-foreground">{s.value}</span>
+          </button>
+        ))}
+      </div>
+      {selectedMetric && (
+        <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 p-2 max-h-[200px] overflow-y-auto">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-semibold text-primary">{selectedMetric} — Details</span>
+            <button onClick={() => setSelectedMetric(null)} className="text-muted-foreground hover:text-foreground">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+          {isLoading ? (
+            <div className="flex justify-center py-4"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>
+          ) : !records || records.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground italic text-center py-2">No records found</p>
+          ) : (
+            <div className="space-y-0.5">
+              {records.map((r, i) => (
+                <div key={i} className="flex items-center justify-between text-[11px] py-1 px-2 rounded bg-background/60">
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-medium text-foreground truncate">{r.label}</span>
+                    {r.sublabel && <span className="text-[10px] text-muted-foreground truncate">{r.sublabel}</span>}
+                  </div>
+                  {r.status && (
+                    <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full whitespace-nowrap ${statusColor(r.status)}`}>
+                      {r.status}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
   agent: { name: string; code: string; role: string };
   data?: SystemAgentSummary;
   domainStats?: AgentDomainStat[];
