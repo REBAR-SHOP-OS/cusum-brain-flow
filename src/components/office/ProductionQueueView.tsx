@@ -94,12 +94,20 @@ export function ProductionQueueView() {
   };
 
   const handleDeleteProject = async (projectId: string): Promise<boolean> => {
-    // 1. Delete barlists (work_orders.barlist_id → SET NULL via FK; barlist_items etc → CASCADE)
+    // Collect extract_session_ids before deleting barlists
     const projectBarlists = barlists.filter(b => b.project_id === projectId);
+    const sessionIds = projectBarlists.map(b => b.extract_session_id).filter(Boolean) as string[];
+
+    // 1. Delete barlists (work_orders.barlist_id → SET NULL via FK; barlist_items etc → CASCADE)
     for (const b of projectBarlists) {
       const { data, error } = await supabase.from("barlists").delete().eq("id", b.id).select();
       if (error) { toast({ title: "Error deleting barlist", description: error.message, variant: "destructive" }); return false; }
       if (!data || data.length === 0) { toast({ title: "Permission denied", description: "Cannot delete barlist — insufficient permissions.", variant: "destructive" }); return false; }
+    }
+
+    // 2. Delete linked extract_sessions (CASCADE removes extract_rows, extract_raw_files, extract_errors)
+    for (const sid of sessionIds) {
+      await supabase.from("extract_sessions").delete().eq("id", sid);
     }
 
     // 3. Delete cut plans (CASCADE handles cut_plan_items → clearance_evidence, cut_output_batches, inventory_reservations, loading_checklist)
@@ -125,6 +133,7 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
     queryClient.invalidateQueries({ queryKey: ["production-queues"] });
+    queryClient.invalidateQueries({ queryKey: ["extract-sessions"] });
     await fetchPlans();
     return true;
   };
