@@ -1758,6 +1758,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
   const [editingAutomations, setEditingAutomations] = useState(false);
   const [editingItems, setEditingItems] = useState(false);
   const [addUserOpen, setAddUserOpen] = useState(false);
+  const [companyRulesOpen, setCompanyRulesOpen] = useState(false);
   const isSuperAdmin = ACCESS_POLICIES.superAdmins.includes(user?.email ?? "");
 
   // Filter @rebar.shop profiles, active first
@@ -2333,6 +2334,7 @@ export function VizzyBrainPanel({ onClose }: Props) {
           adminEmail={user?.email ?? ""}
         />
       )}
+      <CompanyRulesDialog open={companyRulesOpen} onOpenChange={setCompanyRulesOpen} />
     </motion.div>
   );
 }
