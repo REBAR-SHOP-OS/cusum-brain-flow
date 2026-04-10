@@ -238,20 +238,34 @@ export function AIExtractView() {
   // Helper: session's normalised source unit
   const sessionSourceUnit = activeSession?.unit_system === "metric" ? "mm" : (activeSession?.unit_system ?? "mm");
 
-  /** Display length without round-trip rounding — use raw value when display matches source unit */
-  const displayLength = (mmVal: number | null | undefined, rawVal: number | null | undefined): string => {
+  /** Display length — prefer exact source text when available */
+  const displayLength = (row: any): string => {
+    // If source text exists from the original file, show it directly
+    if (row.source_total_length_text != null && row.source_total_length_text !== "") {
+      return row.source_total_length_text;
+    }
+    const mmVal = row.total_length_mm;
     if (mmVal == null) return "—";
     if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
-    if (displayUnit === sessionSourceUnit && rawVal != null) return String(rawVal);
+    if (displayUnit === sessionSourceUnit && row.raw_total_length_mm != null) return String(row.raw_total_length_mm);
     return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode) || "—";
   };
 
-  /** Display dimension value, preferring raw when display matches source unit */
-  const displayDim = (mmVal: number | null | undefined, dimKey: string, rawDimsJson: any): string => {
+  /** Display dimension value — prefer exact source text when available */
+  const displayDim = (mmVal: number | null | undefined, dimKey: string, row: any): string => {
+    // Check source_dims_json for exact original text
+    const sourceDims = row.source_dims_json;
+    if (sourceDims != null) {
+      // dimKey is like "dim_a", source_dims_json keys are like "A"
+      const letter = dimKey.replace("dim_", "").toUpperCase();
+      if (sourceDims[letter] != null && sourceDims[letter] !== "") {
+        return sourceDims[letter];
+      }
+    }
     if (mmVal == null) return "";
     if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
-    if (displayUnit === sessionSourceUnit && rawDimsJson != null) {
-      const rawVal = rawDimsJson[dimKey];
+    if (displayUnit === sessionSourceUnit && row.raw_dims_json != null) {
+      const rawVal = row.raw_dims_json[dimKey];
       if (rawVal != null) return String(rawVal);
     }
     return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode);
