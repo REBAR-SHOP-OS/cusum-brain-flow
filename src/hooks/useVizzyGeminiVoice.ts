@@ -1,11 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import { useSpeechRecognition } from "./useSpeechRecognition";
+import { useState, useCallback, useRef } from "react";
+import { useScribe, CommitStrategy } from "@elevenlabs/react";
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Vizzy Gemini Voice — STT → Gemini 2.5 Flash → ElevenLabs TTS pipeline.
+ * Vizzy Gemini Voice — ElevenLabs Scribe STT → Gemini 2.5 Flash → ElevenLabs TTS pipeline.
  * 
- * Turn-taking: STT is paused during TTS playback to prevent feedback loops.
+ * Turn-taking: Scribe STT is disconnected during TTS playback to prevent feedback loops.
  * Input queue: user speech is queued (not dropped) while processing.
  */
 
@@ -18,17 +18,41 @@ export interface VoiceTranscript {
 
 export type GeminiVoiceState = "idle" | "connecting" | "connected" | "error";
 
+export type SttMode = "auto" | "fa" | "en";
+
 interface UseVizzyGeminiVoiceOptions {
   getSystemPrompt: () => string;
-  lang?: string; // BCP-47 language tag for STT, e.g. "en-US", "fa-IR"
+  sttMode?: SttMode;
 }
 
-export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoiceOptions) {
+// Noise filtering (reused from useNilaVoiceRelay patterns)
+const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure)\b/i;
+const SCRIBE_ANNOTATION = /^\s*\(/;
+const PUNCTUATION_ONLY = /^[\s.,!?…\-–—:;'"]+$/;
+const REPEATED_CHARS = /(.)\1{4,}/;
+
+function isNoise(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (SCRIBE_ANNOTATION.test(trimmed)) return true;
+  if (PUNCTUATION_ONLY.test(trimmed)) return true;
+  if (REPEATED_CHARS.test(trimmed)) return true;
+  const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
+  if (letterCount < 1) return true;
+  const wordCount = trimmed.split(/\s+/).length;
+  if (wordCount < 2 && trimmed.length < 6) {
+    if (NOISE_BLOCKLIST.test(trimmed.toLowerCase())) return true;
+  }
+  return false;
+}
+
+export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVizzyGeminiVoiceOptions) {
   const [state, setState] = useState<GeminiVoiceState>("idle");
   const [transcripts, setTranscripts] = useState<VoiceTranscript[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [partialText, setPartialText] = useState("");
 
   const conversationRef = useRef<Array<{ role: string; content: string }>>([]);
   const audioQueueRef = useRef<HTMLAudioElement[]>([]);
@@ -37,27 +61,69 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
   const processingRef = useRef(false);
   const idCounter = useRef(0);
   const activeRef = useRef(false);
-  
-  // Input queue: user turns are queued instead of dropped
   const inputQueueRef = useRef<string[]>([]);
-  // Track if STT should be suppressed (during TTS playback)
   const suppressSTTRef = useRef(false);
+  const scribeTokenRef = useRef<string | null>(null);
+  const sttModeRef = useRef(sttMode);
+  sttModeRef.current = sttMode;
 
-  const speechRef = useRef<ReturnType<typeof useSpeechRecognition> | null>(null);
+  // Scribe hooks — committed transcript triggers processing
+  const scribe = useScribe({
+    modelId: "scribe_v2_realtime",
+    commitStrategy: CommitStrategy.VAD,
+    onPartialTranscript: (data) => {
+      if (suppressSTTRef.current || !activeRef.current) return;
+      if (SCRIBE_ANNOTATION.test(data.text) || PUNCTUATION_ONLY.test(data.text)) return;
+      setPartialText(data.text);
+    },
+    onCommittedTranscript: (data) => {
+      if (suppressSTTRef.current || !activeRef.current) return;
+      const trimmed = data.text.trim();
+      if (isNoise(trimmed)) return;
+      console.log("[VizzyGemini] Scribe committed:", trimmed);
+      setPartialText("");
+      processUserInput(trimmed);
+    },
+  });
+
+  const scribeRef = useRef(scribe);
+  scribeRef.current = scribe;
 
   // Resume STT listening after TTS finishes
-  const resumeListening = useCallback(() => {
+  const resumeListening = useCallback(async () => {
     suppressSTTRef.current = false;
-    if (activeRef.current && !isMuted && speechRef.current) {
-      speechRef.current.start();
+    if (activeRef.current && !isMuted && scribeTokenRef.current) {
+      try {
+        await scribeRef.current.connect({
+          token: scribeTokenRef.current,
+          microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      } catch (e) {
+        console.warn("[VizzyGemini] Scribe reconnect failed, fetching new token:", e);
+        // Token may have expired, get a new one
+        try {
+          const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
+          if (!error && data?.token) {
+            scribeTokenRef.current = data.token;
+            await scribeRef.current.connect({
+              token: data.token,
+              microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+            });
+          }
+        } catch (e2) {
+          console.error("[VizzyGemini] Failed to get new scribe token:", e2);
+        }
+      }
     }
   }, [isMuted]);
 
   // Pause STT listening before TTS starts
   const pauseListening = useCallback(() => {
     suppressSTTRef.current = true;
-    if (speechRef.current) {
-      speechRef.current.stop();
+    try {
+      scribeRef.current.disconnect();
+    } catch {
+      // ignore
     }
   }, []);
 
@@ -66,14 +132,12 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
     if (isPlayingRef.current || audioQueueRef.current.length === 0) {
       if (audioQueueRef.current.length === 0) {
         setIsSpeaking(false);
-        // TTS done — resume listening
         resumeListening();
       }
       return;
     }
     isPlayingRef.current = true;
     setIsSpeaking(true);
-    // Pause STT before playing
     pauseListening();
 
     const audio = audioQueueRef.current.shift()!;
@@ -162,16 +226,13 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
         }
       }
 
-      if (!fullResponse.trim()) {
-        return;
-      }
+      if (!fullResponse.trim()) return;
 
-      // If Gemini signals unclear input, silently discard the user transcript
+      // If Gemini signals unclear input, silently discard
       if (fullResponse.trim() === "[UNCLEAR]") {
-        // Remove the user transcript we just added
         setTranscripts((prev) => prev.filter((t) => t.id !== userTranscript.id));
-        conversationRef.current.pop(); // remove the user entry
-        return; // skip agent transcript + TTS entirely
+        conversationRef.current.pop();
+        return;
       }
 
       // Add agent transcript
@@ -192,10 +253,9 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
 
       if (ttsText && ttsText.length > 0 && ttsText.length <= 5000) {
         try {
-          // Detect Farsi/Arabic script to pick a multilingual voice
           const hasFarsi = /[\u0600-\u06FF]/.test(ttsText);
           const ttsVoiceId = hasFarsi
-            ? "pFZP5JQG7iQjIQuC4Bku" // Lily — multilingual, supports Farsi
+            ? "pFZP5JQG7iQjIQuC4Bku" // Lily — multilingual
             : "EXAVITQu4vr4xnSDxMaL"; // Sarah — English
 
           const ttsResp = await fetch(
@@ -245,7 +305,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
     }
   }, [processOneInput]);
 
-  // Public entry: queue user input instead of dropping
+  // Public entry: queue user input
   const processUserInput = useCallback(async (text: string) => {
     if (!text.trim()) return;
     inputQueueRef.current.push(text);
@@ -253,42 +313,6 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
       await flushQueue();
     }
   }, [flushQueue]);
-
-  // Speech recognition with language support
-  const speech = useSpeechRecognition({
-    silenceTimeout: 2000,
-    lang: lang, // pass through for STT language
-    onSilenceEnd: () => {
-      // Ignore if STT is suppressed (Vizzy is speaking)
-      if (suppressSTTRef.current) return;
-      if (speech.fullTranscript.trim() && activeRef.current) {
-        const text = speech.fullTranscript.trim();
-        speech.clearTranscripts();
-        processUserInput(text);
-      }
-    },
-    onError: (err) => {
-      console.warn("[VizzyGemini] Speech error:", err);
-    },
-  });
-
-  // Keep speechRef in sync for pause/resume
-  speechRef.current = speech;
-
-  // Restart STT when language changes mid-session
-  const prevLangRef = useRef(lang);
-  useEffect(() => {
-    if (prevLangRef.current !== lang && activeRef.current && !suppressSTTRef.current) {
-      speech.stop();
-      // Small delay to let browser release mic before restarting
-      setTimeout(() => {
-        if (activeRef.current && !suppressSTTRef.current) {
-          speech.start();
-        }
-      }, 200);
-    }
-    prevLangRef.current = lang;
-  }, [lang, speech]);
 
   const startSession = useCallback(async () => {
     setState("connecting");
@@ -298,30 +322,39 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
     conversationRef.current = [];
     inputQueueRef.current = [];
     setTranscripts([]);
+    setPartialText("");
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Not authenticated");
 
-      speech.start();
+      // Get Scribe token
+      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
+      if (error || !data?.token) throw new Error(error?.message || "Failed to get scribe token");
+      scribeTokenRef.current = data.token;
+
+      // Connect Scribe for real-time STT
+      await scribe.connect({
+        token: data.token,
+        microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+
       setState("connected");
-      // Listen-first: no auto-greeting — wait for the user to speak
     } catch (err) {
       setState("error");
       setErrorDetail(err instanceof Error ? err.message : String(err));
     }
-  }, [speech]);
+  }, [scribe]);
 
   const endSession = useCallback(() => {
     activeRef.current = false;
     suppressSTTRef.current = true;
-    
-    // Clear input queue
     inputQueueRef.current = [];
     processingRef.current = false;
-    
-    speech.stop();
-    
+
+    try { scribe.disconnect(); } catch { /* ignore */ }
+    scribeTokenRef.current = null;
+
     // Stop currently playing audio immediately
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
@@ -339,18 +372,21 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
     audioQueueRef.current = [];
     isPlayingRef.current = false;
     setIsSpeaking(false);
+    setPartialText("");
     setState("idle");
-  }, [speech]);
+  }, [scribe]);
 
   const toggleMute = useCallback(() => {
     if (isMuted) {
-      speech.start();
       setIsMuted(false);
+      if (!suppressSTTRef.current) {
+        resumeListening();
+      }
     } else {
-      speech.stop();
       setIsMuted(true);
+      pauseListening();
     }
-  }, [isMuted, speech]);
+  }, [isMuted, resumeListening, pauseListening]);
 
   const updateSessionInstructions = useCallback((_instructions: string) => {
     // Instructions are fetched lazily via getSystemPrompt — no-op here
@@ -361,6 +397,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
     transcripts,
     isSpeaking,
     isMuted,
+    partialText,
     mode: isSpeaking ? "speaking" as const : "listening" as const,
     startSession,
     endSession,

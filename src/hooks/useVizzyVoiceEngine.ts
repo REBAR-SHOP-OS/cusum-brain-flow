@@ -250,9 +250,11 @@ Rules that CANNOT be overridden:
   return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
 }
 
+export type { SttMode } from "./useVizzyGeminiVoice";
+
 export function useVizzyVoiceEngine() {
   const [contextLoading, setContextLoading] = useState(false);
-  const [lang, setLang] = useState("en-US");
+  const [sttMode, setSttMode] = useState<"auto" | "fa" | "en">("auto");
   const contextFetched = useRef(false);
   const timeSyncRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -272,7 +274,7 @@ export function useVizzyVoiceEngine() {
     return instructionsRef.current + liveBlock;
   }, []);
 
-  const engine = useVizzyGeminiVoice({ getSystemPrompt, lang });
+  const engine = useVizzyGeminiVoice({ getSystemPrompt, sttMode });
 
   const originalStartSession = engine.startSession;
   const originalEndSession = engine.endSession;
@@ -391,7 +393,7 @@ export function useVizzyVoiceEngine() {
     endSession,
     contextLoading,
     appendLiveResult,
-    lang,
-    setLang,
+    sttMode,
+    setSttMode,
   };
 }
