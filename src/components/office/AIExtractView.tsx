@@ -235,7 +235,28 @@ export function AIExtractView() {
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode) : -1;
   const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
 
-  // Ref to track if user explicitly set unit — prevents stale DB value from overwriting
+  // Helper: session's normalised source unit
+  const sessionSourceUnit = activeSession?.unit_system === "metric" ? "mm" : (activeSession?.unit_system ?? "mm");
+
+  /** Display length without round-trip rounding — use raw value when display matches source unit */
+  const displayLength = (mmVal: number | null | undefined, rawVal: number | null | undefined): string => {
+    if (mmVal == null) return "—";
+    if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
+    if (displayUnit === sessionSourceUnit && rawVal != null) return String(rawVal);
+    return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode) || "—";
+  };
+
+  /** Display dimension value, preferring raw when display matches source unit */
+  const displayDim = (mmVal: number | null | undefined, dimKey: string, rawDimsJson: any): string => {
+    if (mmVal == null) return "";
+    if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
+    if (displayUnit === sessionSourceUnit && rawDimsJson != null) {
+      const rawVal = rawDimsJson[dimKey];
+      if (rawVal != null) return String(rawVal);
+    }
+    return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode);
+  };
+
   const userSetUnitRef = useRef(false);
   // Ref to hold the confirmed unit value immune to state overwrites from sync effects
   const confirmedUnitRef = useRef<string>("mm");
