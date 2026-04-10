@@ -190,13 +190,22 @@ export function TagsExportView() {
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return;
     setDeleting(true);
-    const { error } = await supabase
+    const ids = Array.from(selectedIds);
+    const { data, error } = await supabase
       .from("extract_sessions")
       .delete()
-      .in("id", Array.from(selectedIds));
-    if (error) toast.error(error.message);
-    else {
-      toast.success(`Deleted ${selectedIds.size} session(s)`);
+      .in("id", ids)
+      .select("id");
+    if (error) {
+      toast.error(error.message);
+    } else if (!data || data.length === 0) {
+      toast.error("Permission denied — could not delete sessions. Check your role permissions.");
+    } else if (data.length < ids.length) {
+      toast.warning(`Only ${data.length} of ${ids.length} session(s) deleted. Some may be protected.`);
+      setSelectedIds(new Set());
+      refresh();
+    } else {
+      toast.success(`Deleted ${data.length} session(s)`);
       setSelectedIds(new Set());
       refresh();
     }
