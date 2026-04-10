@@ -52,6 +52,7 @@ export function ScheduledActivities({ entityType, entityId, assignees }: Schedul
         summary,
         due_date: dueDate,
         assigned_name: assignedName || undefined,
+        allAssignees: assignedName === "__all__" ? assignees : undefined,
       },
       {
         onSuccess: () => {
