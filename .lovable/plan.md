@@ -1,36 +1,32 @@
 
 
-# Make Domain Metrics Clickable to Show Detail Lists
+# Make Vizzy Respond in Any Language Spoken
 
 ## Problem
-In the Agent Report Dialog, domain metrics like "Total Orders: 75" and "Pending: 11" only show counts. The user wants to click on them and see the actual records behind those numbers.
+The current language instruction (line 50-53 in `vizzyIdentity.ts`) only handles English and Farsi. The user wants Vizzy to automatically respond in **any** language it's spoken to.
 
-## Approach
-Add a drill-down panel inside the AgentReportDialog. When a domain metric is clicked, fetch and display the actual records in a collapsible list below the metric grid.
+## Change
 
-### 1. Create `useAgentDomainDrilldown` hook
-- New file: `src/hooks/useAgentDomainDrilldown.ts`
-- Accepts `agentCode` + `metricLabel` (e.g., `"legal"` + `"Total Orders"`)
-- Fetches the actual records based on the agent/metric combination:
-  - **Tally / "Total Orders"**: fetch all orders (order_number, customer name, status, date) 
-  - **Tally / "Pending"**: fetch orders where `status = 'pending'`
-  - **Blitz / "Active Leads"**: fetch leads in active stages (name, stage, date)
-  - **Blitz / "Hot Enquiries"**: fetch leads where `stage = 'hot_enquiries'`
-  - **Penny / "Unpaid Invoices"**: fetch sales_invoices in draft/sent/overdue
-  - **Penny / "Open AR"**: fetch accounting_mirror with balance > 0
-  - **Forge / "Active Cut Plans"**: fetch cut_plans in pending/in_progress
-  - And so on for each agent's metrics
-- Returns `{ data, isLoading }` — data is an array of `{ label: string; sublabel?: string; status?: string }`
+### File: `supabase/functions/_shared/vizzyIdentity.ts` — lines 50-53
 
-### 2. Update `AgentReportDialog` — Domain Metrics section
-- Make each metric card clickable (cursor-pointer, hover highlight)
-- On click, set `selectedMetric` state
-- Below the metrics grid, render a drilldown panel showing the fetched records
-- Each record row shows: primary label (e.g., order number / lead name), sublabel (customer/date), and status badge
-- Add a "close" button or click-to-toggle behavior
+**Current:**
+```
+═══ LANGUAGE (CRITICAL) ═══
+DEFAULT: English. If CEO writes/speaks in Farsi → respond in natural Tehrani Farsi (informal/colloquial).
+Switch back to English immediately when CEO does. Keep business terms, company names, proper nouns in English even in Farsi.
+Previous messages in Farsi do NOT mean current response should be Farsi. Match CURRENT message language only.
+```
 
-### 3. Scope
-- 1 new file: `useAgentDomainDrilldown.ts`
-- 1 modified file: `VizzyBrainPanel.tsx` (AgentReportDialog section, ~lines 1536-1550)
-- No DB changes
+**New:**
+```
+═══ LANGUAGE (CRITICAL) ═══
+ALWAYS respond in the SAME language the user is currently speaking or writing.
+If user speaks Farsi → respond in natural Tehrani Farsi (informal/colloquial).
+If user speaks English → respond in English.
+If user speaks any other language → respond fluently in that language.
+Match CURRENT message language only — previous messages do NOT determine response language.
+Keep business terms, company names, proper nouns, and employee names in English regardless of language.
+```
+
+One section, one file. No other changes needed — both text chat (`admin-chat`) and voice (`VizzyVoiceChat`) use this shared identity.
 
