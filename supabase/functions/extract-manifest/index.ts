@@ -65,7 +65,8 @@ function normalizeDimHeader(raw: string): string | null {
   return null;
 }
 
-/** Extract dimension columns deterministically from XLSX sheet, bypassing AI */
+/** Extract dimension columns deterministically from XLSX sheet, bypassing AI.
+ *  Also captures exact source cell text into __source_dims and __source_length. */
 function overlaySheetDims(workbook: any, items: any[]): any[] {
   try {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -92,15 +93,21 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
     console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
     return items.map((it, n) => {
       const row = rows[hIdx + 1 + n] || [];
+      const sourceDims: Record<string, string> = {};
       for (const d of DIMS) {
         if (colMap[d] != null) {
           const raw = row[colMap[d]];
+          // Save exact source text
+          sourceDims[d] = raw != null ? String(raw).trim() : "";
           it[d] = raw != null ? (parseDimension(raw) ?? null) : null;
         }
       }
+      it.__source_dims = sourceDims;
       // Overlay total_length from spreadsheet if found
       if (colMap["__LENGTH__"] != null) {
         const raw = row[colMap["__LENGTH__"]];
+        // Save exact source text
+        it.__source_length = raw != null ? String(raw).trim() : null;
         const parsed = raw != null ? parseDimension(raw) : null;
         if (parsed != null) it.total_length = parsed;
       }
