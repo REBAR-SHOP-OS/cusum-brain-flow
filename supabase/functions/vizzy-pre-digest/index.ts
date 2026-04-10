@@ -82,17 +82,30 @@ Deno.serve((req) =>
       : "\nNo previous agent audit available.";
 
     // Step 2c: Load Brain Memories (vizzy_memory excluding benchmarks/timeclock)
-    const { data: brainMemories } = await supabase
-      .from("vizzy_memory")
-      .select("category, content, created_at")
-      .eq("user_id", userId)
-      .not("category", "in", "(daily_benchmark,timeclock)")
-      .order("created_at", { ascending: false })
-      .limit(30);
+    const [{ data: brainMemories }, { data: knowledgeItems }] = await Promise.all([
+      supabase
+        .from("vizzy_memory")
+        .select("category, content, created_at")
+        .eq("user_id", userId)
+        .not("category", "in", "(daily_benchmark,timeclock)")
+        .order("created_at", { ascending: false })
+        .limit(30),
+      supabase
+        .from("knowledge")
+        .select("title, content, category")
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
 
-    const brainBlock = (brainMemories || [])
+    const memoryBlock = (brainMemories || [])
       .map((m: any) => `[${m.category}] ${m.content}`)
       .join("\n");
+
+    const knowledgeBlock = (knowledgeItems || [])
+      .map((k: any) => `[${k.category || "knowledge"}] ${k.title}: ${k.content}`)
+      .join("\n");
+
+    const brainBlock = [memoryBlock, knowledgeBlock].filter(Boolean).join("\n");
 
     // Step 3: AI pre-digestion — produce a concise intelligence briefing
     const result = await callAI({

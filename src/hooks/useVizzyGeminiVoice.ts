@@ -192,6 +192,12 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
 
       if (ttsText && ttsText.length > 0 && ttsText.length <= 5000) {
         try {
+          // Detect Farsi/Arabic script to pick a multilingual voice
+          const hasFarsi = /[\u0600-\u06FF]/.test(ttsText);
+          const ttsVoiceId = hasFarsi
+            ? "pFZP5JQG7iQjIQuC4Bku" // Lily — multilingual, supports Farsi
+            : "EXAVITQu4vr4xnSDxMaL"; // Sarah — English
+
           const ttsResp = await fetch(
             `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
             {
@@ -203,7 +209,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt, lang }: UseVizzyGeminiVoi
               },
               body: JSON.stringify({
                 text: ttsText.slice(0, 4500),
-                voiceId: "EXAVITQu4vr4xnSDxMaL",
+                voiceId: ttsVoiceId,
                 speed: 1.0,
               }),
             }
