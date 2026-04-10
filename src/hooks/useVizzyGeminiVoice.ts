@@ -92,27 +92,26 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
   // Resume STT listening after TTS finishes
   const resumeListening = useCallback(async () => {
     suppressSTTRef.current = false;
-    if (activeRef.current && !isMuted && scribeTokenRef.current) {
-      try {
-        await scribeRef.current.connect({
-          token: scribeTokenRef.current,
-          microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        });
-      } catch (e) {
-        console.warn("[VizzyGemini] Scribe reconnect failed, fetching new token:", e);
-        // Token may have expired, get a new one
-        try {
-          const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
-          if (!error && data?.token) {
-            scribeTokenRef.current = data.token;
-            await scribeRef.current.connect({
-              token: data.token,
-              microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-            });
-          }
-        } catch (e2) {
-          console.error("[VizzyGemini] Failed to get new scribe token:", e2);
-        }
+    if (!activeRef.current || isMuted) return;
+    // Skip if already connected
+    if (scribeRef.current.isConnected) return;
+    try {
+      // Always fetch a fresh token — cached tokens expire after 15 min
+      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
+      if (error || !data?.token) {
+        console.warn("[VizzyGemini] Failed to get scribe token for resume:", error);
+        return;
+      }
+      scribeTokenRef.current = data.token;
+      await scribeRef.current.connect({
+        token: data.token,
+        microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+    } catch (e: any) {
+      if (e?.message?.includes("WebSocket") || e?.name === "InvalidStateError") {
+        console.warn("[VizzyGemini] Scribe reconnect WebSocket error (suppressed):", e?.message);
+      } else {
+        console.error("[VizzyGemini] Scribe reconnect failed:", e);
       }
     }
   }, [isMuted]);
@@ -121,9 +120,11 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
   const pauseListening = useCallback(() => {
     suppressSTTRef.current = true;
     try {
-      scribeRef.current.disconnect();
+      if (scribeRef.current.isConnected) {
+        scribeRef.current.disconnect();
+      }
     } catch {
-      // ignore
+      // ignore — WebSocket may already be closed
     }
   }, []);
 
@@ -352,7 +353,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     inputQueueRef.current = [];
     processingRef.current = false;
 
-    try { scribe.disconnect(); } catch { /* ignore */ }
+    try { if (scribe.isConnected) scribe.disconnect(); } catch { /* ignore */ }
     scribeTokenRef.current = null;
 
     // Stop currently playing audio immediately
