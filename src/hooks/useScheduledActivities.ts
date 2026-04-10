@@ -30,6 +30,7 @@ interface CreateActivityInput {
   note?: string;
   due_date: string;
   assigned_name?: string;
+  allAssignees?: { profile_id: string; full_name: string }[];
 }
 
 export function useScheduledActivities(entityType: string, entityId: string | null) {
