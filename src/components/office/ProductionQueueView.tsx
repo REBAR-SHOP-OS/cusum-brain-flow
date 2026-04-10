@@ -149,6 +149,7 @@ export function ProductionQueueView() {
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     queryClient.invalidateQueries({ queryKey: ["barlists"] });
     queryClient.invalidateQueries({ queryKey: ["cutPlans"] });
+    queryClient.invalidateQueries({ queryKey: ["extract-sessions"] });
     await fetchPlans();
   };
 
