@@ -399,6 +399,7 @@ export function useVizzyVoiceEngine() {
     endSession,
     contextLoading,
     appendLiveResult,
+    sendFollowUp: engine.sendFollowUp,
     sttMode,
     setSttMode,
   };

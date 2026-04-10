@@ -82,6 +82,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     contextLoading,
     lastErrorDetail,
     appendLiveResult,
+    sendFollowUp,
     sttMode,
     setSttMode,
     partialText,
