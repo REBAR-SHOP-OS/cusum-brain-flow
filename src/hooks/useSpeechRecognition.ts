@@ -56,9 +56,8 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = true;
     recognition.interimResults = true;
-    if (optionsRef.current?.lang) {
-      recognition.lang = optionsRef.current.lang;
-    }
+    // Do NOT set recognition.lang — let the browser auto-detect the spoken language
+    // so Vizzy can respond in whatever language the user speaks
 
     recognition.onstart = () => setIsListening(true);
 
