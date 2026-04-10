@@ -415,6 +415,19 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     // Instructions are fetched lazily via getSystemPrompt — no-op here
   }, []);
 
+  // Send a follow-up to Gemini without a visible user transcript (for tool result follow-ups)
+  const sendFollowUp = useCallback(async (internalPrompt: string): Promise<string> => {
+    if (!activeRef.current) return "";
+    processingRef.current = true;
+    const result = await processMessages(null, internalPrompt);
+    processingRef.current = false;
+    // Flush any queued input after follow-up
+    if (inputQueueRef.current.length > 0) {
+      await flushQueue();
+    }
+    return result;
+  }, [processMessages, flushQueue]);
+
   return {
     state,
     transcripts,
@@ -426,6 +439,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     endSession,
     toggleMute,
     updateSessionInstructions,
+    sendFollowUp,
     connectionPhase: state === "connecting" ? "getting_token" as const : state === "connected" ? "connected" as const : null,
     lastErrorKind: state === "error" ? "network" as const : null,
     lastErrorDetail: errorDetail,
