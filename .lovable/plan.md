@@ -1,53 +1,34 @@
 
 
-# Fix: Extract View Must Default to Source Unit and Display Values Correctly
+# Fix: "All Employees" Activity Scheduling
 
 ## Problem
-Two related issues:
-1. **Wrong values shown**: When `unit_system` is changed during mapping (e.g., from "in" to "imperial/ft-in"), the `source_total_length_text` still contains raw inch numbers (76, 68, 54). The display logic returns these raw numbers even when the header says "ft-in", because `displayUnit === sessionSourceUnit` evaluates to true.
-2. **Unit persists across sessions**: When starting a new session, the display unit should reset to the new session's source unit, not carry over from the previous session.
+The "Assign to" dropdown in the Schedule Activity form only shows the lead's current assignees. There is no "All Employees" option, and the backend (direct Supabase insert in `useScheduledActivities.ts`) only creates a single row per submission.
 
-## Root Cause
-- `source_total_length_text` stores the **original cell text** from the file (e.g., "76" in inches)
-- During mapping, the user can change `unit_system` from `"in"` to `"imperial"` (ft-in)
-- After this change, `sessionSourceUnit` = `"imperial"`, but the raw text is still in inches
-- The guard `displayUnit === sessionSourceUnit` passes, returning raw inch text "76" instead of converting to ft-in format like `6'-4"`
-- The raw source text shortcut should only fire when `displayUnit` matches the **original detected unit**, not the user-overridden unit
+## Solution
+All changes are frontend-only. No edge function needed — the `scheduled_activities` table accepts direct inserts with any `assigned_to` UUID.
 
-## Changes
+### 1. Add "All Employees" option to `ScheduledActivities.tsx`
+- Prepend a static "All Employees" option (value: `"__all__"`) to the assignee dropdown
+- When `"__all__"` is selected, pass a flag to the mutation
 
-### 1. Track the original detected unit separately (`AIExtractView.tsx`)
-Store the **original detected unit** from the extraction (before any user override during mapping) so the source-text shortcut can compare against it correctly.
+### 2. Update `useScheduledActivities.ts` to handle bulk creation
+- Accept an optional `allAssignees` array in `CreateActivityInput`
+- When `assigned_name === "__all__"` and `allAssignees` is provided:
+  - Build an array of insert rows (one per assignee)
+  - Use `supabase.from("scheduled_activities").insert(rows)` (bulk insert)
+- Otherwise, insert a single row as before
 
-- Add a new field or derive the original unit: when `source_total_length_text` exists, the raw text is in the **originally detected** unit. Since we don't store this separately, the safest approach is to **never use source text shortcut when displayUnit is "imperial" (ft-in)** — because raw source text is never in ft-in format (it's always plain numbers in mm or inches).
+### 3. Wire up the assignees list in `ScheduledActivities.tsx`
+- When "All Employees" is selected and form submitted, pass the full `assignees` array to the mutation
+- Each created activity gets the correct `assigned_to` (profile_id) and `assigned_name` (full_name)
 
-```typescript
-const displayLength = (row: any): string => {
-  // Raw source text is a plain number from the original file.
-  // Only use it when displayUnit is "mm" or "in" (plain number formats).
-  // Never use it for "imperial" (ft-in) or "ft" — those need conversion.
-  if ((displayUnit === "mm" || displayUnit === "in") && 
-      displayUnit === sessionSourceUnit && 
-      row.source_total_length_text != null && row.source_total_length_text !== "") {
-    return row.source_total_length_text;
-  }
-  // ... rest of conversion logic
-};
-```
-
-Same fix for `displayDim`.
-
-### 2. Update LENGTH column header to show active unit
-Add the active display unit label to the LENGTH header:
-```
-LENGTH ({lengthUnitLabelByMode(displayUnit)})
-```
-
-### 3. Ensure displayUnit resets on session switch
-The existing code already handles this (lines 280-295 and 756-758), but verify the `userSetUnitRef` reset on `activeSessionId` change works correctly. The `startNew` function (line 794-795) already resets to "mm". No change needed here — already working.
+## Files Changed
+- `src/components/pipeline/ScheduledActivities.tsx` — add "All Employees" option + pass assignees on submit
+- `src/hooks/useScheduledActivities.ts` — bulk insert logic
 
 ## Scope
-- 1 file: `src/components/office/AIExtractView.tsx`
-- ~10 lines changed in `displayLength` and `displayDim` functions + header
-- No database or edge function changes
+- 2 files, ~25 lines changed
+- No database migration
+- No edge function
 
