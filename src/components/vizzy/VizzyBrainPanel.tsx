@@ -38,6 +38,8 @@ import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { Cog, UserPlus } from "lucide-react";
 import { useUserAccessOverrides } from "@/hooks/useUserAccessOverrides";
 import { AddUserDialog } from "@/components/vizzy/AddUserDialog";
+import { CompanyRulesDialog } from "@/components/vizzy/CompanyRulesDialog";
+import { ScrollText } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 
 const USER_AVATAR_COLORS = [
@@ -2061,6 +2063,13 @@ export function VizzyBrainPanel({ onClose }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCompanyRulesOpen(true)}
+              title="Company Rules"
+              className="p-1.5 rounded-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ScrollText className="w-5 h-5" />
+            </button>
             {!selectedProfileId && (
               <Button size="sm" onClick={handleAnalyze} disabled={analyzing || !hasCompanyContext} className="gap-1">
                 {analyzing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
