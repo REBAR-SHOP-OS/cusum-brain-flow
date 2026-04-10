@@ -1509,7 +1509,7 @@ function DomainMetricsDrilldown({ agentCode, domainStats }: { agentCode: string;
   );
 }
 
-
+function AgentReportDialog({ agent, data, domainStats }: {
   agent: { name: string; code: string; role: string };
   data?: SystemAgentSummary;
   domainStats?: AgentDomainStat[];
