@@ -1,27 +1,32 @@
 
 
-# Add Unlock Button When Machine Is Locked
+# Fix "WebSocket is not connected" Error in Vizzy Voice
 
-## Problem
-When a cutter (or bender) machine is locked, the station view shows a "LOCKED" status bar but provides **no way to unlock** unless there's a mismatched job. The user has to leave the station and find another way to clear the lock. The bender station has no lock management UI at all.
+## Root Cause
 
-## Changes
+The ElevenLabs `useScribe` hook throws uncaught errors when:
+1. `scribe.disconnect()` is called when WebSocket is already disconnected (in `pauseListening` and `endSession`)
+2. `scribe.connect()` is called with an expired token (in `resumeListening`) — tokens expire after 15 minutes
+3. These errors bubble up as uncaught exceptions because the try/catch blocks don't fully contain the async lifecycle of the Scribe SDK
 
-### 1. CutterStationView — Add unlock button to lock status bar
-**File**: `src/components/shopfloor/CutterStationView.tsx` (lines 747-759)
+## Fix — `src/hooks/useVizzyGeminiVoice.ts`
 
-The existing "MACHINE LOCK STATUS BAR" (shown when `machine.machine_lock && !machineHasMismatchedRun`) currently shows only a label. Add a "Clear Lock" button to this bar — visible when no run is actively in progress (`!isRunning`). This lets the operator or supervisor unlock the machine without needing to navigate away.
+### 1. Guard `disconnect()` with `isConnected` check
+Before calling `scribe.disconnect()`, check `scribe.isConnected` to avoid calling it when already disconnected.
 
-The button will call `manageMachine({ action: "complete-run", ... })` to clear the lock, same pattern as the mismatched run banner already uses (line 725-739).
+- **`pauseListening`** (line 124): add `if (scribeRef.current.isConnected)` guard
+- **`endSession`** (line 355): add `if (scribe.isConnected)` guard
 
-### 2. BenderStationView — Add lock detection and unlock banner
-**File**: `src/components/shopfloor/BenderStationView.tsx`
+### 2. Guard `connect()` with `isConnected` check
+In `resumeListening` (line 97), only call `connect()` if `!scribeRef.current.isConnected`. This prevents double-connect attempts.
 
-Add the same lock detection logic as the cutter:
-- If `machine.machine_lock` is true and `machine.cut_session_status === "running"`, show a lock status bar with a "Clear Lock" button
-- Import `manageMachine` from the service
-- Call `manageMachine({ action: "complete-run", machineId, outputQty: 0, scrapQty: 0 })` on click
+### 3. Always fetch a fresh token when resuming
+Instead of reusing `scribeTokenRef.current` which may be expired, always fetch a new token in `resumeListening`. This eliminates the two-step retry logic (try old token → catch → fetch new token) and makes reconnection more reliable.
 
-### Scope
-- 2 files modified: `CutterStationView.tsx`, `BenderStationView.tsx`
+### 4. Add global unhandled rejection catcher (safety net)
+Add a window-level handler in the voice chat component to suppress Scribe WebSocket errors that escape try/catch, preventing the toast/error overlay from showing.
+
+## Scope
+- 1 file modified: `src/hooks/useVizzyGeminiVoice.ts`
 - No database or edge function changes
+
