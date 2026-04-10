@@ -111,6 +111,7 @@ export function ScheduledActivities({ entityType, entityId, assignees }: Schedul
                 <SelectValue placeholder="Assign to..." />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="__all__">👥 All Employees</SelectItem>
                 {assignees.map((a) => (
                   <SelectItem key={a.profile_id} value={a.full_name}>
                     {a.full_name}
