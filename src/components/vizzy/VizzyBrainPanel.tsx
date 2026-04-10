@@ -22,6 +22,7 @@ import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { useUserAgentSessions, AgentSessionSummary } from "@/hooks/useUserAgentSessions";
 import { useSystemAgentSessions, SystemAgentSummary } from "@/hooks/useSystemAgentSessions";
 import { useAgentDomainStats, AgentDomainStat } from "@/hooks/useAgentDomainStats";
+import { useAgentDomainDrilldown, DrilldownRecord } from "@/hooks/useAgentDomainDrilldown";
 import { useUserActivityLog, ActivityEvent } from "@/hooks/useUserActivityLog";
 import { useTeamDailyActivity } from "@/hooks/useTeamDailyActivity";
 import { getUserAgentMapping } from "@/lib/userAgentMap";
@@ -1535,19 +1536,7 @@ function AgentReportDialog({ agent, data, domainStats }: {
 
                 {/* Domain Metrics */}
                 {domainStats && domainStats.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-semibold text-foreground mb-2 flex items-center gap-1.5">
-                      <BarChart3 className="w-3.5 h-3.5 text-primary" /> Domain Metrics
-                    </h4>
-                    <div className="grid grid-cols-2 gap-2">
-                      {domainStats.map((s) => (
-                        <div key={s.label} className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2">
-                          <span className="text-xs text-muted-foreground">{s.label}</span>
-                          <span className="text-sm font-semibold text-foreground">{s.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <DomainMetricsDrilldown agentCode={agent.code} domainStats={domainStats} />
                 )}
 
                 {/* Today's Activity */}
