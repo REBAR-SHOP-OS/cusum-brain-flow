@@ -3313,6 +3313,8 @@ export type Database = {
           phase: string
           pieces_per_bar: number
           qty_bars: number
+          source_dims_json: Json | null
+          source_total_length_text: string | null
           total_pieces: number
           work_order_id: string | null
         }
@@ -3333,6 +3335,8 @@ export type Database = {
           phase?: string
           pieces_per_bar?: number
           qty_bars: number
+          source_dims_json?: Json | null
+          source_total_length_text?: string | null
           total_pieces?: number
           work_order_id?: string | null
         }
@@ -3353,6 +3357,8 @@ export type Database = {
           phase?: string
           pieces_per_bar?: number
           qty_bars?: number
+          source_dims_json?: Json | null
+          source_total_length_text?: string | null
           total_pieces?: number
           work_order_id?: string | null
         }
