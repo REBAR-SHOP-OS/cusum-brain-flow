@@ -258,8 +258,8 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
             <span>Qty</span>
             <span>Size</span>
             <span>Type</span>
-            <span>Length ({unitSystem === "imperial" ? "in" : "mm"})</span>
-            {dimCols.map(c => <span key={c}>{c} ({unitSystem === "imperial" ? "in" : "mm"})</span>)}
+            <span>Length</span>
+            {dimCols.map(c => <span key={c}>{c}</span>)}
             <span>ACT</span>
           </div>
 
@@ -319,18 +319,20 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
                   {isEditing ? (
                     <Input type="number" className="h-6 text-xs px-1 w-16" value={editValues.cut_length_mm} onChange={e => setEditValues(v => ({ ...v, cut_length_mm: parseInt(e.target.value) || 0 }))} />
                   ) : (
-                    <span className="text-xs font-bold">{formatLength(item.cut_length_mm, unitSystem)}</span>
+                    <span className="text-xs font-bold">{(item as any).source_total_length_text || formatLength(item.cut_length_mm, unitSystem)}</span>
                   )}
                   {/* Dim columns */}
-                  {dimCols.map(c => (
-                    isEditing ? (
+                  {dimCols.map(c => {
+                    const srcDims = (item as any).source_dims_json;
+                    const srcVal = srcDims?.[c];
+                    return isEditing ? (
                       <Input key={c} type="number" className="h-6 text-xs px-1 w-12" value={editValues.bend_dimensions?.[c] || ""} onChange={e => setEditValues(v => ({ ...v, bend_dimensions: { ...v.bend_dimensions, [c]: parseInt(e.target.value) || undefined } }))} />
                     ) : (
                       <span key={c} className="text-xs text-muted-foreground">
-                        {dims[c] ? <span className="text-foreground">{unitSystem === "imperial" ? Math.round(Number(dims[c]) / 25.4) : dims[c]}<sub className="text-[8px] text-muted-foreground ml-0.5">{unitSystem === "imperial" ? "IN" : "MM"}</sub></span> : ""}
+                        {srcVal != null && srcVal !== "" ? <span className="text-foreground">{String(srcVal)}</span> : dims[c] ? <span className="text-foreground">{dims[c]}</span> : ""}
                       </span>
-                    )
-                  ))}
+                    );
+                  })}
                   {/* Actions */}
                   <div className="flex items-center gap-1">
                     {isEditing ? (
