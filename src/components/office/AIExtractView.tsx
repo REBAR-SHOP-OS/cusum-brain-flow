@@ -178,6 +178,36 @@ export function AIExtractView() {
   const [selectedUnitSystem, setSelectedUnitSystem] = useState<string>("mm");
   // Display-only unit toggle for line items table — decoupled from source unit
   const [displayUnit, setDisplayUnit] = useState<string>("mm");
+
+  // Helper: get the session's normalised source unit (e.g. "in", "ft", "mm")
+  const sessionSourceUnit = activeSession?.unit_system === "metric" ? "mm" : (activeSession?.unit_system ?? "mm");
+
+  /**
+   * Display a length value without round-trip rounding errors.
+   * When the display unit matches the session source unit we use the raw
+   * pre-conversion value (stored in the DB alongside the mm value).
+   * Otherwise we convert from mm using formatLengthByMode.
+   */
+  const displayLength = (mmVal: number | null | undefined, rawVal: number | null | undefined): string => {
+    if (mmVal == null) return "—";
+    if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
+    // If display unit is the same as the source unit and we have the raw value, show it directly
+    if (displayUnit === sessionSourceUnit && rawVal != null) {
+      return rawVal % 1 === 0 ? String(rawVal) : String(rawVal);
+    }
+    return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode) || "—";
+  };
+
+  /** Display a dimension value, preferring raw when display matches source unit */
+  const displayDim = (mmVal: number | null | undefined, dimKey: string, rawDimsJson: any): string => {
+    if (mmVal == null) return "";
+    if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
+    if (displayUnit === sessionSourceUnit && rawDimsJson != null) {
+      const rawVal = rawDimsJson[dimKey];
+      if (rawVal != null) return rawVal % 1 === 0 ? String(rawVal) : String(rawVal);
+    }
+    return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode);
+  };
   // Data hooks
   const { sessions, refresh: refreshSessions } = useExtractSessions();
   const { rows, loading: rowsLoading, hasFetched: rowsHasFetched, refresh: refreshRows } = useExtractRows(activeSessionId);
