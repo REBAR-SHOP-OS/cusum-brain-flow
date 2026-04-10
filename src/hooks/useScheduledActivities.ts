@@ -30,6 +30,7 @@ interface CreateActivityInput {
   note?: string;
   due_date: string;
   assigned_name?: string;
+  allAssignees?: { profile_id: string; full_name: string }[];
 }
 
 export function useScheduledActivities(entityType: string, entityId: string | null) {
@@ -58,6 +59,27 @@ export function useScheduledActivities(entityType: string, entityId: string | nu
   const createActivity = useMutation({
     mutationFn: async (input: CreateActivityInput) => {
       if (!companyId || !user) throw new Error("Not authenticated");
+
+      // Bulk insert for "All Employees"
+      if (input.assigned_name === "__all__" && input.allAssignees && input.allAssignees.length > 0) {
+        const rows = input.allAssignees.map((emp) => ({
+          company_id: companyId,
+          entity_type: input.entity_type,
+          entity_id: input.entity_id,
+          activity_type: input.activity_type,
+          summary: input.summary,
+          note: input.note || null,
+          due_date: input.due_date,
+          assigned_to: emp.profile_id,
+          assigned_name: emp.full_name,
+          created_by: user.id,
+          status: "planned",
+        }));
+        const { error } = await supabase.from("scheduled_activities").insert(rows);
+        if (error) throw error;
+        return;
+      }
+
       const { error } = await supabase.from("scheduled_activities").insert({
         company_id: companyId,
         entity_type: input.entity_type,
