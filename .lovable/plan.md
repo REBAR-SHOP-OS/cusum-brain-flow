@@ -1,32 +1,25 @@
 
 
-# Make Vizzy Respond in Any Language Spoken
+# Fix Company Rules Dialog — Z-Index Layering
 
 ## Problem
-The current language instruction (line 50-53 in `vizzyIdentity.ts`) only handles English and Farsi. The user wants Vizzy to automatically respond in **any** language it's spoken to.
+The CompanyRulesDialog uses standard `DialogContent` which renders at default z-50. The Vizzy Brain panel sits at z-[100000], so the dialog opens **behind** the panel and appears non-functional.
 
-## Change
+## Fix
 
-### File: `supabase/functions/_shared/vizzyIdentity.ts` — lines 50-53
+### File: `src/components/vizzy/CompanyRulesDialog.tsx`
 
-**Current:**
-```
-═══ LANGUAGE (CRITICAL) ═══
-DEFAULT: English. If CEO writes/speaks in Farsi → respond in natural Tehrani Farsi (informal/colloquial).
-Switch back to English immediately when CEO does. Keep business terms, company names, proper nouns in English even in Farsi.
-Previous messages in Farsi do NOT mean current response should be Farsi. Match CURRENT message language only.
-```
+Replace the standard `Dialog`/`DialogContent` with the portal-based pattern used by other Vizzy Brain dialogs:
 
-**New:**
-```
-═══ LANGUAGE (CRITICAL) ═══
-ALWAYS respond in the SAME language the user is currently speaking or writing.
-If user speaks Farsi → respond in natural Tehrani Farsi (informal/colloquial).
-If user speaks English → respond in English.
-If user speaks any other language → respond fluently in that language.
-Match CURRENT message language only — previous messages do NOT determine response language.
-Keep business terms, company names, proper nouns, and employee names in English regardless of language.
-```
+1. Import `DialogPortal`, `DialogOverlay`, and `DialogPrimitive` (from `@radix-ui/react-dialog`)
+2. Set `DialogOverlay` to `z-[100001]`
+3. Set `DialogContent` to `z-[100002]`
+4. Add `onInteractOutside` and `onPointerDownOutside` prevention handlers so the dialog stays open during typing
+5. Add manual close button (X icon)
 
-One section, one file. No other changes needed — both text chat (`admin-chat`) and voice (`VizzyVoiceChat`) use this shared identity.
+This matches the exact pattern used by AddUserDialog, AgentReportDialog, and other modals that open above VizzyBrainPanel.
+
+### Scope
+- 1 file modified: `CompanyRulesDialog.tsx`
+- No other changes needed
 
