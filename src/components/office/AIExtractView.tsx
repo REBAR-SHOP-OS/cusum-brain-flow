@@ -240,21 +240,25 @@ export function AIExtractView() {
 
   /** Display length — prefer exact source text when available */
   const displayLength = (row: any): string => {
-    // Only use raw source text when display unit matches the session's original unit
-    if (displayUnit === sessionSourceUnit && row.source_total_length_text != null && row.source_total_length_text !== "") {
+    // Raw source text is a plain number from the file — only valid for "mm" or "in" modes.
+    // Never use it for "imperial" (ft-in) or "ft" — those need conversion formatting.
+    if ((displayUnit === "mm" || displayUnit === "in") &&
+        displayUnit === sessionSourceUnit &&
+        row.source_total_length_text != null && row.source_total_length_text !== "") {
       return row.source_total_length_text;
     }
     const mmVal = row.total_length_mm;
     if (mmVal == null) return "—";
     if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
-    if (displayUnit === sessionSourceUnit && row.raw_total_length_mm != null) return String(row.raw_total_length_mm);
+    if ((displayUnit === "mm" || displayUnit === "in") &&
+        displayUnit === sessionSourceUnit && row.raw_total_length_mm != null) return String(row.raw_total_length_mm);
     return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode) || "—";
   };
 
   /** Display dimension value — prefer exact source text when available */
   const displayDim = (mmVal: number | null | undefined, dimKey: string, row: any): string => {
-    // Only use raw source text when display unit matches the session's original unit
-    if (displayUnit === sessionSourceUnit) {
+    // Raw source text is plain numbers — only valid for "mm" or "in" modes.
+    if ((displayUnit === "mm" || displayUnit === "in") && displayUnit === sessionSourceUnit) {
       const sourceDims = row.source_dims_json;
       if (sourceDims != null) {
         const letter = dimKey.replace("dim_", "").toUpperCase();
@@ -265,7 +269,8 @@ export function AIExtractView() {
     }
     if (mmVal == null) return "";
     if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
-    if (displayUnit === sessionSourceUnit && row.raw_dims_json != null) {
+    if ((displayUnit === "mm" || displayUnit === "in") &&
+        displayUnit === sessionSourceUnit && row.raw_dims_json != null) {
       const rawVal = row.raw_dims_json[dimKey];
       if (rawVal != null) return String(rawVal);
     }
@@ -2053,7 +2058,7 @@ export function AIExtractView() {
                           <TableHead className="text-[10px] font-bold tracking-wider w-[40px]">#</TableHead>
                           <TableHead className="text-[10px] font-bold tracking-wider w-[80px]">MARK</TableHead>
                           <TableHead className="text-[10px] font-bold tracking-wider w-[50px]">SIZE</TableHead>
-                          <TableHead className="text-[10px] font-bold tracking-wider w-[70px]">LENGTH</TableHead>
+                          <TableHead className="text-[10px] font-bold tracking-wider w-[70px]">LENGTH ({lengthUnitLabelByMode(displayUnit as LengthDisplayMode)})</TableHead>
                           <TableHead className="text-[10px] font-bold tracking-wider w-[50px]">ORIG QTY</TableHead>
                           <TableHead className="text-[10px] font-bold tracking-wider w-[100px]">MERGED INTO</TableHead>
                           <TableHead className="text-[10px] font-bold tracking-wider">DUP KEY</TableHead>
