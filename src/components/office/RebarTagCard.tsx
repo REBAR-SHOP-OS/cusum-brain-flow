@@ -61,12 +61,14 @@ interface RebarTagCardProps {
   unitSystem?: string;
   bndl?: string;
   job?: string;
+  sourceLength?: string;
+  sourceDims?: Record<string, string>;
 }
 
 export function RebarTagCard({
   mark, size, grade, qty, length, weight, shapeType,
   dwg, item, customer, reference, address, dims, shapeImageUrl,
-  unitSystem = "metric",
+  unitSystem = "metric", sourceLength, sourceDims,
 }: RebarTagCardProps) {
   const us = unitSystem;
   const now = new Date();
@@ -101,9 +103,9 @@ export function RebarTagCard({
         </div>
         <div className="text-center py-2 px-2 border-r-2 border-black">
           <div className="text-[9px] font-bold tracking-widest uppercase">
-            Length {us === "imperial" ? "(ft-in)" : "(mm)"}
+            Length
           </div>
-          <div className="text-[22px] font-black leading-tight">{formatVal(length, us)}</div>
+          <div className="text-[22px] font-black leading-tight">{sourceLength || formatVal(length, us)}</div>
         </div>
         <div className="text-center py-2 px-2">
           <div className="text-[9px] font-bold tracking-widest uppercase">Dwg</div>
@@ -122,13 +124,13 @@ export function RebarTagCard({
           {DIM_LEFT.map((d, i) => (
             <div key={d} className="text-xs flex gap-1" style={{ gridRow: i + 1, gridColumn: 1 }}>
               <span className="font-bold w-3.5">{d}:</span>
-              <span className="font-black">{formatDim(dims[d], us)}</span>
+              <span className="font-black">{sourceDims?.[d] || formatDim(dims[d], us)}</span>
             </div>
           ))}
           {DIM_RIGHT.map((d, i) => (
             <div key={d} className="text-xs flex gap-1" style={{ gridRow: i + 1, gridColumn: 2 }}>
               <span className="font-bold w-3.5">{d}:</span>
-              <span className="font-black">{formatDim(dims[d], us)}</span>
+              <span className="font-black">{sourceDims?.[d] || formatDim(dims[d], us)}</span>
             </div>
           ))}
         </div>

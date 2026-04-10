@@ -107,23 +107,22 @@ export function TagsExportView() {
   // CSV export
   const handleExportCSV = () => {
     if (!sortedRows.length) return;
-    const us = sessionUnitToDisplay((selectedSession as any)?.unit_system);
-    const lengthHeader = us === "imperial" ? "TOTAL LENGTH (ft-in)" : "TOTAL LENGTH (mm)";
-    const dimUnit = us === "imperial" ? "in" : "mm";
-    const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", lengthHeader,
-      ...DIM_COLS.map(d => `${d} (${dimUnit})`), "WEIGHT", "PICTURE", "CUSTOMER", "INVOICE", "REMARK"];
+    const headers = ["DWG #", "ITEM", "GRADE", "MARK", "QUANTITY", "SIZE", "TYPE", "TOTAL LENGTH",
+      ...DIM_COLS.map(d => d), "WEIGHT", "PICTURE", "CUSTOMER", "INVOICE", "REMARK"];
     const csvRows = sortedRows.map((r) => {
       const size = r.bar_size_mapped || r.bar_size || "";
       const shapeType = r.shape_code_mapped || r.shape_type || "STRAIGHT";
       const weight = getWeight(size, r.total_length_mm, r.quantity);
       const picture = shapeType ? (getShapeImageUrl(shapeType) || `TYPE-${shapeType}.PNG`) : "";
-      const formattedLength = r.total_length_mm ? formatDim(r.total_length_mm, us) : "";
+      const srcDims = (r as any).source_dims_json;
+      const formattedLength = (r as any).source_total_length_text || (r.total_length_mm ? String(r.total_length_mm) : "");
       return [
         r.dwg || "", r.row_index, r.grade_mapped || r.grade || "", r.mark || "",
         r.quantity || "", size, shapeType, formattedLength,
         ...DIM_COLS.map((d) => {
+          if (srcDims?.[d] != null && srcDims[d] !== "") return String(srcDims[d]);
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
-          return r[key] != null ? formatDim(Number(r[key]), us) : "";
+          return r[key] != null ? String(r[key]) : "";
         }),
         weight, picture, r.customer || "", (selectedSession as any)?.invoice_number || "", selectedSession?.name || "",
       ].join(",");
@@ -384,7 +383,7 @@ export function TagsExportView() {
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Size</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">Type</th>
                   <th className="text-[10px] font-bold tracking-widest text-primary uppercase text-left px-3 py-2 whitespace-nowrap">
-                    Total Length {sessionUnitToDisplay((selectedSession as any)?.unit_system) === "imperial" ? "(ft-in)" : "(mm)"}
+                    Total Length
                   </th>
                   {DIM_COLS.map((c) => (
                     <th key={c} className="text-[10px] font-bold tracking-widest text-primary uppercase text-right px-3 py-2 whitespace-nowrap">{c}</th>
@@ -405,10 +404,10 @@ export function TagsExportView() {
                 ) : (
                   sortedRows.map((row) => {
                     const size = row.bar_size_mapped || row.bar_size || "";
-                     const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
+                    const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
                     const weight = getWeight(size, row.total_length_mm, row.quantity);
-                    const us = sessionUnitToDisplay((selectedSession as any)?.unit_system);
-                    const unit = dimUnit(us);
+                    const srcDims = (row as any).source_dims_json;
+                    const srcLength = (row as any).source_total_length_text;
 
                     return (
                       <tr key={row.id} className="border-b border-border/50 hover:bg-muted/30">
@@ -420,18 +419,22 @@ export function TagsExportView() {
                         <td className="text-xs px-3 py-2.5">{size || "—"}</td>
                         <td className="text-xs px-3 py-2.5">{shapeType || "—"}</td>
                         <td className="text-xs font-bold text-primary px-3 py-2.5 whitespace-nowrap">
-                          {row.total_length_mm ? (
-                            <>{formatDim(row.total_length_mm, us)} {unit && <sub className="text-[8px] text-primary/60">{unit}</sub>}</>
-                          ) : "—"}
+                          {srcLength || (row.total_length_mm ? String(row.total_length_mm) : "—")}
                         </td>
                         {DIM_COLS.map((d) => {
+                          const srcVal = srcDims?.[d];
+                          if (srcVal != null && srcVal !== "") {
+                            return (
+                              <td key={d} className="text-xs text-muted-foreground text-right px-3 py-2.5 whitespace-nowrap">
+                                {String(srcVal)}
+                              </td>
+                            );
+                          }
                           const key = `dim_${d.toLowerCase()}` as keyof typeof row;
                           const val = row[key] as number | null;
                           return (
                             <td key={d} className="text-xs text-muted-foreground text-right px-3 py-2.5 whitespace-nowrap">
-                              {val != null && val !== 0 ? (
-                                <>{formatDim(val, us)} {unit && <sub className="text-[8px] ml-0.5">{unit}</sub>}</>
-                              ) : ""}
+                              {val != null && val !== 0 ? String(val) : ""}
                             </td>
                           );
                         })}
@@ -470,10 +473,15 @@ export function TagsExportView() {
                 const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
                 const weight = getWeight(size, row.total_length_mm, row.quantity);
                 const dims: Record<string, number | null> = {};
+                const sourceDimsRaw = (row as any).source_dims_json;
+                const sourceDims: Record<string, string> = {};
                 DIM_COLS.forEach((d) => {
                   const key = `dim_${d.toLowerCase()}` as keyof typeof row;
                   const v = row[key];
                   dims[d] = typeof v === "number" ? v : null;
+                  if (sourceDimsRaw?.[d] != null && sourceDimsRaw[d] !== "") {
+                    sourceDims[d] = String(sourceDimsRaw[d]);
+                  }
                 });
 
                 return (
@@ -494,6 +502,8 @@ export function TagsExportView() {
                     dims={dims}
                     shapeImageUrl={getShapeImageUrl(shapeType)}
                     unitSystem={sessionUnitToDisplay((selectedSession as any)?.unit_system)}
+                    sourceLength={(row as any).source_total_length_text || undefined}
+                    sourceDims={Object.keys(sourceDims).length > 0 ? sourceDims : undefined}
                   />
                 );
               })
