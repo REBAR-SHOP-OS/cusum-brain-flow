@@ -1,90 +1,38 @@
 
-# Fix AI Extract to Show Exact Source Values From the Uploaded File
 
-## What’s actually wrong
-The current fix only avoids some rounding, but it still relies on values that were already parsed/normalized. That means the app is not showing the true original spreadsheet values.
+# Show Original Source Values in Tags & Export and Detailed List
 
-Two root causes remain:
-1. `raw_total_length_mm` / `raw_dims_json` are numeric “pre-conversion” values, not the exact source text from the file.
-2. Conversion is still driven by a session-level unit, but your rule is per-cell:
-   - `"` = inches
-   - `'` = feet
-   - no symbol = millimeters
+## Problem
+The AI Extract view correctly shows source values (e.g., `6'6"`, `4'`) using `source_total_length_text` and `source_dims_json` columns. But the **Tags & Export** view and **Detailed List** view still read from the converted `total_length_mm` / `dim_*` columns and apply `formatDim()`, producing wrong values like `78 MM` and `48 MM`.
 
-That means the system must preserve and display the original cell text, not reformat parsed numbers.
+Two affected paths:
+1. **TagsExportView.tsx** — reads `extract_rows` but uses `formatDim(row.total_length_mm)` and `formatDim(dim_*)` instead of source text
+2. **DetailedListView.tsx** — reads `cut_plan_items.cut_length_mm`, which is copied from `extract_rows.total_length_mm` during approval — source text is lost entirely
+3. **RebarTagCard.tsx** — receives `length` as mm number, formats with `formatVal`
 
-## Plan
+## Fix
 
-### 1. Store the exact source values from the spreadsheet
-Add new fields on `extract_rows` for the original displayed values from the uploaded file, for example:
-- `source_total_length_text`
-- `source_dims_json`
+### 1. TagsExportView.tsx — Use source text fields
+- For LENGTH column: display `row.source_total_length_text` when available, fall back to `formatDim(row.total_length_mm)`
+- For DIM columns: display `row.source_dims_json[col]` when available, fall back to `formatDim(dim_val)`
+- Remove the forced `(mm)` / `(in)` unit label from the header when source text is used (since values may mix units)
+- Apply same logic in CSV export
 
-These will store the exact visible values from the file, such as:
-- `149`
-- `54"`
-- `6'`
-- `3'-5"`
+### 2. RebarTagCard.tsx — Accept source text props
+- Add optional `sourceLength?: string` and `sourceDims?: Record<string, string>` props
+- When present, display these instead of `formatVal(length)` / `formatDim(dim)`
+- TagsExportView passes these from `row.source_total_length_text` and `row.source_dims_json`
 
-This is necessary because the current numeric raw fields cannot preserve feet/inch marks or exact formatting.
+### 3. DetailedListView.tsx — Propagate source text from cut_plan_items
+- Add `source_total_length_text` and `source_dims_json` columns to `cut_plan_items` table via migration
+- Update the approve action in `manage-extract` to copy these fields when creating cut_plan_items
+- In the view, display source text when available
 
-### 2. Read spreadsheet cell display text deterministically
-Update `supabase/functions/extract-manifest/index.ts` so spreadsheet extraction does not rely on AI or parsed numeric values for LENGTH and dim columns.
+### 4. manage-extract approve action
+- Copy `source_total_length_text` and `source_dims_json` from `extract_rows` into `cut_plan_items` during the approve step
 
-Instead, for XLSX/CSV:
-- detect the length and A/B/C/... columns as it already does
-- read the actual displayed cell text from the workbook cells
-- save that exact text into the new source fields
-- still map by header name, not position
+## Scope
+- 3 UI files: `TagsExportView.tsx`, `RebarTagCard.tsx`, `DetailedListView.tsx`
+- 1 edge function: `manage-extract/index.ts` (approve action)
+- 1 DB migration: add source text columns to `cut_plan_items`
 
-This will make the extract table match the original bar list for those columns.
-
-### 3. Convert per cell only for internal normalized storage
-Update the normalization/mapping logic in `supabase/functions/manage-extract/index.ts` so mm storage is derived from each cell’s original text, not from one session-wide unit.
-
-New parsing rule:
-- value ending with `"` → treat as inches
-- value ending with `'` → treat as feet
-- value with both feet/inches → parse as ft-in
-- value with no unit mark → treat as mm
-
-This keeps internal calculations usable while preserving exact display from the source file.
-
-### 4. Change AI Extract UI to show source text directly
-Update `src/components/office/AIExtractView.tsx` so LENGTH and dimension columns display the new source text fields directly when available.
-
-That means:
-- no conversion for display
-- no round-trip formatting
-- no forced inch/ft/mm output for extracted values
-
-Also remove or neutralize the unit label on these columns when showing source text, because rows may mix `mm`, `"` and `'`.
-
-### 5. Support existing broken sessions
-Because current sessions already stored the wrong representation, add a repair path for spreadsheet sessions:
-- re-read the original uploaded file from stored extract file metadata
-- backfill the new source-text fields
-- recompute normalized mm values from those source strings
-
-This avoids requiring a fresh upload just to fix the current session.
-
-## Files likely involved
-- `supabase/migrations/...` — add source text columns
-- `supabase/functions/extract-manifest/index.ts` — capture exact spreadsheet cell text
-- `supabase/functions/manage-extract/index.ts` — per-cell unit parsing and normalization
-- `src/lib/extractService.ts` — expose new source fields to the frontend
-- `src/components/office/AIExtractView.tsx` — render original values directly
-
-## Technical notes
-- The current `raw_total_length_mm` / `raw_dims_json` naming is misleading for this requirement; they are not true source values.
-- Session-level `unit_system` is not enough if rows/cells may use different notation.
-- For this request, the display source of truth should be the original file text, not converted mm and not AI-parsed numeric output.
-
-## Validation checklist
-After implementation, verify with the uploaded spreadsheet that:
-- `149` displays as `149`
-- `54"` displays as `54"`
-- `6'` displays as `6'`
-- `3'-5"` displays exactly as `3'-5"`
-- values in the extract table match the source spreadsheet text for LENGTH and A/B/C/... columns
-- mapped/validated sessions still keep correct internal normalized mm values for downstream logic
