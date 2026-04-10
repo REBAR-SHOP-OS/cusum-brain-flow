@@ -256,7 +256,16 @@ Instructions:
           );
         }
 
-        const data = await resp.json();
+        let data: any;
+        try {
+          data = await resp!.json();
+        } catch (parseErr) {
+          console.error("Failed to parse AI edit response as JSON:", parseErr);
+          return new Response(
+            JSON.stringify({ error: "AI returned an invalid response. Please try again with a simpler edit." }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
         let imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
 
         // Fallback: check if image is embedded as base64 in content
@@ -348,7 +357,16 @@ Instructions:
         );
       }
 
-      const data = await resp.json();
+      let data: any;
+      try {
+        data = await resp.json();
+      } catch (parseErr) {
+        console.error("Failed to parse AI generate response as JSON:", parseErr);
+        return new Response(
+          JSON.stringify({ error: "AI returned an invalid response. Please try again." }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       const message = data.choices?.[0]?.message;
       let imageUrl = message?.images?.[0]?.image_url?.url || null;
       const revisedPrompt = message?.content || null;
@@ -412,7 +430,16 @@ Instructions:
       );
     }
 
-    const data = await resp.json();
+    let data: any;
+    try {
+      data = await resp.json();
+    } catch (parseErr) {
+      console.error("Failed to parse OpenAI response as JSON:", parseErr);
+      return new Response(
+        JSON.stringify({ error: "AI returned an invalid response. Please try again." }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     const imageData = data.data?.[0];
     const imageUrl = imageData?.url || (imageData?.b64_json ? `data:image/png;base64,${imageData.b64_json}` : null);
 
