@@ -1,32 +1,43 @@
 
 
-# Fix "WebSocket is not connected" Error in Vizzy Voice
+# Fix: Vizzy Voice Not Answering After Tool Execution
+
+## Problem
+When the CEO asks a question like "چند نفر در شرکت مشغول به کار هستند؟" (how many people work in the company?), Vizzy says "let me check..." and triggers an `investigate_entity` tool call. The tool executes successfully and the result is injected into the system prompt via `appendLiveResult`, but **no follow-up AI call is made**. Vizzy stops talking after "let me check..." and never delivers the actual answer.
+
+The data (staff count, team presence) is already in the system prompt snapshot, so Vizzy should answer directly. But even when it does trigger a tool, the architecture lacks a follow-up mechanism.
 
 ## Root Cause
+`VizzyVoiceChat.tsx` (line 134-184) executes `[VIZZY-ACTION]` tags and appends results to the system prompt, but the conversation flow ends there. There is no mechanism to automatically send a follow-up message to the AI saying "here's the tool result, now answer the question."
 
-The ElevenLabs `useScribe` hook throws uncaught errors when:
-1. `scribe.disconnect()` is called when WebSocket is already disconnected (in `pauseListening` and `endSession`)
-2. `scribe.connect()` is called with an expired token (in `resumeListening`) — tokens expire after 15 minutes
-3. These errors bubble up as uncaught exceptions because the try/catch blocks don't fully contain the async lifecycle of the Scribe SDK
+## Changes
 
-## Fix — `src/hooks/useVizzyGeminiVoice.ts`
+### 1. Auto-follow-up after READ_ACTION results
+**File**: `src/components/vizzy/VizzyVoiceChat.tsx`
 
-### 1. Guard `disconnect()` with `isConnected` check
-Before calling `scribe.disconnect()`, check `scribe.isConnected` to avoid calling it when already disconnected.
+After executing READ_ACTIONS (investigate_entity, deep_business_scan, etc.) and appending results via `appendLiveResult`, automatically inject a hidden follow-up user message like `"[TOOL_RESULTS_READY] Now answer my question using the tool results above."` and trigger `sendFollowUp()` from the voice engine. This makes the AI generate a second response using the fresh tool data.
 
-- **`pauseListening`** (line 124): add `if (scribeRef.current.isConnected)` guard
-- **`endSession`** (line 355): add `if (scribe.isConnected)` guard
+### 2. Add `sendFollowUp` capability to voice engine
+**File**: `src/hooks/useVizzyGeminiVoice.ts`
 
-### 2. Guard `connect()` with `isConnected` check
-In `resumeListening` (line 97), only call `connect()` if `!scribeRef.current.isConnected`. This prevents double-connect attempts.
+Expose a `sendFollowUp(internalPrompt: string)` function that:
+- Adds the internal prompt to conversationRef (as a system/user message)
+- Calls the `vizzy-voice-chat` edge function
+- Streams the response and plays TTS
+- This is the same as `processUserInput` but without creating a visible user transcript
 
-### 3. Always fetch a fresh token when resuming
-Instead of reusing `scribeTokenRef.current` which may be expired, always fetch a new token in `resumeListening`. This eliminates the two-step retry logic (try old token → catch → fetch new token) and makes reconnection more reliable.
+### 3. Strengthen "answer from snapshot first" instructions
+**File**: `src/hooks/useVizzyVoiceEngine.ts`
 
-### 4. Add global unhandled rejection catcher (safety net)
-Add a window-level handler in the voice chat component to suppress Scribe WebSocket errors that escape try/catch, preventing the toast/error overlay from showing.
+Add a rule near the top of the instructions:
+```
+═══ ANSWER FROM SNAPSHOT FIRST (CRITICAL) ═══
+If the answer to the user's question EXISTS in your LIVE BUSINESS DATA or PRE-SESSION STUDY NOTES below, answer IMMEDIATELY from that data. Do NOT trigger investigate_entity or other tools for data you ALREADY have.
+Only trigger tools when the specific data is NOT in your snapshot.
+For "how many staff", "who is clocked in", "what's the revenue" — the answer is ALREADY in your data. USE IT.
+```
 
 ## Scope
-- 1 file modified: `src/hooks/useVizzyGeminiVoice.ts`
+- 3 files modified
 - No database or edge function changes
 
