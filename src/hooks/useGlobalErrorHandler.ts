@@ -86,6 +86,9 @@ function isIgnoredError(message: string): boolean {
     "push subscription",
     "NotSupportedError",
     "no supported sources",
+    "WebSocket is not connected",
+    "WebSocket is already in CLOSING",
+    "WebSocket is already in CLOSED",
   ];
   return ignored.some((pattern) => message.includes(pattern));
 }
