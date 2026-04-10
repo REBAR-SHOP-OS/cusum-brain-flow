@@ -240,8 +240,8 @@ export function AIExtractView() {
 
   /** Display length — prefer exact source text when available */
   const displayLength = (row: any): string => {
-    // If source text exists from the original file, show it directly
-    if (row.source_total_length_text != null && row.source_total_length_text !== "") {
+    // Only use raw source text when display unit matches the session's original unit
+    if (displayUnit === sessionSourceUnit && row.source_total_length_text != null && row.source_total_length_text !== "") {
       return row.source_total_length_text;
     }
     const mmVal = row.total_length_mm;
@@ -253,13 +253,14 @@ export function AIExtractView() {
 
   /** Display dimension value — prefer exact source text when available */
   const displayDim = (mmVal: number | null | undefined, dimKey: string, row: any): string => {
-    // Check source_dims_json for exact original text
-    const sourceDims = row.source_dims_json;
-    if (sourceDims != null) {
-      // dimKey is like "dim_a", source_dims_json keys are like "A"
-      const letter = dimKey.replace("dim_", "").toUpperCase();
-      if (sourceDims[letter] != null && sourceDims[letter] !== "") {
-        return sourceDims[letter];
+    // Only use raw source text when display unit matches the session's original unit
+    if (displayUnit === sessionSourceUnit) {
+      const sourceDims = row.source_dims_json;
+      if (sourceDims != null) {
+        const letter = dimKey.replace("dim_", "").toUpperCase();
+        if (sourceDims[letter] != null && sourceDims[letter] !== "") {
+          return sourceDims[letter];
+        }
       }
     }
     if (mmVal == null) return "";
