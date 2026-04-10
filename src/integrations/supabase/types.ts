@@ -5078,6 +5078,8 @@ export type Database = {
           session_id: string
           shape_code_mapped: string | null
           shape_type: string | null
+          source_dims_json: Json | null
+          source_total_length_text: string | null
           status: string
           total_length_mm: number | null
           weight_kg: number | null
@@ -5119,6 +5121,8 @@ export type Database = {
           session_id: string
           shape_code_mapped?: string | null
           shape_type?: string | null
+          source_dims_json?: Json | null
+          source_total_length_text?: string | null
           status?: string
           total_length_mm?: number | null
           weight_kg?: number | null
@@ -5160,6 +5164,8 @@ export type Database = {
           session_id?: string
           shape_code_mapped?: string | null
           shape_type?: string | null
+          source_dims_json?: Json | null
+          source_total_length_text?: string | null
           status?: string
           total_length_mm?: number | null
           weight_kg?: number | null

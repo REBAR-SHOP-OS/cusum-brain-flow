@@ -65,7 +65,8 @@ function normalizeDimHeader(raw: string): string | null {
   return null;
 }
 
-/** Extract dimension columns deterministically from XLSX sheet, bypassing AI */
+/** Extract dimension columns deterministically from XLSX sheet, bypassing AI.
+ *  Also captures exact source cell text into __source_dims and __source_length. */
 function overlaySheetDims(workbook: any, items: any[]): any[] {
   try {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -92,15 +93,21 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
     console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
     return items.map((it, n) => {
       const row = rows[hIdx + 1 + n] || [];
+      const sourceDims: Record<string, string> = {};
       for (const d of DIMS) {
         if (colMap[d] != null) {
           const raw = row[colMap[d]];
+          // Save exact source text
+          sourceDims[d] = raw != null ? String(raw).trim() : "";
           it[d] = raw != null ? (parseDimension(raw) ?? null) : null;
         }
       }
+      it.__source_dims = sourceDims;
       // Overlay total_length from spreadsheet if found
       if (colMap["__LENGTH__"] != null) {
         const raw = row[colMap["__LENGTH__"]];
+        // Save exact source text
+        it.__source_length = raw != null ? String(raw).trim() : null;
         const parsed = raw != null ? parseDimension(raw) : null;
         if (parsed != null) it.total_length = parsed;
       }
@@ -532,6 +539,9 @@ Rules:
             if (item.I != null) {
               console.warn(`Row ${idx + 1}: AI returned "I" dimension value (${item.I}) — ignoring per rebar standard`);
             }
+            // Build source text from __source_dims / __source_length (set by overlaySheetDims for spreadsheets)
+            const sourceDimsJson = item.__source_dims || null;
+            const sourceLengthText = item.__source_length != null ? String(item.__source_length) : (item.total_length != null ? String(item.total_length) : null);
             return {
               session_id: sessionId,
               company_id: sessionCompanyId,
@@ -560,6 +570,8 @@ Rules:
               customer: item.customer || null,
               reference: item.ref || null,
               address: item.address || null,
+              source_total_length_text: sourceLengthText,
+              source_dims_json: sourceDimsJson,
               status: "raw",
             };
           });

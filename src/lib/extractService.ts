@@ -64,6 +64,9 @@ export interface ExtractRow {
   // Raw pre-conversion values for lossless display
   raw_total_length_mm: number | null;
   raw_dims_json: Record<string, number> | null;
+  // Exact source text from the uploaded file
+  source_total_length_text: string | null;
+  source_dims_json: Record<string, string> | null;
 }
 
 export interface ExtractError {
