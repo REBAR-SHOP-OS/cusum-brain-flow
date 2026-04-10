@@ -82,8 +82,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     contextLoading,
     lastErrorDetail,
     appendLiveResult,
-    lang,
-    setLang,
+    sttMode,
+    setSttMode,
+    partialText,
   } = useVizzyVoiceEngine();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -480,7 +481,23 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {isBrainSyncing ? "Vizzy Brain syncing…" : "Live ERP Data Connected"}
             </div>
-            {/* Auto-detect language — no manual toggle needed */}
+            {/* Language mode selector */}
+            <div className="flex items-center gap-1">
+              {(["auto", "fa", "en"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setSttMode(m)}
+                  className="px-3 py-1 rounded-full text-xs font-medium transition-all"
+                  style={{
+                    background: sttMode === m ? "hsl(172 66% 50% / 0.25)" : "hsl(0 0% 100% / 0.05)",
+                    color: sttMode === m ? "hsl(172 66% 65%)" : "hsl(0 0% 50%)",
+                    border: `1px solid ${sttMode === m ? "hsl(172 66% 50% / 0.4)" : "hsl(0 0% 100% / 0.08)"}`,
+                  }}
+                >
+                  {m === "auto" ? "Auto" : m === "fa" ? "فارسی" : "English"}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         <div className="flex items-center gap-3">
