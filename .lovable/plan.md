@@ -1,53 +1,53 @@
 
 
-# Fix: Vizzy Must Answer From Its Brain Data, Not Trigger Tools
+# Fix: Extract View Must Default to Source Unit and Display Values Correctly
 
 ## Problem
-When the CEO asks questions like "how many people work here?" or "who is clocked in?", Vizzy triggers `investigate_entity` and says "let me check..." instead of answering directly from the pre-digest data it already has. The data (staff count, team presence, activity) is already loaded in the system prompt from the `vizzy-pre-digest` edge function.
+Two related issues:
+1. **Wrong values shown**: When `unit_system` is changed during mapping (e.g., from "in" to "imperial/ft-in"), the `source_total_length_text` still contains raw inch numbers (76, 68, 54). The display logic returns these raw numbers even when the header says "ft-in", because `displayUnit === sessionSourceUnit` evaluates to true.
+2. **Unit persists across sessions**: When starting a new session, the display unit should reset to the new session's source unit, not carry over from the previous session.
 
 ## Root Cause
-In `useVizzyVoiceEngine.ts`, the system instructions have **conflicting rules**:
-- **Line 68-73**: "For SPECIFIC employee queries: Trigger `investigate_entity` FIRST" — this fires for ANY employee-related question
-- **Line 180-184**: "ANSWER FROM SNAPSHOT FIRST" — this says to use existing data
+- `source_total_length_text` stores the **original cell text** from the file (e.g., "76" in inches)
+- During mapping, the user can change `unit_system` from `"in"` to `"imperial"` (ft-in)
+- After this change, `sessionSourceUnit` = `"imperial"`, but the raw text is still in inches
+- The guard `displayUnit === sessionSourceUnit` passes, returning raw inch text "76" instead of converting to ft-in format like `6'-4"`
+- The raw source text shortcut should only fire when `displayUnit` matches the **original detected unit**, not the user-overridden unit
 
-The AI model encounters the `investigate_entity` instruction first and follows it, ignoring the snapshot-first rule that comes later.
+## Changes
 
-## Fix — `src/hooks/useVizzyVoiceEngine.ts`
+### 1. Track the original detected unit separately (`AIExtractView.tsx`)
+Store the **original detected unit** from the extraction (before any user override during mapping) so the source-text shortcut can compare against it correctly.
 
-### 1. Restructure the DATA REFRESH RULE (lines 68-73)
-Change the instruction so `investigate_entity` is ONLY triggered when the data is NOT already in the snapshot. Move the "answer from snapshot" rule to the TOP of instructions and make it the dominant rule.
+- Add a new field or derive the original unit: when `source_total_length_text` exists, the raw text is in the **originally detected** unit. Since we don't store this separately, the safest approach is to **never use source text shortcut when displayUnit is "imperial" (ft-in)** — because raw source text is never in ft-in format (it's always plain numbers in mm or inches).
 
-**Before:**
-```
-═══ DATA REFRESH RULE (CEO ORDER) ═══
-For SPECIFIC employee queries:
-1. Trigger investigate_entity FIRST
-2. Say "Let me pull up [name]'s activity..."
-```
-
-**After:**
-```
-═══ DATA REFRESH RULE ═══
-For employee queries:
-1. FIRST check your PRE-SESSION STUDY NOTES and LIVE BUSINESS DATA below
-2. If the answer EXISTS in your data → answer IMMEDIATELY. Do NOT trigger investigate_entity.
-3. ONLY trigger investigate_entity if you need data NOT in your snapshot (e.g., detailed call transcripts, historical data beyond today)
-4. If you DO trigger investigate_entity, say "Let me pull up more details..."
+```typescript
+const displayLength = (row: any): string => {
+  // Raw source text is a plain number from the original file.
+  // Only use it when displayUnit is "mm" or "in" (plain number formats).
+  // Never use it for "imperial" (ft-in) or "ft" — those need conversion.
+  if ((displayUnit === "mm" || displayUnit === "in") && 
+      displayUnit === sessionSourceUnit && 
+      row.source_total_length_text != null && row.source_total_length_text !== "") {
+    return row.source_total_length_text;
+  }
+  // ... rest of conversion logic
+};
 ```
 
-### 2. Move ANSWER FROM SNAPSHOT instruction ABOVE capabilities section
-Move lines 180-184 up to right after CORE IDENTITY (around line 28) so it's the first behavioral rule the model encounters. Remove it from its current position to avoid duplication.
+Same fix for `displayDim`.
 
-### 3. Strengthen the snapshot-first wording
+### 2. Update LENGTH column header to show active unit
+Add the active display unit label to the LENGTH header:
 ```
-═══ #1 RULE — ANSWER FROM YOUR DATA FIRST (OVERRIDES ALL OTHER RULES) ═══
-Your PRE-SESSION STUDY NOTES below contain ALL of today's business data: staff counts, who's clocked in, revenue, leads, calls, emails, activity per person, agent status.
-ALWAYS answer from this data FIRST. Do NOT trigger investigate_entity, deep_business_scan, or any tool for information that is ALREADY in your notes.
-Only trigger tools for data you genuinely DO NOT have (e.g., historical comparison, specific call transcript content).
+LENGTH ({lengthUnitLabelByMode(displayUnit)})
 ```
+
+### 3. Ensure displayUnit resets on session switch
+The existing code already handles this (lines 280-295 and 756-758), but verify the `userSetUnitRef` reset on `activeSessionId` change works correctly. The `startNew` function (line 794-795) already resets to "mm". No change needed here — already working.
 
 ## Scope
-- 1 file modified: `src/hooks/useVizzyVoiceEngine.ts`
-- ~20 lines changed (instruction reordering + rewording)
+- 1 file: `src/components/office/AIExtractView.tsx`
+- ~10 lines changed in `displayLength` and `displayDim` functions + header
 - No database or edge function changes
 
