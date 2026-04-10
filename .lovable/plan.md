@@ -1,25 +1,41 @@
 
 
-# Fix Company Rules Dialog — Z-Index Layering
+# Fix Vizzy Voice: Farsi Response + Brain Knowledge Integration
 
-## Problem
-The CompanyRulesDialog uses standard `DialogContent` which renders at default z-50. The Vizzy Brain panel sits at z-[100000], so the dialog opens **behind** the panel and appears non-functional.
+## Problems Identified
 
-## Fix
+1. **Language**: The voice engine's language instructions (line 52 of `useVizzyVoiceEngine.ts`) already say "auto-detect and match language." The browser STT already auto-detects (no `lang` set). But the **ElevenLabs TTS voice** (`EXAVITQu4vr4xnSDxMaL` = "Sarah", English-only) cannot speak Farsi. When Vizzy responds in Farsi text, it gets read aloud in English phonetics — garbled output. Need to detect Farsi responses and switch to a multilingual or Farsi-capable ElevenLabs voice.
 
-### File: `src/components/vizzy/CompanyRulesDialog.tsx`
+2. **Brain Knowledge Missing from Voice**: The `vizzy-pre-digest` edge function (used by voice) loads `vizzy_memory` but does NOT load the `knowledge` table (where company rules, brain files, and custom instructions are stored). The text chat loads this via `vizzy-context` → `brainKnowledge`, but voice sessions never see it. Company rules written in the CompanyRulesDialog are invisible to voice Vizzy.
 
-Replace the standard `Dialog`/`DialogContent` with the portal-based pattern used by other Vizzy Brain dialogs:
+## Changes
 
-1. Import `DialogPortal`, `DialogOverlay`, and `DialogPrimitive` (from `@radix-ui/react-dialog`)
-2. Set `DialogOverlay` to `z-[100001]`
-3. Set `DialogContent` to `z-[100002]`
-4. Add `onInteractOutside` and `onPointerDownOutside` prevention handlers so the dialog stays open during typing
-5. Add manual close button (X icon)
+### 1. Load `knowledge` table in `vizzy-pre-digest` (edge function)
+**File**: `supabase/functions/vizzy-pre-digest/index.ts`
 
-This matches the exact pattern used by AddUserDialog, AgentReportDialog, and other modals that open above VizzyBrainPanel.
+- After loading `brainMemories` from `vizzy_memory` (~line 84), add a query to `knowledge` table:
+  ```sql
+  SELECT title, content, category FROM knowledge ORDER BY created_at DESC LIMIT 20
+  ```
+- Build a `knowledgeBlock` string from results
+- Append it to `brainBlock` so it flows into the voice session context
+- Include it in the returned `brainMemories` field so the client-side `buildInstructions` injects it
 
-### Scope
-- 1 file modified: `CompanyRulesDialog.tsx`
-- No other changes needed
+### 2. Detect response language and switch TTS voice
+**File**: `src/hooks/useVizzyGeminiVoice.ts` (~line 193-210)
+
+- Before calling ElevenLabs TTS, detect if the response text contains Farsi characters (Unicode range `\u0600-\u06FF`)
+- If Farsi detected → use a multilingual ElevenLabs voice ID (e.g., `pFZP5JQG7iQjIQuC4Bku` — "Lily" multilingual, or another that supports Farsi)
+- If English → keep current voice `EXAVITQu4vr4xnSDxMaL` ("Sarah")
+- This ensures the TTS output matches the language of the response
+
+### 3. Minor: strengthen voice system prompt language instruction
+**File**: `src/hooks/useVizzyVoiceEngine.ts` (line 52)
+
+- Already correct but add emphasis: "Your TTS output will be in the same language. Respond FULLY in the detected language including all explanations."
+
+## Scope
+- 2 modified files: `useVizzyGeminiVoice.ts`, `vizzy-pre-digest/index.ts`
+- 1 minor edit: `useVizzyVoiceEngine.ts` (language instruction reinforcement)
+- No database changes
 
