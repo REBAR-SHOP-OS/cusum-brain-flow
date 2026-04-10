@@ -1,34 +1,48 @@
 
 
-# Fix: "All Employees" Activity Scheduling
+# Fix: "Edit failed — Unexpected end of JSON input" in Image Edit
 
 ## Problem
-The "Assign to" dropdown in the Schedule Activity form only shows the lead's current assignees. There is no "All Employees" option, and the backend (direct Supabase insert in `useScheduledActivities.ts`) only creates a single row per submission.
+When using "Edit Image" on the Social Media page, clicking Apply fails with "Unexpected end of JSON input".
 
-## Solution
-All changes are frontend-only. No edge function needed — the `scheduled_activities` table accepts direct inserts with any `assigned_to` UUID.
+## Root Cause
+In `supabase/functions/generate-image/index.ts` **line 259**, the edit mode path calls `const data = await resp.json();` **without a try/catch**. If the AI gateway returns a large base64 image response that gets truncated, or returns an empty/malformed body, `resp.json()` throws `"Unexpected end of JSON input"`. This unhandled exception causes the edge function to return a non-JSON error response (Deno's default 500), which in turn causes the client-side `invokeEdgeFunction` to also fail parsing.
 
-### 1. Add "All Employees" option to `ScheduledActivities.tsx`
-- Prepend a static "All Employees" option (value: `"__all__"`) to the assignee dropdown
-- When `"__all__"` is selected, pass a flag to the mutation
+Compare with the generate mode (line 351) — same vulnerability but less likely to hit because generate responses tend to be smaller.
 
-### 2. Update `useScheduledActivities.ts` to handle bulk creation
-- Accept an optional `allAssignees` array in `CreateActivityInput`
-- When `assigned_name === "__all__"` and `allAssignees` is provided:
-  - Build an array of insert rows (one per assignee)
-  - Use `supabase.from("scheduled_activities").insert(rows)` (bulk insert)
-- Otherwise, insert a single row as before
+## Fix — `supabase/functions/generate-image/index.ts`
 
-### 3. Wire up the assignees list in `ScheduledActivities.tsx`
-- When "All Employees" is selected and form submitted, pass the full `assignees` array to the mutation
-- Each created activity gets the correct `assigned_to` (profile_id) and `assigned_name` (full_name)
+### 1. Wrap `resp.json()` in try/catch (edit mode, ~line 259)
 
-## Files Changed
-- `src/components/pipeline/ScheduledActivities.tsx` — add "All Employees" option + pass assignees on submit
-- `src/hooks/useScheduledActivities.ts` — bulk insert logic
+**Before:**
+```typescript
+const data = await resp.json();
+```
+
+**After:**
+```typescript
+let data: any;
+try {
+  data = await resp.json();
+} catch (parseErr) {
+  console.error("Failed to parse AI edit response as JSON:", parseErr);
+  return new Response(
+    JSON.stringify({ error: "AI returned an invalid response. Please try again with a simpler edit." }),
+    { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+```
+
+### 2. Same guard for generate mode (~line 351)
+
+Apply the same try/catch around `const data = await resp.json();` in the generate path to prevent the same issue there.
+
+### 3. Same guard for OpenAI fallback (~line 415)
+
+Wrap the OpenAI `resp.json()` call with the same pattern.
 
 ## Scope
-- 2 files, ~25 lines changed
-- No database migration
-- No edge function
+- 1 file: `supabase/functions/generate-image/index.ts`
+- ~15 lines added (3 try/catch blocks)
+- No database changes, no frontend changes
 
