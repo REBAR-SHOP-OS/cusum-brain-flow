@@ -539,6 +539,9 @@ Rules:
             if (item.I != null) {
               console.warn(`Row ${idx + 1}: AI returned "I" dimension value (${item.I}) — ignoring per rebar standard`);
             }
+            // Build source text from __source_dims / __source_length (set by overlaySheetDims for spreadsheets)
+            const sourceDimsJson = item.__source_dims || null;
+            const sourceLengthText = item.__source_length != null ? String(item.__source_length) : (item.total_length != null ? String(item.total_length) : null);
             return {
               session_id: sessionId,
               company_id: sessionCompanyId,
@@ -567,6 +570,8 @@ Rules:
               customer: item.customer || null,
               reference: item.ref || null,
               address: item.address || null,
+              source_total_length_text: sourceLengthText,
+              source_dims_json: sourceDimsJson,
               status: "raw",
             };
           });
