@@ -235,7 +235,28 @@ export function AIExtractView() {
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode) : -1;
   const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
 
-  // Ref to track if user explicitly set unit — prevents stale DB value from overwriting
+  // Helper: session's normalised source unit
+  const sessionSourceUnit = activeSession?.unit_system === "metric" ? "mm" : (activeSession?.unit_system ?? "mm");
+
+  /** Display length without round-trip rounding — use raw value when display matches source unit */
+  const displayLength = (mmVal: number | null | undefined, rawVal: number | null | undefined): string => {
+    if (mmVal == null) return "—";
+    if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
+    if (displayUnit === sessionSourceUnit && rawVal != null) return String(rawVal);
+    return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode) || "—";
+  };
+
+  /** Display dimension value, preferring raw when display matches source unit */
+  const displayDim = (mmVal: number | null | undefined, dimKey: string, rawDimsJson: any): string => {
+    if (mmVal == null) return "";
+    if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
+    if (displayUnit === sessionSourceUnit && rawDimsJson != null) {
+      const rawVal = rawDimsJson[dimKey];
+      if (rawVal != null) return String(rawVal);
+    }
+    return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode);
+  };
+
   const userSetUnitRef = useRef(false);
   // Ref to hold the confirmed unit value immune to state overwrites from sync effects
   const confirmedUnitRef = useRef<string>("mm");
@@ -2035,7 +2056,7 @@ export function AIExtractView() {
                                   {row.bar_size_mapped || row.bar_size || "—"}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-xs font-mono p-1.5">{row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, displayUnit as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—"}</TableCell>
+                              <TableCell className="text-xs font-mono p-1.5">{displayLength(row.total_length_mm, row.raw_total_length_mm)}</TableCell>
                               <TableCell className="text-xs font-bold p-1.5">{row.original_quantity ?? row.quantity ?? "—"}</TableCell>
                               <TableCell className="text-xs p-1.5">
                                 {survivorRow ? (
@@ -2231,7 +2252,7 @@ export function AIExtractView() {
                                   <input type="number" className="w-full bg-card border border-border rounded px-1.5 py-1 text-xs text-right font-mono" value={edit.total_length_mm} onChange={e => updateEditField(row.id, "total_length_mm", e.target.value)} />
                                   <span className="text-[9px] text-muted-foreground whitespace-nowrap">{lengthUnitLabelByMode(displayUnit as LengthDisplayMode)}</span>
                                 </div>
-                              ) : (row.total_length_mm != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? (formatLengthByMode(row.total_length_mm, displayUnit as LengthDisplayMode) || "—") : String(row.total_length_mm)) : "—")}
+                              ) : (displayLength(row.total_length_mm, row.raw_total_length_mm))}
                             </TableCell>
                             {dimCols.map((d) => {
                               const key = `dim_${d.toLowerCase()}`;
@@ -2243,7 +2264,7 @@ export function AIExtractView() {
                                       <span className="text-[9px] text-muted-foreground whitespace-nowrap">{lengthUnitLabelByMode(displayUnit as LengthDisplayMode)}</span>
                                     </div>
                                   ) : (
-                                    (row as any)[key] != null ? (["mapped", "validated", "approved"].includes(activeSession?.status ?? "") ? formatLengthByMode((row as any)[key], displayUnit as LengthDisplayMode) : String((row as any)[key])) : ""
+                                    displayDim((row as any)[key], key, (row as any).raw_dims_json)
                                   )}
                                 </TableCell>
                               );
