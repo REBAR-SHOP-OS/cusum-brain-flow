@@ -2196,7 +2196,7 @@ export function AIExtractView() {
                         <TableHead className="text-[10px] font-bold tracking-wider w-[50px] sticky top-0 bg-muted/95 z-10">SIZE</TableHead>
                         <TableHead className="text-[10px] font-bold tracking-wider w-[50px] sticky top-0 bg-muted/95 z-10">TYPE</TableHead>
                         <TableHead className="text-[10px] font-bold tracking-wider w-[70px] text-right sticky top-0 bg-muted/95 z-10">
-                          LENGTH ({lengthUnitLabelByMode(displayUnit as LengthDisplayMode)})
+                          LENGTH
                         </TableHead>
                         {dimCols.map((d) => (
                           <TableHead key={d} className="text-[10px] font-bold tracking-wider w-[50px] text-right sticky top-0 bg-muted/95 z-10">{d}</TableHead>
