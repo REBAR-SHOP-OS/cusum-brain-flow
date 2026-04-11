@@ -338,7 +338,14 @@ export function useVizzyVoiceEngine() {
           digest: string;
           rawContext?: string;
           brainMemories?: string;
+          fallback?: boolean;
+          error?: string;
         }>("vizzy-pre-digest", {}, { timeoutMs: 120000 });
+
+        // If rate-limited, skip straight to daily-brief fallback
+        if (data?.fallback || data?.error) {
+          throw new Error(data.error || "Pre-digest unavailable");
+        }
 
         if (data?.digest) {
           lastDigestRef.current = data.digest;
