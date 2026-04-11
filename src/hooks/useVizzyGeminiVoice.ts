@@ -143,14 +143,20 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
 
     const audio = audioQueueRef.current.shift()!;
     currentAudioRef.current = audio;
+    audio.volume = 1.0;
     try {
+      console.log("[VizzyGemini] Playing audio, src length:", audio.src.length, "readyState:", audio.readyState);
       await audio.play();
       await new Promise<void>((resolve) => {
-        audio.onended = () => resolve();
-        audio.onerror = () => resolve();
+        audio.onended = () => { console.log("[VizzyGemini] Audio ended normally"); resolve(); };
+        audio.onerror = (e) => { console.warn("[VizzyGemini] Audio error event:", e); resolve(); };
       });
-    } catch (e) {
-      console.warn("[VizzyGemini] Audio playback failed:", e);
+    } catch (e: any) {
+      console.warn("[VizzyGemini] Audio playback failed:", e?.name, e?.message);
+      // On autoplay block, try again — the user gesture from mic tap should unlock
+      if (e?.name === "NotAllowedError") {
+        console.warn("[VizzyGemini] Autoplay blocked — audio will not play until user interacts");
+      }
     }
     URL.revokeObjectURL(audio.src);
     currentAudioRef.current = null;
@@ -291,10 +297,18 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
 
           if (ttsResp.ok) {
             const blob = await ttsResp.blob();
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audioQueueRef.current.push(audio);
-            playNext();
+            console.log("[VizzyGemini] TTS blob received, size:", blob.size, "type:", blob.type);
+            if (blob.size < 100) {
+              console.warn("[VizzyGemini] TTS blob suspiciously small, skipping");
+            } else {
+              const url = URL.createObjectURL(blob);
+              const audio = new Audio(url);
+              audio.volume = 1.0;
+              // Pre-load audio data before queuing
+              audio.preload = "auto";
+              audioQueueRef.current.push(audio);
+              playNext();
+            }
           } else {
             console.warn("[VizzyGemini] TTS failed:", ttsResp.status);
           }
