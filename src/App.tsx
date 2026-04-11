@@ -107,6 +107,7 @@ import Unsubscribe from "./pages/Unsubscribe";
 import InboxManager from "./pages/InboxManager";
 import OrgChart from "./pages/OrgChart";
 import GlassesCapture from "./pages/GlassesCapture";
+import VizzyVoice from "./pages/VizzyVoice";
 import CameraIntelligence from "./pages/CameraIntelligence";
 import NilaInterpreter from "./pages/NilaInterpreter";
 import VizzyLive from "./pages/VizzyLive";
