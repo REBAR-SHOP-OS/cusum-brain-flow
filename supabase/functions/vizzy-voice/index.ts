@@ -13,27 +13,31 @@ Deno.serve((req) =>
 
     let reply = "";
 
-    if (text.includes("how many orders")) {
-      const { count } = await supabase.from("orders").select("*", { count: "exact", head: true });
-      reply = `You currently have ${count ?? 0} orders.`;
+    const has = (w: string) => text.includes(w);
+    const isCount = has("how many") || has("count") || has("total");
+    const isLatest = has("latest") || has("recent") || has("show");
 
-    } else if (text.includes("how many customers")) {
-      const { count } = await supabase.from("customers").select("*", { count: "exact", head: true });
-      reply = `You have ${count ?? 0} customers.`;
-
-    } else if (text.includes("how many leads")) {
-      const { count } = await supabase.from("leads").select("*", { count: "exact", head: true });
-      reply = `There are ${count ?? 0} leads in the pipeline.`;
-
-    } else if (text.includes("how many machines")) {
-      const { count } = await supabase.from("machines").select("*", { count: "exact", head: true });
-      reply = `You have ${count ?? 0} machines registered.`;
-
-    } else if (text.includes("how many cut plans")) {
+    if (isCount && has("cut") && has("plan")) {
       const { count } = await supabase.from("cut_plans").select("*", { count: "exact", head: true });
       reply = `There are ${count ?? 0} cut plans.`;
 
-    } else if (text.includes("latest orders")) {
+    } else if (isCount && has("order")) {
+      const { count } = await supabase.from("orders").select("*", { count: "exact", head: true });
+      reply = `You currently have ${count ?? 0} orders.`;
+
+    } else if (isCount && has("customer")) {
+      const { count } = await supabase.from("customers").select("*", { count: "exact", head: true });
+      reply = `You have ${count ?? 0} customers.`;
+
+    } else if (isCount && has("lead")) {
+      const { count } = await supabase.from("leads").select("*", { count: "exact", head: true });
+      reply = `There are ${count ?? 0} leads in the pipeline.`;
+
+    } else if (isCount && has("machine")) {
+      const { count } = await supabase.from("machines").select("*", { count: "exact", head: true });
+      reply = `You have ${count ?? 0} machines registered.`;
+
+    } else if (isLatest && has("order")) {
       const { data: orders } = await supabase
         .from("orders")
         .select("order_number, status")
