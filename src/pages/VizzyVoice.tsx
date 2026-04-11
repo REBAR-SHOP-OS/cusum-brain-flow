@@ -1,9 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Mic, MicOff, Send, Volume2, Loader2, Settings, Play } from "lucide-react";
+import { Mic, MicOff, Send, Volume2, Loader2, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { Slider } from "@/components/ui/slider";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { createPrimedAudio, swapAndPlay } from "@/lib/audioPlayer";
 
 type Status = "idle" | "listening" | "processing" | "speaking";
 
@@ -14,27 +13,29 @@ const STATUS_LABELS: Record<Status, string> = {
   speaking: "Speaking…",
 };
 
-const LS_VOICE = "vizzy-voice-uri";
-const LS_RATE = "vizzy-rate";
-const LS_PITCH = "vizzy-pitch";
+/** Default ElevenLabs voice – Sarah (warm, natural English) */
+const DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
 
-function scoreVoice(v: SpeechSynthesisVoice): number {
-  const name = v.name.toLowerCase();
-  let s = 0;
-  if (/natural|enhanced|premium/.test(name)) s += 10;
-  if (/google/.test(name)) s += 5;
-  if (!v.localService) s += 3;
-  return s;
-}
-
-function pickBestVoice(voices: SpeechSynthesisVoice[], savedURI: string | null): string {
-  if (savedURI && voices.some((v) => v.voiceURI === savedURI)) return savedURI;
-  const en = voices.filter((v) => v.lang.startsWith("en"));
-  if (en.length) {
-    en.sort((a, b) => scoreVoice(b) - scoreVoice(a));
-    return en[0].voiceURI;
+/**
+ * Call the elevenlabs-tts edge function and return an audio Blob.
+ * Uses the anon key so no user login is required on this page.
+ */
+async function fetchTTSBlob(text: string): Promise<Blob> {
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify({ text, voiceId: DEFAULT_VOICE_ID }),
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error(`TTS failed (${resp.status}): ${errText}`);
   }
-  return voices[0]?.voiceURI ?? "";
+  return resp.blob();
 }
 
 export default function VizzyVoice() {
@@ -44,57 +45,39 @@ export default function VizzyVoice() {
   const [typedInput, setTypedInput] = useState("");
   const [error, setError] = useState("");
   const recognitionRef = useRef<any>(null);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-
-  // Voice settings
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoiceURI, setSelectedVoiceURI] = useState("");
-  const [rate, setRate] = useState(() => parseFloat(localStorage.getItem(LS_RATE) ?? "0.95"));
-  const [pitch, setPitch] = useState(() => parseFloat(localStorage.getItem(LS_PITCH) ?? "1.05"));
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Load voices
-  useEffect(() => {
-    const loadVoices = () => {
-      const v = speechSynthesis.getVoices();
-      if (!v.length) return;
-      setVoices(v);
-      const saved = localStorage.getItem(LS_VOICE);
-      const best = pickBestVoice(v, saved);
-      setSelectedVoiceURI(best);
-    };
-    loadVoices();
-    speechSynthesis.onvoiceschanged = loadVoices;
-    return () => { speechSynthesis.onvoiceschanged = null; };
-  }, []);
-
-  // Persist settings
-  useEffect(() => { if (selectedVoiceURI) localStorage.setItem(LS_VOICE, selectedVoiceURI); }, [selectedVoiceURI]);
-  useEffect(() => { localStorage.setItem(LS_RATE, String(rate)); }, [rate]);
-  useEffect(() => { localStorage.setItem(LS_PITCH, String(pitch)); }, [pitch]);
-
-  const getVoice = useCallback(() => voices.find((v) => v.voiceURI === selectedVoiceURI) ?? null, [voices, selectedVoiceURI]);
-
-  const speakText = useCallback((text: string, onEnd?: () => void) => {
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    const voice = getVoice();
-    utter.voice = voice;
-    if (voice) utter.lang = voice.lang;
-    utter.rate = rate;
-    utter.pitch = pitch;
-    utter.onstart = () => setStatus("speaking");
-    utter.onend = () => { setStatus("idle"); onEnd?.(); };
-    utter.onerror = () => { setStatus("idle"); onEnd?.(); };
-    utteranceRef.current = utter;
-    window.speechSynthesis.speak(utter);
-  }, [getVoice, rate, pitch]);
+  /** Audio element primed during user gesture for mobile-safe playback */
+  const primedAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const SpeechRecognitionAPI =
     typeof window !== "undefined"
       ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
       : null;
   const isSupported = !!SpeechRecognitionAPI;
+
+  /** Prime an audio element during the current user gesture */
+  const primeAudio = useCallback(() => {
+    primedAudioRef.current = createPrimedAudio();
+  }, []);
+
+  /** Play TTS blob through the primed audio element */
+  const playTTS = useCallback(async (text: string) => {
+    setStatus("speaking");
+    try {
+      const blob = await fetchTTSBlob(text);
+      // Guard against empty / corrupt blobs
+      if (!blob || blob.size < 1000) {
+        console.warn("[VizzyVoice] TTS blob too small:", blob?.size);
+        setStatus("idle");
+        return;
+      }
+      const audio = primedAudioRef.current || createPrimedAudio();
+      await swapAndPlay(audio, blob);
+    } catch (err: any) {
+      console.error("[VizzyVoice] TTS playback error:", err);
+    } finally {
+      setStatus("idle");
+    }
+  }, []);
 
   const sendToVizzy = useCallback(async (text: string) => {
     setError("");
@@ -105,23 +88,22 @@ export default function VizzyVoice() {
       const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/vizzy-voice`;
       const resp = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY },
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
         body: JSON.stringify({ text, source: "vizzy-voice-ui" }),
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data?.error || "Request failed");
       const reply = data.reply || "No reply received.";
       setReplyText(reply);
-      if ("speechSynthesis" in window) {
-        speakText(reply);
-      } else {
-        setStatus("idle");
-      }
+      await playTTS(reply);
     } catch (err: any) {
       setError(err.message || "Something went wrong");
       setStatus("idle");
     }
-  }, [speakText]);
+  }, [playTTS]);
 
   const startListening = useCallback(() => {
     if (!SpeechRecognitionAPI) return;
@@ -151,33 +133,28 @@ export default function VizzyVoice() {
   }, []);
 
   const toggleMic = useCallback(() => {
-    window.speechSynthesis?.cancel();
-    // Prime speechSynthesis during user gesture for mobile
-    const primer = new SpeechSynthesisUtterance("");
-    primer.volume = 0;
-    window.speechSynthesis.speak(primer);
+    // Prime audio element during this user gesture (mobile-safe)
+    primeAudio();
     if (status === "listening") stopListening();
     else if (status === "idle") startListening();
-  }, [status, startListening, stopListening]);
+  }, [status, startListening, stopListening, primeAudio]);
 
   const handleTypedSubmit = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
     const t = typedInput.trim();
     if (!t) return;
-    // Prime speechSynthesis during submit gesture
-    const primer = new SpeechSynthesisUtterance("");
-    primer.volume = 0;
-    window.speechSynthesis.speak(primer);
+    primeAudio();
     setTypedInput("");
     sendToVizzy(t);
-  }, [typedInput, sendToVizzy]);
+  }, [typedInput, sendToVizzy, primeAudio]);
 
   const testSpeak = useCallback(() => {
-    speakText("Hello, I'm Vizzy, your rebar shop assistant.");
-  }, [speakText]);
+    primeAudio();
+    playTTS("Hello, I'm Vizzy, your rebar shop assistant. How can I help you today?");
+  }, [primeAudio, playTTS]);
 
   useEffect(() => {
-    return () => { recognitionRef.current?.stop(); window.speechSynthesis?.cancel(); };
+    return () => { recognitionRef.current?.stop(); };
   }, []);
 
   const micActive = status === "listening";
@@ -244,50 +221,13 @@ export default function VizzyVoice() {
         </button>
       </form>
 
-      {/* Voice Settings */}
-      <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen} className="mt-6 w-full max-w-md">
-        <CollapsibleTrigger className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors uppercase tracking-widest font-semibold">
-          <Settings className="w-3.5 h-3.5" />
-          Voice Settings
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3 space-y-4 rounded-lg border border-border bg-muted/20 p-4">
-          {/* Voice select */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Voice</label>
-            <select
-              value={selectedVoiceURI}
-              onChange={(e) => setSelectedVoiceURI(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-            >
-              {voices.map((v) => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name} ({v.lang})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Rate */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Speed: {rate.toFixed(2)}</label>
-            <Slider min={0.5} max={1.5} step={0.05} value={[rate]} onValueChange={([v]) => setRate(v)} />
-          </div>
-
-          {/* Pitch */}
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Pitch: {pitch.toFixed(2)}</label>
-            <Slider min={0.5} max={1.5} step={0.05} value={[pitch]} onValueChange={([v]) => setPitch(v)} />
-          </div>
-
-          {/* Test */}
-          <button onClick={testSpeak} disabled={busy} className="flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40">
-            <Play className="w-3 h-3" /> Test Voice
-          </button>
-        </CollapsibleContent>
-      </Collapsible>
+      {/* Test Voice */}
+      <button onClick={testSpeak} disabled={busy} className="mt-6 flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40">
+        <Play className="w-3 h-3" /> Test Voice
+      </button>
 
       {!isSupported && <p className="mt-4 text-xs text-destructive">Speech recognition not supported in this browser. Use the text input instead.</p>}
-      <p className="mt-8 text-[10px] text-muted-foreground">Internal tool · v1</p>
+      <p className="mt-8 text-[10px] text-muted-foreground">Internal tool · v2 · ElevenLabs TTS</p>
     </div>
   );
 }
