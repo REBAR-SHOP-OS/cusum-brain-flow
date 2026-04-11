@@ -30,17 +30,18 @@ Deno.serve((req) =>
       return cached;
     }
 
-    // Rate limit: 5 per 10 minutes
+    // Rate limit: 10 per 10 minutes (generous to avoid blocking voice sessions)
     const { data: allowed } = await supabase.rpc("check_rate_limit", {
       _user_id: userId,
       _function_name: "vizzy-pre-digest",
-      _max_requests: 5,
+      _max_requests: 10,
       _window_seconds: 600,
     });
     if (allowed === false) {
+      // Return a fallback-friendly 200 with error signal so client doesn't crash
       return new Response(
-        JSON.stringify({ error: "Rate limited. Try again in a few minutes." }),
-        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Rate limited. Try again in a few minutes.", fallback: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 

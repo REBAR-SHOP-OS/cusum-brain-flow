@@ -174,7 +174,7 @@ export async function handleRequest(
     // If handler returned a Response, always pass it through directly
     if (result instanceof Response) {
       if (result.status >= 400) {
-        log.error("Handler returned error response", { status: result.status });
+        log.error(`Handler returned error response (${result.status})`);
       } else {
         log.done("Success", { companyId });
       }
