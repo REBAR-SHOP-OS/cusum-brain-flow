@@ -265,6 +265,7 @@ const App = () => (
 
                     {/* Legacy redirects */}
                     <Route path="/inbox-manager" element={<P><InboxManager /></P>} />
+                    <Route path="/vizzy-voice" element={<P><VizzyVoice /></P>} />
 
                     {/* Public pages */}
                     <Route path="/privacy" element={<PrivacyPolicy />} />
