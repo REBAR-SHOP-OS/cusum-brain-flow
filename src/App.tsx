@@ -107,6 +107,7 @@ import Unsubscribe from "./pages/Unsubscribe";
 import InboxManager from "./pages/InboxManager";
 import OrgChart from "./pages/OrgChart";
 import GlassesCapture from "./pages/GlassesCapture";
+import VizzyVoice from "./pages/VizzyVoice";
 import CameraIntelligence from "./pages/CameraIntelligence";
 import NilaInterpreter from "./pages/NilaInterpreter";
 import VizzyLive from "./pages/VizzyLive";
@@ -264,6 +265,7 @@ const App = () => (
 
                     {/* Legacy redirects */}
                     <Route path="/inbox-manager" element={<P><InboxManager /></P>} />
+                    <Route path="/vizzy-voice" element={<P><VizzyVoice /></P>} />
 
                     {/* Public pages */}
                     <Route path="/privacy" element={<PrivacyPolicy />} />
