@@ -297,10 +297,18 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
 
           if (ttsResp.ok) {
             const blob = await ttsResp.blob();
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            audioQueueRef.current.push(audio);
-            playNext();
+            console.log("[VizzyGemini] TTS blob received, size:", blob.size, "type:", blob.type);
+            if (blob.size < 100) {
+              console.warn("[VizzyGemini] TTS blob suspiciously small, skipping");
+            } else {
+              const url = URL.createObjectURL(blob);
+              const audio = new Audio(url);
+              audio.volume = 1.0;
+              // Pre-load audio data before queuing
+              audio.preload = "auto";
+              audioQueueRef.current.push(audio);
+              playNext();
+            }
           } else {
             console.warn("[VizzyGemini] TTS failed:", ttsResp.status);
           }
