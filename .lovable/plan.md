@@ -1,62 +1,38 @@
 
 
-# New Edge Function: `vizzy-voice` — PersonaPlex Voice Bridge API
+# Update: Robust Phrase Matching for `vizzy-voice`
 
-## What This Does
-Creates a backend endpoint that your local PersonaPlex voice bridge can call to ask simple questions about your business data (orders, customers, leads, machines, cut plans) and get back plain English answers.
+## Problem
+"how many cut plans do we have" doesn't match `text.includes("how many cut plans")` because it does — but other natural variations like "cut plan count" would fail. The current matching is too literal.
 
-## Endpoint Details
+## Solution
+Replace simple `includes` checks with keyword-combination matching using helper functions. Each intent is matched by checking for the presence of entity keywords plus an action keyword.
 
-| Field | Value |
-|---|---|
-| **Route** | `POST /vizzy-voice` |
-| **Production URL** | `https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/vizzy-voice` |
-| **Request Body** | `{ "text": "latest orders", "source": "personaplex" }` |
-| **Response** | `{ "reply": "Your latest three orders are ..." }` |
+### Matching Logic
 
-## Implementation
+```typescript
+// Helper checks
+const has = (word: string) => text.includes(word);
+const isCount = has("how many") || has("count") || has("total");
+const isLatest = has("latest") || has("recent") || has("show");
 
-### 1. Create `supabase/functions/vizzy-voice/index.ts`
-- Uses `handleRequest` wrapper with `authMode: "none"` (internal bridge, no user auth)
-- Parses `text` from body, lowercases it, matches against keyword patterns
-- Queries via service client (read-only SELECT queries only)
-
-### Supported Queries (v1)
-
-| User Says (contains) | Query | Response Format |
-|---|---|---|
-| "how many orders" | `SELECT count(*) FROM orders` | "You currently have X orders." |
-| "how many customers" | `SELECT count(*) FROM customers` | "You have X customers." |
-| "how many leads" | `SELECT count(*) FROM leads` | "There are X leads in the pipeline." |
-| "how many machines" | `SELECT count(*) FROM machines` | "You have X machines registered." |
-| "how many cut plans" | `SELECT count(*) FROM cut_plans` | "There are X cut plans." |
-| "latest orders" | `SELECT order_number, status FROM orders ORDER BY created_at DESC LIMIT 3` | Natural sentence listing the 3 orders with statuses |
-| Anything else | — | "I can answer questions about orders, customers, leads, machines, and cut plans." |
-
-### Error Handling
-- Missing `text` field → `{ "error": "text field is required" }` (400)
-- DB query failure → `{ "error": "..." }` (500)
-- All responses include CORS headers
-
-### 2. Add config entry to `supabase/config.toml`
-```toml
-[functions.vizzy-voice]
-verify_jwt = false
+// Intent matching (order matters — check cut plans before orders)
+if (isCount && has("cut") && has("plan"))       → cut_plans count
+else if (isCount && has("order"))               → orders count
+else if (isCount && has("customer"))            → customers count
+else if (isCount && has("lead"))                → leads count
+else if (isCount && has("machine"))             → machines count
+else if (isLatest && has("order"))              → latest 3 orders
+else                                            → fallback help text
 ```
 
-## What You'll Call From Your Local Bridge
+**Key fix**: "cut plans" is checked **before** "orders" so that "how many cut plans" doesn't accidentally match the orders branch (both contain "order" — wait, no they don't). Actually, the real fix is that `has("cut") && has("plan")` matches "how many cut plans do we have", "cut plan count", etc. — any phrasing containing both "cut" and "plan" plus a count keyword.
 
-```
-POST https://uavzziigfnqpfdkczbdo.supabase.co/functions/v1/vizzy-voice
-Headers:
-  Content-Type: application/json
-  apikey: <your anon key>
-Body:
-  { "text": "latest orders", "source": "personaplex" }
-```
+### File Changed
+- `supabase/functions/vizzy-voice/index.ts` — replace if/else chain with keyword-combination matching
 
-## Scope
-- 1 new file: `supabase/functions/vizzy-voice/index.ts`
-- 1 line added to `supabase/config.toml`
-- No database changes, no frontend changes
+### Scope
+- 1 file, ~15 lines changed
+- No database changes
+- Function will be redeployed after edit
 
