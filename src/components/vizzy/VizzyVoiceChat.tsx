@@ -86,6 +86,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     sttMode,
     setSttMode,
     partialText,
+    outputAudioBlocked,
+    retryOutputAudio,
   } = useVizzyVoiceEngine();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -237,6 +239,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     statusText = "Reconnecting...";
   } else if (isError) {
     statusText = "Connection failed";
+  } else if (outputAudioBlocked) {
+    statusText = "Tap to enable audio";
   } else if (isActive) {
     statusText = "Vizzy is speaking...";
   } else if (isConnected) {
@@ -368,8 +372,22 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             {statusText}
           </p>
 
+          {/* Tap to enable audio recovery button */}
+          {outputAudioBlocked && (
+            <button
+              onClick={() => retryOutputAudio?.()}
+              className="mt-2 px-5 py-2 rounded-full text-sm font-medium transition-colors animate-pulse"
+              style={{
+                background: "hsl(45 93% 58%)",
+                color: "hsl(210 30% 6%)",
+              }}
+            >
+              🔊 Tap to Enable Audio
+            </button>
+          )}
+
           {/* Audio wave indicator when listening */}
-          {isConnected && !isActive && !isMuted && (
+          {isConnected && !isActive && !isMuted && !outputAudioBlocked && (
             <div className="flex items-center gap-1 h-4">
               {[...Array(5)].map((_, i) => (
                 <motion.div

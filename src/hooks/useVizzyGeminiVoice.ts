@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { useScribe, CommitStrategy } from "@elevenlabs/react";
 import { supabase } from "@/integrations/supabase/client";
+import { createPrimedAudio, swapAndPlay } from "@/lib/audioPlayer";
 
 /**
  * Vizzy Gemini Voice — ElevenLabs Scribe STT → Gemini 2.5 Flash → ElevenLabs TTS pipeline.
@@ -54,10 +55,13 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [partialText, setPartialText] = useState("");
 
+  const [outputAudioBlocked, setOutputAudioBlocked] = useState(false);
+
   const conversationRef = useRef<Array<{ role: string; content: string }>>([]);
-  const audioQueueRef = useRef<HTMLAudioElement[]>([]);
+  const audioQueueRef = useRef<{ blob: Blob }[]>([]);
   const isPlayingRef = useRef(false);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const primedAudioRef = useRef<HTMLAudioElement | null>(null);
   const processingRef = useRef(false);
   const idCounter = useRef(0);
   const activeRef = useRef(false);
@@ -128,7 +132,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     }
   }, []);
 
-  // Audio queue player — pauses STT during playback
+  // Audio queue player — pauses STT during playback, uses primed audio element
   const playNext = useCallback(async () => {
     if (isPlayingRef.current || audioQueueRef.current.length === 0) {
       if (audioQueueRef.current.length === 0) {
@@ -139,26 +143,29 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     }
     isPlayingRef.current = true;
     setIsSpeaking(true);
+    setOutputAudioBlocked(false);
     pauseListening();
 
-    const audio = audioQueueRef.current.shift()!;
+    const item = audioQueueRef.current.shift()!;
+
+    // Get or create a primed audio element
+    let audio = primedAudioRef.current;
+    if (!audio) {
+      audio = createPrimedAudio();
+    }
+    primedAudioRef.current = null; // consume it
     currentAudioRef.current = audio;
-    audio.volume = 1.0;
+
     try {
-      console.log("[VizzyGemini] Playing audio, src length:", audio.src.length, "readyState:", audio.readyState);
-      await audio.play();
-      await new Promise<void>((resolve) => {
-        audio.onended = () => { console.log("[VizzyGemini] Audio ended normally"); resolve(); };
-        audio.onerror = (e) => { console.warn("[VizzyGemini] Audio error event:", e); resolve(); };
-      });
+      console.log("[VizzyGemini] Playing TTS blob, size:", item.blob.size);
+      await swapAndPlay(audio, item.blob);
+      console.log("[VizzyGemini] Audio ended normally");
     } catch (e: any) {
       console.warn("[VizzyGemini] Audio playback failed:", e?.name, e?.message);
-      // On autoplay block, try again — the user gesture from mic tap should unlock
       if (e?.name === "NotAllowedError") {
-        console.warn("[VizzyGemini] Autoplay blocked — audio will not play until user interacts");
+        setOutputAudioBlocked(true);
       }
     }
-    URL.revokeObjectURL(audio.src);
     currentAudioRef.current = null;
     isPlayingRef.current = false;
     playNext();
@@ -301,12 +308,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
             if (blob.size < 100) {
               console.warn("[VizzyGemini] TTS blob suspiciously small, skipping");
             } else {
-              const url = URL.createObjectURL(blob);
-              const audio = new Audio(url);
-              audio.volume = 1.0;
-              // Pre-load audio data before queuing
-              audio.preload = "auto";
-              audioQueueRef.current.push(audio);
+              audioQueueRef.current.push({ blob });
               playNext();
             }
           } else {
@@ -354,12 +356,16 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
   const startSession = useCallback(async () => {
     setState("connecting");
     setErrorDetail(null);
+    setOutputAudioBlocked(false);
     activeRef.current = true;
     suppressSTTRef.current = false;
     conversationRef.current = [];
     inputQueueRef.current = [];
     setTranscripts([]);
     setPartialText("");
+
+    // Prime audio element during user gesture for mobile playback
+    primedAudioRef.current = createPrimedAudio();
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -397,18 +403,13 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
       currentAudioRef.current.pause();
       currentAudioRef.current.onended = null;
       currentAudioRef.current.onerror = null;
-      URL.revokeObjectURL(currentAudioRef.current.src);
       currentAudioRef.current = null;
     }
-    audioQueueRef.current.forEach((a) => {
-      a.pause();
-      a.onended = null;
-      a.onerror = null;
-      URL.revokeObjectURL(a.src);
-    });
+    primedAudioRef.current = null;
     audioQueueRef.current = [];
     isPlayingRef.current = false;
     setIsSpeaking(false);
+    setOutputAudioBlocked(false);
     setPartialText("");
     setState("idle");
   }, [scribe]);
@@ -457,7 +458,14 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     connectionPhase: state === "connecting" ? "getting_token" as const : state === "connected" ? "connected" as const : null,
     lastErrorKind: state === "error" ? "network" as const : null,
     lastErrorDetail: errorDetail,
-    outputAudioBlocked: false,
-    retryOutputAudio: () => {},
+    outputAudioBlocked,
+    retryOutputAudio: () => {
+      // Re-prime and replay queued audio
+      primedAudioRef.current = createPrimedAudio();
+      setOutputAudioBlocked(false);
+      if (audioQueueRef.current.length > 0 && !isPlayingRef.current) {
+        playNext();
+      }
+    },
   };
 }

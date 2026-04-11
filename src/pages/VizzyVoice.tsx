@@ -78,7 +78,9 @@ export default function VizzyVoice() {
   const speakText = useCallback((text: string, onEnd?: () => void) => {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
-    utter.voice = getVoice();
+    const voice = getVoice();
+    utter.voice = voice;
+    if (voice) utter.lang = voice.lang;
     utter.rate = rate;
     utter.pitch = pitch;
     utter.onstart = () => setStatus("speaking");
@@ -150,6 +152,10 @@ export default function VizzyVoice() {
 
   const toggleMic = useCallback(() => {
     window.speechSynthesis?.cancel();
+    // Prime speechSynthesis during user gesture for mobile
+    const primer = new SpeechSynthesisUtterance("");
+    primer.volume = 0;
+    window.speechSynthesis.speak(primer);
     if (status === "listening") stopListening();
     else if (status === "idle") startListening();
   }, [status, startListening, stopListening]);
@@ -158,6 +164,10 @@ export default function VizzyVoice() {
     e?.preventDefault();
     const t = typedInput.trim();
     if (!t) return;
+    // Prime speechSynthesis during submit gesture
+    const primer = new SpeechSynthesisUtterance("");
+    primer.volume = 0;
+    window.speechSynthesis.speak(primer);
     setTypedInput("");
     sendToVizzy(t);
   }, [typedInput, sendToVizzy]);
