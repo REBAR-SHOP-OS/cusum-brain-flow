@@ -143,14 +143,20 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
 
     const audio = audioQueueRef.current.shift()!;
     currentAudioRef.current = audio;
+    audio.volume = 1.0;
     try {
+      console.log("[VizzyGemini] Playing audio, src length:", audio.src.length, "readyState:", audio.readyState);
       await audio.play();
       await new Promise<void>((resolve) => {
-        audio.onended = () => resolve();
-        audio.onerror = () => resolve();
+        audio.onended = () => { console.log("[VizzyGemini] Audio ended normally"); resolve(); };
+        audio.onerror = (e) => { console.warn("[VizzyGemini] Audio error event:", e); resolve(); };
       });
-    } catch (e) {
-      console.warn("[VizzyGemini] Audio playback failed:", e);
+    } catch (e: any) {
+      console.warn("[VizzyGemini] Audio playback failed:", e?.name, e?.message);
+      // On autoplay block, try again — the user gesture from mic tap should unlock
+      if (e?.name === "NotAllowedError") {
+        console.warn("[VizzyGemini] Autoplay blocked — audio will not play until user interacts");
+      }
     }
     URL.revokeObjectURL(audio.src);
     currentAudioRef.current = null;
