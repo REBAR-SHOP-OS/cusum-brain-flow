@@ -1,43 +1,49 @@
 
-Goal: make Vizzy audible on phone, reduce the delay, and fine-tune the voice without changing the ERP query flow or endpoint behavior.
 
-Do I know what the issue is? Yes.
+# Vizzy Voice — Production Hardening & UX Refinement
 
-What I found
-- The main mobile bug is in `src/hooks/useVizzyGeminiVoice.ts`: the app primes mobile audio on tap, but later throws that primed playback path away and creates a fresh `new Audio(url)` after the async TTS fetch. On phones, that new element can lose the unlocked playback context, so Vizzy hears you and shows text but no sound comes out.
-- The simple `/vizzy-voice` page has a similar weakness: `speechSynthesis.speak()` happens only after the async backend reply, with no proper mobile output-unlock tied to the user gesture.
-- The delay feels worse because the UI does not distinguish “thinking” vs “generating voice” vs “audio blocked”.
+## Scope
 
-Implementation plan
-1. Fix the real mobile playback failure
-- Update `src/hooks/useVizzyGeminiVoice.ts` to reuse a primed audio element for returned TTS blobs instead of creating a new `Audio(...)`.
-- Add mobile-safe playback flags (`playsInline`, `preload="auto"`), wait for media readiness, and re-arm playback after interruption.
+Single file rewrite: `src/pages/VizzyVoice.tsx`. No backend changes — the `vizzy-voice` edge function is solid and read-only. Route is already login-protected.
 
-2. Harden shared mobile audio utilities
-- Extend `src/lib/audioPlayer.ts` so Vizzy can prime once during the tap and then safely swap in the real TTS audio later.
-- Keep the same query/backend flow; only playback handling changes.
+## Changes
 
-3. Add blocked-audio recovery UI
-- Update `src/components/vizzy/VizzyVoiceChat.tsx` to surface a small “Tap to enable audio” retry when playback is blocked.
-- Implement the currently stubbed `outputAudioBlocked` / `retryOutputAudio()` path from the hook so failures are recoverable instead of silent.
+### 1. Voice Quality & Controls
 
-4. Fine-tune the voice
-- Adjust the backend TTS settings in `supabase/functions/elevenlabs-tts/index.ts` for a less robotic sound and slightly snappier response.
-- Keep the same endpoint and request shape.
+- **Voice selector dropdown** — enumerate `speechSynthesis.getVoices()`, listen for `voiceschanged`, auto-select best English natural voice
+- **Rate slider** (0.5–2.0, default 0.95) and **Pitch slider** (0.5–1.5, default 1.05)
+- **Persist** selected voice URI, rate, and pitch in `localStorage`
+- **Test Voice button** routes through the same TTS path with stored settings
+- **Interrupt on mic tap** — if speaking, cancel `speechSynthesis` immediately before starting recognition
 
-5. Bring the simple Vizzy Voice page up to the same standard
-- Update `src/pages/VizzyVoice.tsx` to prime speech output on mic tap, typed send, and test-speak.
-- Improve `voiceschanged` handling, set `utter.lang` from the chosen voice, and tighten the auto-selection toward the best natural English voice on the device.
+### 2. UX & Internal Tool Polish
 
-Files to update
-- `src/lib/audioPlayer.ts`
-- `src/hooks/useVizzyGeminiVoice.ts`
-- `src/components/vizzy/VizzyVoiceChat.tsx`
-- `src/pages/VizzyVoice.tsx`
-- `supabase/functions/elevenlabs-tts/index.ts`
+- Header: **VIZZY** / Rebar Shop Voice Assistant
+- Footer: "Internal ERP Tool · Read-Only · PersonaPlex"
+- **5 status states** with distinct visuals: `idle`, `listening`, `processing`, `speaking`, `error`
+- Larger transcript/reply panels with clear labels and timestamps
+- **Copy reply** button (clipboard API)
+- **Retry last query** button
+- **Quick action chips**: "How many orders?", "Latest orders", "How many customers?", "How many leads?", "How many machines?", "How many cut plans?"
+- Typed text input remains prominent below mic
 
-Validation after implementation
-- Test on phone from the current home-screen Vizzy flow and the `/vizzy-voice` page.
-- Confirm: tap once, speak, text appears, audible reply plays on the same turn.
-- Confirm: no silent replies after tab switch / screen lock.
-- Confirm: clearer status text and more natural voice tone.
+### 3. Reliability & Safety Guardrails
+
+- UI disclaimer banner: "Answers from internal ERP data only · Read-only · No actions performed"
+- If backend returns the fallback message, display it with an amber "ungrounded" indicator
+- Error state shown clearly with retry option
+- No simulated actions — UI is purely display
+
+### 4. Collapsible Voice Settings
+
+- Voice controls (selector, rate, pitch) in a collapsible `<details>` panel labeled "Voice Settings" — keeps the main view clean
+
+## Technical Details
+
+- All changes in one file: `src/pages/VizzyVoice.tsx`
+- Uses existing shadcn components (`Select`, `Slider`, `Button`) where available
+- `localStorage` keys: `vizzy-voice-uri`, `vizzy-voice-rate`, `vizzy-voice-pitch`
+- No new dependencies
+- No backend changes
+- No database changes
+
