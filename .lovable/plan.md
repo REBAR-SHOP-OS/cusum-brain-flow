@@ -1,23 +1,59 @@
 
 
-# Replace Browser TTS with ElevenLabs (PersonaPlex) in Vizzy Voice
+# Vizzy Live → OpenAI Realtime Voice via WebRTC
 
-## Problem
-The `/vizzy-voice` page uses browser `SpeechSynthesis` for spoken output — inherently robotic. The `elevenlabs-tts` edge function already exists with human-tuned settings (multilingual_v2 model, stability 0.35, style 0.55) and `authMode: "none"`. It just needs to be wired in.
+## Goal
+Replace the browser STT → Gemini → browser TTS pipeline on `/vizzy-live` with OpenAI's native Realtime API over WebRTC. True voice-to-voice — no intermediate text conversion, dramatically lower latency, human-quality voice.
+
+## Architecture
+
+```text
+Current:  Mic → Browser SpeechRecognition → vizzy-voice-chat (Gemini) → Browser SpeechSynthesis → Speaker
+New:      Mic → WebRTC → OpenAI Realtime (GPT-4o-mini) → WebRTC → Speaker
+```
+
+## Prerequisites (confirmed)
+- `GPT_API_KEY` secret: configured
+- `voice-engine-token` edge function: exists, creates ephemeral sessions
+- `realtimeConnection.ts` WebRTC helpers: exist (STUN servers, ICE gathering)
 
 ## Changes
 
-**File: `src/pages/VizzyVoice.tsx`**
+### 1. New: `src/hooks/useVizzyRealtimeVoice.ts`
+WebRTC hook for OpenAI Realtime API:
+- Fetches ephemeral token from `voice-engine-token` with full Vizzy instructions
+- Creates `RTCPeerConnection` using existing helpers in `src/lib/webrtc/realtimeConnection.ts`
+- Captures mic via `getUserMedia`, adds audio track to peer connection
+- Opens data channel for events — listens for `response.audio_transcript.done` and `conversation.item.input_audio_transcription.completed` to populate transcript UI
+- Parses `[VIZZY-ACTION]` tags from transcripts (same as current)
+- Supports `session.update` via data channel for live instruction pushes (tool results)
+- Exposes same interface as `useVizzyGeminiVoice`: `state`, `transcripts`, `isSpeaking`, `isMuted`, `toggleMute`, `startSession`, `endSession`, `partialText`, `sendFollowUp`, `updateSessionInstructions`
 
-1. **Replace `playTTS` function** — swap `SpeechSynthesisUtterance` for a `fetch` call to the `elevenlabs-tts` edge function, play the returned MP3 blob via `new Audio(URL.createObjectURL(blob))`
-2. **Remove browser voice controls** — drop the voice selector dropdown, rate/pitch sliders, test voice button, and the `voiceschanged` listener since they only apply to browser speech
-3. **Remove `localStorage` voice prefs** — no longer needed (`vizzy-voice-uri`, `vizzy-voice-rate`, `vizzy-voice-pitch`)
-4. **Remove the collapsible Voice Settings panel** — simplifies the UI
-5. **Keep interrupt behavior** — on mic tap while speaking, call `audio.pause()` on the current audio element instead of `speechSynthesis.cancel()`
-6. **Keep everything else** — status states, quick actions, copy/retry, safety banner, typed input all stay
+### 2. Update: `src/hooks/useVizzyVoiceEngine.ts`
+- Swap `useVizzyGeminiVoice` import for `useVizzyRealtimeVoice`
+- Pass instructions to the token endpoint (instead of lazily via `getSystemPrompt`)
+- `appendLiveResult` sends `session.update` on the data channel instead of rebuilding prompt string
+- All context fetching (pre-digest, daily-brief, brain memories) stays identical
+- Time sync interval stays
 
-## Scope
-- 1 file changed: `src/pages/VizzyVoice.tsx`
-- 0 backend changes — `elevenlabs-tts` edge function already deployed with `authMode: "none"`
-- 0 new dependencies
+### 3. Update: `supabase/functions/voice-engine-token/index.ts`
+- Change default voice from `alloy` to `sage`
+
+### 4. No changes to
+- `VizzyVoiceChat.tsx` — interface-compatible
+- `VizzyLive.tsx` — renders `VizzyVoiceChat` unchanged
+- `useVizzyGeminiVoice.ts` — kept for `/vizzy-voice` standalone page
+- Database, RLS, other edge functions
+
+## Files
+| File | Action |
+|------|--------|
+| `src/hooks/useVizzyRealtimeVoice.ts` | Create |
+| `src/hooks/useVizzyVoiceEngine.ts` | Edit (swap engine) |
+| `supabase/functions/voice-engine-token/index.ts` | Edit (default voice) |
+
+## Risks
+- OpenAI Realtime API availability — existing `voice-engine-token` already handles 5xx retries and returns `fallback: true` signal
+- Ephemeral token expiry (~60s) — session persists beyond token lifetime; only needs token at connect time
+- Mobile browser WebRTC support — well-supported on iOS Safari 14.5+ and all modern Android browsers
 
