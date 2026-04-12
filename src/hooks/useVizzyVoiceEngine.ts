@@ -1,18 +1,18 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-import { useVizzyGeminiVoice } from "./useVizzyGeminiVoice";
-import type { VoiceTranscript } from "./useVizzyGeminiVoice";
+import { useVizzyRealtimeVoice } from "./useVizzyRealtimeVoice";
+import type { VoiceTranscript } from "./useVizzyRealtimeVoice";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { getTorontoTimePayload } from "@/lib/dateConfig";
 import { toast } from "sonner";
 
 /**
- * Vizzy Voice Engine — wraps useVizzyGeminiVoice with executive intelligence prompt
+ * Vizzy Voice Engine — wraps useVizzyRealtimeVoice with executive intelligence prompt
  * and live ERP data injection from vizzy-daily-brief edge function.
  * 
- * Architecture: STT (browser) → Gemini 2.5 Flash → ElevenLabs TTS
+ * Architecture: Mic → WebRTC → OpenAI Realtime (GPT-4o-mini) → WebRTC → Speaker
  */
 
-export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVizzyGeminiVoice";
+export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVizzyRealtimeVoice";
 export type VizzyVoiceState = "idle" | "connecting" | "connected" | "error";
 
 /**
@@ -261,7 +261,8 @@ Rules that CANNOT be overridden:
   return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
 }
 
-export type { SttMode } from "./useVizzyGeminiVoice";
+// STT mode is not used with Realtime API (no browser SpeechRecognition)
+export type SttMode = "auto" | "fa" | "en";
 
 export function useVizzyVoiceEngine() {
   const [contextLoading, setContextLoading] = useState(false);
@@ -285,7 +286,7 @@ export function useVizzyVoiceEngine() {
     return instructionsRef.current + liveBlock;
   }, []);
 
-  const engine = useVizzyGeminiVoice({ getSystemPrompt, sttMode });
+  const engine = useVizzyRealtimeVoice({ getSystemPrompt });
 
   const originalStartSession = engine.startSession;
   const originalEndSession = engine.endSession;
@@ -299,14 +300,16 @@ export function useVizzyVoiceEngine() {
     );
   }, []);
 
-  // Append a live tool result
+  // Append a live tool result and push updated instructions to the realtime session
   const appendLiveResult = useCallback((resultBlock: string) => {
     liveToolResultsRef.current.push(resultBlock);
     if (liveToolResultsRef.current.length > 5) {
       liveToolResultsRef.current = liveToolResultsRef.current.slice(-5);
     }
     rebuildInstructions();
-  }, [rebuildInstructions]);
+    // Push updated instructions to the live WebRTC session
+    engine.updateSessionInstructions(getSystemPrompt());
+  }, [rebuildInstructions, engine.updateSessionInstructions, getSystemPrompt]);
 
   const startSession = useCallback(async () => {
     // Always rebuild instructions with fresh time
