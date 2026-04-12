@@ -1,13 +1,10 @@
 import { useState, useCallback, useRef } from "react";
-import { useScribe, CommitStrategy } from "@elevenlabs/react";
 import { supabase } from "@/integrations/supabase/client";
-import { createPrimedAudio, swapAndPlay } from "@/lib/audioPlayer";
 
 /**
- * Vizzy Gemini Voice — ElevenLabs Scribe STT → Gemini 2.5 Flash → ElevenLabs TTS pipeline.
- * 
- * Turn-taking: Scribe STT is disconnected during TTS playback to prevent feedback loops.
- * Input queue: user speech is queued (not dropped) while processing.
+ * Vizzy Gemini Voice — Browser SpeechRecognition STT → Gemini 2.5 Flash → Browser SpeechSynthesis TTS.
+ * All premium voice I/O is handled by the external PersonaPlex bridge.
+ * The web app uses free browser-native speech APIs as a lightweight fallback.
  */
 
 export interface VoiceTranscript {
@@ -26,16 +23,13 @@ interface UseVizzyGeminiVoiceOptions {
   sttMode?: SttMode;
 }
 
-// Noise filtering (reused from useNilaVoiceRelay patterns)
 const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure)\b/i;
-const SCRIBE_ANNOTATION = /^\s*\(/;
 const PUNCTUATION_ONLY = /^[\s.,!?…\-–—:;'"]+$/;
 const REPEATED_CHARS = /(.)\1{4,}/;
 
 function isNoise(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return true;
-  if (SCRIBE_ANNOTATION.test(trimmed)) return true;
   if (PUNCTUATION_ONLY.test(trimmed)) return true;
   if (REPEATED_CHARS.test(trimmed)) return true;
   const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
@@ -47,6 +41,11 @@ function isNoise(text: string): boolean {
   return false;
 }
 
+const SpeechRecognitionAPI =
+  typeof window !== "undefined"
+    ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    : null;
+
 export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVizzyGeminiVoiceOptions) {
   const [state, setState] = useState<GeminiVoiceState>("idle");
   const [transcripts, setTranscripts] = useState<VoiceTranscript[]>([]);
@@ -54,127 +53,132 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
   const [isMuted, setIsMuted] = useState(false);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [partialText, setPartialText] = useState("");
-
   const [outputAudioBlocked, setOutputAudioBlocked] = useState(false);
 
   const conversationRef = useRef<Array<{ role: string; content: string }>>([]);
-  const audioQueueRef = useRef<{ blob: Blob }[]>([]);
-  const isPlayingRef = useRef(false);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const primedAudioRef = useRef<HTMLAudioElement | null>(null);
   const processingRef = useRef(false);
   const idCounter = useRef(0);
   const activeRef = useRef(false);
   const inputQueueRef = useRef<string[]>([]);
-  const suppressSTTRef = useRef(false);
-  const scribeTokenRef = useRef<string | null>(null);
+  const recognitionRef = useRef<any>(null);
   const sttModeRef = useRef(sttMode);
   sttModeRef.current = sttMode;
 
-  // Scribe hooks — committed transcript triggers processing
-  const scribe = useScribe({
-    modelId: "scribe_v2_realtime",
-    commitStrategy: CommitStrategy.VAD,
-    onPartialTranscript: (data) => {
-      if (suppressSTTRef.current || !activeRef.current) return;
-      if (SCRIBE_ANNOTATION.test(data.text) || PUNCTUATION_ONLY.test(data.text)) return;
-      setPartialText(data.text);
-    },
-    onCommittedTranscript: (data) => {
-      if (suppressSTTRef.current || !activeRef.current) return;
-      const trimmed = data.text.trim();
-      if (isNoise(trimmed)) return;
-      console.log("[VizzyGemini] Scribe committed:", trimmed);
-      setPartialText("");
-      processUserInput(trimmed);
-    },
-  });
+  // --- Browser SpeechSynthesis TTS ---
+  const speakText = useCallback((text: string) => {
+    if (!text || typeof window === "undefined" || !window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Pick a natural-sounding voice if available
+    const voices = window.speechSynthesis.getVoices();
+    const hasFarsi = /[\u0600-\u06FF]/.test(text);
+    
+    if (hasFarsi) {
+      const farsiVoice = voices.find(v => v.lang.startsWith("fa") || v.lang.startsWith("ar"));
+      if (farsiVoice) utterance.voice = farsiVoice;
+    } else {
+      const preferred = voices.find(v =>
+        v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Enhanced") || v.name.includes("Google"))
+      ) || voices.find(v => v.lang.startsWith("en"));
+      if (preferred) utterance.voice = preferred;
+    }
 
-  const scribeRef = useRef(scribe);
-  scribeRef.current = scribe;
+    utterance.rate = 0.95;
+    utterance.pitch = 1.05;
 
-  // Resume STT listening after TTS finishes
-  const resumeListening = useCallback(async () => {
-    suppressSTTRef.current = false;
-    if (!activeRef.current || isMuted) return;
-    // Skip if already connected
-    if (scribeRef.current.isConnected) return;
+    setIsSpeaking(true);
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      resumeListening();
+    };
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      resumeListening();
+    };
+
+    pauseListening();
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  // --- Browser SpeechRecognition STT ---
+  const startRecognition = useCallback(() => {
+    if (!SpeechRecognitionAPI || !activeRef.current || isMuted) return;
+    if (recognitionRef.current) return; // already running
+
+    const recognition = new SpeechRecognitionAPI();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    
+    const lang = sttModeRef.current;
+    if (lang === "fa") recognition.lang = "fa-IR";
+    else if (lang === "en") recognition.lang = "en-US";
+    // "auto" uses browser default
+
+    recognition.onresult = (event: any) => {
+      let interimTranscript = "";
+      let finalTranscript = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript;
+        } else {
+          interimTranscript += result[0].transcript;
+        }
+      }
+      if (interimTranscript) setPartialText(interimTranscript);
+      if (finalTranscript) {
+        const trimmed = finalTranscript.trim();
+        setPartialText("");
+        if (!isNoise(trimmed)) {
+          console.log("[VizzyGemini] Browser STT committed:", trimmed);
+          processUserInput(trimmed);
+        }
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error === "aborted" || event.error === "no-speech") return;
+      console.warn("[VizzyGemini] SpeechRecognition error:", event.error);
+    };
+
+    recognition.onend = () => {
+      recognitionRef.current = null;
+      // Auto-restart if still active
+      if (activeRef.current && !isMuted) {
+        setTimeout(() => startRecognition(), 100);
+      }
+    };
+
+    recognitionRef.current = recognition;
     try {
-      // Always fetch a fresh token — cached tokens expire after 15 min
-      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
-      if (error || !data?.token) {
-        console.warn("[VizzyGemini] Failed to get scribe token for resume:", error);
-        return;
-      }
-      scribeTokenRef.current = data.token;
-      await scribeRef.current.connect({
-        token: data.token,
-        microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-    } catch (e: any) {
-      if (e?.message?.includes("WebSocket") || e?.name === "InvalidStateError") {
-        console.warn("[VizzyGemini] Scribe reconnect WebSocket error (suppressed):", e?.message);
-      } else {
-        console.error("[VizzyGemini] Scribe reconnect failed:", e);
-      }
+      recognition.start();
+    } catch (e) {
+      console.warn("[VizzyGemini] Recognition start failed:", e);
+      recognitionRef.current = null;
     }
   }, [isMuted]);
 
-  // Pause STT listening before TTS starts
-  const pauseListening = useCallback(() => {
-    suppressSTTRef.current = true;
-    try {
-      if (scribeRef.current.isConnected) {
-        scribeRef.current.disconnect();
-      }
-    } catch {
-      // ignore — WebSocket may already be closed
+  const stopRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* ignore */ }
+      recognitionRef.current = null;
     }
   }, []);
 
-  // Audio queue player — pauses STT during playback, uses primed audio element
-  const playNext = useCallback(async () => {
-    if (isPlayingRef.current || audioQueueRef.current.length === 0) {
-      if (audioQueueRef.current.length === 0) {
-        setIsSpeaking(false);
-        resumeListening();
-      }
-      return;
-    }
-    isPlayingRef.current = true;
-    setIsSpeaking(true);
-    setOutputAudioBlocked(false);
-    pauseListening();
+  const resumeListening = useCallback(() => {
+    if (!activeRef.current || isMuted) return;
+    startRecognition();
+  }, [isMuted, startRecognition]);
 
-    const item = audioQueueRef.current.shift()!;
+  const pauseListening = useCallback(() => {
+    stopRecognition();
+  }, [stopRecognition]);
 
-    // Get or create a primed audio element
-    let audio = primedAudioRef.current;
-    if (!audio) {
-      audio = createPrimedAudio();
-    }
-    primedAudioRef.current = null; // consume it
-    currentAudioRef.current = audio;
-
-    try {
-      console.log("[VizzyGemini] Playing TTS blob, size:", item.blob.size);
-      await swapAndPlay(audio, item.blob);
-      console.log("[VizzyGemini] Audio ended normally");
-    } catch (e: any) {
-      console.warn("[VizzyGemini] Audio playback failed:", e?.name, e?.message);
-      if (e?.name === "NotAllowedError") {
-        setOutputAudioBlocked(true);
-      }
-    }
-    currentAudioRef.current = null;
-    isPlayingRef.current = false;
-    playNext();
-  }, [pauseListening, resumeListening]);
-
-  // Core processing: send messages to Gemini, stream response, TTS
+  // Core processing: send messages to Gemini, stream response, TTS via browser
   const processMessages = useCallback(async (
-    userText: string | null, // null = follow-up (no visible user transcript)
-    internalPrompt?: string  // hidden system/user message for follow-ups
+    userText: string | null,
+    internalPrompt?: string
   ): Promise<string> => {
     processingRef.current = true;
 
@@ -278,45 +282,8 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
         .replace(/LOVABLE COMMAND:[\s\S]*?DO NOT TOUCH:[^\n]*/g, "")
         .trim();
 
-      if (ttsText && ttsText.length > 0 && ttsText.length <= 5000) {
-        try {
-          const hasFarsi = /[\u0600-\u06FF]/.test(ttsText);
-          const ttsVoiceId = hasFarsi
-            ? "pFZP5JQG7iQjIQuC4Bku" // Lily — multilingual
-            : "EXAVITQu4vr4xnSDxMaL"; // Sarah — English
-
-          const ttsResp = await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-              },
-              body: JSON.stringify({
-                text: ttsText.slice(0, 4500),
-                voiceId: ttsVoiceId,
-                speed: 1.0,
-              }),
-            }
-          );
-
-          if (ttsResp.ok) {
-            const blob = await ttsResp.blob();
-            console.log("[VizzyGemini] TTS blob received, size:", blob.size, "type:", blob.type);
-            if (blob.size < 100) {
-              console.warn("[VizzyGemini] TTS blob suspiciously small, skipping");
-            } else {
-              audioQueueRef.current.push({ blob });
-              playNext();
-            }
-          } else {
-            console.warn("[VizzyGemini] TTS failed:", ttsResp.status);
-          }
-        } catch (ttsErr) {
-          console.warn("[VizzyGemini] TTS error:", ttsErr);
-        }
+      if (ttsText && ttsText.length > 0) {
+        speakText(ttsText);
       }
 
       return fullResponse;
@@ -325,15 +292,13 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
       setErrorDetail(err instanceof Error ? err.message : String(err));
       return "";
     }
-  }, [getSystemPrompt, playNext]);
+  }, [getSystemPrompt, speakText]);
 
-  // Process one user input through Gemini + TTS
   const processOneInput = useCallback(async (text: string) => {
     if (!text.trim()) return;
     await processMessages(text);
   }, [processMessages]);
 
-  // Flush the input queue sequentially
   const flushQueue = useCallback(async () => {
     if (processingRef.current) return;
     while (inputQueueRef.current.length > 0 && activeRef.current) {
@@ -344,7 +309,6 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     }
   }, [processOneInput]);
 
-  // Public entry: queue user input
   const processUserInput = useCallback(async (text: string) => {
     if (!text.trim()) return;
     inputQueueRef.current.push(text);
@@ -358,68 +322,43 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     setErrorDetail(null);
     setOutputAudioBlocked(false);
     activeRef.current = true;
-    suppressSTTRef.current = false;
     conversationRef.current = [];
     inputQueueRef.current = [];
     setTranscripts([]);
     setPartialText("");
 
-    // Prime audio element during user gesture for mobile playback
-    primedAudioRef.current = createPrimedAudio();
-
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Not authenticated");
 
-      // Get Scribe token
-      const { data, error } = await supabase.functions.invoke("elevenlabs-scribe-token");
-      if (error || !data?.token) throw new Error(error?.message || "Failed to get scribe token");
-      scribeTokenRef.current = data.token;
-
-      // Connect Scribe for real-time STT
-      await scribe.connect({
-        token: data.token,
-        microphone: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
+      // Start browser speech recognition
+      startRecognition();
 
       setState("connected");
     } catch (err) {
       setState("error");
       setErrorDetail(err instanceof Error ? err.message : String(err));
     }
-  }, [scribe]);
+  }, [startRecognition]);
 
   const endSession = useCallback(() => {
     activeRef.current = false;
-    suppressSTTRef.current = true;
     inputQueueRef.current = [];
     processingRef.current = false;
 
-    try { if (scribe.isConnected) scribe.disconnect(); } catch { /* ignore */ }
-    scribeTokenRef.current = null;
+    stopRecognition();
+    window.speechSynthesis?.cancel();
 
-    // Stop currently playing audio immediately
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current.onended = null;
-      currentAudioRef.current.onerror = null;
-      currentAudioRef.current = null;
-    }
-    primedAudioRef.current = null;
-    audioQueueRef.current = [];
-    isPlayingRef.current = false;
     setIsSpeaking(false);
     setOutputAudioBlocked(false);
     setPartialText("");
     setState("idle");
-  }, [scribe]);
+  }, [stopRecognition]);
 
   const toggleMute = useCallback(() => {
     if (isMuted) {
       setIsMuted(false);
-      if (!suppressSTTRef.current) {
-        resumeListening();
-      }
+      resumeListening();
     } else {
       setIsMuted(true);
       pauseListening();
@@ -430,13 +369,11 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     // Instructions are fetched lazily via getSystemPrompt — no-op here
   }, []);
 
-  // Send a follow-up to Gemini without a visible user transcript (for tool result follow-ups)
   const sendFollowUp = useCallback(async (internalPrompt: string): Promise<string> => {
     if (!activeRef.current) return "";
     processingRef.current = true;
     const result = await processMessages(null, internalPrompt);
     processingRef.current = false;
-    // Flush any queued input after follow-up
     if (inputQueueRef.current.length > 0) {
       await flushQueue();
     }
@@ -460,12 +397,7 @@ export function useVizzyGeminiVoice({ getSystemPrompt, sttMode = "auto" }: UseVi
     lastErrorDetail: errorDetail,
     outputAudioBlocked,
     retryOutputAudio: () => {
-      // Re-prime and replay queued audio
-      primedAudioRef.current = createPrimedAudio();
       setOutputAudioBlocked(false);
-      if (audioQueueRef.current.length > 0 && !isPlayingRef.current) {
-        playNext();
-      }
     },
   };
 }
