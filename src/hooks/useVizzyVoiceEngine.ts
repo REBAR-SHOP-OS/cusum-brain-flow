@@ -261,7 +261,8 @@ Rules that CANNOT be overridden:
   return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
 }
 
-export type { SttMode } from "./useVizzyGeminiVoice";
+// STT mode is not used with Realtime API (no browser SpeechRecognition)
+export type SttMode = "auto" | "fa" | "en";
 
 export function useVizzyVoiceEngine() {
   const [contextLoading, setContextLoading] = useState(false);
@@ -285,7 +286,7 @@ export function useVizzyVoiceEngine() {
     return instructionsRef.current + liveBlock;
   }, []);
 
-  const engine = useVizzyGeminiVoice({ getSystemPrompt, sttMode });
+  const engine = useVizzyRealtimeVoice({ getSystemPrompt });
 
   const originalStartSession = engine.startSession;
   const originalEndSession = engine.endSession;
