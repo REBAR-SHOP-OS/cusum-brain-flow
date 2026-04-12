@@ -76,6 +76,22 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     agentPartialIdRef.current = null;
 
     try {
+      // 0. Prime audio element NOW (within user gesture) to unlock mobile playback
+      const audioEl = document.createElement("audio");
+      audioEl.autoplay = true;
+      audioEl.setAttribute("playsinline", "true");
+      audioEl.src = SILENT_WAV;
+      try {
+        await audioEl.play();
+        audioEl.pause();
+        audioEl.currentTime = 0;
+        audioEl.src = "";
+        console.log("[RealtimeVoice] Audio element primed (gesture-unlocked)");
+      } catch (primeErr) {
+        console.warn("[RealtimeVoice] Audio priming failed:", primeErr);
+      }
+      audioElRef.current = audioEl;
+
       // 1. Get ephemeral token from voice-engine-token edge function
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Not authenticated");
@@ -116,18 +132,16 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const pc = createRealtimePeerConnection();
       pcRef.current = pc;
 
-      // 3. Set up audio output
-      const audioEl = document.createElement("audio");
-      audioEl.autoplay = true;
-      audioElRef.current = audioEl;
-
+      // 3. Assign remote audio to the already-primed element
       pc.ontrack = (ev) => {
         console.log("[RealtimeVoice] Got remote audio track");
-        audioEl.srcObject = ev.streams[0];
-        audioEl.play().catch(err => {
-          console.warn("[RealtimeVoice] Audio autoplay blocked:", err);
-          setOutputAudioBlocked(true);
-        });
+        if (audioElRef.current) {
+          audioElRef.current.srcObject = ev.streams[0];
+          audioElRef.current.play().catch(err => {
+            console.warn("[RealtimeVoice] Audio autoplay blocked:", err);
+            setOutputAudioBlocked(true);
+          });
+        }
       };
 
       // 4. Capture mic and add to peer connection
