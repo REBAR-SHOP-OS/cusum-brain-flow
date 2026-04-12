@@ -1,11 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Mic, MicOff, Send, Volume2, Loader2, Play, Copy, RotateCcw, AlertTriangle, CheckCircle2, Settings2, ChevronDown } from "lucide-react";
+import { Mic, MicOff, Send, Volume2, Loader2, Copy, RotateCcw, AlertTriangle, CheckCircle2, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 type Status = "idle" | "listening" | "processing" | "speaking" | "error";
 
@@ -26,13 +23,6 @@ const QUICK_ACTIONS = [
   "How many cut plans do we have?",
 ];
 
-function loadPref(key: string, fallback: string): string {
-  try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
-}
-function savePref(key: string, value: string) {
-  try { localStorage.setItem(key, value); } catch { /* noop */ }
-}
-
 export default function VizzyVoice() {
   const [status, setStatus] = useState<Status>("idle");
   const [userText, setUserText] = useState("");
@@ -42,15 +32,9 @@ export default function VizzyVoice() {
   const [lastQuery, setLastQuery] = useState("");
   const [copied, setCopied] = useState(false);
   const [isUngrounded, setIsUngrounded] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Voice settings
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [selectedVoiceURI, setSelectedVoiceURI] = useState(() => loadPref("vizzy-voice-uri", ""));
-  const [rate, setRate] = useState(() => parseFloat(loadPref("vizzy-voice-rate", "0.95")));
-  const [pitch, setPitch] = useState(() => parseFloat(loadPref("vizzy-voice-pitch", "1.05")));
 
   const recognitionRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [replyTimestamp, setReplyTimestamp] = useState<Date | null>(null);
 
   const SpeechRecognitionAPI =
@@ -59,44 +43,56 @@ export default function VizzyVoice() {
       : null;
   const isSupported = !!SpeechRecognitionAPI;
 
-  // Load voices and listen for changes
-  useEffect(() => {
-    if (!window.speechSynthesis) return;
-    const load = () => {
-      const v = window.speechSynthesis.getVoices().filter(voice => voice.lang.startsWith("en"));
-      setVoices(v);
-      // Auto-select best voice if none persisted
-      if (!selectedVoiceURI || !v.find(voice => voice.voiceURI === selectedVoiceURI)) {
-        const best = v.find(voice => voice.name.includes("Natural"))
-          || v.find(voice => voice.name.includes("Enhanced"))
-          || v.find(voice => voice.name.includes("Google"))
-          || v[0];
-        if (best) {
-          setSelectedVoiceURI(best.voiceURI);
-          savePref("vizzy-voice-uri", best.voiceURI);
-        }
-      }
-    };
-    load();
-    window.speechSynthesis.addEventListener("voiceschanged", load);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
-  }, [selectedVoiceURI]);
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+  }, []);
 
   const playTTS = useCallback(async (text: string) => {
     setStatus("speaking");
-    return new Promise<void>((resolve) => {
-      if (!window.speechSynthesis) { setStatus("idle"); resolve(); return; }
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      const voice = voices.find(v => v.voiceURI === selectedVoiceURI);
-      if (voice) utterance.voice = voice;
-      utterance.rate = rate;
-      utterance.pitch = pitch;
-      utterance.onend = () => { setStatus("idle"); resolve(); };
-      utterance.onerror = () => { setStatus("idle"); resolve(); };
-      window.speechSynthesis.speak(utterance);
-    });
-  }, [voices, selectedVoiceURI, rate, pitch]);
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text }),
+      });
+
+      if (!resp.ok) {
+        console.warn("[VizzyVoice] TTS failed, status:", resp.status);
+        setStatus("idle");
+        return;
+      }
+
+      const blob = await resp.blob();
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        audioRef.current = null;
+        setStatus("idle");
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(audioUrl);
+        audioRef.current = null;
+        setStatus("idle");
+      };
+
+      await audio.play();
+    } catch (err) {
+      console.warn("[VizzyVoice] TTS error:", err);
+      setStatus("idle");
+    }
+  }, []);
 
   const sendToVizzy = useCallback(async (text: string) => {
     setErrorMsg("");
@@ -132,8 +128,7 @@ export default function VizzyVoice() {
 
   const startListening = useCallback(() => {
     if (!SpeechRecognitionAPI) return;
-    // Interrupt any ongoing speech
-    window.speechSynthesis?.cancel();
+    stopAudio();
     setErrorMsg("");
     const recognition = new SpeechRecognitionAPI();
     recognition.continuous = false;
@@ -151,7 +146,7 @@ export default function VizzyVoice() {
     recognition.onend = () => setStatus((s) => (s === "listening" ? "idle" : s));
     recognitionRef.current = recognition;
     recognition.start();
-  }, [SpeechRecognitionAPI, sendToVizzy]);
+  }, [SpeechRecognitionAPI, sendToVizzy, stopAudio]);
 
   const stopListening = useCallback(() => {
     recognitionRef.current?.stop();
@@ -161,13 +156,13 @@ export default function VizzyVoice() {
 
   const toggleMic = useCallback(() => {
     if (status === "speaking") {
-      window.speechSynthesis?.cancel();
+      stopAudio();
       setStatus("idle");
       return;
     }
     if (status === "listening") stopListening();
     else if (status === "idle" || status === "error") startListening();
-  }, [status, startListening, stopListening]);
+  }, [status, startListening, stopListening, stopAudio]);
 
   const handleTypedSubmit = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
@@ -176,10 +171,6 @@ export default function VizzyVoice() {
     setTypedInput("");
     sendToVizzy(t);
   }, [typedInput, sendToVizzy]);
-
-  const testSpeak = useCallback(() => {
-    playTTS("Hello, I'm Vizzy, your rebar shop assistant. How can I help you today?");
-  }, [playTTS]);
 
   const retryLast = useCallback(() => {
     if (lastQuery) sendToVizzy(lastQuery);
@@ -194,8 +185,8 @@ export default function VizzyVoice() {
   }, [replyText]);
 
   useEffect(() => {
-    return () => { recognitionRef.current?.stop(); window.speechSynthesis?.cancel(); };
-  }, []);
+    return () => { recognitionRef.current?.stop(); stopAudio(); };
+  }, [stopAudio]);
 
   const busy = status === "processing" || status === "speaking";
 
@@ -238,14 +229,14 @@ export default function VizzyVoice() {
           )}
         </AnimatePresence>
         {status === "processing" ? <Loader2 className="w-10 h-10 animate-spin" />
-          : status === "speaking" ? <Volume2 className="w-10 h-10 animate-pulse" />
+          : status === "speaking" ? <Square className="w-8 h-8" />
           : status === "listening" ? <MicOff className="w-10 h-10" />
           : status === "error" ? <AlertTriangle className="w-10 h-10" />
           : <Mic className="w-10 h-10" />}
       </button>
 
       <p className={cn("mt-3 text-sm font-semibold uppercase tracking-wider", STATUS_CONFIG[status].color)}>
-        {status === "error" && errorMsg ? errorMsg : STATUS_CONFIG[status].label}
+        {status === "speaking" ? "Tap to stop" : status === "error" && errorMsg ? errorMsg : STATUS_CONFIG[status].label}
       </p>
 
       {/* Quick Actions */}
@@ -317,70 +308,6 @@ export default function VizzyVoice() {
           <Send className="w-4 h-4" />
         </Button>
       </form>
-
-      {/* Voice Settings Collapsible */}
-      <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen} className="mt-5 w-full max-w-md">
-        <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors mx-auto">
-          <Settings2 className="w-3.5 h-3.5" />
-          Voice Settings
-          <ChevronDown className={cn("w-3 h-3 transition-transform", settingsOpen && "rotate-180")} />
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-4">
-          {/* Voice selector */}
-          <div>
-            <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-1 block">Voice</label>
-            <Select
-              value={selectedVoiceURI}
-              onValueChange={(uri) => {
-                setSelectedVoiceURI(uri);
-                savePref("vizzy-voice-uri", uri);
-              }}
-            >
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue placeholder="Select voice…" />
-              </SelectTrigger>
-              <SelectContent>
-                {voices.map((v) => (
-                  <SelectItem key={v.voiceURI} value={v.voiceURI} className="text-xs">
-                    {v.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Rate slider */}
-          <div>
-            <div className="flex justify-between mb-1">
-              <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Rate</label>
-              <span className="text-[10px] text-muted-foreground font-mono">{rate.toFixed(2)}</span>
-            </div>
-            <Slider
-              min={0.5} max={2} step={0.05}
-              value={[rate]}
-              onValueChange={([v]) => { setRate(v); savePref("vizzy-voice-rate", String(v)); }}
-            />
-          </div>
-
-          {/* Pitch slider */}
-          <div>
-            <div className="flex justify-between mb-1">
-              <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Pitch</label>
-              <span className="text-[10px] text-muted-foreground font-mono">{pitch.toFixed(2)}</span>
-            </div>
-            <Slider
-              min={0.5} max={1.5} step={0.05}
-              value={[pitch]}
-              onValueChange={([v]) => { setPitch(v); savePref("vizzy-voice-pitch", String(v)); }}
-            />
-          </div>
-
-          {/* Test voice */}
-          <Button onClick={testSpeak} disabled={busy} variant="outline" size="sm" className="w-full text-xs">
-            <Play className="w-3 h-3 mr-1" /> Test Voice
-          </Button>
-        </CollapsibleContent>
-      </Collapsible>
 
       {!isSupported && <p className="mt-4 text-xs text-destructive">Speech recognition not supported. Use the text input.</p>}
 
