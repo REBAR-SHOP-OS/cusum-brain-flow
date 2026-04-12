@@ -300,14 +300,16 @@ export function useVizzyVoiceEngine() {
     );
   }, []);
 
-  // Append a live tool result
+  // Append a live tool result and push updated instructions to the realtime session
   const appendLiveResult = useCallback((resultBlock: string) => {
     liveToolResultsRef.current.push(resultBlock);
     if (liveToolResultsRef.current.length > 5) {
       liveToolResultsRef.current = liveToolResultsRef.current.slice(-5);
     }
     rebuildInstructions();
-  }, [rebuildInstructions]);
+    // Push updated instructions to the live WebRTC session
+    engine.updateSessionInstructions(getSystemPrompt());
+  }, [rebuildInstructions, engine.updateSessionInstructions, getSystemPrompt]);
 
   const startSession = useCallback(async () => {
     // Always rebuild instructions with fresh time
