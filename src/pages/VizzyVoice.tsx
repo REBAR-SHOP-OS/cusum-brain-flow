@@ -2,7 +2,6 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Mic, MicOff, Send, Volume2, Loader2, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
-import { createPrimedAudio, swapAndPlay } from "@/lib/audioPlayer";
 
 type Status = "idle" | "listening" | "processing" | "speaking";
 
@@ -13,29 +12,28 @@ const STATUS_LABELS: Record<Status, string> = {
   speaking: "Speaking…",
 };
 
-/** Default ElevenLabs voice – Sarah (warm, natural English) */
-const DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL";
-
 /**
- * Call the elevenlabs-tts edge function and return an audio Blob.
- * Uses the anon key so no user login is required on this page.
+ * Browser-native TTS using SpeechSynthesis.
+ * Premium voice is handled by external PersonaPlex bridge.
  */
-async function fetchTTSBlob(text: string): Promise<Blob> {
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-    },
-    body: JSON.stringify({ text, voiceId: DEFAULT_VOICE_ID }),
+function speakBrowser(text: string): Promise<void> {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis) { resolve(); return; }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v =>
+      v.lang.startsWith("en") && (v.name.includes("Natural") || v.name.includes("Enhanced") || v.name.includes("Google"))
+    ) || voices.find(v => v.lang.startsWith("en"));
+    if (preferred) utterance.voice = preferred;
+
+    utterance.rate = 0.95;
+    utterance.pitch = 1.05;
+    utterance.onend = () => resolve();
+    utterance.onerror = () => resolve();
+    window.speechSynthesis.speak(utterance);
   });
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error(`TTS failed (${resp.status}): ${errText}`);
-  }
-  return resp.blob();
 }
 
 export default function VizzyVoice() {
@@ -45,8 +43,6 @@ export default function VizzyVoice() {
   const [typedInput, setTypedInput] = useState("");
   const [error, setError] = useState("");
   const recognitionRef = useRef<any>(null);
-  /** Audio element primed during user gesture for mobile-safe playback */
-  const primedAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const SpeechRecognitionAPI =
     typeof window !== "undefined"
@@ -54,26 +50,12 @@ export default function VizzyVoice() {
       : null;
   const isSupported = !!SpeechRecognitionAPI;
 
-  /** Prime an audio element during the current user gesture */
-  const primeAudio = useCallback(() => {
-    primedAudioRef.current = createPrimedAudio();
-  }, []);
-
-  /** Play TTS blob through the primed audio element */
   const playTTS = useCallback(async (text: string) => {
     setStatus("speaking");
     try {
-      const blob = await fetchTTSBlob(text);
-      // Guard against empty / corrupt blobs
-      if (!blob || blob.size < 1000) {
-        console.warn("[VizzyVoice] TTS blob too small:", blob?.size);
-        setStatus("idle");
-        return;
-      }
-      const audio = primedAudioRef.current || createPrimedAudio();
-      await swapAndPlay(audio, blob);
+      await speakBrowser(text);
     } catch (err: any) {
-      console.error("[VizzyVoice] TTS playback error:", err);
+      console.error("[VizzyVoice] TTS error:", err);
     } finally {
       setStatus("idle");
     }
@@ -133,25 +115,21 @@ export default function VizzyVoice() {
   }, []);
 
   const toggleMic = useCallback(() => {
-    // Prime audio element during this user gesture (mobile-safe)
-    primeAudio();
     if (status === "listening") stopListening();
     else if (status === "idle") startListening();
-  }, [status, startListening, stopListening, primeAudio]);
+  }, [status, startListening, stopListening]);
 
   const handleTypedSubmit = useCallback((e?: React.FormEvent) => {
     e?.preventDefault();
     const t = typedInput.trim();
     if (!t) return;
-    primeAudio();
     setTypedInput("");
     sendToVizzy(t);
-  }, [typedInput, sendToVizzy, primeAudio]);
+  }, [typedInput, sendToVizzy]);
 
   const testSpeak = useCallback(() => {
-    primeAudio();
     playTTS("Hello, I'm Vizzy, your rebar shop assistant. How can I help you today?");
-  }, [primeAudio, playTTS]);
+  }, [playTTS]);
 
   useEffect(() => {
     return () => { recognitionRef.current?.stop(); };
@@ -164,7 +142,7 @@ export default function VizzyVoice() {
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-4 selection:bg-primary/20">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-black tracking-tight">VIZZY VOICE</h1>
-        <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest font-semibold">Rebar Shop Assistant</p>
+        <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest font-semibold">Rebar Shop Assistant · PersonaPlex</p>
       </div>
 
       {/* Mic Button */}
@@ -227,7 +205,7 @@ export default function VizzyVoice() {
       </button>
 
       {!isSupported && <p className="mt-4 text-xs text-destructive">Speech recognition not supported in this browser. Use the text input instead.</p>}
-      <p className="mt-8 text-[10px] text-muted-foreground">Internal tool · v2 · ElevenLabs TTS</p>
+      <p className="mt-8 text-[10px] text-muted-foreground">Internal tool · PersonaPlex · Browser Speech</p>
     </div>
   );
 }
