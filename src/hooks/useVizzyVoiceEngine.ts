@@ -1,18 +1,18 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-import { useVizzyGeminiVoice } from "./useVizzyGeminiVoice";
-import type { VoiceTranscript } from "./useVizzyGeminiVoice";
+import { useVizzyRealtimeVoice } from "./useVizzyRealtimeVoice";
+import type { VoiceTranscript } from "./useVizzyRealtimeVoice";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { getTorontoTimePayload } from "@/lib/dateConfig";
 import { toast } from "sonner";
 
 /**
- * Vizzy Voice Engine — wraps useVizzyGeminiVoice with executive intelligence prompt
+ * Vizzy Voice Engine — wraps useVizzyRealtimeVoice with executive intelligence prompt
  * and live ERP data injection from vizzy-daily-brief edge function.
  * 
- * Architecture: STT (browser) → Gemini 2.5 Flash → ElevenLabs TTS
+ * Architecture: Mic → WebRTC → OpenAI Realtime (GPT-4o-mini) → WebRTC → Speaker
  */
 
-export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVizzyGeminiVoice";
+export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVizzyRealtimeVoice";
 export type VizzyVoiceState = "idle" | "connecting" | "connected" | "error";
 
 /**
