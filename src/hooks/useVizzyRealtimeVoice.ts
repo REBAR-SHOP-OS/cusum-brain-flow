@@ -506,17 +506,27 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
       });
 
-      // 6. Create offer, wait for ICE, then send SDP to OpenAI
+      // 6. Create offer and send SDP to OpenAI immediately (no ICE gathering wait)
+      // OpenAI Realtime handles ICE on their side — browser resolves ICE asynchronously
       setStep("sdp_offer_creating");
       const offer = await pc.createOffer();
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after createOffer`); return; }
 
       await pc.setLocalDescription(offer);
-      setStep("ice_gathering");
-
-      const localDesc = await waitForIceGatheringComplete(pc, 15000);
-      if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after ICE gathering`); return; }
       setStep("sdp_post_started");
+
+      // Log ICE candidate events for diagnostics
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) {
+          console.log(`[RealtimeVoice][DIAG] ICE candidate: ${ev.candidate.type} ${ev.candidate.protocol} ${ev.candidate.address}:${ev.candidate.port}`);
+        } else {
+          console.log("[RealtimeVoice][DIAG] ICE gathering complete (null candidate sentinel)");
+        }
+      };
+
+      // Send the offer SDP immediately — do NOT wait for ICE gathering
+      const offerSdp = pc.localDescription?.sdp;
+      if (!offerSdp) throw new Error("No local SDP after setLocalDescription");
 
       const sdpResp = await fetch(
         `https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03`,
@@ -526,7 +536,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             Authorization: `Bearer ${ephemeralKey}`,
             "Content-Type": "application/sdp",
           },
-          body: localDesc.sdp,
+          body: offerSdp,
         }
       );
 
