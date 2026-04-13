@@ -1,50 +1,57 @@
 
 
-# Add Action Router to Vizzy Voice
+# Fix WebRTC Connection + Add Debug Instrumentation
 
-## Overview
-Create a new edge function `assistant-action` that acts as a single action router, and update `VizzyVoice.tsx` to detect intents and display structured results.
+## Confirmed Diagnosis (from logs + code)
 
-## Files to Change
+### Bug 1 — Session timeout never cleared (causes retry failures)
+`useVizzyRealtimeVoice.ts` line 392: `sessionTimeout` is a local `const` inside `startSession`. It is **never stored in a ref** and **never cleared** when:
+- `cleanup()` runs
+- `startSession()` is called again for retry
 
-### 1. NEW: `supabase/functions/assistant-action/index.ts`
-A new edge function accepting `{ source, action, params }` and returning `{ ok, spoken, cardTitle, data }`.
+Result: The old 20s timer fires `cleanup()` on the **new** attempt's PC, closing it mid-handshake → `InvalidStateError: signalingState is 'closed'`.
 
-Supported actions (source="erp"):
-- `get_dashboard_stats` — counts orders, customers, leads, machines, cut plans
-- `list_machines` — returns machines list (name, status, type), limit 20
-- `list_production_tasks` — returns production_tasks (status, bar_code, task_type, qty), limit 20
+### Bug 2 — Primary ICE connectivity failure
+Attempt 1 completes SDP exchange successfully (201 from OpenAI) but the PC goes `connecting → failed` after 16 seconds. This means ICE candidate connectivity checks fail — no media path established. This needs instrumentation to confirm whether it's a TURN/relay issue or a firewall block.
 
-Uses `handleRequest` with `authMode: "none"` (matching vizzy-voice pattern). Validates input with Zod. Returns normalized shape.
+## Plan
 
-### 2. EDIT: `src/pages/VizzyVoice.tsx`
+### File 1: `src/hooks/useVizzyRealtimeVoice.ts`
 
-**Add intent detection function** — maps transcript text to `{ source, action, params }`:
-- "how many orders" / "dashboard" / "stats" → `get_dashboard_stats`
-- "show machines" / "machines" → `list_machines`  
-- "production tasks" / "show tasks" → `list_production_tasks`
-- No match → falls back to existing `vizzy-voice` endpoint
+**Fix the timeout bug:**
+- Store `sessionTimeout` in a ref (`sessionTimeoutRef`)
+- Clear it in `cleanup()` and at the start of `startSession()`
 
-**Modify `sendToVizzy`** — before calling vizzy-voice, check intent. If matched, call `assistant-action` instead. Use the `spoken` field for TTS, store `data` + `cardTitle` in new state.
+**Add `debugStep` state** — a string showing the current connection step, exposed to the UI.
 
-**Add result panel** — below the reply text area, render a simple card showing `cardTitle` and data (e.g., a small table or stat cards). Minimal styling matching existing design.
+**Add debug logs at each stage:**
+1. `"token_fetch_started"` — before fetch
+2. `"token_fetch_ok"` — after successful response
+3. `"mic_requesting"` — before getUserMedia
+4. `"mic_granted"` — after getUserMedia succeeds
+5. `"pc_created"` — after RTCPeerConnection created
+6. `"sdp_offer_created"` — after createOffer
+7. `"ice_gathering"` — after setLocalDescription
+8. `"sdp_post_started"` — before fetch to OpenAI
+9. `"sdp_post_ok"` — after 201 response
+10. `"remote_desc_applied"` — after setRemoteDescription
+11. `"waiting_session_created"` — waiting for data channel event
+12. `"data_channel_open"` — dc open event
+13. `"session_created"` — session.created received
 
-**New state**: `actionResult: { cardTitle: string; data: any } | null`
+Also log `iceConnectionState` changes alongside `connectionState`.
 
-### 3. No other files changed
+**Update error detail** to include the last debug step: `"Failed at step: {debugStep}"`.
 
-## Data Flow
-```text
-User speaks → transcript → detectIntent()
-  ├─ intent found → POST assistant-action → { spoken, cardTitle, data }
-  │   ├─ TTS speaks "spoken"
-  │   └─ UI shows cardTitle + data cards
-  └─ no intent → POST vizzy-voice (existing flow, unchanged)
-```
+### File 2: `src/components/vizzy/VizzyVoiceChat.tsx`
 
-## Safety
-- Read-only actions only
-- No UI redesign — adds a result panel in existing empty space
-- Existing voice/audio flow untouched
-- Reversible: removing the edge function and intent check restores original behavior
+**Add debug status line** — show `debugStep` below the status text when connecting or error state, using a small monospace font. No UI redesign.
+
+Read `debugStep` from the voice engine return value.
+
+### File 3: `src/hooks/useVizzyVoiceEngine.ts`
+
+Pass through `debugStep` from the realtime voice hook.
+
+## No backend changes. No ERP routing changes. Reversible — remove debugStep state and logs later.
 
