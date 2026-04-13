@@ -1,51 +1,47 @@
 
-Root cause:
-- The new `useVizzyRealtimeVoice.ts` hook is too minimal compared to the older working realtime engine.
-- It marks the session as connected right after SDP completes, but it does not complete the realtime turn-taking protocol reliably.
-- Most importantly, it never triggers an initial `response.create` after `session.created`, and it does not react to `session.updated`.
-- It also starts the session before business context finishes loading, then never pushes the refreshed prompt once `vizzy-pre-digest` / `vizzy-daily-brief` completes unless a tool result happens later.
-- Result: the UI shows “Listening…”, user speech can be transcribed, but the model often stays idle and never answers.
 
-What I will change:
-1. Harden `src/hooks/useVizzyRealtimeVoice.ts`
-- Handle realtime protocol events like the older engine:
-  - `session.created`
-  - `session.updated`
-  - `response.audio.started`
-  - `response.audio.done`
-  - `output_audio_buffer.speech_started`
-  - `output_audio_buffer.speech_stopped`
-- Move “connected” state to data-channel/session readiness instead of only SDP completion.
-- Send a guarded initial `response.create` after `session.created` so the session is fully primed.
-- After `conversation.item.input_audio_transcription.completed`, trigger `response.create` if the server is not auto-responding.
-- Add connection-state/data-channel-state logging and safer cleanup/reconnect guards.
+# Fix: Nila Interpreter Language Detection
 
-2. Fix prompt/context timing in `src/hooks/useVizzyVoiceEngine.ts`
-- After pre-digest / daily-brief finishes loading, immediately call `engine.updateSessionInstructions(...)`.
-- Keep the current “listen first” behavior, but ensure the live session actually receives the final business-aware instructions once context arrives.
-- Also push refreshed instructions during the time-sync interval, not just rebuild them locally.
+## Problem
+The `detectRtl` function uses a simple "any RTL character present" check. ElevenLabs Scribe sometimes inserts invisible Unicode directional markers (U+200F, U+202B, etc.) into English transcriptions, causing English text to be misdetected as Farsi. Result: English speech gets "translated" back to English instead of to Farsi.
 
-3. Keep the current mobile audio fix
-- Preserve the primed audio element pattern already added.
-- Keep `outputAudioBlocked` + retry button as fallback.
+The screenshot shows "how are you?" rendered RTL (question mark at start) with a Translation of "how are you?" — English-to-English round-trip instead of English-to-Farsi.
 
-4. Validation after implementation
-- Verify session lifecycle:
-  - start session
-  - data channel opens
-  - `session.created` arrives
-  - user speaks
-  - user transcript appears
-  - Vizzy answers with transcript + audio
-- Verify business context still loads after connect and updates the live session.
-- Verify no regression on mute/end-session/audio-unlock behavior.
+## Fix
 
-Files to edit:
-- `src/hooks/useVizzyRealtimeVoice.ts`
-- `src/hooks/useVizzyVoiceEngine.ts`
+### 1. `src/utils/textDirection.ts` — Ratio-based detection
+Replace the current "any RTL char present" logic with a character-ratio approach:
+- Strip invisible directional markers (U+200F, U+202B, U+202E, U+2067) before testing
+- Count actual RTL script characters (Arabic/Persian block) vs Latin characters
+- Only classify as RTL if RTL characters outnumber Latin characters
+- This makes detection immune to stray directional markers from Scribe
 
-Risk level:
-- Low to medium
-- Frontend-only fix, no database changes
-- No backend schema changes
-- Small chance of duplicate responses if both server VAD auto-response and manual `response.create` fire, so I’ll add guards to prevent double-triggering
+### 2. `src/hooks/useNilaVoiceRelay.ts` — Strip directional markers from transcriptions
+Before running `detectRtl`, strip invisible Unicode directional characters from the committed transcript text. This prevents contamination at the source.
+
+## Technical Detail
+
+```typescript
+// New detectRtl logic
+export function detectRtl(text: string): boolean {
+  if (!text) return false;
+  // Strip invisible directional markers
+  const clean = text.replace(/[\u200F\u200E\u202A-\u202E\u2066-\u2069]/g, "");
+  const rtlChars = (clean.match(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
+  const ltrChars = (clean.match(/[a-zA-Z]/g) || []).length;
+  if (rtlChars === 0 && ltrChars === 0) return false;
+  return rtlChars > ltrChars;
+}
+```
+
+## Files
+| File | Action |
+|------|--------|
+| `src/utils/textDirection.ts` | Edit — ratio-based RTL detection, strip markers |
+| `src/hooks/useNilaVoiceRelay.ts` | Edit — strip directional markers from Scribe output |
+
+## Risk
+- Minimal — only changes language detection logic
+- No backend changes
+- Existing Farsi detection still works (Farsi text will always have more RTL chars than Latin)
+
