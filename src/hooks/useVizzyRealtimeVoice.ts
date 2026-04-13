@@ -398,6 +398,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         // treat the channel as connected anyway (server may skip session.created
         // in newer API versions or certain model configs)
         setTimeout(() => {
+          if (isStale()) return;
           if (activeRef.current && !sessionReadyRef.current && dc.readyState === "open") {
             console.warn("[RealtimeVoice] session.created not received 8s after dc open — treating as connected");
             sessionReadyRef.current = true;
