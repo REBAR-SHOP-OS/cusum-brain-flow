@@ -751,14 +751,14 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} — waiting for session.created`);
       setStep("waiting_session_created");
 
-      // Overall connection timeout — 15s (reduced from 30s for faster relay retry)
+      // Overall connection timeout — 20s (generous for mobile 5G networks)
       sessionTimeoutRef.current = setTimeout(() => {
         if (activeRef.current && !sessionReadyRef.current && !isStale()) {
           const dcState = dcRef.current?.readyState || "no_dc";
           const pcState = pcRef.current?.connectionState || "no_pc";
           const iceState = pcRef.current?.iceConnectionState || "no_ice";
           const iceGather = pcRef.current?.iceGatheringState || "no_ice";
-          logAllStates("session_timeout_15s");
+          logAllStates("session_timeout_20s");
 
           // Try relay-only retry before giving up
           if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
