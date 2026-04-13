@@ -1000,8 +1000,8 @@ export default function AgentWorkspace() {
             <div className="w-full max-w-xl mb-4">
               <ChatInput
                 onSend={handleSend}
-                placeholder={config.placeholder}
-                disabled={isLoading}
+                placeholder={agentId === "eisenhower" && showInlineCalendar ? "Select a date first..." : config.placeholder}
+                disabled={isLoading || (agentId === "eisenhower" && showInlineCalendar)}
                 showFileUpload={true}
                 showSmartMode={agentId !== "social"}
                 minimalToolbar={agentId === "social"}
