@@ -487,11 +487,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       });
 
       dc.addEventListener("close", () => {
-        console.log("[RealtimeVoice] Data channel closed, readyState:", dc.readyState);
+        console.log("[RealtimeVoice] Data channel closed");
+        logAllStates("data_channel_close");
       });
 
       dc.addEventListener("error", (e) => {
         console.error("[RealtimeVoice] Data channel error:", e);
+        logAllStates("data_channel_error");
       });
 
       dc.addEventListener("message", (ev) => {
