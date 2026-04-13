@@ -529,7 +529,9 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   }, [getSystemPrompt, cleanup, handleRealtimeEvent, setStep, debugStep, dcSend]);
 
   const endSession = useCallback(() => {
-    cleanup();
+    // Bump attempt ID to invalidate any in-flight startSession
+    attemptIdRef.current++;
+    cleanup("endSession_called");
     setIsSpeaking(false);
     setOutputAudioBlocked(false);
     setPartialText("");
