@@ -510,9 +510,19 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           }
 
           logAllStates("pc_connection_failed");
-          console.error("[RealtimeVoice] Connection failed — no DC open, treating as fatal");
+          console.error("[RealtimeVoice] Connection failed — no DC open");
           console.error(`[RealtimeVoice][DIAG] Final candidate counts: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`);
           iceCandidateErrors.forEach((e, i) => console.error(`[RealtimeVoice][DIAG] iceError[${i}]: code=${e.code} text=${e.text} url=${e.url}`));
+
+          // Auto-retry once with relay-only transport policy (forces TURN)
+          if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
+            console.warn("[RealtimeVoice] Attempting relay-only retry...");
+            relayRetryDoneRef.current = true;
+            cleanup("relay_retry");
+            startSessionRelay();
+            return;
+          }
+
           setErrorDetail(
             `WebRTC failed | ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived} dcOpen=${dataChannelEverOpened} | candidates: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`
           );
