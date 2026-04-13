@@ -1,47 +1,32 @@
 
 
-# Fix: Nila Interpreter Language Detection
+# Simplify UI: Prompt Bar + Recent Projects
 
-## Problem
-The `detectRtl` function uses a simple "any RTL character present" check. ElevenLabs Scribe sometimes inserts invisible Unicode directional markers (U+200F, U+202B, etc.) into English transcriptions, causing English text to be misdetected as Farsi. Result: English speech gets "translated" back to English instead of to Farsi.
+## Goal
+Make the ChatPromptBar and Recent Projects sections cleaner and flatter — remove heavy glassmorphism, reduce visual noise, use minimal borders and subtle shadows.
 
-The screenshot shows "how are you?" rendered RTL (question mark at start) with a Translation of "how are you?" — English-to-English round-trip instead of English-to-Farsi.
+## Changes
 
-## Fix
+### 1. `src/components/ad-director/ChatPromptBar.tsx`
+- Remove the heavy `rounded-[28px] border border-white/15 bg-black/45 shadow-[0_24px_80px...]` wrapper — replace with a simple `rounded-2xl border border-white/10 bg-white/[0.03]`
+- Remove the "IDEA TO POST-READY CUT" badge pill
+- Remove the border-b divider between header and textarea — merge into one clean section
+- Simplify the header text: keep title, remove the long description paragraph
+- Reduce textarea padding, use a cleaner placeholder
+- Simplify the bottom toolbar pills: remove chevron decorations, use flat minimal style
+- Clean up the "Draft with AI" / "Create video" button row — less decorative, more functional
 
-### 1. `src/utils/textDirection.ts` — Ratio-based detection
-Replace the current "any RTL char present" logic with a character-ratio approach:
-- Strip invisible directional markers (U+200F, U+202B, U+202E, U+2067) before testing
-- Count actual RTL script characters (Arabic/Persian block) vs Latin characters
-- Only classify as RTL if RTL characters outnumber Latin characters
-- This makes detection immune to stray directional markers from Scribe
+### 2. `src/components/ad-director/AdDirectorContent.tsx` (lines 554-578)
+- Prompt bar wrapper (line 554): change `rounded-[32px] border border-white/12 bg-black/55 shadow-[0_40px_120px...]` to `rounded-2xl border border-white/8 bg-white/[0.02]`
+- Recent Projects wrapper (line 562): same simplification — `rounded-2xl border border-white/8 bg-white/[0.02]`
+- Remove uppercase tracking on "RECENT PROJECTS" label — use normal case
+- Simplify heading text size
 
-### 2. `src/hooks/useNilaVoiceRelay.ts` — Strip directional markers from transcriptions
-Before running `detectRtl`, strip invisible Unicode directional characters from the committed transcript text. This prevents contamination at the source.
-
-## Technical Detail
-
-```typescript
-// New detectRtl logic
-export function detectRtl(text: string): boolean {
-  if (!text) return false;
-  // Strip invisible directional markers
-  const clean = text.replace(/[\u200F\u200E\u202A-\u202E\u2066-\u2069]/g, "");
-  const rtlChars = (clean.match(/[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
-  const ltrChars = (clean.match(/[a-zA-Z]/g) || []).length;
-  if (rtlChars === 0 && ltrChars === 0) return false;
-  return rtlChars > ltrChars;
-}
-```
-
-## Files
-| File | Action |
-|------|--------|
-| `src/utils/textDirection.ts` | Edit — ratio-based RTL detection, strip markers |
-| `src/hooks/useNilaVoiceRelay.ts` | Edit — strip directional markers from Scribe output |
-
-## Risk
-- Minimal — only changes language detection logic
-- No backend changes
-- Existing Farsi detection still works (Farsi text will always have more RTL chars than Latin)
+### Summary of style direction
+- Borders: `border-white/8` instead of `border-white/12` or `border-white/15`
+- Backgrounds: `bg-white/[0.02]` or `bg-white/[0.03]` — barely visible
+- Rounded: `rounded-2xl` instead of `rounded-[28px]` / `rounded-[32px]`
+- Shadows: remove heavy shadows entirely
+- Text: reduce uppercase tracking labels, use normal font weights
+- No removed functionality — all buttons and controls stay
 
