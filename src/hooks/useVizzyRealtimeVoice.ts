@@ -532,13 +532,23 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           console.error(`[RealtimeVoice][DIAG] Final candidate counts: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`);
           iceCandidateErrors.forEach((e, i) => console.error(`[RealtimeVoice][DIAG] iceError[${i}]: code=${e.code} text=${e.text} url=${e.url}`));
 
-          // Auto-retry once with relay-only transport policy (forces TURN)
+          // Auto-retry #1: relay-only transport policy (forces TURN)
           if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
             console.warn("[RealtimeVoice] Attempting relay-only retry...");
             relayRetryDoneRef.current = true;
             cleanup("relay_retry");
             iceTransportPolicyRef.current = "relay";
-            // Schedule retry on next microtask to avoid calling startSession within itself
+            setTimeout(() => startSession(), 0);
+            return;
+          }
+
+          // Auto-retry #2: STUN-only (no TURN) — sometimes TURN relay interferes on mobile
+          if (!stunOnlyRetryDoneRef.current) {
+            console.warn("[RealtimeVoice] Relay failed — attempting STUN-only retry (no TURN)...");
+            stunOnlyRetryDoneRef.current = true;
+            cleanup("stun_only_retry");
+            iceTransportPolicyRef.current = "all";
+            skipTurnRef.current = true;
             setTimeout(() => startSession(), 0);
             return;
           }
@@ -756,6 +766,17 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             relayRetryDoneRef.current = true;
             cleanup("session_timeout_relay_retry");
             iceTransportPolicyRef.current = "relay";
+            setTimeout(() => startSession(), 0);
+            return;
+          }
+
+          // Try STUN-only (no TURN) as last resort
+          if (!stunOnlyRetryDoneRef.current) {
+            console.warn("[RealtimeVoice] Session timeout — attempting STUN-only retry...");
+            stunOnlyRetryDoneRef.current = true;
+            cleanup("session_timeout_stun_only");
+            iceTransportPolicyRef.current = "all";
+            skipTurnRef.current = true;
             setTimeout(() => startSession(), 0);
             return;
           }
