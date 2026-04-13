@@ -28,6 +28,7 @@ import { getUserAgentMapping } from "@/lib/userAgentMap";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { getVisibleAgents } from "@/lib/userAccessConfig";
+import { useUserAccessOverrides } from "@/hooks/useUserAccessOverrides";
 import { VizzyDailyBriefing } from "@/components/vizzy/VizzyDailyBriefing";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 
@@ -124,9 +125,13 @@ export default function Home() {
     return agentKeyToSuggestion["assistant"];
   }, [mapping, isAdmin, isWorkshop, roles]);
 
+  const { override: accessOverride } = useUserAccessOverrides(user?.email);
+
   // Reorder helpers: filter by user's agent access, primary first
   const orderedHelpers = useMemo(() => {
-    const allowedAgents = getVisibleAgents(user?.email);
+    const allowedAgents = accessOverride?.agents?.length
+      ? accessOverride.agents
+      : getVisibleAgents(user?.email);
     // If no config found (unknown user), show all for backward compat
     let filtered = allowedAgents.length > 0
       ? helpers.filter((h) => allowedAgents.includes(h.id))
@@ -135,7 +140,7 @@ export default function Home() {
     const primary = filtered.find((h) => h.id === mapping.agentKey);
     if (!primary) return filtered;
     return [primary, ...filtered.filter((h) => h.id !== mapping.agentKey)];
-  }, [mapping, isSuperAdmin, user?.email]);
+  }, [mapping, isSuperAdmin, user?.email, accessOverride]);
 
   const handleSend = useCallback((content: string) => {
     const result = routeToAgent(content);
