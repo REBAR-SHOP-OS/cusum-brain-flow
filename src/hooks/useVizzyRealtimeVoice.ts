@@ -334,6 +334,16 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const ephemeralKey = tokenData.client_secret;
       if (!ephemeralKey) throw new Error("No ephemeral key received");
 
+      // Parse dynamic TURN servers from backend
+      const dynamicTurnServers: RTCIceServer[] = Array.isArray(tokenData.turn_servers)
+        ? tokenData.turn_servers.map((s: any) => ({
+            urls: s.urls || s.url,
+            ...(s.username ? { username: s.username } : {}),
+            ...(s.credential ? { credential: s.credential } : {}),
+          }))
+        : [];
+      console.log(`[RealtimeVoice] Received ${dynamicTurnServers.length} TURN server entries from backend`);
+
       // 2. Capture mic — minimal processing for lowest capture latency
       setStep("mic_requesting");
       const micStream = await navigator.mediaDevices.getUserMedia({
