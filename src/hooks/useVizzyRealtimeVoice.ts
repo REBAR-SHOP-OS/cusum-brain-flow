@@ -377,12 +377,39 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       dcRef.current = dc;
 
       dc.addEventListener("open", () => {
-        console.log("[RealtimeVoice][STEP] data_channel_open");
+        console.log("[RealtimeVoice][STEP] data_channel_open — readyState:", dc.readyState);
         setStep("data_channel_open");
+        // If session.created doesn't arrive within 8s of channel open,
+        // treat the channel as connected anyway (server may skip session.created
+        // in newer API versions or certain model configs)
+        setTimeout(() => {
+          if (activeRef.current && !sessionReadyRef.current && dc.readyState === "open") {
+            console.warn("[RealtimeVoice] session.created not received 8s after dc open — treating as connected");
+            sessionReadyRef.current = true;
+            // Clear the outer 20s timeout
+            if (sessionTimeoutRef.current) {
+              clearTimeout(sessionTimeoutRef.current);
+              sessionTimeoutRef.current = null;
+            }
+            setState("connected");
+            setStep("connected_without_session_event");
+            // Send session.update to configure and verify channel is usable
+            dcSend({
+              type: "session.update",
+              session: {
+                instructions: getSystemPrompt(),
+                modalities: ["text", "audio"],
+                voice: "sage",
+                input_audio_transcription: { model: "whisper-1" },
+                turn_detection: { type: "server_vad", threshold: 0.5, silence_duration_ms: 800 },
+              },
+            });
+          }
+        }, 8000);
       });
 
       dc.addEventListener("close", () => {
-        console.log("[RealtimeVoice] Data channel closed");
+        console.log("[RealtimeVoice] Data channel closed, readyState:", dc.readyState);
       });
 
       dc.addEventListener("error", (e) => {
@@ -392,9 +419,11 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       dc.addEventListener("message", (ev) => {
         try {
           const event = JSON.parse(ev.data);
+          const msgType = event.type || "unknown";
+          console.log("[RealtimeVoice][DC_MSG] type=" + msgType);
           handleRealtimeEvent(event);
         } catch (e) {
-          console.warn("[RealtimeVoice] Failed to parse data channel message:", e);
+          console.warn("[RealtimeVoice] Failed to parse data channel message:", ev.data?.substring?.(0, 200), e);
         }
       });
 
