@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { CameraLoader } from "./CameraLoader";
-import { Loader2, Check, Pencil, Play, AlertCircle, Home, RefreshCw, Send, BookmarkCheck } from "lucide-react";
+import { Loader2, Check, Pencil, Film, Play, AlertCircle, Home, RefreshCw, Send, BookmarkCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChatPromptBar } from "./ChatPromptBar";
@@ -205,10 +205,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     toast({ title: "Generation cancelled" });
   };
 
-  const handleQuickStart = (prompt: string) => {
-    setStarterPrompt(prompt);
-    setStarterPromptSeed((current) => current + 1);
-  };
 
   const handleSelectProjectDraft = (project: AdProjectRow) => {
     const projectClips = project.clips ?? [];
@@ -446,90 +442,9 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       {/* Idle state */}
       {flowState === "idle" && (
         <div className="w-full max-w-6xl space-y-6">
-          <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className="overflow-hidden rounded-[32px] border border-white/12 bg-black/55 p-6 shadow-[0_40px_120px_rgba(0,0,0,0.35)] backdrop-blur-xl md:p-8">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="max-w-2xl space-y-5">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/70">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    AI Video Director
-                  </div>
-                  <div className="space-y-3">
-                    <h2 className="max-w-3xl text-3xl font-semibold tracking-tight text-white md:text-5xl">
-                      Modernize your ad idea into a polished video without changing the message.
-                    </h2>
-                    <p className="max-w-2xl text-sm leading-7 text-white/70 md:text-base">
-                      Start with a sales script, a rough concept, source footage, or a few reference images. The workflow still centers on your original goal: turning one idea into a professional video ad you can refine, AI edit, and prep for posting.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-                  {HERO_POINTS.map(({ icon: Icon, label }) => (
-                    <div
-                      key={label}
-                      className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm text-white/80"
-                    >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/25">
-                        <Icon className="h-4.5 w-4.5 text-white" />
-                      </div>
-                      <span>{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-8 space-y-4">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-                  <Film className="h-3.5 w-3.5" />
-                  Quick start ideas
-                </div>
-                <div className="grid gap-3 md:grid-cols-3">
-                  {QUICK_START_IDEAS.map((idea) => (
-                    <button
-                      key={idea.title}
-                      type="button"
-                      onClick={() => handleQuickStart(idea.prompt)}
-                      className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 text-left transition-all hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.08]"
-                    >
-                      <div className="text-sm font-semibold text-white">{idea.title}</div>
-                      <div className="mt-1 text-sm leading-6 text-white/60">{idea.description}</div>
-                      <div className="mt-4 text-xs font-medium text-cyan-200">Load example brief</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[32px] border border-white/12 bg-black/45 p-6 shadow-[0_32px_100px_rgba(0,0,0,0.28)] backdrop-blur-xl">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Workflow</p>
-                  <h3 className="mt-2 text-xl font-semibold text-white">Keep the idea. Upgrade the presentation.</h3>
-                </div>
-                <div className="space-y-3">
-                  {[
-                    "Describe the product, audience, and offer in plain language.",
-                    "Optionally add source clips plus intro, character, and outro references for stronger direction.",
-                    "Generate scenes, AI edit the composition, then export a polished post-ready cut.",
-                  ].map((step, index) => (
-                    <div key={step} className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-950">
-                        {index + 1}
-                      </div>
-                      <p className="text-sm leading-6 text-white/75">{step}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4 md:p-6">
             <ChatPromptBar
               onSubmit={handleSubmit}
-              starterPrompt={starterPrompt}
-              starterPromptSeed={starterPromptSeed}
             />
           </div>
 
