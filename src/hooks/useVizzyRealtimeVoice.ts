@@ -390,7 +390,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
 
       // Overall connection timeout — if session.created never arrives
       const sessionTimeout = setTimeout(() => {
-        if (activeRef.current && stateRef.current === "connecting") {
+        if (activeRef.current) {
           console.error("[RealtimeVoice] session.created not received within 20s");
           cleanup();
           setErrorDetail("Session handshake timed out — try again");
