@@ -91,14 +91,25 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
     });
     if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return items; }
     console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
+    // Helper: get formatted display text (.w) from a sheet cell, falling back to raw value
+    const getCellText = (sheetRow: number, col: number): string | null => {
+      const addr = XLSX.utils.encode_cell({ r: sheetRow, c: col });
+      const cell = sheet[addr];
+      if (!cell) return null;
+      // .w = formatted text (what user sees in Excel), .v = raw value
+      return (cell.w != null ? String(cell.w) : String(cell.v)).trim();
+    };
+
     return items.map((it, n) => {
       const row = rows[hIdx + 1 + n] || [];
+      const sheetRow = hIdx + 1 + n; // 0-based row in the sheet
       const sourceDims: Record<string, string> = {};
       for (const d of DIMS) {
         if (colMap[d] != null) {
           const raw = row[colMap[d]];
-          // Save exact source text
-          sourceDims[d] = raw != null ? String(raw).trim() : "";
+          // Save exact formatted source text (preserves ft-in like 6'-3 ¼")
+          const cellText = getCellText(sheetRow, colMap[d]);
+          sourceDims[d] = cellText ?? (raw != null ? String(raw).trim() : "");
           it[d] = raw != null ? (parseDimension(raw) ?? null) : null;
         }
       }
@@ -106,8 +117,9 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
       // Overlay total_length from spreadsheet if found
       if (colMap["__LENGTH__"] != null) {
         const raw = row[colMap["__LENGTH__"]];
-        // Save exact source text
-        it.__source_length = raw != null ? String(raw).trim() : null;
+        // Save exact formatted source text (preserves ft-in like 8'-9 ¼")
+        const cellText = getCellText(sheetRow, colMap["__LENGTH__"]);
+        it.__source_length = cellText ?? (raw != null ? String(raw).trim() : null);
         const parsed = raw != null ? parseDimension(raw) : null;
         if (parsed != null) it.total_length = parsed;
       }
