@@ -22,7 +22,6 @@ Deno.serve((req) =>
       threshold: vadThreshold,
       prefix_padding_ms: prefixPaddingMs,
       silence_duration_ms: silenceDurationMs,
-      eagerness: "high",
     };
 
     const payload = JSON.stringify({
