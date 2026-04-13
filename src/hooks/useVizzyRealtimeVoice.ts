@@ -815,6 +815,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     attemptIdRef.current++;
     cleanup("endSession_called");
     relayRetryDoneRef.current = false;
+    stunOnlyRetryDoneRef.current = false;
+    skipTurnRef.current = false;
     iceTransportPolicyRef.current = "all";
     setIsSpeaking(false);
     setOutputAudioBlocked(false);
