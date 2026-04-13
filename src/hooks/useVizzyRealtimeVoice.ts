@@ -233,6 +233,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   }, [triggerResponseCreate, setStep]);
 
   const startSession = useCallback(async () => {
+    // Bump attempt ID — any in-flight older attempt will bail at its next checkpoint
+    const thisAttempt = ++attemptIdRef.current;
+    console.log(`[RealtimeVoice] startSession attempt #${thisAttempt}`);
+
+    // Clean up any previous attempt's resources
+    cleanup("new_attempt_starting");
+
     setState("connecting");
     setErrorDetail(null);
     setOutputAudioBlocked(false);
@@ -244,11 +251,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     agentPartialRef.current = "";
     agentPartialIdRef.current = null;
 
-    // Clear any previous session timeout
-    if (sessionTimeoutRef.current) {
-      clearTimeout(sessionTimeoutRef.current);
-      sessionTimeoutRef.current = null;
-    }
+    /** Returns true if this attempt has been superseded */
+    const isStale = () => attemptIdRef.current !== thisAttempt;
 
     try {
       // 0. Prime audio element NOW (within user gesture) to unlock mobile playback
