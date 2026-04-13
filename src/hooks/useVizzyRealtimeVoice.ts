@@ -720,7 +720,14 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     }
   }, [getSystemPrompt, cleanup, handleRealtimeEvent, setStep, debugStep, dcSend]);
 
-  const endSession = useCallback(() => {
+  /** Retry with relay-only transport policy (forces all traffic through TURN) */
+  const startSessionRelay = useCallback(() => {
+    console.log("[RealtimeVoice] Starting relay-only retry");
+    iceTransportPolicyRef.current = "relay";
+    startSession();
+  }, [startSession]);
+
+
     // Bump attempt ID to invalidate any in-flight startSession
     attemptIdRef.current++;
     cleanup("endSession_called");
