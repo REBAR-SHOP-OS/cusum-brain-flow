@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Sparkles, Loader2 } from "lucide-react";
+import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Smile, Clapperboard, Palette } from "lucide-react";
@@ -178,7 +178,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedVideoModel, setSelectedVideoModel] = useState(VIDEO_MODELS[0]);
-  const [isAutoGenerating, setIsAutoGenerating] = useState(false);
+  
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
   const characterRef = useRef<HTMLInputElement>(null);
@@ -189,7 +189,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const outroPreviewUrl = usePreviewUrl(outroImage);
 
   const hasImages = !!(introImage || outroImage || characterImage);
-  const canAutoGenerate = (selectedStyles.length > 0 && selectedProducts.length > 0) || hasImages;
+  
   const selectedStyleLabels = selectedStyles
     .map((key) => IMAGE_STYLES.find((style) => style.key === key)?.label)
     .filter(Boolean) as string[];
@@ -203,72 +203,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     }
   }, [starterPrompt, starterPromptSeed]);
 
-  const handleAutoGenerate = async () => {
-    if (!canAutoGenerate || isAutoGenerating) return;
-    setIsAutoGenerating(true);
-    try {
-      const productLabels = selectedProducts.map(k => PRODUCT_ICONS.find(p => p.key === k)?.label || k).join(", ");
-      const styleLabels = selectedStyles.map(k => IMAGE_STYLES.find(s => s.key === k)?.label || k).join(", ");
-      const dur = DURATIONS.find(d => d.value === duration)?.label || duration + "s";
-
-      // Build context lines
-      const contextLines: string[] = [];
-      if (selectedProducts.length > 0) contextLines.push(`Products: ${productLabels}`);
-      if (selectedStyles.length > 0) contextLines.push(`Styles: ${styleLabels}`);
-      contextLines.push(`Duration: ${dur}`);
-      contextLines.push(`Aspect Ratio: ${ratio}`);
-      if (introImage) contextLines.push("Intro Image: YES — use as opening reference frame, start the video matching this image");
-      if (characterImage) contextLines.push("Character Image: YES — maintain this person as the consistent narrator/subject across ALL scenes");
-      if (outroImage) contextLines.push("Outro Image: YES — use as closing reference frame, end the video transitioning to match this image");
-
-      const sceneCount = Math.max(1, Math.floor(parseInt(duration) / 15));
-      contextLines.push(`Scene count: ${sceneCount} (each scene is exactly 15 seconds)`);
-
-      const systemLines = [
-        "You are a cinematic video ad prompt writer for a construction/rebar company.",
-        `Write exactly ${sceneCount} scene(s) for a ${dur} video ad.`,
-        "Each scene is exactly 15 seconds.",
-        "If source footage is provided, structure the ad as an AI-edited post-ready sequence built around those uploaded clips.",
-        "Make the ad feel polished and social-ready, with motion-design transitions, a strong intro beat, and a branded outro.",
-        "Format each scene EXACTLY as follows:",
-        "",
-        "Scene X – Ys to Zs",
-        "[Visual prompt: 1-2 sentences, cinematic, vivid, specific camera/lighting details]",
-        "Voiceover:",
-        "\"[Persuasive advertising copy, 1-2 sentences, suitable for text-to-speech]\"",
-        "",
-        "Separate scenes with a blank line.",
-        "Return ONLY the formatted scenes. No extra text, no markdown, no explanations.",
-      ];
-      if (introImage) systemLines.push("An Intro Image is provided — Scene 1 must visually match and continue from the uploaded reference image.");
-      if (characterImage) systemLines.push("A Character Image is provided — feature that person consistently as the narrator and main subject across ALL scenes. Describe their appearance for continuity.");
-      if (outroImage) systemLines.push(`An Outro Image is provided — Scene ${sceneCount} must visually transition into and match the uploaded closing reference image.`);
-
-      const { data, error } = await supabase.functions.invoke("ai-generic", {
-        body: {
-          prompt: contextLines.join("\n"),
-          systemPrompt: systemLines.join("\n"),
-          model: "google/gemini-2.5-flash",
-        },
-      });
-
-      if (error) throw error;
-      const rawResult = data?.result || data?.text || "";
-      if (rawResult) {
-        setPrompt(rawResult.trim());
-        toast({ title: "✨ Prompt ready", description: `${sceneCount} scenes with voiceover generated. Review and edit.` });
-      }
-    } catch (err: unknown) {
-      console.error("Auto-generate prompt error:", err);
-      toast({
-        title: "Prompt generation failed",
-        description: getErrorMessage(err, "Please try again"),
-        variant: "destructive",
-      });
-    } finally {
-      setIsAutoGenerating(false);
-    }
-  };
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
@@ -611,32 +545,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           <div className="flex items-center justify-end gap-2">
 
             <div className="flex items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={handleAutoGenerate}
-                    disabled={!canAutoGenerate || isAutoGenerating || disabled}
-                    className={cn(
-                      "inline-flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition-all",
-                      canAutoGenerate && !isAutoGenerating
-                        ? "border-primary/30 bg-primary/10 text-primary hover:bg-primary/15"
-                        : "cursor-not-allowed border-white/10 bg-white/[0.04] text-white/40"
-                    )}
-                  >
-                    {isAutoGenerating ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
-                    )}
-                    Draft with AI
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  {canAutoGenerate ? "Build a structured ad brief from your references" : "Select a style and product or upload an image"}
-                </TooltipContent>
-              </Tooltip>
-
               <Button
                 onClick={handleSubmit}
                 disabled={!prompt.trim() || disabled}
