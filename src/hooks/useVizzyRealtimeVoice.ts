@@ -3,7 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { SILENT_WAV } from "@/lib/audioPlayer";
 import {
   createRealtimePeerConnection,
-  waitForIceGatheringComplete,
 } from "@/lib/webrtc/realtimeConnection";
 
 /**
@@ -338,6 +337,9 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       // ── Diagnostic flags ──
       let remoteTrackReceived = false;
       let dataChannelEverOpened = false;
+      const connectStartedAt = Date.now();
+      let remoteTrackAt = 0;
+      let dcOpenAt = 0;
 
       /** Log all PC/ICE/DC states in one snapshot */
       const logAllStates = (label: string) => {
@@ -349,7 +351,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       // 4. Assign remote audio to the already-primed element
       pc.ontrack = (ev) => {
         remoteTrackReceived = true;
-        console.log("[RealtimeVoice][DIAG] Remote track received:", ev.track.kind);
+        remoteTrackAt = Date.now();
+        console.log(`[RealtimeVoice][DIAG] Remote track received: ${ev.track.kind} (+${remoteTrackAt - connectStartedAt}ms)`);
         logAllStates("ontrack");
         if (audioElRef.current) {
           audioElRef.current.srcObject = ev.streams[0];
@@ -412,8 +415,25 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         if (s === "failed" && activeRef.current && !isStale()) {
           if (disconnectGraceTimer) { clearTimeout(disconnectGraceTimer); disconnectGraceTimer = null; }
 
-          // If the data channel opened and session is ready, don't immediately fail —
-          // the media path may recover. Give it a grace period.
+          const elapsed = Date.now() - connectStartedAt;
+
+          // During the first 15s of connection, don't treat "failed" as immediately fatal —
+          // ICE may still be negotiating via TURN after STUN fails
+          if (elapsed < 15000) {
+            console.warn(`[RealtimeVoice] PC failed at ${elapsed}ms — still in handshake window, using grace period`);
+            disconnectGraceTimer = setTimeout(() => {
+              if (pc.connectionState === "failed" && activeRef.current && !isStale()) {
+                logAllStates("failed_grace_expired_handshake");
+                setErrorDetail(
+                  `WebRTC connection failed — network may be blocking WebRTC (ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived} dcOpened=${dataChannelEverOpened})`
+                );
+                setState("error");
+              }
+            }, GRACE_PERIOD_MS);
+            return;
+          }
+
+          // If the data channel opened and session is ready, give a grace period
           if (dataChannelEverOpened && sessionReadyRef.current) {
             console.warn("[RealtimeVoice] PC failed but DC was open + session ready — grace period");
             disconnectGraceTimer = setTimeout(() => {
@@ -453,7 +473,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
 
       dc.addEventListener("open", () => {
         dataChannelEverOpened = true;
-        console.log("[RealtimeVoice][STEP] data_channel_open — readyState:", dc.readyState);
+        dcOpenAt = Date.now();
+        console.log(`[RealtimeVoice][STEP] data_channel_open (+${dcOpenAt - connectStartedAt}ms)`);
         logAllStates("data_channel_open");
         setStep("data_channel_open");
         // If session.created doesn't arrive within 8s of channel open,
@@ -507,17 +528,27 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
       });
 
-      // 6. Create offer, wait for ICE, then send SDP to OpenAI
+      // 6. Create offer and send SDP to OpenAI immediately (no ICE gathering wait)
+      // OpenAI Realtime handles ICE on their side — browser resolves ICE asynchronously
       setStep("sdp_offer_creating");
       const offer = await pc.createOffer();
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after createOffer`); return; }
 
       await pc.setLocalDescription(offer);
-      setStep("ice_gathering");
-
-      const localDesc = await waitForIceGatheringComplete(pc, 15000);
-      if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after ICE gathering`); return; }
       setStep("sdp_post_started");
+
+      // Log ICE candidate events for diagnostics
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) {
+          console.log(`[RealtimeVoice][DIAG] ICE candidate: ${ev.candidate.type} ${ev.candidate.protocol} ${ev.candidate.address}:${ev.candidate.port}`);
+        } else {
+          console.log("[RealtimeVoice][DIAG] ICE gathering complete (null candidate sentinel)");
+        }
+      };
+
+      // Send the offer SDP immediately — do NOT wait for ICE gathering
+      const offerSdp = pc.localDescription?.sdp;
+      if (!offerSdp) throw new Error("No local SDP after setLocalDescription");
 
       const sdpResp = await fetch(
         `https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03`,
@@ -527,7 +558,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             Authorization: `Bearer ${ephemeralKey}`,
             "Content-Type": "application/sdp",
           },
-          body: localDesc.sdp,
+          body: offerSdp,
         }
       );
 
@@ -567,18 +598,29 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} — waiting for session.created`);
       setStep("waiting_session_created");
 
-      // Overall connection timeout — if session.created never arrives
+      // Overall connection timeout — 30s to allow async ICE + data channel negotiation
       sessionTimeoutRef.current = setTimeout(() => {
         if (activeRef.current && !sessionReadyRef.current && !isStale()) {
           const dcState = dcRef.current?.readyState || "no_dc";
           const pcState = pcRef.current?.connectionState || "no_pc";
           const iceState = pcRef.current?.iceConnectionState || "no_ice";
-          console.error(`[RealtimeVoice] 20s timeout — dc=${dcState} pc=${pcState} ice=${iceState}`);
+          const iceGather = pcRef.current?.iceGatheringState || "no_ice";
+          logAllStates("session_timeout_30s");
+
+          let errorMsg: string;
+          if (dcState !== "open" && remoteTrackReceived) {
+            errorMsg = `Media connected but control channel failed — audio track received but data channel stayed "${dcState}" (ice=${iceState}, iceGather=${iceGather})`;
+          } else if (iceState === "disconnected" || iceState === "failed") {
+            errorMsg = `ICE connection failed — network may be blocking WebRTC (ice=${iceState}, dc=${dcState}, track=${remoteTrackReceived})`;
+          } else {
+            errorMsg = `Session handshake timed out (dc=${dcState}, pc=${pcState}, ice=${iceState}, iceGather=${iceGather}, track=${remoteTrackReceived})`;
+          }
+
           cleanup("session_timeout");
-          setErrorDetail(`Session handshake timed out (dc=${dcState}, pc=${pcState}, ice=${iceState})`);
+          setErrorDetail(errorMsg);
           setState("error");
         }
-      }, 20000);
+      }, 30000);
     } catch (err) {
       if (isStale()) {
         console.log(`[RealtimeVoice] Attempt #${thisAttempt} error after being superseded — ignoring`);
