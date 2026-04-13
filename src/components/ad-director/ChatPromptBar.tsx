@@ -154,7 +154,7 @@ function ReferenceUploadCard({
         </>
       ) : (
         <div className="relative z-10 pointer-events-none flex h-full flex-col justify-between gap-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-white/80">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-slate-700/60 text-white/80">
             <Icon className="h-5 w-5" />
           </div>
           <div className="space-y-1">
