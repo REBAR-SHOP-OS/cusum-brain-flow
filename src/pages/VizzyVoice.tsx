@@ -393,7 +393,7 @@ function ActionResultDisplay({ data }: { data: any }) {
   if (!data) return null;
 
   // Stats object (dashboard)
-  if (typeof data === "object" && !Array.isArray(data) && data.orders !== undefined) {
+  if (typeof data === "object" && !Array.isArray(data) && (data.total_orders !== undefined || data.total_customers !== undefined)) {
     return (
       <div className="grid grid-cols-3 gap-2">
         {Object.entries(data).map(([key, val]) => (

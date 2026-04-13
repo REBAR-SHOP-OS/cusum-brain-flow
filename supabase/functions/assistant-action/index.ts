@@ -8,8 +8,35 @@ const BodySchema = z.object({
   params: z.record(z.unknown()).optional().default({}),
 });
 
+/** Proxy an action to vizzy-erp-action (the single ERP connector surface). */
+async function callErpAction(
+  action: string,
+  params: Record<string, unknown>,
+  authHeader: string,
+): Promise<any> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+  const resp = await fetch(`${supabaseUrl}/functions/v1/vizzy-erp-action`, {
+    method: "POST",
+    headers: {
+      Authorization: authHeader || `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+      apikey: serviceKey,
+    },
+    body: JSON.stringify({ action, params }),
+  });
+
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => ({}));
+    throw new Error(body?.error || `ERP action failed (${resp.status})`);
+  }
+
+  return resp.json();
+}
+
 Deno.serve((req) =>
-  handleRequest(req, async ({ body, serviceClient: supabase, log }) => {
+  handleRequest(req, async ({ body, req: rawReq, log }) => {
     const parsed = BodySchema.safeParse(body);
     if (!parsed.success) {
       return new Response(
@@ -18,79 +45,39 @@ Deno.serve((req) =>
       );
     }
 
-    const { action } = parsed.data;
+    const { action, params } = parsed.data;
+    const authHeader = rawReq.headers.get("Authorization") || "";
+
+    const erp = await callErpAction(action, params, authHeader);
+    const data = erp.data;
+
+    // Build spoken summary per action
+    let spoken = "Done.";
+    let cardTitle = "Result";
 
     if (action === "get_dashboard_stats") {
-      const [orders, customers, leads, machines, cutPlans] = await Promise.all([
-        supabase.from("orders").select("*", { count: "exact", head: true }),
-        supabase.from("customers").select("*", { count: "exact", head: true }),
-        supabase.from("leads").select("*", { count: "exact", head: true }),
-        supabase.from("machines").select("*", { count: "exact", head: true }),
-        supabase.from("cut_plans").select("*", { count: "exact", head: true }),
-      ]);
-
-      const stats = {
-        orders: orders.count ?? 0,
-        customers: customers.count ?? 0,
-        leads: leads.count ?? 0,
-        machines: machines.count ?? 0,
-        cutPlans: cutPlans.count ?? 0,
-      };
-
-      log.done("Dashboard stats returned", stats);
-      return {
-        ok: true,
-        spoken: `You have ${stats.orders} orders, ${stats.customers} customers, ${stats.leads} leads, ${stats.machines} machines, and ${stats.cutPlans} cut plans.`,
-        cardTitle: "Dashboard Stats",
-        data: stats,
-      };
+      cardTitle = "Dashboard Stats";
+      spoken = `You have ${data.total_orders ?? 0} orders, ${data.total_customers ?? 0} customers, ${data.total_leads ?? 0} leads, ${data.total_machines ?? 0} machines, and ${data.total_cut_plans ?? 0} cut plans.`;
     }
 
     if (action === "list_machines") {
-      const { data: machines, error } = await supabase
-        .from("machines")
-        .select("id, name, status, type")
-        .order("name")
-        .limit(20);
-
-      if (error) throw new Error(error.message);
-
-      const count = machines?.length ?? 0;
-      log.done("Machines listed", { count });
-      return {
-        ok: true,
-        spoken: count === 0
-          ? "No machines found."
-          : `Found ${count} machine${count > 1 ? "s" : ""}. ${machines!.slice(0, 3).map((m: any) => m.name).join(", ")}${count > 3 ? " and more" : ""}.`,
-        cardTitle: "Machines",
-        data: machines,
-      };
+      cardTitle = "Machines";
+      const count = Array.isArray(data) ? data.length : 0;
+      spoken = count === 0
+        ? "No machines found."
+        : `Found ${count} machine${count > 1 ? "s" : ""}. ${data.slice(0, 3).map((m: any) => m.name).join(", ")}${count > 3 ? " and more" : ""}.`;
     }
 
     if (action === "list_production_tasks") {
-      const { data: tasks, error } = await supabase
-        .from("production_tasks")
-        .select("id, status, bar_code, task_type, qty")
-        .order("created_at", { ascending: false })
-        .limit(20);
-
-      if (error) throw new Error(error.message);
-
-      const count = tasks?.length ?? 0;
-      log.done("Production tasks listed", { count });
-      return {
-        ok: true,
-        spoken: count === 0
-          ? "No production tasks found."
-          : `Found ${count} production task${count > 1 ? "s" : ""}.`,
-        cardTitle: "Production Tasks",
-        data: tasks,
-      };
+      cardTitle = "Production Tasks";
+      const count = Array.isArray(data) ? data.length : 0;
+      spoken = count === 0
+        ? "No production tasks found."
+        : `Found ${count} production task${count > 1 ? "s" : ""}.`;
     }
 
-    return new Response(
-      JSON.stringify({ ok: false, error: "Unknown action" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  }, { functionName: "assistant-action", authMode: "none", requireCompany: false, wrapResult: false })
+    log.done("Action proxied", { action, cardTitle });
+
+    return { ok: true, spoken, cardTitle, data };
+  }, { functionName: "assistant-action", authMode: "none", requireCompany: false, wrapResult: false }),
 );
