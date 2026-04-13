@@ -7,13 +7,14 @@ Deno.serve((req) =>
     if (!GPT_API_KEY) throw new Error("GPT_API_KEY not configured");
 
     const {
-      instructions = "You are a helpful assistant.",
+      instructions = "You are a helpful assistant. Be concise — answer in one or two short sentences.",
       voice = "sage",
       model = "gpt-4o-mini-realtime-preview-2025-06-03",
-      vadThreshold = 0.6,
-      silenceDurationMs = 800,
-      prefixPaddingMs = 400,
-      temperature = 0.8,
+      vadThreshold = 0.3,
+      silenceDurationMs = 300,
+      prefixPaddingMs = 200,
+      temperature = 0.6,
+      maxOutputTokens = 150,
     } = ctx.body;
 
     const turnDetection: Record<string, unknown> = {
@@ -21,6 +22,7 @@ Deno.serve((req) =>
       threshold: vadThreshold,
       prefix_padding_ms: prefixPaddingMs,
       silence_duration_ms: silenceDurationMs,
+      eagerness: "high",
     };
 
     const payload = JSON.stringify({
@@ -29,6 +31,7 @@ Deno.serve((req) =>
       modalities: ["audio", "text"],
       instructions,
       temperature,
+      max_response_output_tokens: maxOutputTokens,
       input_audio_transcription: { model: "whisper-1" },
       turn_detection: turnDetection,
     });

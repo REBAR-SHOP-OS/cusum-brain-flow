@@ -105,7 +105,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       console.log("[RealtimeVoice] Skipping response.create — model already responding");
       return;
     }
-    dcSend({ type: "response.create", response: { modalities: ["text", "audio"] } });
+    dcSend({ type: "response.create", response: { modalities: ["text", "audio"], max_output_tokens: 150 } });
     console.log("[RealtimeVoice] Sent response.create");
   }, [dcSend]);
 
