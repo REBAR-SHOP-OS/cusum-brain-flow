@@ -45,7 +45,15 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   const agentPartialRef = useRef("");
   const agentPartialIdRef = useRef<string | null>(null);
 
+  // Guard against duplicate response.create while model is already responding
+  const modelRespondingRef = useRef(false);
+  // Track whether session.created has been received
+  const sessionReadyRef = useRef(false);
+
   const cleanup = useCallback(() => {
+    activeRef.current = false;
+    sessionReadyRef.current = false;
+    modelRespondingRef.current = false;
     if (dcRef.current) {
       try { dcRef.current.close(); } catch { /* ignore */ }
       dcRef.current = null;
@@ -65,11 +73,150 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     }
   }, []);
 
+  /** Safely send a message on the data channel */
+  const dcSend = useCallback((payload: object) => {
+    const dc = dcRef.current;
+    if (!dc || dc.readyState !== "open") {
+      console.warn("[RealtimeVoice] Cannot send — data channel not open");
+      return false;
+    }
+    dc.send(JSON.stringify(payload));
+    return true;
+  }, []);
+
+  /** Trigger a guarded response.create — skips if model is already responding */
+  const triggerResponseCreate = useCallback(() => {
+    if (modelRespondingRef.current) {
+      console.log("[RealtimeVoice] Skipping response.create — model already responding");
+      return;
+    }
+    dcSend({ type: "response.create", response: { modalities: ["text", "audio"] } });
+    console.log("[RealtimeVoice] Sent response.create");
+  }, [dcSend]);
+
+  const handleRealtimeEvent = useCallback((event: any) => {
+    const type = event.type as string;
+
+    switch (type) {
+      // ── Session lifecycle ──
+      case "session.created": {
+        console.log("[RealtimeVoice] Session created:", event.session?.id);
+        sessionReadyRef.current = true;
+        if (activeRef.current) {
+          setState("connected");
+        }
+        break;
+      }
+      case "session.updated": {
+        console.log("[RealtimeVoice] Session updated (instructions/config refreshed)");
+        break;
+      }
+
+      // ── User speech ──
+      case "conversation.item.input_audio_transcription.completed": {
+        const userText = event.transcript?.trim();
+        if (userText) {
+          const transcript: VoiceTranscript = {
+            id: `vt-${++idCounter.current}`,
+            role: "user",
+            text: userText,
+            timestamp: Date.now(),
+          };
+          setTranscripts(prev => [...prev, transcript]);
+        }
+        // If server VAD didn't auto-trigger a response, nudge it
+        if (!modelRespondingRef.current) {
+          console.log("[RealtimeVoice] User transcript done, nudging response.create");
+          triggerResponseCreate();
+        }
+        break;
+      }
+
+      // ── Agent audio response lifecycle ──
+      case "response.created": {
+        modelRespondingRef.current = true;
+        break;
+      }
+      case "response.audio_transcript.delta": {
+        const delta = event.delta || "";
+        agentPartialRef.current += delta;
+        setPartialText(agentPartialRef.current);
+        break;
+      }
+      case "response.audio.delta": {
+        setIsSpeaking(true);
+        break;
+      }
+      case "output_audio_buffer.speech_started": {
+        setIsSpeaking(true);
+        break;
+      }
+      case "output_audio_buffer.speech_stopped": {
+        setIsSpeaking(false);
+        break;
+      }
+      case "response.audio_transcript.done": {
+        const fullText = event.transcript?.trim() || agentPartialRef.current.trim();
+        if (fullText) {
+          const transcript: VoiceTranscript = {
+            id: `vt-${++idCounter.current}`,
+            role: "agent",
+            text: fullText,
+            timestamp: Date.now(),
+          };
+          setTranscripts(prev => [...prev, transcript]);
+        }
+        agentPartialRef.current = "";
+        agentPartialIdRef.current = null;
+        setPartialText("");
+        break;
+      }
+      case "response.done": {
+        setIsSpeaking(false);
+        modelRespondingRef.current = false;
+        console.log("[RealtimeVoice] Response done");
+        break;
+      }
+
+      // ── Input audio buffer events (VAD) ──
+      case "input_audio_buffer.speech_started": {
+        console.log("[RealtimeVoice] VAD: user speech started");
+        break;
+      }
+      case "input_audio_buffer.speech_stopped": {
+        console.log("[RealtimeVoice] VAD: user speech stopped");
+        break;
+      }
+      case "input_audio_buffer.committed": {
+        console.log("[RealtimeVoice] VAD: audio buffer committed");
+        break;
+      }
+
+      // ── Errors ──
+      case "error": {
+        console.error("[RealtimeVoice] OpenAI error:", event.error);
+        setErrorDetail(event.error?.message || "OpenAI realtime error");
+        modelRespondingRef.current = false;
+        break;
+      }
+
+      default: {
+        // Log unhandled events for debugging (not noisy ones)
+        if (!type.startsWith("response.audio.") && type !== "response.text.delta") {
+          console.log("[RealtimeVoice] Event:", type);
+        }
+        break;
+      }
+    }
+  }, [triggerResponseCreate]);
+
   const startSession = useCallback(async () => {
     setState("connecting");
     setErrorDetail(null);
     setOutputAudioBlocked(false);
     activeRef.current = true;
+    sessionReadyRef.current = false;
+    modelRespondingRef.current = false;
     setTranscripts([]);
     setPartialText("");
     agentPartialRef.current = "";
@@ -144,6 +291,18 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
       };
 
+      // Monitor connection state
+      pc.onconnectionstatechange = () => {
+        console.log("[RealtimeVoice] PC connection state:", pc.connectionState);
+        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
+          if (activeRef.current) {
+            console.error("[RealtimeVoice] Connection lost");
+            setErrorDetail("Connection lost — try reconnecting");
+            setState("error");
+          }
+        }
+      };
+
       // 4. Capture mic and add to peer connection
       const micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -160,7 +319,15 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       dcRef.current = dc;
 
       dc.addEventListener("open", () => {
-        console.log("[RealtimeVoice] Data channel open");
+        console.log("[RealtimeVoice] Data channel OPEN — session ready for events");
+      });
+
+      dc.addEventListener("close", () => {
+        console.log("[RealtimeVoice] Data channel closed");
+      });
+
+      dc.addEventListener("error", (e) => {
+        console.error("[RealtimeVoice] Data channel error:", e);
       });
 
       dc.addEventListener("message", (ev) => {
@@ -198,82 +365,18 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const answerSdp = await sdpResp.text();
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 
-      setState("connected");
-      console.log("[RealtimeVoice] WebRTC connected to OpenAI Realtime");
+      // NOTE: We do NOT setState("connected") here.
+      // Instead we wait for "session.created" event on the data channel.
+      console.log("[RealtimeVoice] SDP exchange complete — waiting for session.created");
     } catch (err) {
       console.error("[RealtimeVoice] Connection failed:", err);
       cleanup();
-      activeRef.current = false;
       setState("error");
       setErrorDetail(err instanceof Error ? err.message : String(err));
     }
-  }, [getSystemPrompt, cleanup]);
-
-  const handleRealtimeEvent = useCallback((event: any) => {
-    const type = event.type as string;
-
-    // User finished speaking — their transcript is ready
-    if (type === "conversation.item.input_audio_transcription.completed") {
-      const userText = event.transcript?.trim();
-      if (userText) {
-        const transcript: VoiceTranscript = {
-          id: `vt-${++idCounter.current}`,
-          role: "user",
-          text: userText,
-          timestamp: Date.now(),
-        };
-        setTranscripts(prev => [...prev, transcript]);
-      }
-    }
-
-    // Agent audio transcript streaming (partial)
-    if (type === "response.audio_transcript.delta") {
-      const delta = event.delta || "";
-      agentPartialRef.current += delta;
-      setPartialText(agentPartialRef.current);
-    }
-
-    // Agent response audio started
-    if (type === "response.audio.delta") {
-      setIsSpeaking(true);
-    }
-
-    // Agent finished speaking — full transcript
-    if (type === "response.audio_transcript.done") {
-      const fullText = event.transcript?.trim() || agentPartialRef.current.trim();
-      if (fullText) {
-        const transcript: VoiceTranscript = {
-          id: `vt-${++idCounter.current}`,
-          role: "agent",
-          text: fullText,
-          timestamp: Date.now(),
-        };
-        setTranscripts(prev => [...prev, transcript]);
-      }
-      agentPartialRef.current = "";
-      agentPartialIdRef.current = null;
-      setPartialText("");
-    }
-
-    // Response done — speaking finished
-    if (type === "response.done") {
-      setIsSpeaking(false);
-    }
-
-    // Error from OpenAI
-    if (type === "error") {
-      console.error("[RealtimeVoice] OpenAI error:", event.error);
-      setErrorDetail(event.error?.message || "OpenAI realtime error");
-    }
-
-    // Session created confirmation
-    if (type === "session.created") {
-      console.log("[RealtimeVoice] Session created:", event.session?.id);
-    }
-  }, []);
+  }, [getSystemPrompt, cleanup, handleRealtimeEvent]);
 
   const endSession = useCallback(() => {
-    activeRef.current = false;
     cleanup();
     setIsSpeaking(false);
     setOutputAudioBlocked(false);
@@ -296,39 +399,30 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   }, [isMuted]);
 
   const updateSessionInstructions = useCallback((instructions: string) => {
-    const dc = dcRef.current;
-    if (!dc || dc.readyState !== "open") return;
-
-    const updateEvent = {
+    dcSend({
       type: "session.update",
       session: { instructions },
-    };
-    dc.send(JSON.stringify(updateEvent));
+    });
     console.log("[RealtimeVoice] Pushed session.update with new instructions");
-  }, []);
+  }, [dcSend]);
 
   const sendFollowUp = useCallback(async (internalPrompt: string): Promise<string> => {
-    const dc = dcRef.current;
-    if (!dc || dc.readyState !== "open") return "";
-
     // Send a conversation item with the internal prompt
-    const itemEvent = {
+    dcSend({
       type: "conversation.item.create",
       item: {
         type: "message",
         role: "user",
         content: [{ type: "input_text", text: internalPrompt }],
       },
-    };
-    dc.send(JSON.stringify(itemEvent));
+    });
 
     // Trigger a response
-    const responseEvent = { type: "response.create" };
-    dc.send(JSON.stringify(responseEvent));
+    triggerResponseCreate();
 
     console.log("[RealtimeVoice] Sent follow-up via data channel");
     return ""; // Response comes asynchronously via data channel events
-  }, []);
+  }, [dcSend, triggerResponseCreate]);
 
   return {
     state,
