@@ -33,6 +33,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [partialText, setPartialText] = useState("");
   const [outputAudioBlocked, setOutputAudioBlocked] = useState(false);
+  const [debugStep, setDebugStep] = useState<string>("idle");
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const dcRef = useRef<RTCDataChannel | null>(null);
@@ -40,6 +41,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   const micStreamRef = useRef<MediaStream | null>(null);
   const activeRef = useRef(false);
   const idCounter = useRef(0);
+  const sessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Track partial agent transcript for streaming display
   const agentPartialRef = useRef("");
@@ -50,10 +52,21 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   // Track whether session.created has been received
   const sessionReadyRef = useRef(false);
 
+  // Debug step helper
+  const setStep = useCallback((step: string) => {
+    console.log(`[RealtimeVoice][STEP] ${step}`);
+    setDebugStep(step);
+  }, []);
+
   const cleanup = useCallback(() => {
     activeRef.current = false;
     sessionReadyRef.current = false;
     modelRespondingRef.current = false;
+    // Clear session timeout
+    if (sessionTimeoutRef.current) {
+      clearTimeout(sessionTimeoutRef.current);
+      sessionTimeoutRef.current = null;
+    }
     if (dcRef.current) {
       try { dcRef.current.close(); } catch { /* ignore */ }
       dcRef.current = null;
@@ -102,6 +115,12 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       case "session.created": {
         console.log("[RealtimeVoice] Session created:", event.session?.id);
         sessionReadyRef.current = true;
+        setStep("session_created");
+        // Clear session timeout since we got session.created
+        if (sessionTimeoutRef.current) {
+          clearTimeout(sessionTimeoutRef.current);
+          sessionTimeoutRef.current = null;
+        }
         if (activeRef.current) {
           setState("connected");
         }
@@ -208,7 +227,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         break;
       }
     }
-  }, [triggerResponseCreate]);
+  }, [triggerResponseCreate, setStep]);
 
   const startSession = useCallback(async () => {
     setState("connecting");
@@ -222,8 +241,15 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     agentPartialRef.current = "";
     agentPartialIdRef.current = null;
 
+    // Clear any previous session timeout
+    if (sessionTimeoutRef.current) {
+      clearTimeout(sessionTimeoutRef.current);
+      sessionTimeoutRef.current = null;
+    }
+
     try {
       // 0. Prime audio element NOW (within user gesture) to unlock mobile playback
+      setStep("audio_priming");
       const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
       audioEl.setAttribute("playsinline", "true");
@@ -240,6 +266,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       audioElRef.current = audioEl;
 
       // 1. Get ephemeral token from voice-engine-token edge function
+      setStep("token_fetch_started");
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Not authenticated");
 
@@ -268,6 +295,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       }
 
       const tokenData = await tokenResp.json();
+      setStep("token_fetch_ok");
       if (tokenData.error || tokenData.fallback) {
         throw new Error(tokenData.error || "Realtime session unavailable");
       }
@@ -275,11 +303,24 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const ephemeralKey = tokenData.client_secret;
       if (!ephemeralKey) throw new Error("No ephemeral key received");
 
-      // 2. Create WebRTC peer connection
+      // 2. Capture mic
+      setStep("mic_requesting");
+      const micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      micStreamRef.current = micStream;
+      setStep("mic_granted");
+
+      // 3. Create WebRTC peer connection
       const pc = createRealtimePeerConnection();
       pcRef.current = pc;
+      setStep("pc_created");
 
-      // 3. Assign remote audio to the already-primed element
+      // 4. Assign remote audio to the already-primed element
       pc.ontrack = (ev) => {
         console.log("[RealtimeVoice] Got remote audio track");
         if (audioElRef.current) {
@@ -295,7 +336,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       let disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
       pc.onconnectionstatechange = () => {
         const s = pc.connectionState;
-        console.log("[RealtimeVoice] PC connection state:", s);
+        console.log("[RealtimeVoice][STEP] pc_connection_state=" + s);
 
         if (s === "connected" && disconnectGraceTimer) {
           console.log("[RealtimeVoice] Recovered from disconnected state");
@@ -308,7 +349,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           disconnectGraceTimer = setTimeout(() => {
             if (pc.connectionState !== "connected" && activeRef.current) {
               console.error("[RealtimeVoice] Connection did not recover after grace period");
-              setErrorDetail("Connection lost — try reconnecting");
+              setErrorDetail("Connection lost — try reconnecting (failed at step: pc_disconnected_timeout)");
               setState("error");
             }
           }, 5000);
@@ -317,20 +358,18 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         if (s === "failed" && activeRef.current) {
           if (disconnectGraceTimer) { clearTimeout(disconnectGraceTimer); disconnectGraceTimer = null; }
           console.error("[RealtimeVoice] Connection failed");
-          setErrorDetail("Connection failed — try reconnecting");
+          setErrorDetail("Connection failed — try reconnecting (failed at step: pc_connection_failed)");
           setState("error");
         }
       };
 
-      // 4. Capture mic and add to peer connection
-      const micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
-      micStreamRef.current = micStream;
+      // Monitor ICE connection state
+      pc.oniceconnectionstatechange = () => {
+        const s = pc.iceConnectionState;
+        console.log("[RealtimeVoice][STEP] ice_connection_state=" + s);
+      };
+
+      // Add mic tracks to PC
       micStream.getTracks().forEach(track => pc.addTrack(track, micStream));
 
       // 5. Create data channel for events
@@ -338,7 +377,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       dcRef.current = dc;
 
       dc.addEventListener("open", () => {
-        console.log("[RealtimeVoice] Data channel OPEN — session ready for events");
+        console.log("[RealtimeVoice][STEP] data_channel_open");
+        setStep("data_channel_open");
       });
 
       dc.addEventListener("close", () => {
@@ -359,10 +399,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       });
 
       // 6. Create offer, wait for ICE, then send SDP to OpenAI
+      setStep("sdp_offer_creating");
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      setStep("ice_gathering");
 
       const localDesc = await waitForIceGatheringComplete(pc, 15000);
+      setStep("sdp_post_started");
 
       const sdpResp = await fetch(
         `https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03`,
@@ -381,29 +424,34 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         throw new Error(`OpenAI SDP exchange failed (${sdpResp.status}): ${errText}`);
       }
 
+      setStep("sdp_post_ok");
       const answerSdp = await sdpResp.text();
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+      setStep("remote_desc_applied");
 
       // NOTE: We do NOT setState("connected") here.
       // Instead we wait for "session.created" event on the data channel.
       console.log("[RealtimeVoice] SDP exchange complete — waiting for session.created");
+      setStep("waiting_session_created");
 
       // Overall connection timeout — if session.created never arrives
-      const sessionTimeout = setTimeout(() => {
-        if (activeRef.current) {
+      sessionTimeoutRef.current = setTimeout(() => {
+        if (activeRef.current && !sessionReadyRef.current) {
           console.error("[RealtimeVoice] session.created not received within 20s");
           cleanup();
-          setErrorDetail("Session handshake timed out — try again");
+          setErrorDetail("Session handshake timed out — try again (failed at step: waiting_session_created)");
           setState("error");
         }
       }, 20000);
     } catch (err) {
-      console.error("[RealtimeVoice] Connection failed:", err);
+      const step = debugStep;
+      console.error("[RealtimeVoice] Connection failed at step:", step, err);
       cleanup();
       setState("error");
-      setErrorDetail(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setErrorDetail(`${msg} (failed at step: ${step})`);
     }
-  }, [getSystemPrompt, cleanup, handleRealtimeEvent]);
+  }, [getSystemPrompt, cleanup, handleRealtimeEvent, setStep, debugStep]);
 
   const endSession = useCallback(() => {
     cleanup();
@@ -412,6 +460,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     setPartialText("");
     agentPartialRef.current = "";
     setState("idle");
+    setDebugStep("idle");
   }, [cleanup]);
 
   const toggleMute = useCallback(() => {
@@ -465,6 +514,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     toggleMute,
     updateSessionInstructions,
     sendFollowUp,
+    debugStep,
     connectionPhase: state === "connecting" ? "getting_token" as const : state === "connected" ? "connected" as const : null,
     lastErrorKind: state === "error" ? "network" as const : null,
     lastErrorDetail: errorDetail,

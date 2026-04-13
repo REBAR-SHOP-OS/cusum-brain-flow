@@ -88,6 +88,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     partialText,
     outputAudioBlocked,
     retryOutputAudio,
+    debugStep,
   } = useVizzyVoiceEngine();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -371,6 +372,15 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           >
             {statusText}
           </p>
+          {/* Debug step indicator */}
+          {(isConnecting || isError) && debugStep && debugStep !== "idle" && (
+            <p
+              className="text-[10px] font-mono mt-1"
+              style={{ color: "hsl(45 93% 58% / 0.7)" }}
+            >
+              step: {debugStep}
+            </p>
+          )}
 
           {/* Tap to enable audio recovery button */}
           {outputAudioBlocked && (
