@@ -4,44 +4,50 @@
  *
  * ICE server configuration:
  * - STUN servers are always included (Google + Cloudflare, free & reliable).
- * - TURN servers are added only when VITE_TURN_URL, VITE_TURN_USERNAME,
- *   and VITE_TURN_CREDENTIAL env vars are set. This keeps credentials
- *   out of source and lets each environment bring its own TURN relay.
+ * - TURN servers are injected dynamically from the backend (Metered API)
+ *   at session start. No credentials are hardcoded in the frontend.
  *
  * SDP strategy: We do NOT wait for ICE gathering to complete before
  * sending the SDP offer to OpenAI. The browser and server perform ICE
  * connectivity checks asynchronously after setRemoteDescription.
  */
 
+/** Fallback STUN servers — always included */
+const FALLBACK_STUN: RTCIceServer[] = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun.cloudflare.com:3478" },
+];
+
 /**
- * Build the full ICE server list with hardcoded Metered TURN relay.
+ * Build the full ICE server list.
+ * @param turnServers — dynamic TURN servers from the backend (Metered API).
+ *   If empty/undefined, only STUN fallback is used.
  */
-export function buildIceServers(): RTCIceServer[] {
-  return [
-    { urls: "stun:stun.relay.metered.ca:80" },
-    {
-      urls: [
-        "turn:global.relay.metered.ca:80",
-        "turn:global.relay.metered.ca:443",
-        "turn:global.relay.metered.ca:443?transport=tcp",
-        "turns:global.relay.metered.ca:443?transport=tcp",
-      ],
-      username: "1f355748924a8518adb04a1d",
-      credential: "Jk2Qk0D4BlbnSyB9",
-    },
-  ];
+export function buildIceServers(turnServers?: RTCIceServer[]): RTCIceServer[] {
+  const servers: RTCIceServer[] = [...FALLBACK_STUN];
+  if (turnServers && turnServers.length > 0) {
+    servers.push(...turnServers);
+  }
+  return servers;
 }
 
 /**
- * Create an RTCPeerConnection pre-configured with STUN (+ optional TURN).
+ * Create an RTCPeerConnection pre-configured with STUN + dynamic TURN.
  * Uses max-bundle to reduce ICE candidates and speed up connectivity.
+ *
+ * @param turnServers — dynamic TURN servers from the backend.
+ * @param iceTransportPolicy — "all" (default) or "relay" (force TURN only).
  */
-export function createRealtimePeerConnection(): RTCPeerConnection {
-  const iceServers = buildIceServers();
+export function createRealtimePeerConnection(
+  turnServers?: RTCIceServer[],
+  iceTransportPolicy: RTCIceTransportPolicy = "all",
+): RTCPeerConnection {
+  const iceServers = buildIceServers(turnServers);
   return new RTCPeerConnection({
     iceServers,
     bundlePolicy: "max-bundle",
     iceCandidatePoolSize: 1,
+    iceTransportPolicy,
   });
 }
 

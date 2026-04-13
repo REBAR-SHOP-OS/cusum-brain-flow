@@ -35,6 +35,31 @@ Deno.serve((req) =>
       turn_detection: turnDetection,
     });
 
+    // ── Fetch fresh TURN credentials from Metered (non-blocking on failure) ──
+    let turnServers: Array<{ urls: string | string[]; username?: string; credential?: string }> = [];
+    const METERED_KEY = Deno.env.get("METERED_TURN_API_KEY");
+    if (METERED_KEY) {
+      try {
+        const turnResp = await fetch(
+          `https://rebar-shop.metered.live/api/v1/turn/credentials?apiKey=${METERED_KEY}`,
+          { signal: AbortSignal.timeout(3000) }
+        );
+        if (turnResp.ok) {
+          const creds = await turnResp.json();
+          if (Array.isArray(creds)) {
+            turnServers = creds;
+            console.log(`[voice-engine-token] Fetched ${creds.length} TURN server entries`);
+          }
+        } else {
+          console.warn(`[voice-engine-token] Metered TURN API returned ${turnResp.status}`);
+        }
+      } catch (turnErr) {
+        console.warn("[voice-engine-token] Failed to fetch TURN credentials:", turnErr);
+      }
+    } else {
+      console.warn("[voice-engine-token] METERED_TURN_API_KEY not configured — TURN disabled");
+    }
+
     const MAX_ATTEMPTS = 2;
 
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -72,7 +97,11 @@ Deno.serve((req) =>
           return json({ error: "No client secret received", fallback: true }, 200);
         }
 
-        return { client_secret: clientSecret, expires_at: sessionData.client_secret?.expires_at };
+        return {
+          client_secret: clientSecret,
+          expires_at: sessionData.client_secret?.expires_at,
+          turn_servers: turnServers,
+        };
       } catch (err) {
         console.error(`Unexpected error (attempt ${attempt + 1}):`, err);
         if (attempt < MAX_ATTEMPTS - 1) {
