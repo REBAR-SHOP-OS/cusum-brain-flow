@@ -7,9 +7,9 @@
  * - TURN servers are injected dynamically from the backend (Metered API)
  *   at session start. No credentials are hardcoded in the frontend.
  *
- * SDP strategy: We do NOT wait for ICE gathering to complete before
- * sending the SDP offer to OpenAI. The browser and server perform ICE
- * connectivity checks asynchronously after setRemoteDescription.
+ * SDP strategy: We use a bounded gather — wait briefly for usable
+ * candidates (relay/srflx) before sending the SDP, but never block
+ * longer than a few seconds.
  */
 
 /** Fallback STUN servers — always included */
@@ -60,66 +60,68 @@ export function hasUsableCandidates(sdp: string): boolean {
 }
 
 /**
- * Wait for ICE gathering to complete (or timeout).
- * Returns the full local description with all candidates baked in.
- *
- * NOTE: For OpenAI Realtime, you typically do NOT need this — send the offer
- * immediately and let ICE resolve asynchronously. This helper is kept for
- * other WebRTC flows that require gathered candidates in the SDP.
- *
- * @throws if no usable candidates are gathered within the timeout.
+ * Check if an SDP contains at least one relay or srflx candidate.
  */
-export async function waitForIceGatheringComplete(
+export function hasRelayCandidates(sdp: string): boolean {
+  return /^a=candidate:.+typ (relay|srflx)/m.test(sdp);
+}
+
+/**
+ * Wait briefly for usable ICE candidates to appear in the local description.
+ * Returns the SDP as soon as a relay/srflx candidate is found, or after
+ * the timeout — whichever comes first.
+ *
+ * This prevents sending under-populated SDPs on mobile networks where
+ * relay candidates take 1–3s to arrive after setLocalDescription.
+ *
+ * @param pc — the peer connection (must already have localDescription set)
+ * @param timeoutMs — max time to wait (default 3s)
+ * @returns the best available SDP string
+ */
+export function waitForUsableCandidatesBounded(
   pc: RTCPeerConnection,
-  timeoutMs = 8000
-): Promise<RTCSessionDescription> {
-  if (pc.iceGatheringState === "complete" && pc.localDescription) {
-    return pc.localDescription;
+  timeoutMs = 3000
+): Promise<string> {
+  // If we already have relay/srflx candidates, return immediately
+  const currentSdp = pc.localDescription?.sdp;
+  if (currentSdp && hasRelayCandidates(currentSdp)) {
+    return Promise.resolve(currentSdp);
   }
 
-  return new Promise<RTCSessionDescription>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pc.removeEventListener("icegatheringstatechange", onStateChange);
+  return new Promise<string>((resolve) => {
+    let resolved = false;
+    const done = () => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
       pc.removeEventListener("icecandidate", onCandidate);
-      const desc = pc.localDescription;
-      if (desc && hasUsableCandidates(desc.sdp)) {
-        console.warn("[WebRTC] ICE gathering timed out but has candidates — proceeding");
-        resolve(desc);
-      } else {
-        reject(new Error("ICE gathering timed out with no usable candidates. Check network/firewall."));
-      }
+      pc.removeEventListener("icegatheringstatechange", onGatherComplete);
+      const sdp = pc.localDescription?.sdp;
+      resolve(sdp || currentSdp || "");
+    };
+
+    const timer = setTimeout(() => {
+      console.log("[WebRTC] Bounded gather timeout — sending SDP as-is");
+      done();
     }, timeoutMs);
 
-    const onStateChange = () => {
+    const onCandidate = () => {
+      const sdp = pc.localDescription?.sdp;
+      if (sdp && hasRelayCandidates(sdp)) {
+        console.log("[WebRTC] Bounded gather — relay/srflx candidate found, proceeding");
+        done();
+      }
+    };
+
+    const onGatherComplete = () => {
       if (pc.iceGatheringState === "complete") {
-        clearTimeout(timer);
-        pc.removeEventListener("icegatheringstatechange", onStateChange);
-        pc.removeEventListener("icecandidate", onCandidate);
-        const desc = pc.localDescription;
-        if (desc && hasUsableCandidates(desc.sdp)) {
-          resolve(desc);
-        } else {
-          reject(new Error("ICE gathering completed but no usable candidates found."));
-        }
+        console.log("[WebRTC] Bounded gather — ICE gathering complete");
+        done();
       }
     };
 
-    const onCandidate = (ev: RTCPeerConnectionIceEvent) => {
-      if (ev.candidate === null) {
-        clearTimeout(timer);
-        pc.removeEventListener("icegatheringstatechange", onStateChange);
-        pc.removeEventListener("icecandidate", onCandidate);
-        const desc = pc.localDescription;
-        if (desc && hasUsableCandidates(desc.sdp)) {
-          resolve(desc);
-        } else {
-          reject(new Error("ICE gathering ended (null candidate) with no usable candidates."));
-        }
-      }
-    };
-
-    pc.addEventListener("icegatheringstatechange", onStateChange);
     pc.addEventListener("icecandidate", onCandidate);
+    pc.addEventListener("icegatheringstatechange", onGatherComplete);
   });
 }
 
