@@ -341,10 +341,18 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       let remoteTrackAt = 0;
       let dcOpenAt = 0;
 
+      // ICE candidate type counters for diagnosis
+      const candidateCounts = { host: 0, srflx: 0, relay: 0, prflx: 0, unknown: 0 };
+      const iceCandidateErrors: Array<{ code: number; text: string; url: string }> = [];
+
+      /** Summarise candidate counts */
+      const candidateSummary = () =>
+        `host=${candidateCounts.host} srflx=${candidateCounts.srflx} relay=${candidateCounts.relay} prflx=${candidateCounts.prflx}`;
+
       /** Log all PC/ICE/DC states in one snapshot */
       const logAllStates = (label: string) => {
         console.log(
-          `[RealtimeVoice][DIAG] ${label} | signaling=${pc.signalingState} conn=${pc.connectionState} ice=${pc.iceConnectionState} iceGather=${pc.iceGatheringState} dc=${dc?.readyState ?? "N/A"} remoteTrack=${remoteTrackReceived} dcOpened=${dataChannelEverOpened}`
+          `[RealtimeVoice][DIAG] ${label} | signaling=${pc.signalingState} conn=${pc.connectionState} ice=${pc.iceConnectionState} iceGather=${pc.iceGatheringState} dc=${dc?.readyState ?? "N/A"} remoteTrack=${remoteTrackReceived} dcOpened=${dataChannelEverOpened} candidates={${candidateSummary()}} iceErrors=${iceCandidateErrors.length}`
         );
       };
 
@@ -373,6 +381,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       };
 
       (pc as any).onicecandidateerror = (ev: any) => {
+        iceCandidateErrors.push({ code: ev.errorCode, text: ev.errorText, url: ev.url });
         console.warn("[RealtimeVoice][DIAG] ICE candidate error:", {
           errorCode: ev.errorCode,
           errorText: ev.errorText,
@@ -450,8 +459,10 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
 
           logAllStates("pc_connection_failed");
           console.error("[RealtimeVoice] Connection failed — no DC open, treating as fatal");
+          console.error(`[RealtimeVoice][DIAG] Final candidate counts: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`);
+          iceCandidateErrors.forEach((e, i) => console.error(`[RealtimeVoice][DIAG] iceError[${i}]: code=${e.code} text=${e.text} url=${e.url}`));
           setErrorDetail(
-            `WebRTC peer connection failed (signaling=${pc.signalingState} ice=${pc.iceConnectionState} iceGather=${pc.iceGatheringState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived} dcOpened=${dataChannelEverOpened})`
+            `WebRTC failed | ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived} dcOpen=${dataChannelEverOpened} | candidates: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`
           );
           setState("error");
         }
@@ -537,12 +548,14 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       await pc.setLocalDescription(offer);
       setStep("sdp_post_started");
 
-      // Log ICE candidate events for diagnostics
+      // Log ICE candidate events + count by type for diagnostics
       pc.onicecandidate = (ev) => {
         if (ev.candidate) {
-          console.log(`[RealtimeVoice][DIAG] ICE candidate: ${ev.candidate.type} ${ev.candidate.protocol} ${ev.candidate.address}:${ev.candidate.port}`);
+          const t = ev.candidate.type as keyof typeof candidateCounts;
+          if (t in candidateCounts) candidateCounts[t]++; else candidateCounts.unknown++;
+          console.log(`[RealtimeVoice][DIAG] ICE candidate: ${ev.candidate.type} ${ev.candidate.protocol} ${ev.candidate.address}:${ev.candidate.port} (totals: ${candidateSummary()})`);
         } else {
-          console.log("[RealtimeVoice][DIAG] ICE gathering complete (null candidate sentinel)");
+          console.log(`[RealtimeVoice][DIAG] ICE gathering complete (null candidate sentinel) final: ${candidateSummary()}`);
         }
       };
 
