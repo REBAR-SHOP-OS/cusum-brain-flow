@@ -276,6 +276,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       setStep("token_fetch_started");
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) throw new Error("Not authenticated");
+      if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after auth`); return; }
 
       const instructions = getSystemPrompt();
 
@@ -295,6 +296,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           }),
         }
       );
+
+      if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after token fetch`); return; }
 
       if (!tokenResp.ok) {
         const errText = await tokenResp.text();
