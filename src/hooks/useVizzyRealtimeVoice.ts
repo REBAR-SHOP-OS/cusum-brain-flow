@@ -251,6 +251,9 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     }
   }, [triggerResponseCreate, setStep]);
 
+  /** Internal: optional relay-only mode for retry */
+  const iceTransportPolicyRef = useRef<RTCIceTransportPolicy>("all");
+
   const startSession = useCallback(async () => {
     // Bump attempt ID — any in-flight older attempt will bail at its next checkpoint
     const thisAttempt = ++attemptIdRef.current;
