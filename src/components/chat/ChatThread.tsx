@@ -2,6 +2,7 @@ import { useRef, useEffect } from "react";
 import { Bot } from "lucide-react";
 import { ChatMessage, Message } from "./ChatMessage";
 import { PixelPostData } from "@/components/social/PixelPostCard";
+import { InlineDatePicker } from "./InlineDatePicker";
 
 interface ChatThreadProps {
   messages: Message[];
@@ -16,9 +17,11 @@ interface ChatThreadProps {
   pendingPixelSlot?: number | null;
   hasUnsavedPixelPost?: boolean;
   onApprovePixelSlot?: () => void;
+  onDateSelect?: (date: Date) => void;
+  showInlineCalendar?: boolean;
 }
 
-export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost, onApprovePost, onRegeneratePost, agentImage, agentName, isPixelAgent }: ChatThreadProps) {
+export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost, onApprovePost, onRegeneratePost, agentImage, agentName, isPixelAgent, onDateSelect, showInlineCalendar }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -44,17 +47,23 @@ export function ChatThread({ messages, isLoading, onRegenerateImage, onViewPost,
   return (
     <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
       {messages.map((message) => (
-        <ChatMessage
-          key={message.id}
-          message={message}
-          onRegenerateImage={onRegenerateImage}
-          onViewPost={onViewPost}
-          onApprovePost={onApprovePost}
-          onRegeneratePost={onRegeneratePost}
-          agentImage={agentImage}
-          agentName={agentName}
-          isPixelAgent={isPixelAgent}
-        />
+        <div key={message.id}>
+          <ChatMessage
+            message={message}
+            onRegenerateImage={onRegenerateImage}
+            onViewPost={onViewPost}
+            onApprovePost={onApprovePost}
+            onRegeneratePost={onRegeneratePost}
+            agentImage={agentImage}
+            agentName={agentName}
+            isPixelAgent={isPixelAgent}
+          />
+          {message.showInlineCalendar && showInlineCalendar && onDateSelect && (
+            <div className="mt-2">
+              <InlineDatePicker onDateSelect={onDateSelect} />
+            </div>
+          )}
+        </div>
       ))}
       {isLoading && (
         <div className="flex gap-3 items-start animate-fade-in">
