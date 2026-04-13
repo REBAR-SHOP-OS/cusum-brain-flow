@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Sparkles, Loader2, Video } from "lucide-react";
+import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Sparkles, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Smile, Clapperboard, Palette } from "lucide-react";
@@ -178,7 +178,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const [introImage, setIntroImage] = useState<File | null>(null);
   const [outroImage, setOutroImage] = useState<File | null>(null);
   const [characterImage, setCharacterImage] = useState<File | null>(null);
-  const [sourceClips, setSourceClips] = useState<File[]>([]);
+  
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedVideoModel, setSelectedVideoModel] = useState(VIDEO_MODELS[0]);
@@ -186,14 +186,14 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
   const characterRef = useRef<HTMLInputElement>(null);
-  const sourceClipRef = useRef<HTMLInputElement>(null);
+  
   const { toast } = useToast();
   const introPreviewUrl = usePreviewUrl(introImage);
   const characterPreviewUrl = usePreviewUrl(characterImage);
   const outroPreviewUrl = usePreviewUrl(outroImage);
 
   const hasImages = !!(introImage || outroImage || characterImage);
-  const canAutoGenerate = (selectedStyles.length > 0 && selectedProducts.length > 0) || hasImages || sourceClips.length > 0;
+  const canAutoGenerate = (selectedStyles.length > 0 && selectedProducts.length > 0) || hasImages;
   const selectedStyleLabels = selectedStyles
     .map((key) => IMAGE_STYLES.find((style) => style.key === key)?.label)
     .filter(Boolean) as string[];
@@ -214,13 +214,11 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
       const productLabels = selectedProducts.map(k => PRODUCT_ICONS.find(p => p.key === k)?.label || k).join(", ");
       const styleLabels = selectedStyles.map(k => IMAGE_STYLES.find(s => s.key === k)?.label || k).join(", ");
       const dur = DURATIONS.find(d => d.value === duration)?.label || duration + "s";
-      const sourceClipLabels = sourceClips.map((clip) => `${clip.name} (${clip.type.startsWith("video/") ? "video clip" : "media asset"})`).join(", ");
 
       // Build context lines
       const contextLines: string[] = [];
       if (selectedProducts.length > 0) contextLines.push(`Products: ${productLabels}`);
       if (selectedStyles.length > 0) contextLines.push(`Styles: ${styleLabels}`);
-      if (sourceClips.length > 0) contextLines.push(`Source Footage: ${sourceClipLabels}`);
       contextLines.push(`Duration: ${dur}`);
       contextLines.push(`Aspect Ratio: ${ratio}`);
       if (introImage) contextLines.push("Intro Image: YES — use as opening reference frame, start the video matching this image");
@@ -278,12 +276,11 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
-    onSubmit(prompt.trim(), ratio, sourceClips, introImage, outroImage, duration, characterImage, selectedProducts, selectedStyles, selectedVideoModel.key, selectedVideoModel.provider);
+    onSubmit(prompt.trim(), ratio, [], introImage, outroImage, duration, characterImage, selectedProducts, selectedStyles, selectedVideoModel.key, selectedVideoModel.provider);
     setPrompt("");
     setIntroImage(null);
     setOutroImage(null);
     setCharacterImage(null);
-    setSourceClips([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -308,17 +305,8 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     e.target.value = "";
   };
 
-  const handleSourceClipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []).filter((file) => file.type.startsWith("video/"));
-    if (files.length > 0) {
-      setSourceClips((current) => [...current, ...files]);
-    }
-    e.target.value = "";
-  };
 
-  const removeSourceClip = (index: number) => {
-    setSourceClips((current) => current.filter((_, currentIndex) => currentIndex !== index));
-  };
+
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
@@ -360,63 +348,8 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
         />
       </div>
 
-      <input ref={sourceClipRef} type="file" accept="video/*" multiple hidden onChange={handleSourceClipChange} />
-      <div className="rounded-[28px] border border-white/12 bg-white/[0.05] p-4 backdrop-blur-md">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <div className="flex h-8 w-8 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
-                <Video className="h-4 w-4" />
-              </div>
-              Source footage
-            </div>
-            <p className="max-w-2xl text-xs leading-5 text-white/55">
-              Upload raw video clips and let AI shape them into a post-ready ad with polished transitions, a stronger intro, and a branded outro.
-            </p>
-          </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08]"
-            onClick={() => sourceClipRef.current?.click()}
-            disabled={disabled}
-          >
-            <Video className="h-4 w-4" />
-            Add video clips
-          </Button>
-        </div>
 
-        {sourceClips.length > 0 ? (
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {sourceClips.map((clip, index) => (
-              <div
-                key={`${clip.name}-${clip.lastModified}-${index}`}
-                className="flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-white">{clip.name}</p>
-                  <p className="text-[11px] text-white/45">
-                    Source clip · {formatFileSize(clip.size)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeSourceClip(index)}
-                  className="rounded-full border border-white/10 bg-white/[0.04] p-1.5 text-white/70 transition-colors hover:bg-white/[0.1] hover:text-white"
-                  aria-label={`Remove ${clip.name}`}
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-4 rounded-2xl border border-dashed border-white/10 bg-black/15 px-4 py-4 text-xs leading-5 text-white/45">
-            No source clips yet. Add jobsite footage, product demos, or talking-head videos and AI will build the edit plan around them.
-          </div>
-        )}
-      </div>
 
       <div className="flex flex-wrap gap-2">
         {selectedStyleLabels.map((label) => (
@@ -435,12 +368,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
             Product: {label}
           </span>
         ))}
-        {sourceClips.length > 0 && (
-          <span className="rounded-full border border-violet-300/20 bg-violet-300/10 px-3 py-1 text-xs font-medium text-violet-100">
-            Footage: {sourceClips.length} clip{sourceClips.length > 1 ? "s" : ""}
-          </span>
-        )}
-        {!selectedStyleLabels.length && !selectedProductLabels.length && !hasImages && sourceClips.length === 0 && (
+        {!selectedStyleLabels.length && !selectedProductLabels.length && !hasImages && (
           <p className="px-1 text-xs text-white/45">
             Add references, source clips, or pick styles and products to guide the generated draft.
           </p>
@@ -709,7 +637,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">
-                  {canAutoGenerate ? "Build a structured ad brief from your references or uploaded footage" : "Select a style and product, upload an image, or add source footage"}
+                  {canAutoGenerate ? "Build a structured ad brief from your references" : "Select a style and product or upload an image"}
                 </TooltipContent>
               </Tooltip>
 
