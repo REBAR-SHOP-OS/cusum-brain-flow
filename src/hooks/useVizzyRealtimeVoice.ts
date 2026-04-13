@@ -4,6 +4,8 @@ import { SILENT_WAV, takePrimedMobileAudio } from "@/lib/audioPlayer";
 import {
   createRealtimePeerConnection,
   countCandidates,
+  waitForUsableCandidatesBounded,
+  hasRelayCandidates,
 } from "@/lib/webrtc/realtimeConnection";
 
 /**
@@ -62,6 +64,10 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   // Track whether session.created has been received
   const sessionReadyRef = useRef(false);
 
+  // ── Data channel message queue ──
+  // Messages queued while DC is not yet open; flushed on dc.open
+  const pendingDcQueueRef = useRef<object[]>([]);
+
   // Debug step helper
   const setStep = useCallback((step: string) => {
     console.log(`[RealtimeVoice][STEP] ${step}`);
@@ -73,6 +79,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     activeRef.current = false;
     sessionReadyRef.current = false;
     modelRespondingRef.current = false;
+    pendingDcQueueRef.current = [];
     // Clear session timeout
     if (sessionTimeoutRef.current) {
       clearTimeout(sessionTimeoutRef.current);
@@ -97,15 +104,31 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     }
   }, []);
 
-  /** Safely send a message on the data channel */
+  /** Safely send a message on the data channel, or queue it if DC isn't open yet */
   const dcSend = useCallback((payload: object) => {
     const dc = dcRef.current;
     if (!dc || dc.readyState !== "open") {
-      console.warn("[RealtimeVoice] Cannot send — data channel not open");
+      // Queue for later flush when DC opens
+      pendingDcQueueRef.current.push(payload);
+      console.log(`[RealtimeVoice] DC not open — queued message (queue size: ${pendingDcQueueRef.current.length})`);
       return false;
     }
     dc.send(JSON.stringify(payload));
     return true;
+  }, []);
+
+  /** Flush any queued DC messages */
+  const flushDcQueue = useCallback(() => {
+    const dc = dcRef.current;
+    if (!dc || dc.readyState !== "open") return;
+    const queue = pendingDcQueueRef.current;
+    if (queue.length > 0) {
+      console.log(`[RealtimeVoice] Flushing ${queue.length} queued DC messages`);
+      for (const msg of queue) {
+        dc.send(JSON.stringify(msg));
+      }
+      pendingDcQueueRef.current = [];
+    }
   }, []);
 
   /** Trigger a guarded response.create — skips if model is already responding */
@@ -259,10 +282,18 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   /** Internal: optional relay-only mode for retry */
   const iceTransportPolicyRef = useRef<RTCIceTransportPolicy>("all");
 
+  /** Compute human-readable strategy name for logging */
+  const getStrategyName = (): string => {
+    if (iceTransportPolicyRef.current === "relay") return "relay-only";
+    if (skipTurnRef.current) return "stun-only";
+    return "normal";
+  };
+
   const startSession = useCallback(async () => {
     // Bump attempt ID — any in-flight older attempt will bail at its next checkpoint
     const thisAttempt = ++attemptIdRef.current;
-    console.log(`[RealtimeVoice] startSession attempt #${thisAttempt}`);
+    const strategy = getStrategyName();
+    console.log(`[RealtimeVoice] startSession attempt #${thisAttempt} strategy=${strategy}`);
 
     // Clean up any previous attempt's resources
     cleanup("new_attempt_starting");
@@ -273,6 +304,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     activeRef.current = true;
     sessionReadyRef.current = false;
     modelRespondingRef.current = false;
+    pendingDcQueueRef.current = [];
     setTranscripts([]);
     setPartialText("");
     agentPartialRef.current = "";
@@ -304,7 +336,6 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           console.log("[RealtimeVoice] Audio element primed (fallback path)");
         } catch (primeErr: any) {
           console.warn("[RealtimeVoice] Audio priming skipped:", primeErr?.message || primeErr);
-          // Continue anyway — audio may still work when remote track arrives
         }
       }
       audioElRef.current = audioEl;
@@ -369,7 +400,6 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          // Reduce capture buffer for lower input latency
           channelCount: 1,
           sampleRate: 24000,
         },
@@ -386,9 +416,10 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const turnToUse = skipTurnRef.current ? [] : dynamicTurnServers;
       skipTurnRef.current = false; // reset
       const pc = createRealtimePeerConnection(turnToUse, iceTransportPolicyRef.current);
+      const usedPolicy = iceTransportPolicyRef.current;
       iceTransportPolicyRef.current = "all"; // reset for next attempt
       pcRef.current = pc;
-      console.log(`[RealtimeVoice] PC created with ${turnToUse.length} TURN servers, iceTransport=${iceTransportPolicyRef.current}`);
+      console.log(`[RealtimeVoice] PC created strategy=${strategy} turnCount=${turnToUse.length} iceTransport=${usedPolicy}`);
       setStep("pc_created");
 
       // ── Diagnostic flags ──
@@ -409,7 +440,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       /** Log all PC/ICE/DC states in one snapshot */
       const logAllStates = (label: string) => {
         console.log(
-          `[RealtimeVoice][DIAG] ${label} | signaling=${pc.signalingState} conn=${pc.connectionState} ice=${pc.iceConnectionState} iceGather=${pc.iceGatheringState} dc=${dc?.readyState ?? "N/A"} remoteTrack=${remoteTrackReceived} dcOpened=${dataChannelEverOpened} candidates={${candidateSummary()}} iceErrors=${iceCandidateErrors.length}`
+          `[RealtimeVoice][DIAG] ${label} | strategy=${strategy} signaling=${pc.signalingState} conn=${pc.connectionState} ice=${pc.iceConnectionState} iceGather=${pc.iceGatheringState} dc=${dc?.readyState ?? "N/A"} remoteTrack=${remoteTrackReceived} dcOpened=${dataChannelEverOpened} candidates={${candidateSummary()}} iceErrors=${iceCandidateErrors.length}`
         );
       };
 
@@ -423,10 +454,9 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         // Minimize jitter buffer on the receiver for instant playback
         const receiver = ev.receiver;
         if (receiver && typeof (receiver as any).playoutDelayHint !== "undefined") {
-          (receiver as any).playoutDelayHint = 0; // minimum playout delay
+          (receiver as any).playoutDelayHint = 0;
           console.log("[RealtimeVoice] Set playoutDelayHint=0 for instant audio");
         }
-        // Also try jitterBufferTarget on the track (Chrome 114+)
         if (ev.track && typeof (ev.track as any).jitterBufferTarget !== "undefined") {
           (ev.track as any).jitterBufferTarget = 0;
           console.log("[RealtimeVoice] Set jitterBufferTarget=0 for minimal buffering");
@@ -463,7 +493,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
 
       // Monitor connection state — increased grace, only fatal after DC confirmed never opened
       let disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
-      const GRACE_PERIOD_MS = 10_000; // 10s grace (was 5s)
+      const GRACE_PERIOD_MS = 10_000; // 10s grace
 
       pc.onconnectionstatechange = () => {
         const s = pc.connectionState;
@@ -496,8 +526,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
 
           const elapsed = Date.now() - connectStartedAt;
 
-          // During the first 15s of connection, don't treat "failed" as immediately fatal —
-          // ICE may still be negotiating via TURN after STUN fails
+          // During the first 15s of connection, don't treat "failed" as immediately fatal
           if (elapsed < 15000) {
             console.warn(`[RealtimeVoice] PC failed at ${elapsed}ms — still in handshake window, using grace period`);
             disconnectGraceTimer = setTimeout(() => {
@@ -554,7 +583,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           }
 
           setErrorDetail(
-            `WebRTC failed | ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived} dcOpen=${dataChannelEverOpened} | candidates: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`
+            `WebRTC failed | strategy=${strategy} ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived} dcOpen=${dataChannelEverOpened} | candidates: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`
           );
           setState("error");
         }
@@ -577,18 +606,31 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       dc.addEventListener("open", () => {
         dataChannelEverOpened = true;
         dcOpenAt = Date.now();
-        console.log(`[RealtimeVoice][STEP] data_channel_open (+${dcOpenAt - connectStartedAt}ms)`);
+        console.log(`[RealtimeVoice][STEP] data_channel_open (+${dcOpenAt - connectStartedAt}ms) strategy=${strategy}`);
         logAllStates("data_channel_open");
         setStep("data_channel_open");
-        // If session.created doesn't arrive within 8s of channel open,
-        // treat the channel as connected anyway (server may skip session.created
-        // in newer API versions or certain model configs)
+
+        // ── Flush any queued messages immediately ──
+        flushDcQueue();
+
+        // If session.created already arrived (race), we're done
+        if (sessionReadyRef.current) {
+          console.log("[RealtimeVoice] session.created already received before DC open — connected");
+          if (sessionTimeoutRef.current) {
+            clearTimeout(sessionTimeoutRef.current);
+            sessionTimeoutRef.current = null;
+          }
+          setState("connected");
+          return;
+        }
+
+        // If session.created doesn't arrive within 5s of channel open,
+        // treat the channel as connected anyway
         setTimeout(() => {
           if (isStale()) return;
           if (activeRef.current && !sessionReadyRef.current && dc.readyState === "open") {
-            console.warn("[RealtimeVoice] session.created not received 8s after dc open — treating as connected");
+            console.warn("[RealtimeVoice] session.created not received 5s after dc open — treating as connected");
             sessionReadyRef.current = true;
-            // Clear the outer 20s timeout
             if (sessionTimeoutRef.current) {
               clearTimeout(sessionTimeoutRef.current);
               sessionTimeoutRef.current = null;
@@ -612,7 +654,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
               },
             });
           }
-        }, 8000);
+        }, 5000);
       });
 
       dc.addEventListener("close", () => {
@@ -636,9 +678,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
       });
 
-      // 6. Create offer and send it immediately.
-      // OpenAI Realtime does not require us to wait for full ICE gathering first,
-      // and blocking here can stall mobile/5G handshakes before the answer is applied.
+      // 6. Create offer, then do bounded ICE gather before sending
       setStep("sdp_offer_creating");
       const offer = await pc.createOffer();
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after createOffer`); return; }
@@ -657,12 +697,16 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       await pc.setLocalDescription(offer);
       setStep("ice_gathering");
 
-      const offerSdp = pc.localDescription?.sdp ?? offer.sdp;
+      // ── Bounded gather: wait up to 3s for relay/srflx candidates ──
+      const offerSdp = await waitForUsableCandidatesBounded(pc, 3000);
       if (!offerSdp) throw new Error("No local SDP after createOffer");
+      if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after bounded gather`); return; }
 
+      const hasRelay = hasRelayCandidates(offerSdp);
+      const candidateCount = countCandidates(offerSdp);
       setStep("sdp_post_started");
       console.log(
-        `[RealtimeVoice] Sending initial SDP with ${countCandidates(offerSdp)} ICE candidates (${candidateSummary()}) — continuing ICE asynchronously`
+        `[RealtimeVoice] Sending SDP strategy=${strategy} candidates=${candidateCount} hasRelay=${hasRelay} (${candidateSummary()})`
       );
 
       const sdpResp = await fetch(
@@ -706,11 +750,11 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after setRemoteDescription`); return; }
 
       // NOTE: We do NOT setState("connected") here.
-      // Instead we wait for "session.created" event on the data channel.
+      // Instead we wait for data_channel_open → session.created.
       const dcStateNow = dc.readyState;
       const pcStateNow = pc.connectionState;
       const iceStateNow = pc.iceConnectionState;
-      console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} — waiting for session.created`);
+      console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} strategy=${strategy} — waiting for data_channel_open`);
       setStep("waiting_session_created");
 
       // Overall connection timeout — 30s to allow slower mobile handshakes
@@ -745,11 +789,11 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
 
           let errorMsg: string;
           if (dcState !== "open" && remoteTrackReceived) {
-            errorMsg = `Media connected but control channel failed — audio track received but data channel stayed "${dcState}" (ice=${iceState}, iceGather=${iceGather})`;
+            errorMsg = `Media connected but control channel failed — audio track received but data channel stayed "${dcState}" (ice=${iceState}, iceGather=${iceGather}, strategy=${strategy})`;
           } else if (iceState === "disconnected" || iceState === "failed") {
-            errorMsg = `ICE connection failed — network may be blocking WebRTC (ice=${iceState}, dc=${dcState}, track=${remoteTrackReceived})`;
+            errorMsg = `ICE connection failed — network may be blocking WebRTC (ice=${iceState}, dc=${dcState}, track=${remoteTrackReceived}, strategy=${strategy})`;
           } else {
-            errorMsg = `Session handshake timed out (dc=${dcState}, pc=${pcState}, ice=${iceState}, iceGather=${iceGather}, track=${remoteTrackReceived})`;
+            errorMsg = `Session handshake timed out (dc=${dcState}, pc=${pcState}, ice=${iceState}, iceGather=${iceGather}, track=${remoteTrackReceived}, strategy=${strategy})`;
           }
 
           cleanup("session_timeout");
@@ -769,7 +813,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const msg = err instanceof Error ? err.message : String(err);
       setErrorDetail(`${msg} (failed at step: ${step})`);
     }
-  }, [getSystemPrompt, cleanup, handleRealtimeEvent, setStep, debugStep, dcSend]);
+  }, [getSystemPrompt, cleanup, handleRealtimeEvent, setStep, debugStep, dcSend, flushDcQueue]);
 
 
   const endSession = useCallback(() => {
