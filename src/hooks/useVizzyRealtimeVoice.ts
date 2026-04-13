@@ -460,7 +460,10 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
 
       // NOTE: We do NOT setState("connected") here.
       // Instead we wait for "session.created" event on the data channel.
-      console.log("[RealtimeVoice] SDP exchange complete — waiting for session.created");
+      const dcStateNow = dc.readyState;
+      const pcStateNow = pc.connectionState;
+      const iceStateNow = pc.iceConnectionState;
+      console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} — waiting for session.created`);
       setStep("waiting_session_created");
 
       // Overall connection timeout — if session.created never arrives
