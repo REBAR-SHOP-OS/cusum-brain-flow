@@ -43,6 +43,10 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   const sessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Monotonically increasing attempt ID — guards async continuations against stale attempts */
   const attemptIdRef = useRef(0);
+  /** Whether we already tried a relay-only retry for the current session */
+  const relayRetryDoneRef = useRef(false);
+  /** Stored TURN servers from the last token fetch (reused for relay retry) */
+  const lastTurnServersRef = useRef<RTCIceServer[]>([]);
 
   // Track partial agent transcript for streaming display
   const agentPartialRef = useRef("");
