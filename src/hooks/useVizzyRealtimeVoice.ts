@@ -456,7 +456,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
 
       dc.addEventListener("open", () => {
         dataChannelEverOpened = true;
-        console.log("[RealtimeVoice][STEP] data_channel_open — readyState:", dc.readyState);
+        dcOpenAt = Date.now();
+        console.log(`[RealtimeVoice][STEP] data_channel_open (+${dcOpenAt - connectStartedAt}ms)`);
         logAllStates("data_channel_open");
         setStep("data_channel_open");
         // If session.created doesn't arrive within 8s of channel open,
