@@ -249,9 +249,10 @@ export default function AgentWorkspace() {
     const welcomeMsg: Message = {
       id: crypto.randomUUID(),
       role: "agent",
-      content: "Hello! 👋\n\nPlease select your **target date** from the calendar at the top of the page 📅",
+      content: "Hello! 👋\n\nSelect your **target date** below to get started:",
       agent: "eisenhower" as any,
       timestamp: new Date(),
+      showInlineCalendar: true,
     };
     setMessages([welcomeMsg]);
     setSessionFinalized(false);
@@ -1028,9 +1029,7 @@ export default function AgentWorkspace() {
               agentName={config.name}
               isPixelAgent={agentId === "social"}
             />
-            {showInlineCalendar && agentId === "eisenhower" && (
-              <InlineDatePicker onDateSelect={(date) => handleDateChange(date)} />
-            )}
+            
             {sessionFinalized ? (
               <div className="w-full text-center py-4 px-6">
                 <div className="inline-flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-lg px-4 py-2.5">
@@ -1055,8 +1054,8 @@ export default function AgentWorkspace() {
                 )}
                 <ChatInput
                   onSend={handleSend}
-                  placeholder={config.placeholder}
-                  disabled={isLoading}
+                  placeholder={agentId === "eisenhower" && showInlineCalendar ? "Select a date first..." : config.placeholder}
+                  disabled={isLoading || (agentId === "eisenhower" && showInlineCalendar)}
                   showFileUpload={true}
                   showSmartMode={agentId !== "social"}
                   minimalToolbar={agentId === "social"}
