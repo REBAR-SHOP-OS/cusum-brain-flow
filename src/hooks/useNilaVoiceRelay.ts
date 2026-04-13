@@ -3,7 +3,7 @@ import { useScribe, CommitStrategy } from "@elevenlabs/react";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { toast } from "sonner";
-import { detectRtl } from "@/utils/textDirection";
+import { detectRtl, stripDirectionalMarkers } from "@/utils/textDirection";
 
 export interface RelayTranscript {
   id: string;
@@ -120,7 +120,7 @@ export function useNilaVoiceRelay() {
       const signal = abortRef.current?.signal;
       if (signal?.aborted) return;
 
-      const trimmed = data.text.trim();
+      const trimmed = stripDirectionalMarkers(data.text).trim();
       if (!trimmed) return;
       if (SCRIBE_ANNOTATION.test(trimmed)) return;
       if (PUNCTUATION_ONLY.test(trimmed)) return;
