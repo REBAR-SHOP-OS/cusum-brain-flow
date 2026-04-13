@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { CameraLoader } from "./CameraLoader";
-import { Loader2, Check, Pencil, Film, Play, AlertCircle, Home, RefreshCw, Send, BookmarkCheck, Sparkles, Clapperboard, Wand2, Layers3 } from "lucide-react";
+import { Loader2, Check, Pencil, Play, AlertCircle, Home, RefreshCw, Send, BookmarkCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChatPromptBar } from "./ChatPromptBar";
@@ -25,32 +25,6 @@ import {
 } from "@/lib/backgroundAdDirectorService";
 
 const EDGE_TIMEOUT_MS = 180_000;
-const QUICK_START_IDEAS = [
-  {
-    title: "Product launch ad",
-    description: "Show a new product, explain the edge, end with a quote CTA.",
-    prompt:
-      "Create a polished 30 second B2B product launch ad for contractors. Open with a strong hero shot, show the product in use on a jobsite, highlight speed and durability benefits, and close with a confident call to action to request a quote.",
-  },
-  {
-    title: "Sales script to video",
-    description: "Turn a rep's talking points into a tighter ad narrative.",
-    prompt:
-      "Turn this sales idea into a 30 second video ad for construction buyers: dependable supply, faster installs, less downtime, and premium service. Use persuasive voiceover, cinematic visuals, and a memorable closing offer.",
-  },
-  {
-    title: "Testimonial-style promo",
-    description: "Blend proof, process, and brand trust into one concept.",
-    prompt:
-      "Create a testimonial-style B2B ad showing a contractor team using our products across a busy jobsite. Emphasize trust, consistency, and delivery speed with polished transitions and a final branded close asking viewers to contact sales.",
-  },
-] as const;
-
-const HERO_POINTS = [
-  { icon: Wand2, label: "Prompt to storyboard" },
-  { icon: Layers3, label: "Reference-guided scenes" },
-  { icon: Clapperboard, label: "Editable final composition" },
-] as const;
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
