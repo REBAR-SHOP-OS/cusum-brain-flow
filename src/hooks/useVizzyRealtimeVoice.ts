@@ -524,7 +524,9 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             console.warn("[RealtimeVoice] Attempting relay-only retry...");
             relayRetryDoneRef.current = true;
             cleanup("relay_retry");
-            startSessionRelay();
+            iceTransportPolicyRef.current = "relay";
+            // Schedule retry on next microtask to avoid calling startSession within itself
+            setTimeout(() => startSession(), 0);
             return;
           }
 
