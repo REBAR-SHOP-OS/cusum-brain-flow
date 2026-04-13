@@ -42,6 +42,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   const activeRef = useRef(false);
   const idCounter = useRef(0);
   const sessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Monotonically increasing attempt ID — guards async continuations against stale attempts */
+  const attemptIdRef = useRef(0);
 
   // Track partial agent transcript for streaming display
   const agentPartialRef = useRef("");
