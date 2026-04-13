@@ -141,10 +141,10 @@ export function formatLengthByMode(mm: number | null | undefined, mode: LengthDi
   const rounded = Math.round(mm);
   switch (mode) {
     case "mm":
-      return String(rounded);
+      return `${rounded} mm`;
     case "in": {
       const inches = rounded * INCHES_PER_MM;
-      return inches % 1 === 0 ? `${inches}` : `${inches.toFixed(2)}`;
+      return inches % 1 === 0 ? `${inches}"` : `${inches.toFixed(2)}"`;
     }
     case "ft": {
       const feet = rounded * FEET_PER_MM;
