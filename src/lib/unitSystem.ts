@@ -141,14 +141,14 @@ export function formatLengthByMode(mm: number | null | undefined, mode: LengthDi
   const rounded = Math.round(mm);
   switch (mode) {
     case "mm":
-      return String(rounded);
+      return `${rounded} mm`;
     case "in": {
       const inches = rounded * INCHES_PER_MM;
-      return inches % 1 === 0 ? `${inches}` : `${inches.toFixed(2)}`;
+      return inches % 1 === 0 ? `${inches}"` : `${inches.toFixed(2)}"`;
     }
     case "ft": {
       const feet = rounded * FEET_PER_MM;
-      return feet % 1 === 0 ? `${feet}` : `${feet.toFixed(2)}`;
+      return feet % 1 === 0 ? `${feet}'` : `${feet.toFixed(2)}'`;
     }
     case "imperial": {
       const totalInches = rounded / 25.4;
