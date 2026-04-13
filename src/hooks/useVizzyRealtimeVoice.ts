@@ -291,15 +291,34 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
       };
 
-      // Monitor connection state
+      // Monitor connection state with grace period for "disconnected"
+      let disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
       pc.onconnectionstatechange = () => {
-        console.log("[RealtimeVoice] PC connection state:", pc.connectionState);
-        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-          if (activeRef.current) {
-            console.error("[RealtimeVoice] Connection lost");
-            setErrorDetail("Connection lost — try reconnecting");
-            setState("error");
-          }
+        const s = pc.connectionState;
+        console.log("[RealtimeVoice] PC connection state:", s);
+
+        if (s === "connected" && disconnectGraceTimer) {
+          console.log("[RealtimeVoice] Recovered from disconnected state");
+          clearTimeout(disconnectGraceTimer);
+          disconnectGraceTimer = null;
+        }
+
+        if (s === "disconnected" && activeRef.current) {
+          console.warn("[RealtimeVoice] Disconnected — waiting 5s grace period");
+          disconnectGraceTimer = setTimeout(() => {
+            if (pc.connectionState !== "connected" && activeRef.current) {
+              console.error("[RealtimeVoice] Connection did not recover after grace period");
+              setErrorDetail("Connection lost — try reconnecting");
+              setState("error");
+            }
+          }, 5000);
+        }
+
+        if (s === "failed" && activeRef.current) {
+          if (disconnectGraceTimer) { clearTimeout(disconnectGraceTimer); disconnectGraceTimer = null; }
+          console.error("[RealtimeVoice] Connection failed");
+          setErrorDetail("Connection failed — try reconnecting");
+          setState("error");
         }
       };
 
@@ -343,7 +362,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
 
-      const localDesc = await waitForIceGatheringComplete(pc, 10000);
+      const localDesc = await waitForIceGatheringComplete(pc, 15000);
 
       const sdpResp = await fetch(
         `https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03`,
@@ -368,6 +387,16 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       // NOTE: We do NOT setState("connected") here.
       // Instead we wait for "session.created" event on the data channel.
       console.log("[RealtimeVoice] SDP exchange complete — waiting for session.created");
+
+      // Overall connection timeout — if session.created never arrives
+      const sessionTimeout = setTimeout(() => {
+        if (activeRef.current && stateRef.current === "connecting") {
+          console.error("[RealtimeVoice] session.created not received within 20s");
+          cleanup();
+          setErrorDetail("Session handshake timed out — try again");
+          setState("error");
+        }
+      }, 20000);
     } catch (err) {
       console.error("[RealtimeVoice] Connection failed:", err);
       cleanup();
