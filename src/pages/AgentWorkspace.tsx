@@ -1028,6 +1028,8 @@ export default function AgentWorkspace() {
               agentImage={config.image}
               agentName={config.name}
               isPixelAgent={agentId === "social"}
+              onDateSelect={agentId === "eisenhower" ? (date) => handleDateChange(date) : undefined}
+              showInlineCalendar={showInlineCalendar}
             />
             
             {sessionFinalized ? (
