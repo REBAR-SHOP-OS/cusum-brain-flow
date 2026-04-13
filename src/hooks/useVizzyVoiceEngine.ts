@@ -350,11 +350,14 @@ export function useVizzyVoiceEngine() {
           throw new Error(data.error || "Pre-digest unavailable");
         }
 
-        if (data?.digest) {
+      if (data?.digest) {
           lastDigestRef.current = data.digest;
           lastRawContextRef.current = data.rawContext || null;
           lastBrainRef.current = data.brainMemories || null;
           rebuildInstructions();
+          // Push refreshed context to the already-running live session
+          engine.updateSessionInstructions(getSystemPrompt());
+          console.log("[VizzyVoice] Pushed pre-digest context to live session");
           return;
         }
 
