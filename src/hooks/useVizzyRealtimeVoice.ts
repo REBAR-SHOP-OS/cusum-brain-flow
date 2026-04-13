@@ -347,6 +347,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           }))
         : [];
       console.log(`[RealtimeVoice] Received ${dynamicTurnServers.length} TURN server entries from backend`);
+      lastTurnServersRef.current = dynamicTurnServers;
 
       // 2. Capture mic — minimal processing for lowest capture latency
       setStep("mic_requesting");
