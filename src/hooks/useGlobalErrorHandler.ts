@@ -30,7 +30,8 @@ export function useGlobalErrorHandler() {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       event.preventDefault();
       const message = event.reason?.message || String(event.reason) || "Unknown async error";
-      if (isIgnoredError(message)) return;
+      const nestedMessage = event.reason?.message || "";
+      if (isIgnoredError(message) || isIgnoredError(nestedMessage)) return;
 
       console.error("[GlobalErrorHandler] Unhandled rejection:", event.reason);
       logError("unhandled_rejection", message);
@@ -43,8 +44,10 @@ export function useGlobalErrorHandler() {
     };
 
     const handleError = (event: ErrorEvent) => {
-      const message = event.message || "Unknown error";
-      if (isIgnoredError(message)) return;
+      const message = event.message || event.error?.message || "Unknown error";
+      // Also check the nested error object message for ignored patterns
+      const nestedMessage = event.error?.message || "";
+      if (isIgnoredError(message) || isIgnoredError(nestedMessage)) return;
 
       console.error("[GlobalErrorHandler] Uncaught error:", event.error);
       logError("uncaught_error", message);
