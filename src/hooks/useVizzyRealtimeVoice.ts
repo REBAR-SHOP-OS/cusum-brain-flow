@@ -576,18 +576,29 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} — waiting for session.created`);
       setStep("waiting_session_created");
 
-      // Overall connection timeout — if session.created never arrives
+      // Overall connection timeout — 30s to allow async ICE + data channel negotiation
       sessionTimeoutRef.current = setTimeout(() => {
         if (activeRef.current && !sessionReadyRef.current && !isStale()) {
           const dcState = dcRef.current?.readyState || "no_dc";
           const pcState = pcRef.current?.connectionState || "no_pc";
           const iceState = pcRef.current?.iceConnectionState || "no_ice";
-          console.error(`[RealtimeVoice] 20s timeout — dc=${dcState} pc=${pcState} ice=${iceState}`);
+          const iceGather = pcRef.current?.iceGatheringState || "no_ice";
+          logAllStates("session_timeout_30s");
+
+          let errorMsg: string;
+          if (dcState !== "open" && remoteTrackReceived) {
+            errorMsg = `Media connected but control channel failed — audio track received but data channel stayed "${dcState}" (ice=${iceState}, iceGather=${iceGather})`;
+          } else if (iceState === "disconnected" || iceState === "failed") {
+            errorMsg = `ICE connection failed — network may be blocking WebRTC (ice=${iceState}, dc=${dcState}, track=${remoteTrackReceived})`;
+          } else {
+            errorMsg = `Session handshake timed out (dc=${dcState}, pc=${pcState}, ice=${iceState}, iceGather=${iceGather}, track=${remoteTrackReceived})`;
+          }
+
           cleanup("session_timeout");
-          setErrorDetail(`Session handshake timed out (dc=${dcState}, pc=${pcState}, ice=${iceState})`);
+          setErrorDetail(errorMsg);
           setState("error");
         }
-      }, 20000);
+      }, 30000);
     } catch (err) {
       if (isStale()) {
         console.log(`[RealtimeVoice] Attempt #${thisAttempt} error after being superseded — ignoring`);
