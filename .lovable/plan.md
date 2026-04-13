@@ -1,38 +1,56 @@
 
 
-# Fix: Reference Upload Cards Not Clickable
+# Fix: Vizzy Brain Agent & Menu Overrides Not Enforced
 
-## Root Cause
-In `ReferenceUploadCard`, the clickable `<button>` has `className="absolute inset-0 z-0"` but the content div displaying the icon/label has `z-10`, which sits on top of the button and blocks pointer events.
+## Problem
+
+When you assign/remove agents or items (menus) for a user in Vizzy Brain, the data **is saved** to the `user_access_overrides` table in the database. However, the actual UI components that control what users see **don't read those overrides** for agents — they only read the hardcoded config in `userAccessConfig.ts`.
+
+### What works
+- **Menus (Items)**: `AppSidebar.tsx` correctly reads from `user_access_overrides` and falls back to hardcoded config. Saving menus in Vizzy Brain **does work end-to-end**. ✅
+
+### What's broken
+- **Agents**: `Home.tsx`, `LiveChatWidget.tsx`, and anywhere else calling `getVisibleAgents()` only reads from the hardcoded `USER_ACCESS` map — **DB overrides are completely ignored**. ❌
 
 ## Fix
 
-### `src/components/ad-director/ChatPromptBar.tsx`
+### 1. `src/pages/Home.tsx` — Read agent overrides from DB
 
-Add `pointer-events-none` to both content containers (the empty state div and the file-preview div) so clicks pass through to the button underneath:
+Add `useUserAccessOverrides` hook and prefer DB agents over hardcoded config:
 
-1. **Line 156** — Empty state content div: Add `pointer-events-none`
-   ```
-   <div className="relative z-10 pointer-events-none flex h-full flex-col justify-between gap-6">
-   ```
+```typescript
+const { override } = useUserAccessOverrides(user?.email);
+const allowedAgents = override?.agents?.length 
+  ? override.agents 
+  : getVisibleAgents(user?.email);
+```
 
-2. **Line 146** — File preview content div: Add `pointer-events-none`
-   ```
-   <div className="relative z-10 pointer-events-none flex h-full flex-col justify-end gap-1">
-   ```
+### 2. `src/components/layout/LiveChatWidget.tsx` — Same pattern
 
-3. **Line 135** — The "remove" button (X) needs to stay clickable, so add `pointer-events-auto` to it:
-   ```
-   className="absolute right-3 top-3 z-10 pointer-events-auto flex h-7 w-7 ..."
-   ```
+Read overrides and use them to determine agent visibility:
 
-4. **Line 133** — The preview image overlay also needs `pointer-events-none`:
-   ```
-   <img ... className="absolute inset-0 h-full w-full object-cover pointer-events-none" />
-   ```
+```typescript
+const { override } = useUserAccessOverrides(user?.email);
+const visibleAgents = override?.agents?.length 
+  ? override.agents 
+  : getVisibleAgents(user?.email);
+if (visibleAgents.length === 0) return null;
+```
 
-5. **Line 134** — Gradient overlay: add `pointer-events-none`
+### 3. Any other consumer of `getVisibleAgents`
+
+Search and patch all call sites to prefer DB overrides. This includes `hasAgentAccess()` calls used in agent chat routing.
 
 ## Result
-Clicking anywhere on the reference cards will trigger the file picker dialog for image upload.
+
+After this fix, when you toggle an agent on/off for a user in Vizzy Brain, it will immediately affect what that user sees on their Home page and chat widget.
+
+## Files to Edit
+| File | Change |
+|------|--------|
+| `src/pages/Home.tsx` | Add override hook, use DB agents |
+| `src/components/layout/LiveChatWidget.tsx` | Add override hook, use DB agents |
+| Any other `getVisibleAgents` / `hasAgentAccess` consumers | Same pattern |
+
+## No backend/schema changes needed
 
