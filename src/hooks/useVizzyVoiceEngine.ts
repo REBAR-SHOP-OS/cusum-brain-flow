@@ -425,5 +425,6 @@ export function useVizzyVoiceEngine() {
     sendFollowUp: engine.sendFollowUp,
     sttMode,
     setSttMode,
+    debugStep: engine.debugStep,
   };
 }
