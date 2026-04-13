@@ -749,41 +749,35 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
 
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after SDP POST`); return; }
 
-      if (!sdpResp.ok) {
-        let errText = await sdpResp.text();
+      // --- SDP 5xx retry logic ---
+      if (!sdpResp.ok && sdpResp.status >= 500) {
+        console.warn(`[RealtimeVoice] SDP POST returned ${sdpResp.status} on bounded offer — retrying once with fully gathered SDP`);
+        try {
+          const fullDescription = await waitForIceGatheringComplete(
+            pc,
+            usedPolicy === "relay" ? 4500 : 3000,
+          );
+          const fullOfferSdp = fullDescription.sdp;
 
-        if (sdpResp.status >= 500) {
-          console.warn(`[RealtimeVoice] SDP POST returned ${sdpResp.status} on bounded offer — retrying once with fully gathered SDP`);
-          try {
-            const fullDescription = await waitForIceGatheringComplete(
-              pc,
-              usedPolicy === "relay" ? 4500 : 3000,
-            );
-            const fullOfferSdp = fullDescription.sdp;
-
-            if (fullOfferSdp && fullOfferSdp !== offerSdp) {
-              if (isStale()) {
-                console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale before full-gather retry POST`);
-                return;
-              }
-
-              setStep("sdp_post_retry");
-              sdpResp = await postSdpOffer(fullOfferSdp, "full-gather-retry");
-
-              if (isStale()) {
-                console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after full-gather retry POST`);
-                return;
-              }
-
-              if (!sdpResp.ok) {
-                errText = await sdpResp.text();
-              }
+          if (fullOfferSdp && fullOfferSdp !== offerSdp) {
+            if (isStale()) {
+              console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale before full-gather retry POST`);
+              return;
             }
-          } catch (retryGatherErr) {
-            console.warn("[RealtimeVoice] Full-gather SDP retry could not be prepared:", retryGatherErr);
+
+            setStep("sdp_post_retry");
+            sdpResp = await postSdpOffer(fullOfferSdp, "full-gather-retry");
+
+            if (isStale()) {
+              console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after full-gather retry POST`);
+              return;
+            }
           }
+        } catch (retryGatherErr) {
+          console.warn("[RealtimeVoice] Full-gather SDP retry could not be prepared:", retryGatherErr);
         }
 
+        // If still 5xx after retry, escalate transport strategy
         if (!sdpResp.ok && sdpResp.status >= 500) {
           if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
             console.warn("[RealtimeVoice] SDP 5xx — escalating to relay-only retry...");
@@ -804,7 +798,11 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             return;
           }
         }
+      }
 
+      // Final gate: if the response is still not OK (4xx or exhausted 5xx retries), throw
+      if (!sdpResp.ok) {
+        const errText = await sdpResp.text();
         throw new Error(`OpenAI SDP exchange failed (${sdpResp.status}): ${errText}`);
       }
 
