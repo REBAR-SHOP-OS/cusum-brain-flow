@@ -322,6 +322,11 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           autoGainControl: true,
         },
       });
+      if (isStale()) {
+        console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after mic — releasing tracks`);
+        micStream.getTracks().forEach(t => t.stop());
+        return;
+      }
       micStreamRef.current = micStream;
       setStep("mic_granted");
 
