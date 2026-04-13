@@ -21,6 +21,8 @@ export function buildIceServers(): RTCIceServer[] {
     { urls: "stun:stun.relay.metered.ca:80" },
     {
       urls: [
+        "turn:global.relay.metered.ca:80",
+        "turn:global.relay.metered.ca:443",
         "turn:global.relay.metered.ca:443?transport=tcp",
         "turns:global.relay.metered.ca:443?transport=tcp",
       ],
