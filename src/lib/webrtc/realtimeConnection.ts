@@ -126,6 +126,70 @@ export function waitForUsableCandidatesBounded(
 }
 
 /**
+ * Wait for ICE gathering to complete (or timeout).
+ * Returns the full local description with all candidates baked in.
+ *
+ * NOTE: For OpenAI Realtime, you typically do NOT need this — use
+ * waitForUsableCandidatesBounded instead. This helper is kept for
+ * other WebRTC flows that require gathered candidates in the SDP.
+ *
+ * @throws if no usable candidates are gathered within the timeout.
+ */
+export async function waitForIceGatheringComplete(
+  pc: RTCPeerConnection,
+  timeoutMs = 8000
+): Promise<RTCSessionDescription> {
+  if (pc.iceGatheringState === "complete" && pc.localDescription) {
+    return pc.localDescription;
+  }
+
+  return new Promise<RTCSessionDescription>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pc.removeEventListener("icegatheringstatechange", onStateChange);
+      pc.removeEventListener("icecandidate", onCandidate);
+      const desc = pc.localDescription;
+      if (desc && hasUsableCandidates(desc.sdp)) {
+        console.warn("[WebRTC] ICE gathering timed out but has candidates — proceeding");
+        resolve(desc);
+      } else {
+        reject(new Error("ICE gathering timed out with no usable candidates. Check network/firewall."));
+      }
+    }, timeoutMs);
+
+    const onStateChange = () => {
+      if (pc.iceGatheringState === "complete") {
+        clearTimeout(timer);
+        pc.removeEventListener("icegatheringstatechange", onStateChange);
+        pc.removeEventListener("icecandidate", onCandidate);
+        const desc = pc.localDescription;
+        if (desc && hasUsableCandidates(desc.sdp)) {
+          resolve(desc);
+        } else {
+          reject(new Error("ICE gathering completed but no usable candidates found."));
+        }
+      }
+    };
+
+    const onCandidate = (ev: RTCPeerConnectionIceEvent) => {
+      if (ev.candidate === null) {
+        clearTimeout(timer);
+        pc.removeEventListener("icegatheringstatechange", onStateChange);
+        pc.removeEventListener("icecandidate", onCandidate);
+        const desc = pc.localDescription;
+        if (desc && hasUsableCandidates(desc.sdp)) {
+          resolve(desc);
+        } else {
+          reject(new Error("ICE gathering ended (null candidate) with no usable candidates."));
+        }
+      }
+    };
+
+    pc.addEventListener("icegatheringstatechange", onStateChange);
+    pc.addEventListener("icecandidate", onCandidate);
+  });
+}
+
+/**
  * Count the number of ICE candidate lines in an SDP.
  */
 export function countCandidates(sdp: string): number {
