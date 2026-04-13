@@ -685,14 +685,24 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} — waiting for session.created`);
       setStep("waiting_session_created");
 
-      // Overall connection timeout — 30s to allow async ICE + data channel negotiation
+      // Overall connection timeout — 15s (reduced from 30s for faster relay retry)
       sessionTimeoutRef.current = setTimeout(() => {
         if (activeRef.current && !sessionReadyRef.current && !isStale()) {
           const dcState = dcRef.current?.readyState || "no_dc";
           const pcState = pcRef.current?.connectionState || "no_pc";
           const iceState = pcRef.current?.iceConnectionState || "no_ice";
           const iceGather = pcRef.current?.iceGatheringState || "no_ice";
-          logAllStates("session_timeout_30s");
+          logAllStates("session_timeout_15s");
+
+          // Try relay-only retry before giving up
+          if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
+            console.warn("[RealtimeVoice] Session timeout — attempting relay-only retry...");
+            relayRetryDoneRef.current = true;
+            cleanup("session_timeout_relay_retry");
+            iceTransportPolicyRef.current = "relay";
+            setTimeout(() => startSession(), 0);
+            return;
+          }
 
           let errorMsg: string;
           if (dcState !== "open" && remoteTrackReceived) {
@@ -707,7 +717,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           setErrorDetail(errorMsg);
           setState("error");
         }
-      }, 30000);
+      }, 15000);
     } catch (err) {
       if (isStale()) {
         console.log(`[RealtimeVoice] Attempt #${thisAttempt} error after being superseded — ignoring`);
