@@ -727,7 +727,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     startSession();
   }, [startSession]);
 
-
+  const endSession = useCallback(() => {
     // Bump attempt ID to invalidate any in-flight startSession
     attemptIdRef.current++;
     cleanup("endSession_called");
