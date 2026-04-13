@@ -7,9 +7,9 @@
  * - TURN servers are injected dynamically from the backend (Metered API)
  *   at session start. No credentials are hardcoded in the frontend.
  *
- * SDP strategy: We use a bounded gather — wait briefly for usable
- * candidates (relay/srflx) before sending the SDP, but never block
- * longer than a few seconds.
+ * SDP strategy: We use a bounded gather — wait briefly for preferred
+ * candidates before sending the SDP, but never block longer than a
+ * few seconds.
  */
 
 /** Fallback STUN servers — always included */
@@ -60,10 +60,23 @@ export function hasUsableCandidates(sdp: string): boolean {
 }
 
 /**
- * Check if an SDP contains at least one relay or srflx candidate.
+ * Check if an SDP contains at least one relay candidate.
  */
 export function hasRelayCandidates(sdp: string): boolean {
+  return /^a=candidate:.+typ relay/m.test(sdp);
+}
+
+/**
+ * Check if an SDP contains at least one srflx or relay candidate.
+ */
+export function hasReflexiveOrRelayCandidates(sdp: string): boolean {
   return /^a=candidate:.+typ (relay|srflx)/m.test(sdp);
+}
+
+export interface WaitForUsableCandidatesOptions {
+  timeoutMs?: number;
+  preferRelay?: boolean;
+  requireRelay?: boolean;
 }
 
 /**
@@ -80,11 +93,31 @@ export function hasRelayCandidates(sdp: string): boolean {
  */
 export function waitForUsableCandidatesBounded(
   pc: RTCPeerConnection,
-  timeoutMs = 3000
+  options: WaitForUsableCandidatesOptions | number = 3000
 ): Promise<string> {
-  // If we already have relay/srflx candidates, return immediately
+  const { timeoutMs, preferRelay, requireRelay } =
+    typeof options === "number"
+      ? { timeoutMs: options, preferRelay: false, requireRelay: false }
+      : {
+          timeoutMs: options.timeoutMs ?? 3000,
+          preferRelay: options.preferRelay ?? false,
+          requireRelay: options.requireRelay ?? false,
+        };
+
+  const hasTargetCandidates = (sdp: string) => {
+    if (requireRelay || preferRelay) return hasRelayCandidates(sdp);
+    return hasReflexiveOrRelayCandidates(sdp);
+  };
+
+  const successLabel = requireRelay
+    ? "relay candidate found"
+    : preferRelay
+      ? "preferred relay candidate found"
+      : "usable srflx/relay candidate found";
+
+  // If we already have the preferred candidate type, return immediately.
   const currentSdp = pc.localDescription?.sdp;
-  if (currentSdp && hasRelayCandidates(currentSdp)) {
+  if (currentSdp && hasTargetCandidates(currentSdp)) {
     return Promise.resolve(currentSdp);
   }
 
@@ -107,8 +140,8 @@ export function waitForUsableCandidatesBounded(
 
     const onCandidate = () => {
       const sdp = pc.localDescription?.sdp;
-      if (sdp && hasRelayCandidates(sdp)) {
-        console.log("[WebRTC] Bounded gather — relay/srflx candidate found, proceeding");
+      if (sdp && hasTargetCandidates(sdp)) {
+        console.log(`[WebRTC] Bounded gather — ${successLabel}, proceeding`);
         done();
       }
     };
