@@ -7,12 +7,12 @@ export default function AdDirector() {
   const [isEditing, setIsEditing] = useState(false);
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden bg-slate-950">
       {!isEditing && (
         <div className="max-w-6xl mx-auto w-full px-4 pt-4 pb-2">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/10">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-slate-800 text-white">
                 <Clapperboard className="w-5 h-5 text-white" />
               </div>
               <div>
