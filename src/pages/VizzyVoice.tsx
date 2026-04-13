@@ -21,7 +21,42 @@ const QUICK_ACTIONS = [
   "How many leads do we have?",
   "How many machines do we have?",
   "How many cut plans do we have?",
+  "Show machines",
+  "Show production tasks",
 ];
+
+// --- Intent detection ---
+interface ActionIntent {
+  source: "erp";
+  action: "get_dashboard_stats" | "list_machines" | "list_production_tasks";
+  params?: Record<string, unknown>;
+}
+
+function detectIntent(text: string): ActionIntent | null {
+  const t = text.toLowerCase();
+  if (
+    (t.includes("how many") && (t.includes("order") || t.includes("customer") || t.includes("lead") || t.includes("machine") || t.includes("cut plan"))) ||
+    t.includes("dashboard") ||
+    t.includes("stats") ||
+    t.includes("overview") ||
+    t.includes("summary")
+  ) {
+    return { source: "erp", action: "get_dashboard_stats" };
+  }
+  if (t.includes("machine") && (t.includes("show") || t.includes("list") || t.includes("all"))) {
+    return { source: "erp", action: "list_machines" };
+  }
+  if (t.includes("production task") || (t.includes("task") && t.includes("show")) || t.includes("production")) {
+    return { source: "erp", action: "list_production_tasks" };
+  }
+  return null;
+}
+
+// --- Action result types ---
+interface ActionResult {
+  cardTitle: string;
+  data: any;
+}
 
 export default function VizzyVoice() {
   const [status, setStatus] = useState<Status>("idle");
@@ -32,6 +67,7 @@ export default function VizzyVoice() {
   const [lastQuery, setLastQuery] = useState("");
   const [copied, setCopied] = useState(false);
   const [isUngrounded, setIsUngrounded] = useState(false);
+  const [actionResult, setActionResult] = useState<ActionResult | null>(null);
 
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -101,25 +137,52 @@ export default function VizzyVoice() {
     setLastQuery(text);
     setIsUngrounded(false);
     setReplyTimestamp(null);
+    setActionResult(null);
     setStatus("processing");
+
+    const intent = detectIntent(text);
+
     try {
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/vizzy-voice`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-        },
-        body: JSON.stringify({ text, source: "vizzy-voice-ui" }),
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.error || "Request failed");
-      const reply = data.reply || "No reply received.";
-      const ungrounded = data.fallback === true || reply.includes("I don't have") || reply.includes("unavailable") || reply.includes("I'm not sure");
-      setReplyText(reply);
-      setReplyTimestamp(new Date());
-      setIsUngrounded(ungrounded);
-      await playTTS(reply);
+      if (intent) {
+        // Route through action router
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/assistant-action`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ source: intent.source, action: intent.action, params: intent.params || {} }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data?.error || "Action request failed");
+
+        const spoken = data.spoken || "Done.";
+        setReplyText(spoken);
+        setReplyTimestamp(new Date());
+        setIsUngrounded(false);
+        setActionResult({ cardTitle: data.cardTitle || "Result", data: data.data });
+        await playTTS(spoken);
+      } else {
+        // Fallback to existing vizzy-voice
+        const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/vizzy-voice`;
+        const resp = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ text, source: "vizzy-voice-ui" }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data?.error || "Request failed");
+        const reply = data.reply || "No reply received.";
+        const ungrounded = data.fallback === true || reply.includes("I don't have") || reply.includes("unavailable") || reply.includes("I'm not sure");
+        setReplyText(reply);
+        setReplyTimestamp(new Date());
+        setIsUngrounded(ungrounded);
+        await playTTS(reply);
+      }
     } catch (err: any) {
       setErrorMsg(err.message || "Something went wrong");
       setStatus("error");
@@ -288,6 +351,14 @@ export default function VizzyVoice() {
             <p className="text-sm font-medium leading-relaxed">{replyText}</p>
           </div>
         )}
+
+        {/* Action Result Panel */}
+        {actionResult && (
+          <div className="rounded-lg border border-border bg-muted/30 p-4">
+            <p className="text-[10px] uppercase tracking-widest text-primary font-bold mb-2">{actionResult.cardTitle}</p>
+            <ActionResultDisplay data={actionResult.data} />
+          </div>
+        )}
       </div>
 
       {/* Retry */}
@@ -315,4 +386,53 @@ export default function VizzyVoice() {
       <p className="mt-8 mb-4 text-[10px] text-muted-foreground">Internal ERP Tool · Read-Only · PersonaPlex</p>
     </div>
   );
+}
+
+// --- Result display component ---
+function ActionResultDisplay({ data }: { data: any }) {
+  if (!data) return null;
+
+  // Stats object (dashboard)
+  if (typeof data === "object" && !Array.isArray(data) && data.orders !== undefined) {
+    return (
+      <div className="grid grid-cols-3 gap-2">
+        {Object.entries(data).map(([key, val]) => (
+          <div key={key} className="rounded-md border border-border bg-background p-2 text-center">
+            <p className="text-lg font-bold text-foreground">{String(val)}</p>
+            <p className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{key.replace(/([A-Z])/g, " $1")}</p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Array (table-like)
+  if (Array.isArray(data) && data.length > 0) {
+    const keys = Object.keys(data[0]).filter(k => k !== "id");
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border">
+              {keys.map(k => (
+                <th key={k} className="py-1 px-2 text-left text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">{k.replace(/_/g, " ")}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((row: any, i: number) => (
+              <tr key={i} className="border-b border-border/50 last:border-0">
+                {keys.map(k => (
+                  <td key={k} className="py-1.5 px-2 text-foreground">{row[k] ?? "—"}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // Fallback
+  return <pre className="text-xs text-muted-foreground whitespace-pre-wrap">{JSON.stringify(data, null, 2)}</pre>;
 }
