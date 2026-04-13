@@ -60,7 +60,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     setDebugStep(step);
   }, []);
 
-  const cleanup = useCallback(() => {
+  const cleanup = useCallback((reason?: string) => {
+    console.log(`[RealtimeVoice] cleanup() called — reason: ${reason || "unknown"}`);
     activeRef.current = false;
     sessionReadyRef.current = false;
     modelRespondingRef.current = false;
