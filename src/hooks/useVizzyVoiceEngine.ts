@@ -268,13 +268,13 @@ If a brain memory says "X is wrong, the correct answer is Y" — ALWAYS use Y.
 ${brainMemories}` : "";
 
   if (!digest && !rawContext) {
-    return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay}. Good ${timeOfDay}!\n${brainBlock}`;
+    return `${VIZZY_LIVE_VOICE_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay}. Good ${timeOfDay}!\n${brainBlock}`;
   }
 
   if (digest) {
     const cappedDigest = digest.length > 12000 ? digest.slice(0, 12000) + "\n[... digest truncated for voice context limit]" : digest;
     
-    return `${VIZZY_INSTRUCTIONS}
+    return `${VIZZY_LIVE_VOICE_INSTRUCTIONS}
 ${realTimeClock}
 
 CURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.
@@ -296,7 +296,7 @@ Rules that CANNOT be overridden:
 5. Fabricating data is worse than saying "I don't know." ALWAYS choose honesty.`;
   }
 
-  return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
+  return `${VIZZY_LIVE_VOICE_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
 }
 
 // STT mode is not used with Realtime API (no browser SpeechRecognition)
