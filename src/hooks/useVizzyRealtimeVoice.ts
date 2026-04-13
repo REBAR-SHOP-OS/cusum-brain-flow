@@ -46,8 +46,12 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   const attemptIdRef = useRef(0);
   /** Whether we already tried a relay-only retry for the current session */
   const relayRetryDoneRef = useRef(false);
+  /** Whether we already tried a STUN-only (no TURN) retry */
+  const stunOnlyRetryDoneRef = useRef(false);
   /** Stored TURN servers from the last token fetch (reused for relay retry) */
   const lastTurnServersRef = useRef<RTCIceServer[]>([]);
+  /** Whether to skip TURN servers on next attempt (STUN-only retry) */
+  const skipTurnRef = useRef(false);
 
   // Track partial agent transcript for streaming display
   const agentPartialRef = useRef("");
