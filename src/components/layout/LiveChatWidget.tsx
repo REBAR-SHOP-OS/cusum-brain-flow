@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useAdminChat } from "@/hooks/useAdminChat";
 import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { getVisibleAgents } from "@/lib/userAccessConfig";
+import { useUserAccessOverrides } from "@/hooks/useUserAccessOverrides";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { parseQuickReplies } from "@/lib/parseQuickReplies";
 import { QuickReplies } from "@/components/chat/QuickReplies";
@@ -27,6 +28,11 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
   const grammar = useGrammarCheck();
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const { override: accessOverride } = useUserAccessOverrides(user?.email);
+
+  const visibleAgents = accessOverride?.agents?.length
+    ? accessOverride.agents
+    : getVisibleAgents(user?.email);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -37,7 +43,7 @@ export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function Live
   }, [open]);
 
   // Block users with zero agent access from seeing the chat widget
-  if (getVisibleAgents(user?.email).length === 0) return null;
+  if (visibleAgents.length === 0) return null;
 
   // Cancel stream when closing the panel
   const handleClose = () => {
