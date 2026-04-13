@@ -43,6 +43,10 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   const sessionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Monotonically increasing attempt ID — guards async continuations against stale attempts */
   const attemptIdRef = useRef(0);
+  /** Whether we already tried a relay-only retry for the current session */
+  const relayRetryDoneRef = useRef(false);
+  /** Stored TURN servers from the last token fetch (reused for relay retry) */
+  const lastTurnServersRef = useRef<RTCIceServer[]>([]);
 
   // Track partial agent transcript for streaming display
   const agentPartialRef = useRef("");
@@ -247,6 +251,9 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     }
   }, [triggerResponseCreate, setStep]);
 
+  /** Internal: optional relay-only mode for retry */
+  const iceTransportPolicyRef = useRef<RTCIceTransportPolicy>("all");
+
   const startSession = useCallback(async () => {
     // Bump attempt ID — any in-flight older attempt will bail at its next checkpoint
     const thisAttempt = ++attemptIdRef.current;
@@ -334,6 +341,17 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const ephemeralKey = tokenData.client_secret;
       if (!ephemeralKey) throw new Error("No ephemeral key received");
 
+      // Parse dynamic TURN servers from backend
+      const dynamicTurnServers: RTCIceServer[] = Array.isArray(tokenData.turn_servers)
+        ? tokenData.turn_servers.map((s: any) => ({
+            urls: s.urls || s.url,
+            ...(s.username ? { username: s.username } : {}),
+            ...(s.credential ? { credential: s.credential } : {}),
+          }))
+        : [];
+      console.log(`[RealtimeVoice] Received ${dynamicTurnServers.length} TURN server entries from backend`);
+      lastTurnServersRef.current = dynamicTurnServers;
+
       // 2. Capture mic — minimal processing for lowest capture latency
       setStep("mic_requesting");
       const micStream = await navigator.mediaDevices.getUserMedia({
@@ -355,7 +373,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       setStep("mic_granted");
 
       // 3. Create WebRTC peer connection
-      const pc = createRealtimePeerConnection();
+      const pc = createRealtimePeerConnection(dynamicTurnServers, iceTransportPolicyRef.current);
+      iceTransportPolicyRef.current = "all"; // reset for next attempt
       pcRef.current = pc;
       setStep("pc_created");
 
@@ -496,9 +515,21 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           }
 
           logAllStates("pc_connection_failed");
-          console.error("[RealtimeVoice] Connection failed — no DC open, treating as fatal");
+          console.error("[RealtimeVoice] Connection failed — no DC open");
           console.error(`[RealtimeVoice][DIAG] Final candidate counts: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`);
           iceCandidateErrors.forEach((e, i) => console.error(`[RealtimeVoice][DIAG] iceError[${i}]: code=${e.code} text=${e.text} url=${e.url}`));
+
+          // Auto-retry once with relay-only transport policy (forces TURN)
+          if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
+            console.warn("[RealtimeVoice] Attempting relay-only retry...");
+            relayRetryDoneRef.current = true;
+            cleanup("relay_retry");
+            iceTransportPolicyRef.current = "relay";
+            // Schedule retry on next microtask to avoid calling startSession within itself
+            setTimeout(() => startSession(), 0);
+            return;
+          }
+
           setErrorDetail(
             `WebRTC failed | ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived} dcOpen=${dataChannelEverOpened} | candidates: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`
           );
@@ -691,10 +722,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     }
   }, [getSystemPrompt, cleanup, handleRealtimeEvent, setStep, debugStep, dcSend]);
 
+
   const endSession = useCallback(() => {
     // Bump attempt ID to invalidate any in-flight startSession
     attemptIdRef.current++;
     cleanup("endSession_called");
+    relayRetryDoneRef.current = false;
+    iceTransportPolicyRef.current = "all";
     setIsSpeaking(false);
     setOutputAudioBlocked(false);
     setPartialText("");
