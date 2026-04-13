@@ -1,82 +1,75 @@
 
 Goal
 
-- Restore `/vizzy-live` on mobile by fixing the realtime WebRTC/control-channel startup path.
-- Keep the new lightweight live prompt in place; this looks like a connection problem, not a prompt problem.
+- Fix the real failure path in `/vizzy-live`: the SDP retry logic is falsely treating a successful retry as a hard failure.
 
 What I found
 
-- The backend token path is working:
-  - `voice-engine-token` is authenticating successfully
-  - it is returning TURN servers
-  - no backend failure is showing in the recent logs
-- The client repeatedly reaches:
-  - `audio_priming`
-  - `token_fetch_started`
-  - `mic_requesting`
-  - `sdp_post_ok`
-  - `waiting_session_created`
-- The failure signature is consistent with your screenshot and session replay:
-  - remote audio track is received
-  - data channel stays `connecting`
-  - ICE ends `disconnected`
-  - relay candidates do exist
-- That means the break is after SDP exchange: media partially connects, but the control/data channel never becomes usable.
+- The latest logs change the diagnosis:
+  - the bounded SDP POST does sometimes get a 500 upstream
+  - the full-gather retry then succeeds with HTTP 201
+  - but the client still throws `OpenAI SDP exchange failed (201): Internal Server Error`
+- That points to a control-flow bug in `src/hooks/useVizzyRealtimeVoice.ts`, not a remaining WebRTC transport problem.
+
+Root cause
+
+- In the current code, everything stays inside the original `if (!sdpResp.ok)` block.
+- After a 5xx, the code retries with a fully gathered SDP and can replace `sdpResp` with a successful 201 response.
+- But the function still reaches the unconditional `throw new Error(...)` at the end of that outer block.
+- Result: a recovered SDP exchange is incorrectly reported as failed, and the handshake is aborted before `setRemoteDescription`.
 
 Implementation plan
 
-1. Harden the offer/ICE strategy in `src/hooks/useVizzyRealtimeVoice.ts`
-- Replace the current “send SDP immediately” path with a bounded gather strategy:
-  - wait briefly for usable candidates before posting SDP
-  - prefer a relay/srflx candidate or ICE complete
-  - avoid posting an under-populated offer on mobile
-- Make retries change strategy instead of just repeating the same handshake:
-  - normal hybrid attempt
+1. Fix the SDP retry control flow in `src/hooks/useVizzyRealtimeVoice.ts`
+- Refactor the SDP POST section so it tracks:
+  - initial response
+  - retry response
+  - final response actually used
+  - final error text only if the final response is still non-OK
+- After a successful retry, exit the error branch cleanly and continue into:
+  - `setStep("sdp_post_ok")`
+  - `await sdpResp.text()`
+  - `pc.setRemoteDescription(...)`
+
+2. Keep escalation only for true final failures
+- Preserve the current ladder:
+  - bounded offer
+  - full-gather retry on 5xx
   - relay-only retry
-  - STUN-only last resort
+  - STUN-only retry
+- But only escalate to relay/STUN if the final post attempt still returns 5xx.
 
-2. Port the stable channel-handling pattern from `src/hooks/useVoiceEngine.ts`
-- Queue pending `session.update` instructions while the data channel is not yet open
-- On `data_channel_open`:
-  - mark the session connected immediately
-  - flush any queued instructions
-  - then send the final session config
-- Treat `remoteTrackReceived + dc still connecting` as a control-channel timeout case, not a generic session-created wait
+3. Tighten diagnostics so logs match reality
+- Log whether success came from:
+  - `bounded`
+  - `full-gather-retry`
+- Prevent mixed status/error text like:
+  - status `201`
+  - body text from prior `500`
+- Optionally record the final SDP stage in the debug step so future failures are easier to isolate.
 
-3. Keep the mobile-specific fixes already added
-- Preserve gesture-primed audio reuse
-- Preserve the lightweight `/vizzy-live` prompt path
-- Preserve TURN provisioning from the backend
+4. Re-verify the post-success path
+- Confirm the code reaches:
+  - `remote_desc_applied`
+  - `waiting_session_created`
+  - then `data_channel_open` / `session_created`
+- If a new blocker appears after this fix, it will be the real next issue instead of this false negative.
 
-4. Improve diagnostics without changing behavior
-- Log which handshake strategy each attempt used
-- Log how many ICE candidates were actually included in the SDP that got posted
-- Keep clearer error text for the exact failing phase
-
-5. Validate the fix
-- Re-test `/vizzy-live` on mobile 5G
-- Sanity-check on Wi‑Fi
-- Confirm the flow reaches `data_channel_open` and then either `session_created` or the existing connected fallback
-
-Exact files likely to change
+Files to change
 
 - `src/hooks/useVizzyRealtimeVoice.ts`
-- `src/lib/webrtc/realtimeConnection.ts` if I add a small helper for bounded candidate gathering
-- optionally `src/components/vizzy/VizzyVoiceChat.tsx` only if I need to slightly improve the displayed debug/error text
 
-What stays unchanged
+What should stay unchanged
 
-- `src/hooks/useVizzyVoiceEngine.ts` lightweight live prompt setup
-- `supabase/functions/voice-engine-token/index.ts` unless a new failure appears
-- The `/vizzy-live` UI layout and launch screen
+- TURN token provisioning in the backend
+- bounded ICE gather helpers in `src/lib/webrtc/realtimeConnection.ts`
+- transceiver-based offer shape
+- relay/STUN retry strategy
 
 Technical details
 
-- This does not look like a prompt-size issue anymore.
-- It also does not look like a token-generation/backend-auth issue.
-- The strongest evidence points to a client-side WebRTC negotiation/control-channel problem:
-  - SDP post succeeds
-  - media can partially connect
-  - the SCTP/data channel never reaches `open`
-  - therefore no reliable realtime session becomes usable
-- The safest minimal fix is to improve the SDP/ICE timing and adopt the more reliable data-channel/open-and-flush pattern already used elsewhere in the codebase.
+- The strongest evidence is the exact mismatch in the logs:
+  - retry request succeeds with `201`
+  - thrown error still says `Internal Server Error`
+- That can only happen if the code is reusing the old error text and still throwing after the retry has already recovered.
+- So the next patch should be minimal and surgical: fix the branching, not redesign the handshake again.
