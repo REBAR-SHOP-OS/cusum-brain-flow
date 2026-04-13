@@ -914,6 +914,64 @@ Deno.serve((req) =>
         break;
       }
 
+      // ─── Voice Assistant Read-Only Actions ───
+
+      case "get_dashboard_stats": {
+        const { data: prof } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        const cid = prof?.company_id;
+        const filters = cid ? (q: any) => q.eq("company_id", cid) : (q: any) => q;
+        const [customers, leads, machines, cutPlans, deliveries, orders] = await Promise.all([
+          filters(supabaseAdmin.from("customers").select("*", { count: "exact", head: true })),
+          filters(supabaseAdmin.from("leads").select("*", { count: "exact", head: true })),
+          filters(supabaseAdmin.from("machines").select("*", { count: "exact", head: true })),
+          filters(supabaseAdmin.from("cut_plans").select("*", { count: "exact", head: true })),
+          filters(supabaseAdmin.from("deliveries").select("*", { count: "exact", head: true })),
+          filters(supabaseAdmin.from("orders").select("*", { count: "exact", head: true })),
+        ]);
+        result = {
+          success: true,
+          data: {
+            total_customers: customers.count ?? 0,
+            total_leads: leads.count ?? 0,
+            total_machines: machines.count ?? 0,
+            total_cut_plans: cutPlans.count ?? 0,
+            total_deliveries: deliveries.count ?? 0,
+            total_orders: orders.count ?? 0,
+          },
+        };
+        break;
+      }
+
+      case "list_machines": {
+        const { data: prof } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        let q = supabaseAdmin
+          .from("machines")
+          .select("id, name, model, type, status, company_id, created_at")
+          .order("name");
+        if (prof?.company_id) q = q.eq("company_id", prof.company_id);
+        if (params?.status) q = q.eq("status", params.status);
+        q = q.limit(params?.limit || 50);
+        const { data, error: mErr } = await q;
+        if (mErr) throw mErr;
+        result = { success: true, data };
+        break;
+      }
+
+      case "list_production_tasks": {
+        const { data: prof } = await supabaseAdmin.from("profiles").select("company_id").eq("user_id", userId).single();
+        let q = supabaseAdmin
+          .from("production_tasks")
+          .select("id, order_id, cut_plan_id, cut_plan_item_id, task_type, bar_code, cut_length_mm, qty_required, qty_completed, status, mark_number, drawing_ref, asa_shape_code, priority, created_at")
+          .order("created_at", { ascending: false });
+        if (prof?.company_id) q = q.eq("company_id", prof.company_id);
+        if (params?.phase) q = q.eq("status", params.phase);
+        q = q.limit(params?.limit || 50);
+        const { data, error: tErr } = await q;
+        if (tErr) throw tErr;
+        result = { success: true, data };
+        break;
+      }
+
       default:
         return new Response(JSON.stringify({ error: `Unknown action: ${action}` }), { status: 400, headers: corsHeaders });
     }
