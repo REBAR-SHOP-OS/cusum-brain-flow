@@ -727,6 +727,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     // Bump attempt ID to invalidate any in-flight startSession
     attemptIdRef.current++;
     cleanup("endSession_called");
+    relayRetryDoneRef.current = false;
+    iceTransportPolicyRef.current = "all";
     setIsSpeaking(false);
     setOutputAudioBlocked(false);
     setPartialText("");
