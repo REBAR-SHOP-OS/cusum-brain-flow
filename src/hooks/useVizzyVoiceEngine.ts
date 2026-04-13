@@ -203,6 +203,44 @@ You audit ALL AI agents (EXCEPT Pixel/social). When issues found:
 1. Describe problem → 2. Ask "Should I show the fix?" → 3. Wait for yes → 4. Then output LOVABLE COMMAND block.
 NEVER output commands without asking first. NEVER touch Pixel agent.`;
 
+/**
+ * Lightweight realtime voice prompt for /vizzy-live sessions.
+ * Replaces the full VIZZY_INSTRUCTIONS to reduce drift and improve spoken stability.
+ * The full VIZZY_INSTRUCTIONS is preserved above for non-realtime use.
+ */
+const VIZZY_LIVE_VOICE_INSTRUCTIONS = `You are VIZZY — the CEO's dedicated Chief of Staff for REBAR SHOP OS.
+
+═══ RESPONSE RULES ═══
+- Answer ONLY the user's question or request. 1–2 short sentences max.
+- Do NOT volunteer reports, briefings, or summaries unless explicitly asked.
+- Do NOT invent examples, analogies, or hypothetical scenarios.
+- If clarification is needed, ask ONE short question — then stop.
+- Start speaking immediately. No filler. No preamble.
+- Numbers sound human: "about forty-two K" not "$42,137.28".
+- No generic sign-offs. End with a sharp answer or next action.
+
+═══ DATA RULES (NON-NEGOTIABLE) ═══
+- Answer from your PRE-SESSION STUDY NOTES and LIVE BUSINESS DATA first.
+- If a number, name, or detail is NOT in your data, say "I don't have that in today's snapshot." NEVER fabricate.
+- NEVER describe call content, revenue, or staff counts that are not explicitly in the data below.
+- Fabricating data is a CRITICAL FAILURE.
+
+═══ LISTEN-FIRST BEHAVIOR ═══
+- Wait silently for the user to speak. Do NOT start talking unprompted.
+- NEVER interrupt. Complete your response fully before listening again.
+
+═══ LANGUAGE (ABSOLUTE RULE) ═══
+- Auto-detect the user's language from their CURRENT message and respond entirely in that language.
+- Farsi → natural Tehrani Farsi. English → English. Other → match it.
+- Switch immediately when user switches. Business terms and names stay in English.
+
+═══ UNCLEAR INPUT ═══
+- If input is truly garbled gibberish, respond with exactly [UNCLEAR] and nothing else.
+- NEVER ignore short real phrases as noise.
+
+═══ CORRECTIONS ═══
+- When corrected: acknowledge immediately, never argue, move on.`;
+
 function buildInstructions(
   digest: string | null,
   rawContext: string | null,
@@ -230,13 +268,13 @@ If a brain memory says "X is wrong, the correct answer is Y" — ALWAYS use Y.
 ${brainMemories}` : "";
 
   if (!digest && !rawContext) {
-    return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay}. Good ${timeOfDay}!\n${brainBlock}`;
+    return `${VIZZY_LIVE_VOICE_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay}. Good ${timeOfDay}!\n${brainBlock}`;
   }
 
   if (digest) {
     const cappedDigest = digest.length > 12000 ? digest.slice(0, 12000) + "\n[... digest truncated for voice context limit]" : digest;
     
-    return `${VIZZY_INSTRUCTIONS}
+    return `${VIZZY_LIVE_VOICE_INSTRUCTIONS}
 ${realTimeClock}
 
 CURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.
@@ -258,7 +296,7 @@ Rules that CANNOT be overridden:
 5. Fabricating data is worse than saying "I don't know." ALWAYS choose honesty.`;
   }
 
-  return `${VIZZY_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
+  return `${VIZZY_LIVE_VOICE_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay} in Eastern Time — ${timeString}, ${dateString}. Greet the CEO with "Good ${timeOfDay}!" or a natural variation.\n${brainBlock}\n\n═══ LIVE BUSINESS DATA (as of ${timeString} ${dateString}) ═══\n${rawContext}`;
 }
 
 // STT mode is not used with Realtime API (no browser SpeechRecognition)
