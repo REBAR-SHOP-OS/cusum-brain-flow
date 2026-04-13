@@ -323,7 +323,8 @@ export function useVizzyVoiceEngine() {
     if (timeSyncRef.current) clearInterval(timeSyncRef.current);
     timeSyncRef.current = setInterval(() => {
       rebuildInstructions();
-      console.log("[VizzyVoice] Time sync pushed");
+      engine.updateSessionInstructions(getSystemPrompt());
+      console.log("[VizzyVoice] Time sync pushed to live session");
     }, 60_000);
 
     if (contextFetched.current) {
@@ -371,6 +372,8 @@ export function useVizzyVoiceEngine() {
           lastDigestRef.current = null;
           lastRawContextRef.current = contextData;
           rebuildInstructions();
+          engine.updateSessionInstructions(getSystemPrompt());
+          console.log("[VizzyVoice] Pushed daily-brief context to live session");
         }
       } catch (err) {
         console.warn("Pre-digest failed, trying daily-brief fallback:", err);
@@ -385,6 +388,8 @@ export function useVizzyVoiceEngine() {
             lastDigestRef.current = null;
             lastRawContextRef.current = contextData;
             rebuildInstructions();
+            engine.updateSessionInstructions(getSystemPrompt());
+            console.log("[VizzyVoice] Pushed fallback context to live session");
           }
         } catch (err2) {
           console.warn("Daily-brief fallback also failed:", err2);
