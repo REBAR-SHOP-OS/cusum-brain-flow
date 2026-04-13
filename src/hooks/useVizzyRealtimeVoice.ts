@@ -636,8 +636,9 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
       });
 
-      // 6. Create offer and wait for ICE gathering before sending SDP to OpenAI
-      // On restrictive networks (mobile/5G), relay candidates MUST be in the SDP
+      // 6. Create offer and send it immediately.
+      // OpenAI Realtime does not require us to wait for full ICE gathering first,
+      // and blocking here can stall mobile/5G handshakes before the answer is applied.
       setStep("sdp_offer_creating");
       const offer = await pc.createOffer();
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after createOffer`); return; }
@@ -656,52 +657,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       await pc.setLocalDescription(offer);
       setStep("ice_gathering");
 
-      // Wait for ICE gathering to complete so relay candidates are baked into the SDP
-      // This is critical on mobile/5G where only TURN relay works
-      const gatheredDesc = await new Promise<RTCSessionDescription>((resolve, reject) => {
-        const gatherTimeout = setTimeout(() => {
-          pc.onicecandidate = null;
-          const desc = pc.localDescription;
-          if (desc) {
-            console.warn(`[RealtimeVoice] ICE gathering timed out after 8s — proceeding with ${countCandidates(desc.sdp)} candidates (${candidateSummary()})`);
-            resolve(desc);
-          } else {
-            reject(new Error("ICE gathering timed out with no local description"));
-          }
-        }, 8000);
+      const offerSdp = pc.localDescription?.sdp ?? offer.sdp;
+      if (!offerSdp) throw new Error("No local SDP after createOffer");
 
-        // Check if already complete
-        if (pc.iceGatheringState === "complete" && pc.localDescription) {
-          clearTimeout(gatherTimeout);
-          console.log(`[RealtimeVoice] ICE gathering already complete: ${candidateSummary()}`);
-          resolve(pc.localDescription);
-          return;
-        }
-
-        const origHandler = pc.onicecandidate;
-        pc.onicecandidate = (ev) => {
-          // Call the diagnostic logger
-          if (origHandler) (origHandler as any)(ev);
-          if (ev.candidate === null) {
-            // Gathering complete
-            clearTimeout(gatherTimeout);
-            const desc = pc.localDescription;
-            if (desc) {
-              console.log(`[RealtimeVoice] ICE gathering done: ${candidateSummary()}`);
-              resolve(desc);
-            } else {
-              reject(new Error("ICE gathering completed but no local description"));
-            }
-          }
-        };
-      });
-
-      if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after ICE gathering`); return; }
       setStep("sdp_post_started");
-
-      const offerSdp = gatheredDesc.sdp;
-      if (!offerSdp) throw new Error("No SDP after ICE gathering");
-      console.log(`[RealtimeVoice] Sending SDP with ${countCandidates(offerSdp)} ICE candidates (${candidateSummary()})`);
+      console.log(
+        `[RealtimeVoice] Sending initial SDP with ${countCandidates(offerSdp)} ICE candidates (${candidateSummary()}) — continuing ICE asynchronously`
+      );
 
       const sdpResp = await fetch(
         `https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03`,
@@ -751,14 +713,14 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} — waiting for session.created`);
       setStep("waiting_session_created");
 
-      // Overall connection timeout — 20s (generous for mobile 5G networks)
+      // Overall connection timeout — 30s to allow slower mobile handshakes
       sessionTimeoutRef.current = setTimeout(() => {
         if (activeRef.current && !sessionReadyRef.current && !isStale()) {
           const dcState = dcRef.current?.readyState || "no_dc";
           const pcState = pcRef.current?.connectionState || "no_pc";
           const iceState = pcRef.current?.iceConnectionState || "no_ice";
           const iceGather = pcRef.current?.iceGatheringState || "no_ice";
-          logAllStates("session_timeout_20s");
+          logAllStates("session_timeout_30s");
 
           // Try relay-only retry before giving up
           if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
@@ -794,7 +756,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           setErrorDetail(errorMsg);
           setState("error");
         }
-      }, 20000);
+      }, 30000);
     } catch (err) {
       if (isStale()) {
         console.log(`[RealtimeVoice] Attempt #${thisAttempt} error after being superseded — ignoring`);
