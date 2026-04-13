@@ -447,19 +447,9 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
         )}
       </div>
 
-      <div className="overflow-hidden rounded-[28px] border border-white/15 bg-black/45 shadow-[0_24px_80px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-shadow focus-within:border-white/30 focus-within:shadow-[0_28px_90px_rgba(0,0,0,0.45)]">
-        <div className="border-b border-white/10 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-white">Describe the ad or how AI should edit your footage</p>
-              <p className="text-xs text-white/55">
-                Include audience, product, offer, tone, and the outcome the viewer should remember. If you uploaded clips, describe how they should be edited into the final post.
-              </p>
-            </div>
-            <div className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-white/60">
-              Idea to post-ready cut
-            </div>
-          </div>
+      <div className="overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] backdrop-blur-sm transition-colors focus-within:border-white/15">
+        <div className="px-4 pt-3 pb-1">
+          <p className="text-sm font-medium text-white/80">Describe the ad or how AI should edit your footage</p>
         </div>
 
         <textarea
@@ -488,7 +478,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
                 >
                   <RatioIcon className="w-3.5 h-3.5" />
                   {ratio}
-                  <ChevronDown className="w-3 h-3 opacity-60" />
                 </button>
               </PopoverTrigger>
               <PopoverContent side="top" align="start" className="w-auto p-2">
@@ -524,7 +513,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
                 >
                   <Timer className="w-3.5 h-3.5" />
                   {DURATIONS.find(d => d.value === duration)?.label || "15s"}
-                  <ChevronDown className="w-3 h-3 opacity-60" />
                 </button>
               </PopoverTrigger>
               <PopoverContent side="top" align="start" className="w-auto p-2">
@@ -565,7 +553,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
                       {selectedStyles.length}
                     </span>
                   )}
-                  <ChevronDown className="w-3 h-3 opacity-60" />
                 </button>
               </PopoverTrigger>
               <PopoverContent side="top" align="start" className="w-auto p-2">
@@ -621,7 +608,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
                       {selectedProducts.length}
                     </span>
                   )}
-                  <ChevronDown className="w-3 h-3 opacity-60" />
                 </button>
               </PopoverTrigger>
               <PopoverContent side="top" align="start" className="w-auto p-2">
@@ -673,7 +659,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
                 >
                   <Clapperboard className="w-3.5 h-3.5" />
                   {selectedVideoModel.label}
-                  <ChevronDown className="w-3 h-3 opacity-60" />
                 </button>
               </PopoverTrigger>
               <PopoverContent side="top" align="start" className="w-56 p-2">
@@ -699,12 +684,9 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
             </Popover>
           </div>
 
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-xs leading-5 text-white/45">
-              Want help writing the brief? Generate a structured draft from your references or source footage first, then edit before creating the video.
-            </p>
+          <div className="flex items-center justify-end gap-2">
 
-            <div className="flex items-center gap-2 self-end">
+            <div className="flex items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
