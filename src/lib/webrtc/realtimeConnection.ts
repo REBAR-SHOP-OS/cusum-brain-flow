@@ -7,32 +7,11 @@
  * asynchronously after setRemoteDescription.
  */
 
-/** STUN + free TURN servers for NAT traversal */
+/** STUN servers for reflexive candidate discovery (TURN not needed for OpenAI Realtime) */
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun.cloudflare.com:3478" },
-  // Free TURN relay from OpenRelay (metered.ca) for symmetric NAT / firewall fallback
-  {
-    urls: "turn:a.relay.metered.ca:80",
-    username: "e8dd65b92f6b809b5b145572",
-    credential: "3zaaENIxOurmxCaP",
-  },
-  {
-    urls: "turn:a.relay.metered.ca:80?transport=tcp",
-    username: "e8dd65b92f6b809b5b145572",
-    credential: "3zaaENIxOurmxCaP",
-  },
-  {
-    urls: "turn:a.relay.metered.ca:443",
-    username: "e8dd65b92f6b809b5b145572",
-    credential: "3zaaENIxOurmxCaP",
-  },
-  {
-    urls: "turns:a.relay.metered.ca:443",
-    username: "e8dd65b92f6b809b5b145572",
-    credential: "3zaaENIxOurmxCaP",
-  },
 ];
 
 /**
