@@ -1,27 +1,26 @@
 
 
-# Remove Ad Director Hero Section
+# Remove Source Footage Section from ChatPromptBar
 
 ## What's being removed
-The entire hero area circled in red: the "AI VIDEO DIRECTOR" badge, headline ("Modernize your ad idea..."), description paragraph, feature pills (Prompt to storyboard, Reference-guided scenes, Editable final composition), the Workflow card with 3 steps, and Quick Start Ideas section.
-
-## What stays
-- The prompt bar (ChatPromptBar)
-- Recent projects (VideoHistory)
-- Background video
+The entire "Source footage" block — the upload button, clip list, empty state placeholder, and all related state/logic.
 
 ## Changes
 
-### `src/components/ad-director/AdDirectorContent.tsx`
-- Remove the `QUICK_START_IDEAS` array (lines 28-47)
-- Remove the `HERO_POINTS` array (lines 49-53)
-- Remove the `handleQuickStart` function reference
-- Remove the entire `grid xl:grid-cols-[1.2fr_0.8fr]` block (lines 475-551) containing the hero card and workflow card
-- Keep the prompt bar wrapper (line 554) and recent projects wrapper (line 562) intact
-- Remove unused imports (`Film`, `Sparkles`, `Clapperboard`, `Wand2`, `Layers3`)
-
 ### `src/components/ad-director/ChatPromptBar.tsx`
-- Remove `starterPrompt` / `starterPromptSeed` props since quick-start is gone (if they were only used for that)
 
-Result: The idle state shows only the clean prompt bar + recent projects on the background video.
+1. **Remove state & refs**: Delete `sourceClips` state, `sourceClipRef` ref, `handleSourceClipChange`, `removeSourceClip`, `formatFileSize` (if only used here)
+2. **Remove UI block** (lines 363-419): The hidden file input + the entire `rounded-[28px]` card with "Source footage" heading, "Add video clips" button, clip list, and empty state
+3. **Clean up submit**: Remove `sourceClips` from `handleSubmit` call — pass empty array `[]` instead
+4. **Clean up context builder**: Remove the `sourceClipLabels` line and the `if (sourceClips.length > 0)` context push
+5. **Clean up summary pills** (lines 438-442): Remove the "Footage: N clips" badge
+6. **Clean up `canAutoGenerate`**: Remove `sourceClips.length > 0` from the condition
+7. **Clean up empty-state text** (line 443-445): Remove `sourceClips.length === 0` from the condition
+8. **Remove `Video` icon import** if no longer used
+9. **Remove `formatFileSize` helper** if only used for source clips
+
+### `onSubmit` prop type
+The parent component passes `sourceClips` as the 3rd argument. We'll pass `[]` to keep the interface stable and avoid breaking the parent.
+
+## No backend changes needed
 
