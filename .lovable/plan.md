@@ -1,26 +1,38 @@
 
 
-# Remove Source Footage Section from ChatPromptBar
+# Fix: Reference Upload Cards Not Clickable
 
-## What's being removed
-The entire "Source footage" block — the upload button, clip list, empty state placeholder, and all related state/logic.
+## Root Cause
+In `ReferenceUploadCard`, the clickable `<button>` has `className="absolute inset-0 z-0"` but the content div displaying the icon/label has `z-10`, which sits on top of the button and blocks pointer events.
 
-## Changes
+## Fix
 
 ### `src/components/ad-director/ChatPromptBar.tsx`
 
-1. **Remove state & refs**: Delete `sourceClips` state, `sourceClipRef` ref, `handleSourceClipChange`, `removeSourceClip`, `formatFileSize` (if only used here)
-2. **Remove UI block** (lines 363-419): The hidden file input + the entire `rounded-[28px]` card with "Source footage" heading, "Add video clips" button, clip list, and empty state
-3. **Clean up submit**: Remove `sourceClips` from `handleSubmit` call — pass empty array `[]` instead
-4. **Clean up context builder**: Remove the `sourceClipLabels` line and the `if (sourceClips.length > 0)` context push
-5. **Clean up summary pills** (lines 438-442): Remove the "Footage: N clips" badge
-6. **Clean up `canAutoGenerate`**: Remove `sourceClips.length > 0` from the condition
-7. **Clean up empty-state text** (line 443-445): Remove `sourceClips.length === 0` from the condition
-8. **Remove `Video` icon import** if no longer used
-9. **Remove `formatFileSize` helper** if only used for source clips
+Add `pointer-events-none` to both content containers (the empty state div and the file-preview div) so clicks pass through to the button underneath:
 
-### `onSubmit` prop type
-The parent component passes `sourceClips` as the 3rd argument. We'll pass `[]` to keep the interface stable and avoid breaking the parent.
+1. **Line 156** — Empty state content div: Add `pointer-events-none`
+   ```
+   <div className="relative z-10 pointer-events-none flex h-full flex-col justify-between gap-6">
+   ```
 
-## No backend changes needed
+2. **Line 146** — File preview content div: Add `pointer-events-none`
+   ```
+   <div className="relative z-10 pointer-events-none flex h-full flex-col justify-end gap-1">
+   ```
+
+3. **Line 135** — The "remove" button (X) needs to stay clickable, so add `pointer-events-auto` to it:
+   ```
+   className="absolute right-3 top-3 z-10 pointer-events-auto flex h-7 w-7 ..."
+   ```
+
+4. **Line 133** — The preview image overlay also needs `pointer-events-none`:
+   ```
+   <img ... className="absolute inset-0 h-full w-full object-cover pointer-events-none" />
+   ```
+
+5. **Line 134** — Gradient overlay: add `pointer-events-none`
+
+## Result
+Clicking anywhere on the reference cards will trigger the file picker dialog for image upload.
 
