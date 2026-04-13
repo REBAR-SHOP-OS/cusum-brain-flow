@@ -4,6 +4,7 @@ import { SILENT_WAV, takePrimedMobileAudio } from "@/lib/audioPlayer";
 import {
   createRealtimePeerConnection,
   countCandidates,
+  waitForIceGatheringComplete,
   waitForUsableCandidatesBounded,
   hasRelayCandidates,
   hasReflexiveOrRelayCandidates,
@@ -609,8 +610,11 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         logAllStates("oniceconnectionstatechange");
       };
 
-      // Add mic tracks to PC
-      micStream.getTracks().forEach(track => pc.addTrack(track, micStream));
+      // Add mic tracks using explicit transceivers to keep the offer shape
+      // aligned with the more stable generic voice engine.
+      micStream.getTracks().forEach(track => {
+        pc.addTransceiver(track, { direction: "sendrecv" });
+      });
 
       // 5. Create data channel for events
       const dc = pc.createDataChannel("oai-events");
@@ -719,30 +723,88 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       if (!offerSdp) throw new Error("No local SDP after createOffer");
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after bounded gather`); return; }
 
-      const hasRelay = hasRelayCandidates(offerSdp);
-      const hasUsableRoute = hasReflexiveOrRelayCandidates(offerSdp);
-      const candidateCount = countCandidates(offerSdp);
-      setStep("sdp_post_started");
-      console.log(
-        `[RealtimeVoice] Sending SDP strategy=${strategy} candidates=${candidateCount} hasRelay=${hasRelay} hasUsableRoute=${hasUsableRoute} (${candidateSummary()})`
-      );
+      const postSdpOffer = async (sdp: string, label: string) => {
+        const hasRelay = hasRelayCandidates(sdp);
+        const hasUsableRoute = hasReflexiveOrRelayCandidates(sdp);
+        const candidateCount = countCandidates(sdp);
+        console.log(
+          `[RealtimeVoice] Sending SDP (${label}) strategy=${strategy} candidates=${candidateCount} hasRelay=${hasRelay} hasUsableRoute=${hasUsableRoute} (${candidateSummary()})`
+        );
 
-      const sdpResp = await fetch(
-        `https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${ephemeralKey}`,
-            "Content-Type": "application/sdp",
-          },
-          body: offerSdp,
-        }
-      );
+        return fetch(
+          `https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${ephemeralKey}`,
+              "Content-Type": "application/sdp",
+            },
+            body: sdp,
+          }
+        );
+      };
+
+      setStep("sdp_post_started");
+      let sdpResp = await postSdpOffer(offerSdp, "bounded");
 
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after SDP POST`); return; }
 
       if (!sdpResp.ok) {
-        const errText = await sdpResp.text();
+        let errText = await sdpResp.text();
+
+        if (sdpResp.status >= 500) {
+          console.warn(`[RealtimeVoice] SDP POST returned ${sdpResp.status} on bounded offer — retrying once with fully gathered SDP`);
+          try {
+            const fullDescription = await waitForIceGatheringComplete(
+              pc,
+              usedPolicy === "relay" ? 4500 : 3000,
+            );
+            const fullOfferSdp = fullDescription.sdp;
+
+            if (fullOfferSdp && fullOfferSdp !== offerSdp) {
+              if (isStale()) {
+                console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale before full-gather retry POST`);
+                return;
+              }
+
+              setStep("sdp_post_retry");
+              sdpResp = await postSdpOffer(fullOfferSdp, "full-gather-retry");
+
+              if (isStale()) {
+                console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after full-gather retry POST`);
+                return;
+              }
+
+              if (!sdpResp.ok) {
+                errText = await sdpResp.text();
+              }
+            }
+          } catch (retryGatherErr) {
+            console.warn("[RealtimeVoice] Full-gather SDP retry could not be prepared:", retryGatherErr);
+          }
+        }
+
+        if (!sdpResp.ok && sdpResp.status >= 500) {
+          if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
+            console.warn("[RealtimeVoice] SDP 5xx — escalating to relay-only retry...");
+            relayRetryDoneRef.current = true;
+            cleanup("sdp_server_error_relay_retry");
+            iceTransportPolicyRef.current = "relay";
+            setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
+            return;
+          }
+
+          if (!stunOnlyRetryDoneRef.current) {
+            console.warn("[RealtimeVoice] SDP 5xx after relay/general attempt — escalating to STUN-only retry...");
+            stunOnlyRetryDoneRef.current = true;
+            cleanup("sdp_server_error_stun_retry");
+            iceTransportPolicyRef.current = "all";
+            skipTurnRef.current = true;
+            setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
+            return;
+          }
+        }
+
         throw new Error(`OpenAI SDP exchange failed (${sdpResp.status}): ${errText}`);
       }
 
