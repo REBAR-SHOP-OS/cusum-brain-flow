@@ -35,30 +35,24 @@ Deno.serve((req) =>
       turn_detection: turnDetection,
     });
 
-    // ── Fetch fresh TURN credentials from Metered (non-blocking on failure) ──
-    let turnServers: Array<{ urls: string | string[]; username?: string; credential?: string }> = [];
-    const METERED_KEY = Deno.env.get("METERED_TURN_API_KEY");
-    if (METERED_KEY) {
-      try {
-        const turnResp = await fetch(
-          `https://rebar-shop.metered.live/api/v1/turn/credentials?apiKey=${METERED_KEY}`,
-          { signal: AbortSignal.timeout(3000) }
-        );
-        if (turnResp.ok) {
-          const creds = await turnResp.json();
-          if (Array.isArray(creds)) {
-            turnServers = creds;
-            console.log(`[voice-engine-token] Fetched ${creds.length} TURN server entries`);
-          }
-        } else {
-          console.warn(`[voice-engine-token] Metered TURN API returned ${turnResp.status}`);
-        }
-      } catch (turnErr) {
-        console.warn("[voice-engine-token] Failed to fetch TURN credentials:", turnErr);
-      }
-    } else {
-      console.warn("[voice-engine-token] METERED_TURN_API_KEY not configured — TURN disabled");
-    }
+    // ── TURN credentials served from backend secrets (not exposed in frontend) ──
+    const TURN_USERNAME = Deno.env.get("METERED_TURN_USERNAME") || "1f355748924a8518adb04a1d";
+    const TURN_CREDENTIAL = Deno.env.get("METERED_TURN_CREDENTIAL") || "Jk2Qk0D4BlbnSyB9";
+
+    const turnServers = [
+      { urls: "stun:stun.relay.metered.ca:80" },
+      {
+        urls: [
+          "turn:global.relay.metered.ca:80",
+          "turn:global.relay.metered.ca:80?transport=tcp",
+          "turn:global.relay.metered.ca:443",
+          "turns:global.relay.metered.ca:443?transport=tcp",
+        ],
+        username: TURN_USERNAME,
+        credential: TURN_CREDENTIAL,
+      },
+    ];
+    console.log("[voice-engine-token] TURN credentials prepared (static)");
 
     const MAX_ATTEMPTS = 2;
 
