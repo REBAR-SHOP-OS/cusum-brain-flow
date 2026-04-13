@@ -13,6 +13,7 @@ export const SILENT_WAV =
 let audioCtx: AudioContext | null = null;
 let unlocked = false;
 const audioBufferCache = new Map<string, AudioBuffer>();
+let primedReusableAudio: HTMLAudioElement | null = null;
 
 async function preCacheSound(url: string): Promise<void> {
   if (!audioCtx || audioBufferCache.has(url)) return;
@@ -82,10 +83,26 @@ if (typeof document !== "undefined") {
  * can later be paused, given a real src, and played again after async work.
  */
 export function primeMobileAudio(): HTMLAudioElement {
-  const audio = new Audio(SILENT_WAV);
-  audio.play().catch(() => {
+  const audio = new Audio();
+  audio.autoplay = true;
+  audio.setAttribute("playsinline", "true");
+  audio.preload = "auto";
+  audio.volume = 1.0;
+  audio.src = SILENT_WAV;
+  primedReusableAudio = audio;
+  audio.play().then(() => {
+    audio.pause();
+    audio.currentTime = 0;
+    console.log("[audioPlayer] primed reusable audio element");
+  }).catch(() => {
     /* silent priming may fail outside gesture – that's fine */
   });
+  return audio;
+}
+
+export function takePrimedMobileAudio(): HTMLAudioElement | null {
+  const audio = primedReusableAudio;
+  primedReusableAudio = null;
   return audio;
 }
 

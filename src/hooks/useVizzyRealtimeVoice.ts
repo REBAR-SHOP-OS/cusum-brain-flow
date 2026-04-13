@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SILENT_WAV } from "@/lib/audioPlayer";
+import { SILENT_WAV, takePrimedMobileAudio } from "@/lib/audioPlayer";
 import {
   createRealtimePeerConnection,
   countCandidates,
@@ -278,25 +278,30 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     const isStale = () => attemptIdRef.current !== thisAttempt;
 
     try {
-      // 0. Prime audio element NOW (within user gesture) to unlock mobile playback
+      // 0. Reuse gesture-primed audio element when available so mobile doesn't block here
       setStep("audio_priming");
-      const audioEl = document.createElement("audio");
+      const primedAudioEl = takePrimedMobileAudio();
+      const audioEl = primedAudioEl ?? document.createElement("audio");
       audioEl.autoplay = true;
       audioEl.setAttribute("playsinline", "true");
-      audioEl.src = SILENT_WAV;
-      try {
-        // Race play() against a 2s timeout so we never hang on mobile
-        await Promise.race([
-          audioEl.play(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("prime_timeout")), 2000)),
-        ]);
-        audioEl.pause();
-        audioEl.currentTime = 0;
-        audioEl.src = "";
-        console.log("[RealtimeVoice] Audio element primed (gesture-unlocked)");
-      } catch (primeErr: any) {
-        console.warn("[RealtimeVoice] Audio priming skipped:", primeErr?.message || primeErr);
-        // Continue anyway — audio may still work when remote track arrives
+
+      if (primedAudioEl) {
+        console.log("[RealtimeVoice] Reusing gesture-primed audio element");
+      } else {
+        audioEl.src = SILENT_WAV;
+        try {
+          await Promise.race([
+            audioEl.play(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("prime_timeout")), 2000)),
+          ]);
+          audioEl.pause();
+          audioEl.currentTime = 0;
+          audioEl.src = "";
+          console.log("[RealtimeVoice] Audio element primed (fallback path)");
+        } catch (primeErr: any) {
+          console.warn("[RealtimeVoice] Audio priming skipped:", primeErr?.message || primeErr);
+          // Continue anyway — audio may still work when remote track arrives
+        }
       }
       audioElRef.current = audioEl;
       setStep("audio_primed");
