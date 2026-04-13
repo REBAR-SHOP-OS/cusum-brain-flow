@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SILENT_WAV } from "@/lib/audioPlayer";
+import { SILENT_WAV, takePrimedMobileAudio } from "@/lib/audioPlayer";
 import {
   createRealtimePeerConnection,
   countCandidates,
