@@ -351,7 +351,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       // 4. Assign remote audio to the already-primed element
       pc.ontrack = (ev) => {
         remoteTrackReceived = true;
-        console.log("[RealtimeVoice][DIAG] Remote track received:", ev.track.kind);
+        remoteTrackAt = Date.now();
+        console.log(`[RealtimeVoice][DIAG] Remote track received: ${ev.track.kind} (+${remoteTrackAt - connectStartedAt}ms)`);
         logAllStates("ontrack");
         if (audioElRef.current) {
           audioElRef.current.srcObject = ev.streams[0];
