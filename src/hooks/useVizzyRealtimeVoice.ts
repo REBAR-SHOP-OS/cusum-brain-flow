@@ -365,7 +365,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       setStep("mic_granted");
 
       // 3. Create WebRTC peer connection
-      const pc = createRealtimePeerConnection();
+      const pc = createRealtimePeerConnection(dynamicTurnServers);
       pcRef.current = pc;
       setStep("pc_created");
 
