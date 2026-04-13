@@ -551,7 +551,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
             </div>
           </div>
 
-          <div className="rounded-[32px] border border-white/12 bg-black/55 p-4 shadow-[0_40px_120px_rgba(0,0,0,0.35)] backdrop-blur-xl md:p-6">
+          <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4 md:p-6">
             <ChatPromptBar
               onSubmit={handleSubmit}
               starterPrompt={starterPrompt}
@@ -559,12 +559,10 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
             />
           </div>
 
-          <div className="rounded-[32px] border border-white/12 bg-black/45 p-4 backdrop-blur-xl md:p-6">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Recent projects</p>
-                <h3 className="mt-1 text-lg font-semibold text-white">Resume a draft or reopen a finished ad</h3>
-              </div>
+          <div className="rounded-2xl border border-white/8 bg-white/[0.02] p-4 md:p-6">
+            <div className="mb-3">
+              <p className="text-xs font-medium text-white/40">Recent projects</p>
+              <h3 className="mt-0.5 text-base font-medium text-white/80">Resume a draft or reopen a finished ad</h3>
             </div>
             <VideoHistory
               projects={projects.data ?? []}
