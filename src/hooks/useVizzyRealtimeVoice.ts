@@ -383,9 +383,12 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       setStep("mic_granted");
 
       // 3. Create WebRTC peer connection
-      const pc = createRealtimePeerConnection(dynamicTurnServers, iceTransportPolicyRef.current);
+      const turnToUse = skipTurnRef.current ? [] : dynamicTurnServers;
+      skipTurnRef.current = false; // reset
+      const pc = createRealtimePeerConnection(turnToUse, iceTransportPolicyRef.current);
       iceTransportPolicyRef.current = "all"; // reset for next attempt
       pcRef.current = pc;
+      console.log(`[RealtimeVoice] PC created with ${turnToUse.length} TURN servers, iceTransport=${iceTransportPolicyRef.current}`);
       setStep("pc_created");
 
       // ── Diagnostic flags ──
