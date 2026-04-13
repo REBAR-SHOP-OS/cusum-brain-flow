@@ -148,7 +148,7 @@ export function formatLengthByMode(mm: number | null | undefined, mode: LengthDi
     }
     case "ft": {
       const feet = rounded * FEET_PER_MM;
-      return feet % 1 === 0 ? `${feet}` : `${feet.toFixed(2)}`;
+      return feet % 1 === 0 ? `${feet}'` : `${feet.toFixed(2)}'`;
     }
     case "imperial": {
       const totalInches = rounded / 25.4;
