@@ -335,9 +335,22 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       pcRef.current = pc;
       setStep("pc_created");
 
+      // ── Diagnostic flags ──
+      let remoteTrackReceived = false;
+      let dataChannelEverOpened = false;
+
+      /** Log all PC/ICE/DC states in one snapshot */
+      const logAllStates = (label: string) => {
+        console.log(
+          `[RealtimeVoice][DIAG] ${label} | signaling=${pc.signalingState} conn=${pc.connectionState} ice=${pc.iceConnectionState} iceGather=${pc.iceGatheringState} dc=${dc?.readyState ?? "N/A"} remoteTrack=${remoteTrackReceived} dcOpened=${dataChannelEverOpened}`
+        );
+      };
+
       // 4. Assign remote audio to the already-primed element
       pc.ontrack = (ev) => {
-        console.log("[RealtimeVoice] Got remote audio track");
+        remoteTrackReceived = true;
+        console.log("[RealtimeVoice][DIAG] Remote track received:", ev.track.kind);
+        logAllStates("ontrack");
         if (audioElRef.current) {
           audioElRef.current.srcObject = ev.streams[0];
           audioElRef.current.play().catch(err => {
@@ -347,33 +360,79 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
       };
 
-      // Monitor connection state with grace period for "disconnected"
+      // ── Full state transition logging ──
+      pc.onsignalingstatechange = () => {
+        console.log("[RealtimeVoice][DIAG] signalingState=" + pc.signalingState);
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log("[RealtimeVoice][DIAG] iceGatheringState=" + pc.iceGatheringState);
+      };
+
+      (pc as any).onicecandidateerror = (ev: any) => {
+        console.warn("[RealtimeVoice][DIAG] ICE candidate error:", {
+          errorCode: ev.errorCode,
+          errorText: ev.errorText,
+          url: ev.url,
+          address: ev.address,
+          port: ev.port,
+        });
+      };
+
+      // Monitor connection state — increased grace, only fatal after DC confirmed never opened
       let disconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
+      const GRACE_PERIOD_MS = 10_000; // 10s grace (was 5s)
+
       pc.onconnectionstatechange = () => {
         const s = pc.connectionState;
         console.log("[RealtimeVoice][STEP] pc_connection_state=" + s);
+        logAllStates("onconnectionstatechange");
 
-        if (s === "connected" && disconnectGraceTimer) {
-          console.log("[RealtimeVoice] Recovered from disconnected state");
-          clearTimeout(disconnectGraceTimer);
-          disconnectGraceTimer = null;
+        if (s === "connected") {
+          if (disconnectGraceTimer) {
+            console.log("[RealtimeVoice] Recovered from disconnected state");
+            clearTimeout(disconnectGraceTimer);
+            disconnectGraceTimer = null;
+          }
         }
 
         if (s === "disconnected" && activeRef.current) {
-          console.warn("[RealtimeVoice] Disconnected — waiting 5s grace period");
+          console.warn(`[RealtimeVoice] Disconnected — waiting ${GRACE_PERIOD_MS}ms grace period`);
           disconnectGraceTimer = setTimeout(() => {
-            if (pc.connectionState !== "connected" && activeRef.current) {
-              console.error("[RealtimeVoice] Connection did not recover after grace period");
-              setErrorDetail("Connection lost — try reconnecting (failed at step: pc_disconnected_timeout)");
+            if (pc.connectionState !== "connected" && activeRef.current && !isStale()) {
+              logAllStates("disconnected_grace_expired");
+              setErrorDetail(
+                `WebRTC peer connection lost (conn=${pc.connectionState} ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived})`
+              );
               setState("error");
             }
-          }, 5000);
+          }, GRACE_PERIOD_MS);
         }
 
-        if (s === "failed" && activeRef.current) {
+        if (s === "failed" && activeRef.current && !isStale()) {
           if (disconnectGraceTimer) { clearTimeout(disconnectGraceTimer); disconnectGraceTimer = null; }
-          console.error("[RealtimeVoice] Connection failed");
-          setErrorDetail("Connection failed — try reconnecting (failed at step: pc_connection_failed)");
+
+          // If the data channel opened and session is ready, don't immediately fail —
+          // the media path may recover. Give it a grace period.
+          if (dataChannelEverOpened && sessionReadyRef.current) {
+            console.warn("[RealtimeVoice] PC failed but DC was open + session ready — grace period");
+            disconnectGraceTimer = setTimeout(() => {
+              if (pc.connectionState === "failed" && activeRef.current && !isStale()) {
+                logAllStates("failed_grace_expired");
+                setErrorDetail(
+                  `WebRTC peer connection failed (ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived})`
+                );
+                setState("error");
+              }
+            }, GRACE_PERIOD_MS);
+            return;
+          }
+
+          logAllStates("pc_connection_failed");
+          console.error("[RealtimeVoice] Connection failed — no DC open, treating as fatal");
+          setErrorDetail(
+            `WebRTC peer connection failed (signaling=${pc.signalingState} ice=${pc.iceConnectionState} iceGather=${pc.iceGatheringState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived} dcOpened=${dataChannelEverOpened})`
+          );
           setState("error");
         }
       };
@@ -382,6 +441,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       pc.oniceconnectionstatechange = () => {
         const s = pc.iceConnectionState;
         console.log("[RealtimeVoice][STEP] ice_connection_state=" + s);
+        logAllStates("oniceconnectionstatechange");
       };
 
       // Add mic tracks to PC
@@ -392,7 +452,9 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       dcRef.current = dc;
 
       dc.addEventListener("open", () => {
+        dataChannelEverOpened = true;
         console.log("[RealtimeVoice][STEP] data_channel_open — readyState:", dc.readyState);
+        logAllStates("data_channel_open");
         setStep("data_channel_open");
         // If session.created doesn't arrive within 8s of channel open,
         // treat the channel as connected anyway (server may skip session.created
@@ -425,11 +487,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       });
 
       dc.addEventListener("close", () => {
-        console.log("[RealtimeVoice] Data channel closed, readyState:", dc.readyState);
+        console.log("[RealtimeVoice] Data channel closed");
+        logAllStates("data_channel_close");
       });
 
       dc.addEventListener("error", (e) => {
         console.error("[RealtimeVoice] Data channel error:", e);
+        logAllStates("data_channel_error");
       });
 
       dc.addEventListener("message", (ev) => {
