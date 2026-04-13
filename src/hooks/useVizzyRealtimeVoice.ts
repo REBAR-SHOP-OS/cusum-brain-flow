@@ -415,8 +415,25 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         if (s === "failed" && activeRef.current && !isStale()) {
           if (disconnectGraceTimer) { clearTimeout(disconnectGraceTimer); disconnectGraceTimer = null; }
 
-          // If the data channel opened and session is ready, don't immediately fail —
-          // the media path may recover. Give it a grace period.
+          const elapsed = Date.now() - connectStartedAt;
+
+          // During the first 15s of connection, don't treat "failed" as immediately fatal —
+          // ICE may still be negotiating via TURN after STUN fails
+          if (elapsed < 15000) {
+            console.warn(`[RealtimeVoice] PC failed at ${elapsed}ms — still in handshake window, using grace period`);
+            disconnectGraceTimer = setTimeout(() => {
+              if (pc.connectionState === "failed" && activeRef.current && !isStale()) {
+                logAllStates("failed_grace_expired_handshake");
+                setErrorDetail(
+                  `WebRTC connection failed — network may be blocking WebRTC (ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived} dcOpened=${dataChannelEverOpened})`
+                );
+                setState("error");
+              }
+            }, GRACE_PERIOD_MS);
+            return;
+          }
+
+          // If the data channel opened and session is ready, give a grace period
           if (dataChannelEverOpened && sessionReadyRef.current) {
             console.warn("[RealtimeVoice] PC failed but DC was open + session ready — grace period");
             disconnectGraceTimer = setTimeout(() => {
