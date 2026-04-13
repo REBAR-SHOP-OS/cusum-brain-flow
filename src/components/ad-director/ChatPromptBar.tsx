@@ -130,20 +130,20 @@ function ReferenceUploadCard({
       />
       {file && previewUrl ? (
         <>
-          <img src={previewUrl} alt={label} className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/15" />
+          <img src={previewUrl} alt={label} className="absolute inset-0 h-full w-full object-cover pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/15 pointer-events-none" />
           <button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
               onClear();
             }}
-            className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white transition-colors hover:bg-black/70"
+            className="absolute right-3 top-3 z-10 pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/45 text-white transition-colors hover:bg-black/70"
             aria-label={`Remove ${label}`}
           >
             <X className="h-3.5 w-3.5" />
           </button>
-          <div className="relative z-10 flex h-full flex-col justify-end gap-1">
+          <div className="relative z-10 pointer-events-none flex h-full flex-col justify-end gap-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
               {label}
             </span>
@@ -153,7 +153,7 @@ function ReferenceUploadCard({
           </div>
         </>
       ) : (
-        <div className="relative z-10 flex h-full flex-col justify-between gap-6">
+        <div className="relative z-10 pointer-events-none flex h-full flex-col justify-between gap-6">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-white/80">
             <Icon className="h-5 w-5" />
           </div>
