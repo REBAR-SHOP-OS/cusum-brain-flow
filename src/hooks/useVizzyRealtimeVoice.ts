@@ -337,6 +337,9 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       // ── Diagnostic flags ──
       let remoteTrackReceived = false;
       let dataChannelEverOpened = false;
+      const connectStartedAt = Date.now();
+      let remoteTrackAt = 0;
+      let dcOpenAt = 0;
 
       /** Log all PC/ICE/DC states in one snapshot */
       const logAllStates = (label: string) => {
