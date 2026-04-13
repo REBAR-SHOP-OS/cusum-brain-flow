@@ -1,26 +1,43 @@
 
 
-## Problem
+## Fix: Dynamic TURN Credentials for Vizzy Voice WebRTC
 
-The `formatLengthByMode` function in `src/lib/unitSystem.ts` returns bare numbers for `"in"`, `"ft"`, and `"mm"` display modes — no unit symbols are appended. Only `"imperial"` mode includes symbols (`'` and `"`). This means LENGTH and dimension columns show values like `105`, `8.75` instead of `105"`, `8.75'`.
+### Problem
+Hardcoded Metered TURN credentials in `src/lib/webrtc/realtimeConnection.ts` are expired/rate-limited, causing ICE failures (`ice=failed`, `dcOpen=false`) especially on mobile.
 
-## Fix
+### Changes
 
-**File:** `src/lib/unitSystem.ts` — `formatLengthByMode` function
+**1. Add secret: `METERED_TURN_API_KEY`**
+- Use the `add_secret` tool to request the Metered API key from the user
+- This stays server-side only — never exposed to frontend
 
-Update the three bare-number cases to append their unit symbol:
+**2. `supabase/functions/voice-engine-token/index.ts`**
+- Read `METERED_TURN_API_KEY` from env
+- Fetch fresh TURN credentials from `https://rebar-shop.metered.live/api/v1/turn/credentials?apiKey=...`
+- Return `turn_servers` array in the response alongside `client_secret`
+- If Metered API fails, return empty `turn_servers` (graceful degradation)
 
-- `"mm"` → append ` mm` (e.g., `2667 mm`)
-- `"in"` → append `"` (e.g., `105"`)
-- `"ft"` → append `'` (e.g., `8.75'`)
+**3. `src/lib/webrtc/realtimeConnection.ts`**
+- Update `createRealtimePeerConnection(turnServers?: RTCIceServer[])` to accept dynamic servers
+- Remove hardcoded Metered username/credential
+- Keep fallback STUN: `stun:stun.l.google.com:19302`, `stun:stun.cloudflare.com:3478`
+- If `turnServers` provided, merge with STUN; otherwise STUN-only
 
-The `"imperial"` case already renders correctly and needs no change.
+**4. `src/hooks/useVizzyRealtimeVoice.ts`**
+- Parse `turn_servers` from token response
+- Pass into `createRealtimePeerConnection(turnServers)`
+- On ICE failure (before session usable): retry once with `iceTransportPolicy: "relay"` using same turn servers
 
-### Dimension columns
+### Safety
+- No ERP/UI changes
+- No frontend-exposed secrets
+- Existing diagnostics preserved
+- Graceful fallback if Metered API unreachable
 
-The same function is used for dimension values (A, B, C, etc.), so the fix automatically applies there too. No additional changes needed.
-
-### No other files affected
-
-The display function is the single formatting point — `AIExtractView`, `BarlistMappingPanel`, and other consumers call `formatLengthByMode` and will pick up the symbols automatically.
+### Execution Order
+1. Request `METERED_TURN_API_KEY` secret from user
+2. Wait for confirmation
+3. Update edge function → deploy
+4. Update `realtimeConnection.ts`
+5. Update `useVizzyRealtimeVoice.ts` with dynamic TURN + relay retry
 
