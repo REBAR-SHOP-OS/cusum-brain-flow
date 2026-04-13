@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { WebsiteToolbar, DeviceMode } from "@/components/website/WebsiteToolbar";
 import { WebsiteChat } from "@/components/website/WebsiteChat";
@@ -13,10 +13,10 @@ const SITE_ORIGIN = "https://rebar.shop";
 
 type ChatMode = "normal" | "fullscreen" | "minimized";
 
-const DEVICE_WIDTHS: Record<DeviceMode, string> = {
-  desktop: "100%",
-  tablet: "768px",
-  mobile: "375px",
+const DEVICE_TARGET_WIDTHS: Record<DeviceMode, number> = {
+  desktop: 1440,
+  tablet: 768,
+  mobile: 375,
 };
 
 export default function WebsiteManager() {
@@ -25,8 +25,22 @@ export default function WebsiteManager() {
   const [rightPanel, setRightPanel] = useState<"chat" | "speed">("chat");
   const [chatMode, setChatMode] = useState<ChatMode>("normal");
   const [mobileTab, setMobileTab] = useState<"preview" | "chat">("preview");
+  const [containerWidth, setContainerWidth] = useState<number>(0);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const refreshIframe = useCallback(() => {
     if (iframeRef.current) {
@@ -45,17 +59,17 @@ export default function WebsiteManager() {
     setTimeout(() => refreshIframe(), 1500);
   }, [refreshIframe]);
 
+  const targetWidth = DEVICE_TARGET_WIDTHS[device];
+  const scale = containerWidth > 0 ? Math.min(containerWidth / targetWidth, 1) : 1;
+
   const previewPanel = (
-    <div className="h-full bg-muted/30 flex items-start justify-center overflow-auto p-0">
+    <div ref={containerRef} className="h-full bg-muted/30 overflow-hidden relative">
       <div
-        className={cn(
-          "h-full transition-all duration-300 bg-white",
-          device !== "desktop" && "shadow-xl rounded-lg border border-border mt-4 mb-4"
-        )}
         style={{
-          width: DEVICE_WIDTHS[device],
-          maxWidth: "100%",
-          height: device !== "desktop" ? "calc(100% - 2rem)" : "100%",
+          width: `${targetWidth}px`,
+          height: `${100 / scale}%`,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
         }}
       >
         <iframe
@@ -68,7 +82,6 @@ export default function WebsiteManager() {
       </div>
     </div>
   );
-
   const rightPanelContent = (
     <div className="flex flex-col h-full">
       <Tabs value={rightPanel} onValueChange={(v) => setRightPanel(v as "chat" | "speed")} className="shrink-0">
