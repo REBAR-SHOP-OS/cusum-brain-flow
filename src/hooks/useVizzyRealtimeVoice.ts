@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { SILENT_WAV } from "@/lib/audioPlayer";
 import {
   createRealtimePeerConnection,
+  countCandidates,
 } from "@/lib/webrtc/realtimeConnection";
 
 /**
