@@ -7,14 +7,14 @@ Deno.serve((req) =>
     if (!GPT_API_KEY) throw new Error("GPT_API_KEY not configured");
 
     const {
-      instructions = "You are a helpful assistant. Be concise — answer in one or two short sentences.",
+      instructions = "You are a fast, direct assistant. Answer in short sentences. Respond immediately.",
       voice = "sage",
       model = "gpt-4o-mini-realtime-preview-2025-06-03",
-      vadThreshold = 0.3,
-      silenceDurationMs = 300,
-      prefixPaddingMs = 200,
+      vadThreshold = 0.45,
+      silenceDurationMs = 250,
+      prefixPaddingMs = 250,
       temperature = 0.6,
-      maxOutputTokens = 150,
+      maxOutputTokens = 120,
     } = ctx.body;
 
     const turnDetection: Record<string, unknown> = {
