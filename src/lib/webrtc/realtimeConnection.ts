@@ -13,42 +13,23 @@
  * connectivity checks asynchronously after setRemoteDescription.
  */
 
-/** Always-on STUN servers for reflexive candidate discovery */
-const STUN_SERVERS: RTCIceServer[] = [
-  { urls: "stun:stun.l.google.com:19302" },
-  { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun.cloudflare.com:3478" },
-];
-
 /**
- * Build the full ICE server list.
- *
- * TURN is included only when all three env vars are present:
- *   VITE_TURN_URL        – e.g. "turn:relay.example.com:443"
- *   VITE_TURN_USERNAME    – credential username
- *   VITE_TURN_CREDENTIAL  – credential password
- *
- * Multiple TURN URLs can be comma-separated in VITE_TURN_URL:
- *   "turn:relay.example.com:443,turns:relay.example.com:443"
+ * Build the full ICE server list with hardcoded Metered TURN relay.
  */
 export function buildIceServers(): RTCIceServer[] {
-  const servers: RTCIceServer[] = [...STUN_SERVERS];
-
-  const turnUrl = import.meta.env.VITE_TURN_URL;
-  const turnUser = import.meta.env.VITE_TURN_USERNAME;
-  const turnCred = import.meta.env.VITE_TURN_CREDENTIAL;
-
-  if (turnUrl && turnUser && turnCred) {
-    const urls = turnUrl.split(",").map((u: string) => u.trim()).filter(Boolean);
-    if (urls.length > 0) {
-      servers.push({ urls, username: turnUser, credential: turnCred });
-      console.log(`[WebRTC] TURN configured: ${urls.length} URL(s)`);
-    }
-  } else {
-    console.log("[WebRTC] No TURN configured (STUN-only). Set VITE_TURN_URL, VITE_TURN_USERNAME, VITE_TURN_CREDENTIAL to enable.");
-  }
-
-  return servers;
+  return [
+    { urls: "stun:stun.relay.metered.ca:80" },
+    {
+      urls: [
+        "turn:global.relay.metered.ca:80",
+        "turn:global.relay.metered.ca:80?transport=tcp",
+        "turn:global.relay.metered.ca:443",
+        "turns:global.relay.metered.ca:443?transport=tcp",
+      ],
+      username: "1f355748924a8518adb04a1d",
+      credential: "Jk2Qk0D4BlbnSyB9",
+    },
+  ];
 }
 
 /**
