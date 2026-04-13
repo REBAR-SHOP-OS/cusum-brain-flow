@@ -511,47 +511,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         if (s === "disconnected" && activeRef.current) {
           console.warn(`[RealtimeVoice] Disconnected — waiting ${GRACE_PERIOD_MS}ms grace period`);
           disconnectGraceTimer = setTimeout(() => {
-            if (pc.connectionState === "connected" || !activeRef.current || isStale()) {
-              return;
-            }
-
-            logAllStates("disconnected_grace_expired");
-
-            const dcState = dc?.readyState ?? "N/A";
-            const shouldTreatAsControlChannelFailure = remoteTrackReceived && !dataChannelEverOpened;
-
-            // If media arrived but the control/data channel never opened,
-            // treat this as the same mobile SCTP stall and continue the retry ladder
-            // instead of surfacing an early hard error.
-            if (shouldTreatAsControlChannelFailure || !sessionReadyRef.current) {
-              console.warn(
-                `[RealtimeVoice] Disconnected before session ready — control channel likely stalled (dc=${dcState}, track=${remoteTrackReceived})`
+            if (pc.connectionState !== "connected" && activeRef.current && !isStale()) {
+              logAllStates("disconnected_grace_expired");
+              setErrorDetail(
+                `WebRTC peer connection lost (conn=${pc.connectionState} ice=${pc.iceConnectionState} dc=${dc?.readyState ?? "N/A"} track=${remoteTrackReceived})`
               );
-
-              if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
-                console.warn("[RealtimeVoice] Disconnected grace expired — attempting relay-only retry...");
-                relayRetryDoneRef.current = true;
-                cleanup("disconnected_relay_retry");
-                iceTransportPolicyRef.current = "relay";
-                setTimeout(() => startSession(), 0);
-                return;
-              }
-
-              if (!stunOnlyRetryDoneRef.current) {
-                console.warn("[RealtimeVoice] Disconnected grace expired — attempting STUN-only retry...");
-                stunOnlyRetryDoneRef.current = true;
-                cleanup("disconnected_stun_only_retry");
-                iceTransportPolicyRef.current = "all";
-                skipTurnRef.current = true;
-                setTimeout(() => startSession(), 0);
-                return;
-              }
+              setState("error");
             }
-
-            setErrorDetail(
-              `WebRTC peer connection lost (strategy=${strategy} conn=${pc.connectionState} ice=${pc.iceConnectionState} dc=${dcState} track=${remoteTrackReceived} dcOpen=${dataChannelEverOpened})`
-            );
-            setState("error");
           }, GRACE_PERIOD_MS);
         }
 
