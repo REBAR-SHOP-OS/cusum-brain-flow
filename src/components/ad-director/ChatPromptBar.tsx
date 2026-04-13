@@ -116,8 +116,8 @@ function ReferenceUploadCard({
   return (
     <div
       className={cn(
-        "group relative min-h-[132px] flex-1 overflow-hidden rounded-2xl border border-white/12 bg-white/[0.06] p-4 text-left transition-all",
-        "hover:border-white/25 hover:bg-white/[0.08] hover:-translate-y-0.5",
+        "group relative min-h-[132px] flex-1 overflow-hidden rounded-2xl border border-white/10 bg-slate-800/60 p-4 text-left transition-all",
+        "hover:border-white/20 hover:bg-slate-800/80 hover:-translate-y-0.5",
         "disabled:opacity-40 disabled:cursor-not-allowed"
       )}
     >
@@ -154,7 +154,7 @@ function ReferenceUploadCard({
         </>
       ) : (
         <div className="relative z-10 pointer-events-none flex h-full flex-col justify-between gap-6">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-white/80">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-slate-700/60 text-white/80">
             <Icon className="h-5 w-5" />
           </div>
           <div className="space-y-1">
@@ -305,7 +305,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
         )}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] backdrop-blur-sm transition-colors focus-within:border-white/15">
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-800/50 transition-colors focus-within:border-white/15">
         <div className="px-4 pt-3 pb-1">
           <p className="text-sm font-medium text-white/80">Describe the ad or how AI should edit your footage</p>
         </div>
