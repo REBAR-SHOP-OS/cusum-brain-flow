@@ -613,14 +613,11 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
       });
 
-      // 6. Create offer and send SDP to OpenAI immediately (no ICE gathering wait)
-      // OpenAI Realtime handles ICE on their side — browser resolves ICE asynchronously
+      // 6. Create offer and wait for ICE gathering before sending SDP to OpenAI
+      // On restrictive networks (mobile/5G), relay candidates MUST be in the SDP
       setStep("sdp_offer_creating");
       const offer = await pc.createOffer();
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after createOffer`); return; }
-
-      await pc.setLocalDescription(offer);
-      setStep("sdp_post_started");
 
       // Log ICE candidate events + count by type for diagnostics
       pc.onicecandidate = (ev) => {
@@ -633,9 +630,55 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
       };
 
-      // Send the offer SDP immediately — do NOT wait for ICE gathering
-      const offerSdp = pc.localDescription?.sdp;
-      if (!offerSdp) throw new Error("No local SDP after setLocalDescription");
+      await pc.setLocalDescription(offer);
+      setStep("ice_gathering");
+
+      // Wait for ICE gathering to complete so relay candidates are baked into the SDP
+      // This is critical on mobile/5G where only TURN relay works
+      const gatheredDesc = await new Promise<RTCSessionDescription>((resolve, reject) => {
+        const gatherTimeout = setTimeout(() => {
+          pc.onicecandidate = null;
+          const desc = pc.localDescription;
+          if (desc) {
+            console.warn(`[RealtimeVoice] ICE gathering timed out after 8s — proceeding with ${countCandidates(desc.sdp)} candidates (${candidateSummary()})`);
+            resolve(desc);
+          } else {
+            reject(new Error("ICE gathering timed out with no local description"));
+          }
+        }, 8000);
+
+        // Check if already complete
+        if (pc.iceGatheringState === "complete" && pc.localDescription) {
+          clearTimeout(gatherTimeout);
+          console.log(`[RealtimeVoice] ICE gathering already complete: ${candidateSummary()}`);
+          resolve(pc.localDescription);
+          return;
+        }
+
+        const origHandler = pc.onicecandidate;
+        pc.onicecandidate = (ev) => {
+          // Call the diagnostic logger
+          if (origHandler) (origHandler as any)(ev);
+          if (ev.candidate === null) {
+            // Gathering complete
+            clearTimeout(gatherTimeout);
+            const desc = pc.localDescription;
+            if (desc) {
+              console.log(`[RealtimeVoice] ICE gathering done: ${candidateSummary()}`);
+              resolve(desc);
+            } else {
+              reject(new Error("ICE gathering completed but no local description"));
+            }
+          }
+        };
+      });
+
+      if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after ICE gathering`); return; }
+      setStep("sdp_post_started");
+
+      const offerSdp = gatheredDesc.sdp;
+      if (!offerSdp) throw new Error("No SDP after ICE gathering");
+      console.log(`[RealtimeVoice] Sending SDP with ${countCandidates(offerSdp)} ICE candidates (${candidateSummary()})`);
 
       const sdpResp = await fetch(
         `https://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview-2025-06-03`,
