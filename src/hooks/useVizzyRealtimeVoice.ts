@@ -486,7 +486,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const msg = err instanceof Error ? err.message : String(err);
       setErrorDetail(`${msg} (failed at step: ${step})`);
     }
-  }, [getSystemPrompt, cleanup, handleRealtimeEvent, setStep, debugStep]);
+  }, [getSystemPrompt, cleanup, handleRealtimeEvent, setStep, debugStep, dcSend]);
 
   const endSession = useCallback(() => {
     cleanup();
