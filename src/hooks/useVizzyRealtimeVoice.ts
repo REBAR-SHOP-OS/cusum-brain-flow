@@ -794,7 +794,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           setErrorDetail(errorMsg);
           setState("error");
         }
-      }, 15000);
+      }, 20000);
     } catch (err) {
       if (isStale()) {
         console.log(`[RealtimeVoice] Attempt #${thisAttempt} error after being superseded — ignoring`);
