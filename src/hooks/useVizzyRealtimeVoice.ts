@@ -6,6 +6,7 @@ import {
   countCandidates,
   waitForUsableCandidatesBounded,
   hasRelayCandidates,
+  hasReflexiveOrRelayCandidates,
 } from "@/lib/webrtc/realtimeConnection";
 
 /**
@@ -289,7 +290,19 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     return "normal";
   };
 
-  const startSession = useCallback(async () => {
+  const resetRetryStrategy = useCallback(() => {
+    relayRetryDoneRef.current = false;
+    stunOnlyRetryDoneRef.current = false;
+    skipTurnRef.current = false;
+    iceTransportPolicyRef.current = "all";
+  }, []);
+
+  const startSession = useCallback(async (options?: { preserveRetryStrategy?: boolean }) => {
+    const preserveRetryStrategy = options?.preserveRetryStrategy ?? false;
+    if (!preserveRetryStrategy) {
+      resetRetryStrategy();
+    }
+
     // Bump attempt ID — any in-flight older attempt will bail at its next checkpoint
     const thisAttempt = ++attemptIdRef.current;
     const strategy = getStrategyName();
@@ -567,7 +580,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             relayRetryDoneRef.current = true;
             cleanup("relay_retry");
             iceTransportPolicyRef.current = "relay";
-            setTimeout(() => startSession(), 0);
+            setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
             return;
           }
 
@@ -578,7 +591,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             cleanup("stun_only_retry");
             iceTransportPolicyRef.current = "all";
             skipTurnRef.current = true;
-            setTimeout(() => startSession(), 0);
+            setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
             return;
           }
 
@@ -698,15 +711,20 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       setStep("ice_gathering");
 
       // ── Bounded gather: wait up to 3s for relay/srflx candidates ──
-      const offerSdp = await waitForUsableCandidatesBounded(pc, 3000);
+      const offerSdp = await waitForUsableCandidatesBounded(pc, {
+        timeoutMs: usedPolicy === "relay" ? 4500 : turnToUse.length > 0 ? 4000 : 3000,
+        preferRelay: turnToUse.length > 0 && usedPolicy !== "relay",
+        requireRelay: usedPolicy === "relay",
+      });
       if (!offerSdp) throw new Error("No local SDP after createOffer");
       if (isStale()) { console.log(`[RealtimeVoice] Attempt #${thisAttempt} stale after bounded gather`); return; }
 
       const hasRelay = hasRelayCandidates(offerSdp);
+      const hasUsableRoute = hasReflexiveOrRelayCandidates(offerSdp);
       const candidateCount = countCandidates(offerSdp);
       setStep("sdp_post_started");
       console.log(
-        `[RealtimeVoice] Sending SDP strategy=${strategy} candidates=${candidateCount} hasRelay=${hasRelay} (${candidateSummary()})`
+        `[RealtimeVoice] Sending SDP strategy=${strategy} candidates=${candidateCount} hasRelay=${hasRelay} hasUsableRoute=${hasUsableRoute} (${candidateSummary()})`
       );
 
       const sdpResp = await fetch(
@@ -772,7 +790,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             relayRetryDoneRef.current = true;
             cleanup("session_timeout_relay_retry");
             iceTransportPolicyRef.current = "relay";
-            setTimeout(() => startSession(), 0);
+            setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
             return;
           }
 
@@ -783,7 +801,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             cleanup("session_timeout_stun_only");
             iceTransportPolicyRef.current = "all";
             skipTurnRef.current = true;
-            setTimeout(() => startSession(), 0);
+            setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
             return;
           }
 
@@ -820,17 +838,14 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     // Bump attempt ID to invalidate any in-flight startSession
     attemptIdRef.current++;
     cleanup("endSession_called");
-    relayRetryDoneRef.current = false;
-    stunOnlyRetryDoneRef.current = false;
-    skipTurnRef.current = false;
-    iceTransportPolicyRef.current = "all";
+    resetRetryStrategy();
     setIsSpeaking(false);
     setOutputAudioBlocked(false);
     setPartialText("");
     agentPartialRef.current = "";
     setState("idle");
     setDebugStep("idle");
-  }, [cleanup]);
+  }, [cleanup, resetRetryStrategy]);
 
   const toggleMute = useCallback(() => {
     const stream = micStreamRef.current;
