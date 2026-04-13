@@ -20,6 +20,7 @@ export interface Message {
   timestamp: Date;
   status?: "sending" | "sent" | "draft";
   files?: UploadedFile[];
+  showInlineCalendar?: boolean;
 }
 
 interface ChatMessageProps {
