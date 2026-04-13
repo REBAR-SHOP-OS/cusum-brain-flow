@@ -277,15 +277,21 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       audioEl.setAttribute("playsinline", "true");
       audioEl.src = SILENT_WAV;
       try {
-        await audioEl.play();
+        // Race play() against a 2s timeout so we never hang on mobile
+        await Promise.race([
+          audioEl.play(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("prime_timeout")), 2000)),
+        ]);
         audioEl.pause();
         audioEl.currentTime = 0;
         audioEl.src = "";
         console.log("[RealtimeVoice] Audio element primed (gesture-unlocked)");
-      } catch (primeErr) {
-        console.warn("[RealtimeVoice] Audio priming failed:", primeErr);
+      } catch (primeErr: any) {
+        console.warn("[RealtimeVoice] Audio priming skipped:", primeErr?.message || primeErr);
+        // Continue anyway — audio may still work when remote track arrives
       }
       audioElRef.current = audioEl;
+      setStep("audio_primed");
 
       // 1. Get ephemeral token from voice-engine-token edge function
       setStep("token_fetch_started");
