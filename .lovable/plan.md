@@ -1,41 +1,39 @@
 
 
-# Fix: Vizzy Voice "Connection failed" — WebRTC Stability
+# Eisenhower Agent: Merge Messages + Lock Input Until Date Selected
 
-## Root Cause Analysis
+## What Changes
 
-The edge function logs confirm the token is generated successfully every time. The failure happens **after** the token — during WebRTC negotiation. Two issues identified:
+### 1. Merge welcome message + calendar into one message
+Currently: Two separate elements — a welcome text bubble ("Hello! Please select your target date...") and then a separate `InlineDatePicker` component below the chat. 
 
-### Issue 1: "disconnected" treated as fatal error
-In `useVizzyRealtimeVoice.ts` line 297, the `onconnectionstatechange` handler treats both `"failed"` and `"disconnected"` as terminal errors. In WebRTC, `"disconnected"` is often a **temporary** state that can recover on its own within seconds. Treating it as fatal triggers cleanup and error state prematurely.
+**Fix**: Remove the separate welcome message. Instead, embed the `InlineDatePicker` directly inside the first agent message bubble so the greeting + calendar appear as one unified block.
 
-### Issue 2: No overall connection timeout
-If the SDP exchange succeeds but `session.created` never arrives on the data channel (e.g., data channel opens slowly, or OpenAI delays), the UI stays stuck in "connecting" indefinitely until the PC connection eventually fails.
+### 2. Disable chat input until date is selected
+Currently: The text input is always enabled. The user can type before selecting a date, which breaks the flow.
 
-## Fix Plan
+**Fix**: In `AgentWorkspace.tsx`, disable the `ChatInput` when `agentId === "eisenhower"` and no `selectedDate` is set yet. Add a placeholder like "Please select a date first..." when disabled.
 
-### `src/hooks/useVizzyRealtimeVoice.ts`
+### 3. Language behavior (already mostly correct — minor reinforcement)
+The system prompt already says to respond in the user's language. The welcome message should also follow this (but since it's hardcoded in the frontend, we'll keep it in English as a neutral default — the AI will adapt after the first user message).
 
-1. **Separate "disconnected" from "failed"**: Only treat `"failed"` as a terminal error. For `"disconnected"`, start a 5-second grace timer — if the state recovers to `"connected"` within that window, cancel the timer. If it doesn't recover, then trigger error.
-
-2. **Add overall connection timeout (20s)**: After SDP exchange completes, start a 20-second timer. If `session.created` hasn't been received by then, treat it as a connection failure with a clear error message.
-
-3. **Add `"connecting"` state to `onconnectionstatechange`**: Log the `"connecting"` WebRTC state for visibility.
-
-4. **Increase ICE gathering timeout**: Change from 10s to 15s in the `waitForIceGatheringComplete` call to give more time on slower networks.
-
-### `src/components/vizzy/VizzyVoiceChat.tsx`
-
-5. **Increase auto-retry count from 2 to 3**: Give one more retry attempt since the root cause is often transient network issues.
+### 4. After date selection, prompt for both completed + planned tasks
+The current date-selected message already says "list tasks you've completed and tasks you plan to do" — this is correct. No change needed in the prompt.
 
 ## Files to Edit
+
 | File | Change |
 |------|--------|
-| `src/hooks/useVizzyRealtimeVoice.ts` | Grace period for "disconnected", connection timeout, increase ICE timeout |
-| `src/components/vizzy/VizzyVoiceChat.tsx` | Increase MAX_AUTO_RETRIES to 3 |
+| `src/pages/AgentWorkspace.tsx` | 1) Change welcome message to include calendar instruction inline. 2) Move `InlineDatePicker` inside the chat thread area as part of the first message. 3) Disable `ChatInput` when eisenhower + no date selected. |
+| `src/components/chat/ChatThread.tsx` | Add support for rendering an inline calendar widget within a message (or render it right after the welcome message in the thread). |
 
-## Risk
-- Low — only affects WebRTC connection resilience
-- No backend changes
-- No schema changes
+## Technical Details
+
+**AgentWorkspace.tsx changes:**
+- `autoStartEisenhower`: Change welcome content to a single combined message like "Hello! 👋 Select your target date to get started:"
+- Move `InlineDatePicker` to render right after the welcome message inside the scroll area (not as a separate block after `ChatThread`)
+- `ChatInput` disabled prop: `disabled={isLoading || (agentId === "eisenhower" && !selectedDate)}`
+- ChatInput placeholder when locked: `"Select a date to start..."` instead of default
+
+**No backend changes needed** — the system prompt already handles language detection and English-only final reports correctly.
 
