@@ -312,13 +312,16 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const ephemeralKey = tokenData.client_secret;
       if (!ephemeralKey) throw new Error("No ephemeral key received");
 
-      // 2. Capture mic
+      // 2. Capture mic — minimal processing for lowest capture latency
       setStep("mic_requesting");
       const micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
+          // Reduce capture buffer for lower input latency
+          channelCount: 1,
+          sampleRate: 24000,
         },
       });
       if (isStale()) {
@@ -356,12 +359,25 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         );
       };
 
-      // 4. Assign remote audio to the already-primed element
+      // 4. Assign remote audio to the already-primed element — zero-delay playback
       pc.ontrack = (ev) => {
         remoteTrackReceived = true;
         remoteTrackAt = Date.now();
         console.log(`[RealtimeVoice][DIAG] Remote track received: ${ev.track.kind} (+${remoteTrackAt - connectStartedAt}ms)`);
         logAllStates("ontrack");
+
+        // Minimize jitter buffer on the receiver for instant playback
+        const receiver = ev.receiver;
+        if (receiver && typeof (receiver as any).playoutDelayHint !== "undefined") {
+          (receiver as any).playoutDelayHint = 0; // minimum playout delay
+          console.log("[RealtimeVoice] Set playoutDelayHint=0 for instant audio");
+        }
+        // Also try jitterBufferTarget on the track (Chrome 114+)
+        if (ev.track && typeof (ev.track as any).jitterBufferTarget !== "undefined") {
+          (ev.track as any).jitterBufferTarget = 0;
+          console.log("[RealtimeVoice] Set jitterBufferTarget=0 for minimal buffering");
+        }
+
         if (audioElRef.current) {
           audioElRef.current.srcObject = ev.streams[0];
           audioElRef.current.play().catch(err => {
