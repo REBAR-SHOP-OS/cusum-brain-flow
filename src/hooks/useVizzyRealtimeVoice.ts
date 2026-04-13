@@ -125,6 +125,23 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         }
         if (activeRef.current) {
           setState("connected");
+          // Immediately configure session for lowest-latency responses
+          dcSend({
+            type: "session.update",
+            session: {
+              modalities: ["text", "audio"],
+              voice: "sage",
+              input_audio_transcription: { model: "whisper-1" },
+              turn_detection: {
+                type: "server_vad",
+                threshold: 0.3,
+                silence_duration_ms: 300,
+                prefix_padding_ms: 200,
+                eagerness: "high",
+              },
+            },
+          });
+          console.log("[RealtimeVoice] Sent session.update with aggressive VAD + high eagerness");
         }
         break;
       }
@@ -527,7 +544,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
                 modalities: ["text", "audio"],
                 voice: "sage",
                 input_audio_transcription: { model: "whisper-1" },
-                turn_detection: { type: "server_vad", threshold: 0.5, silence_duration_ms: 800 },
+                turn_detection: {
+                  type: "server_vad",
+                  threshold: 0.3,
+                  silence_duration_ms: 300,
+                  prefix_padding_ms: 200,
+                  eagerness: "high",
+                },
               },
             });
           }
