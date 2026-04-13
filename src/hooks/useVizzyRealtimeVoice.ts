@@ -46,8 +46,12 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
   const attemptIdRef = useRef(0);
   /** Whether we already tried a relay-only retry for the current session */
   const relayRetryDoneRef = useRef(false);
+  /** Whether we already tried a STUN-only (no TURN) retry */
+  const stunOnlyRetryDoneRef = useRef(false);
   /** Stored TURN servers from the last token fetch (reused for relay retry) */
   const lastTurnServersRef = useRef<RTCIceServer[]>([]);
+  /** Whether to skip TURN servers on next attempt (STUN-only retry) */
+  const skipTurnRef = useRef(false);
 
   // Track partial agent transcript for streaming display
   const agentPartialRef = useRef("");
@@ -379,9 +383,12 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       setStep("mic_granted");
 
       // 3. Create WebRTC peer connection
-      const pc = createRealtimePeerConnection(dynamicTurnServers, iceTransportPolicyRef.current);
+      const turnToUse = skipTurnRef.current ? [] : dynamicTurnServers;
+      skipTurnRef.current = false; // reset
+      const pc = createRealtimePeerConnection(turnToUse, iceTransportPolicyRef.current);
       iceTransportPolicyRef.current = "all"; // reset for next attempt
       pcRef.current = pc;
+      console.log(`[RealtimeVoice] PC created with ${turnToUse.length} TURN servers, iceTransport=${iceTransportPolicyRef.current}`);
       setStep("pc_created");
 
       // ── Diagnostic flags ──
@@ -525,13 +532,23 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           console.error(`[RealtimeVoice][DIAG] Final candidate counts: ${candidateSummary()} | iceErrors=${iceCandidateErrors.length}`);
           iceCandidateErrors.forEach((e, i) => console.error(`[RealtimeVoice][DIAG] iceError[${i}]: code=${e.code} text=${e.text} url=${e.url}`));
 
-          // Auto-retry once with relay-only transport policy (forces TURN)
+          // Auto-retry #1: relay-only transport policy (forces TURN)
           if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
             console.warn("[RealtimeVoice] Attempting relay-only retry...");
             relayRetryDoneRef.current = true;
             cleanup("relay_retry");
             iceTransportPolicyRef.current = "relay";
-            // Schedule retry on next microtask to avoid calling startSession within itself
+            setTimeout(() => startSession(), 0);
+            return;
+          }
+
+          // Auto-retry #2: STUN-only (no TURN) — sometimes TURN relay interferes on mobile
+          if (!stunOnlyRetryDoneRef.current) {
+            console.warn("[RealtimeVoice] Relay failed — attempting STUN-only retry (no TURN)...");
+            stunOnlyRetryDoneRef.current = true;
+            cleanup("stun_only_retry");
+            iceTransportPolicyRef.current = "all";
+            skipTurnRef.current = true;
             setTimeout(() => startSession(), 0);
             return;
           }
@@ -734,14 +751,14 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} — waiting for session.created`);
       setStep("waiting_session_created");
 
-      // Overall connection timeout — 15s (reduced from 30s for faster relay retry)
+      // Overall connection timeout — 20s (generous for mobile 5G networks)
       sessionTimeoutRef.current = setTimeout(() => {
         if (activeRef.current && !sessionReadyRef.current && !isStale()) {
           const dcState = dcRef.current?.readyState || "no_dc";
           const pcState = pcRef.current?.connectionState || "no_pc";
           const iceState = pcRef.current?.iceConnectionState || "no_ice";
           const iceGather = pcRef.current?.iceGatheringState || "no_ice";
-          logAllStates("session_timeout_15s");
+          logAllStates("session_timeout_20s");
 
           // Try relay-only retry before giving up
           if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
@@ -749,6 +766,17 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
             relayRetryDoneRef.current = true;
             cleanup("session_timeout_relay_retry");
             iceTransportPolicyRef.current = "relay";
+            setTimeout(() => startSession(), 0);
+            return;
+          }
+
+          // Try STUN-only (no TURN) as last resort
+          if (!stunOnlyRetryDoneRef.current) {
+            console.warn("[RealtimeVoice] Session timeout — attempting STUN-only retry...");
+            stunOnlyRetryDoneRef.current = true;
+            cleanup("session_timeout_stun_only");
+            iceTransportPolicyRef.current = "all";
+            skipTurnRef.current = true;
             setTimeout(() => startSession(), 0);
             return;
           }
@@ -766,7 +794,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           setErrorDetail(errorMsg);
           setState("error");
         }
-      }, 15000);
+      }, 20000);
     } catch (err) {
       if (isStale()) {
         console.log(`[RealtimeVoice] Attempt #${thisAttempt} error after being superseded — ignoring`);
@@ -787,6 +815,8 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
     attemptIdRef.current++;
     cleanup("endSession_called");
     relayRetryDoneRef.current = false;
+    stunOnlyRetryDoneRef.current = false;
+    skipTurnRef.current = false;
     iceTransportPolicyRef.current = "all";
     setIsSpeaking(false);
     setOutputAudioBlocked(false);
