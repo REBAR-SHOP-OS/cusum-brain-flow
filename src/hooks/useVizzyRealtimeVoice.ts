@@ -466,9 +466,12 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       // Overall connection timeout — if session.created never arrives
       sessionTimeoutRef.current = setTimeout(() => {
         if (activeRef.current && !sessionReadyRef.current) {
-          console.error("[RealtimeVoice] session.created not received within 20s");
+          const dcState = dcRef.current?.readyState || "no_dc";
+          const pcState = pcRef.current?.connectionState || "no_pc";
+          const iceState = pcRef.current?.iceConnectionState || "no_ice";
+          console.error(`[RealtimeVoice] 20s timeout — dc=${dcState} pc=${pcState} ice=${iceState}`);
           cleanup();
-          setErrorDetail("Session handshake timed out — try again (failed at step: waiting_session_created)");
+          setErrorDetail(`Session handshake timed out (dc=${dcState}, pc=${pcState}, ice=${iceState})`);
           setState("error");
         }
       }, 20000);
