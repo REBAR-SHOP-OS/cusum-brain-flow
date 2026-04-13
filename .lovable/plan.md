@@ -1,32 +1,41 @@
 
 
-# Simplify UI: Prompt Bar + Recent Projects
+# Fix: Vizzy Voice "Connection failed" — WebRTC Stability
 
-## Goal
-Make the ChatPromptBar and Recent Projects sections cleaner and flatter — remove heavy glassmorphism, reduce visual noise, use minimal borders and subtle shadows.
+## Root Cause Analysis
 
-## Changes
+The edge function logs confirm the token is generated successfully every time. The failure happens **after** the token — during WebRTC negotiation. Two issues identified:
 
-### 1. `src/components/ad-director/ChatPromptBar.tsx`
-- Remove the heavy `rounded-[28px] border border-white/15 bg-black/45 shadow-[0_24px_80px...]` wrapper — replace with a simple `rounded-2xl border border-white/10 bg-white/[0.03]`
-- Remove the "IDEA TO POST-READY CUT" badge pill
-- Remove the border-b divider between header and textarea — merge into one clean section
-- Simplify the header text: keep title, remove the long description paragraph
-- Reduce textarea padding, use a cleaner placeholder
-- Simplify the bottom toolbar pills: remove chevron decorations, use flat minimal style
-- Clean up the "Draft with AI" / "Create video" button row — less decorative, more functional
+### Issue 1: "disconnected" treated as fatal error
+In `useVizzyRealtimeVoice.ts` line 297, the `onconnectionstatechange` handler treats both `"failed"` and `"disconnected"` as terminal errors. In WebRTC, `"disconnected"` is often a **temporary** state that can recover on its own within seconds. Treating it as fatal triggers cleanup and error state prematurely.
 
-### 2. `src/components/ad-director/AdDirectorContent.tsx` (lines 554-578)
-- Prompt bar wrapper (line 554): change `rounded-[32px] border border-white/12 bg-black/55 shadow-[0_40px_120px...]` to `rounded-2xl border border-white/8 bg-white/[0.02]`
-- Recent Projects wrapper (line 562): same simplification — `rounded-2xl border border-white/8 bg-white/[0.02]`
-- Remove uppercase tracking on "RECENT PROJECTS" label — use normal case
-- Simplify heading text size
+### Issue 2: No overall connection timeout
+If the SDP exchange succeeds but `session.created` never arrives on the data channel (e.g., data channel opens slowly, or OpenAI delays), the UI stays stuck in "connecting" indefinitely until the PC connection eventually fails.
 
-### Summary of style direction
-- Borders: `border-white/8` instead of `border-white/12` or `border-white/15`
-- Backgrounds: `bg-white/[0.02]` or `bg-white/[0.03]` — barely visible
-- Rounded: `rounded-2xl` instead of `rounded-[28px]` / `rounded-[32px]`
-- Shadows: remove heavy shadows entirely
-- Text: reduce uppercase tracking labels, use normal font weights
-- No removed functionality — all buttons and controls stay
+## Fix Plan
+
+### `src/hooks/useVizzyRealtimeVoice.ts`
+
+1. **Separate "disconnected" from "failed"**: Only treat `"failed"` as a terminal error. For `"disconnected"`, start a 5-second grace timer — if the state recovers to `"connected"` within that window, cancel the timer. If it doesn't recover, then trigger error.
+
+2. **Add overall connection timeout (20s)**: After SDP exchange completes, start a 20-second timer. If `session.created` hasn't been received by then, treat it as a connection failure with a clear error message.
+
+3. **Add `"connecting"` state to `onconnectionstatechange`**: Log the `"connecting"` WebRTC state for visibility.
+
+4. **Increase ICE gathering timeout**: Change from 10s to 15s in the `waitForIceGatheringComplete` call to give more time on slower networks.
+
+### `src/components/vizzy/VizzyVoiceChat.tsx`
+
+5. **Increase auto-retry count from 2 to 3**: Give one more retry attempt since the root cause is often transient network issues.
+
+## Files to Edit
+| File | Change |
+|------|--------|
+| `src/hooks/useVizzyRealtimeVoice.ts` | Grace period for "disconnected", connection timeout, increase ICE timeout |
+| `src/components/vizzy/VizzyVoiceChat.tsx` | Increase MAX_AUTO_RETRIES to 3 |
+
+## Risk
+- Low — only affects WebRTC connection resilience
+- No backend changes
+- No schema changes
 
