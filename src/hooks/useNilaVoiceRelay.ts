@@ -120,7 +120,7 @@ export function useNilaVoiceRelay() {
       const signal = abortRef.current?.signal;
       if (signal?.aborted) return;
 
-      const trimmed = data.text.trim();
+      const trimmed = stripDirectionalMarkers(data.text).trim();
       if (!trimmed) return;
       if (SCRIBE_ANNOTATION.test(trimmed)) return;
       if (PUNCTUATION_ONLY.test(trimmed)) return;
