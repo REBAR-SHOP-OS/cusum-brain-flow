@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from "react";
-import { useVizzyRealtimeVoice } from "./useVizzyRealtimeVoice";
-import type { VoiceTranscript } from "./useVizzyRealtimeVoice";
+import { useVizzyStreamVoice } from "./useVizzyStreamVoice";
+import type { VoiceTranscript } from "./useVizzyStreamVoice";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { getTorontoTimePayload } from "@/lib/dateConfig";
 import { toast } from "sonner";
@@ -324,7 +324,7 @@ export function useVizzyVoiceEngine() {
     return instructionsRef.current + liveBlock;
   }, []);
 
-  const engine = useVizzyRealtimeVoice({ getSystemPrompt });
+  const engine = useVizzyStreamVoice({ getSystemPrompt });
 
   const originalStartSession = engine.startSession;
   const originalEndSession = engine.endSession;
