@@ -1,45 +1,37 @@
 
 
-## Plan: Add Layer Headers + Fix Empty "Business Modules" Layer
+## Plan: Color-Coded Cards with Descriptions
 
 ### Problem
-1. No visible column headers — user can't tell which layer each column represents
-2. "Business Modules" layer shows 0 cards because all nodes were moved to "items" in the previous update
-3. Some nodes may appear misaligned without clear column boundaries
+1. All cards have the same dark background — hard to visually distinguish layers
+2. Cards only show label + tiny hint — no description of what each component does
+3. User needs to understand the full architecture at a glance
 
 ### Changes
 
-**1. Remove empty "Business Modules" layer (`src/lib/architectureGraphData.ts`)**
-- Remove `{ key: "modules", ... }` from `LAYERS` array since it has 0 nodes — all business module nodes are already in `"items"` layer
-- Remove `"modules"` from the `ArchLayer` type union
-- Re-number `y` values for remaining layers
+**1. Color-coded card backgrounds (`src/components/system-flow/ArchFlowNode.tsx`)**
+- Change `background` from the current dark gradient to use the layer's accent color as a subtle tinted background (e.g., rose-tinted for External, violet-tinted for AI, cyan-tinted for Entry)
+- Use `st.bg` (already defined but unused) as the card fill color, combined with a slightly stronger tint
+- Add a left-side accent bar (3px solid accent color) for extra visual grouping
 
-**2. Add layer header nodes (`src/lib/architectureFlow.ts`)**
-- Export a new function `generateLayerHeaders()` that creates label-only nodes positioned above each column
-- Each header shows the layer name (e.g., "External Services", "System Items", "AI / Automation")
-- Headers are positioned at `y = 0` (above first node row), spanning the width of sub-columns if a layer wraps
+**2. Show description inside each card (`src/components/system-flow/ArchFlowNode.tsx`)**
+- Display the first bullet from `detail.bullets[0]` as a small description line below the hint
+- Style: 9px, white/60 opacity, max 2 lines with overflow ellipsis
+- This gives immediate context (e.g., "React 18 + Vite 5", "Pipeline board", "Route protection")
 
-**3. Render header nodes in ReactFlow (`src/pages/Architecture.tsx`)**
-- Register a new `layerHeader` node type — a simple styled div with the layer name and accent color
-- Create a `LayerHeaderNode` component: non-draggable, non-connectable, styled as a centered label with accent-colored text/border
-- Merge header nodes into the ReactFlow nodes array alongside arch nodes
-- Headers should be non-interactive (no click/hover effects, no handles)
-
-**4. Create LayerHeaderNode component (`src/components/system-flow/LayerHeaderNode.tsx`)**
-- Simple React component: displays layer label with accent color styling
-- No handles, not draggable, not selectable
-- Styled to span the column width with subtle background
+**3. Increase card size to fit description (`src/lib/architectureFlow.ts`)**
+- Increase `nodeHeight` from 72 → 100 to accommodate the extra text line
+- Increase `nodeWidth` from 130 → 160 for better readability
+- Adjust `nodeGap` if needed
 
 ### Files
 | File | Change |
 |---|---|
-| `src/lib/architectureGraphData.ts` | Remove empty `modules` layer from LAYERS + ArchLayer type |
-| `src/lib/architectureFlow.ts` | Add `generateLayerHeaders()` function that computes header positions |
-| `src/components/system-flow/LayerHeaderNode.tsx` | New — simple header node component |
-| `src/pages/Architecture.tsx` | Register `layerHeader` node type, merge headers into nodes |
+| `src/components/system-flow/ArchFlowNode.tsx` | Add accent background tint + left bar + description text |
+| `src/lib/architectureFlow.ts` | Increase nodeWidth/nodeHeight for larger cards |
 
 ### Result
-- Each column has a visible layer title above it (e.g., "External Services", "AI / Automation", "Data + Platform")
-- No empty "Business Modules" layer cluttering the sidebar
-- All 108 nodes properly grouped under their labeled columns
+- Each layer has visually distinct colored cards (rose, orange, violet, blue, emerald, cyan)
+- Every card shows its purpose in a single line description
+- Architecture is immediately understandable at a glance
 
