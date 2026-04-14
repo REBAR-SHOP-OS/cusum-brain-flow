@@ -240,7 +240,7 @@ export default function Architecture() {
   const [lockedNode, setLockedNode] = useState<string | null>(null);
   const [showAllEdges, setShowAllEdges] = useState(false);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
+  const [nodes, setNodes, onNodesChange] = useNodesState(
     buildInitialNodes(),
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildInitialEdges());
