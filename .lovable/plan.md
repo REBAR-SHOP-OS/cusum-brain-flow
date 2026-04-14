@@ -1,31 +1,27 @@
 
 
-## Plan: Add Numbered Labels to Mini Connection Graph
+## Plan: Add "Explain" Icon Button to Architecture Cards
 
 ### Problem
-In the mini connection graph inside the node detail dialog, connected nodes are displayed in a circular layout without any numbering. The user wants each connected node to show a number (1, 2, 3, ...) so the order of connections is clear at a glance.
+The architecture cards currently show only the node name, hint, and one bullet. The user wants an icon button on each card that, when clicked, opens the detail dialog showing the full description: all features/bullets, the mini connection graph, and all connections — so the user can understand what that component is made of and what it connects to.
 
-### Changes (`src/components/system-flow/MiniConnectionGraph.tsx`)
+### Approach
+The detail dialog already exists and shows everything needed (bullets, mini graph, connected nodes). The card just needs a small info/explain button that triggers it directly — same as clicking the card, but more discoverable via a visible icon.
 
-1. **Pass index number to neighbor nodes**: Add an `index` field to each neighbor node's `data` (1-based: `i + 1`)
+### Changes
 
-2. **Display number badge on MiniNode**: For non-center nodes that have an `index`, render a small circular number badge (top-left corner) showing the connection order
+**1. `src/components/system-flow/ArchFlowNode.tsx`**
+- Add an `onExplain` callback to `ArchFlowNodeData`
+- Add a small `Info` (ℹ️) icon button in the bottom-right corner of each card
+- On click, call `onExplain(id)` which opens the detail dialog
+- Style: semi-transparent, appears on hover or always visible with a subtle glow matching the card accent
 
-3. **Add number labels to edges**: Use the `label` property on each edge to show the corresponding number on the connection line
+**2. `src/pages/Architecture.tsx`**
+- Pass an `onExplain` callback into each node's data that opens the detail dialog (same logic as the existing `onNodeClick`)
+- Wire it through the node data when building nodes
 
-### Visual Result
-Each connected node will display like:
-```text
- ①
-┌──────────┐
-│  Seomi   │
-└──────────┘
-```
-
-The center node remains unchanged (no number). Numbers appear in order 1, 2, 3, etc.
-
-### Files
-| File | Change |
-|---|---|
-| `src/components/system-flow/MiniConnectionGraph.tsx` | Add `index` to neighbor data, render number badge on MiniNode, add edge labels |
+### Result
+- Each card shows a small ℹ️ icon button
+- Clicking it opens the full detail dialog with all bullets, connection graph, and connected components
+- Users can quickly understand what each component is made of and what it accesses
 
