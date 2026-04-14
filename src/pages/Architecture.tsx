@@ -261,6 +261,14 @@ export default function Architecture() {
     });
   }, [reactFlowInstance]);
 
+  // Restore TopBar on unmount
+  useEffect(() => {
+    return () => {
+      const topBar = document.querySelector('header.h-\\[46px\\]') as HTMLElement | null;
+      if (topBar) topBar.style.display = '';
+    };
+  }, []);
+
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
     buildInitialArchNodes(),
   );
