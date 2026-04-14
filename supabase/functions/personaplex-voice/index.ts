@@ -30,7 +30,7 @@ Deno.serve((req) =>
     }
 
     // Extract latest user message text
-    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user" || m.role === "system");
     const text = lastUserMsg?.content || "";
 
     if (!text.trim()) {
@@ -40,16 +40,26 @@ Deno.serve((req) =>
       );
     }
 
+    // Build conversation history string for context
+    const conversationHistory = messages
+      .map((m: any) => `${m.role}: ${m.content}`)
+      .join("\n");
+
+    // Build enriched text with full context
+    const enrichedText = systemPrompt
+      ? `SYSTEM:\n${systemPrompt}\n\nCONVERSATION:\n${conversationHistory}\n\nUSER:\n${text}`
+      : text;
+
     // Choose endpoint based on voiceEnabled
     const endpoint = voiceEnabled
       ? `${VIZZY_ONE_BASE}/api/v1/vizzy/voice`
       : `${VIZZY_ONE_BASE}/api/v1/vizzy/chat`;
 
     const requestBody = voiceEnabled
-      ? { text, source: "lovable", voice_enabled: true }
-      : { text, source: "lovable" };
+      ? { text: enrichedText, source: "lovable", voice_enabled: true, systemPrompt, messages }
+      : { text: enrichedText, source: "lovable", systemPrompt, messages };
 
-    console.log(`[personaplex-voice] Routing to Vizzy One API: ${endpoint}`);
+    console.log(`[personaplex-voice] Routing to Vizzy One API: ${endpoint} (context: ${systemPrompt ? "full" : "none"}, messages: ${messages.length})`);
 
     try {
       const apiResp = await fetch(endpoint, {

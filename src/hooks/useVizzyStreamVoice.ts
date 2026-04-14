@@ -44,6 +44,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
   const idCounter = useRef(0);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const conversationRef = useRef<Array<{ role: string; content: string }>>([]);
+  const latestInstructionsRef = useRef<string>("");
   const audioQueueRef = useRef<HTMLAudioElement[]>([]);
   const isPlayingRef = useRef(false);
   const abortRef = useRef<AbortController>(new AbortController());
@@ -122,6 +123,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
         },
         body: JSON.stringify({
           messages: conversationRef.current,
+          systemPrompt: latestInstructionsRef.current || getSystemPrompt(),
           voiceEnabled: true,
         }),
         signal,
@@ -338,14 +340,65 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     });
   }, [startRecognition, stopRecognition]);
 
-  const updateSessionInstructions = useCallback((_instructions: string) => {
-    // No-op — system prompt is read fresh on each call via getSystemPrompt()
+  const updateSessionInstructions = useCallback((instructions: string) => {
+    latestInstructionsRef.current = instructions;
   }, []);
 
   const sendFollowUp = useCallback((text: string) => {
     if (!activeRef.current) return;
+    // Hidden system messages (tool results) — add as system role, not user
+    if (text.startsWith("[TOOL_RESULTS_READY]") || text.startsWith("[SYSTEM]")) {
+      conversationRef.current.push({ role: "system", content: text });
+      // Call backend without adding user transcript
+      (async () => {
+        if (processingRef.current) return;
+        processingRef.current = true;
+        setDebugStep("thinking");
+        const signal = abortRef.current.signal;
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session?.access_token) throw new Error("Not authenticated");
+          const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/personaplex-voice`;
+          const resp = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            },
+            body: JSON.stringify({
+              messages: conversationRef.current,
+              systemPrompt: latestInstructionsRef.current || getSystemPrompt(),
+              voiceEnabled: true,
+            }),
+            signal,
+          });
+          if (!resp.ok) { processingRef.current = false; setDebugStep("listening"); return; }
+          const data = await resp.json();
+          const replyText = data.text || "";
+          if (replyText && replyText.trim() !== "[UNCLEAR]") {
+            setTranscripts(prev => [...prev, {
+              id: `t-${++idCounter.current}`,
+              role: "agent",
+              text: replyText,
+              timestamp: Date.now(),
+            }]);
+            conversationRef.current.push({ role: "assistant", content: replyText });
+            if (data.audio_base64) playBase64Audio(data.audio_base64, data.audio_format || "mp3");
+            else speakWithBrowserTTS(replyText);
+          }
+        } catch (err: any) {
+          if (err?.name === "AbortError") return;
+          console.error("[VizzyStream] follow-up error:", err?.message);
+        } finally {
+          processingRef.current = false;
+          setDebugStep("listening");
+        }
+      })();
+      return;
+    }
     callPersonaPlex(text);
-  }, [callPersonaPlex]);
+  }, [callPersonaPlex, getSystemPrompt, playBase64Audio, speakWithBrowserTTS]);
 
   return {
     state,
