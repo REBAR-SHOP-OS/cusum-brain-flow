@@ -240,6 +240,26 @@ export default function Architecture() {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [lockedNode, setLockedNode] = useState<string | null>(null);
   const [showAllEdges, setShowAllEdges] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => {
+      const next = !prev;
+      // Hide/show the TopBar
+      const topBar = document.querySelector('header.h-\\[46px\\]') as HTMLElement | null;
+      if (topBar) topBar.style.display = next ? 'none' : '';
+      // Hide/show the app sidebar
+      const sidebar = document.querySelector('[data-app-sidebar]') as HTMLElement | null;
+      if (sidebar) sidebar.style.display = next ? 'none' : '';
+      // Hide/show intelligence panel
+      const intel = document.querySelector('.hidden.md\\:flex:has(> *)') as HTMLElement | null;
+      // fitView after layout reflow
+      setTimeout(() => {
+        reactFlowInstance?.fitView({ padding: 0.08, duration: 500, includeHiddenNodes: false });
+      }, 150);
+      return next;
+    });
+  }, [reactFlowInstance]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
     buildInitialArchNodes(),
