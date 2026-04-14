@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -440,8 +440,18 @@ export default function Architecture() {
     setVisibleLayers(getAllLayers());
   }, []);
 
+  const hasFittedRef = useRef(false);
+  const layerKey = useMemo(() => [...visibleLayers].sort().join(','), [visibleLayers]);
+
   useEffect(() => {
     if (!reactFlowInstance || !visibleNodeCount) return;
+
+    // Only fitView on initial load, layer toggle, or search change
+    if (hasFittedRef.current) {
+      // This is a layer/search change — re-fit
+    } else {
+      hasFittedRef.current = true;
+    }
 
     const timeoutId = window.setTimeout(() => {
       reactFlowInstance.fitView({
@@ -452,7 +462,7 @@ export default function Architecture() {
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [reactFlowInstance, visibleNodeCount, visibleEdgeCount]);
+  }, [reactFlowInstance, layerKey, searchQ]);
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col md:h-[calc(100vh-4rem)]">
