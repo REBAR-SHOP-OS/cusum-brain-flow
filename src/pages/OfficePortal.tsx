@@ -42,6 +42,20 @@ export default function OfficePortal() {
   const [activePlanId, setActivePlanId] = useState<string | null>((location.state as any)?.planId || null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Back-to-history callback for AI Extract
+  const backToHistoryRef = useRef<(() => void) | null>(null);
+  const handleRegisterBack = useCallback((cb: () => void) => {
+    backToHistoryRef.current = cb;
+  }, []);
+
+  const handleBack = useCallback(() => {
+    if (activeSection === "ai-extract" && backToHistoryRef.current) {
+      backToHistoryRef.current();
+    } else {
+      window.history.back();
+    }
+  }, [activeSection]);
+
   // React to navigation state changes (e.g. Edit button from Production Queue)
   useEffect(() => {
     const state = location.state as any;
@@ -78,20 +92,6 @@ export default function OfficePortal() {
   }
 
   const ActiveComponent = sectionComponents[activeSection];
-
-  // Back-to-history callback for AI Extract
-  const backToHistoryRef = useRef<(() => void) | null>(null);
-  const handleRegisterBack = useCallback((cb: () => void) => {
-    backToHistoryRef.current = cb;
-  }, []);
-
-  const handleBack = useCallback(() => {
-    if (activeSection === "ai-extract" && backToHistoryRef.current) {
-      backToHistoryRef.current();
-    } else {
-      window.history.back();
-    }
-  }, [activeSection]);
 
   const handleNavigate = (section: OfficeSection) => {
     setActiveSection(section);
