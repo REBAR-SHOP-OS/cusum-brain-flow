@@ -235,7 +235,7 @@ export default function Architecture() {
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [newNodeLabel, setNewNodeLabel] = useState("");
   const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("items");
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ArchitectureFlowNode, Edge> | null>(null);
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [lockedNode, setLockedNode] = useState<string | null>(null);
   const [showAllEdges, setShowAllEdges] = useState(false);
@@ -662,7 +662,7 @@ export default function Architecture() {
         {/* React Flow Canvas */}
         <div className="flex-1 relative">
           <ReactFlow
-            nodes={[...headerNodes, ...displayNodes]}
+            nodes={[...headerNodes, ...displayNodes] as Node[]}
             edges={displayEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
