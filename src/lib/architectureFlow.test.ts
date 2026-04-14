@@ -8,7 +8,7 @@ describe("applyArchitectureLayout", () => {
   it("pushes later layers down when an earlier layer wraps onto a second row", () => {
     const base = applyArchitectureLayout(
       [
-        ...Array.from({ length: 10 }, (_, index): ArchitectureLayoutItem => ({
+        ...Array.from({ length: 12 }, (_, index): ArchitectureLayoutItem => ({
           id: `entry-${index}`,
           layer: "entry",
         })),
@@ -17,7 +17,7 @@ describe("applyArchitectureLayout", () => {
     );
     const wrapped = applyArchitectureLayout(
       [
-        ...Array.from({ length: 11 }, (_, index): ArchitectureLayoutItem => ({
+        ...Array.from({ length: 13 }, (_, index): ArchitectureLayoutItem => ({
           id: `entry-${index}`,
           layer: "entry",
         })),
@@ -69,8 +69,8 @@ describe("applyArchitectureLayout", () => {
     }));
     const result = applyArchitectureLayout(items);
     const row1 = result.find((i) => i.id === "p-0")!;
-    const row2 = result.find((i) => i.id === "p-10")!;
-    const row3 = result.find((i) => i.id === "p-20")!;
+    const row2 = result.find((i) => i.id === "p-12")!;
+    const row3 = result.find((i) => i.id === "p-24")!;
 
     expect(row2.position.y).toBeGreaterThan(row1.position.y);
     expect(row3.position.y).toBeGreaterThan(row2.position.y);
