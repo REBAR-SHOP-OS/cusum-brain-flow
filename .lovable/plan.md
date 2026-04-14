@@ -1,21 +1,53 @@
 
 
-## Plan: Fix Fit-View Button for Full Architecture View
+## Plan: Apply Patch A — Safe Production Behavior for PersonaPlex Voice
 
-### Problem
-The fit-view button (circled in the screenshot) doesn't properly fit all 108 nodes into the viewport. The diagram is very large (8 layers, up to 29 nodes per layer) and the default ReactFlow `fitView` may not be zooming out enough.
+### Assessment
 
-### Root Cause
-ReactFlow's `Controls` component has a built-in fit-view button, but two issues may prevent proper fitting:
-1. `minZoom` is not explicitly set — ReactFlow defaults to `0.5`, which may not be enough zoom-out for 108 nodes spread across the canvas
-2. The `fitViewOptions` padding may be too generous, preventing tight fitting
+After reviewing the full codebase, the existing implementation already follows ~90% of Patch A's rules. Here's what's already in place and what needs to be added:
+
+**Already working correctly:**
+- Vizzy One API is the single backend source of truth (via `personaplex-voice` edge function proxy)
+- If API returns `audio_base64`, it plays it
+- If API returns `audio_base64: null`, text is rendered immediately, browser TTS used as fallback
+- Debug badges visible: `apiConnected`, `intent`, `grounded`, `voicePath`, `audioStatus`
+- App is read-only — never simulates ERP actions
+- Error states show clear text in transcript ("⚠️ Vizzy API is unreachable")
+- No fake PersonaPlex audio is generated in Lovable
+
+**Missing (to add):**
+1. A "Patch A active" debug badge in the UI header bar
+2. An internal note "Native PersonaPlex audio still in lab"
+3. When `audioStatus` is browser-fallback, make it visually distinct (currently browser TTS is used silently without a badge update — `audioStatus` stays "text-only" which is correct but doesn't explicitly say "browser-fallback")
+4. Console log confirming Patch A is active on session start
 
 ### Changes
 
-**`src/pages/Architecture.tsx`**:
-1. Add `minZoom={0.05}` to the `<ReactFlow>` component — allows zooming out far enough to see all nodes
-2. Update `fitViewOptions` padding from `0.15` to `0.05` for tighter fit
-3. Update the programmatic `fitView` call padding from `0.18` to `0.08`
+**`src/hooks/useVizzyStreamVoice.ts`** (2 small changes):
+- Add `console.log("[Patch A] active — native PersonaPlex audio still in lab")` in `startSession`
+- When browser TTS fallback fires, set `audioStatus` to `"browser-fallback"` instead of leaving it as `"text-only"` (honest labeling)
 
-This is a 3-line change in a single file. The built-in Controls fit-view button will then zoom out sufficiently to show the entire architecture.
+**`src/components/vizzy/VizzyVoiceChat.tsx`** (2 small changes):
+- Add a small "Patch A" debug badge next to existing badges (green, always visible when connected)
+- Update audio status badge to handle `"browser-fallback"` label distinctly (amber with 🔊 BROWSER label)
+
+### Files
+| File | Change |
+|---|---|
+| `src/hooks/useVizzyStreamVoice.ts` | Add Patch A log + honest browser-fallback labeling |
+| `src/components/vizzy/VizzyVoiceChat.tsx` | Add "Patch A" badge + browser-fallback badge styling |
+
+### What stays unchanged
+- Edge function `personaplex-voice/index.ts` — no changes needed, already correct
+- Audio playback logic — already plays base64 when present, falls back to browser TTS
+- All debug badges — preserved and enhanced
+- Read-only behavior — preserved
+- UI polish — preserved
+
+### Result
+- "Patch A active" badge visible in debug bar during live sessions
+- Honest labeling: browser fallback is clearly shown, not hidden
+- Console confirms Patch A status
+- Vizzy One API remains the single backend source of truth
+- No fake PersonaPlex audio
 
