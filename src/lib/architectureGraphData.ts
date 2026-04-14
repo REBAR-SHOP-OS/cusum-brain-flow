@@ -44,12 +44,13 @@ export interface ArchEdge {
 /* ───── Layer metadata ───── */
 export const LAYERS: { key: ArchLayer; label: string; accent: Accent; y: number }[] = [
   { key: "external", label: "External Services",  accent: "rose",    y: 0 },
-  { key: "ai",       label: "AI / Automation",    accent: "violet",  y: 1 },
-  { key: "modules",  label: "Business Modules",   accent: "orange",  y: 2 },
-  { key: "backend",  label: "Integrations",       accent: "blue",    y: 3 },
-  { key: "auth",     label: "Access Control",     accent: "emerald", y: 4 },
-  { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 5 },
-  { key: "platform", label: "Data + Platform",    accent: "emerald", y: 6 },
+  { key: "items",    label: "System Items",        accent: "orange",  y: 1 },
+  { key: "ai",       label: "AI / Automation",    accent: "violet",  y: 2 },
+  { key: "modules",  label: "Business Modules",   accent: "orange",  y: 3 },
+  { key: "backend",  label: "Integrations",       accent: "blue",    y: 4 },
+  { key: "auth",     label: "Access Control",     accent: "emerald", y: 5 },
+  { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 6 },
+  { key: "platform", label: "Data + Platform",    accent: "emerald", y: 7 },
 ];
 
 /* ───── Nodes ───── */
@@ -144,11 +145,11 @@ export const ARCH_NODES: ArchNode[] = [
 
   // Layer 5: Integrations (Edge Functions)
   { id: "fn-social",   label: "Social",     hint: "Publish",        layer: "backend", accent: "blue", icon: Share2,     detail: { title: "Social Publish", bullets: ["Meta Graph API", "Multi-platform scheduling", "Content queue"] } },
-  { id: "fn-stripe",   label: "Stripe",     hint: "Payments",       layer: "backend", accent: "blue", icon: CreditCard, detail: { title: "Stripe Integration", bullets: ["Payment processing", "Webhook handling", "Invoice management"] } },
-  { id: "fn-ring",     label: "RingCentral", hint: "Telephony",     layer: "backend", accent: "blue", icon: Phone,      detail: { title: "RingCentral Sync", bullets: ["Call log sync", "Webhook events", "SMS integration"] } },
-  { id: "fn-gmail",    label: "Gmail",      hint: "Email API",      layer: "backend", accent: "blue", icon: MailOpen,   detail: { title: "Gmail Integration", bullets: ["Email send & receive", "Thread tracking", "Draft management"] } },
-  { id: "fn-odoo",     label: "Odoo",       hint: "ERP sync",       layer: "backend", accent: "blue", icon: Building2,  detail: { title: "Odoo Integration", bullets: ["Product & inventory sync", "Order management", "XML-RPC bridge"] } },
-  { id: "fn-qb",       label: "QuickBooks", hint: "Accounting",     layer: "backend", accent: "blue", icon: BookOpen,   detail: { title: "QuickBooks Sync", bullets: ["Customer & invoice mirroring", "OAuth2 token refresh", "Balance sync"] } },
+  { id: "fn-stripe",   label: "Stripe API",  hint: "Payments",       layer: "backend", accent: "blue", icon: CreditCard, detail: { title: "Stripe Integration", bullets: ["Payment processing", "Webhook handling", "Invoice management"] } },
+  { id: "fn-ring",     label: "RC API",      hint: "Telephony",     layer: "backend", accent: "blue", icon: Phone,      detail: { title: "RingCentral Sync", bullets: ["Call log sync", "Webhook events", "SMS integration"] } },
+  { id: "fn-gmail",    label: "Gmail",       hint: "Email API",      layer: "backend", accent: "blue", icon: MailOpen,   detail: { title: "Gmail Integration", bullets: ["Email send & receive", "Thread tracking", "Draft management"] } },
+  { id: "fn-odoo",     label: "Odoo Sync",   hint: "ERP sync",       layer: "backend", accent: "blue", icon: Building2,  detail: { title: "Odoo Integration", bullets: ["Product & inventory sync", "Order management", "XML-RPC bridge"] } },
+  { id: "fn-qb",       label: "QB Sync",     hint: "Accounting",     layer: "backend", accent: "blue", icon: BookOpen,   detail: { title: "QuickBooks Sync", bullets: ["Customer & invoice mirroring", "OAuth2 token refresh", "Balance sync"] } },
   { id: "fn-seo",      label: "SEO Engine", hint: "Audit",          layer: "backend", accent: "blue", icon: FileSearch, detail: { title: "SEO Backend", bullets: ["PageSpeed analysis", "Core Web Vitals", "Keyword tracking"] } },
   { id: "fn-ai",       label: "AI Gateway", hint: "LLM proxy",      layer: "backend", accent: "blue", icon: Zap,        detail: { title: "AI Gateway", bullets: ["Multi-model routing", "Usage logging", "Rate limiting"] } },
   { id: "fn-push",     label: "Push",       hint: "Notifications",  layer: "backend", accent: "blue", icon: Bell,       detail: { title: "Push Notifications", bullets: ["DB trigger pipeline", "Multi-channel delivery", "Escalation rules"] } },
@@ -408,6 +409,7 @@ export const LAYER_LABELS: Record<ArchLayer, string> = {
   entry: "Entry Points",
   auth: "Access Control",
   modules: "Business Modules",
+  items: "System Items",
   ai: "AI / Automation",
   backend: "Integrations",
   external: "External Services",
