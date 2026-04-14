@@ -1,48 +1,57 @@
 
 
-## Plan: Reorder Architecture Layers — Macro to Micro
+## Plan: Add All Agents as Categorized Nodes in Architecture Diagram
 
-### Goal
-Reorganize the architecture diagram so the hierarchy flows from the most important/strategic level (LLMs) down to the operational details (Agents), following a macro-to-micro structure.
+### Problem
+The top area of the architecture diagram (External Services layer) appears sparse. The user wants all 20+ named agents and their items shown in a categorized layout, so clicking any card reveals its relationships.
 
-### Current Layer Order (top → bottom)
-1. Entry Points (cyan)
-2. Access Control (emerald)
-3. Business Modules (orange)
-4. AI / Automation (violet)
-5. Integrations (blue)
-6. External Services (rose)
-7. Data + Platform (emerald)
+### Approach
+Add all agents as nodes in the **AI / Automation** layer (where Vizzy and Nila already live), organized by department. Then add edges connecting each agent to its related modules, integrations, and external services.
 
-### New Layer Order (macro → micro)
-1. **External Services** — Which LLMs & platforms (OpenAI, ElevenLabs, Meta, Google, etc.)
-2. **AI / Automation** — AI systems, rules engines, state machines, knowledge
-3. **Business Modules** — CRM, Shop Floor, Accounting, etc.
-4. **Integrations** — Edge functions connecting to services
-5. **Access Control** — Auth, RBAC, routing
-6. **Entry Points** — Web App, Webhooks, Kiosk
-7. **Data + Platform** — DB, storage, queues, monitoring
+### New Agent Nodes to Add (by department)
+
+**Revenue Department:**
+- Blitz (Sales) → connects to CRM, Pipeline
+- Penny (Accounting) → connects to Accounting, QuickBooks
+- Gauge (Estimating) → connects to Estimating, QA War
+- Kala (Purchasing) → connects to Shop Floor
+
+**Operations Department:**
+- Forge (Shop Floor) → connects to Shop Floor, State Machine
+- Atlas (Delivery) → connects to Shop Floor
+- Relay (Email) → connects to Inbox, Gmail
+
+**Support Department:**
+- Haven (Support) → connects to Chat, Notifications
+
+**Growth Department:**
+- Pixel (Social) → connects to Social, Meta
+- Seomi (SEO) → connects to SEO, SEO Engine
+- Buddy (BizDev) → connects to CRM, Pipeline
+- Commet (Web Builder) → connects to Website
+- Penn (Copywriting) → connects to Email, Social
+- Gigi (Growth) → connects to Pipeline
+- Scouty (Talent) → connects to Team Hub
+- Prism (Data) → connects to Analytics, Primary DB
+
+**Special Ops:**
+- Architect (Empire) → connects to Odoo, MCP
+
+**Note:** Vizzy and Nila already exist as nodes — they stay as-is.
 
 ### Changes
 
-**`src/lib/architectureGraphData.ts`** — Reorder `LAYERS` array and update `y` values:
-```typescript
-export const LAYERS = [
-  { key: "external", label: "External Services",  accent: "rose",    y: 0 },
-  { key: "ai",       label: "AI / Automation",    accent: "violet",  y: 1 },
-  { key: "modules",  label: "Business Modules",   accent: "orange",  y: 2 },
-  { key: "backend",  label: "Integrations",       accent: "blue",    y: 3 },
-  { key: "auth",     label: "Access Control",     accent: "emerald", y: 4 },
-  { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 5 },
-  { key: "platform", label: "Data + Platform",    accent: "emerald", y: 6 },
-];
-```
+**`src/lib/architectureGraphData.ts`**:
+1. Add ~16 new agent nodes to `ARCH_NODES` in the `ai` layer with `violet` accent
+2. Add ~30 new edges connecting agents to their related modules/integrations
+3. Each agent node gets descriptive bullets showing its role and connections
 
-This is a single array reorder — the layout engine already uses the `y` value from this array to position nodes vertically. All nodes, edges, and interactions remain unchanged.
+**`src/lib/architectureFlow.ts`**:
+- Increase `maxPerRow` from 10 to 12 (to fit more nodes per row in the AI layer)
 
 ### Result
-- Top of diagram: LLM providers (OpenAI, ElevenLabs, Google, etc.)
-- Middle: AI agents & business modules
-- Bottom: Infrastructure & data platform
-- All existing connections, click behavior, and styling preserved
+- AI / Automation layer shows all agents organized in rows
+- Single-clicking any agent reveals its connections to modules, integrations, and external services
+- Single-clicking any module shows which agents connect to it
+- All existing nodes, edges, and behavior preserved
 
