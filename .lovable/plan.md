@@ -1,79 +1,28 @@
 
 
-## Goal
+## Vizzy Live — Two Behavioral Bugs
 
-Replace the OpenAI Realtime WebRTC voice engine with a **STT → Lovable AI → ElevenLabs TTS** pipeline for Vizzy Voice on `/vizzy-live`. This completely eliminates the WebRTC/ICE/TURN transport failures on mobile.
+### Bug 1: "I cannot hear you" → `[UNCLEAR]`
+**Root cause**: The `VIZZY_LIVE_VOICE_INSTRUCTIONS` prompt tells the model to respond `[UNCLEAR]` for "truly garbled gibberish." The model is incorrectly classifying "I cannot hear you" as noise — likely because it's a meta-statement about the system rather than a business query, and the model over-triggers the `[UNCLEAR]` rule.
 
-## Architecture
+**Fix**: Add an explicit rule in the `UNCLEAR INPUT` section of `VIZZY_LIVE_VOICE_INSTRUCTIONS`:
+- Sentences like "I cannot hear you", "I can't hear anything", "the audio isn't working", "you're not speaking" are **real user speech about audio issues** — NOT gibberish.
+- For audio complaints, respond naturally: "I'm here — can you hear me now?" or "Let me try again."
 
-```text
-Current (broken on mobile):
-  Mic → WebRTC → OpenAI Realtime (GPT-4o-mini) → WebRTC → Speaker
+### Bug 2: `[UNCLEAR]` displays as visible text in transcript
+**Root cause**: When the model returns `[UNCLEAR]`, the code in `useVizzyStreamVoice.ts` strips it from the *speakable* text (line 153) but still adds the raw `[UNCLEAR]` to the transcript (line 138). The user sees `[UNCLEAR]` in the chat bubble, which is a bad UX.
 
-New:
-  Mic → Browser SpeechRecognition → vizzy-voice-chat (Lovable AI, streaming) → elevenlabs-tts → Speaker
-```
+**Fix**: In `useVizzyStreamVoice.ts`, when the agent response is exactly `[UNCLEAR]` (after trimming), skip adding it to the transcript entirely. No transcript bubble, no TTS — just silently ignore it so the conversation stays clean.
 
-## What already exists and will be reused
+### Files changed
+1. **`src/hooks/useVizzyVoiceEngine.ts`** — Update `VIZZY_LIVE_VOICE_INSTRUCTIONS` unclear input section to handle audio-complaint phrases.
+2. **`src/hooks/useVizzyStreamVoice.ts`** — Skip transcript + TTS when response is exactly `[UNCLEAR]`.
 
-- **`vizzy-voice-chat` edge function** — already streams from Lovable AI gateway with system prompt support
-- **`elevenlabs-tts` edge function** — already generates MP3 from text
-- **`useNilaVoiceRelay` hook** — demonstrates the exact STT → process → TTS → audio-queue pattern we need
-- **`VizzyVoiceChat` UI component** — keeps its transcript display, action parsing, mute/unmute, debug step display
-- **`useVizzyVoiceEngine`** — keeps its context-fetching, instruction-building, and time-sync logic
-
-## Implementation plan
-
-### 1. Create `useVizzyStreamVoice` hook (new file)
-Replace `useVizzyRealtimeVoice` with a simpler hook that:
-- Uses `webkitSpeechRecognition` / `SpeechRecognition` for continuous STT (same pattern as existing voice features)
-- On committed transcript: streams to `vizzy-voice-chat` edge function via SSE fetch
-- Collects full response text, then sends to `elevenlabs-tts` for audio playback
-- Manages an audio queue (reuse pattern from `useNilaVoiceRelay`)
-- Exposes the same interface: `state`, `transcripts`, `isSpeaking`, `isMuted`, `partialText`, `startSession`, `endSession`, `toggleMute`, `updateSessionInstructions`, `sendFollowUp`, `debugStep`
-
-### 2. Update `useVizzyVoiceEngine` 
-- Change import from `useVizzyRealtimeVoice` to `useVizzyStreamVoice`
-- Remove WebRTC-specific refs (relay retry, TURN servers, skip TURN)
-- Keep all context-fetching and instruction-building logic unchanged
-
-### 3. Update `vizzy-voice-chat` edge function
-- Ensure it accepts the full system prompt from the client (it already does)
-- No other changes needed — it already streams from Lovable AI
-
-### 4. Minor cleanup in `VizzyVoiceChat` UI
-- Remove `outputAudioBlocked` / `retryOutputAudio` references (WebRTC-specific)
-- Remove WebRTC debug step display (replace with simpler status: "listening", "thinking", "speaking")
-- Keep all VIZZY-ACTION parsing, auto-follow-up, transcript display unchanged
-
-## What stays unchanged
-- `vizzy-voice-chat` edge function (already works)
-- `elevenlabs-tts` edge function (already works)
-- `VizzyVoiceChat` UI layout, action parsing, transcript rendering
-- `VizzyLive` page (prime audio + session start flow)
-- All ERP/PersonaPlex/context logic in `useVizzyVoiceEngine`
-- The full `VIZZY_INSTRUCTIONS` prompt
-
-## Files changed
-- `src/hooks/useVizzyStreamVoice.ts` — **new** (STT + LLM stream + TTS pipeline)
-- `src/hooks/useVizzyVoiceEngine.ts` — swap import, remove WebRTC refs
-- `src/components/vizzy/VizzyVoiceChat.tsx` — remove WebRTC-specific UI bits
-
-## Files NOT changed
-- `supabase/functions/vizzy-voice-chat/index.ts`
-- `supabase/functions/elevenlabs-tts/index.ts`
-- `src/hooks/useVizzyRealtimeVoice.ts` (kept for potential future use, just no longer imported)
-- `src/pages/VizzyLive.tsx`
-
-## Expected result
-- No WebRTC, no ICE, no TURN, no SDP — zero transport-layer failure surface
-- Works on any mobile network that can make HTTPS requests
-- Slightly higher latency than true realtime (~2-4s for LLM + TTS) but 100% reliable
-- Same Vizzy personality, same ERP actions, same transcript UI
-
-## Technical details
-- STT: `SpeechRecognition` API with `continuous=true`, `interimResults=true`, language auto-detect (en/fa)
-- LLM: SSE stream from `vizzy-voice-chat`, parsed token-by-token for partial text display
-- TTS: Full response sent to `elevenlabs-tts` after stream completes, audio queued and played
-- Conversation history maintained as messages array passed to the edge function on each turn
+### What stays unchanged
+- Transport layer
+- UI design
+- ERP schema
+- Anti-fabrication guardrails
+- Greeting behavior
+- `max_tokens` limit
 
