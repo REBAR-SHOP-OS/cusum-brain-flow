@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downloadFile } from "@/lib/downloadUtils";
+import { sanitizeFileName } from "@/lib/sanitizeFileName";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -239,7 +240,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     if (!sessionOk) throw new Error("Session expired — please log in again");
     const results: Array<{ name: string; url: string; type: string; size: number }> = [];
     for (const pf of pendingFiles) {
-      const path = `chat-uploads/${channelId}/${Date.now()}-${pf.name}`;
+      const path = `chat-uploads/${channelId}/${Date.now()}-${sanitizeFileName(pf.name)}`;
       const { error } = await uploadToStorage("team-chat-files", path, pf.file);
       if (error) throw new Error(`Upload failed for ${pf.name}: ${error.message}`);
       results.push({ name: pf.name, url: getPublicFileUrl(path), type: pf.file.type, size: pf.size });

@@ -7,6 +7,7 @@ import { sendAgentMessage, ChatMessage, AttachedFile } from "@/lib/agent";
 import { backgroundAgentService } from "@/lib/backgroundAgentService";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
+import { sanitizeFileName } from "@/lib/sanitizeFileName";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { RichMarkdown, type ActionItemCallbacks } from "@/components/chat/RichMarkdown";
@@ -198,7 +199,7 @@ RULES:
   }, [autoGreet, qbSummary]);
 
   const uploadFile = async (file: File): Promise<{ name: string; url: string } | null> => {
-    const path = `chat-uploads/${Date.now()}-${file.name}`;
+    const path = `chat-uploads/${Date.now()}-${sanitizeFileName(file.name)}`;
     const { error } = await uploadToStorage("clearance-photos", path, file);
     if (error) { console.error("Upload failed:", error); return null; }
     const { data: urlData } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 3600);
