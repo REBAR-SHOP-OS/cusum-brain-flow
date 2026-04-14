@@ -1,63 +1,35 @@
 
 
-## Plan: Fix Vizzy Voice Reconnect Loop on Mic Permission Denied
+## Plan: Fix Vizzy Can't Hear — Revert Aggressive Recognition Nullification
 
 ### Problem
-When microphone permission is denied, `SpeechRecognition` fires `onerror("not-allowed")` → sets state to `"error"` → `onend` fires and restarts recognition (line 350) → infinite error loop. The auto-retry in VizzyVoiceChat compounds this by retrying 3 times, but permission errors never self-resolve.
+The previous "reconnect loop fix" nullifies `recognitionRef.current` and `activeRef.current` when `not-allowed` fires. On some devices this fires transiently or on session restart, permanently killing STT for the session. The `onend` handler can't restart because `recognitionRef.current` is null.
 
 ### Changes
 
-**1. Patch: `src/hooks/useVizzyStreamVoice.ts`**
+**1. Patch: `src/hooks/useVizzyStreamVoice.ts`** (lines 339-350)
 
-In `recognition.onerror` (line 339–346): When error is "not-allowed", null out `recognitionRef.current` BEFORE setting state to "error". This prevents `onend` from restarting recognition.
+Remove the two nullification lines. Keep the error message and state change so the UI still shows a clear error, but let the normal `onend` restart cycle attempt recovery:
 
 ```typescript
 recognition.onerror = (event: any) => {
   if (event.error === "aborted") return;
   console.error("[VizzyStream] STT error:", event.error);
   if (event.error === "not-allowed") {
-    // Prevent onend from restarting — permission errors won't self-resolve
-    recognitionRef.current = null;
-    activeRef.current = false;
     setErrorDetail("Microphone access denied — check browser permissions");
     setState("error");
+    return;
   }
 };
 ```
 
-**2. Patch: `src/components/vizzy/VizzyVoiceChat.tsx`**
-
-In the auto-retry effect (lines 228–235): Skip auto-retry when `lastErrorDetail` contains "Microphone" or "denied" — these errors require user action, not retries.
-
-```typescript
-useEffect(() => {
-  const isMicError = lastErrorDetail?.toLowerCase().includes("microphone") 
-    || lastErrorDetail?.toLowerCase().includes("denied");
-  if (isError && !isMicError && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
-    // ... existing retry logic
-  }
-}, [isError, startSession, lastErrorDetail]);
-```
-
-Update `statusText` to show mic-specific message when applicable:
-```typescript
-} else if (isError && lastErrorDetail?.includes("Microphone")) {
-  statusText = "Microphone access denied";
-```
-
-### File summary
-
-| File | Action |
-|---|---|
-| `src/hooks/useVizzyStreamVoice.ts` | Patch — stop restart loop on mic permission denied |
-| `src/components/vizzy/VizzyVoiceChat.tsx` | Patch — skip auto-retry for permission errors, show correct status |
+The auto-retry skip in `VizzyVoiceChat.tsx` (checking for "microphone"/"denied" in `lastErrorDetail`) remains — that's still correct and prevents UI-level retry spam for genuine permission blocks.
 
 ### What does NOT change
-- TTS chunking, audio queue, playBase64Audio — all unchanged
-- personaplex-voice edge function — unchanged
-- Session lifecycle for non-permission errors — unchanged
-- UI layout and styling — unchanged
+- VizzyVoiceChat auto-retry skip for mic errors — still in place
+- TTS chunking, audio queue — unchanged
+- Session lifecycle — unchanged
 
 ### Result
-Permission denial shows a clear "Microphone access denied" message with no infinite retry loop. Network/transient errors still auto-retry as before.
+Recognition can attempt restart after transient `not-allowed` errors. Genuine permission blocks still show the error message and skip UI auto-retry.
 
