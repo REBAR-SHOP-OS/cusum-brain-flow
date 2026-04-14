@@ -132,16 +132,16 @@ function MiniGraphInner({ selectedNodeId, allNodes, allEdges }: Props) {
         onInit={onInit}
         proOptions={{ hideAttribution: true }}
         panOnDrag
-        zoomOnScroll={false}
-        zoomOnPinch={false}
-        zoomOnDoubleClick={false}
+        zoomOnScroll
+        zoomOnPinch
+        zoomOnDoubleClick
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
         fitView
         fitViewOptions={{ padding: 0.3 }}
-        minZoom={0.3}
-        maxZoom={1.5}
+        minZoom={0.1}
+        maxZoom={3}
       />
     </div>
   );
