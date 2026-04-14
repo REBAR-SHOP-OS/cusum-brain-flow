@@ -167,6 +167,21 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
         {nodeData.hint}
       </span>
 
+      {nodeData.detail?.bullets?.[0] && (
+        <span
+          className="mt-0.5 max-w-[140px] text-[9px] leading-tight text-white/50"
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          }}
+          title={nodeData.detail.bullets[0]}
+        >
+          {nodeData.detail.bullets[0]}
+        </span>
+      )}
+
       {/* Source handle (right) */}
       <Handle
         type="source"
