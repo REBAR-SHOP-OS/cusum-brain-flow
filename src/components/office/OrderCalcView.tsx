@@ -31,35 +31,54 @@ function calculate(
   wpm: Record<string, number>,
   unitFactor: number = 1
 ): SizeSummary[] {
-  const grouped: Record<string, { pieces: number; length_mm: number }> = {};
-  for (const it of items) {
-    if (!grouped[it.bar_size]) grouped[it.bar_size] = { pieces: 0, length_mm: 0 };
-    grouped[it.bar_size].pieces += it.quantity;
-    // Convert raw value to mm using the source unit factor
-    grouped[it.bar_size].length_mm += (it.cut_length_mm * unitFactor) * it.quantity;
-  }
-
   const stockMm = stockLengthM * 1000;
+  const wasteMult = 1 + wastePct / 100;
   const sizes = ["10M", "15M", "20M", "25M", "30M", "35M"];
 
-  return sizes
-    .filter(s => grouped[s])
-    .map(s => {
-      const g = grouped[s];
-      const totalM = g.length_mm / 1000;
-      const withWaste = totalM * (1 + wastePct / 100);
-      const bars = Math.ceil((withWaste * 1000) / stockMm);
-      const w = wpm[s] ?? FALLBACK_WPM[s] ?? 0;
-      const weight = Math.round(bars * stockLengthM * w * 100) / 100;
-      return {
-        bar_size: s,
-        total_pieces: g.pieces,
-        total_length_m: Math.round(totalM * 100) / 100,
-        length_with_waste_m: Math.round(withWaste * 100) / 100,
-        bars_to_order: bars,
-        total_weight_kg: weight,
-      };
-    });
+  // Group items by bar size, expanding each piece into individual cuts
+  const grouped: Record<string, { pieces: number; cuts_mm: number[] }> = {};
+  for (const it of items) {
+    if (!grouped[it.bar_size]) grouped[it.bar_size] = { pieces: 0, cuts_mm: [] };
+    const cutMm = it.cut_length_mm * unitFactor * wasteMult;
+    grouped[it.bar_size].pieces += it.quantity;
+    for (let i = 0; i < it.quantity; i++) {
+      grouped[it.bar_size].cuts_mm.push(cutMm);
+    }
+  }
+
+  return sizes.filter(s => grouped[s]).map(s => {
+    const g = grouped[s];
+    // First-Fit Decreasing bin packing
+    const cuts = [...g.cuts_mm].sort((a, b) => b - a); // longest first
+    const bins: number[] = []; // remaining space per bin
+    for (const cut of cuts) {
+      let placed = false;
+      for (let j = 0; j < bins.length; j++) {
+        if (bins[j] >= cut) {
+          bins[j] -= cut;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        bins.push(stockMm - cut);
+      }
+    }
+    const bars = bins.length;
+    const totalM = g.cuts_mm.reduce((a, b) => a + b, 0) / wasteMult / 1000;
+    const withWasteM = g.cuts_mm.reduce((a, b) => a + b, 0) / 1000;
+    const w = wpm[s] ?? FALLBACK_WPM[s] ?? 0;
+    const weight = Math.round(bars * stockLengthM * w * 100) / 100;
+
+    return {
+      bar_size: s,
+      total_pieces: g.pieces,
+      total_length_m: Math.round(totalM * 100) / 100,
+      length_with_waste_m: Math.round(withWasteM * 100) / 100,
+      bars_to_order: bars,
+      total_weight_kg: weight,
+    };
+  });
 }
 
 // --- Component ---
