@@ -1,6 +1,6 @@
 import { memo, useState, useCallback } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Trash2 } from "lucide-react";
+import { Trash2, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import type { ArchLayer, ArchNode } from "@/lib/architectureGraphData";
@@ -19,6 +19,7 @@ export type ArchFlowNodeData = {
   highlighted?: boolean;
   onDelete?: (id: string) => void;
   onLabelChange?: (id: string, label: string) => void;
+  onExplain?: (id: string) => void;
 };
 
 const accentStyles: Record<FlowAccent, { border: string; glow: string; solid: string; bg: string }> = {
@@ -180,6 +181,20 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
           {nodeData.detail.bullets[0]}
         </span>
       )}
+
+      {/* Explain button */}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          nodeData.onExplain?.(id);
+        }}
+        className="absolute -bottom-1.5 -right-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-full border border-white/20 bg-slate-900/90 text-white/60 transition hover:text-white opacity-0 group-hover:opacity-100"
+        style={{ opacity: selected ? 1 : undefined, borderColor: `${st.solid}60` }}
+        title="Explain node"
+      >
+        <Info className="h-2.5 w-2.5" style={{ color: st.solid }} />
+      </button>
 
       {/* Source handle (right) */}
       <Handle

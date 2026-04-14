@@ -387,6 +387,19 @@ export default function Architecture() {
     });
   }, []);
 
+  const handleExplain = useCallback((nodeId: string) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    setOpenNode({
+      id: node.id,
+      hint: node.data.hint,
+      layer: node.data.layer,
+      accent: node.data.accent,
+      icon: node.data.Icon,
+      detail: { ...node.data.detail, title: node.data.label },
+    });
+  }, [nodes]);
+
   const onNodeDoubleClick = useCallback(() => {}, []);
 
   const onNodeMouseEnter = useCallback((_: unknown, node: ArchitectureFlowNode) => {
@@ -420,7 +433,7 @@ export default function Architecture() {
       return {
         ...n,
         hidden: layerHidden || searchHidden,
-        data: { ...nodeData, onDelete: handleDelete, onLabelChange: handleLabelChange, dimmed, highlighted },
+        data: { ...nodeData, onDelete: handleDelete, onLabelChange: handleLabelChange, onExplain: handleExplain, dimmed, highlighted },
       };
     });
   }, [nodes, visibleLayers, filteredNodeIds, handleDelete, handleLabelChange, activeNode, connectedNodeIds]);
