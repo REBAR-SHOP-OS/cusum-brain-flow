@@ -148,6 +148,16 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   // Active session
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+
+  // Register back-to-history callback for parent
+  useEffect(() => {
+    if (onRegisterBackToHistory) {
+      onRegisterBackToHistory(() => {
+        setActiveSessionId(null);
+        setShowHistory(true);
+      });
+    }
+  }, [onRegisterBackToHistory]);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [deleteProjectConfirm, setDeleteProjectConfirm] = useState<{ id: string; name: string } | null>(null);
