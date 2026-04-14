@@ -322,8 +322,10 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
 
         if (speakable) {
           setDebugStep("speaking");
+          fallbackSpeechRef.current = speakable;
+          browserFallbackTriggeredRef.current = false;
           if (data.audio_base64) {
-            playBase64Audio(data.audio_base64, data.audio_format || "mp3");
+            playBase64Audio(data.audio_base64, data.audio_format || "mp3", speakable);
           } else {
             // Chunked realtime TTS — start speaking chunk-by-chunk
             setAudioStatus("chunked-tts");
