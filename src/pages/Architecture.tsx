@@ -817,14 +817,15 @@ export default function Architecture() {
       <AnimatePresence>
         {openNode && (
           <Dialog open={!!openNode} onOpenChange={(o) => !o && setOpenNode(null)}>
-            <DialogContent className="max-w-lg border-border/80 bg-background/95 backdrop-blur-xl">
+            <DialogContent className="max-w-lg border-border/80 bg-background/95 backdrop-blur-xl max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-base">
                   <openNode.icon className="h-5 w-5" style={{ color: accentColor[openNode.accent] }} />
                   {openNode.detail.title}
                 </DialogTitle>
                 <DialogDescription asChild>
-                  <div className="mt-3 space-y-3">
+                  <div className="mt-3 space-y-4">
+                    {/* Layer badge + hint */}
                     <div className="flex items-center gap-2 text-xs">
                       <span
                         className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider"
@@ -834,57 +835,124 @@ export default function Architecture() {
                           border: `1px solid ${accentColor[openNode.accent]}`,
                         }}
                       >
-                        {openNode.layer}
+                        {LAYERS.find(l => l.key === openNode.layer)?.label || openNode.layer}
                       </span>
                       <span className="text-muted-foreground">{openNode.hint}</span>
                     </div>
-                    <ul className="list-inside list-disc space-y-1.5 text-left text-sm text-muted-foreground">
-                      {openNode.detail.bullets.map((line) => (
-                        <li key={line} className="break-words">{line}</li>
-                      ))}
-                    </ul>
+
+                    {/* Description */}
+                    {openNode.description && (
+                      <p className="text-sm text-foreground/80 leading-relaxed">
+                        {openNode.description}
+                      </p>
+                    )}
+
+                    {/* Functions & Capabilities */}
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Functions & Capabilities</p>
+                      <ul className="list-inside list-disc space-y-1 text-left text-sm text-muted-foreground">
+                        {openNode.detail.bullets.map((line) => (
+                          <li key={line} className="break-words">{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Mini Connection Graph */}
                     <MiniConnectionGraph
                       selectedNodeId={openNode.id}
                       allNodes={nodes}
                       allEdges={edges}
                     />
-                    <div className="pt-2 border-t border-border/40">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Connected to</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {edges
-                          .filter((e) => e.source === openNode.id || e.target === openNode.id)
-                          .map((e) => {
-                            const otherId = e.source === openNode.id ? e.target : e.source;
-                            const other = nodes.find((n) => n.id === otherId);
-                            if (!other) return null;
-                            return (
-                              <button
-                                key={e.id}
-                                onClick={() => {
-                                  const next = nodes.find((n) => n.id === otherId);
-                                  if (!next) return;
-                                  setOpenNode({
-                                    id: next.id,
-                                    hint: next.data.hint,
-                                    layer: next.data.layer,
-                                    accent: next.data.accent,
-                                    icon: next.data.Icon,
-                                    detail: { ...next.data.detail, title: next.data.label },
-                                  });
-                                }}
-                                className="rounded-md px-2 py-0.5 text-[11px] font-medium transition-colors hover:opacity-80"
-                                style={{
-                                  background: accentBg[other.data.accent],
-                                  color: accentColor[other.data.accent],
-                                  border: `1px solid ${accentColor[other.data.accent]}40`,
-                                }}
-                              >
+
+                    {/* Directional connections */}
+                    {(() => {
+                      const inboundEdges = edges.filter((e) => e.target === openNode.id);
+                      const outboundEdges = edges.filter((e) => e.source === openNode.id);
+                      const archEdgeMap = new Map(ARCH_EDGES.map(e => [e.id, e]));
+
+                      const renderConnectionBadge = (edge: Edge, otherId: string, direction: "in" | "out") => {
+                        const other = nodes.find((n) => n.id === otherId);
+                        if (!other) return null;
+                        const archEdge = archEdgeMap.get(edge.id);
+                        const edgeLabel = archEdge?.label;
+                        const edgeStyle = archEdge?.edgeStyle || "solid";
+                        const styleIndicator = edgeStyle === "dashed" ? "◦" : edgeStyle === "failure" ? "✕" : "●";
+
+                        return (
+                          <button
+                            key={edge.id}
+                            onClick={() => {
+                              const next = nodes.find((n) => n.id === otherId);
+                              if (!next) return;
+                              const nextArch = ARCH_NODES.find((n) => n.id === otherId);
+                              setOpenNode({
+                                id: next.id,
+                                hint: next.data.hint,
+                                layer: next.data.layer,
+                                accent: next.data.accent,
+                                icon: next.data.Icon,
+                                detail: { ...next.data.detail, title: next.data.label },
+                                description: nextArch?.description,
+                              });
+                            }}
+                            className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors hover:opacity-80"
+                            style={{
+                              background: accentBg[other.data.accent],
+                              color: accentColor[other.data.accent],
+                              border: `1px solid ${accentColor[other.data.accent]}40`,
+                            }}
+                          >
+                            <span className="text-[9px] opacity-60">{styleIndicator}</span>
+                            {direction === "in" ? (
+                              <>
                                 {other.data.label}
-                              </button>
-                            );
-                          })}
-                      </div>
-                    </div>
+                                {edgeLabel && <span className="text-[9px] opacity-60">─{edgeLabel}→</span>}
+                                {!edgeLabel && <span className="text-[9px] opacity-60">→</span>}
+                              </>
+                            ) : (
+                              <>
+                                {edgeLabel && <span className="text-[9px] opacity-60">─{edgeLabel}→</span>}
+                                {!edgeLabel && <span className="text-[9px] opacity-60">→</span>}
+                                {other.data.label}
+                              </>
+                            )}
+                          </button>
+                        );
+                      };
+
+                      return (
+                        <div className="space-y-3 pt-2 border-t border-border/40">
+                          {/* Inbound */}
+                          {inboundEdges.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                                ← Inbound ({inboundEdges.length})
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {inboundEdges.map((e) => renderConnectionBadge(e, e.source, "in"))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Outbound */}
+                          {outboundEdges.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+                                → Outbound ({outboundEdges.length})
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {outboundEdges.map((e) => renderConnectionBadge(e, e.target, "out"))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Summary */}
+                          <p className="text-[10px] text-muted-foreground/70 text-center pt-1">
+                            {inboundEdges.length} inbound · {outboundEdges.length} outbound connections
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </DialogDescription>
               </DialogHeader>
