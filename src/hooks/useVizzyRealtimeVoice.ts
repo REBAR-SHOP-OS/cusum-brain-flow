@@ -870,7 +870,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const pcStateNow = pc.connectionState;
       const iceStateNow = pc.iceConnectionState;
       console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} strategy=${strategy} — waiting for data_channel_open`);
-      setStep("waiting_session_created");
+      setStep(`waiting_session_created (${strategy})`);
 
       // Overall connection timeout — 30s to allow slower mobile handshakes
       sessionTimeoutRef.current = setTimeout(() => {
@@ -881,14 +881,21 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           const iceGather = pcRef.current?.iceGatheringState || "no_ice";
           logAllStates("session_timeout_30s");
 
-          // Try relay-only retry before giving up
-          if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
+          // Try relay-only retry before giving up — but skip if Metered DNS is broken
+          // (relay uses the same broken Metered servers)
+          const meteredBroken = hasMeteredDnsFailures();
+          if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0 && !meteredBroken) {
             console.warn("[RealtimeVoice] Session timeout — attempting relay-only retry...");
             relayRetryDoneRef.current = true;
             cleanup("session_timeout_relay_retry");
             iceTransportPolicyRef.current = "relay";
             setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
             return;
+          }
+          // Mark relay as done if skipped due to Metered DNS
+          if (meteredBroken && !relayRetryDoneRef.current) {
+            console.warn("[RealtimeVoice] Skipping relay-only retry — Metered DNS is broken on this network");
+            relayRetryDoneRef.current = true;
           }
 
           // Try STUN-only (no TURN) as last resort
