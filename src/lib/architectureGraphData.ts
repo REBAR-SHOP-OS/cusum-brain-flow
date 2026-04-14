@@ -21,7 +21,7 @@ import {
 
 export type ArchLayer = "entry" | "auth" | "ai" | "backend" | "external" | "platform" | "items";
 
-export type Accent = "cyan" | "emerald" | "orange" | "violet" | "blue" | "rose";
+export type Accent = "cyan" | "emerald" | "orange" | "violet" | "blue" | "rose" | "amber";
 
 export interface ArchNode {
   id: string;
@@ -49,7 +49,7 @@ export const LAYERS: { key: ArchLayer; label: string; accent: Accent; y: number 
   { key: "backend",  label: "Integrations",       accent: "blue",    y: 3 },
   { key: "auth",     label: "Access Control",     accent: "emerald", y: 4 },
   { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 5 },
-  { key: "platform", label: "Data + Platform",    accent: "emerald", y: 6 },
+  { key: "platform", label: "Data + Platform",    accent: "amber", y: 6 },
 ];
 
 /* ───── Nodes ───── */

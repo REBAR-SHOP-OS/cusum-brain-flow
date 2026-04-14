@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import type { ArchLayer, ArchNode } from "@/lib/architectureGraphData";
 
-export type FlowAccent = "cyan" | "emerald" | "violet" | "orange" | "blue" | "rose";
+export type FlowAccent = "cyan" | "emerald" | "violet" | "orange" | "blue" | "rose" | "amber";
 
 export type ArchFlowNodeData = {
   label: string;
@@ -24,40 +24,46 @@ export type ArchFlowNodeData = {
 
 const accentStyles: Record<FlowAccent, { border: string; glow: string; solid: string; bg: string }> = {
   cyan: {
-    border: "rgba(34,211,238,0.85)",
+    border: "rgb(34,211,238)",
     glow: "0 0 18px rgba(34,211,238,0.35)",
     solid: "rgb(34,211,238)",
-    bg: "rgb(12,35,42)",
+    bg: "rgb(15,50,60)",
   },
   emerald: {
-    border: "rgba(52,211,153,0.85)",
+    border: "rgb(52,211,153)",
     glow: "0 0 18px rgba(52,211,153,0.35)",
     solid: "rgb(52,211,153)",
-    bg: "rgb(15,38,30)",
+    bg: "rgb(18,55,40)",
   },
   violet: {
-    border: "rgba(167,139,250,0.85)",
+    border: "rgb(167,139,250)",
     glow: "0 0 20px rgba(167,139,250,0.4)",
     solid: "rgb(167,139,250)",
-    bg: "rgb(30,22,50)",
+    bg: "rgb(40,30,65)",
   },
   orange: {
-    border: "rgba(251,146,60,0.85)",
+    border: "rgb(251,146,60)",
     glow: "0 0 22px rgba(251,146,60,0.45)",
     solid: "rgb(251,146,60)",
-    bg: "rgb(45,30,15)",
+    bg: "rgb(60,38,18)",
   },
   blue: {
-    border: "rgba(96,165,250,0.85)",
+    border: "rgb(96,165,250)",
     glow: "0 0 18px rgba(96,165,250,0.35)",
     solid: "rgb(96,165,250)",
-    bg: "rgb(18,28,48)",
+    bg: "rgb(22,38,65)",
   },
   rose: {
-    border: "rgba(251,113,133,0.85)",
+    border: "rgb(251,113,133)",
     glow: "0 0 18px rgba(251,113,133,0.35)",
     solid: "rgb(251,113,133)",
-    bg: "rgb(45,20,28)",
+    bg: "rgb(60,25,35)",
+  },
+  amber: {
+    border: "rgb(245,195,68)",
+    glow: "0 0 18px rgba(245,195,68,0.35)",
+    solid: "rgb(245,195,68)",
+    bg: "rgb(55,42,15)",
   },
 };
 
