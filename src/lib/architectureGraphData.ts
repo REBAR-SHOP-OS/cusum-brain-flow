@@ -19,7 +19,7 @@ import {
   LayoutDashboard, ListTodo, Monitor, Building, Star, Clock, Package, Stethoscope, Settings,
 } from "lucide-react";
 
-export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform" | "items";
+export type ArchLayer = "entry" | "auth" | "ai" | "backend" | "external" | "platform" | "items";
 
 export type Accent = "cyan" | "emerald" | "orange" | "violet" | "blue" | "rose";
 
@@ -46,11 +46,10 @@ export const LAYERS: { key: ArchLayer; label: string; accent: Accent; y: number 
   { key: "external", label: "External Services",  accent: "rose",    y: 0 },
   { key: "items",    label: "System Items",        accent: "orange",  y: 1 },
   { key: "ai",       label: "AI / Automation",    accent: "violet",  y: 2 },
-  { key: "modules",  label: "Business Modules",   accent: "orange",  y: 3 },
-  { key: "backend",  label: "Integrations",       accent: "blue",    y: 4 },
-  { key: "auth",     label: "Access Control",     accent: "emerald", y: 5 },
-  { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 6 },
-  { key: "platform", label: "Data + Platform",    accent: "emerald", y: 7 },
+  { key: "backend",  label: "Integrations",       accent: "blue",    y: 3 },
+  { key: "auth",     label: "Access Control",     accent: "emerald", y: 4 },
+  { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 5 },
+  { key: "platform", label: "Data + Platform",    accent: "emerald", y: 6 },
 ];
 
 /* ───── Nodes ───── */
@@ -408,7 +407,6 @@ export function nodesInLayer(layer: ArchLayer): ArchNode[] {
 export const LAYER_LABELS: Record<ArchLayer, string> = {
   entry: "Entry Points",
   auth: "Access Control",
-  modules: "Business Modules",
   items: "System Items",
   ai: "AI / Automation",
   backend: "Integrations",
