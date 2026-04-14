@@ -19,7 +19,7 @@ import {
   LayoutDashboard, ListTodo, Monitor, Building, Star, Clock, Package, Stethoscope, Settings,
 } from "lucide-react";
 
-export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform";
+export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform" | "items";
 
 export type Accent = "cyan" | "emerald" | "orange" | "violet" | "blue" | "rose";
 

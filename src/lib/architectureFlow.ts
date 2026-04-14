@@ -1,13 +1,13 @@
 import { LAYERS, type ArchLayer } from "@/lib/architectureGraphData";
 
 export const ARCHITECTURE_LAYOUT = {
-  layerGap: 220,
+  layerGap: 280,
   nodeWidth: 130,
-  nodeGap: 30,
+  nodeHeight: 72,
+  nodeGap: 16,
   leftMargin: 40,
   topMargin: 40,
-  centerRef: 2800,
-  maxPerRow: 14,
+  maxPerColumn: 14,
 } as const;
 
 export type ArchitectureLayoutItem = {
@@ -31,41 +31,40 @@ function resolveLayer(item: ArchitectureLayoutItem): ArchLayer | undefined {
   return item.layer || item.data?.layer;
 }
 
+/**
+ * Horizontal layout: each layer is a column (left → right).
+ * Nodes within a column stack vertically.
+ * If a column has more than maxPerColumn nodes, it wraps into multiple sub-columns.
+ */
 export function applyArchitectureLayout<T extends ArchitectureLayoutItem>(items: T[]): (T & { position: { x: number; y: number } })[] {
   const positions = new Map<string, { x: number; y: number }>();
-  let layerOffset = 0;
+  let columnOffset = 0;
 
   for (const layer of LAYERS) {
     const layerItems = items.filter((item) => resolveLayer(item) === layer.key);
     if (!layerItems.length) continue;
 
-    const rowCount = Math.ceil(layerItems.length / ARCHITECTURE_LAYOUT.maxPerRow);
+    const colCount = Math.ceil(layerItems.length / ARCHITECTURE_LAYOUT.maxPerColumn);
 
-    for (let row = 0; row < rowCount; row += 1) {
-      const rowItems = layerItems.slice(
-        row * ARCHITECTURE_LAYOUT.maxPerRow,
-        (row + 1) * ARCHITECTURE_LAYOUT.maxPerRow,
+    for (let col = 0; col < colCount; col += 1) {
+      const colItems = layerItems.slice(
+        col * ARCHITECTURE_LAYOUT.maxPerColumn,
+        (col + 1) * ARCHITECTURE_LAYOUT.maxPerColumn,
       );
-      const totalWidth =
-        rowItems.length * ARCHITECTURE_LAYOUT.nodeWidth +
-        Math.max(0, rowItems.length - 1) * ARCHITECTURE_LAYOUT.nodeGap;
-      const startX =
-        ARCHITECTURE_LAYOUT.leftMargin +
-        Math.max(0, (ARCHITECTURE_LAYOUT.centerRef - totalWidth) / 2);
-      const y =
-        ARCHITECTURE_LAYOUT.topMargin +
-        layerOffset * ARCHITECTURE_LAYOUT.layerGap +
-        row * (ARCHITECTURE_LAYOUT.layerGap * 0.55);
 
-      rowItems.forEach((item, index) => {
+      const x =
+        ARCHITECTURE_LAYOUT.leftMargin +
+        (columnOffset + col) * ARCHITECTURE_LAYOUT.layerGap;
+
+      colItems.forEach((item, index) => {
         positions.set(item.id, {
-          x: startX + index * (ARCHITECTURE_LAYOUT.nodeWidth + ARCHITECTURE_LAYOUT.nodeGap),
-          y,
+          x,
+          y: ARCHITECTURE_LAYOUT.topMargin + index * (ARCHITECTURE_LAYOUT.nodeHeight + ARCHITECTURE_LAYOUT.nodeGap),
         });
       });
     }
 
-    layerOffset += rowCount > 1 ? 2 : 1;
+    columnOffset += colCount;
   }
 
   return items.map((item) => ({
