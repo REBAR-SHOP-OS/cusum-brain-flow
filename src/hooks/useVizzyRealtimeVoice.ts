@@ -662,7 +662,10 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         dcOpenAt = Date.now();
         console.log(`[RealtimeVoice][STEP] data_channel_open (+${dcOpenAt - connectStartedAt}ms) strategy=${strategy}`);
         logAllStates("data_channel_open");
-        setStep("data_channel_open");
+        setStep(`data_channel_open (${strategy})`);
+
+        // Clear ICE stuck timer — connection succeeded
+        if (iceStuckTimerRef) { clearTimeout(iceStuckTimerRef); iceStuckTimerRef = null; }
 
         // ── Flush any queued messages immediately ──
         flushDcQueue();
