@@ -1,53 +1,45 @@
 
 
-## Plan: Apply Patch A — Safe Production Behavior for PersonaPlex Voice
+## Plan: Add Layer Headers + Fix Empty "Business Modules" Layer
 
-### Assessment
-
-After reviewing the full codebase, the existing implementation already follows ~90% of Patch A's rules. Here's what's already in place and what needs to be added:
-
-**Already working correctly:**
-- Vizzy One API is the single backend source of truth (via `personaplex-voice` edge function proxy)
-- If API returns `audio_base64`, it plays it
-- If API returns `audio_base64: null`, text is rendered immediately, browser TTS used as fallback
-- Debug badges visible: `apiConnected`, `intent`, `grounded`, `voicePath`, `audioStatus`
-- App is read-only — never simulates ERP actions
-- Error states show clear text in transcript ("⚠️ Vizzy API is unreachable")
-- No fake PersonaPlex audio is generated in Lovable
-
-**Missing (to add):**
-1. A "Patch A active" debug badge in the UI header bar
-2. An internal note "Native PersonaPlex audio still in lab"
-3. When `audioStatus` is browser-fallback, make it visually distinct (currently browser TTS is used silently without a badge update — `audioStatus` stays "text-only" which is correct but doesn't explicitly say "browser-fallback")
-4. Console log confirming Patch A is active on session start
+### Problem
+1. No visible column headers — user can't tell which layer each column represents
+2. "Business Modules" layer shows 0 cards because all nodes were moved to "items" in the previous update
+3. Some nodes may appear misaligned without clear column boundaries
 
 ### Changes
 
-**`src/hooks/useVizzyStreamVoice.ts`** (2 small changes):
-- Add `console.log("[Patch A] active — native PersonaPlex audio still in lab")` in `startSession`
-- When browser TTS fallback fires, set `audioStatus` to `"browser-fallback"` instead of leaving it as `"text-only"` (honest labeling)
+**1. Remove empty "Business Modules" layer (`src/lib/architectureGraphData.ts`)**
+- Remove `{ key: "modules", ... }` from `LAYERS` array since it has 0 nodes — all business module nodes are already in `"items"` layer
+- Remove `"modules"` from the `ArchLayer` type union
+- Re-number `y` values for remaining layers
 
-**`src/components/vizzy/VizzyVoiceChat.tsx`** (2 small changes):
-- Add a small "Patch A" debug badge next to existing badges (green, always visible when connected)
-- Update audio status badge to handle `"browser-fallback"` label distinctly (amber with 🔊 BROWSER label)
+**2. Add layer header nodes (`src/lib/architectureFlow.ts`)**
+- Export a new function `generateLayerHeaders()` that creates label-only nodes positioned above each column
+- Each header shows the layer name (e.g., "External Services", "System Items", "AI / Automation")
+- Headers are positioned at `y = 0` (above first node row), spanning the width of sub-columns if a layer wraps
+
+**3. Render header nodes in ReactFlow (`src/pages/Architecture.tsx`)**
+- Register a new `layerHeader` node type — a simple styled div with the layer name and accent color
+- Create a `LayerHeaderNode` component: non-draggable, non-connectable, styled as a centered label with accent-colored text/border
+- Merge header nodes into the ReactFlow nodes array alongside arch nodes
+- Headers should be non-interactive (no click/hover effects, no handles)
+
+**4. Create LayerHeaderNode component (`src/components/system-flow/LayerHeaderNode.tsx`)**
+- Simple React component: displays layer label with accent color styling
+- No handles, not draggable, not selectable
+- Styled to span the column width with subtle background
 
 ### Files
 | File | Change |
 |---|---|
-| `src/hooks/useVizzyStreamVoice.ts` | Add Patch A log + honest browser-fallback labeling |
-| `src/components/vizzy/VizzyVoiceChat.tsx` | Add "Patch A" badge + browser-fallback badge styling |
-
-### What stays unchanged
-- Edge function `personaplex-voice/index.ts` — no changes needed, already correct
-- Audio playback logic — already plays base64 when present, falls back to browser TTS
-- All debug badges — preserved and enhanced
-- Read-only behavior — preserved
-- UI polish — preserved
+| `src/lib/architectureGraphData.ts` | Remove empty `modules` layer from LAYERS + ArchLayer type |
+| `src/lib/architectureFlow.ts` | Add `generateLayerHeaders()` function that computes header positions |
+| `src/components/system-flow/LayerHeaderNode.tsx` | New — simple header node component |
+| `src/pages/Architecture.tsx` | Register `layerHeader` node type, merge headers into nodes |
 
 ### Result
-- "Patch A active" badge visible in debug bar during live sessions
-- Honest labeling: browser fallback is clearly shown, not hidden
-- Console confirms Patch A status
-- Vizzy One API remains the single backend source of truth
-- No fake PersonaPlex audio
+- Each column has a visible layer title above it (e.g., "External Services", "AI / Automation", "Data + Platform")
+- No empty "Business Modules" layer cluttering the sidebar
+- All 108 nodes properly grouped under their labeled columns
 
