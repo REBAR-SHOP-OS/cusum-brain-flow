@@ -7,7 +7,7 @@ export const ARCHITECTURE_LAYOUT = {
   leftMargin: 40,
   topMargin: 40,
   centerRef: 2800,
-  maxPerRow: 12,
+  maxPerRow: 14,
 } as const;
 
 export type ArchitectureLayoutItem = {
