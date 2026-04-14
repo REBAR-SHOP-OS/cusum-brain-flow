@@ -616,6 +616,35 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         const s = pc.iceConnectionState;
         console.log("[RealtimeVoice][STEP] ice_connection_state=" + s);
         logAllStates("oniceconnectionstatechange");
+
+        // Start ICE-stuck timer when we enter "checking" — if Metered DNS is broken,
+        // skip relay-only and jump to STUN-only after 15s instead of waiting full 30s
+        if (s === "checking" && !iceStuckTimerRef) {
+          iceStuckTimerRef = setTimeout(() => {
+            if (isStale() || !activeRef.current) return;
+            if (dataChannelEverOpened || sessionReadyRef.current) return;
+            const currentIce = pc.iceConnectionState;
+            if (currentIce !== "checking") return;
+
+            console.warn(`[RealtimeVoice] ICE stuck at "checking" for 15s — candidates: ${candidateSummary()} meteredDnsFail=${hasMeteredDnsFailures()}`);
+
+            if (hasMeteredDnsFailures() && !stunOnlyRetryDoneRef.current) {
+              console.warn("[RealtimeVoice] Metered DNS failures detected — skipping relay-only, going straight to STUN-only retry");
+              stunOnlyRetryDoneRef.current = true;
+              relayRetryDoneRef.current = true; // skip relay too — same broken servers
+              cleanup("ice_stuck_stun_only");
+              iceTransportPolicyRef.current = "all";
+              skipTurnRef.current = true;
+              setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
+            }
+          }, 15000);
+        }
+
+        // Clear the stuck timer if ICE succeeds
+        if ((s === "connected" || s === "completed") && iceStuckTimerRef) {
+          clearTimeout(iceStuckTimerRef);
+          iceStuckTimerRef = null;
+        }
       };
 
       // Add mic tracks using explicit transceivers to keep the offer shape
