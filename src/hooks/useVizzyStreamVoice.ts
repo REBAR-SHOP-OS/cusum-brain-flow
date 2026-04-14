@@ -166,8 +166,8 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
           if (data.audio_base64) {
             playBase64Audio(data.audio_base64, data.audio_format || "mp3");
           } else {
-            // Fallback: ElevenLabs TTS when PersonaPlex returns text-only
-            speakWithElevenLabs(speakable);
+            // Fallback: browser TTS when PersonaPlex returns text-only
+            speakWithBrowserTTS(speakable);
           }
         }
       }
@@ -178,7 +178,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       processingRef.current = false;
       setDebugStep("listening");
     }
-  }, [getSystemPrompt, playBase64Audio, speakWithElevenLabs]);
+  }, [getSystemPrompt, playBase64Audio, speakWithBrowserTTS]);
 
   // --- Speech recognition ---
   const startRecognition = useCallback(() => {
