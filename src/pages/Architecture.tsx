@@ -424,7 +424,7 @@ export default function Architecture() {
 
     const timeoutId = window.setTimeout(() => {
       reactFlowInstance.fitView({
-        padding: 0.18,
+        padding: 0.08,
         duration: 250,
         includeHiddenNodes: false,
       });
@@ -654,7 +654,8 @@ export default function Architecture() {
             onInit={setReactFlowInstance}
             nodeTypes={nodeTypes}
             fitView
-            fitViewOptions={{ padding: 0.15 }}
+            minZoom={0.05}
+            fitViewOptions={{ padding: 0.05 }}
             deleteKeyCode={["Backspace", "Delete"]}
             snapToGrid
             snapGrid={[10, 10]}
