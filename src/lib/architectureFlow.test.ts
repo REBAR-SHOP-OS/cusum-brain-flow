@@ -62,15 +62,15 @@ describe("applyArchitectureLayout", () => {
     expect(nested.position.y).toBe(topLevel.position.y);
   });
 
-  it("wraps 25+ nodes into 3 rows with increasing y", () => {
-    const items: ArchitectureLayoutItem[] = Array.from({ length: 25 }, (_, i) => ({
+  it("wraps 29+ nodes into 3 rows with increasing y", () => {
+    const items: ArchitectureLayoutItem[] = Array.from({ length: 29 }, (_, i) => ({
       id: `p-${i}`,
       layer: "platform" as const,
     }));
     const result = applyArchitectureLayout(items);
     const row1 = result.find((i) => i.id === "p-0")!;
     const row2 = result.find((i) => i.id === "p-14")!;
-    const row3 = result.find((i) => i.id === "p-24")!;
+    const row3 = result.find((i) => i.id === "p-28")!;
 
     expect(row2.position.y).toBeGreaterThan(row1.position.y);
     expect(row3.position.y).toBeGreaterThan(row2.position.y);
