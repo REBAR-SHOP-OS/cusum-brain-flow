@@ -79,6 +79,7 @@ type ArchitectureDialogNode = {
   accent: Accent;
   icon: ArchNode["icon"];
   detail: ArchNode["detail"];
+  description?: string;
 };
 
 const getAllLayers = () => new Set(LAYERS.map((layer) => layer.key));
