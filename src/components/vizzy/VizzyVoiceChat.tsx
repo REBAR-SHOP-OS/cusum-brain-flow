@@ -89,6 +89,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     outputAudioBlocked,
     retryOutputAudio,
     debugStep,
+    voicePath,
   } = useVizzyVoiceEngine();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -280,6 +281,18 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           <span className="text-xs font-medium" style={{ color: "hsl(172 30% 70%)" }}>
             {isConnected ? "LIVE SESSION" : isConnecting ? "CONNECTING" : "OFFLINE"}
           </span>
+          {isConnected && voicePath && voicePath !== "idle" && (
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+              style={{
+                color: voicePath === "personaplex" ? "hsl(152 69% 70%)" : "hsl(45 80% 70%)",
+                background: voicePath === "personaplex" ? "hsl(152 69% 20% / 0.4)" : "hsl(45 80% 20% / 0.4)",
+                border: `1px solid ${voicePath === "personaplex" ? "hsl(152 69% 40% / 0.5)" : "hsl(45 80% 40% / 0.5)"}`,
+              }}
+            >
+              {voicePath === "personaplex" ? "PP" : "FB"}
+            </span>
+          )}
         </div>
         <button
           onClick={handleClose}

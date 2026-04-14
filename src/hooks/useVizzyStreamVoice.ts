@@ -33,6 +33,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
   const [partialText, setPartialText] = useState("");
   const [debugStep, setDebugStep] = useState("idle");
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [voicePath, setVoicePath] = useState<string>("idle");
 
   const recognitionRef = useRef<any>(null);
   const activeRef = useRef(false);
@@ -133,6 +134,11 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       const data = await resp.json();
       const text = data.text || "";
       const agentId = `t-${++idCounter.current}`;
+
+      // Track which voice path the server used
+      if (data._voice_path) {
+        setVoicePath(data._voice_path);
+      }
 
       if (text) {
         // Silently drop [UNCLEAR] — no transcript, no TTS
@@ -328,5 +334,6 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     retryOutputAudio: undefined,
     debugStep,
     lastErrorDetail: errorDetail,
+    voicePath,
   };
 }
