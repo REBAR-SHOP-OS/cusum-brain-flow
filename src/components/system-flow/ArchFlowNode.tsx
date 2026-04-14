@@ -109,10 +109,10 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
         style={{ background: `linear-gradient(90deg, transparent, ${st.solid}, transparent)`, opacity: 0.6 }}
       />
 
-      {/* Target handle (top) */}
+      {/* Target handle (left) */}
       <Handle
         type="target"
-        position={Position.Top}
+        position={Position.Left}
         className="!h-2.5 !w-2.5 !border-2 !bg-slate-900"
         style={{ borderColor: st.border }}
       />
@@ -166,10 +166,10 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
         {nodeData.hint}
       </span>
 
-      {/* Source handle (bottom) */}
+      {/* Source handle (right) */}
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={Position.Right}
         className="!h-2.5 !w-2.5 !border-2 !bg-slate-900"
         style={{ borderColor: st.border }}
       />

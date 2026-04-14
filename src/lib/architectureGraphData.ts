@@ -19,7 +19,7 @@ import {
   LayoutDashboard, ListTodo, Monitor, Building, Star, Clock, Package, Stethoscope, Settings,
 } from "lucide-react";
 
-export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform";
+export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform" | "items";
 
 export type Accent = "cyan" | "emerald" | "orange" | "violet" | "blue" | "rose";
 
@@ -44,12 +44,13 @@ export interface ArchEdge {
 /* ───── Layer metadata ───── */
 export const LAYERS: { key: ArchLayer; label: string; accent: Accent; y: number }[] = [
   { key: "external", label: "External Services",  accent: "rose",    y: 0 },
-  { key: "ai",       label: "AI / Automation",    accent: "violet",  y: 1 },
-  { key: "modules",  label: "Business Modules",   accent: "orange",  y: 2 },
-  { key: "backend",  label: "Integrations",       accent: "blue",    y: 3 },
-  { key: "auth",     label: "Access Control",     accent: "emerald", y: 4 },
-  { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 5 },
-  { key: "platform", label: "Data + Platform",    accent: "emerald", y: 6 },
+  { key: "items",    label: "System Items",        accent: "orange",  y: 1 },
+  { key: "ai",       label: "AI / Automation",    accent: "violet",  y: 2 },
+  { key: "modules",  label: "Business Modules",   accent: "orange",  y: 3 },
+  { key: "backend",  label: "Integrations",       accent: "blue",    y: 4 },
+  { key: "auth",     label: "Access Control",     accent: "emerald", y: 5 },
+  { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 6 },
+  { key: "platform", label: "Data + Platform",    accent: "emerald", y: 7 },
 ];
 
 /* ───── Nodes ───── */
@@ -68,38 +69,38 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "agent-rtr", label: "Agent Router", hint: "AI dispatch",  layer: "auth", accent: "emerald", icon: Bot,     detail: { title: "Agent Router", bullets: ["Routes to correct AI agent", "Agent registry", "Action logging"] } },
 
   // Layer 3: Business Modules
-  { id: "crm",        label: "CRM",        hint: "Leads & deals",  layer: "modules", accent: "orange", icon: Briefcase,   detail: { title: "CRM Module", bullets: ["Pipeline board", "Leads, contacts, customers", "Activity tracking"] } },
-  { id: "shop-floor", label: "Shop Floor", hint: "Production",     layer: "modules", accent: "orange", icon: Factory,     detail: { title: "Shop Floor", bullets: ["Live production dashboard", "Work orders, cut & bend batches", "Machine monitoring"] } },
-  { id: "team-hub",   label: "Team Hub",   hint: "HR & time",      layer: "modules", accent: "orange", icon: UsersRound,  detail: { title: "Team Hub", bullets: ["Employee management", "Time entries & schedules", "Performance tracking"] } },
-  { id: "accounting", label: "Accounting", hint: "Finance",        layer: "modules", accent: "orange", icon: Calculator,  detail: { title: "Accounting", bullets: ["Financial overview", "QuickBooks mirror", "Budgets & bank feeds"] } },
-  { id: "seo",        label: "SEO",        hint: "Rankings",       layer: "modules", accent: "orange", icon: Search,      detail: { title: "SEO Module", bullets: ["Keyword tracking", "Site audits", "Search Console integration"] } },
-  { id: "video",      label: "Video",      hint: "Ad Director",    layer: "modules", accent: "orange", icon: Video,       detail: { title: "Video Ad Director", bullets: ["AI video creation", "Storyboard workflow", "Brand kit integration"] } },
-  { id: "email",      label: "Email",      hint: "Campaigns",      layer: "modules", accent: "orange", icon: Mail,        detail: { title: "Email Campaigns", bullets: ["Template builder", "Audience segmentation", "Delivery tracking"] } },
-  { id: "chat",       label: "Chat",       hint: "Messaging",      layer: "modules", accent: "orange", icon: MessageSquare, detail: { title: "Chat System", bullets: ["Thread-based messaging", "Real-time via Supabase Realtime", "File sharing"] } },
-  { id: "estimating", label: "Estimating", hint: "OCR + AI",       layer: "modules", accent: "orange", icon: Ruler,          detail: { title: "Estimating Engine", bullets: ["PDF extraction & OCR", "AI-powered estimates", "Barlist generation"] } },
-  { id: "quotes",     label: "Quotes",     hint: "Sales quotes",   layer: "modules", accent: "orange", icon: FileSpreadsheet, detail: { title: "Sales Quotes", bullets: ["Quote builder & templates", "Price calculation engine", "Email delivery"] } },
-  { id: "payroll",    label: "Payroll",    hint: "Wages",          layer: "modules", accent: "orange", icon: Banknote,       detail: { title: "Payroll", bullets: ["Pay period processing", "Deductions & benefits", "Export to accounting"] } },
-  { id: "inbox",      label: "Inbox",      hint: "Unified comms",  layer: "modules", accent: "orange", icon: Inbox,          detail: { title: "Inbox / Comms", bullets: ["Unified email + SMS", "AI triage & drafting", "Translation support"] } },
+  { id: "crm",        label: "CRM",        hint: "Leads & deals",  layer: "items", accent: "orange", icon: Briefcase,   detail: { title: "CRM Module", bullets: ["Pipeline board", "Leads, contacts, customers", "Activity tracking"] } },
+  { id: "shop-floor", label: "Shop Floor", hint: "Production",     layer: "items", accent: "orange", icon: Factory,     detail: { title: "Shop Floor", bullets: ["Live production dashboard", "Work orders, cut & bend batches", "Machine monitoring"] } },
+  { id: "team-hub",   label: "Team Hub",   hint: "HR & time",      layer: "items", accent: "orange", icon: UsersRound,  detail: { title: "Team Hub", bullets: ["Employee management", "Time entries & schedules", "Performance tracking"] } },
+  { id: "accounting", label: "Accounting", hint: "Finance",        layer: "items", accent: "orange", icon: Calculator,  detail: { title: "Accounting", bullets: ["Financial overview", "QuickBooks mirror", "Budgets & bank feeds"] } },
+  { id: "seo",        label: "SEO",        hint: "Rankings",       layer: "items", accent: "orange", icon: Search,      detail: { title: "SEO Module", bullets: ["Keyword tracking", "Site audits", "Search Console integration"] } },
+  { id: "video",      label: "Video",      hint: "Ad Director",    layer: "items", accent: "orange", icon: Video,       detail: { title: "Video Ad Director", bullets: ["AI video creation", "Storyboard workflow", "Brand kit integration"] } },
+  { id: "email",      label: "Email",      hint: "Campaigns",      layer: "items", accent: "orange", icon: Mail,        detail: { title: "Email Campaigns", bullets: ["Template builder", "Audience segmentation", "Delivery tracking"] } },
+  { id: "chat",       label: "Chat",       hint: "Messaging",      layer: "items", accent: "orange", icon: MessageSquare, detail: { title: "Chat System", bullets: ["Thread-based messaging", "Real-time via Supabase Realtime", "File sharing"] } },
+  { id: "estimating", label: "Estimating", hint: "OCR + AI",       layer: "items", accent: "orange", icon: Ruler,          detail: { title: "Estimating Engine", bullets: ["PDF extraction & OCR", "AI-powered estimates", "Barlist generation"] } },
+  { id: "quotes",     label: "Quotes",     hint: "Sales quotes",   layer: "items", accent: "orange", icon: FileSpreadsheet, detail: { title: "Sales Quotes", bullets: ["Quote builder & templates", "Price calculation engine", "Email delivery"] } },
+  { id: "payroll",    label: "Payroll",    hint: "Wages",          layer: "items", accent: "orange", icon: Banknote,       detail: { title: "Payroll", bullets: ["Pay period processing", "Deductions & benefits", "Export to accounting"] } },
+  { id: "inbox",      label: "Inbox",      hint: "Unified comms",  layer: "items", accent: "orange", icon: Inbox,          detail: { title: "Inbox / Comms", bullets: ["Unified email + SMS", "AI triage & drafting", "Translation support"] } },
 
   // OFFICE additions
-  { id: "dashboard",    label: "Dashboard",      hint: "Overview",      layer: "modules", accent: "orange", icon: LayoutDashboard, detail: { title: "Dashboard", bullets: ["Company-wide KPIs", "Real-time metrics", "Widget-based layout"] } },
-  { id: "biz-tasks",    label: "Business Tasks", hint: "Task mgmt",    layer: "modules", accent: "orange", icon: ListTodo,        detail: { title: "Business Tasks", bullets: ["Task assignment & tracking", "Priority management", "Deadline monitoring"] } },
-  { id: "live-monitor", label: "Live Monitor",   hint: "Real-time",    layer: "modules", accent: "orange", icon: Monitor,         detail: { title: "Live Monitor", bullets: ["Real-time production view", "Machine status tracking", "Alert notifications"] } },
-  { id: "ceo-portal",   label: "CEO Portal",     hint: "Executive",    layer: "modules", accent: "orange", icon: Building,        detail: { title: "CEO Portal", bullets: ["Executive dashboard", "Financial summaries", "Strategic overview"] } },
-  { id: "support",      label: "Support",        hint: "Help desk",    layer: "modules", accent: "orange", icon: HeadphonesIcon,  detail: { title: "Support", bullets: ["Ticket management", "Customer issue tracking", "AI-assisted responses"] } },
-  { id: "lead-scoring", label: "Lead Scoring",   hint: "AI scoring",   layer: "modules", accent: "orange", icon: Star,            detail: { title: "Lead Scoring", bullets: ["AI-powered lead ranking", "Qualification criteria", "Conversion predictions"] } },
-  { id: "customers",    label: "Customers",      hint: "Directory",    layer: "modules", accent: "orange", icon: Users,           detail: { title: "Customers", bullets: ["Customer directory", "Contact management", "Purchase history"] } },
-  { id: "sales",        label: "Sales",          hint: "Revenue",      layer: "modules", accent: "orange", icon: DollarSign,      detail: { title: "Sales", bullets: ["Sales pipeline", "Deal tracking", "Revenue reporting"] } },
+  { id: "dashboard",    label: "Dashboard",      hint: "Overview",      layer: "items", accent: "orange", icon: LayoutDashboard, detail: { title: "Dashboard", bullets: ["Company-wide KPIs", "Real-time metrics", "Widget-based layout"] } },
+  { id: "biz-tasks",    label: "Business Tasks", hint: "Task mgmt",    layer: "items", accent: "orange", icon: ListTodo,        detail: { title: "Business Tasks", bullets: ["Task assignment & tracking", "Priority management", "Deadline monitoring"] } },
+  { id: "live-monitor", label: "Live Monitor",   hint: "Real-time",    layer: "items", accent: "orange", icon: Monitor,         detail: { title: "Live Monitor", bullets: ["Real-time production view", "Machine status tracking", "Alert notifications"] } },
+  { id: "ceo-portal",   label: "CEO Portal",     hint: "Executive",    layer: "items", accent: "orange", icon: Building,        detail: { title: "CEO Portal", bullets: ["Executive dashboard", "Financial summaries", "Strategic overview"] } },
+  { id: "support",      label: "Support",        hint: "Help desk",    layer: "items", accent: "orange", icon: HeadphonesIcon,  detail: { title: "Support", bullets: ["Ticket management", "Customer issue tracking", "AI-assisted responses"] } },
+  { id: "lead-scoring", label: "Lead Scoring",   hint: "AI scoring",   layer: "items", accent: "orange", icon: Star,            detail: { title: "Lead Scoring", bullets: ["AI-powered lead ranking", "Qualification criteria", "Conversion predictions"] } },
+  { id: "customers",    label: "Customers",      hint: "Directory",    layer: "items", accent: "orange", icon: Users,           detail: { title: "Customers", bullets: ["Customer directory", "Contact management", "Purchase history"] } },
+  { id: "sales",        label: "Sales",          hint: "Revenue",      layer: "items", accent: "orange", icon: DollarSign,      detail: { title: "Sales", bullets: ["Sales pipeline", "Deal tracking", "Revenue reporting"] } },
 
   // PRODUCTION additions
-  { id: "time-clock",   label: "Time Clock",     hint: "Attendance",   layer: "modules", accent: "orange", icon: Clock,           detail: { title: "Time Clock", bullets: ["Clock in/out tracking", "Break management", "Overtime calculations"] } },
-  { id: "office-tools", label: "Office Tools",   hint: "Utilities",    layer: "modules", accent: "orange", icon: Wrench,          detail: { title: "Office Tools", bullets: ["AI extract & barlist tools", "Production queue", "Packing slips & tags"] } },
+  { id: "time-clock",   label: "Time Clock",     hint: "Attendance",   layer: "items", accent: "orange", icon: Clock,           detail: { title: "Time Clock", bullets: ["Clock in/out tracking", "Break management", "Overtime calculations"] } },
+  { id: "office-tools", label: "Office Tools",   hint: "Utilities",    layer: "items", accent: "orange", icon: Wrench,          detail: { title: "Office Tools", bullets: ["AI extract & barlist tools", "Production queue", "Packing slips & tags"] } },
 
   // LOGISTICS
-  { id: "inventory",    label: "Inventory",      hint: "Stock",        layer: "modules", accent: "orange", icon: Package,         detail: { title: "Inventory", bullets: ["Stock level tracking", "Material management", "Reorder alerts"] } },
+  { id: "inventory",    label: "Inventory",      hint: "Stock",        layer: "items", accent: "orange", icon: Package,         detail: { title: "Inventory", bullets: ["Stock level tracking", "Material management", "Reorder alerts"] } },
 
   // QA
-  { id: "diagnostics",  label: "Diagnostics",    hint: "System health", layer: "modules", accent: "orange", icon: Stethoscope,    detail: { title: "Diagnostics", bullets: ["System health checks", "Performance monitoring", "Error diagnostics"] } },
+  { id: "diagnostics",  label: "Diagnostics",    hint: "System health", layer: "items", accent: "orange", icon: Stethoscope,    detail: { title: "Diagnostics", bullets: ["System health checks", "Performance monitoring", "Error diagnostics"] } },
 
   // Layer 4: AI & Automation
   { id: "vizzy",       label: "Vizzy",       hint: "Voice AI",       layer: "ai", accent: "violet", icon: Mic,          detail: { title: "Vizzy — Voice Assistant", bullets: ["WebRTC Realtime", "Sliding window context", "ERP data digest"] } },
@@ -144,11 +145,11 @@ export const ARCH_NODES: ArchNode[] = [
 
   // Layer 5: Integrations (Edge Functions)
   { id: "fn-social",   label: "Social",     hint: "Publish",        layer: "backend", accent: "blue", icon: Share2,     detail: { title: "Social Publish", bullets: ["Meta Graph API", "Multi-platform scheduling", "Content queue"] } },
-  { id: "fn-stripe",   label: "Stripe",     hint: "Payments",       layer: "backend", accent: "blue", icon: CreditCard, detail: { title: "Stripe Integration", bullets: ["Payment processing", "Webhook handling", "Invoice management"] } },
-  { id: "fn-ring",     label: "RingCentral", hint: "Telephony",     layer: "backend", accent: "blue", icon: Phone,      detail: { title: "RingCentral Sync", bullets: ["Call log sync", "Webhook events", "SMS integration"] } },
-  { id: "fn-gmail",    label: "Gmail",      hint: "Email API",      layer: "backend", accent: "blue", icon: MailOpen,   detail: { title: "Gmail Integration", bullets: ["Email send & receive", "Thread tracking", "Draft management"] } },
-  { id: "fn-odoo",     label: "Odoo",       hint: "ERP sync",       layer: "backend", accent: "blue", icon: Building2,  detail: { title: "Odoo Integration", bullets: ["Product & inventory sync", "Order management", "XML-RPC bridge"] } },
-  { id: "fn-qb",       label: "QuickBooks", hint: "Accounting",     layer: "backend", accent: "blue", icon: BookOpen,   detail: { title: "QuickBooks Sync", bullets: ["Customer & invoice mirroring", "OAuth2 token refresh", "Balance sync"] } },
+  { id: "fn-stripe",   label: "Stripe API",  hint: "Payments",       layer: "backend", accent: "blue", icon: CreditCard, detail: { title: "Stripe Integration", bullets: ["Payment processing", "Webhook handling", "Invoice management"] } },
+  { id: "fn-ring",     label: "RC API",      hint: "Telephony",     layer: "backend", accent: "blue", icon: Phone,      detail: { title: "RingCentral Sync", bullets: ["Call log sync", "Webhook events", "SMS integration"] } },
+  { id: "fn-gmail",    label: "Gmail",       hint: "Email API",      layer: "backend", accent: "blue", icon: MailOpen,   detail: { title: "Gmail Integration", bullets: ["Email send & receive", "Thread tracking", "Draft management"] } },
+  { id: "fn-odoo",     label: "Odoo Sync",   hint: "ERP sync",       layer: "backend", accent: "blue", icon: Building2,  detail: { title: "Odoo Integration", bullets: ["Product & inventory sync", "Order management", "XML-RPC bridge"] } },
+  { id: "fn-qb",       label: "QB Sync",     hint: "Accounting",     layer: "backend", accent: "blue", icon: BookOpen,   detail: { title: "QuickBooks Sync", bullets: ["Customer & invoice mirroring", "OAuth2 token refresh", "Balance sync"] } },
   { id: "fn-seo",      label: "SEO Engine", hint: "Audit",          layer: "backend", accent: "blue", icon: FileSearch, detail: { title: "SEO Backend", bullets: ["PageSpeed analysis", "Core Web Vitals", "Keyword tracking"] } },
   { id: "fn-ai",       label: "AI Gateway", hint: "LLM proxy",      layer: "backend", accent: "blue", icon: Zap,        detail: { title: "AI Gateway", bullets: ["Multi-model routing", "Usage logging", "Rate limiting"] } },
   { id: "fn-push",     label: "Push",       hint: "Notifications",  layer: "backend", accent: "blue", icon: Bell,       detail: { title: "Push Notifications", bullets: ["DB trigger pipeline", "Multi-channel delivery", "Escalation rules"] } },
@@ -408,6 +409,7 @@ export const LAYER_LABELS: Record<ArchLayer, string> = {
   entry: "Entry Points",
   auth: "Access Control",
   modules: "Business Modules",
+  items: "System Items",
   ai: "AI / Automation",
   backend: "Integrations",
   external: "External Services",
