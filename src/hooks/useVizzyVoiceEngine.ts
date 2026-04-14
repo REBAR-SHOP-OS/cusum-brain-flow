@@ -324,7 +324,7 @@ export function useVizzyVoiceEngine() {
     return instructionsRef.current + liveBlock;
   }, []);
 
-  const engine = useVizzyRealtimeVoice({ getSystemPrompt });
+  const engine = useVizzyStreamVoice({ getSystemPrompt });
 
   const originalStartSession = engine.startSession;
   const originalEndSession = engine.endSession;
