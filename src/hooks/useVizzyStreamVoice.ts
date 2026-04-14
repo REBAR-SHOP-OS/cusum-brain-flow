@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from "react";
 import { takePrimedMobileAudio } from "@/lib/audioPlayer";
 import { supabase } from "@/integrations/supabase/client";
+import { chunkText } from "@/utils/chunkText";
 
 /**
  * Vizzy Stream Voice — STT → PersonaPlex (via backend proxy) → Audio playback.
@@ -77,10 +78,89 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     playNextAudio();
   }, [playNextAudio]);
 
-  // --- Browser TTS fallback (only if PersonaPlex returns no audio) ---
+  // --- Chunked realtime TTS via vizzy-tts edge function ---
+  const ttsAbortRef = useRef<AbortController | null>(null);
+  const ttsUrlCacheRef = useRef<string[]>([]);
+
+  const stopSpeech = useCallback(() => {
+    ttsAbortRef.current?.abort();
+    ttsAbortRef.current = null;
+    // Revoke cached object URLs
+    ttsUrlCacheRef.current.forEach(url => URL.revokeObjectURL(url));
+    ttsUrlCacheRef.current = [];
+    // Clear audio queue
+    audioQueueRef.current.forEach(a => {
+      a.onended = null; a.onerror = null; a.pause(); a.src = "";
+    });
+    audioQueueRef.current = [];
+    isPlayingRef.current = false;
+    setIsSpeaking(false);
+    window.speechSynthesis?.cancel();
+  }, []);
+
+  const speakRealtime = useCallback(async (text: string) => {
+    if (!text.trim()) return;
+
+    const chunks = chunkText(text);
+    if (chunks.length === 0) return;
+
+    console.log(`[VizzyStream] Chunked TTS: ${chunks.length} chunks`);
+    setIsSpeaking(true);
+    setAudioStatus("chunked-tts");
+
+    // Abort any previous TTS generation
+    ttsAbortRef.current?.abort();
+    const controller = new AbortController();
+    ttsAbortRef.current = controller;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) {
+      console.error("[VizzyStream] Not authenticated for TTS");
+      setIsSpeaking(false);
+      return;
+    }
+
+    const ttsUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/vizzy-tts`;
+
+    // Fire chunks in parallel with staggered starts — queue as they resolve
+    for (let i = 0; i < chunks.length; i++) {
+      if (controller.signal.aborted) break;
+
+      try {
+        const resp = await fetch(ttsUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          },
+          body: JSON.stringify({ text: chunks[i] }),
+          signal: controller.signal,
+        });
+
+        if (!resp.ok) {
+          console.warn(`[VizzyStream] TTS chunk ${i} failed: ${resp.status}`);
+          continue;
+        }
+
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        ttsUrlCacheRef.current.push(url);
+
+        const audio = new Audio(url);
+        audioQueueRef.current.push(audio);
+        playNextAudio();
+      } catch (err: any) {
+        if (err?.name === "AbortError") break;
+        console.warn(`[VizzyStream] TTS chunk ${i} error:`, err?.message);
+      }
+    }
+  }, [playNextAudio]);
+
+  // Legacy browser TTS fallback (kept as last resort)
   const speakWithBrowserTTS = useCallback((text: string) => {
     if (!window.speechSynthesis || !text.trim()) return;
-    console.warn("[VizzyStream] PersonaPlex returned no audio — using browser TTS fallback");
+    console.warn("[VizzyStream] Using browser TTS as last resort");
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.1;
     utterance.onstart = () => setIsSpeaking(true);
@@ -191,9 +271,9 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
           if (data.audio_base64) {
             playBase64Audio(data.audio_base64, data.audio_format || "mp3");
           } else {
-            // Fallback: browser TTS when API returns text-only
-            setAudioStatus("browser-fallback");
-            speakWithBrowserTTS(speakable);
+            // Chunked realtime TTS — start speaking chunk-by-chunk
+            setAudioStatus("chunked-tts");
+            speakRealtime(speakable);
           }
         }
       }
@@ -214,7 +294,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       processingRef.current = false;
       setDebugStep("listening");
     }
-  }, [playBase64Audio, speakWithBrowserTTS]);
+  }, [playBase64Audio, speakRealtime]);
 
   // --- Speech recognition ---
   const startRecognition = useCallback(() => {
@@ -315,13 +395,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     abortRef.current = new AbortController();
 
     stopRecognition();
-    window.speechSynthesis?.cancel();
-
-    audioQueueRef.current.forEach(a => {
-      a.onended = null; a.onerror = null; a.pause(); a.src = "";
-    });
-    audioQueueRef.current = [];
-    isPlayingRef.current = false;
+    stopSpeech();
 
     setState("idle");
     setIsSpeaking(false);
@@ -330,7 +404,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     setDebugStep("idle");
     setTranscripts([]);
     conversationRef.current = [];
-  }, [stopRecognition]);
+  }, [stopRecognition, stopSpeech]);
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {
@@ -385,7 +459,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
             }]);
             conversationRef.current.push({ role: "assistant", content: replyText });
             if (data.audio_base64) playBase64Audio(data.audio_base64, data.audio_format || "mp3");
-            else speakWithBrowserTTS(replyText);
+            else speakRealtime(replyText);
           }
         } catch (err: any) {
           if (err?.name === "AbortError") return;
@@ -398,7 +472,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       return;
     }
     callPersonaPlex(text);
-  }, [callPersonaPlex, getSystemPrompt, playBase64Audio, speakWithBrowserTTS]);
+  }, [callPersonaPlex, getSystemPrompt, playBase64Audio, speakRealtime]);
 
   return {
     state,
