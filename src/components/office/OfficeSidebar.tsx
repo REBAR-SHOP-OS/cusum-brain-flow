@@ -9,7 +9,7 @@ import {
   DollarSign,
   ArrowLeft,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import brandLogo from "@/assets/brand-logo.png";
 
