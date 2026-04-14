@@ -139,13 +139,12 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       const text = data.text || "";
       const agentId = `t-${++idCounter.current}`;
 
-      // Track which voice path and audio status the server used
-      if (data._voice_path) {
-        setVoicePath(data._voice_path);
-      }
-      if (data._audio_status) {
-        setAudioStatus(data._audio_status);
-      }
+      // Track Vizzy One API metadata
+      if (data._voice_path) setVoicePath(data._voice_path);
+      if (data._audio_status) setAudioStatus(data._audio_status);
+      if (data._api_connected !== undefined) setApiConnected(data._api_connected);
+      if (data._intent !== undefined) setIntent(data._intent);
+      if (data._grounded !== undefined) setGrounded(data._grounded);
 
       if (text) {
         // Silently drop [UNCLEAR] — no transcript, no TTS
@@ -343,5 +342,8 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     lastErrorDetail: errorDetail,
     voicePath,
     audioStatus,
+    apiConnected,
+    intent,
+    grounded,
   };
 }
