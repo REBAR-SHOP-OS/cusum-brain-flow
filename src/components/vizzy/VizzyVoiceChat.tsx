@@ -597,7 +597,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           <div className="flex flex-col items-center gap-2">
             <div className="flex items-center gap-2 text-xs" style={{ color: "hsl(0 0% 45%)" }}>
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              {isBrainSyncing ? "Vizzy Brain syncing…" : "Live ERP Data Connected"}
+              {isBrainSyncing ? "Vizzy Brain syncing…" : "Vizzy One API Connected"}
             </div>
             {/* Language mode selector */}
             <div className="flex items-center gap-1">

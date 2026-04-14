@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { takePrimedMobileAudio } from "@/lib/audioPlayer";
 
 /**
@@ -88,7 +87,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     window.speechSynthesis.speak(utterance);
   }, []);
 
-  // --- Call PersonaPlex via edge function ---
+  // --- Call Vizzy One API directly ---
   const callPersonaPlex = useCallback(async (userText: string) => {
     if (processingRef.current) return;
     processingRef.current = true;
@@ -106,45 +105,39 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     }]);
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const VIZZY_ONE_BASE = "https://pc.tail669f65.ts.net";
+      const endpoint = `${VIZZY_ONE_BASE}/api/v1/vizzy/voice`;
 
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/personaplex-voice`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({
-            messages: conversationRef.current,
-            systemPrompt: getSystemPrompt(),
-            voiceEnabled: true,
-          }),
-          signal,
-        }
-      );
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: userText,
+          source: "lovable",
+          voice_enabled: true,
+        }),
+        signal,
+      });
 
       if (!resp.ok) {
         const errText = await resp.text().catch(() => "");
-        console.error("[VizzyStream] PersonaPlex proxy error:", resp.status, errText);
+        console.error("[VizzyStream] Vizzy One API error:", resp.status, errText);
+        setApiConnected(false);
         processingRef.current = false;
         setDebugStep("listening");
         return;
       }
 
       const data = await resp.json();
-      const text = data.text || "";
+      const text = data.reply || "";
       const agentId = `t-${++idCounter.current}`;
 
       // Track Vizzy One API metadata
-      if (data._voice_path) setVoicePath(data._voice_path);
-      if (data._audio_status) setAudioStatus(data._audio_status);
-      if (data._api_connected !== undefined) setApiConnected(data._api_connected);
-      if (data._intent !== undefined) setIntent(data._intent);
-      if (data._grounded !== undefined) setGrounded(data._grounded);
+      setApiConnected(data.ok === true);
+      if (data.voice_path) setVoicePath(data.voice_path);
+      if (data.intent) setIntent(data.intent);
+      if (data.grounded !== undefined) setGrounded(data.grounded);
+      setAudioStatus(data.audio_base64 ? "vizzy-one" : "text-only");
 
       if (text) {
         // Silently drop [UNCLEAR] — no transcript, no TTS
@@ -190,7 +183,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       processingRef.current = false;
       setDebugStep("listening");
     }
-  }, [getSystemPrompt, playBase64Audio, speakWithBrowserTTS]);
+  }, [playBase64Audio, speakWithBrowserTTS]);
 
   // --- Speech recognition ---
   const startRecognition = useCallback(() => {
