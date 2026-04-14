@@ -1,81 +1,53 @@
 
 
-## Plan: Add All Sidebar Menu Items to Architecture Diagram
+## Plan: Horizontal Layout + Remove Duplicate Cards + Layer 1.5
 
-### Current State
-The sidebar has ~20 menu items across 5 categories (OFFICE, PRODUCTION, LOGISTICS, QA, SYSTEM). Only about half are represented in the architecture diagram.
+### Problem
+1. The layout is currently vertical (top-to-bottom) — user wants **horizontal** (left-to-right)
+2. Four cards have duplicate labels across layers: **Stripe**, **RingCentral**, **Odoo**, **QuickBooks** (each appears in both Integrations and External Services)
+3. User wants a layer 1.5 between External Services and AI/Automation for sidebar "items"
+4. Zoom/pan/drag already works via ReactFlow — no changes needed there
 
-### Missing Items (not yet in ARCH_NODES)
-
-| Sidebar Item | Category | Proposed Layer | Connections |
-|---|---|---|---|
-| Dashboard | OFFICE | modules | Primary DB, Analytics, Realtime |
-| Business Tasks | OFFICE | modules | Pipeline, State Machine, Approval Engine |
-| Live Monitor | OFFICE | modules | Realtime, Monitoring, Shop Floor |
-| CEO Portal | OFFICE | modules | Analytics, Primary DB, Pipeline |
-| Support | OFFICE | modules | Chat, Haven agent, Notifications |
-| Lead Scoring | OFFICE | modules | CRM, Pipeline, AI Gateway |
-| Customers | OFFICE | modules | CRM, Primary DB |
-| Sales | OFFICE | modules | CRM, Quotes, Pipeline, Blitz agent |
-| Time Clock | PRODUCTION | modules | Team Hub, Kiosk, Payroll |
-| Office Tools | PRODUCTION | modules | Primary DB, Storage |
-| Inventory | LOGISTICS | modules | Shop Floor, Odoo, Kala agent |
-| Diagnostics | QA | modules | Monitoring, Health Check, Error Track |
-| Settings | SYSTEM | platform | Feature Flags, Secrets, Admin |
-| Architecture | SYSTEM | platform | (self-reference, skip or add as doc node) |
-
-**Already mapped:** Inbox, Team Hub, Accounting, Shop Floor, Pipeline (as AI node)
+### Current Duplicates
+| Label | Integration Layer (id) | External Layer (id) |
+|---|---|---|
+| Stripe | fn-stripe | ext-stripe |
+| RingCentral | fn-ring | ext-rc |
+| Odoo | fn-odoo | ext-odoo |
+| QuickBooks | fn-qb | ext-qb |
 
 ### Changes
 
-**`src/lib/architectureGraphData.ts`**:
-1. Add ~13 new nodes to the `modules` layer (and 1 to `platform`) with `orange` accent
-2. Add ~35 new edges connecting these items to existing nodes (agents, integrations, platform)
-3. Import any additional Lucide icons needed (LayoutDashboard, ListTodo, Monitor, Crown/Building, Headphones, Star, Users, Clock, Wrench, Package, Stethoscope, Settings)
+**1. `src/lib/architectureFlow.ts` — Switch to horizontal layout**
+- Change the layout algorithm so layers are arranged **left-to-right** (each layer = a column) instead of top-to-bottom (each layer = a row)
+- Layers become vertical columns; nodes within each layer stack vertically
+- Swap X/Y logic: `layerOffset` controls X position, nodes within a layer get sequential Y positions
+- Adjust constants: `layerGap` → horizontal spacing between columns, `nodeGap` → vertical spacing within columns
 
-**`src/lib/architectureFlow.ts`**:
-- Increase `maxPerRow` from 12 to 14 (modules layer will now have ~25 nodes)
+**2. `src/lib/architectureGraphData.ts` — Fix duplicates + add layer 1.5**
+- Rename duplicate labels to be distinct:
+  - `fn-stripe` → "Stripe API" (or keep as integration-specific name)
+  - `fn-ring` → "RC API"
+  - `fn-odoo` → "Odoo Sync"
+  - `fn-qb` → "QB Sync"
+- Add a new layer key `"items"` between `external` and `ai` in the `LAYERS` array for sidebar menu items (layer 1.5)
+- Move the 24 Business Module nodes into this new `items` layer, or create it as a distinct grouping depending on user's intent
 
-### New Nodes Detail
+**3. `src/lib/architectureGraphData.ts` — Update type + LAYERS**
+- Add `"items"` to `ArchLayer` type
+- Insert `{ key: "items", label: "System Items", accent: "orange", y: 1 }` into LAYERS between external (y:0) and ai (y:2)
+- Re-number subsequent layer `y` values
 
-```text
-// OFFICE additions
-{ id: "dashboard",    label: "Dashboard",      hint: "Overview",     layer: "modules" }
-{ id: "biz-tasks",    label: "Business Tasks", hint: "Task mgmt",    layer: "modules" }
-{ id: "live-monitor", label: "Live Monitor",   hint: "Real-time",    layer: "modules" }
-{ id: "ceo-portal",   label: "CEO Portal",     hint: "Executive",    layer: "modules" }
-{ id: "support",      label: "Support",        hint: "Help desk",    layer: "modules" }
-{ id: "lead-scoring", label: "Lead Scoring",   hint: "AI scoring",   layer: "modules" }
-{ id: "customers",    label: "Customers",      hint: "Directory",    layer: "modules" }
-{ id: "sales",        label: "Sales",          hint: "Revenue",      layer: "modules" }
+**4. `src/pages/Architecture.tsx` — Ensure horizontal scroll**
+- The ReactFlow canvas already supports pan/zoom/drag — no changes needed for that
+- Verify `fitView` works well with wider horizontal layouts
 
-// PRODUCTION additions
-{ id: "time-clock",   label: "Time Clock",     hint: "Attendance",   layer: "modules" }
-{ id: "office-tools", label: "Office Tools",   hint: "Utilities",    layer: "modules" }
-
-// LOGISTICS
-{ id: "inventory",    label: "Inventory",      hint: "Stock",        layer: "modules" }
-
-// QA
-{ id: "diagnostics",  label: "Diagnostics",    hint: "System health", layer: "modules" }
-
-// SYSTEM
-{ id: "settings",     label: "Settings",       hint: "Config",       layer: "platform" }
-```
-
-### Key Edges (examples)
-- `dashboard` → `primary-db`, `analytics`, `realtime`
-- `sales` → `crm`, `quotes`, `ag-blitz`
-- `inventory` → `shop-floor`, `fn-odoo`, `ag-kala`
-- `time-clock` → `team-hub`, `kiosk`, `payroll`
-- `diagnostics` → `monitoring`, `health`, `error-track`
-- `lead-scoring` → `crm`, `fn-ai`, `pipeline`
-- `live-monitor` → `realtime`, `monitoring`, `shop-floor`
-- `ceo-portal` → `analytics`, `primary-db`, `pipeline`
+**5. `src/lib/architectureFlow.test.ts` — Update tests**
+- Adjust layout tests for the new horizontal algorithm (X increases per layer instead of Y)
 
 ### Result
-- Every sidebar menu item has a corresponding node in the diagram
-- Single-clicking any item shows its connections
-- Modules layer expands to ~25 nodes across 2 rows
-- All existing nodes, edges, and interactions preserved
+- Architecture flows **left → right**: External Services → Items → AI/Agents → Modules → Integrations → Access → Entry → Platform
+- No duplicate card names
+- Full zoom, pan, and drag preserved
+- All 108 nodes and their connections intact
 
