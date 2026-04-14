@@ -446,7 +446,6 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     setErrorDetail(null);
     conversationRef.current = [];
 
-    takePrimedMobileAudio();
     primedAudioRef.current = takePrimedMobileAudio() || primedAudioRef.current;
 
     setTimeout(() => {
