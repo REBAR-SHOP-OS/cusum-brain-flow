@@ -1,55 +1,52 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 
+/**
+ * Vizzy Voice Chat — text-only path via Vizzy One API
+ *
+ * POST /api/v1/vizzy/chat → { ok, reply, intent, grounded }
+ */
+
+const VIZZY_ONE_BASE = "https://pc.tail669f65.ts.net";
+
 Deno.serve((req) =>
   handleRequest(req, async ({ body }) => {
     const { messages, systemPrompt } = body;
     if (!messages || !Array.isArray(messages)) throw new Error("messages array is required");
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
+    const text = lastUserMsg?.content || "";
 
-    const allMessages = [
-      { role: "system", content: systemPrompt || "You are Vizzy, an executive AI assistant." },
-      ...messages,
-    ];
+    if (!text.trim()) throw new Error("No user message found");
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    console.log("[vizzy-voice-chat] Routing to Vizzy One API /api/v1/vizzy/chat");
+
+    const apiResp = await fetch(`${VIZZY_ONE_BASE}/api/v1/vizzy/chat`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: allMessages,
-        stream: true,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, source: "lovable" }),
+    });
+
+    if (!apiResp.ok) {
+      const errText = await apiResp.text().catch(() => "");
+      console.error("[vizzy-voice-chat] Vizzy One API error:", apiResp.status, errText);
+      return new Response(
+        JSON.stringify({ error: `Vizzy One API error: ${apiResp.status}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const data = await apiResp.json();
+
+    return new Response(
+      JSON.stringify({
+        text: data.reply || "",
+        _api_connected: data.ok === true,
+        _intent: data.intent || null,
+        _grounded: data.grounded ?? null,
+        _voice_path: data.voice_path || "text-only",
       }),
-    });
-
-    if (response.status === 429) {
-      return new Response(JSON.stringify({ error: "Rate limited. Please try again in a moment." }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (response.status === 402) {
-      return new Response(JSON.stringify({ error: "AI credits exhausted." }), {
-        status: 402,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!response.ok) {
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
-      return new Response(JSON.stringify({ error: `AI gateway error: ${response.status}` }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-    });
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }, { functionName: "vizzy-voice-chat", authMode: "required", requireCompany: false, rawResponse: true })
 );
