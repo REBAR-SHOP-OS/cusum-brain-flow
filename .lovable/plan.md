@@ -1,65 +1,51 @@
 
 
-## Plan: Solid Card Colors with Unique Color Per Layer
+## Plan: Strengthen Noise Filtering in Nila Interpreter
 
 ### Problem
-1. Card backgrounds are very dark with subtle tints — hard to distinguish layers
-2. Border colors use `rgba` (transparency) instead of solid colors
-3. Two layers (`auth` and `platform`) share the same `emerald` accent, causing confusion
+Nila currently translates low-confidence or garbled audio — random sounds, filler words, and misheard fragments get through and produce bad translations.
+
+### Current State
+Both `useRealtimeTranscribe.ts` and `useNilaVoiceRelay.ts` have basic filters (min word count, letter ratio, noise blocklist, repeated chars). But they're too lenient — short unclear phrases and common STT hallucinations still pass through.
 
 ### Changes
 
-**1. `src/lib/architectureGraphData.ts`**
-- Change `platform` layer accent from `"emerald"` to `"cyan"` so every layer has a unique color:
-  - external → rose
-  - items → orange
-  - ai → violet
-  - backend → blue
-  - auth → emerald
-  - entry → cyan
-  - platform → needs a new accent
+**1. `src/hooks/useNilaVoiceRelay.ts`** (voice chat mode)
+- Expand `NOISE_BLOCKLIST` with more filler/hallucination words (e.g., "thank you", "thanks", "you know", common STT artifacts like "you", "the", "I", "a" as standalone)
+- Raise minimum threshold: require at least **3 words AND 10 characters** (currently 3 words OR 8 chars)
+- Add duplicate-word detector: reject if >60% of words are the same word repeated
+- Add STT hallucination patterns: reject strings that are just repeated short phrases (e.g., "thank you thank you thank you")
+- Filter transcripts where unique words < 40% of total words (repetitive gibberish)
 
-Since `entry` already uses `cyan` and `platform` uses `emerald` (duplicate), we need a 7th accent. We'll add a **`amber`** accent for one of them, or reassign so no duplicates exist. Best approach: change `platform` to `"cyan"` and `entry` to a new accent like `"amber"` or `"teal"`.
+**2. `src/hooks/useRealtimeTranscribe.ts`** (split-column mode)
+- Apply the same stricter filters: raise from 2 words/5 chars to **3 words/10 chars**
+- Add the same expanded noise blocklist and repetition detector
+- Add duplicate-word filter matching the voice relay hook
 
-Actually, with 7 layers and 6 accents, we need to add one more accent color.
+### Specific Filter Additions
+```text
+Expanded noise blocklist (single/double word catches):
+  thank you, thanks, you know, I mean, let me, 
+  what, the, a, an, it, is, this, that, and, but,
+  come on, go ahead
 
-**Reassignment** (all unique):
-| Layer | Accent |
-|---|---|
-| external | rose |
-| items | orange |
-| ai | violet |
-| backend | blue |
-| auth | emerald |
-| entry | cyan |
-| platform | **amber** (new) |
+New repetition detector:
+  - Split into words, count frequency of most common word
+  - If mostCommonWord appears in >60% of words → reject
 
-**2. `src/components/system-flow/ArchFlowNode.tsx`**
-- Add `amber` to `FlowAccent` type and `accentStyles`
-- Make all `bg` values brighter/more saturated (solid, no transparency feel)
-- Change all `border` values from `rgba(...)` to solid `rgb(...)` (no alpha)
-- Increase bg brightness so cards are visually distinct per layer
-
-Updated color scheme (solid, opaque):
-| Accent | Border (solid) | Background (brighter) |
-|---|---|---|
-| cyan | rgb(34,211,238) | rgb(15,50,60) |
-| emerald | rgb(52,211,153) | rgb(18,55,40) |
-| violet | rgb(167,139,250) | rgb(40,30,65) |
-| orange | rgb(251,146,60) | rgb(60,38,18) |
-| blue | rgb(96,165,250) | rgb(22,38,65) |
-| rose | rgb(251,113,133) | rgb(60,25,35) |
-| amber | rgb(245,195,68) | rgb(55,42,15) |
+Raised thresholds:
+  - wordCount < 3 → reject (was 2 in transcribe, 3 in relay but with OR)
+  - trimmed.length < 10 → reject (was 5/8)
+```
 
 ### Files
 | File | Change |
 |---|---|
-| `src/lib/architectureGraphData.ts` | Change platform accent to `"amber"` |
-| `src/components/system-flow/ArchFlowNode.tsx` | Add `amber` accent, make all borders solid `rgb()`, brighten backgrounds |
-| `src/components/system-flow/ArchColumnHeader.tsx` | Add `amber` to header accent styles if applicable |
+| `src/hooks/useNilaVoiceRelay.ts` | Stricter thresholds, expanded blocklist, repetition filter |
+| `src/hooks/useRealtimeTranscribe.ts` | Same stricter thresholds and filters |
 
 ### Result
-- Every layer has its own unique, distinguishable color
-- Card backgrounds are solid and clearly visible
-- No transparency in borders — fully opaque colors
+- Only clear, meaningful speech gets translated
+- Filler words, repeated sounds, and STT hallucinations are silently dropped
+- Both interpreter modes (split-column and voice chat) share the same quality bar
 
