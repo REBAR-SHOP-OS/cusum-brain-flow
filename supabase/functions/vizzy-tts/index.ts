@@ -28,7 +28,7 @@ Deno.serve((req) =>
       );
     }
 
-    const endpoint = `${ttsUrl}/tts`;
+    const endpoint = `${ttsUrl}/v1/tts`;
     log.info("Generating TTS", { textLength: text.length, endpoint });
 
     const ttsResp = await fetch(endpoint, {
