@@ -81,11 +81,11 @@ type ArchitectureDialogNode = {
 const getAllLayers = () => new Set(LAYERS.map((layer) => layer.key));
 
 /* ───── Convert static data to React Flow nodes/edges ───── */
-function buildInitialNodes(): ArchitectureFlowNode[] {
-  return applyArchitectureLayout(
+function buildInitialNodes(): Node[] {
+  const archNodes = applyArchitectureLayout(
     ARCH_NODES.map((node) => ({
       id: node.id,
-      type: "archNode",
+      type: "archNode" as const,
       position: { x: 0, y: 0 },
       data: {
         label: node.label,
@@ -97,6 +97,25 @@ function buildInitialNodes(): ArchitectureFlowNode[] {
       },
     })),
   );
+
+  const headers = generateLayerHeaders(
+    ARCH_NODES.map((n) => ({ id: n.id, layer: n.layer })),
+  );
+
+  const headerNodes: Node[] = headers.map((h) => ({
+    id: h.id,
+    type: "layerHeader",
+    position: h.position,
+    draggable: false,
+    selectable: false,
+    connectable: false,
+    data: {
+      label: h.label,
+      accentColor: accentColor[h.accent],
+    },
+  }));
+
+  return [...headerNodes, ...archNodes];
 }
 
 function buildInitialEdges(): Edge[] {
