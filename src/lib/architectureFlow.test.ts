@@ -9,27 +9,27 @@ describe("applyArchitectureLayout", () => {
     const base = applyArchitectureLayout(
       [
         ...Array.from({ length: 12 }, (_, index): ArchitectureLayoutItem => ({
-          id: `entry-${index}`,
-          layer: "entry",
+          id: `ai-${index}`,
+          layer: "ai",
         })),
-        { id: "auth-1", layer: "auth" } as ArchitectureLayoutItem,
+        { id: "mod-1", layer: "modules" } as ArchitectureLayoutItem,
       ],
     );
     const wrapped = applyArchitectureLayout(
       [
         ...Array.from({ length: 13 }, (_, index): ArchitectureLayoutItem => ({
-          id: `entry-${index}`,
-          layer: "entry",
+          id: `ai-${index}`,
+          layer: "ai",
         })),
-        { id: "auth-1", layer: "auth" } as ArchitectureLayoutItem,
+        { id: "mod-1", layer: "modules" } as ArchitectureLayoutItem,
       ],
     );
 
-    const baseAuth = base.find((item) => item.id === "auth-1")!;
-    const wrappedAuth = wrapped.find((item) => item.id === "auth-1")!;
+    const baseMod = base.find((item) => item.id === "mod-1")!;
+    const wrappedMod = wrapped.find((item) => item.id === "mod-1")!;
 
-    expect(baseAuth.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap);
-    expect(wrappedAuth.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap * 2);
+    expect(baseMod.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap);
+    expect(wrappedMod.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap * 2);
   });
 
   it("keeps a platform node centered regardless of auth-layer node count", () => {
