@@ -1,15 +1,12 @@
 import { LAYERS, type ArchLayer, type Accent } from "@/lib/architectureGraphData";
 
 export const ARCHITECTURE_LAYOUT = {
+  layerGap: 340,
   nodeWidth: 190,
   nodeHeight: 120,
   nodeGap: 18,
   leftMargin: 40,
   topMargin: 80,
-  layerHeaderHeight: 50,
-  layerGroupGap: 40,
-  // kept for compatibility but unused in vertical layout
-  layerGap: 340,
   maxPerColumn: 14,
   headerY: 0,
 } as const;
@@ -36,66 +33,81 @@ function resolveLayer(item: ArchitectureLayoutItem): ArchLayer | undefined {
 }
 
 /**
- * Vertical single-column layout: all nodes stack top-to-bottom,
- * grouped by layer with a gap between groups.
+ * Horizontal layout: each layer is a column (left → right).
+ * Nodes within a column stack vertically.
+ * If a column has more than maxPerColumn nodes, it wraps into multiple sub-columns.
  */
 export function applyArchitectureLayout<T extends ArchitectureLayoutItem>(items: T[]): (T & { position: { x: number; y: number } })[] {
   const positions = new Map<string, { x: number; y: number }>();
-  const x = ARCHITECTURE_LAYOUT.leftMargin;
-  let y = ARCHITECTURE_LAYOUT.topMargin;
+  let columnOffset = 0;
 
   for (const layer of LAYERS) {
     const layerItems = items.filter((item) => resolveLayer(item) === layer.key);
     if (!layerItems.length) continue;
 
-    // Skip space for the header
-    y += ARCHITECTURE_LAYOUT.layerHeaderHeight;
+    const colCount = Math.ceil(layerItems.length / ARCHITECTURE_LAYOUT.maxPerColumn);
 
-    layerItems.forEach((item, index) => {
-      positions.set(item.id, { x, y });
-      y += ARCHITECTURE_LAYOUT.nodeHeight + ARCHITECTURE_LAYOUT.nodeGap;
-    });
+    for (let col = 0; col < colCount; col += 1) {
+      const colItems = layerItems.slice(
+        col * ARCHITECTURE_LAYOUT.maxPerColumn,
+        (col + 1) * ARCHITECTURE_LAYOUT.maxPerColumn,
+      );
 
-    y += ARCHITECTURE_LAYOUT.layerGroupGap;
+      const x =
+        ARCHITECTURE_LAYOUT.leftMargin +
+        (columnOffset + col) * ARCHITECTURE_LAYOUT.layerGap;
+
+      colItems.forEach((item, index) => {
+        positions.set(item.id, {
+          x,
+          y: ARCHITECTURE_LAYOUT.topMargin + index * (ARCHITECTURE_LAYOUT.nodeHeight + ARCHITECTURE_LAYOUT.nodeGap),
+        });
+      });
+    }
+
+    columnOffset += colCount;
   }
 
   return items.map((item) => ({
     ...item,
-    position: positions.get(item.id) ?? { x, y: ARCHITECTURE_LAYOUT.topMargin },
+    position: positions.get(item.id) ?? {
+      x: ARCHITECTURE_LAYOUT.leftMargin,
+      y: ARCHITECTURE_LAYOUT.topMargin,
+    },
   }));
 }
 
 /**
- * Generate header nodes for each layer group (vertical layout).
+ * Generate header nodes for each layer column.
  */
 export type LayerHeaderInfo = {
   id: string;
   label: string;
   accent: Accent;
   position: { x: number; y: number };
-  colSpan: number;
+  colSpan: number; // number of sub-columns this layer occupies
 };
 
 export function generateLayerHeaders<T extends ArchitectureLayoutItem>(items: T[]): LayerHeaderInfo[] {
   const headers: LayerHeaderInfo[] = [];
-  const x = ARCHITECTURE_LAYOUT.leftMargin;
-  let y = ARCHITECTURE_LAYOUT.topMargin;
+  let columnOffset = 0;
 
   for (const layer of LAYERS) {
     const layerItems = items.filter((item) => resolveLayer(item) === layer.key);
     if (!layerItems.length) continue;
 
+    const colCount = Math.ceil(layerItems.length / ARCHITECTURE_LAYOUT.maxPerColumn);
+    const x = ARCHITECTURE_LAYOUT.leftMargin + columnOffset * ARCHITECTURE_LAYOUT.layerGap;
+
     headers.push({
       id: `header-${layer.key}`,
       label: layer.label,
       accent: layer.accent,
-      position: { x, y },
-      colSpan: 1,
+      position: { x, y: ARCHITECTURE_LAYOUT.headerY },
+      colSpan: colCount,
     });
 
-    y += ARCHITECTURE_LAYOUT.layerHeaderHeight;
-    y += layerItems.length * (ARCHITECTURE_LAYOUT.nodeHeight + ARCHITECTURE_LAYOUT.nodeGap);
-    y += ARCHITECTURE_LAYOUT.layerGroupGap;
+    columnOffset += colCount;
   }
 
   return headers;

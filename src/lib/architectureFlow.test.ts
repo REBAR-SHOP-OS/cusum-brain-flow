@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { ARCHITECTURE_LAYOUT, applyArchitectureLayout, matchesArchitectureQuery } from "@/lib/architectureFlow";
 import type { ArchitectureLayoutItem } from "@/lib/architectureFlow";
 
-describe("applyArchitectureLayout (vertical)", () => {
-  it("places later layers further down (increasing Y)", () => {
+describe("applyArchitectureLayout (horizontal)", () => {
+  it("places later layers further to the right (increasing X)", () => {
     const items: ArchitectureLayoutItem[] = [
       { id: "ext-1", layer: "external" },
       { id: "ai-1", layer: "ai" },
@@ -14,11 +14,10 @@ describe("applyArchitectureLayout (vertical)", () => {
     const ext = result.find((i) => i.id === "ext-1")!;
     const ai = result.find((i) => i.id === "ai-1")!;
 
-    expect(ai.position.y).toBeGreaterThan(ext.position.y);
-    expect(ai.position.x).toBe(ext.position.x);
+    expect(ai.position.x).toBeGreaterThan(ext.position.x);
   });
 
-  it("stacks nodes vertically within a layer", () => {
+  it("stacks nodes vertically within a layer column", () => {
     const items: ArchitectureLayoutItem[] = [
       { id: "a-0", layer: "ai" },
       { id: "a-1", layer: "ai" },
@@ -35,16 +34,16 @@ describe("applyArchitectureLayout (vertical)", () => {
     expect(result[0].position.x).toBe(result[1].position.x);
   });
 
-  it("all nodes share the same X position", () => {
+  it("wraps overflow into additional sub-columns with increasing X", () => {
     const items: ArchitectureLayoutItem[] = Array.from({ length: 15 }, (_, i) => ({
       id: `ai-${i}`,
       layer: "ai" as const,
     }));
     const result = applyArchitectureLayout(items);
     const first = result.find((i) => i.id === "ai-0")!;
-    const last = result.find((i) => i.id === "ai-14")!;
+    const wrapped = result.find((i) => i.id === "ai-14")!;
 
-    expect(last.position.x).toBe(first.position.x);
+    expect(wrapped.position.x).toBeGreaterThan(first.position.x);
   });
 
   it("resolves layer from data.layer fallback (React Flow format)", () => {
