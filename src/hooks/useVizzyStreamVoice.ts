@@ -525,8 +525,16 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
               timestamp: Date.now(),
             }]);
             conversationRef.current.push({ role: "assistant", content: replyText });
-            if (data.audio_base64) playBase64Audio(data.audio_base64, data.audio_format || "mp3");
-            else speakRealtime(replyText);
+            const speakable = replyText
+              .replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/g, "")
+              .replace(/\[UNCLEAR\]/g, "")
+              .trim();
+            if (speakable) {
+              fallbackSpeechRef.current = speakable;
+              browserFallbackTriggeredRef.current = false;
+              if (data.audio_base64) playBase64Audio(data.audio_base64, data.audio_format || "mp3", speakable);
+              else speakRealtime(speakable);
+            }
           }
         } catch (err: any) {
           if (err?.name === "AbortError") return;
