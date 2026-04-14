@@ -442,6 +442,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const connectStartedAt = Date.now();
       let remoteTrackAt = 0;
       let dcOpenAt = 0;
+      let iceStuckTimerRef: ReturnType<typeof setTimeout> | null = null;
 
       // ICE candidate type counters for diagnosis
       const candidateCounts = { host: 0, srflx: 0, relay: 0, prflx: 0, unknown: 0 };
@@ -450,6 +451,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       /** Summarise candidate counts */
       const candidateSummary = () =>
         `host=${candidateCounts.host} srflx=${candidateCounts.srflx} relay=${candidateCounts.relay} prflx=${candidateCounts.prflx}`;
+
+      /** Check if Metered TURN/STUN servers have DNS lookup failures */
+      const hasMeteredDnsFailures = () =>
+        iceCandidateErrors.some(e =>
+          (e.text.includes("host lookup") || e.text.includes("not associated")) &&
+          e.url.includes("metered")
+        );
 
       /** Log all PC/ICE/DC states in one snapshot */
       const logAllStates = (label: string) => {
