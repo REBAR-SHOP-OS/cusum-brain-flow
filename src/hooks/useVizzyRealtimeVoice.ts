@@ -442,6 +442,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const connectStartedAt = Date.now();
       let remoteTrackAt = 0;
       let dcOpenAt = 0;
+      let iceStuckTimerRef: ReturnType<typeof setTimeout> | null = null;
 
       // ICE candidate type counters for diagnosis
       const candidateCounts = { host: 0, srflx: 0, relay: 0, prflx: 0, unknown: 0 };
@@ -450,6 +451,13 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       /** Summarise candidate counts */
       const candidateSummary = () =>
         `host=${candidateCounts.host} srflx=${candidateCounts.srflx} relay=${candidateCounts.relay} prflx=${candidateCounts.prflx}`;
+
+      /** Check if Metered TURN/STUN servers have DNS lookup failures */
+      const hasMeteredDnsFailures = () =>
+        iceCandidateErrors.some(e =>
+          (e.text.includes("host lookup") || e.text.includes("not associated")) &&
+          e.url.includes("metered")
+        );
 
       /** Log all PC/ICE/DC states in one snapshot */
       const logAllStates = (label: string) => {
@@ -608,6 +616,35 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         const s = pc.iceConnectionState;
         console.log("[RealtimeVoice][STEP] ice_connection_state=" + s);
         logAllStates("oniceconnectionstatechange");
+
+        // Start ICE-stuck timer when we enter "checking" — if Metered DNS is broken,
+        // skip relay-only and jump to STUN-only after 15s instead of waiting full 30s
+        if (s === "checking" && !iceStuckTimerRef) {
+          iceStuckTimerRef = setTimeout(() => {
+            if (isStale() || !activeRef.current) return;
+            if (dataChannelEverOpened || sessionReadyRef.current) return;
+            const currentIce = pc.iceConnectionState;
+            if (currentIce !== "checking") return;
+
+            console.warn(`[RealtimeVoice] ICE stuck at "checking" for 15s — candidates: ${candidateSummary()} meteredDnsFail=${hasMeteredDnsFailures()}`);
+
+            if (hasMeteredDnsFailures() && !stunOnlyRetryDoneRef.current) {
+              console.warn("[RealtimeVoice] Metered DNS failures detected — skipping relay-only, going straight to STUN-only retry");
+              stunOnlyRetryDoneRef.current = true;
+              relayRetryDoneRef.current = true; // skip relay too — same broken servers
+              cleanup("ice_stuck_stun_only");
+              iceTransportPolicyRef.current = "all";
+              skipTurnRef.current = true;
+              setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
+            }
+          }, 15000);
+        }
+
+        // Clear the stuck timer if ICE succeeds
+        if ((s === "connected" || s === "completed") && iceStuckTimerRef) {
+          clearTimeout(iceStuckTimerRef);
+          iceStuckTimerRef = null;
+        }
       };
 
       // Add mic tracks using explicit transceivers to keep the offer shape
@@ -625,7 +662,10 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         dcOpenAt = Date.now();
         console.log(`[RealtimeVoice][STEP] data_channel_open (+${dcOpenAt - connectStartedAt}ms) strategy=${strategy}`);
         logAllStates("data_channel_open");
-        setStep("data_channel_open");
+        setStep(`data_channel_open (${strategy})`);
+
+        // Clear ICE stuck timer — connection succeeded
+        if (iceStuckTimerRef) { clearTimeout(iceStuckTimerRef); iceStuckTimerRef = null; }
 
         // ── Flush any queued messages immediately ──
         flushDcQueue();
@@ -806,7 +846,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         throw new Error(`OpenAI SDP exchange failed (${sdpResp.status}): ${errText}`);
       }
 
-      setStep("sdp_post_ok");
+      setStep(`sdp_post_ok (${strategy})`);
       const answerSdp = await sdpResp.text();
 
       // Guard: check PC is still usable before setRemoteDescription
@@ -833,7 +873,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
       const pcStateNow = pc.connectionState;
       const iceStateNow = pc.iceConnectionState;
       console.log(`[RealtimeVoice] SDP exchange complete — dc=${dcStateNow} pc=${pcStateNow} ice=${iceStateNow} strategy=${strategy} — waiting for data_channel_open`);
-      setStep("waiting_session_created");
+      setStep(`waiting_session_created (${strategy})`);
 
       // Overall connection timeout — 30s to allow slower mobile handshakes
       sessionTimeoutRef.current = setTimeout(() => {
@@ -844,14 +884,21 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
           const iceGather = pcRef.current?.iceGatheringState || "no_ice";
           logAllStates("session_timeout_30s");
 
-          // Try relay-only retry before giving up
-          if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0) {
+          // Try relay-only retry before giving up — but skip if Metered DNS is broken
+          // (relay uses the same broken Metered servers)
+          const meteredBroken = hasMeteredDnsFailures();
+          if (!relayRetryDoneRef.current && lastTurnServersRef.current.length > 0 && !meteredBroken) {
             console.warn("[RealtimeVoice] Session timeout — attempting relay-only retry...");
             relayRetryDoneRef.current = true;
             cleanup("session_timeout_relay_retry");
             iceTransportPolicyRef.current = "relay";
             setTimeout(() => startSession({ preserveRetryStrategy: true }), 0);
             return;
+          }
+          // Mark relay as done if skipped due to Metered DNS
+          if (meteredBroken && !relayRetryDoneRef.current) {
+            console.warn("[RealtimeVoice] Skipping relay-only retry — Metered DNS is broken on this network");
+            relayRetryDoneRef.current = true;
           }
 
           // Try STUN-only (no TURN) as last resort
