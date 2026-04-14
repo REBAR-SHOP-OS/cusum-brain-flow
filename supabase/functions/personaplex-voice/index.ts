@@ -92,8 +92,13 @@ Deno.serve((req) =>
           }
         } else {
           const data = await ppResponse.json();
+          const hasAudio = Boolean(data.audio_base64);
           return new Response(
-            JSON.stringify({ ...data, _voice_path: "personaplex" }),
+            JSON.stringify({
+              ...data,
+              _voice_path: "personaplex",
+              _audio_status: hasAudio ? "adapter" : "text-only",
+            }),
             { headers: { ...corsHeaders, "Content-Type": "application/json" } },
           );
         }

@@ -34,6 +34,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
   const [debugStep, setDebugStep] = useState("idle");
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [voicePath, setVoicePath] = useState<string>("idle");
+  const [audioStatus, setAudioStatus] = useState<string>("idle");
 
   const recognitionRef = useRef<any>(null);
   const activeRef = useRef(false);
