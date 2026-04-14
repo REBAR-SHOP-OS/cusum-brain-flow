@@ -28,14 +28,19 @@ Deno.serve((req) =>
       );
     }
 
-    const PERSONAPLEX_API_URL = Deno.env.get("PERSONAPLEX_API_URL");
-    const PERSONAPLEX_API_KEY = Deno.env.get("PERSONAPLEX_API_KEY");
+    const PERSONAPLEX_API_URL = (Deno.env.get("PERSONAPLEX_API_URL") || "").trim();
+    const PERSONAPLEX_API_KEY = (Deno.env.get("PERSONAPLEX_API_KEY") || "").trim();
 
-    console.log("[personaplex-voice] PERSONAPLEX_API_URL configured:", !!PERSONAPLEX_API_URL);
-    console.log("[personaplex-voice] PERSONAPLEX_API_KEY configured:", !!PERSONAPLEX_API_KEY);
+    // Validate: skip if URL is empty, contains variable name prefix, or points to our own project
+    const isValidPersonaPlexUrl = PERSONAPLEX_API_URL
+      && !PERSONAPLEX_API_URL.includes("PERSONAPLEX_API_URL")
+      && !PERSONAPLEX_API_URL.includes("supabase.co/functions")
+      && PERSONAPLEX_API_KEY;
+
+    console.log("[personaplex-voice] PersonaPlex valid:", !!isValidPersonaPlexUrl, "URL set:", !!PERSONAPLEX_API_URL);
 
     // ── PersonaPlex path (when adapter is deployed) ──
-    if (PERSONAPLEX_API_URL && PERSONAPLEX_API_KEY) {
+    if (isValidPersonaPlexUrl) {
       try {
         const ppResponse = await fetch(`${PERSONAPLEX_API_URL}/v1/chat`, {
           method: "POST",
