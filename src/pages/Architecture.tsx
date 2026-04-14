@@ -29,7 +29,8 @@ import {
   type ArchNode, type ArchEdge, type ArchLayer, type Accent,
 } from "@/lib/architectureGraphData";
 import { ArchFlowNode, type ArchFlowNodeData } from "@/components/system-flow/ArchFlowNode";
-import { applyArchitectureLayout, matchesArchitectureQuery } from "@/lib/architectureFlow";
+import { LayerHeaderNode } from "@/components/system-flow/LayerHeaderNode";
+import { applyArchitectureLayout, generateLayerHeaders, matchesArchitectureQuery } from "@/lib/architectureFlow";
 
 /* ───── Style maps ───── */
 const accentColor: Record<Accent, string> = {
@@ -64,7 +65,7 @@ function getEdgeVisuals(archEdge: ArchEdge | undefined, srcAccent: Accent) {
 }
 
 /* ───── Node types ───── */
-const nodeTypes = { archNode: ArchFlowNode };
+const nodeTypes = { archNode: ArchFlowNode, layerHeader: LayerHeaderNode };
 
 type ArchitectureFlowNode = Node<ArchFlowNodeData>;
 
