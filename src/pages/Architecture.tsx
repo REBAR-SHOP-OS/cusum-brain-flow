@@ -17,7 +17,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { AnimatePresence } from "framer-motion";
 import {
-  Plus, Search, X, Eye, EyeOff, Sparkles,
+  Plus, Search, X, Eye, EyeOff, Sparkles, Maximize, Minimize,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
