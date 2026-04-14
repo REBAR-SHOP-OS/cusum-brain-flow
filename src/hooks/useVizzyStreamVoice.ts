@@ -395,13 +395,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     abortRef.current = new AbortController();
 
     stopRecognition();
-    window.speechSynthesis?.cancel();
-
-    audioQueueRef.current.forEach(a => {
-      a.onended = null; a.onerror = null; a.pause(); a.src = "";
-    });
-    audioQueueRef.current = [];
-    isPlayingRef.current = false;
+    stopSpeech();
 
     setState("idle");
     setIsSpeaking(false);
