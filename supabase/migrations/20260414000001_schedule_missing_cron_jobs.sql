@@ -1,6 +1,11 @@
 -- Schedule pipeline-lead-recycler and quote-expiry-watchdog as cron jobs.
 -- Both functions were already marked authMode:"none" and process automation_configs.
 -- Now that they have internalOnly:true, cron invocations must include x-internal-secret.
+--
+-- Note: The anon JWT below is the same project-scoped anon key used in all other cron
+-- migrations in this repo (20260407124005 etc.). The real security is the
+-- x-internal-secret from vault — the anon JWT is present only to satisfy Supabase's
+-- Authorization header requirement for edge function invocation.
 
 SELECT cron.schedule(
   'pipeline-lead-recycler-daily',
