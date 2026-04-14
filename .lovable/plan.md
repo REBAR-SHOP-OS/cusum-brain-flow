@@ -1,41 +1,63 @@
 
 
-## Plan: Integrate Near-Realtime Chunked TTS into Vizzy Voice
+## Plan: Fix Vizzy Voice Reconnect Loop on Mic Permission Denied
 
-### What we're building
-Replace the single-shot browser TTS fallback with chunked TTS via the external Phase 7 TTS server. When Vizzy One returns text-only (no `audio_base64`), the reply gets split into sentence chunks, each fetched as audio from a new `vizzy-tts` edge function, and queued for seamless playback. First audio plays in ~1s instead of waiting for the full reply.
+### Problem
+When microphone permission is denied, `SpeechRecognition` fires `onerror("not-allowed")` → sets state to `"error"` → `onend` fires and restarts recognition (line 350) → infinite error loop. The auto-retry in VizzyVoiceChat compounds this by retrying 3 times, but permission errors never self-resolve.
 
 ### Changes
 
-**1. New file: `src/utils/chunkText.ts`**
-Text chunking utility — splits on `.!?`, groups into ~120 char chunks of 1–2 sentences. Strips `[VIZZY-ACTION]` blocks before chunking.
+**1. Patch: `src/hooks/useVizzyStreamVoice.ts`**
 
-**2. New edge function: `supabase/functions/vizzy-tts/index.ts`**
-Proxies `{ text }` → `http://100.86.84.110:9009` (the HTTP CORS bridge to Phase 7 TTS). Returns the audio blob directly. Uses the shared `requestHandler` with `authMode: "required"`, `rawResponse: true`. The TTS URL will be stored as a secret (`TTS_API_URL`).
+In `recognition.onerror` (line 339–346): When error is "not-allowed", null out `recognitionRef.current` BEFORE setting state to "error". This prevents `onend` from restarting recognition.
 
-**3. Patch: `src/hooks/useVizzyStreamVoice.ts`**
-- Import `chunkText`
-- Add `speakRealtime(text)`: chunks text → for each chunk, fetches audio from `vizzy-tts` edge function → creates `Audio` element → pushes to existing `audioQueueRef` → calls `playNextAudio()`. Generation runs ahead of playback so chunks overlap.
-- Add `stopSpeech()`: clears queue, stops current audio, revokes URLs. Called from `endSession`.
-- Replace `speakWithBrowserTTS(speakable)` calls (lines 196 and 388) with `speakRealtime(speakable)`
-- Keep `playBase64Audio` path unchanged for when Vizzy One returns native audio
+```typescript
+recognition.onerror = (event: any) => {
+  if (event.error === "aborted") return;
+  console.error("[VizzyStream] STT error:", event.error);
+  if (event.error === "not-allowed") {
+    // Prevent onend from restarting — permission errors won't self-resolve
+    recognitionRef.current = null;
+    activeRef.current = false;
+    setErrorDetail("Microphone access denied — check browser permissions");
+    setState("error");
+  }
+};
+```
+
+**2. Patch: `src/components/vizzy/VizzyVoiceChat.tsx`**
+
+In the auto-retry effect (lines 228–235): Skip auto-retry when `lastErrorDetail` contains "Microphone" or "denied" — these errors require user action, not retries.
+
+```typescript
+useEffect(() => {
+  const isMicError = lastErrorDetail?.toLowerCase().includes("microphone") 
+    || lastErrorDetail?.toLowerCase().includes("denied");
+  if (isError && !isMicError && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
+    // ... existing retry logic
+  }
+}, [isError, startSession, lastErrorDetail]);
+```
+
+Update `statusText` to show mic-specific message when applicable:
+```typescript
+} else if (isError && lastErrorDetail?.includes("Microphone")) {
+  statusText = "Microphone access denied";
+```
 
 ### File summary
 
 | File | Action |
 |---|---|
-| `src/utils/chunkText.ts` | New |
-| `supabase/functions/vizzy-tts/index.ts` | New |
-| `src/hooks/useVizzyStreamVoice.ts` | Patch — replace browser TTS fallback with chunked realtime TTS |
+| `src/hooks/useVizzyStreamVoice.ts` | Patch — stop restart loop on mic permission denied |
+| `src/components/vizzy/VizzyVoiceChat.tsx` | Patch — skip auto-retry for permission errors, show correct status |
 
 ### What does NOT change
-- STT (browser SpeechRecognition) — unchanged
-- `personaplex-voice` edge function — unchanged
-- System prompt / brain context flow — unchanged
-- UI layout, styling, animations — unchanged
-- Audio path when Vizzy One returns `audio_base64` — unchanged
-- Session lifecycle — unchanged
+- TTS chunking, audio queue, playBase64Audio — all unchanged
+- personaplex-voice edge function — unchanged
+- Session lifecycle for non-permission errors — unchanged
+- UI layout and styling — unchanged
 
-### Secret needed
-`TTS_API_URL` = `http://100.86.84.110:9009` — will prompt user to set via secrets tool.
+### Result
+Permission denial shows a clear "Microphone access denied" message with no infinite retry loop. Network/transient errors still auto-retry as before.
 
