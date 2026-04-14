@@ -14,6 +14,7 @@ const accentStyles: Record<string, { bg: string; border: string; text: string }>
   orange:  { bg: "rgba(251,146,60,0.15)", border: "rgba(251,146,60,0.7)", text: "rgb(251,146,60)" },
   blue:    { bg: "rgba(96,165,250,0.15)", border: "rgba(96,165,250,0.7)", text: "rgb(96,165,250)" },
   rose:    { bg: "rgba(251,113,133,0.15)", border: "rgba(251,113,133,0.7)", text: "rgb(251,113,133)" },
+  amber:   { bg: "rgba(245,195,68,0.15)", border: "rgba(245,195,68,0.7)", text: "rgb(245,195,68)" },
 };
 
 function MiniNode({ data }: { data: Record<string, unknown> }) {
