@@ -134,6 +134,13 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       const agentId = `t-${++idCounter.current}`;
 
       if (text) {
+        // Silently drop [UNCLEAR] — no transcript, no TTS
+        if (text.trim() === "[UNCLEAR]") {
+          processingRef.current = false;
+          setDebugStep("listening");
+          return;
+        }
+
         // Add agent transcript
         setTranscripts(prev => [...prev, {
           id: agentId,
