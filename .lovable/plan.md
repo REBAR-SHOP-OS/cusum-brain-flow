@@ -1,45 +1,41 @@
 
 
-## Plan: Fix Edge Function System Message Bug
+## Plan: Integrate Near-Realtime Chunked TTS into Vizzy Voice
 
-### Problem
-Line 33 of `personaplex-voice/index.ts` extracts the last message with `role === "user" || m.role === "system"` — this means hidden `[TOOL_RESULTS_READY]` system messages get treated as the user's speech input, causing the reconnect loop. The conversation history also includes noisy tool/hidden messages.
+### What we're building
+Replace the single-shot browser TTS fallback with chunked TTS via the external Phase 7 TTS server. When Vizzy One returns text-only (no `audio_base64`), the reply gets split into sentence chunks, each fetched as audio from a new `vizzy-tts` edge function, and queued for seamless playback. First audio plays in ~1s instead of waiting for the full reply.
 
-The frontend (`useVizzyStreamVoice.ts`) is already correct from the previous patch — no frontend changes needed.
+### Changes
 
-### Changes — `supabase/functions/personaplex-voice/index.ts`
+**1. New file: `src/utils/chunkText.ts`**
+Text chunking utility — splits on `.!?`, groups into ~120 char chunks of 1–2 sentences. Strips `[VIZZY-ACTION]` blocks before chunking.
 
-**1. Fix user message extraction (line 33)**
-Only find `role === "user"` — never treat system messages as user input:
-```typescript
-const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
-```
+**2. New edge function: `supabase/functions/vizzy-tts/index.ts`**
+Proxies `{ text }` → `http://100.86.84.110:9009` (the HTTP CORS bridge to Phase 7 TTS). Returns the audio blob directly. Uses the shared `requestHandler` with `authMode: "required"`, `rawResponse: true`. The TTS URL will be stored as a secret (`TTS_API_URL`).
 
-**2. Filter conversation history (lines 44-46)**
-Remove hidden and tool messages, limit to last 12 for token efficiency:
-```typescript
-const conversationHistory = messages
-  .filter((m: any) => m.content && !m.content.startsWith("[TOOL_") && !m.hidden)
-  .slice(-12)
-  .map((m: any) => `${m.role}: ${m.content}`)
-  .join("\n");
-```
+**3. Patch: `src/hooks/useVizzyStreamVoice.ts`**
+- Import `chunkText`
+- Add `speakRealtime(text)`: chunks text → for each chunk, fetches audio from `vizzy-tts` edge function → creates `Audio` element → pushes to existing `audioQueueRef` → calls `playNextAudio()`. Generation runs ahead of playback so chunks overlap.
+- Add `stopSpeech()`: clears queue, stops current audio, revokes URLs. Called from `endSession`.
+- Replace `speakWithBrowserTTS(speakable)` calls (lines 196 and 388) with `speakRealtime(speakable)`
+- Keep `playBase64Audio` path unchanged for when Vizzy One returns native audio
 
-**3. Add debug log (after line 62)**
-```typescript
-console.log("[personaplex-voice]", {
-  hasSystemPrompt: !!systemPrompt,
-  messageCount: messages.length,
-  textLength: text.length,
-});
-```
+### File summary
 
-### What Does NOT Change
-- Frontend code (already patched)
-- Audio playback logic
-- Vizzy One API endpoints
-- Auth mode, CORS
+| File | Action |
+|---|---|
+| `src/utils/chunkText.ts` | New |
+| `supabase/functions/vizzy-tts/index.ts` | New |
+| `src/hooks/useVizzyStreamVoice.ts` | Patch — replace browser TTS fallback with chunked realtime TTS |
 
-### Result
-System/tool messages no longer hijack the user text field. Conversation history is clean. The reconnect loop caused by `[TOOL_RESULTS_READY]` being sent as user speech is eliminated.
+### What does NOT change
+- STT (browser SpeechRecognition) — unchanged
+- `personaplex-voice` edge function — unchanged
+- System prompt / brain context flow — unchanged
+- UI layout, styling, animations — unchanged
+- Audio path when Vizzy One returns `audio_base64` — unchanged
+- Session lifecycle — unchanged
+
+### Secret needed
+`TTS_API_URL` = `http://100.86.84.110:9009` — will prompt user to set via secrets tool.
 
