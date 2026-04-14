@@ -294,7 +294,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       processingRef.current = false;
       setDebugStep("listening");
     }
-  }, [playBase64Audio, speakWithBrowserTTS]);
+  }, [playBase64Audio, speakRealtime]);
 
   // --- Speech recognition ---
   const startRecognition = useCallback(() => {
@@ -404,7 +404,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     setDebugStep("idle");
     setTranscripts([]);
     conversationRef.current = [];
-  }, [stopRecognition]);
+  }, [stopRecognition, stopSpeech]);
 
   const toggleMute = useCallback(() => {
     setIsMuted(prev => {
@@ -472,7 +472,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       return;
     }
     callPersonaPlex(text);
-  }, [callPersonaPlex, getSystemPrompt, playBase64Audio, speakWithBrowserTTS]);
+  }, [callPersonaPlex, getSystemPrompt, playBase64Audio, speakRealtime]);
 
   return {
     state,
