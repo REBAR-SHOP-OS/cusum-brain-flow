@@ -326,11 +326,7 @@ export default function Architecture() {
   }, [activeNode, edges]);
 
   const onNodeClick = useCallback((_: unknown, node: ArchitectureFlowNode) => {
-    // Toggle lock
     setLockedNode((prev) => (prev === node.id ? null : node.id));
-  }, []);
-
-  const onNodeDoubleClick = useCallback((_: unknown, node: ArchitectureFlowNode) => {
     setOpenNode({
       id: node.id,
       hint: node.data.hint,
@@ -340,6 +336,8 @@ export default function Architecture() {
       detail: { ...node.data.detail, title: node.data.label },
     });
   }, []);
+
+  const onNodeDoubleClick = useCallback(() => {}, []);
 
   const onNodeMouseEnter = useCallback((_: unknown, node: ArchitectureFlowNode) => {
     setHoveredNode(node.id);
