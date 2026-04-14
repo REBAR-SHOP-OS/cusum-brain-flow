@@ -1,75 +1,79 @@
 
-Goal
 
-- Fix the real failure path in `/vizzy-live`: the SDP retry logic is falsely treating a successful retry as a hard failure.
+## Goal
 
-What I found
+Replace the OpenAI Realtime WebRTC voice engine with a **STT → Lovable AI → ElevenLabs TTS** pipeline for Vizzy Voice on `/vizzy-live`. This completely eliminates the WebRTC/ICE/TURN transport failures on mobile.
 
-- The latest logs change the diagnosis:
-  - the bounded SDP POST does sometimes get a 500 upstream
-  - the full-gather retry then succeeds with HTTP 201
-  - but the client still throws `OpenAI SDP exchange failed (201): Internal Server Error`
-- That points to a control-flow bug in `src/hooks/useVizzyRealtimeVoice.ts`, not a remaining WebRTC transport problem.
+## Architecture
 
-Root cause
+```text
+Current (broken on mobile):
+  Mic → WebRTC → OpenAI Realtime (GPT-4o-mini) → WebRTC → Speaker
 
-- In the current code, everything stays inside the original `if (!sdpResp.ok)` block.
-- After a 5xx, the code retries with a fully gathered SDP and can replace `sdpResp` with a successful 201 response.
-- But the function still reaches the unconditional `throw new Error(...)` at the end of that outer block.
-- Result: a recovered SDP exchange is incorrectly reported as failed, and the handshake is aborted before `setRemoteDescription`.
+New:
+  Mic → Browser SpeechRecognition → vizzy-voice-chat (Lovable AI, streaming) → elevenlabs-tts → Speaker
+```
 
-Implementation plan
+## What already exists and will be reused
 
-1. Fix the SDP retry control flow in `src/hooks/useVizzyRealtimeVoice.ts`
-- Refactor the SDP POST section so it tracks:
-  - initial response
-  - retry response
-  - final response actually used
-  - final error text only if the final response is still non-OK
-- After a successful retry, exit the error branch cleanly and continue into:
-  - `setStep("sdp_post_ok")`
-  - `await sdpResp.text()`
-  - `pc.setRemoteDescription(...)`
+- **`vizzy-voice-chat` edge function** — already streams from Lovable AI gateway with system prompt support
+- **`elevenlabs-tts` edge function** — already generates MP3 from text
+- **`useNilaVoiceRelay` hook** — demonstrates the exact STT → process → TTS → audio-queue pattern we need
+- **`VizzyVoiceChat` UI component** — keeps its transcript display, action parsing, mute/unmute, debug step display
+- **`useVizzyVoiceEngine`** — keeps its context-fetching, instruction-building, and time-sync logic
 
-2. Keep escalation only for true final failures
-- Preserve the current ladder:
-  - bounded offer
-  - full-gather retry on 5xx
-  - relay-only retry
-  - STUN-only retry
-- But only escalate to relay/STUN if the final post attempt still returns 5xx.
+## Implementation plan
 
-3. Tighten diagnostics so logs match reality
-- Log whether success came from:
-  - `bounded`
-  - `full-gather-retry`
-- Prevent mixed status/error text like:
-  - status `201`
-  - body text from prior `500`
-- Optionally record the final SDP stage in the debug step so future failures are easier to isolate.
+### 1. Create `useVizzyStreamVoice` hook (new file)
+Replace `useVizzyRealtimeVoice` with a simpler hook that:
+- Uses `webkitSpeechRecognition` / `SpeechRecognition` for continuous STT (same pattern as existing voice features)
+- On committed transcript: streams to `vizzy-voice-chat` edge function via SSE fetch
+- Collects full response text, then sends to `elevenlabs-tts` for audio playback
+- Manages an audio queue (reuse pattern from `useNilaVoiceRelay`)
+- Exposes the same interface: `state`, `transcripts`, `isSpeaking`, `isMuted`, `partialText`, `startSession`, `endSession`, `toggleMute`, `updateSessionInstructions`, `sendFollowUp`, `debugStep`
 
-4. Re-verify the post-success path
-- Confirm the code reaches:
-  - `remote_desc_applied`
-  - `waiting_session_created`
-  - then `data_channel_open` / `session_created`
-- If a new blocker appears after this fix, it will be the real next issue instead of this false negative.
+### 2. Update `useVizzyVoiceEngine` 
+- Change import from `useVizzyRealtimeVoice` to `useVizzyStreamVoice`
+- Remove WebRTC-specific refs (relay retry, TURN servers, skip TURN)
+- Keep all context-fetching and instruction-building logic unchanged
 
-Files to change
+### 3. Update `vizzy-voice-chat` edge function
+- Ensure it accepts the full system prompt from the client (it already does)
+- No other changes needed — it already streams from Lovable AI
 
-- `src/hooks/useVizzyRealtimeVoice.ts`
+### 4. Minor cleanup in `VizzyVoiceChat` UI
+- Remove `outputAudioBlocked` / `retryOutputAudio` references (WebRTC-specific)
+- Remove WebRTC debug step display (replace with simpler status: "listening", "thinking", "speaking")
+- Keep all VIZZY-ACTION parsing, auto-follow-up, transcript display unchanged
 
-What should stay unchanged
+## What stays unchanged
+- `vizzy-voice-chat` edge function (already works)
+- `elevenlabs-tts` edge function (already works)
+- `VizzyVoiceChat` UI layout, action parsing, transcript rendering
+- `VizzyLive` page (prime audio + session start flow)
+- All ERP/PersonaPlex/context logic in `useVizzyVoiceEngine`
+- The full `VIZZY_INSTRUCTIONS` prompt
 
-- TURN token provisioning in the backend
-- bounded ICE gather helpers in `src/lib/webrtc/realtimeConnection.ts`
-- transceiver-based offer shape
-- relay/STUN retry strategy
+## Files changed
+- `src/hooks/useVizzyStreamVoice.ts` — **new** (STT + LLM stream + TTS pipeline)
+- `src/hooks/useVizzyVoiceEngine.ts` — swap import, remove WebRTC refs
+- `src/components/vizzy/VizzyVoiceChat.tsx` — remove WebRTC-specific UI bits
 
-Technical details
+## Files NOT changed
+- `supabase/functions/vizzy-voice-chat/index.ts`
+- `supabase/functions/elevenlabs-tts/index.ts`
+- `src/hooks/useVizzyRealtimeVoice.ts` (kept for potential future use, just no longer imported)
+- `src/pages/VizzyLive.tsx`
 
-- The strongest evidence is the exact mismatch in the logs:
-  - retry request succeeds with `201`
-  - thrown error still says `Internal Server Error`
-- That can only happen if the code is reusing the old error text and still throwing after the retry has already recovered.
-- So the next patch should be minimal and surgical: fix the branching, not redesign the handshake again.
+## Expected result
+- No WebRTC, no ICE, no TURN, no SDP — zero transport-layer failure surface
+- Works on any mobile network that can make HTTPS requests
+- Slightly higher latency than true realtime (~2-4s for LLM + TTS) but 100% reliable
+- Same Vizzy personality, same ERP actions, same transcript UI
+
+## Technical details
+- STT: `SpeechRecognition` API with `continuous=true`, `interimResults=true`, language auto-detect (en/fa)
+- LLM: SSE stream from `vizzy-voice-chat`, parsed token-by-token for partial text display
+- TTS: Full response sent to `elevenlabs-tts` after stream completes, audio queued and played
+- Conversation history maintained as messages array passed to the edge function on each turn
+
