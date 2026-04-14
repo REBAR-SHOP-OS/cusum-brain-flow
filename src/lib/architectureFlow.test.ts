@@ -4,50 +4,46 @@ import { describe, expect, it } from "vitest";
 import { ARCHITECTURE_LAYOUT, applyArchitectureLayout, matchesArchitectureQuery } from "@/lib/architectureFlow";
 import type { ArchitectureLayoutItem } from "@/lib/architectureFlow";
 
-describe("applyArchitectureLayout", () => {
-  it("pushes later layers down when an earlier layer wraps onto a second row", () => {
-    const base = applyArchitectureLayout(
-      [
-        ...Array.from({ length: 14 }, (_, index): ArchitectureLayoutItem => ({
-          id: `ai-${index}`,
-          layer: "ai",
-        })),
-        { id: "mod-1", layer: "modules" } as ArchitectureLayoutItem,
-      ],
-    );
-    const wrapped = applyArchitectureLayout(
-      [
-        ...Array.from({ length: 15 }, (_, index): ArchitectureLayoutItem => ({
-          id: `ai-${index}`,
-          layer: "ai",
-        })),
-        { id: "mod-1", layer: "modules" } as ArchitectureLayoutItem,
-      ],
-    );
+describe("applyArchitectureLayout (horizontal)", () => {
+  it("places later layers further to the right (increasing X)", () => {
+    const items: ArchitectureLayoutItem[] = [
+      { id: "ext-1", layer: "external" },
+      { id: "ai-1", layer: "ai" },
+    ];
+    const result = applyArchitectureLayout(items);
+    const ext = result.find((i) => i.id === "ext-1")!;
+    const ai = result.find((i) => i.id === "ai-1")!;
 
-    const baseMod = base.find((item) => item.id === "mod-1")!;
-    const wrappedMod = wrapped.find((item) => item.id === "mod-1")!;
-
-    expect(baseMod.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap);
-    expect(wrappedMod.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap * 2);
+    expect(ai.position.x).toBeGreaterThan(ext.position.x);
   });
 
-  it("keeps a platform node centered regardless of auth-layer node count", () => {
-    const platformOnly = applyArchitectureLayout([
-      { id: "platform-1", layer: "platform" } as ArchitectureLayoutItem,
-    ]);
-    const mixed = applyArchitectureLayout([
-      ...Array.from({ length: 12 }, (_, index): ArchitectureLayoutItem => ({
-        id: `auth-${index}`,
-        layer: "auth",
-      })),
-      { id: "platform-1", layer: "platform" } as ArchitectureLayoutItem,
-    ]);
+  it("stacks nodes vertically within a layer column", () => {
+    const items: ArchitectureLayoutItem[] = [
+      { id: "a-0", layer: "ai" },
+      { id: "a-1", layer: "ai" },
+      { id: "a-2", layer: "ai" },
+    ];
+    const result = applyArchitectureLayout(items);
+    const y0 = result.find((i) => i.id === "a-0")!.position.y;
+    const y1 = result.find((i) => i.id === "a-1")!.position.y;
+    const y2 = result.find((i) => i.id === "a-2")!.position.y;
 
-    const basePlatform = platformOnly.find((item) => item.id === "platform-1")!;
-    const mixedPlatform = mixed.find((item) => item.id === "platform-1")!;
+    expect(y1).toBeGreaterThan(y0);
+    expect(y2).toBeGreaterThan(y1);
+    // All same X
+    expect(result[0].position.x).toBe(result[1].position.x);
+  });
 
-    expect(mixedPlatform.position.x).toBe(basePlatform.position.x);
+  it("wraps overflow into additional sub-columns with increasing X", () => {
+    const items: ArchitectureLayoutItem[] = Array.from({ length: 15 }, (_, i) => ({
+      id: `ai-${i}`,
+      layer: "ai" as const,
+    }));
+    const result = applyArchitectureLayout(items);
+    const first = result.find((i) => i.id === "ai-0")!;
+    const wrapped = result.find((i) => i.id === "ai-14")!;
+
+    expect(wrapped.position.x).toBeGreaterThan(first.position.x);
   });
 
   it("resolves layer from data.layer fallback (React Flow format)", () => {
@@ -59,21 +55,7 @@ describe("applyArchitectureLayout", () => {
     const topLevel = result.find((i) => i.id === "top-level")!;
     const nested = result.find((i) => i.id === "nested")!;
 
-    expect(nested.position.y).toBe(topLevel.position.y);
-  });
-
-  it("wraps 29+ nodes into 3 rows with increasing y", () => {
-    const items: ArchitectureLayoutItem[] = Array.from({ length: 29 }, (_, i) => ({
-      id: `p-${i}`,
-      layer: "platform" as const,
-    }));
-    const result = applyArchitectureLayout(items);
-    const row1 = result.find((i) => i.id === "p-0")!;
-    const row2 = result.find((i) => i.id === "p-14")!;
-    const row3 = result.find((i) => i.id === "p-28")!;
-
-    expect(row2.position.y).toBeGreaterThan(row1.position.y);
-    expect(row3.position.y).toBeGreaterThan(row2.position.y);
+    expect(nested.position.x).toBe(topLevel.position.x);
   });
 });
 
