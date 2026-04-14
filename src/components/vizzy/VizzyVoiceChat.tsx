@@ -226,13 +226,15 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
 
   // Auto-retry on error
   useEffect(() => {
-    if (isError && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
+    const isMicError = lastErrorDetail?.toLowerCase().includes("microphone")
+      || lastErrorDetail?.toLowerCase().includes("denied");
+    if (isError && !isMicError && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
       autoRetryCountRef.current += 1;
       console.log(`[VizzyVoiceChat] Auto-retry ${autoRetryCountRef.current}/${MAX_AUTO_RETRIES}`);
       autoRetryTimerRef.current = setTimeout(() => { startSession(); }, 3000);
       return () => { if (autoRetryTimerRef.current) clearTimeout(autoRetryTimerRef.current); };
     }
-  }, [isError, startSession]);
+  }, [isError, startSession, lastErrorDetail]);
 
   useEffect(() => {
     if (voiceState === "connected") { autoRetryCountRef.current = 0; }
@@ -241,6 +243,8 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
   let statusText = "";
   if (isConnecting) {
     statusText = "Connecting to Vizzy...";
+  } else if (isError && lastErrorDetail?.includes("Microphone")) {
+    statusText = "Microphone access denied";
   } else if (isError && autoRetryCountRef.current < MAX_AUTO_RETRIES) {
     statusText = "Reconnecting...";
   } else if (isError) {
