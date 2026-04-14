@@ -40,12 +40,12 @@ export interface ArchEdge {
 
 /* ───── Layer metadata ───── */
 export const LAYERS: { key: ArchLayer; label: string; accent: Accent; y: number }[] = [
-  { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 0 },
-  { key: "auth",     label: "Access Control",     accent: "emerald", y: 1 },
+  { key: "external", label: "External Services",  accent: "rose",    y: 0 },
+  { key: "ai",       label: "AI / Automation",    accent: "violet",  y: 1 },
   { key: "modules",  label: "Business Modules",   accent: "orange",  y: 2 },
-  { key: "ai",       label: "AI / Automation",     accent: "violet",  y: 3 },
-  { key: "backend",  label: "Integrations",       accent: "blue",    y: 4 },
-  { key: "external", label: "External Services",  accent: "rose",    y: 5 },
+  { key: "backend",  label: "Integrations",       accent: "blue",    y: 3 },
+  { key: "auth",     label: "Access Control",     accent: "emerald", y: 4 },
+  { key: "entry",    label: "Entry Points",       accent: "cyan",    y: 5 },
   { key: "platform", label: "Data + Platform",    accent: "emerald", y: 6 },
 ];
 
