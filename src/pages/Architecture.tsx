@@ -726,6 +726,17 @@ export default function Architecture() {
               color="rgba(34,211,238,0.08)"
             />
             <Controls position="top-right" />
+            {/* Fullscreen toggle button */}
+            <div className="absolute top-2 left-2 z-30">
+              <button
+                onClick={toggleFullscreen}
+                className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-1.5 text-[11px] font-medium text-zinc-300 backdrop-blur-sm transition-colors hover:bg-slate-900/90 hover:text-white"
+                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              >
+                {isFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
+                {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              </button>
+            </div>
             <MiniMap
               position="bottom-right"
               nodeColor={(n) => {
