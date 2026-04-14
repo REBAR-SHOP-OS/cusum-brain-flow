@@ -1,10 +1,10 @@
 import { LAYERS, type ArchLayer, type Accent } from "@/lib/architectureGraphData";
 
 export const ARCHITECTURE_LAYOUT = {
-  layerGap: 280,
-  nodeWidth: 130,
-  nodeHeight: 72,
-  nodeGap: 16,
+  layerGap: 300,
+  nodeWidth: 160,
+  nodeHeight: 100,
+  nodeGap: 14,
   leftMargin: 40,
   topMargin: 80,
   maxPerColumn: 14,
