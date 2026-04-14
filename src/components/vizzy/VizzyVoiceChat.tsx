@@ -89,6 +89,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     outputAudioBlocked,
     retryOutputAudio,
     debugStep,
+    voicePath,
   } = useVizzyVoiceEngine();
 
   const bottomRef = useRef<HTMLDivElement>(null);
