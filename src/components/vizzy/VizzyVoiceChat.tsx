@@ -293,6 +293,18 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               {voicePath === "personaplex" ? "PP" : "FB"}
             </span>
           )}
+          {isConnected && (engine as any).audioStatus && (engine as any).audioStatus !== "idle" && (
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+              style={{
+                color: (engine as any).audioStatus === "adapter" ? "hsl(152 69% 70%)" : "hsl(30 80% 70%)",
+                background: (engine as any).audioStatus === "adapter" ? "hsl(152 69% 20% / 0.4)" : "hsl(30 80% 20% / 0.4)",
+                border: `1px solid ${(engine as any).audioStatus === "adapter" ? "hsl(152 69% 40% / 0.5)" : "hsl(30 80% 40% / 0.5)"}`,
+              }}
+            >
+              {(engine as any).audioStatus === "adapter" ? "🔊 AUDIO" : "📝 TEXT"}
+            </span>
+          )}
         </div>
         <button
           onClick={handleClose}
