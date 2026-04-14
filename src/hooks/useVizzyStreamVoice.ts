@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { takePrimedMobileAudio } from "@/lib/audioPlayer";
+import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Vizzy Stream Voice — STT → PersonaPlex (via backend proxy) → Audio playback.
