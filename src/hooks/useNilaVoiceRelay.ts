@@ -19,12 +19,24 @@ export type RelayState = "idle" | "connecting" | "connected" | "error";
 const VOICE_ENGLISH = "FGY2WhTYpPnrIDTdsKH5";
 const VOICE_FARSI = "EXAVITQu4vr4xnSDxMaL";
 
-const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure)\b/i;
+const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure|thank you|thanks|you know|i mean|let me|what|the|a|an|it|is|this|that|and|but|come on|go ahead|i see|of course|exactly|absolutely|definitely|alright|all right)\b/i;
 const HAS_FARSI_OR_LATIN = /[\u0600-\u06FF\u0750-\u077Fa-zA-Z]/;
 const REPEATED_CHARS = /(.)\1{4,}/;
 const SCRIBE_ANNOTATION = /^\s*\(/;
 const PUNCTUATION_ONLY = /^[\s.,!?…\-–—:;'"]+$/;
 const FOREIGN_SCRIPT = /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0D7F\u0E00-\u0E7F\u1000-\u109F\u3000-\u9FFF\uAC00-\uD7AF]/;
+
+function isRepetitiveText(text: string): boolean {
+  const words = text.toLowerCase().split(/\s+/);
+  if (words.length < 2) return false;
+  const freq: Record<string, number> = {};
+  for (const w of words) freq[w] = (freq[w] || 0) + 1;
+  const maxFreq = Math.max(...Object.values(freq));
+  if (maxFreq / words.length > 0.6) return true;
+  const uniqueWords = new Set(words);
+  if (uniqueWords.size / words.length < 0.4) return true;
+  return false;
+}
 
 export function useNilaVoiceRelay() {
   const [state, setState] = useState<RelayState>("idle");
@@ -132,8 +144,9 @@ export function useNilaVoiceRelay() {
       if (FOREIGN_SCRIPT.test(trimmed)) return;
       if (REPEATED_CHARS.test(trimmed)) return;
       const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 3 && trimmed.length < 8) return;
-      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 2) return;
+      if (wordCount < 3 || trimmed.length < 10) return;
+      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
+      if (isRepetitiveText(trimmed)) return;
       console.log("[relay] committed transcript accepted:", trimmed, `(${wordCount} words, ${trimmed.length} chars)`);
 
       const isRtl = detectRtl(trimmed);

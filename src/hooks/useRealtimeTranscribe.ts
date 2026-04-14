@@ -4,6 +4,24 @@ import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { toast } from "sonner";
 
+const NOISE_BLOCKLIST = /^(yeah|yep|hmm+|uh+|ah+|oh+|ok+|okay|mhm+|huh|ha+|hey|hi|bye|no|yes|so|well|like|um+|right|sure|thank you|thanks|you know|i mean|let me|what|the|a|an|it|is|this|that|and|but|come on|go ahead|i see|of course|exactly|absolutely|definitely|alright|all right)\b/i;
+const FOREIGN_SCRIPT = /[\u0900-\u097F\u0980-\u09FF\u0A00-\u0D7F\u0E00-\u0E7F\u1000-\u109F\u3000-\u9FFF\uAC00-\uD7AF]/;
+const REPEATED_CHARS = /(.)\1{4,}/;
+const PUNCTUATION_ONLY = /^[\s.,!?…\-–—:;'"]+$/;
+const SCRIBE_ANNOTATION = /^\s*\(/;
+
+function isRepetitiveText(text: string): boolean {
+  const words = text.toLowerCase().split(/\s+/);
+  if (words.length < 2) return false;
+  const freq: Record<string, number> = {};
+  for (const w of words) freq[w] = (freq[w] || 0) + 1;
+  const maxFreq = Math.max(...Object.values(freq));
+  if (maxFreq / words.length > 0.6) return true;
+  const uniqueWords = new Set(words);
+  if (uniqueWords.size / words.length < 0.4) return true;
+  return false;
+}
+
 export type SourceLang = "auto" | "en" | "fa";
 
 interface CommittedTranscript {
@@ -79,10 +97,15 @@ export function useRealtimeTranscribe() {
     onCommittedTranscript: (data) => {
       const trimmed = data.text.trim();
       if (!trimmed) return;
+      if (SCRIBE_ANNOTATION.test(trimmed) || PUNCTUATION_ONLY.test(trimmed)) return;
+      if (FOREIGN_SCRIPT.test(trimmed)) return;
+      if (REPEATED_CHARS.test(trimmed)) return;
       const wordCount = trimmed.split(/\s+/).length;
-      if (wordCount < 2 || trimmed.length < 5) return;
+      if (wordCount < 3 || trimmed.length < 10) return;
       const letterCount = (trimmed.match(/[\p{L}]/gu) || []).length;
-      if (letterCount / trimmed.length < 0.5) return;
+      if (letterCount < 1 || letterCount / trimmed.length < 0.5) return;
+      if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
+      if (isRepetitiveText(trimmed)) return;
       const words = trimmed.split(/\s+/);
       const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
       if (uniqueWords.size <= 2 && words.length >= 3) return;
