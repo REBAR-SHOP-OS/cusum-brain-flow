@@ -106,39 +106,56 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     }]);
 
     try {
-      const VIZZY_ONE_BASE = "https://pc.tail669f65.ts.net";
-      const endpoint = `${VIZZY_ONE_BASE}/api/v1/vizzy/voice`;
+      // Route through edge function proxy (avoids CORS/network issues)
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Not authenticated");
+      }
 
-      const resp = await fetch(endpoint, {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/personaplex-voice`;
+      const resp = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
         body: JSON.stringify({
-          text: userText,
-          source: "lovable",
-          voice_enabled: true,
+          messages: conversationRef.current,
+          voiceEnabled: true,
         }),
         signal,
       });
 
       if (!resp.ok) {
         const errText = await resp.text().catch(() => "");
-        console.error("[VizzyStream] Vizzy One API error:", resp.status, errText);
+        const errMsg = `API error ${resp.status}: ${errText || "Unknown error"}`;
+        console.error("[VizzyStream] Edge function error:", errMsg);
         setApiConnected(false);
+        setErrorDetail(errMsg);
+        // Show error in transcript
+        setTranscripts(prev => [...prev, {
+          id: `t-${++idCounter.current}`,
+          role: "agent",
+          text: "⚠️ Vizzy API is unreachable right now. Please try again in a moment.",
+          timestamp: Date.now(),
+        }]);
         processingRef.current = false;
         setDebugStep("listening");
         return;
       }
 
       const data = await resp.json();
-      const text = data.reply || "";
+      const text = data.text || "";
       const agentId = `t-${++idCounter.current}`;
 
-      // Track Vizzy One API metadata
-      setApiConnected(data.ok === true);
-      if (data.voice_path) setVoicePath(data.voice_path);
-      if (data.intent) setIntent(data.intent);
-      if (data.grounded !== undefined) setGrounded(data.grounded);
+      // Track Vizzy One API metadata from edge function normalized response
+      setApiConnected(data._api_connected === true);
+      if (data._voice_path) setVoicePath(data._voice_path);
+      if (data._intent) setIntent(data._intent);
+      if (data._grounded !== undefined) setGrounded(data._grounded);
       setAudioStatus(data.audio_base64 ? "vizzy-one" : "text-only");
+      setErrorDetail(null);
 
       if (text) {
         // Silently drop [UNCLEAR] — no transcript, no TTS
@@ -172,14 +189,24 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
           if (data.audio_base64) {
             playBase64Audio(data.audio_base64, data.audio_format || "mp3");
           } else {
-            // Fallback: browser TTS when PersonaPlex returns text-only
+            // Fallback: browser TTS when API returns text-only
             speakWithBrowserTTS(speakable);
           }
         }
       }
     } catch (err: any) {
       if (err?.name === "AbortError") return;
-      console.error("[VizzyStream] error:", err);
+      const errMsg = err?.message || "Unknown error";
+      console.error("[VizzyStream] error:", errMsg);
+      setApiConnected(false);
+      setErrorDetail(errMsg);
+      // Show error in transcript
+      setTranscripts(prev => [...prev, {
+        id: `t-${++idCounter.current}`,
+        role: "agent",
+        text: "⚠️ Vizzy API is unreachable right now. Please try again in a moment.",
+        timestamp: Date.now(),
+      }]);
     } finally {
       processingRef.current = false;
       setDebugStep("listening");
