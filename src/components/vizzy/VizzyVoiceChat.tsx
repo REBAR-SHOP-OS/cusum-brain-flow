@@ -90,6 +90,7 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     retryOutputAudio,
     debugStep,
     voicePath,
+    audioStatus,
   } = useVizzyVoiceEngine();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -291,6 +292,18 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
               }}
             >
               {voicePath === "personaplex" ? "PP" : "FB"}
+            </span>
+          )}
+          {isConnected && audioStatus && audioStatus !== "idle" && (
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+              style={{
+                color: audioStatus === "adapter" ? "hsl(152 69% 70%)" : "hsl(30 80% 70%)",
+                background: audioStatus === "adapter" ? "hsl(152 69% 20% / 0.4)" : "hsl(30 80% 20% / 0.4)",
+                border: `1px solid ${audioStatus === "adapter" ? "hsl(152 69% 40% / 0.5)" : "hsl(30 80% 40% / 0.5)"}`,
+              }}
+            >
+              {audioStatus === "adapter" ? "🔊 AUDIO" : "📝 TEXT"}
             </span>
           )}
         </div>
