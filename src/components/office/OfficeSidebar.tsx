@@ -56,7 +56,7 @@ export function OfficeSidebar({ active, onNavigate, onBack }: OfficeSidebarProps
       {/* Back */}
       <div className="px-3 py-2 border-b border-border">
         <button
-          onClick={() => navigate(-1)}
+          onClick={handleBack}
           className="flex items-center gap-2 text-[10px] tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
