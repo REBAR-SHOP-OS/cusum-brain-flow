@@ -843,7 +843,7 @@ export function useVizzyRealtimeVoice({ getSystemPrompt }: UseVizzyRealtimeVoice
         throw new Error(`OpenAI SDP exchange failed (${sdpResp.status}): ${errText}`);
       }
 
-      setStep("sdp_post_ok");
+      setStep(`sdp_post_ok (${strategy})`);
       const answerSdp = await sdpResp.text();
 
       // Guard: check PC is still usable before setRemoteDescription
