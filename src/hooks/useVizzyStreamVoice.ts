@@ -183,6 +183,11 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     for (let i = 0; i < chunks.length; i++) {
       if (controller.signal.aborted) break;
 
+      const chunkController = new AbortController();
+      const abortChunk = () => chunkController.abort();
+      controller.signal.addEventListener("abort", abortChunk, { once: true });
+      const chunkTimeout = window.setTimeout(() => chunkController.abort(), 4500);
+
       try {
         const resp = await fetch(ttsUrl, {
           method: "POST",
@@ -192,11 +197,12 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
           },
           body: JSON.stringify({ text: chunks[i] }),
-          signal: controller.signal,
+          signal: chunkController.signal,
         });
 
         if (!resp.ok) {
           console.warn(`[VizzyStream] TTS chunk ${i} failed: ${resp.status}`);
+          if (successCount === 0) break;
           continue;
         }
 
@@ -213,8 +219,12 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
         successCount += 1;
         playNextAudio();
       } catch (err: any) {
-        if (err?.name === "AbortError") break;
+        if (controller.signal.aborted) break;
         console.warn(`[VizzyStream] TTS chunk ${i} error:`, err?.message);
+        if (successCount === 0) break;
+      } finally {
+        clearTimeout(chunkTimeout);
+        controller.signal.removeEventListener("abort", abortChunk);
       }
     }
 
