@@ -1,5 +1,6 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 /**
  * PersonaPlex Voice Proxy — Phase 1 scaffold.
@@ -108,8 +109,56 @@ Deno.serve((req) =>
     const result = await response.json();
     const text = result.choices?.[0]?.message?.content || "";
 
+    // Generate audio via ElevenLabs TTS so the client always gets audio
+    let audio_base64: string | null = null;
+    let audio_format: string | null = null;
+    const ELEVENLABS_API_KEY = Deno.env.get("ELEVENLABS_API_KEY");
+
+    if (text && ELEVENLABS_API_KEY) {
+      try {
+        const speakable = text
+          .replace(/\[VIZZY-ACTION\][\s\S]*?\[\/VIZZY-ACTION\]/g, "")
+          .replace(/\[UNCLEAR\]/g, "")
+          .trim();
+
+        if (speakable) {
+          const ttsResp = await fetch(
+            `https://api.elevenlabs.io/v1/text-to-speech/JBFqnCBsd6RMkjVDRZzb?output_format=mp3_44100_128`,
+            {
+              method: "POST",
+              headers: {
+                "xi-api-key": ELEVENLABS_API_KEY,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                text: speakable,
+                model_id: "eleven_multilingual_v2",
+                voice_settings: {
+                  stability: 0.35,
+                  similarity_boost: 0.80,
+                  style: 0.55,
+                  use_speaker_boost: true,
+                },
+              }),
+            }
+          );
+
+          if (ttsResp.ok) {
+            const audioBuffer = await ttsResp.arrayBuffer();
+            audio_base64 = base64Encode(audioBuffer);
+            audio_format = "mp3";
+            console.log("[personaplex-voice] TTS audio generated, size:", audioBuffer.byteLength);
+          } else {
+            console.error("[personaplex-voice] ElevenLabs TTS failed:", ttsResp.status);
+          }
+        }
+      } catch (ttsErr) {
+        console.error("[personaplex-voice] TTS error:", ttsErr);
+      }
+    }
+
     return new Response(
-      JSON.stringify({ text, audio_base64: null, audio_format: null, _fallback: true }),
+      JSON.stringify({ text, audio_base64, audio_format, _fallback: true }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }, { functionName: "personaplex-voice", authMode: "required", requireCompany: false, rawResponse: true })
