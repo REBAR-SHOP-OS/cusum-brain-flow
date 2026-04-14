@@ -356,7 +356,7 @@ export function CutEngine({
           {/* Strokes */}
           <div className="text-center">
             <p className={cn("text-[9px] tracking-wider uppercase mb-1", mutedClasses)}>Strokes</p>
-            <p className="text-4xl font-black font-mono leading-none">
+            <p className="text-4xl font-black font-sans tabular-nums leading-none">
               {strokesDone}
               <span className={cn("text-lg", mutedClasses)}>/{totalStrokesNeeded}</span>
             </p>
@@ -365,7 +365,7 @@ export function CutEngine({
           {/* Pieces this run */}
           <div className="text-center">
             <p className={cn("text-[9px] tracking-wider uppercase mb-1", mutedClasses)}>Pieces This Run</p>
-            <p className="text-4xl font-black font-mono leading-none text-primary">
+            <p className="text-4xl font-black font-sans tabular-nums leading-none text-primary">
               {totalPiecesDone}
               <span className={cn("text-lg", mutedClasses)}>/{totalPiecesPlanned}</span>
             </p>

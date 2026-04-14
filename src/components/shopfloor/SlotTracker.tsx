@@ -202,7 +202,7 @@ export function SlotTracker({
             {/* Bars loaded */}
             <div>
               <Layers className="w-5 h-5 text-primary mx-auto mb-1" />
-              <p className="text-3xl font-black font-mono leading-none">{totalBars}</p>
+              <p className="text-3xl font-black font-sans tabular-nums leading-none">{totalBars}</p>
               <p className="text-[9px] text-muted-foreground tracking-wider uppercase mt-1">
                 Bars Loaded
               </p>
@@ -211,7 +211,7 @@ export function SlotTracker({
             {/* Strokes */}
             <div>
               <Scissors className="w-5 h-5 text-primary mx-auto mb-1 animate-pulse" />
-              <p className="text-3xl font-black font-mono leading-none">
+              <p className="text-3xl font-black font-sans tabular-nums leading-none">
                 {strokesDone}<span className="text-lg text-muted-foreground">/{maxStrokes}</span>
               </p>
               <p className="text-[9px] text-muted-foreground tracking-wider uppercase mt-1">
@@ -222,7 +222,7 @@ export function SlotTracker({
             {/* Pieces done */}
             <div>
               <CheckCircle2 className="w-5 h-5 text-primary mx-auto mb-1" />
-              <p className="text-3xl font-black font-mono leading-none text-primary">
+              <p className="text-3xl font-black font-sans tabular-nums leading-none text-primary">
                 {totalCutsDone}<span className="text-lg text-muted-foreground">/{totalPlanned}</span>
               </p>
               <p className="text-[9px] text-muted-foreground tracking-wider uppercase mt-1">
