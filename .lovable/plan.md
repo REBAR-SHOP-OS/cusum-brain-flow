@@ -1,28 +1,33 @@
 
 
-## Vizzy Live — Two Behavioral Bugs
+## Fix: Give Vizzy her voice back
 
-### Bug 1: "I cannot hear you" → `[UNCLEAR]`
-**Root cause**: The `VIZZY_LIVE_VOICE_INSTRUCTIONS` prompt tells the model to respond `[UNCLEAR]` for "truly garbled gibberish." The model is incorrectly classifying "I cannot hear you" as noise — likely because it's a meta-statement about the system rather than a business query, and the model over-triggers the `[UNCLEAR]` rule.
+### Problem
+The `personaplex-voice` fallback (Lovable AI) returns `audio_base64: null`. The client falls back to `window.speechSynthesis` (browser TTS), which is unreliable on mobile Safari and often produces no audio output at all.
 
-**Fix**: Add an explicit rule in the `UNCLEAR INPUT` section of `VIZZY_LIVE_VOICE_INSTRUCTIONS`:
-- Sentences like "I cannot hear you", "I can't hear anything", "the audio isn't working", "you're not speaking" are **real user speech about audio issues** — NOT gibberish.
-- For audio complaints, respond naturally: "I'm here — can you hear me now?" or "Let me try again."
-
-### Bug 2: `[UNCLEAR]` displays as visible text in transcript
-**Root cause**: When the model returns `[UNCLEAR]`, the code in `useVizzyStreamVoice.ts` strips it from the *speakable* text (line 153) but still adds the raw `[UNCLEAR]` to the transcript (line 138). The user sees `[UNCLEAR]` in the chat bubble, which is a bad UX.
-
-**Fix**: In `useVizzyStreamVoice.ts`, when the agent response is exactly `[UNCLEAR]` (after trimming), skip adding it to the transcript entirely. No transcript bubble, no TTS — just silently ignore it so the conversation stays clean.
+### Solution
+Replace the browser `speechSynthesis` fallback with a call to the existing `elevenlabs-tts` edge function, which already works and returns high-quality MP3 audio. The client will fetch TTS audio as a blob, create an object URL, and play it through the audio queue system that already exists.
 
 ### Files changed
-1. **`src/hooks/useVizzyVoiceEngine.ts`** — Update `VIZZY_LIVE_VOICE_INSTRUCTIONS` unclear input section to handle audio-complaint phrases.
-2. **`src/hooks/useVizzyStreamVoice.ts`** — Skip transcript + TTS when response is exactly `[UNCLEAR]`.
+
+**`src/hooks/useVizzyStreamVoice.ts`**
+- Replace `speakWithBrowserTTS` with `speakWithElevenLabs` — calls the `elevenlabs-tts` edge function, receives MP3 binary, creates a blob URL, and plays via the existing audio queue (`playNextAudio`).
+- Use the primed mobile audio element (from `takePrimedMobileAudio`) for the first playback to satisfy iOS autoplay restrictions.
+- Keep `window.speechSynthesis.cancel()` in `endSession` for cleanup safety.
+
+### Flow after fix
+```text
+User speaks → Browser STT → personaplex-voice (text response)
+                                    ↓
+                        audio_base64 present? → play it
+                        audio_base64 null?    → call elevenlabs-tts → play MP3
+```
 
 ### What stays unchanged
-- Transport layer
+- Transport architecture
 - UI design
 - ERP schema
 - Anti-fabrication guardrails
 - Greeting behavior
-- `max_tokens` limit
+- Prompt structure
 
