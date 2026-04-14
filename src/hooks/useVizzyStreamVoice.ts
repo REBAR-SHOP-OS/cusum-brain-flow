@@ -71,42 +71,17 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     playNextAudio();
   }, [playNextAudio]);
 
-  // --- ElevenLabs TTS fallback (when PersonaPlex returns no audio) ---
-  const speakWithElevenLabs = useCallback(async (text: string) => {
-    if (!text.trim()) return;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const resp = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${token || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ text, voiceId: "JBFqnCBsd6RMkjVDRZzb", speed: 1.0 }),
-        }
-      );
-
-      if (!resp.ok) {
-        console.error("[VizzyStream] ElevenLabs TTS error:", resp.status);
-        return;
-      }
-
-      const blob = await resp.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      audio.onerror = () => URL.revokeObjectURL(url);
-      audioQueueRef.current.push(audio);
-      playNextAudio();
-    } catch (err) {
-      console.warn("[VizzyStream] ElevenLabs TTS failed:", err);
-    }
-  }, [playNextAudio]);
+  // --- Browser TTS fallback (only if PersonaPlex returns no audio) ---
+  const speakWithBrowserTTS = useCallback((text: string) => {
+    if (!window.speechSynthesis || !text.trim()) return;
+    console.warn("[VizzyStream] PersonaPlex returned no audio — using browser TTS fallback");
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.1;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }, []);
 
   // --- Call PersonaPlex via edge function ---
   const callPersonaPlex = useCallback(async (userText: string) => {
@@ -191,8 +166,8 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
           if (data.audio_base64) {
             playBase64Audio(data.audio_base64, data.audio_format || "mp3");
           } else {
-            // Fallback: ElevenLabs TTS when PersonaPlex returns text-only
-            speakWithElevenLabs(speakable);
+            // Fallback: browser TTS when PersonaPlex returns text-only
+            speakWithBrowserTTS(speakable);
           }
         }
       }
@@ -203,7 +178,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       processingRef.current = false;
       setDebugStep("listening");
     }
-  }, [getSystemPrompt, playBase64Audio, speakWithElevenLabs]);
+  }, [getSystemPrompt, playBase64Audio, speakWithBrowserTTS]);
 
   // --- Speech recognition ---
   const startRecognition = useCallback(() => {

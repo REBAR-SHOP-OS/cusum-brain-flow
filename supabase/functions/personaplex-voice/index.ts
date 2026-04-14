@@ -30,6 +30,9 @@ Deno.serve((req) =>
     const PERSONAPLEX_API_URL = Deno.env.get("PERSONAPLEX_API_URL");
     const PERSONAPLEX_API_KEY = Deno.env.get("PERSONAPLEX_API_KEY");
 
+    console.log("[personaplex-voice] PERSONAPLEX_API_URL configured:", !!PERSONAPLEX_API_URL);
+    console.log("[personaplex-voice] PERSONAPLEX_API_KEY configured:", !!PERSONAPLEX_API_KEY);
+
     // ── PersonaPlex path (when adapter is deployed) ──
     if (PERSONAPLEX_API_URL && PERSONAPLEX_API_KEY) {
       try {
