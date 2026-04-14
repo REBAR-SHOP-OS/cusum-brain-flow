@@ -29,7 +29,8 @@ import {
   type ArchNode, type ArchEdge, type ArchLayer, type Accent,
 } from "@/lib/architectureGraphData";
 import { ArchFlowNode, type ArchFlowNodeData } from "@/components/system-flow/ArchFlowNode";
-import { applyArchitectureLayout, matchesArchitectureQuery } from "@/lib/architectureFlow";
+import { LayerHeaderNode } from "@/components/system-flow/LayerHeaderNode";
+import { applyArchitectureLayout, generateLayerHeaders, matchesArchitectureQuery } from "@/lib/architectureFlow";
 
 /* ───── Style maps ───── */
 const accentColor: Record<Accent, string> = {
@@ -64,7 +65,7 @@ function getEdgeVisuals(archEdge: ArchEdge | undefined, srcAccent: Accent) {
 }
 
 /* ───── Node types ───── */
-const nodeTypes = { archNode: ArchFlowNode };
+const nodeTypes = { archNode: ArchFlowNode, layerHeader: LayerHeaderNode };
 
 type ArchitectureFlowNode = Node<ArchFlowNodeData>;
 
@@ -80,11 +81,11 @@ type ArchitectureDialogNode = {
 const getAllLayers = () => new Set(LAYERS.map((layer) => layer.key));
 
 /* ───── Convert static data to React Flow nodes/edges ───── */
-function buildInitialNodes(): ArchitectureFlowNode[] {
+function buildInitialArchNodes(): ArchitectureFlowNode[] {
   return applyArchitectureLayout(
     ARCH_NODES.map((node) => ({
       id: node.id,
-      type: "archNode",
+      type: "archNode" as const,
       position: { x: 0, y: 0 },
       data: {
         label: node.label,
@@ -96,6 +97,25 @@ function buildInitialNodes(): ArchitectureFlowNode[] {
       },
     })),
   );
+}
+
+function buildHeaderNodes(): Node[] {
+  const headers = generateLayerHeaders(
+    ARCH_NODES.map((n) => ({ id: n.id, layer: n.layer })),
+  );
+
+  return headers.map((h) => ({
+    id: h.id,
+    type: "layerHeader",
+    position: h.position,
+    draggable: false,
+    selectable: false,
+    connectable: false,
+    data: {
+      label: h.label,
+      accentColor: accentColor[h.accent],
+    },
+  }));
 }
 
 function buildInitialEdges(): Edge[] {
@@ -214,15 +234,16 @@ export default function Architecture() {
   );
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [newNodeLabel, setNewNodeLabel] = useState("");
-  const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("modules");
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ArchitectureFlowNode, Edge> | null>(null);
+  const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("items");
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [lockedNode, setLockedNode] = useState<string | null>(null);
   const [showAllEdges, setShowAllEdges] = useState(false);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
-    buildInitialNodes(),
+    buildInitialArchNodes(),
   );
+  const headerNodes = useMemo(() => buildHeaderNodes(), []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildInitialEdges());
 
   const handleDelete = useCallback((nodeId: string) => {
@@ -393,7 +414,7 @@ export default function Architecture() {
         acc[node.data.layer] += 1;
         return acc;
       },
-      { entry: 0, auth: 0, modules: 0, items: 0, ai: 0, backend: 0, external: 0, platform: 0 },
+      { entry: 0, auth: 0, items: 0, ai: 0, backend: 0, external: 0, platform: 0 },
     );
   }, [nodes]);
 
@@ -641,7 +662,7 @@ export default function Architecture() {
         {/* React Flow Canvas */}
         <div className="flex-1 relative">
           <ReactFlow
-            nodes={displayNodes}
+            nodes={[...headerNodes, ...displayNodes] as Node[]}
             edges={displayEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}

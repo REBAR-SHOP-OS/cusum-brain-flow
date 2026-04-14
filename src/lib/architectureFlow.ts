@@ -1,4 +1,4 @@
-import { LAYERS, type ArchLayer } from "@/lib/architectureGraphData";
+import { LAYERS, type ArchLayer, type Accent } from "@/lib/architectureGraphData";
 
 export const ARCHITECTURE_LAYOUT = {
   layerGap: 280,
@@ -6,8 +6,9 @@ export const ARCHITECTURE_LAYOUT = {
   nodeHeight: 72,
   nodeGap: 16,
   leftMargin: 40,
-  topMargin: 40,
+  topMargin: 80,
   maxPerColumn: 14,
+  headerY: 0,
 } as const;
 
 export type ArchitectureLayoutItem = {
@@ -74,4 +75,40 @@ export function applyArchitectureLayout<T extends ArchitectureLayoutItem>(items:
       y: ARCHITECTURE_LAYOUT.topMargin,
     },
   }));
+}
+
+/**
+ * Generate header nodes for each layer column.
+ */
+export type LayerHeaderInfo = {
+  id: string;
+  label: string;
+  accent: Accent;
+  position: { x: number; y: number };
+  colSpan: number; // number of sub-columns this layer occupies
+};
+
+export function generateLayerHeaders<T extends ArchitectureLayoutItem>(items: T[]): LayerHeaderInfo[] {
+  const headers: LayerHeaderInfo[] = [];
+  let columnOffset = 0;
+
+  for (const layer of LAYERS) {
+    const layerItems = items.filter((item) => resolveLayer(item) === layer.key);
+    if (!layerItems.length) continue;
+
+    const colCount = Math.ceil(layerItems.length / ARCHITECTURE_LAYOUT.maxPerColumn);
+    const x = ARCHITECTURE_LAYOUT.leftMargin + columnOffset * ARCHITECTURE_LAYOUT.layerGap;
+
+    headers.push({
+      id: `header-${layer.key}`,
+      label: layer.label,
+      accent: layer.accent,
+      position: { x, y: ARCHITECTURE_LAYOUT.headerY },
+      colSpan: colCount,
+    });
+
+    columnOffset += colCount;
+  }
+
+  return headers;
 }
