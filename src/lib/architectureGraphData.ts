@@ -31,6 +31,7 @@ export interface ArchNode {
   accent: Accent;
   icon: LucideIcon;
   detail: { title: string; bullets: string[] };
+  description?: string;
 }
 
 export interface ArchEdge {
@@ -55,11 +56,11 @@ export const LAYERS: { key: ArchLayer; label: string; accent: Accent; y: number 
 /* ───── Nodes ───── */
 export const ARCH_NODES: ArchNode[] = [
   // Layer 1: Entry Points
-  { id: "web-app",   label: "Web App",    hint: "React SPA",    layer: "entry", accent: "cyan", icon: Globe,    detail: { title: "Web Application", bullets: ["React 18 + Vite 5 + TailwindCSS", "src/App.tsx — main router", "PWA enabled via vite-plugin-pwa"] } },
-  { id: "webhooks",  label: "Webhooks",   hint: "Inbound HTTP", layer: "entry", accent: "cyan", icon: Webhook,  detail: { title: "Webhook Endpoints", bullets: ["RingCentral webhook", "Stripe webhook", "Generic inbound handler"] } },
-  { id: "crons",     label: "Crons",      hint: "Scheduled",    layer: "entry", accent: "cyan", icon: Timer,    detail: { title: "Scheduled Jobs", bullets: ["pg_cron → ringcentral-sync (15 min)", "pg_cron → qb-sync (hourly)", "pg_cron → seo-audit (daily)"] } },
-  { id: "oauth",     label: "OAuth",      hint: "3rd-party",    layer: "entry", accent: "cyan", icon: KeyRound, detail: { title: "OAuth Flows", bullets: ["QuickBooks OAuth2", "Google OAuth", "Meta OAuth"] } },
-  { id: "kiosk",     label: "Kiosk",      hint: "TimeClock",    layer: "entry", accent: "cyan", icon: Maximize, detail: { title: "Kiosk Mode", bullets: ["QR/PIN entry", "Auto-sleep after 3 min", "Dedicated kiosk account"] } },
+  { id: "web-app",   label: "Web App",    hint: "React SPA",    layer: "entry", accent: "cyan", icon: Globe,    detail: { title: "Web Application", bullets: ["React 18 + Vite 5 + TailwindCSS", "src/App.tsx — main router", "PWA enabled via vite-plugin-pwa"] }, description: "Main browser-based single-page application serving all UI modules and dashboards." },
+  { id: "webhooks",  label: "Webhooks",   hint: "Inbound HTTP", layer: "entry", accent: "cyan", icon: Webhook,  detail: { title: "Webhook Endpoints", bullets: ["RingCentral webhook", "Stripe webhook", "Generic inbound handler"] }, description: "Receives inbound HTTP callbacks from external services like Stripe, RingCentral, and custom integrations." },
+  { id: "crons",     label: "Crons",      hint: "Scheduled",    layer: "entry", accent: "cyan", icon: Timer,    detail: { title: "Scheduled Jobs", bullets: ["pg_cron → ringcentral-sync (15 min)", "pg_cron → qb-sync (hourly)", "pg_cron → seo-audit (daily)"] }, description: "Executes recurring background jobs on defined schedules for data synchronization and maintenance." },
+  { id: "oauth",     label: "OAuth",      hint: "3rd-party",    layer: "entry", accent: "cyan", icon: KeyRound, detail: { title: "OAuth Flows", bullets: ["QuickBooks OAuth2", "Google OAuth", "Meta OAuth"] }, description: "Handles third-party OAuth2 authorization flows for connecting external accounts." },
+  { id: "kiosk",     label: "Kiosk",      hint: "TimeClock",    layer: "entry", accent: "cyan", icon: Maximize, detail: { title: "Kiosk Mode", bullets: ["QR/PIN entry", "Auto-sleep after 3 min", "Dedicated kiosk account"] }, description: "Dedicated time-clock interface for shop floor employees to punch in/out via QR or PIN." },
 
   // Layer 2: Access Control
   { id: "api-gw",    label: "API Gateway", hint: "Hub",           layer: "auth", accent: "emerald", icon: Server,  detail: { title: "API Gateway", bullets: ["Central request hub", "Rate limiting & throttle", "Request routing to services"] } },
