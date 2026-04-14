@@ -1,33 +1,49 @@
 
 
-## Fix: Give Vizzy her voice back
+## Patch: Route voice through edge function proxy + add error feedback
 
 ### Problem
-The `personaplex-voice` fallback (Lovable AI) returns `audio_base64: null`. The client falls back to `window.speechSynthesis` (browser TTS), which is unreliable on mobile Safari and often produces no audio output at all.
+Browser-direct `fetch` to `https://pc.tail669f65.ts.net` fails silently (CORS / network). User sees their transcript but gets no assistant reply.
 
-### Solution
-Replace the browser `speechSynthesis` fallback with a call to the existing `elevenlabs-tts` edge function, which already works and returns high-quality MP3 audio. The client will fetch TTS audio as a blob, create an object URL, and play it through the audio queue system that already exists.
+### Changes
 
-### Files changed
+**`src/hooks/useVizzyStreamVoice.ts`** — `callPersonaPlex` function (lines 91–186)
 
-**`src/hooks/useVizzyStreamVoice.ts`**
-- Replace `speakWithBrowserTTS` with `speakWithElevenLabs` — calls the `elevenlabs-tts` edge function, receives MP3 binary, creates a blob URL, and plays via the existing audio queue (`playNextAudio`).
-- Use the primed mobile audio element (from `takePrimedMobileAudio`) for the first playback to satisfy iOS autoplay restrictions.
-- Keep `window.speechSynthesis.cancel()` in `endSession` for cleanup safety.
+1. **Replace direct fetch with edge function proxy call**:
+   - Remove the direct `fetch("https://pc.tail669f65.ts.net/...")` call
+   - Import `supabase` from `@/integrations/supabase/client`
+   - Get the current session's access token
+   - Call `${VITE_SUPABASE_URL}/functions/v1/personaplex-voice` with auth headers
+   - Send body: `{ messages: conversationRef.current, voiceEnabled: true }`
+   - The edge function already proxies to the Vizzy One API with the correct request shape
 
-### Flow after fix
-```text
-User speaks → Browser STT → personaplex-voice (text response)
-                                    ↓
-                        audio_base64 present? → play it
-                        audio_base64 null?    → call elevenlabs-tts → play MP3
-```
+2. **Add visible error feedback on failure**:
+   - In the `catch` block (line 179), instead of just `console.error`, append an agent transcript entry:
+     ```
+     text: "⚠️ Vizzy API is unreachable right now. Please try again in a moment."
+     ```
+   - Also handle non-ok responses (lines 122–129) the same way — append an error transcript instead of silently returning
+   - Set `apiConnected` to `false` on any failure
+   - Set `errorDetail` with the actual error message for debugging
+
+3. **Keep all debug state updates** (`apiConnected`, `intent`, `grounded`, `voicePath`, `audioStatus`) — map from the edge function's normalized response fields (`_api_connected`, `_intent`, `_grounded`, `_voice_path`, `_audio_status`)
 
 ### What stays unchanged
-- Transport architecture
-- UI design
-- ERP schema
-- Anti-fabrication guardrails
-- Greeting behavior
-- Prompt structure
+- Edge function `personaplex-voice/index.ts` — already proxies to the Vizzy One API correctly
+- UI component `VizzyVoiceChat.tsx` — debug badges already display all metadata
+- Audio playback, browser TTS fallback, STT, session management
+- Read-only behavior, anti-fabrication guardrails
+
+### Architecture after patch
+```text
+User speaks → Browser STT → personaplex-voice edge function
+                                    ↓ (server-side proxy)
+                          https://pc.tail669f65.ts.net/api/v1/vizzy/voice
+                                    ↓
+                          Response to client
+                                    ↓
+                     audio_base64? → play it
+                     null?         → browser TTS (last resort)
+                     error?        → show "API unreachable" in transcript
+```
 
