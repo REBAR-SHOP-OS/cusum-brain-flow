@@ -1,36 +1,45 @@
 
 
-## Plan: Add Mini Connection Graph to Node Detail Dialog
+## Plan: Opaque Colored Cards + Larger Size + Proper Column Alignment
 
-### Problem
-When clicking a node, the detail dialog shows text info (bullets, layer badge, connected-to buttons) but no visual representation of the node's connections. User wants to see the node and its connected nodes as a small visual graph inside the dialog.
-
-### Approach
-Add a mini ReactFlow diagram inside the detail dialog showing:
-- The selected node in the center
-- All directly connected nodes around it
-- The edges between them
-- Each node styled with its layer accent color
+### Problems (from screenshot)
+1. Cards have near-transparent backgrounds — hard to read against dark canvas
+2. Cards are too small — text barely visible when zoomed out
+3. Some cards appear outside their layer column (circled area in screenshot shows misaligned cards in AI/Automation)
 
 ### Changes
 
-**`src/components/system-flow/MiniConnectionGraph.tsx`** (new file)
-- A small ReactFlow instance (~350px tall) rendered inside the dialog
-- Takes the selected node ID + all nodes/edges as props
-- Filters to only show the selected node + its direct neighbors
-- Positions the selected node in the center, neighbors in a radial/circular layout around it
-- Uses simplified node rendering (colored rectangles with labels, no handles)
-- Auto-fits the mini view on mount
-- `proOptions={{ hideAttribution: true }}`, no controls/minimap, non-interactive (pan only)
+**1. Opaque colored backgrounds (`src/components/system-flow/ArchFlowNode.tsx`)**
+- Replace the transparent `bg` values with solid, opaque dark-tinted colors per accent:
+  - rose: `rgb(45, 20, 28)` — dark rose
+  - orange: `rgb(45, 30, 15)` — dark orange  
+  - violet: `rgb(30, 22, 50)` — dark violet
+  - blue: `rgb(18, 28, 48)` — dark blue
+  - emerald: `rgb(15, 38, 30)` — dark emerald
+  - cyan: `rgb(12, 35, 42)` — dark cyan
+- Remove `backdropFilter: "blur(16px)"` — not needed with opaque backgrounds
+- Change background from gradient to solid opaque fill
 
-**`src/pages/Architecture.tsx`**
-- Import `MiniConnectionGraph`
-- Pass `openNode.id`, `nodes`, and `edges` to the component
-- Insert it inside the dialog between the bullets list and the "Connected to" section
-- Widen dialog from `max-w-md` to `max-w-lg` to accommodate the graph
+**2. Larger card dimensions**
+- `nodeWidth`: 160 → 190
+- `nodeHeight`: 100 → 120
+- `nodeGap`: 14 → 18
+- Update card width in ArchFlowNode to match (190px)
+- Increase font sizes: label 11px → 13px, hint 8px → 9px, description 9px → 10px
+- Icon size: 22 → 26
+
+**3. Layout constants (`src/lib/architectureFlow.ts`)**
+- Update `nodeWidth`, `nodeHeight`, `nodeGap` to match new sizes
+- Increase `layerGap` from 300 → 340 to prevent column overlap with wider cards
+
+### Files
+| File | Change |
+|---|---|
+| `src/components/system-flow/ArchFlowNode.tsx` | Opaque bg colors, larger card, bigger fonts |
+| `src/lib/architectureFlow.ts` | Increase layout dimensions |
 
 ### Result
-- Clicking any card shows its detail popup with a visual mini-graph of connections
-- User can see at a glance which components are linked and how they relate
-- The existing text details and clickable connection buttons remain unchanged
+- All cards have solid, clearly visible colored backgrounds per layer
+- Cards are larger and text is readable
+- Every card sits under its layer column header
 
