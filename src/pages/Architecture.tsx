@@ -420,7 +420,7 @@ export default function Architecture() {
       return {
         ...n,
         hidden: layerHidden || searchHidden,
-        data: { ...nodeData, onDelete: handleDelete, onLabelChange: handleLabelChange, dimmed, highlighted },
+        data: { ...nodeData, onDelete: handleDelete, onLabelChange: handleLabelChange, onExplain: handleExplain, dimmed, highlighted },
       };
     });
   }, [nodes, visibleLayers, filteredNodeIds, handleDelete, handleLabelChange, activeNode, connectedNodeIds]);
