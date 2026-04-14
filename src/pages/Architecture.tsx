@@ -662,7 +662,7 @@ export default function Architecture() {
         {/* React Flow Canvas */}
         <div className="flex-1 relative">
           <ReactFlow
-            nodes={displayNodes}
+            nodes={[...headerNodes, ...displayNodes]}
             edges={displayEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
