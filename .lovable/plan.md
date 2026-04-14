@@ -1,51 +1,65 @@
 
 
-## Plan: Strengthen Noise Filtering in Nila Interpreter
+## Plan: Enhanced Architecture Report Dialog
 
 ### Problem
-Nila currently translates low-confidence or garbled audio — random sounds, filler words, and misheard fragments get through and produce bad translations.
-
-### Current State
-Both `useRealtimeTranscribe.ts` and `useNilaVoiceRelay.ts` have basic filters (min word count, letter ratio, noise blocklist, repeated chars). But they're too lenient — short unclear phrases and common STT hallucinations still pass through.
+The current explain dialog shows only basic bullets and a flat list of connections. The user wants a comprehensive architectural report that clearly shows: what the component does, its internal functions, and directional connections (what sends data TO it vs what it sends data TO).
 
 ### Changes
 
-**1. `src/hooks/useNilaVoiceRelay.ts`** (voice chat mode)
-- Expand `NOISE_BLOCKLIST` with more filler/hallucination words (e.g., "thank you", "thanks", "you know", common STT artifacts like "you", "the", "I", "a" as standalone)
-- Raise minimum threshold: require at least **3 words AND 10 characters** (currently 3 words OR 8 chars)
-- Add duplicate-word detector: reject if >60% of words are the same word repeated
-- Add STT hallucination patterns: reject strings that are just repeated short phrases (e.g., "thank you thank you thank you")
-- Filter transcripts where unique words < 40% of total words (repetitive gibberish)
+**1. `src/pages/Architecture.tsx` — Enhance the detail dialog**
+- Split "Connected to" into two sections: **Inbound** (→ this node) and **Outbound** (this node →)
+- Show edge labels (e.g., "sync", "auth", "cache") next to each connection badge
+- Show edge style type (solid = primary, dashed = async, failure = error path) with visual indicators
+- Add a summary line: "X inbound · Y outbound connections"
+- Add the component's layer name prominently
+- Show the full detail title + all bullets in a structured "Functions & Capabilities" section
 
-**2. `src/hooks/useRealtimeTranscribe.ts`** (split-column mode)
-- Apply the same stricter filters: raise from 2 words/5 chars to **3 words/10 chars**
-- Add the same expanded noise blocklist and repetition detector
-- Add duplicate-word filter matching the voice relay hook
+**2. `src/lib/architectureGraphData.ts` — Add `description` field to `ArchNode`**
+- Add an optional `description: string` field to each node for a one-line purpose statement (e.g., "Manages the full sales pipeline from lead capture to deal closure")
+- Populate for all ~100 nodes with concise architectural descriptions
 
-### Specific Filter Additions
+**3. `src/pages/Architecture.tsx` — Wire description into dialog**
+- Display the description below the title as a summary paragraph before bullets
+
+### Visual Result
 ```text
-Expanded noise blocklist (single/double word catches):
-  thank you, thanks, you know, I mean, let me, 
-  what, the, a, an, it, is, this, that, and, but,
-  come on, go ahead
-
-New repetition detector:
-  - Split into words, count frequency of most common word
-  - If mostCommonWord appears in >60% of words → reject
-
-Raised thresholds:
-  - wordCount < 3 → reject (was 2 in transcribe, 3 in relay but with OR)
-  - trimmed.length < 10 → reject (was 5/8)
+┌─────────────────────────────────────────┐
+│ 🔀 Pipeline                         ✕  │
+│ ┌──────────┐                            │
+│ │ AI Layer │  Workflows                 │
+│ └──────────┘                            │
+│                                         │
+│ Orchestrates automated workflows with   │
+│ cron, webhook, and manual triggers.     │
+│                                         │
+│ ▸ FUNCTIONS                             │
+│   • Workflow definitions                │
+│   • Execution log                       │
+│   • Cron, webhook, manual triggers      │
+│                                         │
+│ ▸ MINI CONNECTION GRAPH                 │
+│   [existing graph]                      │
+│                                         │
+│ ▸ INBOUND (3)                           │
+│   CRM ──→  •  Shop Floor ──→           │
+│   Estimating ──verify→                  │
+│                                         │
+│ ▸ OUTBOUND (8)                          │
+│   ──→ Social (publish)                  │
+│   ──→ Stripe                            │
+│   ──→ Rules Engine                      │
+│   ──→ Job Queue (enqueue)               │
+│   ──→ Gmail  ──→ RC  ──→ SEO           │
+│   ──→ Message Bus (publish)             │
+│                                         │
+│ 3 inbound · 8 outbound connections      │
+└─────────────────────────────────────────┘
 ```
 
 ### Files
 | File | Change |
 |---|---|
-| `src/hooks/useNilaVoiceRelay.ts` | Stricter thresholds, expanded blocklist, repetition filter |
-| `src/hooks/useRealtimeTranscribe.ts` | Same stricter thresholds and filters |
-
-### Result
-- Only clear, meaningful speech gets translated
-- Filler words, repeated sounds, and STT hallucinations are silently dropped
-- Both interpreter modes (split-column and voice chat) share the same quality bar
+| `src/lib/architectureGraphData.ts` | Add optional `description` field to `ArchNode`, populate for all nodes |
+| `src/pages/Architecture.tsx` | Restructure dialog: add description, split connections into inbound/outbound with edge labels and direction arrows |
 
