@@ -14,6 +14,8 @@ import {
   RefreshCw, AlertTriangle, CheckCircle, Workflow, Scale, Server,
   MemoryStick, Radio, Gauge, Key, BarChart3, FileText, HeartPulse, ToggleRight, Bus,
   Ruler, FileSpreadsheet, Banknote, Inbox, Library, BellRing, Camera, Globe2, Plug, AudioLines,
+  TrendingUp, HeadphonesIcon, Megaphone, PenTool, UserSearch, Sprout, Crown, Wrench,
+  Truck, MailCheck, Eye, Compass, Palette, GraduationCap,
 } from "lucide-react";
 
 export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform";
