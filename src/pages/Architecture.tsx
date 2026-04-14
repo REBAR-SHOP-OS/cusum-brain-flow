@@ -81,8 +81,8 @@ type ArchitectureDialogNode = {
 const getAllLayers = () => new Set(LAYERS.map((layer) => layer.key));
 
 /* ───── Convert static data to React Flow nodes/edges ───── */
-function buildInitialNodes(): Node[] {
-  const archNodes = applyArchitectureLayout(
+function buildInitialArchNodes(): ArchitectureFlowNode[] {
+  return applyArchitectureLayout(
     ARCH_NODES.map((node) => ({
       id: node.id,
       type: "archNode" as const,
@@ -97,12 +97,14 @@ function buildInitialNodes(): Node[] {
       },
     })),
   );
+}
 
+function buildHeaderNodes(): Node[] {
   const headers = generateLayerHeaders(
     ARCH_NODES.map((n) => ({ id: n.id, layer: n.layer })),
   );
 
-  const headerNodes: Node[] = headers.map((h) => ({
+  return headers.map((h) => ({
     id: h.id,
     type: "layerHeader",
     position: h.position,
@@ -114,8 +116,6 @@ function buildInitialNodes(): Node[] {
       accentColor: accentColor[h.accent],
     },
   }));
-
-  return [...headerNodes, ...archNodes];
 }
 
 function buildInitialEdges(): Edge[] {
@@ -240,9 +240,10 @@ export default function Architecture() {
   const [lockedNode, setLockedNode] = useState<string | null>(null);
   const [showAllEdges, setShowAllEdges] = useState(false);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState(
-    buildInitialNodes(),
+  const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
+    buildInitialArchNodes(),
   );
+  const headerNodes = useMemo(() => buildHeaderNodes(), []);
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildInitialEdges());
 
   const handleDelete = useCallback((nodeId: string) => {
