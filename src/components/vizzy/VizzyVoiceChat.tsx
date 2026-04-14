@@ -91,6 +91,9 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
     debugStep,
     voicePath,
     audioStatus,
+    apiConnected,
+    intent,
+    grounded,
   } = useVizzyVoiceEngine();
 
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -282,28 +285,64 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
           <span className="text-xs font-medium" style={{ color: "hsl(172 30% 70%)" }}>
             {isConnected ? "LIVE SESSION" : isConnecting ? "CONNECTING" : "OFFLINE"}
           </span>
+          {isConnected && (
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+              style={{
+                color: apiConnected ? "hsl(152 69% 70%)" : "hsl(0 70% 70%)",
+                background: apiConnected ? "hsl(152 69% 20% / 0.4)" : "hsl(0 70% 20% / 0.4)",
+                border: `1px solid ${apiConnected ? "hsl(152 69% 40% / 0.5)" : "hsl(0 70% 40% / 0.5)"}`,
+              }}
+            >
+              {apiConnected ? "API ✓" : apiConnected === false ? "API ✗" : "API …"}
+            </span>
+          )}
           {isConnected && voicePath && voicePath !== "idle" && (
             <span
               className="text-[10px] font-mono px-1.5 py-0.5 rounded"
               style={{
-                color: voicePath === "personaplex" ? "hsl(152 69% 70%)" : "hsl(45 80% 70%)",
-                background: voicePath === "personaplex" ? "hsl(152 69% 20% / 0.4)" : "hsl(45 80% 20% / 0.4)",
-                border: `1px solid ${voicePath === "personaplex" ? "hsl(152 69% 40% / 0.5)" : "hsl(45 80% 40% / 0.5)"}`,
+                color: "hsl(200 70% 70%)",
+                background: "hsl(200 70% 20% / 0.4)",
+                border: "1px solid hsl(200 70% 40% / 0.5)",
               }}
             >
-              {voicePath === "personaplex" ? "PP" : "FB"}
+              {voicePath}
+            </span>
+          )}
+          {isConnected && intent && (
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+              style={{
+                color: "hsl(270 60% 75%)",
+                background: "hsl(270 60% 20% / 0.4)",
+                border: "1px solid hsl(270 60% 40% / 0.5)",
+              }}
+            >
+              {intent}
+            </span>
+          )}
+          {isConnected && grounded !== null && (
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+              style={{
+                color: grounded ? "hsl(152 69% 70%)" : "hsl(30 80% 70%)",
+                background: grounded ? "hsl(152 69% 20% / 0.4)" : "hsl(30 80% 20% / 0.4)",
+                border: `1px solid ${grounded ? "hsl(152 69% 40% / 0.5)" : "hsl(30 80% 40% / 0.5)"}`,
+              }}
+            >
+              {grounded ? "grounded" : "ungrounded"}
             </span>
           )}
           {isConnected && audioStatus && audioStatus !== "idle" && (
             <span
               className="text-[10px] font-mono px-1.5 py-0.5 rounded"
               style={{
-                color: audioStatus === "adapter" ? "hsl(152 69% 70%)" : "hsl(30 80% 70%)",
-                background: audioStatus === "adapter" ? "hsl(152 69% 20% / 0.4)" : "hsl(30 80% 20% / 0.4)",
-                border: `1px solid ${audioStatus === "adapter" ? "hsl(152 69% 40% / 0.5)" : "hsl(30 80% 40% / 0.5)"}`,
+                color: audioStatus !== "text-only" ? "hsl(152 69% 70%)" : "hsl(30 80% 70%)",
+                background: audioStatus !== "text-only" ? "hsl(152 69% 20% / 0.4)" : "hsl(30 80% 20% / 0.4)",
+                border: `1px solid ${audioStatus !== "text-only" ? "hsl(152 69% 40% / 0.5)" : "hsl(30 80% 40% / 0.5)"}`,
               }}
             >
-              {audioStatus === "adapter" ? "🔊 AUDIO" : "📝 TEXT"}
+              {audioStatus !== "text-only" ? "🔊 AUDIO" : "📝 TEXT"}
             </span>
           )}
         </div>
