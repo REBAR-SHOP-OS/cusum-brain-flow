@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { Menu, Shield } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
