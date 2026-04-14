@@ -42,17 +42,18 @@ const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }
 ];
 
 export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
+  const navigate = useNavigate();
   return (
     <aside className="flex w-[180px] shrink-0 border-r border-border bg-card flex-col h-full">
-      {/* Back to Home */}
+      {/* Back */}
       <div className="px-3 py-2 border-b border-border">
-        <Link
-          to="/home"
+        <button
+          onClick={() => navigate(-1)}
           className="flex items-center gap-2 text-[10px] tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Home
-        </Link>
+          Back
+        </button>
       </div>
 
       {/* Header */}
