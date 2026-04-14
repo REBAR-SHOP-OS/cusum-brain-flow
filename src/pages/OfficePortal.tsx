@@ -104,13 +104,13 @@ export default function OfficePortal() {
       {/* Mobile sidebar sheet */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent side="left" className="p-0 w-[200px]">
-          <OfficeSidebar active={activeSection} onNavigate={handleNavigate} />
+          <OfficeSidebar active={activeSection} onNavigate={handleNavigate} onBack={handleBack} />
         </SheetContent>
       </Sheet>
 
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <OfficeSidebar active={activeSection} onNavigate={handleNavigate} />
+        <OfficeSidebar active={activeSection} onNavigate={handleNavigate} onBack={handleBack} />
       </div>
 
       {/* Main content */}
@@ -132,6 +132,8 @@ export default function OfficePortal() {
         <div className="flex-1 overflow-auto">
           {activeSection === "detailed-list" ? (
             <DetailedListView initialPlanId={activePlanId} />
+          ) : activeSection === "ai-extract" ? (
+            <AIExtractView onRegisterBackToHistory={handleRegisterBack} />
           ) : (
             <ActiveComponent />
           )}
