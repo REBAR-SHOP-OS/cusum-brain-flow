@@ -7,7 +7,7 @@ export const ARCHITECTURE_LAYOUT = {
   nodeGap: 18,
   leftMargin: 40,
   topMargin: 80,
-  maxPerColumn: 14,
+  maxPerColumn: 50,
   headerY: 0,
 } as const;
 
