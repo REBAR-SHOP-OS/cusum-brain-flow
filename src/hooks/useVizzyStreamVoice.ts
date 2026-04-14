@@ -271,9 +271,9 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
           if (data.audio_base64) {
             playBase64Audio(data.audio_base64, data.audio_format || "mp3");
           } else {
-            // Fallback: browser TTS when API returns text-only
-            setAudioStatus("browser-fallback");
-            speakWithBrowserTTS(speakable);
+            // Chunked realtime TTS — start speaking chunk-by-chunk
+            setAudioStatus("chunked-tts");
+            speakRealtime(speakable);
           }
         }
       }
@@ -465,7 +465,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
             }]);
             conversationRef.current.push({ role: "assistant", content: replyText });
             if (data.audio_base64) playBase64Audio(data.audio_base64, data.audio_format || "mp3");
-            else speakWithBrowserTTS(replyText);
+            else speakRealtime(replyText);
           }
         } catch (err: any) {
           if (err?.name === "AbortError") return;
