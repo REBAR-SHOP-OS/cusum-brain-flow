@@ -20,27 +20,53 @@ function MiniNode({ data }: { data: Record<string, unknown> }) {
   const label = data.label as string;
   const accent = (data.accent as string) || "cyan";
   const isCenter = data.isCenter as boolean;
+  const index = data.index as number | undefined;
   const st = accentStyles[accent] || accentStyles.cyan;
 
   return (
-    <div
-      style={{
-        background: isCenter ? st.border : st.bg,
-        border: `1.5px solid ${st.border}`,
-        borderRadius: 8,
-        padding: "6px 10px",
-        fontSize: 10,
-        fontWeight: 600,
-        color: isCenter ? "#0a0e1a" : st.text,
-        maxWidth: 120,
-        textAlign: "center",
-        whiteSpace: "nowrap",
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        boxShadow: isCenter ? `0 0 16px ${st.border}` : "none",
-      }}
-    >
-      {label}
+    <div style={{ position: "relative" }}>
+      {!isCenter && index != null && (
+        <div
+          style={{
+            position: "absolute",
+            top: -8,
+            left: -8,
+            width: 18,
+            height: 18,
+            borderRadius: "50%",
+            background: st.border,
+            color: "#0a0e1a",
+            fontSize: 10,
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 2,
+            boxShadow: `0 0 6px ${st.border}`,
+          }}
+        >
+          {index}
+        </div>
+      )}
+      <div
+        style={{
+          background: isCenter ? st.border : st.bg,
+          border: `1.5px solid ${st.border}`,
+          borderRadius: 8,
+          padding: "6px 10px",
+          fontSize: 10,
+          fontWeight: 600,
+          color: isCenter ? "#0a0e1a" : st.text,
+          maxWidth: 120,
+          textAlign: "center",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          boxShadow: isCenter ? `0 0 16px ${st.border}` : "none",
+        }}
+      >
+        {label}
+      </div>
     </div>
   );
 }
@@ -100,17 +126,23 @@ function MiniGraphInner({ selectedNodeId, allNodes, allEdges }: Props) {
             label: n.data.label,
             accent: n.data.accent,
             isCenter: false,
+            index: i + 1,
           },
           draggable: false,
         };
       }),
     ];
 
-    const mEdges: Edge[] = connectedEdges.map((e) => ({
+    const mEdges: Edge[] = connectedEdges.map((e, i) => ({
       id: `mini-${e.id}`,
       source: e.source,
       target: e.target,
       style: { stroke: "rgba(148,163,184,0.4)", strokeWidth: 1.5 },
+      label: `${i + 1}`,
+      labelStyle: { fill: "rgb(148,163,184)", fontSize: 9, fontWeight: 600 },
+      labelBgStyle: { fill: "rgba(8,12,30,0.8)", fillOpacity: 0.8 },
+      labelBgPadding: [4, 2] as [number, number],
+      labelBgBorderRadius: 4,
       animated: false,
     }));
 
