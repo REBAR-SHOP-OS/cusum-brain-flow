@@ -30,7 +30,7 @@ Deno.serve((req) =>
     }
 
     // Extract latest user message text
-    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user" || m.role === "system");
+    const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
     const text = lastUserMsg?.content || "";
 
     if (!text.trim()) {
@@ -42,6 +42,8 @@ Deno.serve((req) =>
 
     // Build conversation history string for context
     const conversationHistory = messages
+      .filter((m: any) => m.content && !m.content.startsWith("[TOOL_") && !m.hidden)
+      .slice(-12)
       .map((m: any) => `${m.role}: ${m.content}`)
       .join("\n");
 
@@ -60,6 +62,11 @@ Deno.serve((req) =>
       : { text: enrichedText, source: "lovable", systemPrompt, messages };
 
     console.log(`[personaplex-voice] Routing to Vizzy One API: ${endpoint} (context: ${systemPrompt ? "full" : "none"}, messages: ${messages.length})`);
+    console.log("[personaplex-voice]", {
+      hasSystemPrompt: !!systemPrompt,
+      messageCount: messages.length,
+      textLength: text.length,
+    });
 
     try {
       const apiResp = await fetch(endpoint, {
