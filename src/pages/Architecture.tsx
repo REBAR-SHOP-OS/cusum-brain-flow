@@ -31,6 +31,7 @@ import {
 import { ArchFlowNode, type ArchFlowNodeData } from "@/components/system-flow/ArchFlowNode";
 import { LayerHeaderNode } from "@/components/system-flow/LayerHeaderNode";
 import { applyArchitectureLayout, generateLayerHeaders, matchesArchitectureQuery } from "@/lib/architectureFlow";
+import MiniConnectionGraph from "@/components/system-flow/MiniConnectionGraph";
 
 /* ───── Style maps ───── */
 const accentColor: Record<Accent, string> = {
@@ -757,7 +758,7 @@ export default function Architecture() {
       <AnimatePresence>
         {openNode && (
           <Dialog open={!!openNode} onOpenChange={(o) => !o && setOpenNode(null)}>
-            <DialogContent className="max-w-md border-border/80 bg-background/95 backdrop-blur-xl">
+            <DialogContent className="max-w-lg border-border/80 bg-background/95 backdrop-blur-xl">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-base">
                   <openNode.icon className="h-5 w-5" style={{ color: accentColor[openNode.accent] }} />
@@ -783,6 +784,11 @@ export default function Architecture() {
                         <li key={line} className="break-words">{line}</li>
                       ))}
                     </ul>
+                    <MiniConnectionGraph
+                      selectedNodeId={openNode.id}
+                      allNodes={nodes}
+                      allEdges={edges}
+                    />
                     <div className="pt-2 border-t border-border/40">
                       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Connected to</p>
                       <div className="flex flex-wrap gap-1.5">
