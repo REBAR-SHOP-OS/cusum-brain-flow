@@ -42,8 +42,15 @@ const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }
   { id: "order-calc", label: "Order Calc", icon: Package },
 ];
 
-export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
+export function OfficeSidebar({ active, onNavigate, onBack }: OfficeSidebarProps) {
   const navigate = useNavigate();
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      navigate(-1);
+    }
+  };
   return (
     <aside className="flex w-[180px] shrink-0 border-r border-border bg-card flex-col h-full">
       {/* Back */}

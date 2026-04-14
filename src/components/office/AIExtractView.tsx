@@ -111,7 +111,7 @@ function getStepIndex(status: string, optimizationMode?: string | null) {
   return idx >= 0 ? idx : -1;
 }
 
-export function AIExtractView() {
+export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHistory?: (cb: () => void) => void }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
