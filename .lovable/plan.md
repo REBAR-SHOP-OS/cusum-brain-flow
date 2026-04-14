@@ -1,48 +1,45 @@
 
 
-## Plan: Connect Vizzy Voice to Full Brain Context
+## Plan: Fix Edge Function System Message Bug
 
 ### Problem
-The voice flow builds a rich system prompt (ERP data, brain memories, time context) client-side but never sends it to the backend. The edge function only forwards the last user message as `{ text }` to Vizzy One API. Result: zero business context reaches the AI.
+Line 33 of `personaplex-voice/index.ts` extracts the last message with `role === "user" || m.role === "system"` — this means hidden `[TOOL_RESULTS_READY]` system messages get treated as the user's speech input, causing the reconnect loop. The conversation history also includes noisy tool/hidden messages.
 
-### Changes
+The frontend (`useVizzyStreamVoice.ts`) is already correct from the previous patch — no frontend changes needed.
 
-**1. `src/hooks/useVizzyStreamVoice.ts`**
+### Changes — `supabase/functions/personaplex-voice/index.ts`
 
-- **`callPersonaPlex()` (line 123)**: Add `systemPrompt: getSystemPrompt()` to the request body sent to the edge function. The `messages` array is already sent.
-- **`updateSessionInstructions()` (line 341)**: Store the new instructions in a ref (`latestInstructionsRef`) so the next `callPersonaPlex` call uses fresh context instead of being a no-op.
-- **`sendFollowUp()` (line 345)**: Add the text to conversation history as a hidden entry (role: `"system"`) instead of `"user"`, so `[TOOL_RESULTS_READY]` messages don't appear as user chat bubbles. Skip adding user transcript for system-prefixed messages.
-
-**2. `supabase/functions/personaplex-voice/index.ts`**
-
-- Extract `systemPrompt` and `messages` from the request body.
-- Attempt to forward `{ text, systemPrompt, messages, source }` to Vizzy One API.
-- **Fallback**: If the Vizzy One API doesn't accept those fields (or returns an error), prepend context into the `text` field using the format:
-
-```
-SYSTEM:\n${systemPrompt}\n\nCONVERSATION:\n${messages}\n\nUSER:\n${text}
+**1. Fix user message extraction (line 33)**
+Only find `role === "user"` — never treat system messages as user input:
+```typescript
+const lastUserMsg = [...messages].reverse().find((m: any) => m.role === "user");
 ```
 
-- Audio reply handling stays unchanged.
+**2. Filter conversation history (lines 44-46)**
+Remove hidden and tool messages, limit to last 12 for token efficiency:
+```typescript
+const conversationHistory = messages
+  .filter((m: any) => m.content && !m.content.startsWith("[TOOL_") && !m.hidden)
+  .slice(-12)
+  .map((m: any) => `${m.role}: ${m.content}`)
+  .join("\n");
+```
 
-### Detailed File Changes
-
-| File | Line(s) | Change |
-|---|---|---|
-| `src/hooks/useVizzyStreamVoice.ts` | 46 | Add `latestInstructionsRef` to store current system prompt |
-| `src/hooks/useVizzyStreamVoice.ts` | 92-128 | In `callPersonaPlex`: add `systemPrompt` to fetch body |
-| `src/hooks/useVizzyStreamVoice.ts` | 341-343 | `updateSessionInstructions`: write to `latestInstructionsRef` instead of no-op |
-| `src/hooks/useVizzyStreamVoice.ts` | 345-348 | `sendFollowUp`: use role `"system"` for hidden messages, skip user transcript |
-| `supabase/functions/personaplex-voice/index.ts` | 23-28 | Extract `systemPrompt`, `messages` from body |
-| `supabase/functions/personaplex-voice/index.ts` | 47-55 | Build enriched payload with context fallback |
+**3. Add debug log (after line 62)**
+```typescript
+console.log("[personaplex-voice]", {
+  hasSystemPrompt: !!systemPrompt,
+  messageCount: messages.length,
+  textLength: text.length,
+});
+```
 
 ### What Does NOT Change
-- Audio playback (base64 + browser TTS fallback)
-- UI layout, styling, animations
-- STT (browser SpeechRecognition)
-- Session start/end lifecycle
-- Edge function auth mode and CORS
+- Frontend code (already patched)
+- Audio playback logic
+- Vizzy One API endpoints
+- Auth mode, CORS
 
 ### Result
-Every voice request now carries the full system prompt (with ERP data, brain memories, time clock) and conversation history to the Vizzy One API. `updateSessionInstructions` actively stores fresh context. Hidden follow-up messages stay hidden from the user transcript.
+System/tool messages no longer hijack the user text field. Conversation history is clean. The reconnect loop caused by `[TOOL_RESULTS_READY]` being sent as user speech is eliminated.
 
