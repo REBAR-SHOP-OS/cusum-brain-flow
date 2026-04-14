@@ -26,37 +26,37 @@ const accentStyles: Record<FlowAccent, { border: string; glow: string; solid: st
     border: "rgba(34,211,238,0.85)",
     glow: "0 0 18px rgba(34,211,238,0.35)",
     solid: "rgb(34,211,238)",
-    bg: "rgba(34,211,238,0.08)",
+    bg: "rgb(12,35,42)",
   },
   emerald: {
     border: "rgba(52,211,153,0.85)",
     glow: "0 0 18px rgba(52,211,153,0.35)",
     solid: "rgb(52,211,153)",
-    bg: "rgba(52,211,153,0.08)",
+    bg: "rgb(15,38,30)",
   },
   violet: {
     border: "rgba(167,139,250,0.85)",
     glow: "0 0 20px rgba(167,139,250,0.4)",
     solid: "rgb(167,139,250)",
-    bg: "rgba(167,139,250,0.08)",
+    bg: "rgb(30,22,50)",
   },
   orange: {
     border: "rgba(251,146,60,0.85)",
     glow: "0 0 22px rgba(251,146,60,0.45)",
     solid: "rgb(251,146,60)",
-    bg: "rgba(251,146,60,0.08)",
+    bg: "rgb(45,30,15)",
   },
   blue: {
     border: "rgba(96,165,250,0.85)",
     glow: "0 0 18px rgba(96,165,250,0.35)",
     solid: "rgb(96,165,250)",
-    bg: "rgba(96,165,250,0.08)",
+    bg: "rgb(18,28,48)",
   },
   rose: {
     border: "rgba(251,113,133,0.85)",
     glow: "0 0 18px rgba(251,113,133,0.35)",
     solid: "rgb(251,113,133)",
-    bg: "rgba(251,113,133,0.08)",
+    bg: "rgb(45,20,28)",
   },
 };
 
@@ -84,8 +84,8 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
         nodeData.dimmed && "pointer-events-none",
       )}
       style={{
-        width: 160,
-        minHeight: 100,
+        width: 190,
+        minHeight: 120,
         border: `1.5px solid ${st.border}`,
         borderLeft: `3px solid ${st.solid}`,
         boxShadow: nodeData.highlighted
@@ -93,8 +93,7 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
           : selected
             ? `${st.glow}, 0 0 0 2px rgba(255,255,255,0.15)`
             : st.glow,
-        backdropFilter: "blur(16px) saturate(1.5)",
-        background: `linear-gradient(180deg, ${st.bg}, rgba(8,12,30,0.85))`,
+        background: st.bg,
         padding: "10px 8px",
         display: "flex",
         flexDirection: "column",
@@ -135,7 +134,7 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
       {Icon && (
         <Icon
           className="shrink-0 mb-1"
-          style={{ color: st.border, width: 22, height: 22, filter: `drop-shadow(0 0 6px ${st.solid}40)` }}
+          style={{ color: st.border, width: 26, height: 26, filter: `drop-shadow(0 0 6px ${st.solid}40)` }}
           strokeWidth={1.5}
         />
       )}
@@ -150,12 +149,12 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
             if (e.key === "Enter") commitEdit();
             if (e.key === "Escape") { setEditVal(nodeData.label); setEditing(false); }
           }}
-          className="w-full bg-transparent text-center text-[11px] font-semibold text-white outline-none border-b border-white/30"
-          style={{ maxWidth: 110 }}
+          className="w-full bg-transparent text-center text-[13px] font-semibold text-white outline-none border-b border-white/30"
+          style={{ maxWidth: 140 }}
         />
       ) : (
         <span
-          className="max-w-[112px] cursor-text text-balance text-[11px] font-semibold leading-tight text-white"
+          className="max-w-[140px] cursor-text text-balance text-[13px] font-semibold leading-tight text-white"
           onDoubleClick={() => { setEditVal(nodeData.label); setEditing(true); }}
           title={nodeData.label}
         >
@@ -163,13 +162,13 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
         </span>
       )}
 
-      <span className="text-[8px] font-medium uppercase tracking-wider" style={{ color: st.border, opacity: 0.7 }}>
+      <span className="text-[9px] font-medium uppercase tracking-wider" style={{ color: st.border, opacity: 0.7 }}>
         {nodeData.hint}
       </span>
 
       {nodeData.detail?.bullets?.[0] && (
         <span
-          className="mt-0.5 max-w-[140px] text-[9px] leading-tight text-white/50"
+          className="mt-0.5 max-w-[160px] text-[10px] leading-tight text-white/50"
           style={{
             display: "-webkit-box",
             WebkitLineClamp: 2,
