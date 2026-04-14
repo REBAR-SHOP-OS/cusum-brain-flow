@@ -35,12 +35,13 @@ import MiniConnectionGraph from "@/components/system-flow/MiniConnectionGraph";
 
 /* ───── Style maps ───── */
 const accentColor: Record<Accent, string> = {
-  cyan:    "rgba(34,211,238,0.85)",
-  emerald: "rgba(52,211,153,0.85)",
-  orange:  "rgba(251,146,60,0.85)",
-  violet:  "rgba(167,139,250,0.85)",
-  blue:    "rgba(96,165,250,0.85)",
-  rose:    "rgba(251,113,133,0.85)",
+  cyan:    "rgb(34,211,238)",
+  emerald: "rgb(52,211,153)",
+  orange:  "rgb(251,146,60)",
+  violet:  "rgb(167,139,250)",
+  blue:    "rgb(96,165,250)",
+  rose:    "rgb(251,113,133)",
+  amber:   "rgb(245,195,68)",
 };
 
 const accentBg: Record<Accent, string> = {
@@ -50,6 +51,7 @@ const accentBg: Record<Accent, string> = {
   violet:  "rgba(167,139,250,0.08)",
   blue:    "rgba(96,165,250,0.08)",
   rose:    "rgba(251,113,133,0.08)",
+  amber:   "rgba(245,195,68,0.08)",
 };
 
 /* ───── Edge style helpers ───── */
