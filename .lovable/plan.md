@@ -1,42 +1,86 @@
 
 
-## Plan: Make Back Button Return to History Panel
+## Plan: First-Fit Decreasing Cutting Stock Algorithm for Order Calculator
 
 ### Problem
-When a user opens a session from the History panel in AI Extract, clicking the sidebar "Back" button navigates away from the Office portal entirely (browser history back). The user expects it to return to the History session list they came from.
+The current `calculate()` function divides total length by stock length (`Math.ceil(withWaste * 1000 / stockMm)`). This overestimates because it ignores that remnants from one stock bar can fit smaller cuts. A First-Fit Decreasing (FFD) bin-packing algorithm will yield accurate results.
 
-### Approach
-Pass the `showHistory` state toggle from `AIExtractView` up through `OfficePortal` to `OfficeSidebar`. When the user is viewing an active session in AI Extract, the Back button shows the history panel. Otherwise, it navigates back normally.
+### Algorithm
+For each bar size independently:
+1. Expand parsed items into individual cut lengths (respecting quantity), applying waste factor per-piece
+2. Sort cuts longest → shortest
+3. Iterate: for each cut, find the first open stock bar with enough remaining length; if none, open a new bar
+4. Count of opened bars = bars to order
 
 ### Changes
 
-**1. `src/components/office/OfficeSidebar.tsx`**
-- Add optional `onBack` callback prop
-- If `onBack` is provided, call it instead of `navigate(-1)`
-- Fall back to `navigate(-1)` when `onBack` is not set
+**`src/components/office/OrderCalcView.tsx`**
 
-**2. `src/components/office/AIExtractView.tsx`**
-- Expose a callback (via ref or prop) that the parent can call to toggle history open
-- Accept an `onRegisterBack` or use a ref pattern so OfficePortal can wire the back button
+Replace the `calculate()` function (lines 27-63) with an FFD-based version:
 
-**3. `src/pages/OfficePortal.tsx`**
-- Track whether AI Extract has an active session
-- Pass an `onBack` handler to the sidebar that, when on `ai-extract` with an active session, toggles the history panel; otherwise uses `navigate(-1)`
+```typescript
+function calculate(
+  items: ParsedItem[],
+  stockLengthM: number,
+  wastePct: number,
+  wpm: Record<string, number>,
+  unitFactor: number = 1
+): SizeSummary[] {
+  const stockMm = stockLengthM * 1000;
+  const wasteMult = 1 + wastePct / 100;
+  const sizes = ["10M", "15M", "20M", "25M", "30M", "35M"];
 
-### Simpler Alternative
-Instead of complex state wiring, the Back button behavior can be:
-- When `activeSection === "ai-extract"`: call a callback that AIExtractView exposes to show history and clear the active session
-- Otherwise: `navigate(-1)`
+  // Group items by bar size
+  const grouped: Record<string, { pieces: number; cuts_mm: number[] }> = {};
+  for (const it of items) {
+    if (!grouped[it.bar_size]) grouped[it.bar_size] = { pieces: 0, cuts_mm: [] };
+    const cutMm = it.cut_length_mm * unitFactor * wasteMult;
+    grouped[it.bar_size].pieces += it.quantity;
+    for (let i = 0; i < it.quantity; i++) {
+      grouped[it.bar_size].cuts_mm.push(cutMm);
+    }
+  }
 
-This keeps it simple — one optional `onBack` prop on the sidebar.
+  return sizes.filter(s => grouped[s]).map(s => {
+    const g = grouped[s];
+    // FFD bin packing
+    const cuts = g.cuts_mm.sort((a, b) => b - a); // longest first
+    const bins: number[] = []; // remaining space per bin
+    for (const cut of cuts) {
+      let placed = false;
+      for (let j = 0; j < bins.length; j++) {
+        if (bins[j] >= cut) {
+          bins[j] -= cut;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        bins.push(stockMm - cut);
+      }
+    }
+    const bars = bins.length;
+    const totalM = g.cuts_mm.reduce((a, b) => a + b, 0) / wasteMult / 1000;
+    const withWasteM = g.cuts_mm.reduce((a, b) => a + b, 0) / 1000;
+    const w = wpm[s] ?? FALLBACK_WPM[s] ?? 0;
+    const weight = Math.round(bars * stockLengthM * w * 100) / 100;
 
-### Files
-| File | Change |
-|---|---|
-| `src/components/office/OfficeSidebar.tsx` | Add `onBack?: () => void` prop, use it if provided |
-| `src/components/office/AIExtractView.tsx` | Accept `onBackToHistory` ref/callback to expose history toggle |
-| `src/pages/OfficePortal.tsx` | Wire the back-to-history callback between AIExtractView and sidebar |
+    return {
+      bar_size: s,
+      total_pieces: g.pieces,
+      total_length_m: Math.round(totalM * 100) / 100,
+      length_with_waste_m: Math.round(withWasteM * 100) / 100,
+      bars_to_order: bars,
+      total_weight_kg: weight,
+    };
+  });
+}
+```
 
-### Result
-Clicking "Back" while viewing a session in AI Extract opens the History panel instead of leaving the page. On other sections, Back still navigates to the previous page.
+### Key Differences
+- **Before**: `bars = ceil(totalLength / stockLength)` — treats all cuts as continuous material
+- **After**: Each individual cut piece is placed into stock bars using FFD — remnants are reused for shorter cuts, yielding fewer bars
+
+### Scope
+Single file change: `src/components/office/OrderCalcView.tsx` — only the `calculate` function is replaced. No other files affected.
 
