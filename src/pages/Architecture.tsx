@@ -523,7 +523,7 @@ export default function Architecture() {
         </div>
       </header>
 
-      <div className="flex shrink-0 flex-col gap-2 border-b border-border/40 bg-background/70 px-4 py-3 md:hidden">
+      <div className={`flex shrink-0 flex-col gap-2 border-b border-border/40 bg-background/70 px-4 py-3 md:hidden ${isFullscreen ? '!hidden' : ''}`}>
         <div className="flex gap-2 overflow-x-auto pb-1">
           {LAYERS.map((layer) => {
             const on = visibleLayers.has(layer.key);
