@@ -27,6 +27,7 @@ export type OfficeSection =
 interface OfficeSidebarProps {
   active: OfficeSection;
   onNavigate: (section: OfficeSection) => void;
+  onBack?: () => void;
 }
 
 const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }[] = [
