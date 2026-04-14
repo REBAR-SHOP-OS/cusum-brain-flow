@@ -214,7 +214,7 @@ export default function Architecture() {
   );
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [newNodeLabel, setNewNodeLabel] = useState("");
-  const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("modules");
+  const [newNodeLayer, setNewNodeLayer] = useState<ArchLayer>("items");
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<ArchitectureFlowNode, Edge> | null>(null);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [lockedNode, setLockedNode] = useState<string | null>(null);
@@ -393,7 +393,7 @@ export default function Architecture() {
         acc[node.data.layer] += 1;
         return acc;
       },
-      { entry: 0, auth: 0, modules: 0, items: 0, ai: 0, backend: 0, external: 0, platform: 0 },
+      { entry: 0, auth: 0, items: 0, ai: 0, backend: 0, external: 0, platform: 0 },
     );
   }, [nodes]);
 
