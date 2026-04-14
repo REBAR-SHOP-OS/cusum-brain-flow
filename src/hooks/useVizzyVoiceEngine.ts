@@ -6,13 +6,13 @@ import { getTorontoTimePayload } from "@/lib/dateConfig";
 import { toast } from "sonner";
 
 /**
- * Vizzy Voice Engine — wraps useVizzyRealtimeVoice with executive intelligence prompt
+ * Vizzy Voice Engine — wraps useVizzyStreamVoice with executive intelligence prompt
  * and live ERP data injection from vizzy-daily-brief edge function.
  * 
- * Architecture: Mic → WebRTC → OpenAI Realtime (GPT-4o-mini) → WebRTC → Speaker
+ * Architecture: Mic → Browser STT → PersonaPlex (via backend proxy) → Audio playback
  */
 
-export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVizzyRealtimeVoice";
+export type { VoiceTranscript as VizzyVoiceTranscript } from "./useVizzyStreamVoice";
 export type VizzyVoiceState = "idle" | "connecting" | "connected" | "error";
 
 /**
