@@ -214,7 +214,7 @@ export default function EmpireBuilder() {
           extraContext += `\n\n[ZIP Analysis: ${pf.file.name}]\n${result.summary}`;
           for (const url of result.imageUrls) attachedFiles.push({ name: `${pf.file.name}-image`, url });
         } else if (pf.type === "image" || pf.type === "pdf") {
-          const path = `chat-uploads/${Date.now()}-${pf.file.name}`;
+          const path = `chat-uploads/${Date.now()}-${sanitizeFileName(pf.file.name)}`;
           const { error } = await uploadToStorage("clearance-photos", path, pf.file);
           if (error) { console.error("Upload error:", error); continue; }
           const { data: urlData } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 3600);

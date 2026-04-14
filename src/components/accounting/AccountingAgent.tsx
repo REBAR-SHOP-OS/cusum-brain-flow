@@ -198,7 +198,7 @@ RULES:
   }, [autoGreet, qbSummary]);
 
   const uploadFile = async (file: File): Promise<{ name: string; url: string } | null> => {
-    const path = `chat-uploads/${Date.now()}-${file.name}`;
+    const path = `chat-uploads/${Date.now()}-${sanitizeFileName(file.name)}`;
     const { error } = await uploadToStorage("clearance-photos", path, file);
     if (error) { console.error("Upload failed:", error); return null; }
     const { data: urlData } = await supabase.storage.from("clearance-photos").createSignedUrl(path, 3600);
