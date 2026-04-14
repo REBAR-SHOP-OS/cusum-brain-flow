@@ -380,6 +380,7 @@ export default function Architecture() {
 
   const onNodeClick = useCallback((_: unknown, node: ArchitectureFlowNode) => {
     setLockedNode((prev) => (prev === node.id ? null : node.id));
+    const archNode = ARCH_NODES.find((n) => n.id === node.id);
     setOpenNode({
       id: node.id,
       hint: node.data.hint,
@@ -387,12 +388,14 @@ export default function Architecture() {
       accent: node.data.accent,
       icon: node.data.Icon,
       detail: { ...node.data.detail, title: node.data.label },
+      description: archNode?.description,
     });
   }, []);
 
   const handleExplain = useCallback((nodeId: string) => {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) return;
+    const archNode = ARCH_NODES.find((n) => n.id === nodeId);
     setOpenNode({
       id: node.id,
       hint: node.data.hint,
@@ -400,6 +403,7 @@ export default function Architecture() {
       accent: node.data.accent,
       icon: node.data.Icon,
       detail: { ...node.data.detail, title: node.data.label },
+      description: archNode?.description,
     });
   }, [nodes]);
 
