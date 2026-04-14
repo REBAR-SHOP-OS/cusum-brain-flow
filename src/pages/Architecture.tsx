@@ -486,9 +486,9 @@ export default function Architecture() {
   }, [reactFlowInstance, layerKey, searchQ]);
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col md:h-[calc(100vh-4rem)]">
+    <div className={`flex h-[calc(100vh-3.5rem)] flex-col md:h-[calc(100vh-4rem)] ${isFullscreen ? '!h-screen !fixed !inset-0 !z-50' : ''}`}>
       {/* Header */}
-      <header className="shrink-0 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md flex items-center gap-4 flex-wrap">
+      <header className={`shrink-0 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md flex items-center gap-4 flex-wrap ${isFullscreen ? 'hidden' : ''}`}>
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-lg font-semibold tracking-tight text-foreground">System Architecture</h1>
           <p className="text-xs text-muted-foreground">
