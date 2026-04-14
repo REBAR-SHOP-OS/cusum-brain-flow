@@ -585,7 +585,7 @@ export default function Architecture() {
 
       <div className="flex flex-1 min-h-0">
         {/* Layer filter sidebar */}
-        <div className="hidden md:flex w-44 shrink-0 flex-col border-r border-border/40 bg-background/60 backdrop-blur-sm p-3 gap-1.5 overflow-y-auto">
+        <div className={`hidden md:flex w-44 shrink-0 flex-col border-r border-border/40 bg-background/60 backdrop-blur-sm p-3 gap-1.5 overflow-y-auto ${isFullscreen ? '!hidden' : ''}`}>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Layers</p>
           {LAYERS.map((layer) => {
             const on = visibleLayers.has(layer.key);
