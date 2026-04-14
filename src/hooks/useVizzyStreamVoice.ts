@@ -340,8 +340,12 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       if (event.error === "aborted") return;
       console.error("[VizzyStream] STT error:", event.error);
       if (event.error === "not-allowed") {
-        setErrorDetail("Microphone access denied");
+        // Null out ref BEFORE setting error state — prevents onend from restarting
+        recognitionRef.current = null;
+        activeRef.current = false;
+        setErrorDetail("Microphone access denied — check browser permissions");
         setState("error");
+        return;
       }
     };
 
