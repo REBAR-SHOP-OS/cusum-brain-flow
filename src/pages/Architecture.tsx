@@ -17,7 +17,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { AnimatePresence } from "framer-motion";
 import {
-  Plus, Search, X, Eye, EyeOff, Sparkles,
+  Plus, Search, X, Eye, EyeOff, Sparkles, Maximize, Minimize,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
@@ -240,6 +240,34 @@ export default function Architecture() {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [lockedNode, setLockedNode] = useState<string | null>(null);
   const [showAllEdges, setShowAllEdges] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const toggleFullscreen = useCallback(() => {
+    setIsFullscreen((prev) => {
+      const next = !prev;
+      // Hide/show the TopBar
+      const topBar = document.querySelector('header.h-\\[46px\\]') as HTMLElement | null;
+      if (topBar) topBar.style.display = next ? 'none' : '';
+      // Hide/show the app sidebar
+      const sidebar = document.querySelector('[data-app-sidebar]') as HTMLElement | null;
+      if (sidebar) sidebar.style.display = next ? 'none' : '';
+      // Hide/show intelligence panel
+      const intel = document.querySelector('.hidden.md\\:flex:has(> *)') as HTMLElement | null;
+      // fitView after layout reflow
+      setTimeout(() => {
+        reactFlowInstance?.fitView({ padding: 0.08, duration: 500, includeHiddenNodes: false });
+      }, 150);
+      return next;
+    });
+  }, [reactFlowInstance]);
+
+  // Restore TopBar on unmount
+  useEffect(() => {
+    return () => {
+      const topBar = document.querySelector('header.h-\\[46px\\]') as HTMLElement | null;
+      if (topBar) topBar.style.display = '';
+    };
+  }, []);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ArchitectureFlowNode>(
     buildInitialArchNodes(),
@@ -466,9 +494,9 @@ export default function Architecture() {
   }, [reactFlowInstance, layerKey, searchQ]);
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] flex-col md:h-[calc(100vh-4rem)]">
+    <div className={`flex h-[calc(100vh-3.5rem)] flex-col md:h-[calc(100vh-4rem)] ${isFullscreen ? '!h-screen !fixed !inset-0 !z-50' : ''}`}>
       {/* Header */}
-      <header className="shrink-0 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md flex items-center gap-4 flex-wrap">
+      <header className={`shrink-0 border-b border-border/60 bg-background/80 px-4 py-3 backdrop-blur-md flex items-center gap-4 flex-wrap ${isFullscreen ? 'hidden' : ''}`}>
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-lg font-semibold tracking-tight text-foreground">System Architecture</h1>
           <p className="text-xs text-muted-foreground">
@@ -503,7 +531,7 @@ export default function Architecture() {
         </div>
       </header>
 
-      <div className="flex shrink-0 flex-col gap-2 border-b border-border/40 bg-background/70 px-4 py-3 md:hidden">
+      <div className={`flex shrink-0 flex-col gap-2 border-b border-border/40 bg-background/70 px-4 py-3 md:hidden ${isFullscreen ? '!hidden' : ''}`}>
         <div className="flex gap-2 overflow-x-auto pb-1">
           {LAYERS.map((layer) => {
             const on = visibleLayers.has(layer.key);
@@ -565,7 +593,7 @@ export default function Architecture() {
 
       <div className="flex flex-1 min-h-0">
         {/* Layer filter sidebar */}
-        <div className="hidden md:flex w-44 shrink-0 flex-col border-r border-border/40 bg-background/60 backdrop-blur-sm p-3 gap-1.5 overflow-y-auto">
+        <div className={`hidden md:flex w-44 shrink-0 flex-col border-r border-border/40 bg-background/60 backdrop-blur-sm p-3 gap-1.5 overflow-y-auto ${isFullscreen ? '!hidden' : ''}`}>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Layers</p>
           {LAYERS.map((layer) => {
             const on = visibleLayers.has(layer.key);
@@ -706,6 +734,17 @@ export default function Architecture() {
               color="rgba(34,211,238,0.08)"
             />
             <Controls position="top-right" />
+            {/* Fullscreen toggle button */}
+            <div className="absolute top-2 left-2 z-30">
+              <button
+                onClick={toggleFullscreen}
+                className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-1.5 text-[11px] font-medium text-zinc-300 backdrop-blur-sm transition-colors hover:bg-slate-900/90 hover:text-white"
+                title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              >
+                {isFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
+                {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              </button>
+            </div>
             <MiniMap
               position="bottom-right"
               nodeColor={(n) => {
