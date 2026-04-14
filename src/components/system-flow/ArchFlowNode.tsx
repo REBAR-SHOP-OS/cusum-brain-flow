@@ -84,16 +84,17 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
         nodeData.dimmed && "pointer-events-none",
       )}
       style={{
-        width: 130,
-        minHeight: 72,
+        width: 160,
+        minHeight: 100,
         border: `1.5px solid ${st.border}`,
+        borderLeft: `3px solid ${st.solid}`,
         boxShadow: nodeData.highlighted
           ? `${st.glow}, 0 0 24px ${st.solid}60, 0 0 0 2px ${st.solid}40`
           : selected
             ? `${st.glow}, 0 0 0 2px rgba(255,255,255,0.15)`
             : st.glow,
         backdropFilter: "blur(16px) saturate(1.5)",
-        background: `linear-gradient(180deg, rgba(15,23,42,0.6), rgba(8,12,30,0.8))`,
+        background: `linear-gradient(180deg, ${st.bg}, rgba(8,12,30,0.85))`,
         padding: "10px 8px",
         display: "flex",
         flexDirection: "column",
@@ -165,6 +166,21 @@ function ArchFlowNodeInner({ id, data, selected }: NodeProps) {
       <span className="text-[8px] font-medium uppercase tracking-wider" style={{ color: st.border, opacity: 0.7 }}>
         {nodeData.hint}
       </span>
+
+      {nodeData.detail?.bullets?.[0] && (
+        <span
+          className="mt-0.5 max-w-[140px] text-[9px] leading-tight text-white/50"
+          style={{
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical",
+            overflow: "hidden",
+          }}
+          title={nodeData.detail.bullets[0]}
+        >
+          {nodeData.detail.bullets[0]}
+        </span>
+      )}
 
       {/* Source handle (right) */}
       <Handle
