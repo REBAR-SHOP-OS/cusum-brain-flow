@@ -268,7 +268,12 @@ If a brain memory says "X is wrong, the correct answer is Y" — ALWAYS use Y.
 ${brainMemories}` : "";
 
   if (!digest && !rawContext) {
-    return `${VIZZY_LIVE_VOICE_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay}. Good ${timeOfDay}!\n${brainBlock}`;
+    return `${VIZZY_LIVE_VOICE_INSTRUCTIONS}\n${realTimeClock}\n\nCURRENT TIME CONTEXT: It is currently ${timeOfDay}. Good ${timeOfDay}!\n${brainBlock}
+
+═══ DATA BOUNDARY (NO DATA LOADED YET) ═══
+Business data has NOT been loaded into this session yet.
+If the user asks about orders, revenue, staff, leads, or any business metric — say: "Business data is still loading, give me a moment."
+NEVER invent numbers or names. Fabricating data is a CRITICAL FAILURE.`;
   }
 
   if (digest) {
