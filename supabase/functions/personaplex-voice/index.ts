@@ -89,6 +89,7 @@ Deno.serve((req) =>
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: allMessages,
+        max_tokens: 150,
       }),
     });
 
