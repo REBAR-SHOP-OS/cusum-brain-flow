@@ -16,7 +16,7 @@ import { corsHeaders } from "../_shared/auth.ts";
  * Behavior: strictly read-only — never simulates or claims ERP actions.
  */
 
-const VIZZY_ONE_BASE = "https://pc.tail669f65.ts.net";
+const VIZZY_ONE_BASE = Deno.env.get("BACKEND_URL") || "https://pc.tail669f65.ts.net";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ body }) => {
