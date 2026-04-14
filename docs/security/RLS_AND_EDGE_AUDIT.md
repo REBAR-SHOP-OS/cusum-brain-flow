@@ -44,7 +44,7 @@ Policies remain: SELECT/INSERT/UPDATE/DELETE for authenticated users only when `
 | Function | Auth | Role / notes |
 |----------|------|----------------|
 | `schedule-post` | Required JWT | `admin` or `marketing` |
-| `social-publish` | Required JWT | `admin` or `marketing`; super-admin email fallback via `SUPER_ADMIN_EMAILS` (centralized in `_shared/accessPolicies.ts`) |
+| `social-publish` | Required JWT | `admin` or `marketing`; super-admin email fallback via `SUPER_ADMIN_EMAILS` (defined in `_shared/accessPolicies.ts`, applied in `_shared/roleCheck.ts`) |
 | `regenerate-post` | Required JWT | `admin` or `marketing` |
 | `auto-generate-post` | Required JWT | `admin` or `marketing` |
 | `social-cron-publish` | `internalOnly` + secret | No user JWT |
