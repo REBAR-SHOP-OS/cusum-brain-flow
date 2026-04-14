@@ -8,28 +8,28 @@ describe("applyArchitectureLayout", () => {
   it("pushes later layers down when an earlier layer wraps onto a second row", () => {
     const base = applyArchitectureLayout(
       [
-        ...Array.from({ length: 10 }, (_, index): ArchitectureLayoutItem => ({
-          id: `entry-${index}`,
-          layer: "entry",
+        ...Array.from({ length: 12 }, (_, index): ArchitectureLayoutItem => ({
+          id: `ai-${index}`,
+          layer: "ai",
         })),
-        { id: "auth-1", layer: "auth" } as ArchitectureLayoutItem,
+        { id: "mod-1", layer: "modules" } as ArchitectureLayoutItem,
       ],
     );
     const wrapped = applyArchitectureLayout(
       [
-        ...Array.from({ length: 11 }, (_, index): ArchitectureLayoutItem => ({
-          id: `entry-${index}`,
-          layer: "entry",
+        ...Array.from({ length: 13 }, (_, index): ArchitectureLayoutItem => ({
+          id: `ai-${index}`,
+          layer: "ai",
         })),
-        { id: "auth-1", layer: "auth" } as ArchitectureLayoutItem,
+        { id: "mod-1", layer: "modules" } as ArchitectureLayoutItem,
       ],
     );
 
-    const baseAuth = base.find((item) => item.id === "auth-1")!;
-    const wrappedAuth = wrapped.find((item) => item.id === "auth-1")!;
+    const baseMod = base.find((item) => item.id === "mod-1")!;
+    const wrappedMod = wrapped.find((item) => item.id === "mod-1")!;
 
-    expect(baseAuth.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap);
-    expect(wrappedAuth.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap * 2);
+    expect(baseMod.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap);
+    expect(wrappedMod.position.y).toBe(ARCHITECTURE_LAYOUT.topMargin + ARCHITECTURE_LAYOUT.layerGap * 2);
   });
 
   it("keeps a platform node centered regardless of auth-layer node count", () => {
@@ -69,8 +69,8 @@ describe("applyArchitectureLayout", () => {
     }));
     const result = applyArchitectureLayout(items);
     const row1 = result.find((i) => i.id === "p-0")!;
-    const row2 = result.find((i) => i.id === "p-10")!;
-    const row3 = result.find((i) => i.id === "p-20")!;
+    const row2 = result.find((i) => i.id === "p-12")!;
+    const row3 = result.find((i) => i.id === "p-24")!;
 
     expect(row2.position.y).toBeGreaterThan(row1.position.y);
     expect(row3.position.y).toBeGreaterThan(row2.position.y);

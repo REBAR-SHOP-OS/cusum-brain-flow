@@ -14,6 +14,8 @@ import {
   RefreshCw, AlertTriangle, CheckCircle, Workflow, Scale, Server,
   MemoryStick, Radio, Gauge, Key, BarChart3, FileText, HeartPulse, ToggleRight, Bus,
   Ruler, FileSpreadsheet, Banknote, Inbox, Library, BellRing, Camera, Globe2, Plug, AudioLines,
+  TrendingUp, HeadphonesIcon, Megaphone, PenTool, UserSearch, Sprout, Crown, Wrench,
+  Truck, MailCheck, Eye, Compass, Palette, GraduationCap,
 } from "lucide-react";
 
 export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform";
@@ -90,6 +92,34 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "rules-engine", label: "Rules Engine", hint: "Business rules", layer: "ai", accent: "violet", icon: Scale,      detail: { title: "Rules Engine", bullets: ["Conditional logic execution", "Threshold-based triggers", "Dynamic rule evaluation"] } },
   { id: "knowledge-rag", label: "Knowledge", hint: "RAG store",      layer: "ai", accent: "violet", icon: Library,    detail: { title: "Knowledge / RAG", bullets: ["Document embeddings", "Semantic search", "Context retrieval for AI"] } },
   { id: "notif-hub",     label: "Notifications", hint: "Alert routing", layer: "ai", accent: "violet", icon: BellRing, detail: { title: "Notification Hub", bullets: ["Multi-channel routing", "Escalation chains", "Digest & batching"] } },
+
+  // Agents — Revenue
+  { id: "ag-blitz",   label: "Blitz",     hint: "Sales Agent",      layer: "ai", accent: "violet", icon: TrendingUp,      detail: { title: "Blitz — Sales Agent", bullets: ["Pipeline management", "Lead follow-ups", "Deal tracking & outreach"] } },
+  { id: "ag-penny",   label: "Penny",     hint: "Accounting Agent", layer: "ai", accent: "violet", icon: Calculator,      detail: { title: "Penny — Accounting Agent", bullets: ["Invoice management", "QuickBooks sync", "Overdue balance tracking"] } },
+  { id: "ag-gauge",   label: "Gauge",     hint: "Estimating Agent", layer: "ai", accent: "violet", icon: Ruler,           detail: { title: "Gauge — Estimating Agent", bullets: ["Takeoff from drawings", "Rebar calculations", "Estimate reviews"] } },
+  { id: "ag-kala",    label: "Kala",      hint: "Purchasing Agent",  layer: "ai", accent: "violet", icon: Boxes,           detail: { title: "Kala — Purchasing Agent", bullets: ["Material procurement", "Vendor management", "Purchase order tracking"] } },
+
+  // Agents — Operations
+  { id: "ag-forge",   label: "Forge",     hint: "Shop Floor Agent", layer: "ai", accent: "violet", icon: Wrench,          detail: { title: "Forge — Shop Floor Agent", bullets: ["Work order management", "Machine scheduling", "Production tracking"] } },
+  { id: "ag-atlas",   label: "Atlas",     hint: "Delivery Agent",   layer: "ai", accent: "violet", icon: Truck,           detail: { title: "Atlas — Delivery Agent", bullets: ["Route planning", "Delivery tracking", "Schedule optimization"] } },
+  { id: "ag-relay",   label: "Relay",     hint: "Email Agent",      layer: "ai", accent: "violet", icon: MailCheck,        detail: { title: "Relay — Email Agent", bullets: ["Email summarization", "AI reply drafting", "Action item extraction"] } },
+
+  // Agents — Support
+  { id: "ag-haven",   label: "Haven",     hint: "Support Agent",    layer: "ai", accent: "violet", icon: HeadphonesIcon,  detail: { title: "Haven — Support Agent", bullets: ["Customer issue triage", "Ticket management", "Response drafting"] } },
+
+  // Agents — Growth
+  { id: "ag-pixel",   label: "Pixel",     hint: "Social Agent",     layer: "ai", accent: "violet", icon: Share2,          detail: { title: "Pixel — Social Media Agent", bullets: ["Content creation", "Post scheduling", "Performance analytics"] } },
+  { id: "ag-seomi",   label: "Seomi",     hint: "SEO Agent",        layer: "ai", accent: "violet", icon: Eye,             detail: { title: "Seomi — SEO Agent", bullets: ["SEO audits", "Meta tag optimization", "Blog content strategy"] } },
+  { id: "ag-buddy",   label: "Buddy",     hint: "BizDev Agent",     layer: "ai", accent: "violet", icon: Compass,         detail: { title: "Buddy — Business Development Agent", bullets: ["Market analysis", "Partnership discovery", "Growth planning"] } },
+  { id: "ag-commet",  label: "Commet",    hint: "Web Builder Agent", layer: "ai", accent: "violet", icon: Palette,        detail: { title: "Commet — Web Builder Agent", bullets: ["Website audits", "Landing page suggestions", "Copy writing"] } },
+  { id: "ag-penn",    label: "Penn",      hint: "Copywriting Agent", layer: "ai", accent: "violet", icon: PenTool,        detail: { title: "Penn — Copywriting Agent", bullets: ["Proposal writing", "Email campaigns", "Product descriptions"] } },
+  { id: "ag-gigi",    label: "Gigi",      hint: "Growth Agent",     layer: "ai", accent: "violet", icon: Sprout,          detail: { title: "Gigi — Growth Agent", bullets: ["Goal setting", "Productivity coaching", "Team development"] } },
+  { id: "ag-scouty",  label: "Scouty",    hint: "Talent Agent",     layer: "ai", accent: "violet", icon: UserSearch,      detail: { title: "Scouty — Talent Agent", bullets: ["Job postings", "Interview preparation", "Onboarding checklists"] } },
+  { id: "ag-prism",   label: "Prism",     hint: "Data Agent",       layer: "ai", accent: "violet", icon: BarChart3,       detail: { title: "Prism — Data Analytics Agent", bullets: ["KPI dashboards", "Trend analysis", "Report generation"] } },
+
+  // Agents — Special Ops
+  { id: "ag-architect", label: "Architect", hint: "Empire Agent",   layer: "ai", accent: "violet", icon: Crown,           detail: { title: "Architect — Empire Builder Agent", bullets: ["Venture management", "Cross-platform diagnostics", "Business stress testing"] } },
+  { id: "ag-tally",     label: "Tally",     hint: "Legal Agent",   layer: "ai", accent: "violet", icon: Scale,           detail: { title: "Tally — Legal Agent", bullets: ["Contract review", "Lien rights guidance", "Compliance checks"] } },
 
   // Layer 5: Integrations (Edge Functions)
   { id: "fn-social",   label: "Social",     hint: "Publish",        layer: "backend", accent: "blue", icon: Share2,     detail: { title: "Social Publish", bullets: ["Meta Graph API", "Multi-platform scheduling", "Content queue"] } },
@@ -249,6 +279,57 @@ export const ARCH_EDGES: ArchEdge[] = [
   { id: "e111", source: "vizzy",         target: "ext-eleven",     edgeStyle: "dashed", label: "voice" },
   { id: "e112", source: "fn-website",    target: "ext-google",     edgeStyle: "dashed", label: "analytics" },
   { id: "e113", source: "payroll",       target: "accounting",     edgeStyle: "solid",  label: "export" },
+
+  // Agent → Module / Integration edges
+  { id: "ea1",  source: "ag-blitz",     target: "crm",          edgeStyle: "solid",  label: "leads" },
+  { id: "ea2",  source: "ag-blitz",     target: "pipeline",     edgeStyle: "solid" },
+  { id: "ea3",  source: "ag-penny",     target: "accounting",   edgeStyle: "solid",  label: "invoices" },
+  { id: "ea4",  source: "ag-penny",     target: "fn-qb",        edgeStyle: "dashed", label: "sync" },
+  { id: "ea5",  source: "ag-gauge",     target: "estimating",   edgeStyle: "solid",  label: "takeoff" },
+  { id: "ea6",  source: "ag-gauge",     target: "qa-war",       edgeStyle: "solid",  label: "verify" },
+  { id: "ea7",  source: "ag-kala",      target: "shop-floor",   edgeStyle: "solid",  label: "purchase" },
+  { id: "ea8",  source: "ag-forge",     target: "shop-floor",   edgeStyle: "solid",  label: "produce" },
+  { id: "ea9",  source: "ag-forge",     target: "state-machine", edgeStyle: "dashed" },
+  { id: "ea10", source: "ag-atlas",     target: "shop-floor",   edgeStyle: "solid",  label: "deliver" },
+  { id: "ea11", source: "ag-relay",     target: "inbox",        edgeStyle: "solid",  label: "email" },
+  { id: "ea12", source: "ag-relay",     target: "fn-gmail",     edgeStyle: "dashed", label: "send" },
+  { id: "ea13", source: "ag-haven",     target: "chat",         edgeStyle: "solid",  label: "support" },
+  { id: "ea14", source: "ag-haven",     target: "notif-hub",    edgeStyle: "dashed", label: "alert" },
+  { id: "ea15", source: "ag-pixel",     target: "fn-social",    edgeStyle: "solid",  label: "publish" },
+  { id: "ea16", source: "ag-pixel",     target: "ext-meta",     edgeStyle: "dashed", label: "post" },
+  { id: "ea17", source: "ag-seomi",     target: "seo",          edgeStyle: "solid",  label: "audit" },
+  { id: "ea18", source: "ag-seomi",     target: "fn-seo",       edgeStyle: "dashed", label: "crawl" },
+  { id: "ea19", source: "ag-buddy",     target: "crm",          edgeStyle: "solid",  label: "partners" },
+  { id: "ea20", source: "ag-buddy",     target: "pipeline",     edgeStyle: "dashed" },
+  { id: "ea21", source: "ag-commet",    target: "fn-website",   edgeStyle: "solid",  label: "build" },
+  { id: "ea22", source: "ag-penn",      target: "email",        edgeStyle: "solid",  label: "copy" },
+  { id: "ea23", source: "ag-penn",      target: "fn-social",    edgeStyle: "dashed", label: "content" },
+  { id: "ea24", source: "ag-gigi",      target: "pipeline",     edgeStyle: "solid",  label: "goals" },
+  { id: "ea25", source: "ag-scouty",    target: "team-hub",     edgeStyle: "solid",  label: "hire" },
+  { id: "ea26", source: "ag-prism",     target: "analytics",    edgeStyle: "solid",  label: "KPIs" },
+  { id: "ea27", source: "ag-prism",     target: "primary-db",   edgeStyle: "dashed", label: "query" },
+  { id: "ea28", source: "ag-architect", target: "fn-odoo",      edgeStyle: "solid",  label: "ERP" },
+  { id: "ea29", source: "ag-architect", target: "fn-mcp",       edgeStyle: "dashed", label: "bridge" },
+  { id: "ea30", source: "ag-tally",     target: "rules-engine", edgeStyle: "solid",  label: "comply" },
+  // All agents → AI Gateway
+  { id: "ea31", source: "ag-blitz",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea32", source: "ag-penny",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea33", source: "ag-gauge",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea34", source: "ag-forge",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea35", source: "ag-haven",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea36", source: "ag-pixel",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea37", source: "ag-seomi",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea38", source: "ag-buddy",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea39", source: "ag-commet",    target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea40", source: "ag-penn",      target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea41", source: "ag-gigi",      target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea42", source: "ag-scouty",    target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea43", source: "ag-prism",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea44", source: "ag-architect", target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea45", source: "ag-tally",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea46", source: "ag-kala",      target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea47", source: "ag-atlas",     target: "fn-ai",        edgeStyle: "dashed" },
+  { id: "ea48", source: "ag-relay",     target: "fn-ai",        edgeStyle: "dashed" },
 ];
 
 /* ───── Helpers ───── */
