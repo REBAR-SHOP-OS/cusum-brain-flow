@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { takePrimedMobileAudio } from "@/lib/audioPlayer";
 import { takePrimedMobileAudio } from "@/lib/audioPlayer";
 
 /**
@@ -184,7 +184,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
       processingRef.current = false;
       setDebugStep("listening");
     }
-  }, [getSystemPrompt, playBase64Audio, speakWithBrowserTTS]);
+  }, [playBase64Audio, speakWithBrowserTTS]);
 
   // --- Speech recognition ---
   const startRecognition = useCallback(() => {
