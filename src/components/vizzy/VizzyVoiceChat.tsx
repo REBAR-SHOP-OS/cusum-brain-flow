@@ -337,12 +337,24 @@ export function VizzyVoiceChat({ onClose }: VizzyVoiceChatProps) {
             <span
               className="text-[10px] font-mono px-1.5 py-0.5 rounded"
               style={{
-                color: audioStatus !== "text-only" ? "hsl(152 69% 70%)" : "hsl(30 80% 70%)",
-                background: audioStatus !== "text-only" ? "hsl(152 69% 20% / 0.4)" : "hsl(30 80% 20% / 0.4)",
-                border: `1px solid ${audioStatus !== "text-only" ? "hsl(152 69% 40% / 0.5)" : "hsl(30 80% 40% / 0.5)"}`,
+                color: audioStatus === "vizzy-one" ? "hsl(152 69% 70%)" : audioStatus === "browser-fallback" ? "hsl(45 93% 70%)" : "hsl(30 80% 70%)",
+                background: audioStatus === "vizzy-one" ? "hsl(152 69% 20% / 0.4)" : audioStatus === "browser-fallback" ? "hsl(45 93% 20% / 0.4)" : "hsl(30 80% 20% / 0.4)",
+                border: `1px solid ${audioStatus === "vizzy-one" ? "hsl(152 69% 40% / 0.5)" : audioStatus === "browser-fallback" ? "hsl(45 93% 40% / 0.5)" : "hsl(30 80% 40% / 0.5)"}`,
               }}
             >
-              {audioStatus !== "text-only" ? "🔊 AUDIO" : "📝 TEXT"}
+              {audioStatus === "vizzy-one" ? "🔊 AUDIO" : audioStatus === "browser-fallback" ? "🔊 BROWSER" : "📝 TEXT"}
+            </span>
+          )}
+          {isConnected && (
+            <span
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded"
+              style={{
+                color: "hsl(152 69% 70%)",
+                background: "hsl(152 69% 20% / 0.4)",
+                border: "1px solid hsl(152 69% 40% / 0.5)",
+              }}
+            >
+              Patch A
             </span>
           )}
         </div>

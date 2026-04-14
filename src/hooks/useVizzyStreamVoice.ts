@@ -190,6 +190,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
             playBase64Audio(data.audio_base64, data.audio_format || "mp3");
           } else {
             // Fallback: browser TTS when API returns text-only
+            setAudioStatus("browser-fallback");
             speakWithBrowserTTS(speakable);
           }
         }
@@ -290,6 +291,7 @@ export function useVizzyStreamVoice({ getSystemPrompt }: UseVizzyStreamVoiceOpti
     if (activeRef.current) return;
     activeRef.current = true;
     abortRef.current = new AbortController();
+    console.log("[Patch A] active — native PersonaPlex audio still in lab");
     setDebugStep("connecting");
     setState("connecting");
     setErrorDetail(null);
