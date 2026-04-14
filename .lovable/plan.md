@@ -1,40 +1,31 @@
 
 
-## Plan: Fullscreen Mode on Fit View Click
+## Plan: Add Numbered Labels to Mini Connection Graph
 
 ### Problem
-When the user clicks the Fit View button (circled in the screenshot), only the zoom resets — the sidebar (layers panel) and top header remain visible, reducing the diagram area.
+In the mini connection graph inside the node detail dialog, connected nodes are displayed in a circular layout without any numbering. The user wants each connected node to show a number (1, 2, 3, ...) so the order of connections is clear at a glance.
 
-### Approach
-Add a fullscreen toggle state. When the user clicks the Fit View button on the ReactFlow Controls, the sidebar and header hide, giving the diagram the full page. A floating button appears to exit fullscreen.
+### Changes (`src/components/system-flow/MiniConnectionGraph.tsx`)
 
-Since ReactFlow's built-in Controls `fitView` button can't be easily intercepted, we'll add a custom fullscreen toggle button and hide the default Controls `fitView`.
+1. **Pass index number to neighbor nodes**: Add an `index` field to each neighbor node's `data` (1-based: `i + 1`)
 
-### Changes (`src/pages/Architecture.tsx`)
+2. **Display number badge on MiniNode**: For non-center nodes that have an `index`, render a small circular number badge (top-left corner) showing the connection order
 
-1. **Add state**: `const [isFullscreen, setIsFullscreen] = useState(false)`
+3. **Add number labels to edges**: Use the `label` property on each edge to show the corresponding number on the connection line
 
-2. **Hide header + sidebar when fullscreen**:
-   - Header (`<header>`) gets `className={... isFullscreen ? "hidden" : ""}`
-   - Mobile layer bar (`md:hidden` div) gets same treatment
-   - Sidebar (`hidden md:flex w-44`) gets `isFullscreen ? "!hidden" : ""`
+### Visual Result
+Each connected node will display like:
+```text
+ ①
+┌──────────┐
+│  Seomi   │
+└──────────┘
+```
 
-3. **Add custom Fit View + Fullscreen button** as a floating overlay on the canvas:
-   - A small button group in top-right of the canvas area
-   - "Fullscreen" button: toggles `isFullscreen`, also calls `reactFlowInstance.fitView()`
-   - When in fullscreen, show an "Exit Fullscreen" button (e.g., Minimize icon)
-
-4. **Also call fitView** when entering fullscreen, with a small delay to let layout reflow
-
-5. **TopBar**: Hide the TopBar when fullscreen using a CSS class on the page wrapper, or conditionally render
+The center node remains unchanged (no number). Numbers appear in order 1, 2, 3, etc.
 
 ### Files
 | File | Change |
 |---|---|
-| `src/pages/Architecture.tsx` | Add fullscreen state, hide header/sidebar/topbar conditionally, add floating toggle button, call fitView on toggle |
-
-### Result
-- Clicking the fullscreen button hides the sidebar, header, and top navigation bar
-- The diagram fills the entire screen with a fitView animation
-- A floating button allows exiting fullscreen mode back to normal layout
+| `src/components/system-flow/MiniConnectionGraph.tsx` | Add `index` to neighbor data, render number badge on MiniNode, add edge labels |
 
