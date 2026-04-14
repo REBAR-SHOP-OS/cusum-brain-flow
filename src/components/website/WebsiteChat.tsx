@@ -9,6 +9,7 @@ import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
+import { sanitizeFileName } from "@/lib/sanitizeFileName";
 import { toast } from "sonner";
 import { analyzeZip } from "@/lib/zipAnalyzer";
 

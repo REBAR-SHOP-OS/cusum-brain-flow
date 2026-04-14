@@ -1,6 +1,7 @@
 import { BlobReader, ZipReader, BlobWriter } from "@zip.js/zip.js";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
+import { sanitizeFileName } from "@/lib/sanitizeFileName";
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
