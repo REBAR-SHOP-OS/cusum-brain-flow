@@ -21,6 +21,7 @@ export interface StationItem {
   bend_completed_pieces: number;
   needs_fix: boolean;
   bend_dimensions: Record<string, number> | null;
+  source_total_length_text: string | null;
   work_order_id: string | null;
   phase: string;
   // Joined from cut_plans
@@ -75,6 +76,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
             bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
             phase: (item.phase as string) || "queued",
             bend_dimensions: item.bend_dimensions as Record<string, number> | null,
+            source_total_length_text: (item as any).source_total_length_text || null,
             plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
             project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
             project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
@@ -83,7 +85,6 @@ export function useStationData(machineId: string | null, machineType?: string, p
             optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
           })) as StationItem[];
       }
-
       // Cutter: route items by bar_code capability, not by plan assignment
       // 1. Fetch machine capabilities
       const { data: caps } = await supabase
@@ -126,6 +127,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
           bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
           phase: (item.phase as string) || "queued",
           bend_dimensions: item.bend_dimensions as Record<string, number> | null,
+          source_total_length_text: (item as any).source_total_length_text || null,
           plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
           project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
           project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
