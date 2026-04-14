@@ -27,6 +27,7 @@ export type OfficeSection =
 interface OfficeSidebarProps {
   active: OfficeSection;
   onNavigate: (section: OfficeSection) => void;
+  onBack?: () => void;
 }
 
 const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }[] = [
@@ -41,14 +42,21 @@ const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }
   { id: "order-calc", label: "Order Calc", icon: Package },
 ];
 
-export function OfficeSidebar({ active, onNavigate }: OfficeSidebarProps) {
+export function OfficeSidebar({ active, onNavigate, onBack }: OfficeSidebarProps) {
   const navigate = useNavigate();
+  const handleBack = () => {
+    if (onBack) {
+      onBack();
+    } else {
+      navigate(-1);
+    }
+  };
   return (
     <aside className="flex w-[180px] shrink-0 border-r border-border bg-card flex-col h-full">
       {/* Back */}
       <div className="px-3 py-2 border-b border-border">
         <button
-          onClick={() => navigate(-1)}
+          onClick={handleBack}
           className="flex items-center gap-2 text-[10px] tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase"
         >
           <ArrowLeft className="w-3.5 h-3.5" />

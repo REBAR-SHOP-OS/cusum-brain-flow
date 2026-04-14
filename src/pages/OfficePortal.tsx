@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { Menu, Shield } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -41,6 +41,20 @@ export default function OfficePortal() {
   const [activeSection, setActiveSection] = useState<OfficeSection>(initialSection);
   const [activePlanId, setActivePlanId] = useState<string | null>((location.state as any)?.planId || null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Back-to-history callback for AI Extract
+  const backToHistoryRef = useRef<(() => void) | null>(null);
+  const handleRegisterBack = useCallback((cb: () => void) => {
+    backToHistoryRef.current = cb;
+  }, []);
+
+  const handleBack = useCallback(() => {
+    if (activeSection === "ai-extract" && backToHistoryRef.current) {
+      backToHistoryRef.current();
+    } else {
+      window.history.back();
+    }
+  }, [activeSection]);
 
   // React to navigation state changes (e.g. Edit button from Production Queue)
   useEffect(() => {
@@ -90,13 +104,13 @@ export default function OfficePortal() {
       {/* Mobile sidebar sheet */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent side="left" className="p-0 w-[200px]">
-          <OfficeSidebar active={activeSection} onNavigate={handleNavigate} />
+          <OfficeSidebar active={activeSection} onNavigate={handleNavigate} onBack={handleBack} />
         </SheetContent>
       </Sheet>
 
       {/* Desktop sidebar */}
       <div className="hidden md:flex">
-        <OfficeSidebar active={activeSection} onNavigate={handleNavigate} />
+        <OfficeSidebar active={activeSection} onNavigate={handleNavigate} onBack={handleBack} />
       </div>
 
       {/* Main content */}
@@ -118,6 +132,8 @@ export default function OfficePortal() {
         <div className="flex-1 overflow-auto">
           {activeSection === "detailed-list" ? (
             <DetailedListView initialPlanId={activePlanId} />
+          ) : activeSection === "ai-extract" ? (
+            <AIExtractView onRegisterBackToHistory={handleRegisterBack} />
           ) : (
             <ActiveComponent />
           )}
