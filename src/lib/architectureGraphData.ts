@@ -93,6 +93,34 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "knowledge-rag", label: "Knowledge", hint: "RAG store",      layer: "ai", accent: "violet", icon: Library,    detail: { title: "Knowledge / RAG", bullets: ["Document embeddings", "Semantic search", "Context retrieval for AI"] } },
   { id: "notif-hub",     label: "Notifications", hint: "Alert routing", layer: "ai", accent: "violet", icon: BellRing, detail: { title: "Notification Hub", bullets: ["Multi-channel routing", "Escalation chains", "Digest & batching"] } },
 
+  // Agents — Revenue
+  { id: "ag-blitz",   label: "Blitz",     hint: "Sales Agent",      layer: "ai", accent: "violet", icon: TrendingUp,      detail: { title: "Blitz — Sales Agent", bullets: ["Pipeline management", "Lead follow-ups", "Deal tracking & outreach"] } },
+  { id: "ag-penny",   label: "Penny",     hint: "Accounting Agent", layer: "ai", accent: "violet", icon: Calculator,      detail: { title: "Penny — Accounting Agent", bullets: ["Invoice management", "QuickBooks sync", "Overdue balance tracking"] } },
+  { id: "ag-gauge",   label: "Gauge",     hint: "Estimating Agent", layer: "ai", accent: "violet", icon: Ruler,           detail: { title: "Gauge — Estimating Agent", bullets: ["Takeoff from drawings", "Rebar calculations", "Estimate reviews"] } },
+  { id: "ag-kala",    label: "Kala",      hint: "Purchasing Agent",  layer: "ai", accent: "violet", icon: Boxes,           detail: { title: "Kala — Purchasing Agent", bullets: ["Material procurement", "Vendor management", "Purchase order tracking"] } },
+
+  // Agents — Operations
+  { id: "ag-forge",   label: "Forge",     hint: "Shop Floor Agent", layer: "ai", accent: "violet", icon: Wrench,          detail: { title: "Forge — Shop Floor Agent", bullets: ["Work order management", "Machine scheduling", "Production tracking"] } },
+  { id: "ag-atlas",   label: "Atlas",     hint: "Delivery Agent",   layer: "ai", accent: "violet", icon: Truck,           detail: { title: "Atlas — Delivery Agent", bullets: ["Route planning", "Delivery tracking", "Schedule optimization"] } },
+  { id: "ag-relay",   label: "Relay",     hint: "Email Agent",      layer: "ai", accent: "violet", icon: MailCheck,        detail: { title: "Relay — Email Agent", bullets: ["Email summarization", "AI reply drafting", "Action item extraction"] } },
+
+  // Agents — Support
+  { id: "ag-haven",   label: "Haven",     hint: "Support Agent",    layer: "ai", accent: "violet", icon: HeadphonesIcon,  detail: { title: "Haven — Support Agent", bullets: ["Customer issue triage", "Ticket management", "Response drafting"] } },
+
+  // Agents — Growth
+  { id: "ag-pixel",   label: "Pixel",     hint: "Social Agent",     layer: "ai", accent: "violet", icon: Share2,          detail: { title: "Pixel — Social Media Agent", bullets: ["Content creation", "Post scheduling", "Performance analytics"] } },
+  { id: "ag-seomi",   label: "Seomi",     hint: "SEO Agent",        layer: "ai", accent: "violet", icon: Eye,             detail: { title: "Seomi — SEO Agent", bullets: ["SEO audits", "Meta tag optimization", "Blog content strategy"] } },
+  { id: "ag-buddy",   label: "Buddy",     hint: "BizDev Agent",     layer: "ai", accent: "violet", icon: Compass,         detail: { title: "Buddy — Business Development Agent", bullets: ["Market analysis", "Partnership discovery", "Growth planning"] } },
+  { id: "ag-commet",  label: "Commet",    hint: "Web Builder Agent", layer: "ai", accent: "violet", icon: Palette,        detail: { title: "Commet — Web Builder Agent", bullets: ["Website audits", "Landing page suggestions", "Copy writing"] } },
+  { id: "ag-penn",    label: "Penn",      hint: "Copywriting Agent", layer: "ai", accent: "violet", icon: PenTool,        detail: { title: "Penn — Copywriting Agent", bullets: ["Proposal writing", "Email campaigns", "Product descriptions"] } },
+  { id: "ag-gigi",    label: "Gigi",      hint: "Growth Agent",     layer: "ai", accent: "violet", icon: Sprout,          detail: { title: "Gigi — Growth Agent", bullets: ["Goal setting", "Productivity coaching", "Team development"] } },
+  { id: "ag-scouty",  label: "Scouty",    hint: "Talent Agent",     layer: "ai", accent: "violet", icon: UserSearch,      detail: { title: "Scouty — Talent Agent", bullets: ["Job postings", "Interview preparation", "Onboarding checklists"] } },
+  { id: "ag-prism",   label: "Prism",     hint: "Data Agent",       layer: "ai", accent: "violet", icon: BarChart3,       detail: { title: "Prism — Data Analytics Agent", bullets: ["KPI dashboards", "Trend analysis", "Report generation"] } },
+
+  // Agents — Special Ops
+  { id: "ag-architect", label: "Architect", hint: "Empire Agent",   layer: "ai", accent: "violet", icon: Crown,           detail: { title: "Architect — Empire Builder Agent", bullets: ["Venture management", "Cross-platform diagnostics", "Business stress testing"] } },
+  { id: "ag-tally",     label: "Tally",     hint: "Legal Agent",   layer: "ai", accent: "violet", icon: Scale,           detail: { title: "Tally — Legal Agent", bullets: ["Contract review", "Lien rights guidance", "Compliance checks"] } },
+
   // Layer 5: Integrations (Edge Functions)
   { id: "fn-social",   label: "Social",     hint: "Publish",        layer: "backend", accent: "blue", icon: Share2,     detail: { title: "Social Publish", bullets: ["Meta Graph API", "Multi-platform scheduling", "Content queue"] } },
   { id: "fn-stripe",   label: "Stripe",     hint: "Payments",       layer: "backend", accent: "blue", icon: CreditCard, detail: { title: "Stripe Integration", bullets: ["Payment processing", "Webhook handling", "Invoice management"] } },
