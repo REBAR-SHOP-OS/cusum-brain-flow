@@ -79,5 +79,5 @@ Deno.serve((req) =>
     log.done("Action proxied", { action, cardTitle });
 
     return { ok: true, spoken, cardTitle, data };
-  }, { functionName: "assistant-action", authMode: "none", requireCompany: false, wrapResult: false }),
+  }, { functionName: "assistant-action", authMode: "required", requireCompany: false, wrapResult: false }),
 );

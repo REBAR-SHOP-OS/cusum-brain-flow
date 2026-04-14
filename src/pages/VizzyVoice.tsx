@@ -3,6 +3,7 @@ import { Mic, MicOff, Send, Volume2, Loader2, Copy, RotateCcw, AlertTriangle, Ch
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 
 type Status = "idle" | "listening" | "processing" | "speaking" | "error";
 
@@ -146,11 +147,13 @@ export default function VizzyVoice() {
       if (intent) {
         // Route through action router
         const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/assistant-action`;
+        const { data: { session: assistantSession } } = await supabase.auth.getSession();
         const resp = await fetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${assistantSession?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
           body: JSON.stringify({ source: intent.source, action: intent.action, params: intent.params || {} }),
         });

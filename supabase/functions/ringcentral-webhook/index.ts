@@ -305,6 +305,7 @@ async function handleMessageEvent(supabase: any, body: any) {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${svcKey}`,
+            "x-internal-secret": Deno.env.get("INTERNAL_FUNCTION_SECRET") || "",
           },
           body: JSON.stringify({
             from_number: fromAddr,

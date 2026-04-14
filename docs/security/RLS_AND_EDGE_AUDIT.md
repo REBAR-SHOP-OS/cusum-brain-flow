@@ -33,28 +33,69 @@ Policies remain: SELECT/INSERT/UPDATE/DELETE for authenticated users only when `
 - **Justification for removal:** All public-facing pages (CustomerPortal, AcceptQuote, VendorPortal) reach these tables via service-role edge functions only, not direct anon PostgREST queries.
 - **After:** Anon SELECT policies dropped. Authenticated access policies (company-scoped) remain in place from earlier migrations.
 
-## Edge Functions — shared stack (audited ✅)
+## Edge function auth audit (audited ✅ — April 2026)
 
-- [`supabase/functions/_shared/auth.ts`](../../supabase/functions/_shared/auth.ts): `requireAuth` validates JWT via `getClaims()` (local verification).
-- [`supabase/functions/_shared/requestHandler.ts`](../../supabase/functions/_shared/requestHandler.ts): CORS, optional `internalOnly` (`x-internal-secret`), `requireRole` / `requireAnyRole`, company resolution.
-- [`supabase/functions/_shared/structuredLog.ts`](../../supabase/functions/_shared/structuredLog.ts): JSON logs to stdout for aggregation.
+Full scan of all 213 edge functions. Findings and resolutions below.
 
-## Critical functions — auth gates (post-change)
+### Functions with legitimate public / optional auth (no changes needed)
 
-| Function | Auth | Role / notes |
-|----------|------|----------------|
-| `schedule-post` | Required JWT | `admin` or `marketing` |
-| `social-publish` | Required JWT | `admin` or `marketing`; super-admin email fallback via `SUPER_ADMIN_EMAILS` (defined in `_shared/accessPolicies.ts`, applied in `_shared/roleCheck.ts`) |
-| `regenerate-post` | Required JWT | `admin` or `marketing` |
-| `auto-generate-post` | Required JWT | `admin` or `marketing` |
-| `social-cron-publish` | `internalOnly` + secret | No user JWT |
-| `voice-engine-token` | Varies | Review separately if widening scope |
+| Function | Pattern | Justification |
+|---|---|---|
+| `quote-public-view` | No auth | Serves public quote URLs; reads only status + total; gated by quote_id |
+| `validate-invite` | No auth | Pre-auth invite token validation; returns no PII beyond invite metadata |
+| `consume-invite` | No auth | Pre-auth invite consumption; validates token expiry before acting |
+| `facebook-data-deletion` | `authMode: "none"` | GDPR deletion callback from Facebook — must accept unauthenticated |
+| `qb-webhook` | `authMode: "none"` | QuickBooks webhook — signed by QB HMAC, not user JWT |
+| `wc-webhook` | `authMode: "none"` | WooCommerce webhook — signed by WC secret |
+| `stripe-qb-webhook` | `authMode: "none"` | Stripe webhook — signed by Stripe, not user JWT |
+| `gmail-webhook` | `authMode: "none"` | Gmail push — verified by topic token |
+| `ringcentral-*` webhooks | `authMode: "optional"` | RingCentral HMAC-signed; service handles auth externally |
+| `email-unsubscribe` | `authMode: "none"` | One-click unsubscribe via token link in email |
+| `website-chat` / `website-chat-widget` | `authMode: "none"` | Public-facing customer support chat |
+| `support-chat` | `authMode: "none"` | Public support chat widget |
+| `elevenlabs-scribe-token` etc. | Various | Token vending machines — limited scope, reviewed separately |
+
+### Findings fixed (this session)
+
+#### HIGH: `elevenlabs-tts` — no auth → API cost abuse via public anon key (✅ Fixed)
+- **Before:** `authMode: "none"` — anyone with the public anon key could call ElevenLabs TTS and drain credits.
+- **After:** `authMode: "required"`. Frontend callers updated to pass `session.access_token` instead of the anon key.
+- **Files:** `elevenlabs-tts/index.ts`, `MessageThread.tsx`, `ProVideoEditor.tsx`
+
+#### HIGH: `assistant-action` — no auth → unauthenticated ERP data reads (✅ Fixed)
+- **Before:** `authMode: "none"` — any HTTP client could retrieve order counts, machine lists, customer counts without logging in.
+- **After:** `authMode: "required"`. `VizzyVoice.tsx` updated to send `session.access_token`.
+- **Files:** `assistant-action/index.ts`, `VizzyVoice.tsx`
+
+#### HIGH: `generate-invoice-pdf` — header presence check without JWT verification (✅ Fixed)
+- **Before:** Only checked `if (!authHeader)` — any non-empty string passed. Function uploads HTML to storage bucket using service role.
+- **After:** `requireAuth()` used to validate the JWT via `getClaims()` before proceeding.
+- **Files:** `generate-invoice-pdf/index.ts`
+
+#### HIGH: 14 cron/background functions with `internalOnly: false` (✅ Fixed)
+- **Before:** All 14 had `authMode: "none"` + `internalOnly: false`. Cron and DB triggers already sent `x-internal-secret` but functions didn't check it — anyone could trigger them.
+- **After:** `internalOnly: true` on all 14. The `handleRequest` middleware now enforces the shared secret.
+- **Functions:** `comms-alerts`, `timeclock-alerts`, `email-automation-check`, `friday-ideas`, `check-escalations`, `social-cron-publish`, `vizzy-business-watchdog`, `notify-on-message`, `push-on-notify`, `notify-feedback-owner`, `send-push`, `pipeline-automation-engine`, `pipeline-lead-recycler`, `quote-expiry-watchdog`
+- **Migration:** `20260414000001_schedule_missing_cron_jobs.sql` adds `pipeline-lead-recycler` and `quote-expiry-watchdog` to pg_cron with `x-internal-secret`.
+
+#### MEDIUM: `vizzy-sms-reply` — no auth, can trigger SMS replies (✅ Fixed)
+- **Before:** Raw `Deno.serve` with no auth; any caller could trigger AI SMS replies via RingCentral.
+- **After:** Internal secret check added at entry point. `ringcentral-webhook` updated to send `x-internal-secret`.
+- **Files:** `vizzy-sms-reply/index.ts`, `ringcentral-webhook/index.ts`
+
+#### MEDIUM: `mcp-server` — API key accepted via URL query parameter (✅ Fixed)
+- **Before:** `?api_key=...` accepted — key visible in server logs, browser history, and Referer headers.
+- **After:** Query param support removed; only `x-api-key` header and `Authorization: Bearer` accepted.
+- **Files:** `mcp-server/index.ts`
 
 ## Remaining work
 
 - **`SUPER_ADMIN_EMAILS` email bypass in `roleCheck.ts`:** `requireRole` / `requireAnyRole` still check `SUPER_ADMIN_EMAILS` before the role table. This is a controlled backstop for the three named super admins. Can be eliminated once those users are confirmed to have the `admin` role in `user_roles` in production.
 - **`social-publish` super-admin fallback:** Uses `hasAnyRole(["admin","marketing"])` first; falls back to `SUPER_ADMIN_EMAILS`. Acceptable short-term; migrate fully once role seeding is confirmed.
 - **Regenerate types:** Run `supabase gen types typescript --project-id <id> > src/integrations/supabase/types.ts` after applying the new migration to keep TypeScript types in sync.
+- **`enhance-music-prompt` auth (ProVideoEditor.tsx line 267):** Uses anon key. Low risk (AI prompt only, no data written), deferred — same function context was updated for TTS.
+- **`voice-engine-token`:** Required auth but no role enforcement. Review if restricted to specific roles.
+- **`system-backup`:** `authMode: "optional"` — should be `internalOnly: true` if only cron-triggered; verify before changing.
 - **Broader `USING (true)` tables:** Remaining instances are either `service_role`-only (appropriate) or reference/config tables where read-only access by any authenticated user is intentional. Each has been reviewed in the table below.
 
 ## `USING (true)` policy inventory — reviewed

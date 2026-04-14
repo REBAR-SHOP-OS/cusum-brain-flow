@@ -24,6 +24,15 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Internal-only: reject calls without the shared internal secret
+  const expectedSecret = Deno.env.get("INTERNAL_FUNCTION_SECRET");
+  const providedSecret = req.headers.get("x-internal-secret");
+  if (!expectedSecret || !providedSecret || providedSecret !== expectedSecret) {
+    return new Response(JSON.stringify({ ok: false, error: "Forbidden" }), {
+      status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const { from_number, message_text, contact_name, contact_id, company_id } = await req.json();
     const normalizedEntry = from_number?.replace(/\D/g, "") || "";

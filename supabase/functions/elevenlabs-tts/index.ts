@@ -52,5 +52,5 @@ Deno.serve((req) =>
     return new Response(audioBuffer, {
       headers: { ...corsHeaders, "Content-Type": "audio/mpeg" },
     });
-  }, { functionName: "elevenlabs-tts", authMode: "none", requireCompany: false, rawResponse: true })
+  }, { functionName: "elevenlabs-tts", authMode: "required", requireCompany: false, rawResponse: true })
 );
