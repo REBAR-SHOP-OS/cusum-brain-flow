@@ -16,6 +16,7 @@ import {
   Ruler, FileSpreadsheet, Banknote, Inbox, Library, BellRing, Camera, Globe2, Plug, AudioLines,
   TrendingUp, HeadphonesIcon, Megaphone, PenTool, UserSearch, Sprout, Crown, Wrench,
   Truck, MailCheck, Eye, Compass, Palette, GraduationCap,
+  LayoutDashboard, ListTodo, Monitor, Building, Star, Clock, Package, Stethoscope, Settings,
 } from "lucide-react";
 
 export type ArchLayer = "entry" | "auth" | "modules" | "ai" | "backend" | "external" | "platform";
@@ -79,6 +80,26 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "quotes",     label: "Quotes",     hint: "Sales quotes",   layer: "modules", accent: "orange", icon: FileSpreadsheet, detail: { title: "Sales Quotes", bullets: ["Quote builder & templates", "Price calculation engine", "Email delivery"] } },
   { id: "payroll",    label: "Payroll",    hint: "Wages",          layer: "modules", accent: "orange", icon: Banknote,       detail: { title: "Payroll", bullets: ["Pay period processing", "Deductions & benefits", "Export to accounting"] } },
   { id: "inbox",      label: "Inbox",      hint: "Unified comms",  layer: "modules", accent: "orange", icon: Inbox,          detail: { title: "Inbox / Comms", bullets: ["Unified email + SMS", "AI triage & drafting", "Translation support"] } },
+
+  // OFFICE additions
+  { id: "dashboard",    label: "Dashboard",      hint: "Overview",      layer: "modules", accent: "orange", icon: LayoutDashboard, detail: { title: "Dashboard", bullets: ["Company-wide KPIs", "Real-time metrics", "Widget-based layout"] } },
+  { id: "biz-tasks",    label: "Business Tasks", hint: "Task mgmt",    layer: "modules", accent: "orange", icon: ListTodo,        detail: { title: "Business Tasks", bullets: ["Task assignment & tracking", "Priority management", "Deadline monitoring"] } },
+  { id: "live-monitor", label: "Live Monitor",   hint: "Real-time",    layer: "modules", accent: "orange", icon: Monitor,         detail: { title: "Live Monitor", bullets: ["Real-time production view", "Machine status tracking", "Alert notifications"] } },
+  { id: "ceo-portal",   label: "CEO Portal",     hint: "Executive",    layer: "modules", accent: "orange", icon: Building,        detail: { title: "CEO Portal", bullets: ["Executive dashboard", "Financial summaries", "Strategic overview"] } },
+  { id: "support",      label: "Support",        hint: "Help desk",    layer: "modules", accent: "orange", icon: HeadphonesIcon,  detail: { title: "Support", bullets: ["Ticket management", "Customer issue tracking", "AI-assisted responses"] } },
+  { id: "lead-scoring", label: "Lead Scoring",   hint: "AI scoring",   layer: "modules", accent: "orange", icon: Star,            detail: { title: "Lead Scoring", bullets: ["AI-powered lead ranking", "Qualification criteria", "Conversion predictions"] } },
+  { id: "customers",    label: "Customers",      hint: "Directory",    layer: "modules", accent: "orange", icon: Users,           detail: { title: "Customers", bullets: ["Customer directory", "Contact management", "Purchase history"] } },
+  { id: "sales",        label: "Sales",          hint: "Revenue",      layer: "modules", accent: "orange", icon: DollarSign,      detail: { title: "Sales", bullets: ["Sales pipeline", "Deal tracking", "Revenue reporting"] } },
+
+  // PRODUCTION additions
+  { id: "time-clock",   label: "Time Clock",     hint: "Attendance",   layer: "modules", accent: "orange", icon: Clock,           detail: { title: "Time Clock", bullets: ["Clock in/out tracking", "Break management", "Overtime calculations"] } },
+  { id: "office-tools", label: "Office Tools",   hint: "Utilities",    layer: "modules", accent: "orange", icon: Wrench,          detail: { title: "Office Tools", bullets: ["AI extract & barlist tools", "Production queue", "Packing slips & tags"] } },
+
+  // LOGISTICS
+  { id: "inventory",    label: "Inventory",      hint: "Stock",        layer: "modules", accent: "orange", icon: Package,         detail: { title: "Inventory", bullets: ["Stock level tracking", "Material management", "Reorder alerts"] } },
+
+  // QA
+  { id: "diagnostics",  label: "Diagnostics",    hint: "System health", layer: "modules", accent: "orange", icon: Stethoscope,    detail: { title: "Diagnostics", bullets: ["System health checks", "Performance monitoring", "Error diagnostics"] } },
 
   // Layer 4: AI & Automation
   { id: "vizzy",       label: "Vizzy",       hint: "Voice AI",       layer: "ai", accent: "violet", icon: Mic,          detail: { title: "Vizzy — Voice Assistant", bullets: ["WebRTC Realtime", "Sliding window context", "ERP data digest"] } },
@@ -161,6 +182,7 @@ export const ARCH_NODES: ArchNode[] = [
   { id: "secrets-mgr",   label: "Secrets",       hint: "Vault",        layer: "platform", accent: "emerald", icon: Lock,          detail: { title: "Secrets Manager", bullets: ["API key storage", "Token rotation", "Encrypted vault"] } },
   { id: "backups",       label: "Backups",       hint: "Recovery",     layer: "platform", accent: "emerald", icon: DownloadCloud, detail: { title: "Backups", bullets: ["Daily snapshots", "Point-in-time recovery", "Geo-redundant storage"] } },
   { id: "admin-console", label: "Admin",         hint: "Management",   layer: "platform", accent: "emerald", icon: Users,         detail: { title: "Admin Console", bullets: ["User management", "System configuration", "Feature flags"] } },
+  { id: "settings",      label: "Settings",      hint: "Config",       layer: "platform", accent: "emerald", icon: Settings,       detail: { title: "Settings", bullets: ["App configuration", "User preferences", "System parameters"] } },
   { id: "cdn-edge",      label: "CDN / Edge",    hint: "Delivery",     layer: "platform", accent: "emerald", icon: Globe,         detail: { title: "CDN / Edge", bullets: ["Static asset delivery", "Edge caching", "Global distribution"] } },
   { id: "memory-store",  label: "Memory",        hint: "AI & CRM memory", layer: "platform", accent: "emerald", icon: MemoryStick,   detail: { title: "Memory Store", bullets: ["Vizzy brain & lead memory", "Qualification / quote / loss memory", "Client performance memory"] } },
   { id: "realtime",      label: "Realtime",      hint: "Live events",  layer: "platform", accent: "emerald", icon: Radio,         detail: { title: "Realtime Engine", bullets: ["Supabase Realtime", "Live chat & dashboards", "Presence & notifications"] } },
@@ -330,6 +352,51 @@ export const ARCH_EDGES: ArchEdge[] = [
   { id: "ea46", source: "ag-kala",      target: "fn-ai",        edgeStyle: "dashed" },
   { id: "ea47", source: "ag-atlas",     target: "fn-ai",        edgeStyle: "dashed" },
   { id: "ea48", source: "ag-relay",     target: "fn-ai",        edgeStyle: "dashed" },
+
+  // New module edges
+  { id: "em1",  source: "dashboard",    target: "primary-db",    edgeStyle: "dashed", label: "data" },
+  { id: "em2",  source: "dashboard",    target: "analytics",     edgeStyle: "solid",  label: "KPIs" },
+  { id: "em3",  source: "dashboard",    target: "realtime",      edgeStyle: "dashed", label: "live" },
+  { id: "em4",  source: "biz-tasks",    target: "pipeline",      edgeStyle: "solid",  label: "workflow" },
+  { id: "em5",  source: "biz-tasks",    target: "state-machine", edgeStyle: "dashed" },
+  { id: "em6",  source: "biz-tasks",    target: "approval-eng",  edgeStyle: "solid",  label: "approve" },
+  { id: "em7",  source: "live-monitor", target: "realtime",      edgeStyle: "solid",  label: "stream" },
+  { id: "em8",  source: "live-monitor", target: "monitoring",    edgeStyle: "solid" },
+  { id: "em9",  source: "live-monitor", target: "shop-floor",    edgeStyle: "dashed", label: "status" },
+  { id: "em10", source: "ceo-portal",   target: "analytics",     edgeStyle: "solid",  label: "reports" },
+  { id: "em11", source: "ceo-portal",   target: "primary-db",    edgeStyle: "dashed", label: "data" },
+  { id: "em12", source: "ceo-portal",   target: "pipeline",      edgeStyle: "dashed" },
+  { id: "em13", source: "support",      target: "chat",          edgeStyle: "solid",  label: "tickets" },
+  { id: "em14", source: "support",      target: "ag-haven",      edgeStyle: "solid",  label: "AI" },
+  { id: "em15", source: "support",      target: "notif-hub",     edgeStyle: "dashed", label: "alert" },
+  { id: "em16", source: "lead-scoring", target: "crm",           edgeStyle: "solid",  label: "leads" },
+  { id: "em17", source: "lead-scoring", target: "fn-ai",         edgeStyle: "dashed", label: "score" },
+  { id: "em18", source: "lead-scoring", target: "pipeline",      edgeStyle: "dashed" },
+  { id: "em19", source: "customers",    target: "crm",           edgeStyle: "solid",  label: "contacts" },
+  { id: "em20", source: "customers",    target: "primary-db",    edgeStyle: "dashed", label: "data" },
+  { id: "em21", source: "sales",        target: "crm",           edgeStyle: "solid",  label: "deals" },
+  { id: "em22", source: "sales",        target: "quotes",        edgeStyle: "solid",  label: "quote" },
+  { id: "em23", source: "sales",        target: "ag-blitz",      edgeStyle: "dashed", label: "AI" },
+  { id: "em24", source: "sales",        target: "pipeline",      edgeStyle: "dashed" },
+  { id: "em25", source: "time-clock",   target: "team-hub",      edgeStyle: "solid",  label: "hours" },
+  { id: "em26", source: "time-clock",   target: "kiosk",         edgeStyle: "solid",  label: "punch" },
+  { id: "em27", source: "time-clock",   target: "payroll",       edgeStyle: "solid",  label: "wages" },
+  { id: "em28", source: "office-tools", target: "primary-db",    edgeStyle: "dashed", label: "data" },
+  { id: "em29", source: "office-tools", target: "obj-storage",   edgeStyle: "dashed", label: "files" },
+  { id: "em30", source: "inventory",    target: "shop-floor",    edgeStyle: "solid",  label: "stock" },
+  { id: "em31", source: "inventory",    target: "fn-odoo",       edgeStyle: "dashed", label: "sync" },
+  { id: "em32", source: "inventory",    target: "ag-kala",       edgeStyle: "dashed", label: "order" },
+  { id: "em33", source: "diagnostics",  target: "monitoring",    edgeStyle: "solid",  label: "health" },
+  { id: "em34", source: "diagnostics",  target: "health",        edgeStyle: "solid" },
+  { id: "em35", source: "diagnostics",  target: "error-track",   edgeStyle: "solid",  label: "errors" },
+  { id: "em36", source: "settings",     target: "feature-flags", edgeStyle: "solid",  label: "toggles" },
+  { id: "em37", source: "settings",     target: "secrets-mgr",   edgeStyle: "dashed", label: "keys" },
+  { id: "em38", source: "settings",     target: "admin-console", edgeStyle: "solid" },
+
+  // Role-guard → new modules
+  { id: "em40", source: "role-guard",   target: "dashboard",     edgeStyle: "solid" },
+  { id: "em41", source: "role-guard",   target: "support",       edgeStyle: "solid" },
+  { id: "em42", source: "role-guard",   target: "sales",         edgeStyle: "solid" },
 ];
 
 /* ───── Helpers ───── */
