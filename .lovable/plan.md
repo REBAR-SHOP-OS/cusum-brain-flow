@@ -1,35 +1,26 @@
 
 
-## Plan: Fix Vizzy Can't Hear — Revert Aggressive Recognition Nullification
+## Plan: Update Secrets to Tailscale Funnel Public URLs
 
 ### Problem
-The previous "reconnect loop fix" nullifies `recognitionRef.current` and `activeRef.current` when `not-allowed` fires. On some devices this fires transiently or on session restart, permanently killing STT for the session. The `onend` handler can't restart because `recognitionRef.current` is null.
+Edge functions run in Deno Deploy (cloud) and cannot reach private Tailscale IPs (`100.86.84.110`). Tailscale Funnel exposes services via public HTTPS hostnames.
 
 ### Changes
 
-**1. Patch: `src/hooks/useVizzyStreamVoice.ts`** (lines 339-350)
+1. **Update secret `BACKEND_URL`** — from `http://100.86.84.110:3000` → `https://pc.tail669f65.ts.net`
+2. **Update secret `TTS_API_URL`** — from `http://100.86.84.110:9009` → `https://pc.tail669f65.ts.net:9009`
+3. **Redeploy edge functions** — `personaplex-voice`, `vizzy-voice-chat`, `vizzy-tts` to pick up new secrets
+4. **Health check** — curl all three endpoints to verify connectivity
 
-Remove the two nullification lines. Keep the error message and state change so the UI still shows a clear error, but let the normal `onend` restart cycle attempt recovery:
-
-```typescript
-recognition.onerror = (event: any) => {
-  if (event.error === "aborted") return;
-  console.error("[VizzyStream] STT error:", event.error);
-  if (event.error === "not-allowed") {
-    setErrorDetail("Microphone access denied — check browser permissions");
-    setState("error");
-    return;
-  }
-};
+### Prerequisites
+You must have Tailscale Funnel active on the PC node before we update:
+```powershell
+tailscale funnel localhost:3000
+tailscale funnel localhost:9009
 ```
 
-The auto-retry skip in `VizzyVoiceChat.tsx` (checking for "microphone"/"denied" in `lastErrorDetail`) remains — that's still correct and prevents UI-level retry spam for genuine permission blocks.
-
 ### What does NOT change
-- VizzyVoiceChat auto-retry skip for mic errors — still in place
-- TTS chunking, audio queue — unchanged
-- Session lifecycle — unchanged
-
-### Result
-Recognition can attempt restart after transient `not-allowed` errors. Genuine permission blocks still show the error message and skip UI auto-retry.
+- Edge function code — already reads from `BACKEND_URL` and `TTS_API_URL` env vars
+- Frontend code — unchanged
+- No database changes
 
