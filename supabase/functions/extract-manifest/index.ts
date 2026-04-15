@@ -51,13 +51,13 @@ function parseDimension(val: any): number | null {
   // Imperial: X'-Y" or X' Y" or X'-Y or X' Y  (Y can be decimal like 9.25)
   const ftIn = s.match(/^(\d+(?:\.\d+)?)\s*['']\s*-?\s*(\d+(?:\.\d+)?)\s*["""]?\s*$/);
   if (ftIn) {
-    return Math.round(parseFloat(ftIn[1]) * 12 + parseFloat(ftIn[2]));
+    return parseFloat(ftIn[1]) * 12 + parseFloat(ftIn[2]);
   }
 
   // Feet only: "6'"
   const ftOnly = s.match(/^(\d+(?:\.\d+)?)\s*['']\s*$/);
   if (ftOnly) {
-    return Math.round(parseFloat(ftOnly[1]) * 12);
+    return parseFloat(ftOnly[1]) * 12;
   }
 
   // Inches only: '4"'
@@ -71,7 +71,7 @@ function parseDimension(val: any): number | null {
   const stripped = s.replace(/[^0-9.'\-"]/g, "");
   const ftInFallback = stripped.match(/^(\d+(?:\.\d+)?)['\-](\d+(?:\.\d+)?)/);
   if (ftInFallback) {
-    return Math.round(parseFloat(ftInFallback[1]) * 12 + parseFloat(ftInFallback[2]));
+    return parseFloat(ftInFallback[1]) * 12 + parseFloat(ftInFallback[2]);
   }
 
   const n = parseFloat(stripped.replace(/[^0-9.\-]/g, ""));
@@ -340,7 +340,7 @@ Rules:
           const fileResp = await fetch(fileUrl);
           if (!fileResp.ok) throw new Error(`Failed to fetch file: ${fileResp.status}`);
           const fileBytes = new Uint8Array(await fileResp.arrayBuffer());
-          parsedWorkbook = XLSX.read(fileBytes, { type: "array" });
+          parsedWorkbook = XLSX.read(fileBytes, { type: "array", cellText: true });
           const workbook = parsedWorkbook;
 
           const csvParts: string[] = [];
