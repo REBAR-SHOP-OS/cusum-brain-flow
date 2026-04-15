@@ -288,7 +288,7 @@ export function PostReviewPanel({
       }
     };
     doTranslate();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; setAutoTranslating(false); };
   }, [post?.id, persianImageText, persianCaptionText, localContent, localTitle]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
