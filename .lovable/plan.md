@@ -1,30 +1,52 @@
 
 
-## Plan: Preserve SEO Section State on Navigation
+## Plan: Hardwire SEO Module to Use ai@rebar.shop Google Connection
 
 ### Problem
-When navigating between Dashboard, Keywords, Pages, etc., the current section unmounts completely (conditional rendering with `&&`). Returning to a section forces a full re-render and data refetch, losing scroll position and any local state.
+The SEO module currently checks the **logged-in user's** Google token for GSC/GA4 connection status. But the SEO module should always use `ai@rebar.shop`'s Google connection, regardless of who is logged in. Currently if radin@ logs in, it shows "connected as radin@rebar.shop" — it should always show and use ai@rebar.shop.
 
-### Fix
-**File: `src/pages/SeoModule.tsx`**
+### Changes
 
-Replace conditional rendering (`{section === "overview" && <SeoOverview />}`) with CSS visibility (`display: none` / `display: block`). All traffic sub-sections render once and stay mounted — only the active one is visible.
+#### 1. Frontend: `src/components/seo/SeoOverview.tsx`
+- Change the `check-status` call to pass a flag `seo_service_account: true` so the edge function knows to look up ai@rebar.shop's token instead of the current user's
+- Same for `connectGoogle` and `reconnectGoogle` — these should target ai@rebar.shop
 
-```tsx
-// Before (unmounts on navigate):
-{section === "overview" && <SeoOverview />}
+#### 2. Edge Function: `supabase/functions/google-oauth/index.ts`
+- In the `check-status` handler: when `seo_service_account: true` is passed, look up the ai@rebar.shop user's token instead of the current user's token
+- This way the SEO dashboard always reflects ai@rebar.shop's connection status
 
-// After (stays mounted, hidden via CSS):
-<div style={{ display: section === "overview" ? "block" : "none" }}>
-  <SeoOverview />
-</div>
+#### 3. Edge Function: `supabase/functions/seo-gsc-sync/index.ts`
+- Instead of looping through all company profiles to find any token, **prioritize ai@rebar.shop's token first**
+- Look up ai@rebar.shop's user_id from auth.users, then check their token in user_gmail_tokens
+
+#### 4. Edge Function: `supabase/functions/seo-smart-scan/index.ts`
+- Same approach: when checking if GSC is available, look for ai@rebar.shop's token specifically
+
+#### 5. Memory Update
+- Save this rule: "SEO module always uses ai@rebar.shop Google connection for GSC/GA4 data"
+
+### Technical Details
+
+**Lookup pattern (edge functions):**
+```typescript
+// Find ai@rebar.shop user
+const { data: aiUser } = await supabaseAdmin.auth.admin.listUsers();
+const aiAccount = aiUser.users.find(u => u.email === "ai@rebar.shop");
+if (aiAccount) {
+  const { data: tokenRow } = await supabaseAdmin
+    .from("user_gmail_tokens")
+    .select("refresh_token, is_encrypted, gmail_email")
+    .eq("user_id", aiAccount.id)
+    .maybeSingle();
+}
 ```
 
-Same pattern for all 6 traffic sections (overview, keywords, pages, tasks, links, copilot) and the 4 category sections (traffic, content, ai-pr, ai-visibility, local).
+**Files to modify:**
+- `src/components/seo/SeoOverview.tsx` — pass `seo_service_account: true` flag
+- `supabase/functions/google-oauth/index.ts` — handle SEO service account lookup
+- `supabase/functions/seo-gsc-sync/index.ts` — prioritize ai@rebar.shop token
+- `supabase/functions/seo-smart-scan/index.ts` — use ai@rebar.shop for GSC check
 
 ### Result
-- Data stays loaded when switching between sections
-- No re-fetch on return
-- Scroll position preserved
-- React Query cache still works for background refreshes
+SEO module always uses ai@rebar.shop's Google connection for all GSC and GA4 operations, regardless of which user is logged in.
 
