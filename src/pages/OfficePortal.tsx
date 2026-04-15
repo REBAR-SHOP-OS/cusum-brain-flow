@@ -43,18 +43,21 @@ export default function OfficePortal() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Back-to-history callback for AI Extract
-  const backToHistoryRef = useRef<(() => void) | null>(null);
-  const handleRegisterBack = useCallback((cb: () => void) => {
+  const backToHistoryRef = useRef<(() => boolean) | null>(null);
+  const handleRegisterBack = useCallback((cb: () => boolean) => {
     backToHistoryRef.current = cb;
   }, []);
 
   const nav = useNavigate();
   const handleBack = useCallback(() => {
-    if (activeSection === "ai-extract" && backToHistoryRef.current) {
-      backToHistoryRef.current();
-    } else {
-      nav("/home");
+    if (activeSection === "ai-extract") {
+      const handledInternally = backToHistoryRef.current?.() ?? false;
+      if (handledInternally) {
+        return;
+      }
     }
+
+    nav("/home");
   }, [activeSection, nav]);
 
   // React to navigation state changes (e.g. Edit button from Production Queue)
