@@ -2,17 +2,31 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-function invoke(action: string, params: Record<string, unknown> = {}) {
-  return supabase.functions.invoke("semrush-api", { body: { action, ...params } });
-}
-
-/** Parse edge function response — detect NO_UNITS gracefully */
-function handleResponse(res: { data: any; error: any }) {
-  if (res.error) throw res.error;
-  // Edge function may return 402 with code: NO_UNITS
+async function invoke(action: string, params: Record<string, unknown> = {}) {
+  const res = await supabase.functions.invoke("semrush-api", { body: { action, ...params } });
+  // Supabase client wraps non-2xx as error — but the body may still contain structured JSON
+  // For 402 NO_UNITS, the error object contains the context we need
+  if (res.error) {
+    // Try to parse the error context for NO_UNITS code
+    const errMsg = res.error?.message || String(res.error);
+    if (errMsg.includes("units exhausted") || errMsg.includes("NO_UNITS")) {
+      throw new Error("SEMrush API units exhausted. Top up at semrush.com or wait for monthly reset.");
+    }
+    // Also check if data came through despite the error (some versions pass it)
+    if (res.data?.code === "NO_UNITS") {
+      throw new Error(res.data.error || "SEMrush API units exhausted.");
+    }
+    throw new Error(errMsg);
+  }
   if (res.data?.code === "NO_UNITS") {
     throw new Error(res.data.error || "SEMrush API units exhausted.");
   }
+  if (res.data?.error) throw new Error(res.data.error);
+  return res;
+}
+
+/** Parse edge function response */
+function handleResponse(res: { data: any; error: any }) {
   if (res.data?.error) throw new Error(res.data.error);
   return res.data;
 }
