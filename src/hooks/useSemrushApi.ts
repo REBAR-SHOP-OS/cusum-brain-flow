@@ -6,20 +6,31 @@ async function invoke(action: string, params: Record<string, unknown> = {}) {
   const res = await supabase.functions.invoke("semrush-api", { body: { action, ...params } });
 
   if (res.error) {
-    // Supabase JS wraps non-2xx in FunctionsHttpError — the JSON body is in res.data (or error.context)
-    // For 402 NO_UNITS the edge function returns { code: "NO_UNITS", error: "..." }
-    // res.data may still be populated even when res.error is set
+    // Supabase JS v2 FunctionsHttpError: res.data contains the parsed JSON body
+    // even on non-2xx responses. Check it first for structured error codes.
     const body = res.data as Record<string, unknown> | null;
     if (body?.code === "NO_UNITS") {
       throw new Error(String(body.error || "SEMrush API units exhausted. Top up or wait for monthly reset."));
     }
-    // Try to read the response body from the error context (FunctionsHttpError)
+    if (body?.error) {
+      throw new Error(String(body.error));
+    }
+
+    // Fallback: try reading from the error's context Response
     try {
-      const ctx = await (res.error as any)?.context?.json?.();
-      if (ctx?.code === "NO_UNITS") {
-        throw new Error(String(ctx.error || "SEMrush API units exhausted."));
+      const errAny = res.error as any;
+      if (errAny?.context instanceof Response) {
+        const ctx = await errAny.context.json();
+        if (ctx?.code === "NO_UNITS") {
+          throw new Error(String(ctx.error || "SEMrush API units exhausted."));
+        }
+        if (ctx?.error) throw new Error(String(ctx.error));
       }
-    } catch { /* context not available or not json */ }
+    } catch (parseErr) {
+      // If inner throw, re-throw it; otherwise ignore parse failures
+      if (parseErr instanceof Error && parseErr.message.includes("units exhausted")) throw parseErr;
+      if (parseErr instanceof Error && !parseErr.message.includes("JSON")) throw parseErr;
+    }
 
     throw new Error(res.error?.message || String(res.error));
   }
