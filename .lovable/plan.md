@@ -1,56 +1,107 @@
 
+## Root cause confirmed
 
-## Plan: Fix Imperial Dimension Display in UI
+I checked the live extraction data for your latest Office session (`63 Old Forest Hill`) and the problem is real in the database, not just the UI:
 
-### Problem
-The UI shows raw numbers (`8`, `6`, `1`) instead of formatted imperial values (`8'-9 ¼"`, `6"`, `1'-4"`) because:
+- `total_length_mm` is being saved as `8`, `7`, `5`
+- `dim_a / dim_b / dim_c` are being saved as `6`, `4`, `1`
+- `source_dims_json` is `null`
+- `raw_dims_json` is also `null`
 
-1. **Line 305 / 274 short-circuit**: `displayDim()` and `displayLength()` return `String(mmVal)` for sessions not yet at "mapped" status — bypassing all formatting logic
-2. **`source_dims_json` may be null**: Even when `overlaySheetDims` should work, if it fails silently, the source text path is skipped
-3. **Old data stores inches as mm**: Data extracted before the conversion fix has raw inch values (6, 8) in `dim_a`, `total_length_mm` instead of mm (152, 203)
+So the table is receiving small source-unit numbers instead of real millimeter values.
 
-### Root Cause
-The `displayDim` and `displayLength` functions have a guard at lines 305/274 that says: "if session status is not mapped/validated/approved, just return the raw number." This was meant to show unprocessed data as-is, but it breaks imperial display because raw numbers mean nothing without unit formatting.
+That is why the UI shows values like `0¼"` and `0⅛"`:
+- the formatter assumes `6` means `6 mm`
+- `6 mm` converted to imperial becomes about `0.24 in`
+- so the UI renders near-zero imperial output
 
-### Changes
+## Actual root cause
 
-#### File 1: `src/components/office/AIExtractView.tsx`
+This is a 2-part extraction failure:
 
-**Fix A: Remove the status-based raw-number guard for imperial display**
+1. `overlaySheetDims()` is not capturing the exact source dimension cells for this `.xls` format  
+   - so `source_dims_json` never gets populated
+   - the UI loses the exact visible text from the source sheet
 
-Replace lines 304-305 in `displayDim()`:
-```typescript
-if (mmVal == null) return "";
-// REMOVED: no longer short-circuit to String(mmVal) for non-mapped sessions
-```
+2. the extraction pipeline is still letting raw imperial numbers like `6`, `8`, `4`, `1` reach the DB length/dimension mm fields  
+   - so the fallback formatter receives incorrect stored values
+   - even when the session unit is `imperial`, the saved row data is still not normalized safely
 
-Replace lines 273-274 in `displayLength()`:
-```typescript
-if (mmVal == null) return "—";
-// REMOVED: no longer short-circuit to String(mmVal) for non-mapped sessions
-```
+There is also a structural weakness in the UI:
+- when source text is missing, it blindly trusts `dim_*` and `total_length_mm`
+- so if extraction ever slips again, the UI breaks again
 
-Both functions should ALWAYS go through the formatting pipeline regardless of session status, so imperial values get proper ft-in formatting.
+## Implementation plan
 
-**Fix B: Ensure `formatLengthByMode` is always the final fallback**
+### 1) Harden spreadsheet extraction at the source
+Update `supabase/functions/extract-manifest/index.ts` so spreadsheet extraction becomes deterministic for this `.xls` format:
 
-The existing fallback at line 322 (`formatLengthByMode(mmVal, du)`) already handles this correctly — it converts mm to `6"`, `8'-9 ¼"`, etc. We just need to remove the guard that prevents it from being reached.
+- expand header matching in `overlaySheetDims()` so it recognizes headers with unit suffixes, not only plain `A`, `B`, `C`
+- use formatted cell text first, not raw numeric cell values, when reading dimensions and length
+- parse from the exact visible spreadsheet text whenever possible
+- populate:
+  - `source_total_length_text`
+  - `source_dims_json`
+  - raw source-unit values for:
+    - `raw_total_length_mm`
+    - `raw_dims_json`
+- convert source-unit values to true mm before insert into:
+  - `total_length_mm`
+  - `dim_a...dim_r`
 
-#### File 2: `supabase/functions/extract-manifest/index.ts`
+### 2) Add a validation guard before saving rows
+In the same extraction function, add a deterministic sanity check:
 
-**Fix C: Add logging to `overlaySheetDims` to debug why `source_dims_json` is null**
+- if session unit is imperial/inch-based
+- and stored mm fields are suspiciously tiny while source/unit evidence says imperial
+- do not silently save bad values as final normalized data
 
-Add console.log before and after the function processes each row to confirm it's running correctly for this file format. This ensures future extractions always populate `source_dims_json`.
+This prevents future regressions from AI output, `.xls` quirks, or header mismatches.
 
-### Re-extraction Required
-The user's current data was extracted before the mm conversion fix. After deploying these changes, re-extracting the file will:
-- Store correct mm values (6" → 152mm)
-- Populate `source_dims_json` with `{"A": "6\"", "C": "6'-3 ¼\"", ...}`
-- Display exactly like the source Excel
+### 3) Add a defensive UI fallback
+Update `src/components/office/AIExtractView.tsx` so the table does not collapse into near-zero values if extraction data is incomplete:
 
-### Result
-- Dimensions show `6"`, `6'-3 ¼"`, `4'-8 ½"`, `1'-6"` — matching the source Excel exactly
-- Length shows `8'-9 ¼"`, `7'-2 ½"`, `5'-11"` — matching the source Excel exactly
-- Works for all session statuses (raw, mapped, validated, approved)
-- No changes to metric display — unaffected
+- if source unit is imperial
+- and source text/raw source values are missing
+- and the stored numeric values look like unnormalized source-unit numbers
+- format them as source-unit values instead of treating them as mm
 
+This is not the main fix; it is a safety net so the UI stays stable even if extraction misses a case again.
+
+### 4) Keep source-faithful rendering as highest priority
+Preserve this display order:
+
+1. exact source text from `source_dims_json` / `source_total_length_text`
+2. raw source-unit values from `raw_dims_json` / `raw_total_length_mm`
+3. converted mm fallback only if normalized data is truly valid
+
+That makes the UI match the source sheet as closely as possible.
+
+## Files to update
+
+- `supabase/functions/extract-manifest/index.ts`
+- `src/components/office/AIExtractView.tsx`
+
+## What this will fix
+
+After implementation:
+
+- values like `6`, `4`, `1`, `8` will no longer be treated as millimeters
+- dimensions will display like the source sheet instead of near-zero imperial values
+- the exact ft/in/fraction text will be preserved when available
+- this section of the UI will stop breaking when a spreadsheet format changes slightly
+
+## Validation after implementation
+
+I will verify these exact cases:
+
+1. upload the same `.xls` file again
+2. confirm DB rows store real mm values, not `8/6/4/1`
+3. confirm `source_dims_json` is populated
+4. confirm extracted table shows full imperial values instead of `0¼"`/`0⅛"`
+5. confirm mapping/approval still work without double conversion
+6. re-check the same rows end-to-end in the Office UI
+
+## Important note
+
+Your current extracted session is already saved with bad values, so after the fix the affected file/session must be re-extracted to fully correct the displayed data.
