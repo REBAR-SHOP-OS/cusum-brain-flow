@@ -13,6 +13,7 @@ const ALLOWED_ACTIONS = [
   "wp_update_product_content",
   "wp_create_post",
   "wp_update_slug",
+  "trigger_gsc_sync",
 ];
 
 // ─── AI-powered content generation ───
@@ -101,9 +102,10 @@ Tasks you CAN auto-execute (can_execute=true):
 - Title optimization with keywords → wp_update_title + wp_update_meta
 - Content expansion/optimization → wp_update_content
 - Product page SEO improvements → wp_update_product_meta + wp_update_product_content
+- Pulling/syncing keyword performance data from Google Search Console (impressions, clicks, CTR, positions) → trigger_gsc_sync
 
 Tasks you CANNOT auto-execute (need human):
-- Google Search Console verification
+- Initial Google Search Console domain verification (adding DNS TXT record)
 - DNS/domain changes
 - Google Analytics setup
 - Plugin installation/configuration (but you CAN work with existing Yoast fields)
@@ -228,10 +230,40 @@ async function resolveEntity(wp: WPClient, target: string): Promise<{ entity: an
   return null;
 }
 
-async function executeActions(actions: any[], wp: WPClient, task: any): Promise<string[]> {
+async function executeActions(actions: any[], wp: WPClient, task: any, sb?: any): Promise<string[]> {
   const results: string[] = [];
 
   for (const action of actions) {
+    // Handle GSC sync separately — doesn't need WP
+    if (action.type === "trigger_gsc_sync") {
+      try {
+        const domainId = task.domain_id;
+        if (!domainId) {
+          results.push("FAILED: No domain_id on task for GSC sync");
+          continue;
+        }
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const gscRes = await fetch(`${supabaseUrl}/functions/v1/seo-gsc-sync`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${serviceKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ domain_id: domainId, days: 28 }),
+        });
+        const gscData = await gscRes.json();
+        if (!gscRes.ok) {
+          results.push(`GSC sync error: ${gscData.error || gscRes.status}`);
+        } else {
+          results.push(`GSC sync complete: ${gscData.rows_processed || 0} rows, ${gscData.rank_entries_upserted || 0} upserted, ${gscData.new_keywords_created || 0} new keywords`);
+        }
+      } catch (e) {
+        results.push(`GSC sync failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      continue;
+    }
+
     if (!ALLOWED_ACTIONS.includes(action.type)) {
       results.push(`SKIPPED: Unknown action type "${action.type}"`);
       continue;
@@ -464,19 +496,21 @@ Deno.serve((req) =>
 
     // Phase: execute
     if (phase === "execute") {
-      if (!wp) {
-        return new Response(
-          JSON.stringify({ error: "WordPress connection not available" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       const plan = await analyzeTask(task, wp);
 
       if (!plan.can_execute || !plan.actions?.length) {
         return new Response(
           JSON.stringify({ error: "Task cannot be auto-executed", human_steps: plan.human_steps }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Check if all actions are GSC-only (don't need WP)
+      const needsWp = plan.actions.some((a: any) => a.type !== "trigger_gsc_sync");
+      if (needsWp && !wp) {
+        return new Response(
+          JSON.stringify({ error: "WordPress connection not available" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -489,7 +523,7 @@ Deno.serve((req) =>
         }
       }
 
-      const results = await executeActions(plan.actions, wp, task);
+      const results = await executeActions(plan.actions, wp!, task, sb);
 
       const executionLog = {
         plan_summary: plan.plan_summary,
