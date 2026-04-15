@@ -262,6 +262,7 @@ async function executeActions(actions: any[], wp: WPClient, task: any, sb?: any)
         results.push(`GSC sync failed: ${e instanceof Error ? e.message : String(e)}`);
       }
       continue;
+    }
 
     if (!ALLOWED_ACTIONS.includes(action.type)) {
       results.push(`SKIPPED: Unknown action type "${action.type}"`);
