@@ -1,5 +1,3 @@
-import type { PostgrestFilterBuilder } from "@supabase/postgrest-js";
-
 const PAGE_SIZE = 1000;
 
 /**
@@ -7,7 +5,7 @@ const PAGE_SIZE = 1000;
  * Overcomes the PostgREST server-side row limit.
  */
 export async function fetchAllRows<T = any>(
-  buildQuery: () => PostgrestFilterBuilder<any, any, any>
+  buildQuery: () => { range: (from: number, to: number) => Promise<{ data: T[] | null; error: any }> }
 ): Promise<T[]> {
   let all: T[] = [];
   let page = 0;
