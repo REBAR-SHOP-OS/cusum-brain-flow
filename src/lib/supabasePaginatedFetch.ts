@@ -4,8 +4,9 @@ const PAGE_SIZE = 1000;
  * Fetches all rows from a Supabase query by paginating in batches of 1000.
  * Overcomes the PostgREST server-side row limit.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function fetchAllRows<T = any>(
-  buildQuery: () => { range: (from: number, to: number) => Promise<{ data: T[] | null; error: any }> }
+  buildQuery: () => any
 ): Promise<T[]> {
   let all: T[] = [];
   let page = 0;
