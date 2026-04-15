@@ -1,26 +1,26 @@
 
 
-## Plan: Fix Content Area Clipping
+## Plan: Fix SEO Copilot Boot Crash (Duplicate Import)
 
 ### Problem
-Line 1039 in `AIExtractView.tsx` sets `max-w-[100vw]` on the content wrapper. Since `100vw` is the full browser width (including the ~200px sidebar), the content area extends ~200px beyond its actual available space, cutting off the right edge of cards and table columns.
+The `seo-ai-copilot` edge function crashes on boot with:
+```
+Uncaught SyntaxError: Identifier 'WPClient' has already been declared at line 5
+```
+
+### Root cause
+Line 4 and line 5 are identical:
+```typescript
+import { WPClient } from "../_shared/wpClient.ts";
+import { WPClient } from "../_shared/wpClient.ts";  // ← duplicate
+```
 
 ### Fix
 
-**File: `src/components/office/AIExtractView.tsx`** — Line 1039
+**File: `supabase/functions/seo-ai-copilot/index.ts`** — Delete line 5
 
-Replace:
-```tsx
-<div className="p-6 space-y-6 w-full max-w-[100vw] overflow-x-auto min-w-0">
-```
-
-With:
-```tsx
-<div className="p-6 space-y-6 w-full overflow-x-auto min-w-0">
-```
-
-Simply remove `max-w-[100vw]`. The parent flex layout already constrains the width correctly via `flex-1 min-w-0` on the `<main>` element. No `max-w` override is needed.
+Remove the duplicate import. One line change.
 
 ### Result
-Summary cards and all content will fit within the visible area without being clipped on the right.
+Function boots → SEO Copilot responds to questions instead of "Error: Failed to fetch".
 
