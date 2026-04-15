@@ -2,7 +2,6 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { callAIStream, callAI, AIError } from "../_shared/aiRouter.ts";
 import { WPClient } from "../_shared/wpClient.ts";
-import { WPClient } from "../_shared/wpClient.ts";
 
 // ─── WordPress Tool Definitions ───
 const wpTools = [
