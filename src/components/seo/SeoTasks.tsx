@@ -65,17 +65,31 @@ export function SeoTasks() {
     },
   });
 
-  const { data: tasks, isLoading } = useQuery({
+  const { data: tasks, isLoading, error: tasksError } = useQuery({
     queryKey: ["seo-tasks"],
     queryFn: async () => {
-      return await fetchAllRows(() =>
-        supabase
+      try {
+        return await fetchAllRows(() =>
+          supabase
+            .from("seo_tasks")
+            .select("*")
+            .order("created_at", { ascending: false })
+        );
+      } catch (e) {
+        console.error("[SeoTasks] fetchAllRows failed, falling back to direct query:", e);
+        const { data, error } = await supabase
           .from("seo_tasks")
           .select("*")
-          .order("created_at", { ascending: false })
-      );
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return data || [];
+      }
     },
   });
+
+  if (tasksError) {
+    console.error("[SeoTasks] query error:", tasksError);
+  }
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {

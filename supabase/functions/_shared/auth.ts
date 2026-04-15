@@ -42,11 +42,22 @@ export async function requireAuth(req: Request): Promise<AuthResult> {
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+  const token = authHeader.replace("Bearer ", "");
+
+  // Allow internal function-to-function calls using the service role key
+  if (token === serviceKey) {
+    const serviceClient = createClient(supabaseUrl, serviceKey);
+    return {
+      userId: "service_role",
+      userClient: serviceClient,
+      serviceClient,
+    };
+  }
+
   const userClient = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const token = authHeader.replace("Bearer ", "");
   const { data, error: claimsError } = await userClient.auth.getClaims(token);
 
   if (claimsError || !data?.claims?.sub) {
