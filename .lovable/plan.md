@@ -1,68 +1,56 @@
 
 
-## Plan: Fix Imperial Unit Extraction and Display — Root Cause
+## Plan: Fix Imperial Dimension Display in UI
 
 ### Problem
-When an imperial (ft-in) barlist is uploaded, the extracted data is fundamentally broken:
-- `source_dims_json` is **null** — the `overlaySheetDims` function fails silently
-- `dim_a`, `dim_b`, etc. store **raw inch values** (e.g., `6` for `6"`) instead of mm
-- `total_length_mm` stores **raw inches** (e.g., `8` for `8'-9¼"`) instead of mm
-- Result: the UI shows `6` instead of `6"`, and `8` instead of `8'-9 ¼"`
+The UI shows raw numbers (`8`, `6`, `1`) instead of formatted imperial values (`8'-9 ¼"`, `6"`, `1'-4"`) because:
 
-### Root Causes
+1. **Line 305 / 274 short-circuit**: `displayDim()` and `displayLength()` return `String(mmVal)` for sessions not yet at "mapped" status — bypassing all formatting logic
+2. **`source_dims_json` may be null**: Even when `overlaySheetDims` should work, if it fails silently, the source text path is skipped
+3. **Old data stores inches as mm**: Data extracted before the conversion fix has raw inch values (6, 8) in `dim_a`, `total_length_mm` instead of mm (152, 203)
 
-**1. `parseDimension()` returns inches, not mm** (extract-manifest/index.ts line 42-78)
-- `6"` → returns `6` (inches)
-- `1'-4"` → returns `16` (inches)
-- These are stored directly into `dim_a`, `dim_b`, etc. and `total_length_mm` — all meant to be mm
-- Fix: When `detectedUnitSystem === "imperial"`, multiply parsed dimension values by 25.4 to convert inches→mm before storing
-
-**2. `overlaySheetDims()` fails silently** → `source_dims_json` stays null
-- Need to add logging and investigate why it's failing for this file format
-- Even if it succeeds, the display path still needs the mm values to be correct for cross-unit conversion
-
-**3. `displayDim()` fallback shows raw numbers** (AIExtractView.tsx line 289-323)
-- When `source_dims_json` is null, it falls back to `formatLengthByMode(mmVal, "imperial")` 
-- But `mmVal` is actually inches (6) not mm (152.4), so the formatting is wrong
-- Fix is upstream in the extraction, but display should also handle the case where source_dims_json exists
+### Root Cause
+The `displayDim` and `displayLength` functions have a guard at lines 305/274 that says: "if session status is not mapped/validated/approved, just return the raw number." This was meant to show unprocessed data as-is, but it breaks imperial display because raw numbers mean nothing without unit formatting.
 
 ### Changes
 
-#### File 1: `supabase/functions/extract-manifest/index.ts`
+#### File 1: `src/components/office/AIExtractView.tsx`
 
-**Fix A: Convert parsed imperial dimensions from inches to mm before storing**
+**Fix A: Remove the status-based raw-number guard for imperial display**
 
-In the row-building section (lines 587-626), when `detectedUnitSystem === "imperial"`:
-- Wrap `safeDim()` calls with `× 25.4` conversion for all dim columns
-- Wrap `total_length_mm` with `× 25.4` conversion
-- This ensures all stored values are truly in mm regardless of source unit
+Replace lines 304-305 in `displayDim()`:
+```typescript
+if (mmVal == null) return "";
+// REMOVED: no longer short-circuit to String(mmVal) for non-mapped sessions
+```
 
-**Fix B: Debug and harden `overlaySheetDims()`**
+Replace lines 273-274 in `displayLength()`:
+```typescript
+if (mmVal == null) return "—";
+// REMOVED: no longer short-circuit to String(mmVal) for non-mapped sessions
+```
 
-- Add more verbose logging to trace why the function returns without processing
-- Ensure `getCellText()` captures the original ft-in text (e.g., `6'-3 ¼"`) into `source_dims_json`
-- If `overlaySheetDims` runs successfully, `source_dims_json` will contain the exact cell text for lossless display
+Both functions should ALWAYS go through the formatting pipeline regardless of session status, so imperial values get proper ft-in formatting.
 
-#### File 2: `src/components/office/AIExtractView.tsx`
+**Fix B: Ensure `formatLengthByMode` is always the final fallback**
 
-**No changes needed** — the `displayDim()` function already correctly:
-1. Shows `source_dims_json` text when available (priority 1)
-2. Falls back to `formatLengthByMode(mmVal, mode)` which will now receive correct mm values
+The existing fallback at line 322 (`formatLengthByMode(mmVal, du)`) already handles this correctly — it converts mm to `6"`, `8'-9 ¼"`, etc. We just need to remove the guard that prevents it from being reached.
 
-### What Stays the Same
-- `parseDimension()` signature — still returns a number
-- `displayDim()` / `displayLength()` logic — already correct once data is right
-- `source_dims_json` schema — still stores `{ A: "6\"", B: "1'-6\"", ... }`
-- All metric extractions — unaffected since mm values pass through unchanged
+#### File 2: `supabase/functions/extract-manifest/index.ts`
 
-### Deployment
-- Redeploy `extract-manifest` edge function
-- Existing sessions with bad data will need re-extraction to fix stored values
+**Fix C: Add logging to `overlaySheetDims` to debug why `source_dims_json` is null**
+
+Add console.log before and after the function processes each row to confirm it's running correctly for this file format. This ensures future extractions always populate `source_dims_json`.
+
+### Re-extraction Required
+The user's current data was extracted before the mm conversion fix. After deploying these changes, re-extracting the file will:
+- Store correct mm values (6" → 152mm)
+- Populate `source_dims_json` with `{"A": "6\"", "C": "6'-3 ¼\"", ...}`
+- Display exactly like the source Excel
 
 ### Result
-After fix:
-- `dim_a` for `6"` source → stored as `152` (mm), displayed as `6"` (from source_dims_json or formatted)
-- `total_length_mm` for `8'-9 ¼"` → stored as `2667` (mm), displayed as `8'-9 ¼"`
-- Column headers correctly show "(ft-in)" unit labels
-- All dimension values match the source Excel exactly
+- Dimensions show `6"`, `6'-3 ¼"`, `4'-8 ½"`, `1'-6"` — matching the source Excel exactly
+- Length shows `8'-9 ¼"`, `7'-2 ½"`, `5'-11"` — matching the source Excel exactly
+- Works for all session statuses (raw, mapped, validated, approved)
+- No changes to metric display — unaffected
 
