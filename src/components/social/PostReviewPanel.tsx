@@ -250,6 +250,7 @@ export function PostReviewPanel({
     }
     setLocalHashtags(post.hashtags?.join(", ") || "");
     setSaveStatus("idle");
+    setAutoTranslating(false);
   }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages, post?.title, post?.content, post?.hashtags]);
 
   // Auto-translate to Persian when missing
@@ -287,7 +288,7 @@ export function PostReviewPanel({
       }
     };
     doTranslate();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; setAutoTranslating(false); };
   }, [post?.id, persianImageText, persianCaptionText, localContent, localTitle]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
