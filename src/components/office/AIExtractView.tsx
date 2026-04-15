@@ -2246,7 +2246,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
                   </div>
                 </div>
               )}
-              <div className="h-[55vh] overflow-auto min-w-0 w-full" style={{ maxWidth: '100%' }}>
+              <div className="h-[55vh] overflow-x-scroll overflow-y-auto min-w-0 w-full extract-table-scroll" style={{ maxWidth: '100%' }}>
                 <div className="min-w-[1400px]">
                   <Table>
                     <TableHeader>
