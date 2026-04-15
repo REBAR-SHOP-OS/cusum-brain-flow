@@ -157,10 +157,11 @@ function overlaySheetDims(workbook: any, items: any[]): { items: any[], headersI
       // Overlay total_length from spreadsheet if found
       if (colMap["__LENGTH__"] != null) {
         const raw = row[colMap["__LENGTH__"]];
-        // Save exact formatted source text (preserves ft-in like 8'-9 ¼")
         const cellText = getCellText(sheetRow, colMap["__LENGTH__"]);
         it.__source_length = cellText ?? (raw != null ? String(raw).trim() : null);
-        const parsed = raw != null ? parseDimension(raw) : null;
+        // Parse from formatted text first (preserves ft-in like 8'-9 ¼")
+        const parseSource = cellText ?? (raw != null ? String(raw) : null);
+        const parsed = parseSource != null ? parseDimension(parseSource) : null;
         if (parsed != null) it.total_length = parsed;
       }
       it.I = null;
