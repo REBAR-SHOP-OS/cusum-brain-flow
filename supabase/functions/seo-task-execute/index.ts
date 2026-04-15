@@ -102,9 +102,10 @@ Tasks you CAN auto-execute (can_execute=true):
 - Title optimization with keywords → wp_update_title + wp_update_meta
 - Content expansion/optimization → wp_update_content
 - Product page SEO improvements → wp_update_product_meta + wp_update_product_content
+- Pulling/syncing keyword performance data from Google Search Console (impressions, clicks, CTR, positions) → trigger_gsc_sync
 
 Tasks you CANNOT auto-execute (need human):
-- Google Search Console verification
+- Initial Google Search Console domain verification (adding DNS TXT record)
 - DNS/domain changes
 - Google Analytics setup
 - Plugin installation/configuration (but you CAN work with existing Yoast fields)
