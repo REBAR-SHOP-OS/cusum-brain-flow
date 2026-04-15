@@ -1,47 +1,51 @@
 
 
-## Plan: Fix SEMrush Column Mapping + Add Missing Columns
+## Plan: Fix `extract-manifest` Boot Crash (Deno Import Error)
+
+### Problem
+The `extract-manifest` edge function returns **503** on every call because it fails to boot. The error:
+
+```
+Uncaught SyntaxError: The requested module 'https://deno.land/std@0.190.0/encoding/base64.ts' does not provide an export named 'encode'
+```
 
 ### Root cause
-The `semrush-api` edge function references ~14 columns that don't exist in the database. Every upsert silently fails. SEMrush charges API units but zero data is saved.
+Line 2 of `supabase/functions/extract-manifest/index.ts` imports `{ encode as base64Encode }` from `https://deno.land/std@0.190.0/encoding/base64.ts`. That module's export was renamed/removed in the Deno standard library. The function crashes before any handler code runs.
 
-### Changes
+### Fix
 
-#### Step 1: Database Migration — Add missing columns
+**File: `supabase/functions/extract-manifest/index.ts`** — Line 2
 
-**`seo_domains`** — add:
-- `semrush_authority_score` (integer)
-- `semrush_organic_keywords` (integer)
-- `semrush_organic_traffic` (integer)
-- `semrush_organic_cost` (numeric)
-- `last_semrush_sync` (timestamptz)
+Replace:
+```typescript
+import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
+```
 
-**`seo_keyword_ai`** — add:
-- `cpc` (numeric)
-- `competition` (numeric)
-- `traffic_pct` (numeric)
-- `traffic_cost` (numeric)
-- `results_count` (bigint)
-- `keyword_difficulty` (numeric)
-- `last_synced_at` (timestamptz)
+With the native Deno `btoa` + `Uint8Array` approach (no external dependency):
+```typescript
+// Use built-in btoa for base64 encoding — no external import needed
+```
 
-#### Step 2: Fix column name mismatches in edge function
+Then replace any usage of `base64Encode(bytes)` in the file with the built-in equivalent:
+```typescript
+const base64 = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+```
 
-In `supabase/functions/semrush-api/index.ts`:
-- `search_volume` → `volume` (seo_keyword_ai already has `volume`)
-- `url` → `top_page` (seo_keyword_ai already has `top_page`)
+Or if the byte arrays are large (to avoid stack overflow), use the same chunked approach already used in `ai-document-import`:
+```typescript
+let binary = "";
+const chunk = 8192;
+for (let i = 0; i < bytes.length; i += chunk) {
+  binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+}
+const base64 = btoa(binary);
+```
 
-These two fields exist but under different names. The edge function must use the correct column names.
-
-#### Step 3: Redeploy edge function
-
-After fixing the column references, redeploy so the next sync actually saves data.
+### Scope
+- Remove the broken import on line 2
+- Find all usages of `base64Encode` in the file and replace with native `btoa`
+- Redeploy the function
 
 ### Expected result
-- All SEMrush API calls will correctly persist data to the database
-- No more wasted API units on silent failures
-- Next fullExport will populate keywords, pages, backlinks, competitors, and rank history
-
-### Cost note
-The 4,000 units consumed today are lost — SEMrush doesn't refund. After this fix, re-running the sync will use another ~4,000 units but this time the data will actually be saved.
+`extract-manifest` boots successfully → barlist XLS files can be processed again.
 
