@@ -274,7 +274,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
 
     // Defensive fallback: if imperial session and values look like unnormalized source-unit numbers
     // (suspiciously small for mm), treat them as inches instead of mm
-    const isImperialSession = srcUnit === "imperial" || srcUnit === "in" || srcUnit === "ft-in";
+    const isImperialSession = srcUnit === "imperial" || srcUnit === "in" || (srcUnit as string) === "ft-in";
     if (isImperialSession && mmVal < 50 && !row.source_total_length_text && !row.raw_total_length_mm) {
       // Value is likely raw inches, not mm — format as inches directly
       return formatLengthByMode(Math.round(mmVal * 25.4), du) || "—";
