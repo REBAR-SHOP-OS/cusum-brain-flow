@@ -20,6 +20,18 @@ export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function Inte
   const { messages, isStreaming, sendMessage, clearChat, cancelStream, deleteMessage } = useAdminChat();
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const { speakText } = useVizzyAutoSpeak();
+  const lastSpokenIdRef = useRef<string | null>(null);
+
+  // Auto-speak: trigger TTS when streaming finishes and last message is assistant
+  useEffect(() => {
+    if (isStreaming) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    if (last.id === lastSpokenIdRef.current) return;
+    lastSpokenIdRef.current = last.id;
+    speakText(last.content);
+  }, [messages, isStreaming, speakText]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
