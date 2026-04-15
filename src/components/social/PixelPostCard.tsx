@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { CheckCircle2, RefreshCw, ZoomIn, Languages, Pencil } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { CheckCircle2, RefreshCw, ZoomIn, Languages, Pencil, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ImageEditDialog } from "./ImageEditDialog";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 export interface PixelPostData {
   id: string;
