@@ -554,7 +554,9 @@ export default function AgentWorkspace() {
       let persianBlock = "";
       if (persianIdx !== -1) {
         persianBlock = rawCaption.slice(persianIdx);
-      } else if (post.imageTextTranslation || post.captionTranslation) {
+      }
+      // Always prefer the enriched translations from the card (latest auto-translate)
+      if (post.captionTranslation || post.imageTextTranslation) {
         persianBlock = "---PERSIAN---\n🖼️ متن روی عکس: " + (post.imageTextTranslation || "") + "\n📝 ترجمه کپشن: " + (post.captionTranslation || "");
       }
       if (persianIdx !== -1) rawCaption = rawCaption.slice(0, persianIdx);
