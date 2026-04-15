@@ -310,6 +310,12 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
 
     if (mmVal == null) return "";
 
+    // Defensive fallback: if imperial session and value looks unnormalized (too small for mm)
+    const isImperialSession = srcUnit === "imperial" || srcUnit === "in" || (srcUnit as string) === "ft-in";
+    if (isImperialSession && mmVal < 50 && !row.source_dims_json && !row.raw_dims_json) {
+      return formatLengthByMode(Math.round(mmVal * 25.4), du);
+    }
+
     // Same unit, raw available
     if (du === srcUnit && row.raw_dims_json != null) {
       const rawVal = row.raw_dims_json[dimKey];
