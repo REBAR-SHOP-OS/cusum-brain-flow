@@ -21,6 +21,34 @@ const VISUAL_STYLES_POOL = [
 
 const PIXEL_CONTACT_INFO = `\n\n📍 9 Cedar Ave, Thornhill, Ontario\n📞 647-260-9403\n🌐 www.rebar.shop`;
 
+// ─── Curated construction-industry hashtag pool ───
+const HASHTAG_POOL = {
+  core: ["#rebar", "#rebarshop", "#steelreinforcement", "#reinforcedconcrete", "#construction", "#constructionlife", "#constructionindustry", "#buildingmaterials", "#constructionproject", "#rebarinstallation"],
+  b2b: ["#generalcontractor", "#constructionbusiness", "#builderlife", "#commercialconstruction", "#contractorsofinstagram", "#constructioncompany", "#projectmanagement", "#infrastructure", "#civilengineering", "#sitework"],
+  viral: ["#reelsinstagram", "#constructionreels", "#viralreels", "#explorepage", "#instareels", "#trendingreels", "#reelvideo", "#videooftheday", "#viralcontent"],
+  location: ["#toronto", "#torontoconstruction", "#torontobuilder", "#canada", "#canadaconstruction", "#ontarioconstruction", "#vaughanconstruction", "#richmondhillconstruction", "#gtaconstruction"],
+  content: ["#constructionwork", "#worksite", "#jobsite", "#constructionworkers", "#heavyequipment", "#timelapseconstruction", "#beforeandafter", "#buildingprocess", "#steelwork"],
+  niche: ["#rebarcage", "#rebarfabrication", "#rebarwork", "#structuralsteel", "#steelbars", "#concretereinforcement", "#formwork", "#barbending", "#constructiondetail"],
+};
+
+function generateHashtags(count = 15): string[] {
+  const categories = Object.values(HASHTAG_POOL);
+  const picked = new Set<string>();
+  // First pass: pick at least 2 from each category
+  for (const cat of categories) {
+    const shuffled = [...cat].sort(() => Math.random() - 0.5);
+    for (const tag of shuffled.slice(0, 2)) picked.add(tag);
+    if (picked.size >= count) break;
+  }
+  // Second pass: fill remaining from all categories
+  const allTags = categories.flat().sort(() => Math.random() - 0.5);
+  for (const tag of allTags) {
+    if (picked.size >= count) break;
+    picked.add(tag);
+  }
+  return [...picked].slice(0, count);
+}
+
 // ─── Helpers (same as Pixel agent) ───
 
 function extractImageFromAIResponse(aiData: any): string | null {
