@@ -12946,10 +12946,15 @@ export type Database = {
           ga_property_id: string | null
           gsc_verified: boolean
           id: string
+          last_semrush_sync: string | null
           pages_per_visit: number | null
           position_tracking_date: string | null
+          semrush_authority_score: number | null
           semrush_backlinks_json: Json | null
           semrush_competitors_json: Json | null
+          semrush_organic_cost: number | null
+          semrush_organic_keywords: number | null
+          semrush_organic_traffic: number | null
           semrush_rank_history_json: Json | null
           top10_keywords: number | null
           top3_keywords: number | null
@@ -12981,10 +12986,15 @@ export type Database = {
           ga_property_id?: string | null
           gsc_verified?: boolean
           id?: string
+          last_semrush_sync?: string | null
           pages_per_visit?: number | null
           position_tracking_date?: string | null
+          semrush_authority_score?: number | null
           semrush_backlinks_json?: Json | null
           semrush_competitors_json?: Json | null
+          semrush_organic_cost?: number | null
+          semrush_organic_keywords?: number | null
+          semrush_organic_traffic?: number | null
           semrush_rank_history_json?: Json | null
           top10_keywords?: number | null
           top3_keywords?: number | null
@@ -13016,10 +13026,15 @@ export type Database = {
           ga_property_id?: string | null
           gsc_verified?: boolean
           id?: string
+          last_semrush_sync?: string | null
           pages_per_visit?: number | null
           position_tracking_date?: string | null
+          semrush_authority_score?: number | null
           semrush_backlinks_json?: Json | null
           semrush_competitors_json?: Json | null
+          semrush_organic_cost?: number | null
+          semrush_organic_keywords?: number | null
+          semrush_organic_traffic?: number | null
           semrush_rank_history_json?: Json | null
           top10_keywords?: number | null
           top3_keywords?: number | null
@@ -13149,6 +13164,8 @@ export type Database = {
           business_relevance: number | null
           clicks_28d: number | null
           company_id: string
+          competition: number | null
+          cpc: number | null
           created_at: string
           ctr: number | null
           domain_id: string
@@ -13157,14 +13174,19 @@ export type Database = {
           impressions_28d: number | null
           intent: string | null
           keyword: string
+          keyword_difficulty: number | null
           last_analyzed_at: string | null
+          last_synced_at: string | null
           opportunity_score: number | null
+          results_count: number | null
           sample_context: string | null
           source_count: number | null
           sources: string[] | null
           status: string | null
           top_page: string | null
           topic_cluster: string | null
+          traffic_cost: number | null
+          traffic_pct: number | null
           trend_score: number | null
           volume: number | null
           wincher_best_position: number | null
@@ -13184,6 +13206,8 @@ export type Database = {
           business_relevance?: number | null
           clicks_28d?: number | null
           company_id: string
+          competition?: number | null
+          cpc?: number | null
           created_at?: string
           ctr?: number | null
           domain_id: string
@@ -13192,14 +13216,19 @@ export type Database = {
           impressions_28d?: number | null
           intent?: string | null
           keyword: string
+          keyword_difficulty?: number | null
           last_analyzed_at?: string | null
+          last_synced_at?: string | null
           opportunity_score?: number | null
+          results_count?: number | null
           sample_context?: string | null
           source_count?: number | null
           sources?: string[] | null
           status?: string | null
           top_page?: string | null
           topic_cluster?: string | null
+          traffic_cost?: number | null
+          traffic_pct?: number | null
           trend_score?: number | null
           volume?: number | null
           wincher_best_position?: number | null
@@ -13219,6 +13248,8 @@ export type Database = {
           business_relevance?: number | null
           clicks_28d?: number | null
           company_id?: string
+          competition?: number | null
+          cpc?: number | null
           created_at?: string
           ctr?: number | null
           domain_id?: string
@@ -13227,14 +13258,19 @@ export type Database = {
           impressions_28d?: number | null
           intent?: string | null
           keyword?: string
+          keyword_difficulty?: number | null
           last_analyzed_at?: string | null
+          last_synced_at?: string | null
           opportunity_score?: number | null
+          results_count?: number | null
           sample_context?: string | null
           source_count?: number | null
           sources?: string[] | null
           status?: string | null
           top_page?: string | null
           topic_cluster?: string | null
+          traffic_cost?: number | null
+          traffic_pct?: number | null
           trend_score?: number | null
           volume?: number | null
           wincher_best_position?: number | null
