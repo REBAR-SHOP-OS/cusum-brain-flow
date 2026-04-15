@@ -1,23 +1,39 @@
 
 
-## Plan: Fix TTS SSL Issue — Update Secret + Edge Function Path
+## Plan: Auto-Speak for Vizzy Intelligence Panel
 
-### Problem
-The TTS proxy on port 9009 via Tailscale Funnel has an SSL cert validation issue. The proxy's endpoint path is `/tts`, but the edge function currently appends `/v1/tts` to the `TTS_API_URL` secret.
+### What Changes
+Add auto-speak so every Vizzy assistant reply is automatically sent to PersonaPlex TTS and played aloud.
 
-### Changes
+### Implementation
 
-1. **Update secret `TTS_API_URL`** → `https://pc.tail669f65.ts.net:9009`
-   - Keep the base URL clean (no path suffix in the secret)
+**1. Create `src/hooks/useVizzyAutoSpeak.ts`** — a small hook encapsulating the TTS logic:
+- `audioRef` to track the single active `HTMLAudioElement`
+- `speakText(text)` function that POSTs to `${VITE_TTS_API_URL}/v1/tts`, decodes `audio_base64`, creates a blob URL, and plays it
+- Guards: skip empty text, `[UNCLEAR]`, and messages starting with `⚠️` / `❌` / `🚫` / `⏳` (system/error messages)
+- Stops any currently playing audio before starting new playback
+- Cleans up blob URLs on `ended`
 
-2. **Update `vizzy-tts/index.ts`** — change the endpoint path from `/v1/tts` to `/tts`
-   - Line 31: `const endpoint = \`\${ttsUrl}/tts\`;`
-   - This matches the proxy's actual route
+**2. Patch `src/components/layout/IntelligencePanel.tsx`** — minimal addition:
+- Import and call `useVizzyAutoSpeak()`
+- Add a `useEffect` that watches `messages` and `isStreaming`: when streaming ends and the last message is `assistant`, call `speakText(lastMessage.content)`
+- This ensures we speak only the final complete reply, not partial chunks
 
-3. **Redeploy `vizzy-tts`** and run a health check to confirm audio generation works end-to-end
+### Guards Against Overlap / Noise
+- Single `audioRef` — old audio stopped before new plays
+- No speak during streaming (waits for completion)
+- Skip tool/system messages via prefix checks
+- Skip empty or `[UNCLEAR]` content
 
-### What does NOT change
-- `personaplex-voice` and `vizzy-voice-chat` — already working via `BACKEND_URL`
-- Frontend code — unchanged
-- No database changes
+### What Does NOT Change
+- UI, styling, layout — untouched
+- `useAdminChat` hook — untouched
+- Manual playback if it exists elsewhere — preserved
+- No database or edge function changes
+
+### Files
+| File | Action |
+|------|--------|
+| `src/hooks/useVizzyAutoSpeak.ts` | Create |
+| `src/components/layout/IntelligencePanel.tsx` | Add hook + useEffect (≈10 lines) |
 
