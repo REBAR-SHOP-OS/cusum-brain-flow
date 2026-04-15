@@ -543,9 +543,18 @@ Rules:
         });
 
         // Deterministic dimension overlay for spreadsheets — bypass AI for dim columns
+        let headersIndicateImperial = false;
         if (isSpreadsheet && parsedWorkbook && items.length > 0) {
           console.log(`[extract-manifest] Applying deterministic dim overlay for ${items.length} items`);
-          items = overlaySheetDims(parsedWorkbook, items);
+          const overlayResult = overlaySheetDims(parsedWorkbook, items);
+          items = overlayResult.items;
+          headersIndicateImperial = overlayResult.headersImperial;
+        }
+
+        // Header-based unit detection: if column headers say "(FT-IN)", trust that
+        if (headersIndicateImperial && detectedUnitSystem === "mm") {
+          detectedUnitSystem = "imperial";
+          console.log("Detected imperial unit system from spreadsheet column headers (FT-IN)");
         }
         // Note: primary detection already ran above on raw strings
 
