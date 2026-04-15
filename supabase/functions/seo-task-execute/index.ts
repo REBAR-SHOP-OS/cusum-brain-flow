@@ -14,6 +14,10 @@ const ALLOWED_ACTIONS = [
   "wp_create_post",
   "wp_update_slug",
   "trigger_gsc_sync",
+  "trigger_wincher_sync",
+  "trigger_semrush_sync",
+  "trigger_site_crawl",
+  "trigger_link_audit",
 ];
 
 // ─── AI-powered content generation ───
@@ -103,6 +107,10 @@ Tasks you CAN auto-execute (can_execute=true):
 - Content expansion/optimization → wp_update_content
 - Product page SEO improvements → wp_update_product_meta + wp_update_product_content
 - Pulling/syncing keyword performance data from Google Search Console (impressions, clicks, CTR, positions) → trigger_gsc_sync
+- Syncing keyword rank tracking data from Wincher → trigger_wincher_sync
+- Pulling domain overview and competitive data from SEMrush → trigger_semrush_sync
+- Running a technical site crawl for SEO issues (broken links, missing meta, etc.) → trigger_site_crawl
+- Running a backlink/link audit → trigger_link_audit
 
 Tasks you CANNOT auto-execute (need human):
 - Initial Google Search Console domain verification (adding DNS TXT record)
@@ -234,32 +242,55 @@ async function executeActions(actions: any[], wp: WPClient, task: any, sb?: any)
   const results: string[] = [];
 
   for (const action of actions) {
-    // Handle GSC sync separately — doesn't need WP
-    if (action.type === "trigger_gsc_sync") {
+    // Handle sync actions separately — doesn't need WP
+    if (["trigger_gsc_sync", "trigger_wincher_sync", "trigger_semrush_sync", "trigger_site_crawl", "trigger_link_audit"].includes(action.type)) {
       try {
         const domainId = task.domain_id;
         if (!domainId) {
-          results.push("FAILED: No domain_id on task for GSC sync");
+          results.push(`FAILED: No domain_id on task for ${action.type}`);
           continue;
         }
         const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
         const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const gscRes = await fetch(`${supabaseUrl}/functions/v1/seo-gsc-sync`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${serviceKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ domain_id: domainId, days: 28 }),
+        const fnHeaders = { "Authorization": `Bearer ${serviceKey}`, "Content-Type": "application/json" };
+
+        let fnName = "";
+        let fnBody: Record<string, unknown> = {};
+
+        switch (action.type) {
+          case "trigger_gsc_sync":
+            fnName = "seo-gsc-sync";
+            fnBody = { domain_id: domainId, days: 28 };
+            break;
+          case "trigger_wincher_sync":
+            fnName = "wincher-sync";
+            fnBody = { action: "full_export", domain_id: domainId };
+            break;
+          case "trigger_semrush_sync":
+            fnName = "semrush-api";
+            fnBody = { action: "domain_overview", domain_id: domainId };
+            break;
+          case "trigger_site_crawl":
+            fnName = "seo-site-crawl";
+            fnBody = { domain_id: domainId };
+            break;
+          case "trigger_link_audit":
+            fnName = "seo-link-audit";
+            fnBody = { domain_id: domainId, phase: "crawl" };
+            break;
+        }
+
+        const res = await fetch(`${supabaseUrl}/functions/v1/${fnName}`, {
+          method: "POST", headers: fnHeaders, body: JSON.stringify(fnBody),
         });
-        const gscData = await gscRes.json();
-        if (!gscRes.ok) {
-          results.push(`GSC sync error: ${gscData.error || gscRes.status}`);
+        const data = await res.json();
+        if (!res.ok) {
+          results.push(`${action.type} error: ${data.error || res.status}`);
         } else {
-          results.push(`GSC sync complete: ${gscData.rows_processed || 0} rows, ${gscData.rank_entries_upserted || 0} upserted, ${gscData.new_keywords_created || 0} new keywords`);
+          results.push(`${action.type} complete: ${JSON.stringify(data).slice(0, 200)}`);
         }
       } catch (e) {
-        results.push(`GSC sync failed: ${e instanceof Error ? e.message : String(e)}`);
+        results.push(`${action.type} failed: ${e instanceof Error ? e.message : String(e)}`);
       }
       continue;
     }
@@ -506,7 +537,7 @@ Deno.serve((req) =>
       }
 
       // Check if all actions are GSC-only (don't need WP)
-      const needsWp = plan.actions.some((a: any) => a.type !== "trigger_gsc_sync");
+      const needsWp = plan.actions.some((a: any) => !["trigger_gsc_sync", "trigger_wincher_sync", "trigger_semrush_sync", "trigger_site_crawl", "trigger_link_audit"].includes(a.type));
       if (needsWp && !wp) {
         return new Response(
           JSON.stringify({ error: "WordPress connection not available" }),

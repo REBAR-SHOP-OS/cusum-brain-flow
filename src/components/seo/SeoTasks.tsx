@@ -9,7 +9,8 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { ExternalLink, Sparkles, Bot, User, Zap, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ExternalLink, Sparkles, Bot, User, Zap, Loader2, CheckCircle, AlertTriangle, Radar, Wrench } from "lucide-react";
 import { toast } from "sonner";
 
 const columns = ["open", "in_progress", "done"] as const;
@@ -35,6 +36,14 @@ interface AnalyzeResult {
   human_steps?: string;
 }
 
+interface SmartScanResult {
+  sources_synced: string[];
+  analysis: { keywords_analyzed: number; pages_analyzed: number; insights_created: number; tasks_created: number } | null;
+  auto_fixed: number;
+  manual_required: number;
+  auto_fix_details: string[];
+}
+
 export function SeoTasks() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -42,6 +51,18 @@ export function SeoTasks() {
   const [executingTaskId, setExecutingTaskId] = useState<string | null>(null);
   const [analyzeResult, setAnalyzeResult] = useState<AnalyzeResult | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<SmartScanResult | null>(null);
+  const [scanProgress, setScanProgress] = useState(0);
+
+  // Get domain_id
+  const { data: domainData } = useQuery({
+    queryKey: ["seo-domain"],
+    queryFn: async () => {
+      const { data } = await supabase.from("seo_domains").select("id").limit(1).single();
+      return data;
+    },
+  });
 
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["seo-tasks"],
@@ -66,6 +87,39 @@ export function SeoTasks() {
     },
     onError: (e: any) => toast.error(e.message),
   });
+
+  const handleSmartScan = async () => {
+    if (!domainData?.id) {
+      toast.error("No SEO domain configured");
+      return;
+    }
+    setScanning(true);
+    setScanResult(null);
+    setScanProgress(10);
+
+    const progressInterval = setInterval(() => {
+      setScanProgress((p) => Math.min(p + 5, 90));
+    }, 3000);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("seo-smart-scan", {
+        body: { domain_id: domainData.id },
+      });
+      if (error) throw error;
+      setScanResult(data);
+      setScanProgress(100);
+      qc.invalidateQueries({ queryKey: ["seo-tasks"] });
+      qc.invalidateQueries({ queryKey: ["seo-ai-kw-stats"] });
+      qc.invalidateQueries({ queryKey: ["seo-ai-keywords"] });
+      qc.invalidateQueries({ queryKey: ["seo-ai-pages"] });
+      toast.success(`Smart Scan complete! ${data.auto_fixed} auto-fixed, ${data.manual_required} need attention.`);
+    } catch (err: any) {
+      toast.error(err.message || "Smart Scan failed");
+    } finally {
+      clearInterval(progressInterval);
+      setScanning(false);
+    }
+  };
 
   const handleAnalyze = async (taskId: string) => {
     setAnalyzingTaskId(taskId);
@@ -126,10 +180,77 @@ export function SeoTasks() {
 
   return (
     <div className="space-y-6">
-      <div>
-         <h1 className="text-2xl font-bold">SEO Action Items</h1>
-        <p className="text-sm text-muted-foreground">Automated and manual tasks to improve search performance</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">SEO Action Items</h1>
+          <p className="text-sm text-muted-foreground">Automated and manual tasks to improve search performance</p>
+        </div>
+        <Button
+          onClick={handleSmartScan}
+          disabled={scanning}
+          className="gap-2"
+        >
+          {scanning ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Scanning...</>
+          ) : (
+            <><Radar className="w-4 h-4" /> Smart Scan</>
+          )}
+        </Button>
       </div>
+
+      {/* Scan Progress */}
+      {scanning && (
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              Scanning all connected sources, analyzing data, and auto-fixing issues…
+            </div>
+            <Progress value={scanProgress} className="h-2" />
+            <p className="text-xs text-muted-foreground">This may take 1-2 minutes</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Scan Results */}
+      {scanResult && !scanning && (
+        <Card className="border-primary/20">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <CheckCircle className="w-4 h-4 text-green-500" />
+              Smart Scan Complete
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="bg-muted/50 rounded p-2 text-center">
+                <p className="text-lg font-bold">{scanResult.sources_synced.length}</p>
+                <p className="text-xs text-muted-foreground">Sources Synced</p>
+              </div>
+              <div className="bg-muted/50 rounded p-2 text-center">
+                <p className="text-lg font-bold">{scanResult.analysis?.tasks_created || 0}</p>
+                <p className="text-xs text-muted-foreground">Issues Found</p>
+              </div>
+              <div className="bg-green-500/10 rounded p-2 text-center">
+                <p className="text-lg font-bold text-green-600">{scanResult.auto_fixed}</p>
+                <p className="text-xs text-muted-foreground">Auto-Fixed</p>
+              </div>
+              <div className="bg-yellow-500/10 rounded p-2 text-center">
+                <p className="text-lg font-bold text-yellow-600">{scanResult.manual_required}</p>
+                <p className="text-xs text-muted-foreground">Need Attention</p>
+              </div>
+            </div>
+            {scanResult.sources_synced.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {scanResult.sources_synced.map((s) => (
+                  <Badge key={s} variant="outline" className="text-[10px] capitalize">{s.replace("_", " ")}</Badge>
+                ))}
+              </div>
+            )}
+            <Button variant="ghost" size="sm" className="text-xs" onClick={() => setScanResult(null)}>
+              Dismiss
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {isLoading ? (
         <p className="text-muted-foreground">Loading...</p>
@@ -179,6 +300,17 @@ export function SeoTasks() {
                               {task.task_type}
                             </Badge>
                           )}
+                          {/* Auto-fix badge */}
+                          {task.can_autofix === true && task.status !== "done" && (
+                            <Badge className="text-[10px] bg-green-500/10 text-green-600 gap-0.5">
+                              <Wrench className="w-2.5 h-2.5" /> Auto-Fix
+                            </Badge>
+                          )}
+                          {task.can_autofix === false && task.status !== "done" && (
+                            <Badge className="text-[10px] bg-yellow-500/10 text-yellow-600">
+                              Manual
+                            </Badge>
+                          )}
                           <Badge variant="outline" className="text-[10px]">
                             {task.created_by === "ai" ? (
                               <span className="flex items-center gap-0.5"><Bot className="w-2.5 h-2.5" /> AI</span>
@@ -215,6 +347,16 @@ export function SeoTasks() {
                           <div className="bg-green-500/5 rounded p-1.5 border border-green-500/10">
                             <p className="text-[10px] text-green-600 font-medium flex items-center gap-1">
                               <CheckCircle className="w-3 h-3" /> AI Executed
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Human steps for non-autofix done/in_progress tasks */}
+                        {task.execution_log?.human_steps && task.status !== "done" && (
+                          <div className="bg-yellow-500/5 rounded p-2 border border-yellow-500/10">
+                            <p className="text-[10px] text-yellow-600 font-medium mb-1">Steps to fix:</p>
+                            <p className="text-xs text-muted-foreground whitespace-pre-line line-clamp-4">
+                              {task.execution_log.human_steps}
                             </p>
                           </div>
                         )}
