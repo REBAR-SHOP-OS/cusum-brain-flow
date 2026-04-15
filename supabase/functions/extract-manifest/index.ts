@@ -145,10 +145,12 @@ function overlaySheetDims(workbook: any, items: any[]): { items: any[], headersI
       for (const d of DIMS) {
         if (colMap[d] != null) {
           const raw = row[colMap[d]];
-          // Save exact formatted source text (preserves ft-in like 6'-3 ¼")
           const cellText = getCellText(sheetRow, colMap[d]);
           sourceDims[d] = cellText ?? (raw != null ? String(raw).trim() : "");
-          it[d] = raw != null ? (parseDimension(raw) ?? null) : null;
+          // Parse from formatted text first (preserves ft-in like 6'-3 ¼"),
+          // fall back to raw only if text is unavailable
+          const parseSource = cellText ?? (raw != null ? String(raw) : null);
+          it[d] = parseSource != null ? (parseDimension(parseSource) ?? null) : null;
         }
       }
       it.__source_dims = sourceDims;
