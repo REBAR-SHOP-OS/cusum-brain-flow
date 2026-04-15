@@ -1,30 +1,52 @@
 
 
-## Diagnosis: Zahra's Face Recognition Issue
+## Plan: Fix Imperial Fraction Parsing in AI Extraction
 
-### Current State
-- The face recognition pipeline (`face-recognize` edge function) already uses **only** `face_enrollments` as its source of truth — no avatars or other photos are used for matching.
-- Every other enrolled user has exactly 3 active photos each (Behnam, Kourosh, Neel, Radin, Sattar, Saurabh, Tariq, Vicky).
-- **Zahra Zokaei has zero enrollments** — no active, no inactive. She has never been enrolled.
+### Root Cause (Confirmed via Database)
 
-### What Needs to Happen
+The database stores these values for the file `BARLIST R1(R0) COOLONG TOWER FDN.xls`:
 
-**Step 1 — Enroll Zahra (Admin Action, not code)**
-Someone with admin access must open the **Face Memory** panel on the TimeClock page, click "Add Person", select Zahra Zokaei, and capture 3 photos of her face from slightly different angles. This is the only fix needed.
+| Mark | Original Length | Stored `total_length_mm` | Original dim_c | Stored `dim_c` |
+|------|----------------|-------------------------|-----------------|----------------|
+| 10A01 | 8'-9 ¼" | **8** | 6'-3 ¼" | **6** |
+| 10A02 | 7'-2 ½" | **7** | 4'-8 ½" | **4** |
+| 25A01 | 5'-11" | **5** | — | — |
 
-**Step 2 — (Optional) Purge old inactive enrollment rows**
-There are 22 inactive (soft-deleted) enrollment records for Radin (10), Saurabh (6), Sattar (3), and Ai (3). These are harmless (filtered by `is_active = true`) but can be permanently deleted via a migration for cleanliness:
+Additionally, `source_dims_json` and `raw_dims_json` are both **NULL** — so the display cannot fall back to source text.
 
-```sql
-DELETE FROM face_enrollments WHERE is_active = false;
-```
+**The bug is in `parseDimension()` (line 24–55 of `extract-manifest/index.ts`)**:
 
-### No Code Changes Required
-The edge function and UI already enforce the correct behavior:
-- Source of truth = `face_enrollments` table only
-- Photos limited to 3 per person in the AI prompt (line 56)
-- Avatars are only used for display after a match, never for recognition
+1. RebarCAD XLS stores ft-in values with Unicode fraction characters: `8'-9 ¼"`, `6'-3 ¼"`, `7'-2 ½"`
+2. The ft-in regex `^(\d+)\s*[']\s*-?\s*(\d+)\s*[""]?$` **cannot match** because `9 ¼` is not captured by `\d+(\.\d+)?`
+3. Falls through to the plain-number fallback: `parseFloat(s.replace(/[^0-9.\-]/g, ""))` which for `"8'-9 ¼"` strips to `"8-9.25"` → `parseFloat("8-9.25")` = **8** (stops at the dash)
 
-### Action Required from You
-Open the TimeClock page → Face Memory panel → Add Person → Select "Zahra Zokaei" → Capture 3 photos → Done.
+This means **every imperial dimension with fractions is truncated to just the feet number**.
+
+### Fix — Two Changes in One File
+
+**File: `supabase/functions/extract-manifest/index.ts`**
+
+**Change 1: Enhance `parseDimension` to handle fraction characters**
+
+Add a pre-processing step that converts Unicode fractions (¼→.25, ½→.5, ¾→.75, ⅛→.125, ⅜→.375, ⅝→.625, ⅞→.875) into decimal form before regex matching. This makes `8'-9 ¼"` become `8'-9.25"` which the existing ft-in regex can handle.
+
+**Change 2: Fix the fallback `parseFloat` stripping**
+
+The plain-number fallback `parseFloat(s.replace(/[^0-9.\-]/g, ""))` incorrectly strips the `'` separator, producing `"8-9.25"` which `parseFloat` truncates at the dash. After fraction normalization, the ft-in regex should catch these cases, but as a safety net, the fallback should also be improved.
+
+### What This Fixes
+- All imperial dimensions with fractions (¼, ½, ¾, etc.) will be correctly converted to total inches
+- `8'-9 ¼"` → 105.25 inches (stored as 105 after rounding)
+- `6'-3 ¼"` → 75.25 inches (stored as 75)
+- `1'-6"` → 18 inches (already works, no fractions)
+- Source text (`source_dims_json`) capture in `overlaySheetDims` is unaffected — it correctly reads `.w` formatted text. The NULL issue is likely because the AI path ran first and `overlaySheetDims` then overwrote `it[d]` but the `__source_dims` property was correctly set and should flow to the DB.
+
+### Impact
+- Only affects the `parseDimension` function in the edge function
+- No frontend changes needed — once values are stored correctly, the existing ft-in display logic works
+- Existing extractions with correct mm values are unaffected (numbers pass through unchanged)
+- **Existing broken extractions will need re-extraction** to get correct values
+
+### Re-extraction Note
+After deploying, the user should re-extract the affected file to get correct values. Alternatively, a one-time SQL fix could be applied to known affected rows, but re-extraction is cleaner.
 
