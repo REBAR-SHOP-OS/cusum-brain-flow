@@ -124,6 +124,7 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
       return (cell.w != null ? String(cell.w) : String(cell.v)).trim();
     };
 
+    console.log(`[overlaySheetDims] Processing ${items.length} items against ${rows.length} sheet rows`);
     return items.map((it, n) => {
       const row = rows[hIdx + 1 + n] || [];
       const sheetRow = hIdx + 1 + n; // 0-based row in the sheet
@@ -148,6 +149,7 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
         if (parsed != null) it.total_length = parsed;
       }
       it.I = null;
+      if (n < 3) console.log(`[overlaySheetDims] Row ${n}: sourceDims=${JSON.stringify(sourceDims)}, sourceLength=${it.__source_length}`);
       return it;
     });
   } catch (e) {
