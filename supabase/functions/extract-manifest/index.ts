@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
+// base64 encoding uses native btoa — no external import needed
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 import { corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
@@ -363,7 +363,13 @@ Rules:
           const fileResp = await fetch(fileUrl);
           if (!fileResp.ok) throw new Error(`Failed to fetch file: ${fileResp.status}`);
           const fileBytes = new Uint8Array(await fileResp.arrayBuffer());
-          const b64 = base64Encode(fileBytes);
+          // Chunked btoa to avoid stack overflow on large files
+          let binary = "";
+          const chunkSize = 8192;
+          for (let i = 0; i < fileBytes.length; i += chunkSize) {
+            binary += String.fromCharCode(...fileBytes.subarray(i, i + chunkSize));
+          }
+          const b64 = btoa(binary);
           const mimeType = getMimeType(fileName || fileUrl);
           const dataUrl = `data:${mimeType};base64,${b64}`;
 
