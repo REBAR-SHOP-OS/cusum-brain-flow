@@ -1,52 +1,49 @@
 
 
-## Plan: Fix Imperial Fraction Parsing in AI Extraction
+## Plan: Enforce Construction Industry Hashtag Strategy in Caption Generation
 
-### Root Cause (Confirmed via Database)
+### What Changes
 
-The database stores these values for the file `BARLIST R1(R0) COOLONG TOWER FDN.xls`:
+Update the hashtag generation logic in `supabase/functions/regenerate-post/index.ts` to use a curated pool of construction/rebar industry hashtags instead of letting the AI freely generate hashtags.
 
-| Mark | Original Length | Stored `total_length_mm` | Original dim_c | Stored `dim_c` |
-|------|----------------|-------------------------|-----------------|----------------|
-| 10A01 | 8'-9 ¼" | **8** | 6'-3 ¼" | **6** |
-| 10A02 | 7'-2 ½" | **7** | 4'-8 ½" | **4** |
-| 25A01 | 5'-11" | **5** | — | — |
+### Changes — Single File
 
-Additionally, `source_dims_json` and `raw_dims_json` are both **NULL** — so the display cannot fall back to source text.
+**File: `supabase/functions/regenerate-post/index.ts`**
 
-**The bug is in `parseDimension()` (line 24–55 of `extract-manifest/index.ts`)**:
+**Change 1: Add a hashtag pool constant** (top of file, after imports)
 
-1. RebarCAD XLS stores ft-in values with Unicode fraction characters: `8'-9 ¼"`, `6'-3 ¼"`, `7'-2 ½"`
-2. The ft-in regex `^(\d+)\s*[']\s*-?\s*(\d+)\s*[""]?$` **cannot match** because `9 ¼` is not captured by `\d+(\.\d+)?`
-3. Falls through to the plain-number fallback: `parseFloat(s.replace(/[^0-9.\-]/g, ""))` which for `"8'-9 ¼"` strips to `"8-9.25"` → `parseFloat("8-9.25")` = **8** (stops at the dash)
+Define the 6 hashtag categories as arrays:
+- **Core**: #rebar, #rebarshop, #steelreinforcement, #reinforcedconcrete, #construction, #constructionlife, #constructionindustry, #buildingmaterials, #constructionproject, #rebarinstallation
+- **B2B**: #generalcontractor, #constructionbusiness, #builderlife, #commercialconstruction, #contractorsofinstagram, #constructioncompany, #projectmanagement, #infrastructure, #civilengineering, #sitework
+- **Viral**: #reelsinstagram, #constructionreels, #viralreels, #explorepage, #instareels, #trendingreels, #reelvideo, #videooftheday, #viralcontent
+- **Location**: #toronto, #torontoconstruction, #torontobuilder, #canada, #canadaconstruction, #ontarioconstruction, #vaughanconstruction, #richmondhillconstruction, #gtaconstruction
+- **Content**: #constructionwork, #worksite, #jobsite, #constructionworkers, #heavyequipment, #timelapseconstruction, #beforeandafter, #buildingprocess, #steelwork
+- **Niche**: #rebarcage, #rebarfabrication, #rebarwork, #structuralsteel, #steelbars, #concretereinforcement, #formwork, #barbending, #constructiondetail
 
-This means **every imperial dimension with fractions is truncated to just the feet number**.
+Add a `generateHashtags()` function that picks 15 hashtags by randomly sampling from each category (ensuring mix), then joins them space-separated.
 
-### Fix — Two Changes in One File
+**Change 2: Update caption-only prompt** (line ~302-327)
 
-**File: `supabase/functions/extract-manifest/index.ts`**
+- Remove "Write 8-12 relevant hashtags" instruction from the prompt
+- Remove `hashtags` from the expected JSON response
+- After parsing AI response, call `generateHashtags()` to produce the 15 hashtags deterministically from the pool
 
-**Change 1: Enhance `parseDimension` to handle fraction characters**
+**Change 3: Update full regeneration prompt** (line ~391-420)
 
-Add a pre-processing step that converts Unicode fractions (¼→.25, ½→.5, ¾→.75, ⅛→.125, ⅜→.375, ⅝→.625, ⅞→.875) into decimal form before regex matching. This makes `8'-9 ¼"` become `8'-9.25"` which the existing ft-in regex can handle.
+- Same change: remove hashtag instruction from prompt, remove `hashtags` from JSON schema
+- After parsing, use `generateHashtags()` for hashtags
 
-**Change 2: Fix the fallback `parseFloat` stripping**
+**Change 4: Update content assembly**
 
-The plain-number fallback `parseFloat(s.replace(/[^0-9.\-]/g, ""))` incorrectly strips the `'` separator, producing `"8-9.25"` which `parseFloat` truncates at the dash. After fraction normalization, the ft-in regex should catch these cases, but as a safety net, the fallback should also be improved.
+Both paths currently read `newCap.hashtags` / `newContent.hashtags`. Replace with the output of `generateHashtags()`.
 
-### What This Fixes
-- All imperial dimensions with fractions (¼, ½, ¾, etc.) will be correctly converted to total inches
-- `8'-9 ¼"` → 105.25 inches (stored as 105 after rounding)
-- `6'-3 ¼"` → 75.25 inches (stored as 75)
-- `1'-6"` → 18 inches (already works, no fractions)
-- Source text (`source_dims_json`) capture in `overlaySheetDims` is unaffected — it correctly reads `.w` formatted text. The NULL issue is likely because the AI path ran first and `overlaySheetDims` then overwrote `it[d]` but the `__source_dims` property was correctly set and should flow to the DB.
+### What Stays the Same
+- Caption text generation (AI still writes captions)
+- Persian translation
+- Image slogan logic
+- Video-to-social flow (separate edge function, not affected)
+- Frontend code — no changes needed
 
-### Impact
-- Only affects the `parseDimension` function in the edge function
-- No frontend changes needed — once values are stored correctly, the existing ft-in display logic works
-- Existing extractions with correct mm values are unaffected (numbers pass through unchanged)
-- **Existing broken extractions will need re-extraction** to get correct values
-
-### Re-extraction Note
-After deploying, the user should re-extract the affected file to get correct values. Alternatively, a one-time SQL fix could be applied to known affected rows, but re-extraction is cleaner.
+### Result
+Every "Regenerate caption" click will produce exactly 15 industry-relevant hashtags from the curated pool, mixed across all 6 categories, with no generic tags like #love or #happy.
 
