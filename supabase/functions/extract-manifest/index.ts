@@ -94,8 +94,9 @@ function normalizeDimHeader(raw: string): string | null {
 }
 
 /** Extract dimension columns deterministically from XLSX sheet, bypassing AI.
- *  Also captures exact source cell text into __source_dims and __source_length. */
-function overlaySheetDims(workbook: any, items: any[]): any[] {
+ *  Also captures exact source cell text into __source_dims and __source_length.
+ *  Returns { items, headersImperial } so the caller can use header-based unit detection. */
+function overlaySheetDims(workbook: any, items: any[]): { items: any[], headersImperial: boolean } {
   try {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
@@ -103,7 +104,7 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
     const hIdx = rows.findIndex((r) =>
       r.some((c) => c != null && normalizeDimHeader(String(c)) !== null)
     );
-    if (hIdx < 0) { console.log("[overlaySheetDims] No dim header row found"); return items; }
+    if (hIdx < 0) { console.log("[overlaySheetDims] No dim header row found"); return { items, headersImperial: false }; }
     const hRow = rows[hIdx];
 
     // Detect if headers contain imperial unit hints like "(FT-IN)" or "(IN)"
@@ -125,7 +126,7 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
         colMap["__LENGTH__"] = i;
       }
     });
-    if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return items; }
+    if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return { items, headersImperial: headersHaveImperial }; }
     console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
     // Helper: get formatted display text (.w) from a sheet cell, falling back to raw value
     const getCellText = (sheetRow: number, col: number): string | null => {
@@ -137,7 +138,7 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
     };
 
     console.log(`[overlaySheetDims] Processing ${items.length} items against ${rows.length} sheet rows`);
-    return items.map((it, n) => {
+    const result = items.map((it, n) => {
       const row = rows[hIdx + 1 + n] || [];
       const sheetRow = hIdx + 1 + n; // 0-based row in the sheet
       const sourceDims: Record<string, string> = {};
@@ -164,9 +165,10 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
       if (n < 3) console.log(`[overlaySheetDims] Row ${n}: sourceDims=${JSON.stringify(sourceDims)}, sourceLength=${it.__source_length}`);
       return it;
     });
+    return { items: result, headersImperial: headersHaveImperial };
   } catch (e) {
     console.warn("[overlaySheetDims] Failed, falling back to AI dims:", e);
-    return items;
+    return { items, headersImperial: false };
   }
 }
 
