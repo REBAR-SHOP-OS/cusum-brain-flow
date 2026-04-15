@@ -1,48 +1,30 @@
 
 
-## Plan: Remove 1,000 Keyword Cap — Fetch All SEO Data
+## Plan: Preserve SEO Section State on Navigation
 
 ### Problem
-Database has **1,730 keywords** but the dashboard shows **1,000**. Supabase PostgREST enforces a server-side maximum of 1,000 rows per request. The `.range(0, 9999)` calls don't override this server limit — they still return only 1,000 rows.
+When navigating between Dashboard, Keywords, Pages, etc., the current section unmounts completely (conditional rendering with `&&`). Returning to a section forces a full re-render and data refetch, losing scroll position and any local state.
 
 ### Fix
-Create a shared paginated fetch utility that loops in batches of 1,000 until all rows are retrieved, then replace all `.range(0, 9999)` calls across SEO components with this utility.
+**File: `src/pages/SeoModule.tsx`**
 
-### Changes
+Replace conditional rendering (`{section === "overview" && <SeoOverview />}`) with CSS visibility (`display: none` / `display: block`). All traffic sub-sections render once and stay mounted — only the active one is visible.
 
-**1. New utility: `src/lib/supabasePaginatedFetch.ts`**
-A helper function that:
-- Accepts a Supabase query builder
-- Fetches in pages of 1,000
-- Concatenates all results
-- Returns the full array
+```tsx
+// Before (unmounts on navigate):
+{section === "overview" && <SeoOverview />}
 
-```typescript
-export async function fetchAllRows(queryBuilder) {
-  const PAGE = 1000;
-  let all = [], page = 0, done = false;
-  while (!done) {
-    const { data } = await queryBuilder.range(page * PAGE, (page + 1) * PAGE - 1);
-    all = all.concat(data || []);
-    if (!data || data.length < PAGE) done = true;
-    page++;
-  }
-  return all;
-}
+// After (stays mounted, hidden via CSS):
+<div style={{ display: section === "overview" ? "block" : "none" }}>
+  <SeoOverview />
+</div>
 ```
 
-**2. Update 4 files** — replace `.range(0, 9999)` with paginated fetch:
-
-| File | Query |
-|------|-------|
-| `SeoOverview.tsx` line 96-100 | keyword stats (count, clicks, impressions) |
-| `SeoOverview.tsx` line 124-128 | page stats |
-| `SeoKeywords.tsx` line 254-259 | full keyword list |
-| `SeoPages.tsx` line 46-50 | full pages list |
-| `SeoTasks.tsx` line 70-74 | tasks list |
-
-Each will use the paginated helper to fetch all rows regardless of count.
+Same pattern for all 6 traffic sections (overview, keywords, pages, tasks, links, copilot) and the 4 category sections (traffic, content, ai-pr, ai-visibility, local).
 
 ### Result
-Dashboard will show the real count (1,730+) and all keywords, pages, and tasks will be fully loaded without any artificial cap.
+- Data stays loaded when switching between sections
+- No re-fetch on return
+- Scroll position preserved
+- React Query cache still works for background refreshes
 
