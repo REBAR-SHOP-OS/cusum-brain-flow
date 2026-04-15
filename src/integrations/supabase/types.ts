@@ -13535,6 +13535,7 @@ export type Database = {
         Row: {
           ai_reasoning: string | null
           assigned_to: string | null
+          can_autofix: boolean | null
           company_id: string
           created_at: string
           created_by: string
@@ -13557,6 +13558,7 @@ export type Database = {
         Insert: {
           ai_reasoning?: string | null
           assigned_to?: string | null
+          can_autofix?: boolean | null
           company_id?: string
           created_at?: string
           created_by?: string
@@ -13579,6 +13581,7 @@ export type Database = {
         Update: {
           ai_reasoning?: string | null
           assigned_to?: string | null
+          can_autofix?: boolean | null
           company_id?: string
           created_at?: string
           created_by?: string
