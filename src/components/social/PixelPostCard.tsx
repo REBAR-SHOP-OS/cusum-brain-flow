@@ -37,6 +37,36 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
     const [imageZoomOpen, setImageZoomOpen] = useState(false);
     const [showImageEdit, setShowImageEdit] = useState(false);
     const [currentImageUrl, setCurrentImageUrl] = useState(post.imageUrl);
+    const [autoTranslating, setAutoTranslating] = useState(false);
+    const [localImageTextTranslation, setLocalImageTextTranslation] = useState(post.imageTextTranslation || "");
+    const [localCaptionTranslation, setLocalCaptionTranslation] = useState(post.captionTranslation || "");
+
+    // Auto-translate if Persian translations are missing
+    useEffect(() => {
+      if (localImageTextTranslation || localCaptionTranslation) return;
+      if (!post.caption) return;
+      if (autoTranslating) return;
+
+      let cancelled = false;
+      const doTranslate = async () => {
+        setAutoTranslating(true);
+        try {
+          const data = await invokeEdgeFunction("translate-caption", {
+            caption: post.caption || "",
+            imageText: "",
+          }, { timeoutMs: 30000 });
+          if (cancelled) return;
+          if (data.captionFa) setLocalCaptionTranslation(data.captionFa);
+          if (data.imageTextFa) setLocalImageTextTranslation(data.imageTextFa);
+        } catch (err) {
+          console.warn("PixelPostCard auto-translate failed:", err);
+        } finally {
+          if (!cancelled) setAutoTranslating(false);
+        }
+      };
+      doTranslate();
+      return () => { cancelled = true; };
+    }, [post.id, post.caption]);
 
     const handleApprove = () => {
       if (!approved) {
