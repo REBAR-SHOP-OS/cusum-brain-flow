@@ -497,19 +497,21 @@ Deno.serve((req) =>
 
     // Phase: execute
     if (phase === "execute") {
-      if (!wp) {
-        return new Response(
-          JSON.stringify({ error: "WordPress connection not available" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
       const plan = await analyzeTask(task, wp);
 
       if (!plan.can_execute || !plan.actions?.length) {
         return new Response(
           JSON.stringify({ error: "Task cannot be auto-executed", human_steps: plan.human_steps }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Check if all actions are GSC-only (don't need WP)
+      const needsWp = plan.actions.some((a: any) => a.type !== "trigger_gsc_sync");
+      if (needsWp && !wp) {
+        return new Response(
+          JSON.stringify({ error: "WordPress connection not available" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -522,7 +524,7 @@ Deno.serve((req) =>
         }
       }
 
-      const results = await executeActions(plan.actions, wp, task);
+      const results = await executeActions(plan.actions, wp!, task, sb);
 
       const executionLog = {
         plan_summary: plan.plan_summary,
