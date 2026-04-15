@@ -111,7 +111,7 @@ function getStepIndex(status: string, optimizationMode?: string | null) {
   return idx >= 0 ? idx : -1;
 }
 
-export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHistory?: (cb: () => void) => void }) {
+export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHistory?: (cb: () => boolean) => void }) {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -151,13 +151,24 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
 
   // Register back-to-history callback for parent
   useEffect(() => {
-    if (onRegisterBackToHistory) {
-      onRegisterBackToHistory(() => {
+    if (!onRegisterBackToHistory) {
+      return;
+    }
+
+    onRegisterBackToHistory(() => {
+      if (!activeSessionId) {
+        return false;
+      }
+
         setActiveSessionId(null);
         setShowHistory(true);
+        return true;
       });
-    }
-  }, [onRegisterBackToHistory]);
+
+    return () => {
+      onRegisterBackToHistory(() => false);
+    };
+  }, [activeSessionId, onRegisterBackToHistory]);
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [deleteProjectConfirm, setDeleteProjectConfirm] = useState<{ id: string; name: string } | null>(null);
