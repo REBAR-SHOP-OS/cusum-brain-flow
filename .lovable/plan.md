@@ -1,25 +1,25 @@
 
 
-## Plan: Replace Tag Font to Distinguish 0 from 8
+## Plan: Switch Tag Font to OCR-B or Share Tech Mono for Clear 0 vs 8
 
 ### Problem
-The current monospace font (`JetBrains Mono` / system monospace) renders `0` too similarly to `8` at heavy weights (`font-black`), causing misreads on printed rebar tags.
+Roboto Mono's `0` and `8` still look too similar at heavy weights on printed tags — the zero lacks a distinctive slash/dot.
 
 ### Solution
-Switch to **Roboto Mono** — a Google Font with a clearly distinguishable zero (open/rounded vs. the figure-8 shape). It's highly legible at all weights and well-suited for industrial print tags.
+Switch to **Share Tech Mono** — a Google Font designed for technical/industrial readability. Its zero has a clearly visible dot inside, making it unmistakable from `8` at any weight. Alternative: **Source Code Pro** (also has dotted zero and multiple weights).
+
+**Recommendation**: **Source Code Pro** — it has weights 400–900, a dotted zero, and excellent print legibility.
 
 ### Changes
 
-**1. `index.html`** — Add Roboto Mono import from Google Fonts (weights 400–900)
-
-**2. `src/index.css`** — Update `.font-mono` to use `'Roboto Mono'` as primary
-
-**3. `src/pages/PrintTags.tsx`** — Update print page `font-family` to `'Roboto Mono'`
-
-**4. `src/components/office/RebarTagCard.tsx`** — No changes needed (it uses Tailwind's `font-mono` class which will inherit the update)
+| File | Change |
+|------|--------|
+| `index.html` | Replace Roboto Mono import with `Source Code Pro` (wght 400;500;700;900) |
+| `src/index.css` | Update `@import` to Source Code Pro |
+| `tailwind.config.ts` | Change `font-mono` primary to `'Source Code Pro'` |
+| `src/pages/PrintTags.tsx` | Update print `font-family` to `'Source Code Pro'` |
 
 ### What does NOT change
 - Tag layout, sizing, colors — untouched
-- No database changes
-- No logic changes
+- No logic or database changes
 
