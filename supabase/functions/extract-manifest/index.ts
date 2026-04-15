@@ -80,11 +80,15 @@ function parseDimension(val: any): number | null {
 
 const DIMS = ["A","B","C","D","E","F","G","H","J","K","O","R"] as const;
 
-/** Normalize a header cell to a single dimension letter (A-R), handling "DIM A", "Dim. B", etc. */
+/** Normalize a header cell to a single dimension letter (A-R), handling "DIM A", "Dim. B", "A (FT-IN)", etc. */
 function normalizeDimHeader(raw: string): string | null {
-  const s = String(raw).trim().toUpperCase()
-    .replace(/^DIM\.?\s*/i, "")   // strip leading "DIM" or "DIM."
-    .replace(/[^A-Z]/g, "");       // keep only letters
+  let s = String(raw).trim().toUpperCase();
+  // Strip parenthesized unit suffixes like "(FT-IN)", "(MM)", "(IN)" first
+  s = s.replace(/\s*\(.*?\)\s*/g, " ").trim();
+  // Strip leading "DIM" or "DIM."
+  s = s.replace(/^DIM\.?\s*/i, "").trim();
+  // Keep only letters
+  s = s.replace(/[^A-Z]/g, "");
   if (s.length === 1 && (DIMS as readonly string[]).includes(s)) return s;
   return null;
 }
@@ -106,8 +110,9 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
       if (c == null) return;
       const letter = normalizeDimHeader(String(c));
       if (letter) colMap[letter] = i;
-      // Also detect length column headers
+      // Also detect length column headers — strip parenthesized unit suffixes first
       const normalized = String(c).trim().toUpperCase()
+        .replace(/\s*\(.*?\)\s*/g, " ")  // strip "(FT-IN)", "(MM)", etc.
         .replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
       if (["CUT LENGTH", "TOTAL LENGTH", "LENGTH", "CUTLENGTH", "CUT LEN", "TOT LENGTH"].includes(normalized)) {
         colMap["__LENGTH__"] = i;
