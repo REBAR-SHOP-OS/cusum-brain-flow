@@ -1036,7 +1036,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
       `}</style>
 
       <ScrollArea className="h-full">
-        <div className="p-6 space-y-6 w-full max-w-[100vw] overflow-x-auto min-w-0">
+        <div className="p-6 space-y-6 w-full overflow-x-auto min-w-0">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-y-2">
           <div className="flex items-center gap-3">
