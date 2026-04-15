@@ -74,7 +74,8 @@ export default function PrintTags() {
           margin: 0 auto;
           padding: 0;
           background: #fff;
-          font-family: 'Source Code Pro', 'Courier New', monospace;
+          font-family: 'Inter', system-ui, sans-serif;
+          font-variant-numeric: tabular-nums;
           color: #000;
         }
         .rebar-tag {
