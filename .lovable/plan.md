@@ -1,49 +1,46 @@
 
 
-## Plan: Enforce Construction Industry Hashtag Strategy in Caption Generation
+## Plan: Auto-Generate Persian Translation When Missing
 
-### What Changes
+### Problem
+Many existing posts were created before the Persian translation feature was added. When viewing these posts in the review panel, the "Internal Reference" section shows "ترجمه‌ای موجود نیست" for both image text and caption translation.
 
-Update the hashtag generation logic in `supabase/functions/regenerate-post/index.ts` to use a curated pool of construction/rebar industry hashtags instead of letting the AI freely generate hashtags.
+### Root Cause
+- New posts (via `ai-agent` and `regenerate-post`) already include `---PERSIAN---` blocks with translations
+- Old posts in the database lack this block entirely
+- The UI simply displays "no translation" when the block is missing — it never attempts to generate one
 
-### Changes — Single File
+### Solution
+Add auto-translation in the PostReviewPanel: when a post loads and has no Persian translation, automatically call the AI to translate the English caption and image text to Persian, then update the post content in the database.
 
-**File: `supabase/functions/regenerate-post/index.ts`**
+### Changes
 
-**Change 1: Add a hashtag pool constant** (top of file, after imports)
+**File 1: `src/components/social/PostReviewPanel.tsx`**
 
-Define the 6 hashtag categories as arrays:
-- **Core**: #rebar, #rebarshop, #steelreinforcement, #reinforcedconcrete, #construction, #constructionlife, #constructionindustry, #buildingmaterials, #constructionproject, #rebarinstallation
-- **B2B**: #generalcontractor, #constructionbusiness, #builderlife, #commercialconstruction, #contractorsofinstagram, #constructioncompany, #projectmanagement, #infrastructure, #civilengineering, #sitework
-- **Viral**: #reelsinstagram, #constructionreels, #viralreels, #explorepage, #instareels, #trendingreels, #reelvideo, #videooftheday, #viralcontent
-- **Location**: #toronto, #torontoconstruction, #torontobuilder, #canada, #canadaconstruction, #ontarioconstruction, #vaughanconstruction, #richmondhillconstruction, #gtaconstruction
-- **Content**: #constructionwork, #worksite, #jobsite, #constructionworkers, #heavyequipment, #timelapseconstruction, #beforeandafter, #buildingprocess, #steelwork
-- **Niche**: #rebarcage, #rebarfabrication, #rebarwork, #structuralsteel, #steelbars, #concretereinforcement, #formwork, #barbending, #constructiondetail
+Add a `useEffect` that triggers when a post loads with empty `persianImageText` and `persianCaptionText`:
+- Call a new lightweight edge function `translate-caption` (or reuse `translate-message`) to translate the English caption to Persian
+- On success, update the post's `content` field in the DB by appending the `---PERSIAN---` block
+- Update local state to display the translation immediately
+- Show a subtle loading indicator while translating
 
-Add a `generateHashtags()` function that picks 15 hashtags by randomly sampling from each category (ensuring mix), then joins them space-separated.
+**File 2: `supabase/functions/translate-caption/index.ts`** (new edge function)
 
-**Change 2: Update caption-only prompt** (line ~302-327)
+A simple edge function that:
+- Accepts `{ caption: string, imageText?: string }`
+- Calls the AI gateway to translate both to fluent Persian (same quality instructions as regenerate-post)
+- Returns `{ captionFa: string, imageTextFa?: string }`
 
-- Remove "Write 8-12 relevant hashtags" instruction from the prompt
-- Remove `hashtags` from the expected JSON response
-- After parsing AI response, call `generateHashtags()` to produce the 15 hashtags deterministically from the pool
+This is kept separate from `translate-message` because it needs the specific advertising-quality Persian translation prompt, not general translation.
 
-**Change 3: Update full regeneration prompt** (line ~391-420)
+**File 3: `src/components/social/PixelPostCard.tsx`**
 
-- Same change: remove hashtag instruction from prompt, remove `hashtags` from JSON schema
-- After parsing, use `generateHashtags()` for hashtags
-
-**Change 4: Update content assembly**
-
-Both paths currently read `newCap.hashtags` / `newContent.hashtags`. Replace with the output of `generateHashtags()`.
+Same logic: if `captionTranslation` is empty when the card renders, show a "Translating..." indicator and trigger the same translation flow.
 
 ### What Stays the Same
-- Caption text generation (AI still writes captions)
-- Persian translation
-- Image slogan logic
-- Video-to-social flow (separate edge function, not affected)
-- Frontend code — no changes needed
+- All new post generation (ai-agent, regenerate-post) already produces Persian — no changes needed
+- The `stripPersian` function in publish flows continues to remove Persian before publishing
+- No changes to the database schema
 
 ### Result
-Every "Regenerate caption" click will produce exactly 15 industry-relevant hashtags from the curated pool, mixed across all 6 categories, with no generic tags like #love or #happy.
+Every post will always show its Persian translation. For new posts it's generated at creation time. For old posts without translations, it's auto-generated on first view and saved back to the DB so it only needs to be done once.
 
