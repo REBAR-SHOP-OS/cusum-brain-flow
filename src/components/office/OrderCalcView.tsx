@@ -13,13 +13,34 @@ const FALLBACK_WPM: Record<string, number> = {
   "25M": 3.925, "30M": 5.495, "35M": 7.850,
 };
 
+// --- Formatting helpers ---
+
+/** Format a decimal value in the source unit. For ft → X'-Y" */
+function formatSourceLength(val: number, unit: SourceUnit): string {
+  if (unit === "ft") {
+    const feet = Math.floor(val);
+    const inches = Math.round((val - feet) * 12);
+    if (inches === 12) return `${feet + 1}'-0"`;
+    return `${feet}'-${inches}"`;
+  }
+  return val.toFixed(2);
+}
+
+function unitColumnLabel(unit: SourceUnit): string {
+  switch (unit) {
+    case "mm": return "mm";
+    case "in": return "in";
+    case "ft": return "ft'in";
+  }
+}
+
 // --- Calculation ---
 
 interface SizeSummary {
   bar_size: string;
   total_pieces: number;
-  total_length_m: number;
-  length_with_waste_m: number;
+  total_length: number;      // in source unit
+  length_with_waste: number;  // in source unit
   bars_to_order: number;
   total_weight_kg: number;
 }
@@ -65,16 +86,19 @@ function calculate(
       }
     }
     const bars = bins.length;
-    const totalM = g.cuts_mm.reduce((a, b) => a + b, 0) / wasteMult / 1000;
-    const withWasteM = g.cuts_mm.reduce((a, b) => a + b, 0) / 1000;
+    // Display values in source unit (divide mm by unitFactor, not by 1000)
+    const totalMm = g.cuts_mm.reduce((a, b) => a + b, 0) / wasteMult;
+    const withWasteMm = g.cuts_mm.reduce((a, b) => a + b, 0);
+    const totalSource = totalMm / unitFactor;
+    const withWasteSource = withWasteMm / unitFactor;
     const w = wpm[s] ?? FALLBACK_WPM[s] ?? 0;
     const weight = Math.round(bars * stockLengthM * w * 100) / 100;
 
     return {
       bar_size: s,
       total_pieces: g.pieces,
-      total_length_m: Math.round(totalM * 100) / 100,
-      length_with_waste_m: Math.round(withWasteM * 100) / 100,
+      total_length: Math.round(totalSource * 100) / 100,
+      length_with_waste: Math.round(withWasteSource * 100) / 100,
       bars_to_order: bars,
       total_weight_kg: weight,
     };
