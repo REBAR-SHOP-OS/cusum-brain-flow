@@ -172,18 +172,27 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
               🔒 Internal reference only — not published
             </p>
-            <div className="mb-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
-              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                {post.imageTextTranslation || "ترجمه‌ای موجود نیست"}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
-              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                {post.captionTranslation || "ترجمه‌ای موجود نیست"}
-              </p>
-            </div>
+            {autoTranslating ? (
+              <div className="flex items-center gap-2 py-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Translating to Persian…</span>
+              </div>
+            ) : (
+              <>
+                <div className="mb-1.5">
+                  <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                    {localImageTextTranslation || "ترجمه‌ای موجود نیست"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                    {localCaptionTranslation || "ترجمه‌ای موجود نیست"}
+                  </p>
+                </div>
+              </>
+            )}
           </CollapsibleContent>
         </Collapsible>
 
