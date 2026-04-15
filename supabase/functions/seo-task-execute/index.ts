@@ -13,6 +13,7 @@ const ALLOWED_ACTIONS = [
   "wp_update_product_content",
   "wp_create_post",
   "wp_update_slug",
+  "trigger_gsc_sync",
 ];
 
 // ─── AI-powered content generation ───
