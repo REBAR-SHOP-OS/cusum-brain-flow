@@ -341,18 +341,18 @@ ${brainBlock}
 
 RULES:
 - Write a short, punchy, promotional English caption. Maximum 2 sentences.
-- Write 8-12 relevant hashtags as a single string separated by spaces.
 - Write a short catchy title (max 10 words).
 - Translate the caption to Farsi (Persian). This MUST be a beautiful, fluent, native-quality Persian translation — NOT a word-by-word translation. Rewrite the meaning in elegant, professional Persian that sounds like it was originally written by a native Persian advertising copywriter.
 - CAPTION TONE: PURELY PROMOTIONAL & ADVERTISING — catchy, bold, emotional. Do NOT explain how the product works. Focus on why the customer should buy.
 - ABSOLUTELY FORBIDDEN: scientific explanations, technical specs, engineering terminology, material properties, structural analysis claims.
 - FORBIDDEN WORDS: guarantee, guaranteed, ensures, ensure, promise, warranty, certified, certify, unparalleled, revolutionary, superior, structural integrity, load-bearing, tensile strength, AI-driven, precision-engineered, interlocks, unmatched, finest, unbeatable, top-notch, scientifically, assured
 - Do NOT mention ANY time of day, hour, clock time, AM/PM
+- Do NOT generate hashtags — they will be added separately.
 - Be bold, specific, and direct. Use relevant emojis.
 - SESSION SEED: ${sessionSeed}
 
 Respond with ONLY a valid JSON object (no markdown, no code fences):
-{"title": "...", "caption": "...", "hashtags": "...", "captionFa": "..."}`;
+{"title": "...", "caption": "...", "captionFa": "..."}`;
 
       const contentParts: any[] = [{ type: "text", text: captionOnlyPrompt }];
       // Only attach image if it's NOT a video (AI models can't process MP4/MOV/WebM)
