@@ -40,22 +40,30 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
     const [autoTranslating, setAutoTranslating] = useState(false);
     const [localImageTextTranslation, setLocalImageTextTranslation] = useState(post.imageTextTranslation || "");
     const [localCaptionTranslation, setLocalCaptionTranslation] = useState(post.captionTranslation || "");
+    // Track which caption was last translated to detect changes
+    const lastTranslatedCaptionRef = React.useRef<string>("");
 
-    // Auto-translate if Persian translations are missing
+    // Reset translation when post or caption changes, then auto-translate
     useEffect(() => {
-      if (localImageTextTranslation || localCaptionTranslation) return;
-      if (!post.caption) return;
-      if (autoTranslating) return;
+      const caption = post.caption || "";
+      if (!caption) return;
+      // If caption hasn't changed from what we last translated, skip
+      if (lastTranslatedCaptionRef.current === caption && (localCaptionTranslation || localImageTextTranslation)) return;
+
+      // Clear stale translations and re-translate
+      setLocalCaptionTranslation("");
+      setLocalImageTextTranslation("");
 
       let cancelled = false;
       const doTranslate = async () => {
         setAutoTranslating(true);
         try {
           const data = await invokeEdgeFunction("translate-caption", {
-            caption: post.caption || "",
+            caption,
             imageText: "",
           }, { timeoutMs: 30000 });
           if (cancelled) return;
+          lastTranslatedCaptionRef.current = caption;
           if (data.captionFa) setLocalCaptionTranslation(data.captionFa);
           if (data.imageTextFa) setLocalImageTextTranslation(data.imageTextFa);
         } catch (err) {
@@ -65,13 +73,19 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
         }
       };
       doTranslate();
-      return () => { cancelled = true; };
+      return () => { cancelled = true; setAutoTranslating(false); };
     }, [post.id, post.caption]);
 
     const handleApprove = () => {
       if (!approved) {
         setApproved(true);
-        onApprove?.(post);
+        // Pass enriched post with latest translations and image
+        onApprove?.({
+          ...post,
+          imageUrl: currentImageUrl,
+          captionTranslation: localCaptionTranslation,
+          imageTextTranslation: localImageTextTranslation,
+        });
       }
     };
 
