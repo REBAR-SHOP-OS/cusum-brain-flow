@@ -99,12 +99,19 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
   try {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-    // Find header row containing dimension letters (exact or prefixed with DIM)
+    // Find header row containing dimension letters (exact or prefixed with DIM, with optional unit suffixes)
     const hIdx = rows.findIndex((r) =>
       r.some((c) => c != null && normalizeDimHeader(String(c)) !== null)
     );
     if (hIdx < 0) { console.log("[overlaySheetDims] No dim header row found"); return items; }
     const hRow = rows[hIdx];
+
+    // Detect if headers contain imperial unit hints like "(FT-IN)" or "(IN)"
+    const headerLine = hRow.map((c: any) => String(c ?? "").toUpperCase()).join(" ");
+    const headersHaveImperial = /\(FT[\s-]*IN\)|\(IN\)|\(INCH\)|FT-IN|FEET|INCHES/i.test(headerLine);
+    if (headersHaveImperial) {
+      console.log("[overlaySheetDims] Imperial unit detected from column headers");
+    }
     const colMap: Record<string, number> = {};
     hRow.forEach((c: any, i: number) => {
       if (c == null) return;
