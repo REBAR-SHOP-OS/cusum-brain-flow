@@ -21,30 +21,25 @@ export default function SeoModule() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Only show sidebar for Traffic & Market */}
-      {category === "traffic" && (
+      <div style={{ display: category === "traffic" ? "flex" : "none" }} className="shrink-0">
         <SeoSidebar active={section} onNavigate={setSection} />
-      )}
+      </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {/* Category cards at the top */}
         <SeoCategoryBar active={category} onSelect={setCategory} />
 
-        {/* Traffic & Market uses the sub-navigation */}
-        {category === "traffic" && (
-          <>
-            {section === "overview" && <SeoOverview />}
-            {section === "keywords" && <SeoKeywords />}
-            {section === "pages" && <SeoPages />}
-            {section === "tasks" && <SeoTasks />}
-            {section === "links" && <SeoLinks />}
-            {section === "copilot" && <SeoCopilot />}
-          </>
-        )}
+        {/* Traffic sub-sections — always mounted, toggled via CSS */}
+        <div style={{ display: category === "traffic" && section === "overview" ? "block" : "none" }}><SeoOverview /></div>
+        <div style={{ display: category === "traffic" && section === "keywords" ? "block" : "none" }}><SeoKeywords /></div>
+        <div style={{ display: category === "traffic" && section === "pages" ? "block" : "none" }}><SeoPages /></div>
+        <div style={{ display: category === "traffic" && section === "tasks" ? "block" : "none" }}><SeoTasks /></div>
+        <div style={{ display: category === "traffic" && section === "links" ? "block" : "none" }}><SeoLinks /></div>
+        <div style={{ display: category === "traffic" && section === "copilot" ? "block" : "none" }}><SeoCopilot /></div>
 
-        {category === "content" && <SeoContent />}
-        {category === "ai-pr" && <SeoAiPr />}
-        {category === "ai-visibility" && <SeoAiVisibility />}
-        {category === "local" && <SeoLocal />}
+        {/* Category sections — always mounted, toggled via CSS */}
+        <div style={{ display: category === "content" ? "block" : "none" }}><SeoContent /></div>
+        <div style={{ display: category === "ai-pr" ? "block" : "none" }}><SeoAiPr /></div>
+        <div style={{ display: category === "ai-visibility" ? "block" : "none" }}><SeoAiVisibility /></div>
+        <div style={{ display: category === "local" ? "block" : "none" }}><SeoLocal /></div>
       </div>
     </div>
   );
