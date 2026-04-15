@@ -21,16 +21,34 @@ function getMimeType(filename: string): string {
   return map[ext] || "application/octet-stream";
 }
 
-/** Parse a dimension value that may be imperial (e.g. "0'-4\"", "3'-6\"") or numeric. Returns a number or null. */
+/** Convert Unicode fraction characters to decimal equivalents */
+function normalizeFractions(input: string): string {
+  const fractionMap: Record<string, string> = {
+    '¼': '.25', '½': '.5', '¾': '.75',
+    '⅛': '.125', '⅜': '.375', '⅝': '.625', '⅞': '.875',
+    '⅓': '.333', '⅔': '.667', '⅕': '.2', '⅖': '.4', '⅗': '.6', '⅘': '.8',
+    '⅙': '.167', '⅚': '.833',
+  };
+  let result = input;
+  for (const [char, dec] of Object.entries(fractionMap)) {
+    result = result.replaceAll(char, dec);
+  }
+  // Collapse whitespace around decimal (e.g. "9 .25" → "9.25")
+  result = result.replace(/(\d)\s+(\.\d)/g, '$1$2');
+  return result;
+}
+
+/** Parse a dimension value that may be imperial (e.g. "0'-4\"", "8'-9 ¼\"") or numeric. Returns a number or null. */
 function parseDimension(val: any): number | null {
   if (val == null) return null;
   if (typeof val === "number") return isNaN(val) ? null : val;
   if (typeof val !== "string") return null;
 
-  const s = val.trim();
+  // Normalize Unicode fractions first (¼→.25, ½→.5, etc.)
+  const s = normalizeFractions(val.trim());
   if (!s) return null;
 
-  // Imperial: X'-Y" or X' Y" or X'-Y or X' Y
+  // Imperial: X'-Y" or X' Y" or X'-Y or X' Y  (Y can be decimal like 9.25)
   const ftIn = s.match(/^(\d+(?:\.\d+)?)\s*['']\s*-?\s*(\d+(?:\.\d+)?)\s*["""]?\s*$/);
   if (ftIn) {
     return Math.round(parseFloat(ftIn[1]) * 12 + parseFloat(ftIn[2]));
@@ -49,8 +67,14 @@ function parseDimension(val: any): number | null {
     return isNaN(n) ? null : n;
   }
 
-  // Plain number
-  const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+  // Plain number — try ft-in pattern in the stripped string as safety net
+  const stripped = s.replace(/[^0-9.'\-"]/g, "");
+  const ftInFallback = stripped.match(/^(\d+(?:\.\d+)?)['\-](\d+(?:\.\d+)?)/);
+  if (ftInFallback) {
+    return Math.round(parseFloat(ftInFallback[1]) * 12 + parseFloat(ftInFallback[2]));
+  }
+
+  const n = parseFloat(stripped.replace(/[^0-9.\-]/g, ""));
   return isNaN(n) ? null : n;
 }
 
