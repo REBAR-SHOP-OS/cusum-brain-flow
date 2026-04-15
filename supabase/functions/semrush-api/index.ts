@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
         const upserts = rows.map((r) => ({
           domain_id,
           keyword: r["Ph"] || "",
-          search_volume: Number(r["Nq"] || 0),
+          volume: Number(r["Nq"] || 0),
           cpc: Number(r["Cp"] || 0),
           competition: Number(r["Co"] || 0),
           keyword_difficulty: Number(r["Kd"] || 0),
@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
         const upserts = rows.map((r) => ({
           domain_id,
           keyword: r["Ph"] || "",
-          search_volume: Number(r["Nq"] || 0),
+          volume: Number(r["Nq"] || 0),
           cpc: Number(r["Cp"] || 0),
           competition: Number(r["Co"] || 0),
           keyword_difficulty: Number(r["Kd"] || 0),
@@ -287,7 +287,7 @@ Deno.serve(async (req) => {
         const upserts = rows.map((r) => ({
           domain_id,
           keyword: r["Ph"] || "",
-          search_volume: Number(r["Nq"] || 0),
+          volume: Number(r["Nq"] || 0),
           cpc: Number(r["Cp"] || 0),
           competition: Number(r["Co"] || 0),
           keyword_difficulty: Number(r["Kd"] || 0),
