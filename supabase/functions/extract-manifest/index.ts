@@ -474,10 +474,19 @@ Rules:
               if (item[key] != null) rawSample.push(String(item[key]));
             }
           }
-          const imperialRaw = /\d+\s*['']\s*-?\s*\d+\s*["""]|\d+(?:\.\d+)?\s*["""]\s*$|\d+(?:\.\d+)?\s*['']\s*$/;
-          if (rawSample.some((v) => imperialRaw.test(v))) {
+          // ft-inch pattern: e.g. 6'-4", 5' - 8"
+          const ftInchPattern = /\d+\s*['']\s*-?\s*\d+\s*["""]/;
+          // standalone inch: e.g. 54" or 78"
+          const inchOnlyPattern = /^\d+(?:\.\d+)?\s*["""]\s*$/;
+          // standalone feet: e.g. 6'
+          const feetOnlyPattern = /^\d+(?:\.\d+)?\s*['']\s*$/;
+
+          if (rawSample.some((v) => ftInchPattern.test(v))) {
+            detectedUnitSystem = "imperial";
+            console.log("Detected ft-inch (imperial) unit system from raw AI values");
+          } else if (rawSample.some((v) => inchOnlyPattern.test(v) || feetOnlyPattern.test(v))) {
             detectedUnitSystem = "in";
-            console.log("Detected imperial unit system from raw AI values (before normalization)");
+            console.log("Detected inch unit system from raw AI values");
           }
         }
 
@@ -500,7 +509,7 @@ Rules:
         }
         // Note: primary detection already ran above on raw strings
 
-        // Secondary check: scan raw XLSX cells for standalone inch marks (e.g. 54")
+        // Secondary check: scan raw XLSX cells for ft-inch or standalone inch marks
         if (isSpreadsheet && parsedWorkbook && detectedUnitSystem === "mm") {
           try {
             const sheet = parsedWorkbook.Sheets[parsedWorkbook.SheetNames[0]];
@@ -511,7 +520,12 @@ Rules:
                 if (typeof cell === "string") sampleCells.push(cell);
               }
             }
-            if (sampleCells.some((c: string) => /^\d+(?:\.\d+)?\s*[""'']\s*$/.test(c.trim()))) {
+            // ft-inch first: e.g. 6'-4", 0'-9"
+            const ftInCellPattern = /\d+\s*['']\s*-?\s*\d+\s*["""]/;
+            if (sampleCells.some((c: string) => ftInCellPattern.test(c.trim()))) {
+              detectedUnitSystem = "imperial";
+              console.log("Detected ft-inch (imperial) unit system from raw XLSX cell values");
+            } else if (sampleCells.some((c: string) => /^\d+(?:\.\d+)?\s*[""'']\s*$/.test(c.trim()))) {
               detectedUnitSystem = "in";
               console.log("Detected inch unit system from raw XLSX cell values");
             }
