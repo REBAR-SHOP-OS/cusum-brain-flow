@@ -14,6 +14,10 @@ const ALLOWED_ACTIONS = [
   "wp_create_post",
   "wp_update_slug",
   "trigger_gsc_sync",
+  "trigger_wincher_sync",
+  "trigger_semrush_sync",
+  "trigger_site_crawl",
+  "trigger_link_audit",
 ];
 
 // ─── AI-powered content generation ───
@@ -103,6 +107,10 @@ Tasks you CAN auto-execute (can_execute=true):
 - Content expansion/optimization → wp_update_content
 - Product page SEO improvements → wp_update_product_meta + wp_update_product_content
 - Pulling/syncing keyword performance data from Google Search Console (impressions, clicks, CTR, positions) → trigger_gsc_sync
+- Syncing keyword rank tracking data from Wincher → trigger_wincher_sync
+- Pulling domain overview and competitive data from SEMrush → trigger_semrush_sync
+- Running a technical site crawl for SEO issues (broken links, missing meta, etc.) → trigger_site_crawl
+- Running a backlink/link audit → trigger_link_audit
 
 Tasks you CANNOT auto-execute (need human):
 - Initial Google Search Console domain verification (adding DNS TXT record)

@@ -284,7 +284,12 @@ Deno.serve((req) =>
       messages: [
         {
           role: "system",
-          content: `You are an SEO analyst for ${domain.domain}. Analyze the GSC + GA data and produce structured insights. Be specific with numbers and actionable recommendations.`,
+          content: `You are an SEO analyst for ${domain.domain}. Analyze the GSC + GA data and produce structured insights. Be specific with numbers and actionable recommendations.
+
+CRITICAL RULES:
+- NEVER create tasks asking the user to "provide data", "export data", or "manually check" any analytics platform. The system automatically pulls data from Google Search Console, Wincher, SEMrush, and site crawl tools.
+- All data collection is automated. Only create ACTIONABLE tasks (content changes, technical fixes, link building, etc.)
+- For each task, set can_autofix=true if it can be done via WordPress REST API (meta updates, content changes, JSON-LD injection, slug changes, new posts). Set can_autofix=false for DNS changes, server config, plugin installs, GA setup, etc.`,
         },
         {
           role: "user",
@@ -376,8 +381,9 @@ Suggest specific tasks with expected impact.`,
                       priority: { type: "string", enum: ["low", "medium", "high", "critical"] },
                       expected_impact: { type: "string" },
                       entity_url: { type: "string" },
+                      can_autofix: { type: "boolean", description: "true if fixable via WordPress API (meta, content, JSON-LD, slugs), false if needs human (DNS, server, plugins)" },
                     },
-                    required: ["title", "task_type", "priority"],
+                    required: ["title", "task_type", "priority", "can_autofix"],
                   },
                 },
               },
@@ -464,6 +470,7 @@ Suggest specific tasks with expected impact.`,
         created_by: "ai",
         ai_reasoning: task.description || task.title,
         company_id: domain.company_id,
+        can_autofix: task.can_autofix ?? false,
       });
       if (!error) tasksCreated++;
     }
