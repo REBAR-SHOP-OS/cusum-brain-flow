@@ -173,11 +173,13 @@ export function OrderCalcView() {
     if (file) handleFile(file);
   }, [handleFile]);
 
+  const uLabel = unitColumnLabel(sourceUnit);
+
   const exportCSV = () => {
     if (!results.length) return;
-    const header = "Bar Size,Total Pieces,Total Length (m),With Waste (m),Stock Length (m),Bars to Order,Weight (kg)\n";
+    const header = `Bar Size,Total Pieces,Total Length (${uLabel}),With Waste (${uLabel}),Stock Length (m),Bars to Order,Weight (kg)\n`;
     const rows = results.map(r =>
-      `${r.bar_size},${r.total_pieces},${r.total_length_m},${r.length_with_waste_m},${stockLength},${r.bars_to_order},${r.total_weight_kg}`
+      `${r.bar_size},${r.total_pieces},${formatSourceLength(r.total_length, sourceUnit)},${formatSourceLength(r.length_with_waste, sourceUnit)},${stockLength},${r.bars_to_order},${r.total_weight_kg}`
     ).join("\n");
     const totals = `\nTOTAL,${results.reduce((s, r) => s + r.total_pieces, 0)},,,,${results.reduce((s, r) => s + r.bars_to_order, 0)},${results.reduce((s, r) => s + r.total_weight_kg, 0).toFixed(2)}`;
     const blob = new Blob([header + rows + totals], { type: "text/csv" });
