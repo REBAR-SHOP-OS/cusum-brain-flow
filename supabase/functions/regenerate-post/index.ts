@@ -394,8 +394,8 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       const persianBlock = newCap.captionFa
         ? `\n\n---PERSIAN---\n📝 ترجمه کپشن: ${newCap.captionFa}`
         : "";
-      const fullContent = `${newCap.caption}${PIXEL_CONTACT_INFO}\n\n${newCap.hashtags || ""}${persianBlock}`;
-      const hashtags = (newCap.hashtags || "").split(/\s+/).filter((h: string) => h.startsWith("#"));
+      const hashtags = generateHashtags(15);
+      const fullContent = `${newCap.caption}${PIXEL_CONTACT_INFO}\n\n${hashtags.join(" ")}${persianBlock}`;
 
       const { error: updateErr } = await supabase
         .from("social_posts")
@@ -427,7 +427,7 @@ ${isVideoPost ? `IMPORTANT: This post contains a VIDEO. Write a GENERAL promotio
 1. Write a compelling, UNIQUE English caption (2-4 sentences) ${isVideoPost ? "about REBAR.SHOP company and services broadly" : "for this product/topic"}. Use relevant emojis.
 🚨 ZERO OVERLAP RULE: The caption and the image slogan MUST have ZERO overlapping words or phrases. The slogan sells EMOTION (max 6 words). The caption sells SERVICES (delivery, products, benefits). NEVER repeat, rephrase, or echo the slogan in the caption. VIOLATION = rejection.
 2. Write a SHORT English advertising slogan (MAXIMUM 6 words) that will be printed ON the image. It MUST be: simple, catchy, beautiful, and grammatically perfect English. Pure advertising tagline — NO guarantees, NO technical terms, NO scientific claims. Think billboard: short, emotional, memorable. GOOD: "Steel That Builds Dreams", "Your Project, Our Pride". BAD: "Unparalleled Structural Integrity", "Guaranteed Quality Framework".
-3. Write 8-12 relevant hashtags as a single string separated by spaces.
+3. Do NOT generate hashtags — they will be added separately.
 4. Translate the caption to Farsi (Persian) — this MUST be a premium-quality, natural-sounding Persian translation. Do NOT translate word-by-word. Instead, rewrite the meaning in beautiful, fluent Persian that sounds like it was originally written by a native Persian copywriter. Use elegant vocabulary, proper Persian grammar, and a professional advertising tone.
 5. Translate the image slogan to Farsi (Persian) — same quality standard: fluent, catchy, natural Persian. Not a literal translation.
 6. Write a short catchy title (max 10 words).
@@ -445,7 +445,7 @@ CRITICAL RULES:
 ${brainKnowledge ? "- You MUST follow any brand guidelines from the Brain Context above" : ""}
 
 Respond with ONLY a valid JSON object (no markdown, no code fences):
-{"title": "...", "caption": "...", "hashtags": "...", "imageText": "...", "imageTextFa": "...", "captionFa": "..."}`;
+{"title": "...", "caption": "...", "imageText": "...", "imageTextFa": "...", "captionFa": "..."}`;
 
     const captionModels = ["google/gemini-2.5-flash", "openai/gpt-5-mini"];
     let captionRes: Response | null = null;
