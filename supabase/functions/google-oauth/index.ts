@@ -167,12 +167,23 @@ Deno.serve((req) =>
     // ─── Check connection status for current user ──────────────────
     if (action === "check-status") {
       const integration = body.integration as string;
+      const seoServiceAccount = body.seo_service_account === true;
+
+      // For SEO module, always check ai@rebar.shop's token
+      let lookupUserId = userId;
+      if (seoServiceAccount) {
+        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+        const aiAccount = usersData?.users?.find((u: any) => u.email === "ai@rebar.shop");
+        if (aiAccount) {
+          lookupUserId = aiAccount.id;
+        }
+      }
 
       // Check if the user has a stored Google token
       const { data: tokenData } = await supabaseAdmin
         .from("user_gmail_tokens")
         .select("gmail_email, updated_at")
-        .eq("user_id", userId)
+        .eq("user_id", lookupUserId)
         .maybeSingle();
 
       if (tokenData) {

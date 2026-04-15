@@ -45,21 +45,36 @@ Deno.serve((req) =>
       keyword_harvest: true, // always available
     };
 
-    // Check GSC: any user in company has gmail tokens?
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("user_id")
-      .eq("company_id", domain.company_id)
-      .limit(10);
+    // Check GSC: prioritize ai@rebar.shop's token
+    const { data: usersData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    const aiAccount = usersData?.users?.find((u: any) => u.email === "ai@rebar.shop");
 
-    if (profiles?.length) {
-      for (const p of profiles) {
-        const { data: tok } = await supabase
-          .from("user_gmail_tokens")
-          .select("id")
-          .eq("user_id", p.user_id)
-          .maybeSingle();
-        if (tok) { sources.gsc = true; break; }
+    if (aiAccount) {
+      const { data: tok } = await supabase
+        .from("user_gmail_tokens")
+        .select("id")
+        .eq("user_id", aiAccount.id)
+        .maybeSingle();
+      if (tok) sources.gsc = true;
+    }
+
+    // Fallback: check any company user
+    if (!sources.gsc) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("company_id", domain.company_id)
+        .limit(10);
+
+      if (profiles?.length) {
+        for (const p of profiles) {
+          const { data: tok } = await supabase
+            .from("user_gmail_tokens")
+            .select("id")
+            .eq("user_id", p.user_id)
+            .maybeSingle();
+          if (tok) { sources.gsc = true; break; }
+        }
       }
     }
 
