@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Menu, Shield } from "lucide-react";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,13 +48,14 @@ export default function OfficePortal() {
     backToHistoryRef.current = cb;
   }, []);
 
+  const nav = useNavigate();
   const handleBack = useCallback(() => {
     if (activeSection === "ai-extract" && backToHistoryRef.current) {
       backToHistoryRef.current();
     } else {
-      window.history.back();
+      nav("/home");
     }
-  }, [activeSection]);
+  }, [activeSection, nav]);
 
   // React to navigation state changes (e.g. Edit button from Production Queue)
   useEffect(() => {
