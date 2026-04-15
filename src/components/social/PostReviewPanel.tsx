@@ -252,6 +252,44 @@ export function PostReviewPanel({
     setSaveStatus("idle");
   }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages, post?.title, post?.content, post?.hashtags]);
 
+  // Auto-translate to Persian when missing
+  const [autoTranslating, setAutoTranslating] = useState(false);
+  useEffect(() => {
+    if (!post) return;
+    if (persianImageText || persianCaptionText) return; // already have translation
+    if (!localContent && !localTitle) return; // nothing to translate
+    if (autoTranslating) return;
+
+    let cancelled = false;
+    const doTranslate = async () => {
+      setAutoTranslating(true);
+      try {
+        const data = await invokeEdgeFunction("translate-caption", {
+          caption: localContent || localTitle || "",
+          imageText: "", // we don't have image OCR text for old posts
+        }, { timeoutMs: 30000 });
+        if (cancelled) return;
+        const capFa = data.captionFa || "";
+        const imgFa = data.imageTextFa || "";
+        if (capFa || imgFa) {
+          setPersianCaptionText(capFa);
+          setPersianImageText(imgFa);
+          // Save to DB
+          const persianBlock = "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + imgFa + "\n📝 ترجمه کپشن: " + capFa;
+          const rawContent = post.content || "";
+          const contentWithPersian = (rawContent.includes("---PERSIAN---") ? rawContent : rawContent + persianBlock);
+          updatePost.mutate({ id: post.id, content: contentWithPersian });
+        }
+      } catch (err) {
+        console.warn("Auto-translate failed:", err);
+      } finally {
+        if (!cancelled) setAutoTranslating(false);
+      }
+    };
+    doTranslate();
+    return () => { cancelled = true; };
+  }, [post?.id, persianImageText, persianCaptionText, localContent, localTitle]);
+
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
     setUploading(true);
@@ -839,18 +877,27 @@ export function PostReviewPanel({
                       <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
                         🔒 Internal reference only — not published
                       </p>
-                      <div className="mb-1.5">
-                        <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
-                        <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                          {persianImageText || "ترجمه‌ای موجود نیست"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
-                        <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                          {persianCaptionText || "ترجمه‌ای موجود نیست"}
-                        </p>
-                      </div>
+                      {autoTranslating ? (
+                        <div className="flex items-center gap-2 py-2">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">Translating to Persian…</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mb-1.5">
+                            <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
+                            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                              {persianImageText || "ترجمه‌ای موجود نیست"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
+                            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                              {persianCaptionText || "ترجمه‌ای موجود نیست"}
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Regenerate caption */}

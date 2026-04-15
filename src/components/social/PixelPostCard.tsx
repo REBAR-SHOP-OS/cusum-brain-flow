@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { CheckCircle2, RefreshCw, ZoomIn, Languages, Pencil } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { CheckCircle2, RefreshCw, ZoomIn, Languages, Pencil, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ImageEditDialog } from "./ImageEditDialog";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 
 export interface PixelPostData {
   id: string;
@@ -36,6 +37,36 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
     const [imageZoomOpen, setImageZoomOpen] = useState(false);
     const [showImageEdit, setShowImageEdit] = useState(false);
     const [currentImageUrl, setCurrentImageUrl] = useState(post.imageUrl);
+    const [autoTranslating, setAutoTranslating] = useState(false);
+    const [localImageTextTranslation, setLocalImageTextTranslation] = useState(post.imageTextTranslation || "");
+    const [localCaptionTranslation, setLocalCaptionTranslation] = useState(post.captionTranslation || "");
+
+    // Auto-translate if Persian translations are missing
+    useEffect(() => {
+      if (localImageTextTranslation || localCaptionTranslation) return;
+      if (!post.caption) return;
+      if (autoTranslating) return;
+
+      let cancelled = false;
+      const doTranslate = async () => {
+        setAutoTranslating(true);
+        try {
+          const data = await invokeEdgeFunction("translate-caption", {
+            caption: post.caption || "",
+            imageText: "",
+          }, { timeoutMs: 30000 });
+          if (cancelled) return;
+          if (data.captionFa) setLocalCaptionTranslation(data.captionFa);
+          if (data.imageTextFa) setLocalImageTextTranslation(data.imageTextFa);
+        } catch (err) {
+          console.warn("PixelPostCard auto-translate failed:", err);
+        } finally {
+          if (!cancelled) setAutoTranslating(false);
+        }
+      };
+      doTranslate();
+      return () => { cancelled = true; };
+    }, [post.id, post.caption]);
 
     const handleApprove = () => {
       if (!approved) {
@@ -141,18 +172,27 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
             <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
               🔒 Internal reference only — not published
             </p>
-            <div className="mb-1.5">
-              <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
-              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                {post.imageTextTranslation || "ترجمه‌ای موجود نیست"}
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
-              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                {post.captionTranslation || "ترجمه‌ای موجود نیست"}
-              </p>
-            </div>
+            {autoTranslating ? (
+              <div className="flex items-center gap-2 py-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Translating to Persian…</span>
+              </div>
+            ) : (
+              <>
+                <div className="mb-1.5">
+                  <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                    {localImageTextTranslation || "ترجمه‌ای موجود نیست"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
+                    {localCaptionTranslation || "ترجمه‌ای موجود نیست"}
+                  </p>
+                </div>
+              </>
+            )}
           </CollapsibleContent>
         </Collapsible>
 
