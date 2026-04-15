@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/supabasePaginatedFetch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -251,13 +252,13 @@ export function SeoKeywords() {
     queryKey: ["seo-ai-keywords", domain?.id],
     enabled: !!domain?.id,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("seo_keyword_ai")
-        .select("*")
-        .eq("domain_id", domain!.id)
-        .order("opportunity_score", { ascending: false })
-        .range(0, 9999);
-      return data || [];
+      return await fetchAllRows(() =>
+        supabase
+          .from("seo_keyword_ai")
+          .select("*")
+          .eq("domain_id", domain!.id)
+          .order("opportunity_score", { ascending: false })
+      );
     },
   });
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/supabasePaginatedFetch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,12 +68,12 @@ export function SeoTasks() {
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["seo-tasks"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("seo_tasks")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .range(0, 9999);
-      return data || [];
+      return await fetchAllRows(() =>
+        supabase
+          .from("seo_tasks")
+          .select("*")
+          .order("created_at", { ascending: false })
+      );
     },
   });
 

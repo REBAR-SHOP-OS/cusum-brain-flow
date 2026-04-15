@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows } from "@/lib/supabasePaginatedFetch";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -42,13 +43,13 @@ export function SeoPages() {
     queryKey: ["seo-ai-pages", domain?.id],
     enabled: !!domain?.id,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("seo_page_ai")
-        .select("*")
-        .eq("domain_id", domain!.id)
-        .order("seo_score", { ascending: false })
-        .range(0, 9999);
-      return data || [];
+      return await fetchAllRows(() =>
+        supabase
+          .from("seo_page_ai")
+          .select("*")
+          .eq("domain_id", domain!.id)
+          .order("seo_score", { ascending: false })
+      );
     },
   });
 
