@@ -248,27 +248,39 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   // Helper: session's normalised source unit
   const sessionSourceUnit = activeSession?.unit_system === "metric" ? "mm" : (activeSession?.unit_system ?? "mm");
 
-  /** Display length — prefer exact source text when available */
+  /** Display length — prefer exact source text when available, use lossless conversion otherwise */
   const displayLength = (row: any): string => {
-    // Raw source text is a plain number from the file — only valid for "mm" or "in" modes.
-    // Never use it for "imperial" (ft-in) or "ft" — those need conversion formatting.
-    if ((displayUnit === "mm" || displayUnit === "in") &&
-        displayUnit === sessionSourceUnit &&
-        row.source_total_length_text != null && row.source_total_length_text !== "") {
+    const du = displayUnit as LengthDisplayMode;
+    const srcUnit = sessionSourceUnit as LengthDisplayMode;
+
+    // Same unit as source → show exact source text
+    if (du === srcUnit && row.source_total_length_text != null && row.source_total_length_text !== "") {
       return row.source_total_length_text;
     }
+
     const mmVal = row.total_length_mm;
     if (mmVal == null) return "—";
     if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
-    if ((displayUnit === "mm" || displayUnit === "in") &&
-        displayUnit === sessionSourceUnit && row.raw_total_length_mm != null) return String(row.raw_total_length_mm);
-    return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode) || "—";
+
+    // Same unit, raw available → exact raw number
+    if (du === srcUnit && row.raw_total_length_mm != null) return String(row.raw_total_length_mm);
+
+    // Cross-unit conversion: use raw value (in source unit) to avoid rounding through integer mm
+    if (row.raw_total_length_mm != null) {
+      return formatConvertedLength(row.raw_total_length_mm, srcUnit, du) || "—";
+    }
+
+    // Fallback: convert from stored mm (may have minor rounding)
+    return formatLengthByMode(mmVal, du) || "—";
   };
 
-  /** Display dimension value — prefer exact source text when available */
+  /** Display dimension value — prefer exact source text, use lossless conversion otherwise */
   const displayDim = (mmVal: number | null | undefined, dimKey: string, row: any): string => {
-    // Raw source text is plain numbers — only valid for "mm" or "in" modes.
-    if ((displayUnit === "mm" || displayUnit === "in") && displayUnit === sessionSourceUnit) {
+    const du = displayUnit as LengthDisplayMode;
+    const srcUnit = sessionSourceUnit as LengthDisplayMode;
+
+    // Same unit as source → show exact source text
+    if (du === srcUnit) {
       const sourceDims = row.source_dims_json;
       if (sourceDims != null) {
         const letter = dimKey.replace("dim_", "").toUpperCase();
@@ -277,14 +289,26 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
         }
       }
     }
+
     if (mmVal == null) return "";
     if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
-    if ((displayUnit === "mm" || displayUnit === "in") &&
-        displayUnit === sessionSourceUnit && row.raw_dims_json != null) {
+
+    // Same unit, raw available
+    if (du === srcUnit && row.raw_dims_json != null) {
       const rawVal = row.raw_dims_json[dimKey];
       if (rawVal != null) return String(rawVal);
     }
-    return formatLengthByMode(mmVal, displayUnit as LengthDisplayMode);
+
+    // Cross-unit: use raw dim value to convert losslessly
+    if (row.raw_dims_json != null) {
+      const rawVal = row.raw_dims_json[dimKey];
+      if (rawVal != null) {
+        return formatConvertedLength(rawVal, srcUnit, du);
+      }
+    }
+
+    // Fallback: convert from stored mm
+    return formatLengthByMode(mmVal, du);
   };
 
   const userSetUnitRef = useRef(false);

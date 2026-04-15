@@ -181,6 +181,58 @@ export function displayModeToMm(value: number, mode: LengthDisplayMode): number 
   }
 }
 
+/**
+ * Convert a numeric value directly between two display modes
+ * WITHOUT rounding through integer mm. This avoids precision loss
+ * like 8' → 2438mm → 7.99'.
+ */
+export function convertBetweenModes(
+  value: number,
+  fromMode: LengthDisplayMode,
+  toMode: LengthDisplayMode
+): number {
+  if (fromMode === toMode) return value;
+  // Convert source value → mm (floating point, no rounding)
+  let mm: number;
+  switch (fromMode) {
+    case "mm": mm = value; break;
+    case "in": case "imperial": mm = value * 25.4; break;
+    case "ft": mm = value * 304.8; break;
+    default: mm = value;
+  }
+  // Convert mm → target (floating point, no rounding)
+  switch (toMode) {
+    case "mm": return Math.round(mm);
+    case "in": return mm / 25.4;
+    case "ft": return mm / 304.8;
+    case "imperial": return mm / 25.4; // returns total inches for imperial formatting
+    default: return mm;
+  }
+}
+
+/** Format a raw value from one mode into display text for another mode, losslessly */
+export function formatConvertedLength(
+  rawValue: number,
+  fromMode: LengthDisplayMode,
+  toMode: LengthDisplayMode
+): string {
+  if (fromMode === toMode) return formatLengthByMode(displayModeToMm(rawValue, fromMode), toMode);
+  const converted = convertBetweenModes(rawValue, fromMode, toMode);
+  if (toMode === "mm") return `${converted} mm`;
+  if (toMode === "in") {
+    return converted % 1 === 0 ? `${converted}"` : `${parseFloat(converted.toFixed(2))}"`;
+  }
+  if (toMode === "ft") {
+    return converted % 1 === 0 ? `${converted}'` : `${parseFloat(converted.toFixed(2))}'`;
+  }
+  if (toMode === "imperial") {
+    // Use the full imperial ft-in formatting from the converted mm
+    const mm = convertBetweenModes(rawValue, fromMode, "mm");
+    return formatLengthByMode(Math.round(mm), "imperial");
+  }
+  return String(converted);
+}
+
 /** Get the short unit label for a display mode */
 export function lengthUnitLabelByMode(mode: LengthDisplayMode): string {
   switch (mode) {
