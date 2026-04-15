@@ -1,25 +1,26 @@
 
 
-## Plan: Switch Tag Font to OCR-B or Share Tech Mono for Clear 0 vs 8
+## Plan: Fix Zero Rendering on Tags — Use Sans-Serif with Tabular Nums
 
 ### Problem
-Roboto Mono's `0` and `8` still look too similar at heavy weights on printed tags — the zero lacks a distinctive slash/dot.
+Source Code Pro (and most monospace coding fonts) renders `0` with a dot inside. The existing shop floor typography memory already solved this: use `font-sans tabular-nums` (Inter) which gives clean zeros with fixed-width digit alignment.
+
+### Root Cause
+`RebarTagCard` and `PrintTags` use `font-mono`, which maps to Source Code Pro — a coding font with a dotted zero by design.
 
 ### Solution
-Switch to **Share Tech Mono** — a Google Font designed for technical/industrial readability. Its zero has a clearly visible dot inside, making it unmistakable from `8` at any weight. Alternative: **Source Code Pro** (also has dotted zero and multiple weights).
-
-**Recommendation**: **Source Code Pro** — it has weights 400–900, a dotted zero, and excellent print legibility.
+Switch the tag typography from `font-mono` to `font-sans` with `tabular-nums` style, matching the shop floor standard already documented in memory. Inter renders a clean, empty zero that is naturally distinguishable from 8 by shape alone.
 
 ### Changes
 
 | File | Change |
 |------|--------|
-| `index.html` | Replace Roboto Mono import with `Source Code Pro` (wght 400;500;700;900) |
-| `src/index.css` | Update `@import` to Source Code Pro |
-| `tailwind.config.ts` | Change `font-mono` primary to `'Source Code Pro'` |
-| `src/pages/PrintTags.tsx` | Update print `font-family` to `'Source Code Pro'` |
+| `src/components/office/RebarTagCard.tsx` | Replace `font-mono` with `font-sans` and add `tabular-nums` style on the tag container |
+| `src/pages/PrintTags.tsx` | Update print CSS `font-family` from `'Source Code Pro'` to `'Inter', system-ui, sans-serif` and add `font-variant-numeric: tabular-nums` |
 
 ### What does NOT change
-- Tag layout, sizing, colors — untouched
-- No logic or database changes
+- Tag layout, sizing, borders, colors — untouched
+- No database or logic changes
+- Shop floor components — already correct
+- Can remove Source Code Pro font imports from `index.html` and `src/index.css` since tags were the only consumer
 
