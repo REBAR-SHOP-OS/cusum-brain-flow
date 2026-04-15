@@ -4,20 +4,26 @@ import { toast } from "sonner";
 
 async function invoke(action: string, params: Record<string, unknown> = {}) {
   const res = await supabase.functions.invoke("semrush-api", { body: { action, ...params } });
-  // Supabase client wraps non-2xx as error — but the body may still contain structured JSON
-  // For 402 NO_UNITS, the error object contains the context we need
+
   if (res.error) {
-    // Try to parse the error context for NO_UNITS code
-    const errMsg = res.error?.message || String(res.error);
-    if (errMsg.includes("units exhausted") || errMsg.includes("NO_UNITS")) {
-      throw new Error("SEMrush API units exhausted. Top up at semrush.com or wait for monthly reset.");
+    // Supabase JS wraps non-2xx in FunctionsHttpError — the JSON body is in res.data (or error.context)
+    // For 402 NO_UNITS the edge function returns { code: "NO_UNITS", error: "..." }
+    // res.data may still be populated even when res.error is set
+    const body = res.data as Record<string, unknown> | null;
+    if (body?.code === "NO_UNITS") {
+      throw new Error(String(body.error || "SEMrush API units exhausted. Top up or wait for monthly reset."));
     }
-    // Also check if data came through despite the error (some versions pass it)
-    if (res.data?.code === "NO_UNITS") {
-      throw new Error(res.data.error || "SEMrush API units exhausted.");
-    }
-    throw new Error(errMsg);
+    // Try to read the response body from the error context (FunctionsHttpError)
+    try {
+      const ctx = await (res.error as any)?.context?.json?.();
+      if (ctx?.code === "NO_UNITS") {
+        throw new Error(String(ctx.error || "SEMrush API units exhausted."));
+      }
+    } catch { /* context not available or not json */ }
+
+    throw new Error(res.error?.message || String(res.error));
   }
+
   if (res.data?.code === "NO_UNITS") {
     throw new Error(res.data.error || "SEMrush API units exhausted.");
   }
