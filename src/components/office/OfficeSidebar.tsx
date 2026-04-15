@@ -48,7 +48,7 @@ export function OfficeSidebar({ active, onNavigate, onBack }: OfficeSidebarProps
     if (onBack) {
       onBack();
     } else {
-      navigate(-1);
+      navigate("/home");
     }
   };
   return (
