@@ -1,24 +1,25 @@
 
 
-## Plan: Add Dynamic Unit Labels to AI Extract Table Headers
+## Plan: Fix Horizontal Scroll in AI Extract Table
 
-### Problem
-The AI Extract table shows "LENGTH" and dimension columns (A, B, C…) without any unit indicator. The user wants the source unit displayed in the headers so it's immediately clear what unit the values are in.
+### Root Cause
+Line 1027 in `AIExtractView.tsx` has `overflow-x-hidden` on the outer content wrapper, which blocks all horizontal scrolling — even though the table container at line 2237 correctly has `overflow-auto` and the inner table has `min-w-[1400px]`.
 
-### Changes — Single File: `src/components/office/AIExtractView.tsx`
+### Fix — Single Line Change
 
-**1. LENGTH column header** (line 2249-2251) — append the active display unit:
-```
-LENGTH → LENGTH (mm) / LENGTH (in) / LENGTH (ft-in)
-```
-Uses existing `lengthUnitLabelByMode(displayUnit)`.
+**File: `src/components/office/AIExtractView.tsx`** — Line 1027
 
-**2. Dimension column headers** (line 2253) — same treatment:
+Change:
 ```
-A → A (mm) / A (in) / A (ft-in)
+overflow-x-hidden
 ```
+To:
+```
+overflow-x-auto
+```
+
+This allows the wide table (and any other wide content) to scroll horizontally when it exceeds the viewport width.
 
 ### What does NOT change
-- Display logic, unit toggle, source text preservation, edit mode, bin-packing — all unchanged.
-- Only two lines of JSX are updated.
+- Table structure, sticky headers, vertical scroll, or any other layout behavior.
 
