@@ -582,6 +582,25 @@ Rules:
           .update({ progress: 85, unit_system: detectedUnitSystem } as any)
           .eq("id", sessionId);
 
+        // Conversion factor: if source is imperial (inches), convert to mm for storage
+        const isImperial = detectedUnitSystem === "imperial" || detectedUnitSystem === "in";
+        const toMm = isImperial ? 25.4 : 1;
+        if (isImperial) {
+          console.log(`[extract-manifest] Applying ×25.4 conversion (${detectedUnitSystem} → mm) for all dims and lengths`);
+        }
+
+        /** Convert a parsed dimension (which is in inches for imperial) to mm */
+        const dimToMm = (val: any): number | null => {
+          const v = safeDim(val);
+          if (v == null) return null;
+          return Math.round(v * toMm);
+        };
+        const lengthToMm = (val: any): number | null => {
+          const v = safeInt(val, 0);
+          if (!v) return null;
+          return Math.round(v * toMm);
+        };
+
         let savedCount = 0;
         if (items.length > 0) {
           const rows = items.map((item: any, idx: number) => {
@@ -603,19 +622,19 @@ Rules:
               quantity: safeInt(item.quantity, 0),
               bar_size: item.size || null,
               shape_type: item.type || null,
-              total_length_mm: safeInt(item.total_length, 0) || null,
-              dim_a: safeDim(item.A),
-              dim_b: safeDim(item.B),
-              dim_c: safeDim(item.C),
-              dim_d: safeDim(item.D),
-              dim_e: safeDim(item.E),
-              dim_f: safeDim(item.F),
-              dim_g: safeDim(item.G),
-              dim_h: safeDim(item.H),
-              dim_j: safeDim(item.J),
-              dim_k: safeDim(item.K),
-              dim_o: safeDim(item.O),
-              dim_r: safeDim(item.R),
+              total_length_mm: lengthToMm(item.total_length),
+              dim_a: dimToMm(item.A),
+              dim_b: dimToMm(item.B),
+              dim_c: dimToMm(item.C),
+              dim_d: dimToMm(item.D),
+              dim_e: dimToMm(item.E),
+              dim_f: dimToMm(item.F),
+              dim_g: dimToMm(item.G),
+              dim_h: dimToMm(item.H),
+              dim_j: dimToMm(item.J),
+              dim_k: dimToMm(item.K),
+              dim_o: dimToMm(item.O),
+              dim_r: dimToMm(item.R),
               weight_kg: parseDimension(item.weight),
               customer: item.customer || null,
               reference: item.ref || null,
