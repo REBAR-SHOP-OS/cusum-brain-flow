@@ -614,6 +614,7 @@ Rules:
           console.log(`[extract-manifest] Applying ×25.4 conversion (${detectedUnitSystem} → mm) for all dims and lengths`);
         }
 
+
         /** Convert a parsed dimension (which is in inches for imperial) to mm */
         const dimToMm = (val: any): number | null => {
           const v = safeDim(val);
@@ -624,6 +625,55 @@ Rules:
           const v = safeInt(val, 0);
           if (!v) return null;
           return Math.round(v * toMm);
+        };
+
+        // Validation guard: if imperial but converted mm values look suspiciously small,
+        // it means parseDimension returned raw numbers without unit marks.
+        // In that case the values ARE already in source units (inches) and need ×25.4.
+        // If toMm is already 25.4, this is fine. But if detection somehow missed imperial
+        // and toMm=1, we catch it here.
+        if (!isImperial && items.length > 0) {
+          // Check if most dim/length values are suspiciously small (< 50) which would
+          // be unusual for mm but normal for inches
+          const sampleVals: number[] = [];
+          for (const it of items.slice(0, 20)) {
+            for (const k of ["total_length", "A", "B", "C", "D"]) {
+              const v = it[k];
+              if (typeof v === "number" && v > 0) sampleVals.push(v);
+            }
+          }
+          if (sampleVals.length > 3) {
+            const median = sampleVals.sort((a, b) => a - b)[Math.floor(sampleVals.length / 2)];
+            // If median value < 50, these are likely inches not mm (no rebar dim is < 50mm)
+            if (median < 50) {
+              console.warn(`[extract-manifest] VALIDATION GUARD: median dim value is ${median} — too small for mm. Likely unnormalized imperial. Re-detecting as "in".`);
+              detectedUnitSystem = "in";
+              // Re-update session
+              await svcClient
+                .from("extract_sessions")
+                .update({ unit_system: "in" } as any)
+                .eq("id", sessionId);
+            }
+          }
+        }
+
+        // Recompute conversion after possible guard override
+        const finalIsImperial = detectedUnitSystem === "imperial" || detectedUnitSystem === "in";
+        const finalToMm = finalIsImperial ? 25.4 : 1;
+        if (finalIsImperial && !isImperial) {
+          console.log(`[extract-manifest] Validation guard upgraded unit to imperial — applying ×25.4`);
+        }
+
+        /** Final conversion helpers using validated unit */
+        const finalDimToMm = (val: any): number | null => {
+          const v = safeDim(val);
+          if (v == null) return null;
+          return Math.round(v * finalToMm);
+        };
+        const finalLengthToMm = (val: any): number | null => {
+          const v = safeInt(val, 0);
+          if (!v) return null;
+          return Math.round(v * finalToMm);
         };
 
         let savedCount = 0;
