@@ -67,12 +67,12 @@ export function SeoTasks() {
   const { data: tasks, isLoading } = useQuery({
     queryKey: ["seo-tasks"],
     queryFn: async () => {
-      const { data } = await supabase
-        .from("seo_tasks")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .range(0, 9999);
-      return data || [];
+      return await fetchAllRows(() =>
+        supabase
+          .from("seo_tasks")
+          .select("*")
+          .order("created_at", { ascending: false })
+      );
     },
   });
 

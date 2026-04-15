@@ -93,12 +93,12 @@ export function SeoOverview() {
     queryKey: ["seo-ai-kw-stats", domain?.id],
     enabled: !!domain?.id,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("seo_keyword_ai")
-        .select("opportunity_score, status, impressions_28d, clicks_28d, sources, source_count")
-        .eq("domain_id", domain!.id)
-        .range(0, 9999);
-      const all = data || [];
+      const all = await fetchAllRows(() =>
+        supabase
+          .from("seo_keyword_ai")
+          .select("opportunity_score, status, impressions_28d, clicks_28d, sources, source_count")
+          .eq("domain_id", domain!.id)
+      );
       const totalImpressions = all.reduce((s: number, k: any) => s + (k.impressions_28d || 0), 0);
       const totalClicks = all.reduce((s: number, k: any) => s + (k.clicks_28d || 0), 0);
       const winners = all.filter((k: any) => k.status === "winner").length;
@@ -121,12 +121,12 @@ export function SeoOverview() {
     queryKey: ["seo-ai-pg-stats", domain?.id],
     enabled: !!domain?.id,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("seo_page_ai")
-        .select("sessions, conversions, revenue, seo_score")
-        .eq("domain_id", domain!.id)
-        .range(0, 9999);
-      const all = data || [];
+      const all = await fetchAllRows(() =>
+        supabase
+          .from("seo_page_ai")
+          .select("sessions, conversions, revenue, seo_score")
+          .eq("domain_id", domain!.id)
+      );
       const totalSessions = all.reduce((s: number, p: any) => s + (p.sessions || 0), 0);
       const totalConversions = all.reduce((s: number, p: any) => s + (p.conversions || 0), 0);
       const totalRevenue = all.reduce((s: number, p: any) => s + Number(p.revenue || 0), 0);
