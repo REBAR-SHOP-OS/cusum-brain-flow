@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encodeBase64 as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.190.0/encoding/base64.ts";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 import { corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
