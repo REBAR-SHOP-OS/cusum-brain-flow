@@ -1,53 +1,75 @@
 
 
-## Plan: Fix Imperial Dimension Precision and Source Text Storage
+## Plan: Fix Imperial Dimension Extraction (Root Cause: Header Detection Bug)
 
-### Root cause (confirmed from DB data)
+### Problem
+Dimensions display as `159'-3"`, `119'-7"` instead of `6'-3 ¼"`, `4'-8 ½"` — a double ×25.4 conversion.
 
-The latest extraction (`ffc1d980`, "ET10533 WEST PARK HOSPITAL") shows:
-- `dim_c = 1905` (should be 1911 for `6'-3 ¼"`)
-- `source_dims_json = null` (should contain exact source text)
-- `source_total_length_text = "105.25"` (should be `"8'-9 ¼"`)
+### Root cause chain (confirmed from logs + DB)
 
-Three bugs:
+1. **`normalizeDimHeader` false-matches non-header cells** — The function strips ALL non-letter characters before checking if a single DIMS letter remains. So a cell with `"R1"` (Dwg No value) becomes `"R"` → matches. This causes `overlaySheetDims` to pick the wrong row as the "header row", find only 1 dim column, and **skip** entirely.
 
-**Bug 1: `Math.round` in `parseDimension` loses fractions**
-Line 54: `Math.round(parseFloat(ftIn[1]) * 12 + parseFloat(ftIn[2]))` → `6'-3 ¼"` becomes 75 instead of 75.25. Same on lines 60 and 74. This loses ¼" precision (6.35mm per ¼").
+2. **`overlaySheetDims` skips → `source_dims_json` = null** — Without the overlay, the exact cell text (`6'-3 ¼"`) is never captured.
 
-**Bug 2: `.w` property not populated on XLSX cells**
-`XLSX.read(fileBytes, { type: "array" })` on line 343 does not guarantee `.w` (formatted text) is generated. Need `cellText: true` option to force `.w` population for custom-formatted cells (RebarCAD's ft-in number formats).
+3. **AI returns values already converted to mm** — The AI model receives the CSV, sees ft-in text, and returns numeric values in mm (e.g., `1911` for `6'-3 ¼"`). 
 
-**Bug 3: Deployment gap**
-The `__source_dims` and `__source_length` assignments exist in code but aren't reaching the DB. Forced redeployment needed.
+4. **Double conversion** — Code detects imperial from cell patterns → `finalToMm = 25.4` → `1911 × 25.4 = 48539` stored as `dim_c`. The displayed `159'-3"` is a correct back-conversion of `48539mm`, but the stored value was wrong.
 
 ### Changes
 
-#### `supabase/functions/extract-manifest/index.ts`
+#### File: `supabase/functions/extract-manifest/index.ts`
 
-1. **Line 343** — Add `cellText: true` to XLSX.read:
+**Fix 1: Tighten `normalizeDimHeader` (line 84-94)**
+After stripping "DIM" prefix and parenthesized suffixes, the remaining text must be exactly one letter (no trailing digits/content). Currently it strips ALL non-letters then checks length — this makes `"R1"` match as `"R"`. Fix: check that the cleaned string (before stripping non-alpha) is a single character or matches pattern `^[A-Z]$`.
+
 ```typescript
-parsedWorkbook = XLSX.read(fileBytes, { type: "array", cellText: true });
+function normalizeDimHeader(raw: string): string | null {
+  let s = String(raw).trim().toUpperCase();
+  s = s.replace(/\s*\(.*?\)\s*/g, " ").trim();
+  s = s.replace(/^DIM\.?\s*/i, "").trim();
+  // Must be exactly a single letter after cleanup — don't strip digits
+  if (s.length === 1 && /^[A-Z]$/.test(s) && (DIMS as readonly string[]).includes(s)) return s;
+  return null;
+}
 ```
 
-2. **Lines 54, 60, 74** — Remove `Math.round` from `parseDimension` to preserve fractional inches:
+**Fix 2: Add double-conversion guard (after line 668)**
+After `overlaySheetDims`, if imperial is detected and overlay succeeded, values are in inches (correct). But if overlay failed and AI returned values, check if the median dim value is large enough to already be mm (>200). If so, set `finalToMm = 1` to prevent double conversion.
+
 ```typescript
-// Line 54: return parseFloat(ftIn[1]) * 12 + parseFloat(ftIn[2]);
-// Line 60: return parseFloat(ftOnly[1]) * 12;
-// Line 74: return parseFloat(ftInFallback[1]) * 12 + parseFloat(ftInFallback[2]);
+// After finalToMm computation:
+if (finalIsImperial && !overlaySucceeded) {
+  const sampleDims: number[] = [];
+  for (const it of items.slice(0, 10)) {
+    for (const k of DIMS) {
+      const v = safeDim(it[k]);
+      if (v != null && v > 0) sampleDims.push(v);
+    }
+  }
+  if (sampleDims.length > 2) {
+    const median = sampleDims.sort((a, b) => a - b)[Math.floor(sampleDims.length / 2)];
+    if (median > 200) {
+      console.warn(`[extract-manifest] AI likely returned mm values (median dim=${median}). Skipping ×25.4.`);
+      finalToMm = 1;
+    }
+  }
+}
 ```
 
-3. **Redeploy** the edge function to ensure all accumulated fixes are live.
+**Fix 3: Track overlay success flag**
+Return a boolean from `overlaySheetDims` indicating whether the overlay actually applied (found ≥2 columns), so the guard above can use it.
+
+**Fix 4: Redeploy** the edge function.
 
 ### Expected result after fix + re-extraction
 
-| Source text | parseDimension | ×25.4 stored mm | source_dims_json | UI (imperial) |
-|------------|---------------|-----------------|-----------------|---------------|
-| `6'-3 ¼"` | 75.25 | 1911 | `"6'-3 ¼"` | `6'-3 ¼"` |
-| `8'-9 ¼"` | 105.25 | 2673 | `"8'-9 ¼"` | `8'-9 ¼"` |
-| `4'-8 ½"` | 56.5 | 1435 | `"4'-8 ½"` | `4'-8 ½"` |
-| `6"` | 6 | 152 | `"6"` | `6"` |
-| `1'-4"` | 16 | 406 | `"1'-4"` | `1'-4"` |
+| Source | Stored mm | source_dims_json | UI (ft-in) |
+|--------|----------|-----------------|------------|
+| `6'-3 ¼"` | 1911 | `{"C":"6'-3 ¼\""}` | `6'-3 ¼"` |
+| `4'-8 ½"` | 1435 | `{"C":"4'-8 ½\""}` | `4'-8 ½"` |
+| `6"` | 152 | `{"A":"6\""}` | `6"` |
+| `1'-6"` | 457 | `{"G":"1'-6\""}` | `1'-6"` |
 
 ### Re-extraction required
-After deploying, the file must be re-extracted to populate correct values.
+After deploying, the file must be re-extracted.
 
