@@ -1,32 +1,71 @@
 
 
-## Plan: Fix SEO Task Executor to Use GSC Sync Instead of Asking for Manual Steps
+## Plan: Smart SEO Scanner — Auto-Detect Sources, Auto-Fix, and Guide
 
 ### Problem
-When a SEO task related to Google Search Console data (keyword performance, impressions, clicks, CTR) is created, clicking "Execute" shows "Manual Steps Required" telling the user to manually export data from GSC. This is wrong because:
+The SEO task system creates tasks like "Provide Page Data" that ask the user to manually export data from Google Search Console, even though GSC, Wincher, SEMrush, and site crawl functions are all connected and functional. The AI planner doesn't know about these data sources and can't auto-trigger them.
 
-1. GSC **is** connected via Google OAuth
-2. The system **already has** a `seo-gsc-sync` edge function that pulls GSC data automatically
-3. The AI task planner in `seo-task-execute` doesn't know about this capability — its prompt only lists WordPress API actions
+### What Changes
 
-### Root Cause
-In `supabase/functions/seo-task-execute/index.ts`, the system prompt (line 87-117) tells the AI planner that "Google Search Console verification" is something it CANNOT auto-execute. The planner has no knowledge of the `seo-gsc-sync` function that can pull GSC data.
+#### 1. New Edge Function: `seo-smart-scan` 
+A master orchestrator that:
+- **Auto-detects all connected data sources** (GSC via OAuth, Wincher via API key, SEMrush API, site crawl, link audit, keyword harvest)
+- **Runs all available syncs** in parallel (calls existing functions: `seo-gsc-sync`, `wincher-sync`, `semrush-api`, `seo-site-crawl`, `seo-keyword-harvest`, `seo-link-audit`)
+- **Feeds aggregated data to `seo-ai-analyze`** for AI-powered analysis
+- **Creates tasks with auto-fix flags** — each task gets `can_autofix: true/false` based on whether it's within WP API capabilities
+- **Auto-executes fixable tasks** immediately (meta titles, descriptions, JSON-LD, content updates) by calling `seo-task-execute`
+- **Non-fixable tasks** get detailed human instructions (DNS changes, plugin installs, GA setup, etc.)
+- Returns a summary: `{ sources_synced, issues_found, auto_fixed, manual_required }`
 
-### Fix
+#### 2. Update `seo-ai-analyze` System Prompt
+- Remove any prompts that generate "provide data" type tasks
+- Add instruction: "Never create tasks asking the user to provide data — the system automatically pulls from GSC, Wincher, SEMrush, and site crawl"
+- Add `can_autofix` boolean to the task schema so AI labels each task
 
-**File: `supabase/functions/seo-task-execute/index.ts`**
+#### 3. Update `seo-task-execute` — Add More Auto-Actions
+Add these to `ALLOWED_ACTIONS` and the system prompt:
+- `trigger_wincher_sync` — calls `wincher-sync`
+- `trigger_semrush_sync` — calls `semrush-api` with `action: "domain_overview"`
+- `trigger_site_crawl` — calls `seo-site-crawl`
+- `trigger_link_audit` — calls `seo-link-audit` with `phase: "crawl"`
 
-1. **Add GSC sync to the "CAN auto-execute" list** in the system prompt — add a new action type `trigger_gsc_sync` that calls the `seo-gsc-sync` edge function
-2. **Add the action handler** in the execution logic to invoke `seo-gsc-sync` when the AI planner returns a `trigger_gsc_sync` action
-3. **Remove "Google Search Console verification" from the CANNOT list** (or clarify it only means initial domain verification, not data syncing)
+#### 4. Update `SeoTasks.tsx` UI
+- Add "Smart Scan" button at top that triggers `seo-smart-scan`
+- Show scan progress and results summary
+- Auto-fixed tasks show green "AI Fixed" badge
+- Manual tasks show clear step-by-step instructions with a yellow "Manual" badge
+- Group tasks by: "Auto-Fixed" | "Needs Your Action" | "Open"
 
 ### Technical Details
 
-- Add to system prompt CAN-execute list: `- Pulling keyword performance data from Google Search Console → trigger_gsc_sync`
-- Add action type `trigger_gsc_sync` to the tool schema
-- In the execution switch/handler, call `supabase.functions.invoke("seo-gsc-sync", { body: { domain_id } })` when this action is triggered
-- Mark the task as done after successful sync
+**`seo-smart-scan` flow:**
+```text
+1. Check available sources:
+   - GSC: user_gmail_tokens exists? → call seo-gsc-sync
+   - Wincher: WINCHER_API_KEY set? → call wincher-sync
+   - SEMrush: hardcoded key exists → call semrush-api
+   - Site crawl: always available → call seo-site-crawl
+   - Link audit: always available → call seo-link-audit (crawl phase)
+   - Keyword harvest: always available → call seo-keyword-harvest
+
+2. Run all available syncs in parallel (Promise.allSettled)
+
+3. Call seo-ai-analyze with refreshed data
+
+4. For each new task with can_autofix=true:
+   → call seo-task-execute (analyze + execute) immediately
+   
+5. Return summary to frontend
+```
+
+**Files to create:**
+- `supabase/functions/seo-smart-scan/index.ts`
+
+**Files to modify:**
+- `supabase/functions/seo-ai-analyze/index.ts` — update AI prompt, add `can_autofix` to task schema
+- `supabase/functions/seo-task-execute/index.ts` — add Wincher/SEMrush/crawl sync actions
+- `src/components/seo/SeoTasks.tsx` — add Smart Scan button and improved UI grouping
 
 ### Result
-GSC data tasks will auto-execute by triggering the existing sync function instead of showing manual steps.
+One-click "Smart Scan" automatically pulls data from all connected sources, identifies all SEO issues, auto-fixes everything possible via WordPress API, and presents clear manual instructions for the rest.
 
