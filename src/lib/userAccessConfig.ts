@@ -119,7 +119,7 @@ const USER_ACCESS: Record<string, UserConfig> = {
   },
 
   "ben@rebar.shop": {
-    menus: ["Dashboard", "Inbox", "Team Hub", "Pipeline", "Time Clock"],
+    menus: ["Dashboard", "Inbox", "Team Hub", "Business Tasks", "Pipeline", "Time Clock"],
     agents: ["sales", "support", "estimating", "eisenhower"],
     primaryAgent: "estimating",
     heroText: "How can **Gauge** help you today?",
