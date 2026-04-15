@@ -1,39 +1,43 @@
 
 
-## Plan: Auto-Speak for Vizzy Intelligence Panel
+## Plan: Fix Unit Converter Rounding Artifacts in AI Extract
 
-### What Changes
-Add auto-speak so every Vizzy assistant reply is automatically sent to PersonaPlex TTS and played aloud.
+### Problem
+When toggling the display unit (e.g., from inches → mm → ft), values show rounding errors like `7.99'` instead of `8'` or `47.99"` instead of `48"`.
 
-### Implementation
+**Root cause**: Values are stored as `total_length_mm` (rounded integer). Converting back from rounded mm introduces precision loss: `8' → 2438.4mm → 2438 → 2438/304.8 = 7.99'`.
 
-**1. Create `src/hooks/useVizzyAutoSpeak.ts`** — a small hook encapsulating the TTS logic:
-- `audioRef` to track the single active `HTMLAudioElement`
-- `speakText(text)` function that POSTs to `${VITE_TTS_API_URL}/v1/tts`, decodes `audio_base64`, creates a blob URL, and plays it
-- Guards: skip empty text, `[UNCLEAR]`, and messages starting with `⚠️` / `❌` / `🚫` / `⏳` (system/error messages)
-- Stops any currently playing audio before starting new playback
-- Cleans up blob URLs on `ended`
+The raw source values exist in `raw_total_length_mm` (in source units) and `raw_dims_json`, but they're only used when `displayUnit === sessionSourceUnit`. They should also be used as the conversion base for other units.
 
-**2. Patch `src/components/layout/IntelligencePanel.tsx`** — minimal addition:
-- Import and call `useVizzyAutoSpeak()`
-- Add a `useEffect` that watches `messages` and `isStreaming`: when streaming ends and the last message is `assistant`, call `speakText(lastMessage.content)`
-- This ensures we speak only the final complete reply, not partial chunks
+### Solution
 
-### Guards Against Overlap / Noise
-- Single `audioRef` — old audio stopped before new plays
-- No speak during streaming (waits for completion)
-- Skip tool/system messages via prefix checks
-- Skip empty or `[UNCLEAR]` content
+**File: `src/components/office/AIExtractView.tsx`** — Update `displayLength` and `displayDim` functions.
 
-### What Does NOT Change
-- UI, styling, layout — untouched
-- `useAdminChat` hook — untouched
-- Manual playback if it exists elsewhere — preserved
-- No database or edge function changes
+**Strategy**: When `raw_total_length_mm` exists and the session's source unit is known, convert from `raw → target` instead of `mm → target`. This eliminates the integer rounding error.
+
+1. **`displayLength`**: When converting to a non-source unit, use `raw_total_length_mm` (in source units) and convert directly to the target unit via a new helper, instead of going through the rounded `total_length_mm`.
+
+2. **`displayDim`**: Same approach — use `raw_dims_json` values (in source units) and convert directly to the target display unit.
+
+3. **Add helper function** `convertRawToDisplay(rawValue, sourceUnit, targetUnit)` that converts directly between unit modes without rounding through mm.
+
+**File: `src/lib/unitSystem.ts`** — Add `convertBetweenModes(value, fromMode, toMode)` utility.
+
+### Example fix for `displayLength`:
+```typescript
+// Before (lossy): formatLengthByMode(2438, "ft") → "7.99'"
+// After (lossless): convert raw 96 (inches) → ft → "8'"
+```
+
+### What does NOT change
+- Database values — untouched
+- Source text display in native unit — untouched
+- Mapping/extraction logic — untouched
+- Print/tags components — untouched (they use `source_total_length_text` already)
 
 ### Files
 | File | Action |
 |------|--------|
-| `src/hooks/useVizzyAutoSpeak.ts` | Create |
-| `src/components/layout/IntelligencePanel.tsx` | Add hook + useEffect (≈10 lines) |
+| `src/lib/unitSystem.ts` | Add `convertBetweenModes()` helper |
+| `src/components/office/AIExtractView.tsx` | Update `displayLength` + `displayDim` to use raw values for cross-unit conversion |
 
