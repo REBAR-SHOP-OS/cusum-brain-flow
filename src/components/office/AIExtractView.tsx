@@ -271,7 +271,6 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
 
     const mmVal = row.total_length_mm;
     if (mmVal == null) return "—";
-    if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
 
     // Same unit, raw available → exact raw number
     if (du === srcUnit && row.raw_total_length_mm != null) return String(row.raw_total_length_mm);
@@ -302,7 +301,6 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
     }
 
     if (mmVal == null) return "";
-    if (!["mapped", "validated", "approved"].includes(activeSession?.status ?? "")) return String(mmVal);
 
     // Same unit, raw available
     if (du === srcUnit && row.raw_dims_json != null) {
