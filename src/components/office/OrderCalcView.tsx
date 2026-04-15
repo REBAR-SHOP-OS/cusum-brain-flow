@@ -13,13 +13,34 @@ const FALLBACK_WPM: Record<string, number> = {
   "25M": 3.925, "30M": 5.495, "35M": 7.850,
 };
 
+// --- Formatting helpers ---
+
+/** Format a decimal value in the source unit. For ft → X'-Y" */
+function formatSourceLength(val: number, unit: SourceUnit): string {
+  if (unit === "ft") {
+    const feet = Math.floor(val);
+    const inches = Math.round((val - feet) * 12);
+    if (inches === 12) return `${feet + 1}'-0"`;
+    return `${feet}'-${inches}"`;
+  }
+  return val.toFixed(2);
+}
+
+function unitColumnLabel(unit: SourceUnit): string {
+  switch (unit) {
+    case "mm": return "mm";
+    case "in": return "in";
+    case "ft": return "ft'in";
+  }
+}
+
 // --- Calculation ---
 
 interface SizeSummary {
   bar_size: string;
   total_pieces: number;
-  total_length_m: number;
-  length_with_waste_m: number;
+  total_length: number;      // in source unit
+  length_with_waste: number;  // in source unit
   bars_to_order: number;
   total_weight_kg: number;
 }
@@ -65,16 +86,19 @@ function calculate(
       }
     }
     const bars = bins.length;
-    const totalM = g.cuts_mm.reduce((a, b) => a + b, 0) / wasteMult / 1000;
-    const withWasteM = g.cuts_mm.reduce((a, b) => a + b, 0) / 1000;
+    // Display values in source unit (divide mm by unitFactor, not by 1000)
+    const totalMm = g.cuts_mm.reduce((a, b) => a + b, 0) / wasteMult;
+    const withWasteMm = g.cuts_mm.reduce((a, b) => a + b, 0);
+    const totalSource = totalMm / unitFactor;
+    const withWasteSource = withWasteMm / unitFactor;
     const w = wpm[s] ?? FALLBACK_WPM[s] ?? 0;
     const weight = Math.round(bars * stockLengthM * w * 100) / 100;
 
     return {
       bar_size: s,
       total_pieces: g.pieces,
-      total_length_m: Math.round(totalM * 100) / 100,
-      length_with_waste_m: Math.round(withWasteM * 100) / 100,
+      total_length: Math.round(totalSource * 100) / 100,
+      length_with_waste: Math.round(withWasteSource * 100) / 100,
       bars_to_order: bars,
       total_weight_kg: weight,
     };
@@ -149,11 +173,13 @@ export function OrderCalcView() {
     if (file) handleFile(file);
   }, [handleFile]);
 
+  const uLabel = unitColumnLabel(sourceUnit);
+
   const exportCSV = () => {
     if (!results.length) return;
-    const header = "Bar Size,Total Pieces,Total Length (m),With Waste (m),Stock Length (m),Bars to Order,Weight (kg)\n";
+    const header = `Bar Size,Total Pieces,Total Length (${uLabel}),With Waste (${uLabel}),Stock Length (m),Bars to Order,Weight (kg)\n`;
     const rows = results.map(r =>
-      `${r.bar_size},${r.total_pieces},${r.total_length_m},${r.length_with_waste_m},${stockLength},${r.bars_to_order},${r.total_weight_kg}`
+      `${r.bar_size},${r.total_pieces},${formatSourceLength(r.total_length, sourceUnit)},${formatSourceLength(r.length_with_waste, sourceUnit)},${stockLength},${r.bars_to_order},${r.total_weight_kg}`
     ).join("\n");
     const totals = `\nTOTAL,${results.reduce((s, r) => s + r.total_pieces, 0)},,,,${results.reduce((s, r) => s + r.bars_to_order, 0)},${results.reduce((s, r) => s + r.total_weight_kg, 0).toFixed(2)}`;
     const blob = new Blob([header + rows + totals], { type: "text/csv" });
@@ -268,8 +294,8 @@ export function OrderCalcView() {
                 <TableRow className="bg-muted/30">
                   <TableHead className="text-xs">Bar Size</TableHead>
                   <TableHead className="text-xs text-right">Pieces</TableHead>
-                  <TableHead className="text-xs text-right">Length (m)</TableHead>
-                  <TableHead className="text-xs text-right">+ Waste (m)</TableHead>
+                  <TableHead className="text-xs text-right">Length ({uLabel})</TableHead>
+                  <TableHead className="text-xs text-right">+ Waste ({uLabel})</TableHead>
                   <TableHead className="text-xs text-right">Stock ({stockLength}M)</TableHead>
                   <TableHead className="text-xs text-right font-bold">Bars to Order</TableHead>
                   <TableHead className="text-xs text-right">Weight (kg)</TableHead>
@@ -280,8 +306,8 @@ export function OrderCalcView() {
                   <TableRow key={r.bar_size}>
                     <TableCell className="font-medium">{r.bar_size}</TableCell>
                     <TableCell className="text-right">{r.total_pieces.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.total_length_m.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.length_with_waste_m.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{formatSourceLength(r.total_length, sourceUnit)}</TableCell>
+                    <TableCell className="text-right">{formatSourceLength(r.length_with_waste, sourceUnit)}</TableCell>
                     <TableCell className="text-right">{stockLength}M</TableCell>
                     <TableCell className="text-right font-bold text-primary">{r.bars_to_order.toLocaleString()}</TableCell>
                     <TableCell className="text-right">{r.total_weight_kg.toLocaleString()}</TableCell>
@@ -291,8 +317,8 @@ export function OrderCalcView() {
                 <TableRow className="bg-muted/20 font-bold border-t-2 border-border">
                   <TableCell>TOTAL</TableCell>
                   <TableCell className="text-right">{results.reduce((s, r) => s + r.total_pieces, 0).toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{results.reduce((s, r) => s + r.total_length_m, 0).toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{results.reduce((s, r) => s + r.length_with_waste_m, 0).toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{formatSourceLength(results.reduce((s, r) => s + r.total_length, 0), sourceUnit)}</TableCell>
+                  <TableCell className="text-right">{formatSourceLength(results.reduce((s, r) => s + r.length_with_waste, 0), sourceUnit)}</TableCell>
                   <TableCell />
                   <TableCell className="text-right text-primary">{totalBars.toLocaleString()}</TableCell>
                   <TableCell className="text-right">{totalWeight.toLocaleString()}</TableCell>
