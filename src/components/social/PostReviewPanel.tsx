@@ -253,43 +253,54 @@ export function PostReviewPanel({
     setAutoTranslating(false);
   }, [post?.id, post?.platform, post?.content_type, post?.page_name, groupPages, post?.title, post?.content, post?.hashtags]);
 
-  // Auto-translate to Persian when missing
+  // Auto-translate to Persian — always driven by current localContent
   const [autoTranslating, setAutoTranslating] = useState(false);
+  const lastTranslatedCaptionRef = useRef<string>("");
+  const translateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!post) return;
-    if (persianImageText || persianCaptionText) return; // already have translation
-    if (!localContent && !localTitle) return; // nothing to translate
-    if (autoTranslating) return;
+    const caption = localContent || localTitle || "";
+    if (!caption) return;
+    // If we already translated this exact caption, skip
+    if (lastTranslatedCaptionRef.current === caption && (persianCaptionText || persianImageText)) return;
 
-    let cancelled = false;
-    const doTranslate = async () => {
-      setAutoTranslating(true);
-      try {
-        const data = await invokeEdgeFunction("translate-caption", {
-          caption: localContent || localTitle || "",
-          imageText: "", // we don't have image OCR text for old posts
-        }, { timeoutMs: 30000 });
-        if (cancelled) return;
-        const capFa = data.captionFa || "";
-        const imgFa = data.imageTextFa || "";
-        if (capFa || imgFa) {
+    // Debounce: wait 1.5s after last caption change before translating
+    if (translateDebounceRef.current) clearTimeout(translateDebounceRef.current);
+    translateDebounceRef.current = setTimeout(() => {
+      let cancelled = false;
+      const doTranslate = async () => {
+        setAutoTranslating(true);
+        try {
+          const data = await invokeEdgeFunction("translate-caption", {
+            caption,
+            imageText: "",
+          }, { timeoutMs: 30000 });
+          if (cancelled) return;
+          lastTranslatedCaptionRef.current = caption;
+          const capFa = data.captionFa || "";
+          const imgFa = data.imageTextFa || "";
           setPersianCaptionText(capFa);
           setPersianImageText(imgFa);
           // Save to DB
           const persianBlock = "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + imgFa + "\n📝 ترجمه کپشن: " + capFa;
           const rawContent = post.content || "";
-          const contentWithPersian = (rawContent.includes("---PERSIAN---") ? rawContent : rawContent + persianBlock);
-          updatePost.mutate({ id: post.id, content: contentWithPersian });
+          const baseContent = rawContent.includes("---PERSIAN---") ? rawContent.slice(0, rawContent.indexOf("---PERSIAN---")).trim() : rawContent;
+          updatePost.mutate({ id: post.id, content: baseContent + persianBlock });
+        } catch (err) {
+          console.warn("Auto-translate failed:", err);
+        } finally {
+          if (!cancelled) setAutoTranslating(false);
         }
-      } catch (err) {
-        console.warn("Auto-translate failed:", err);
-      } finally {
-        if (!cancelled) setAutoTranslating(false);
-      }
+      };
+      doTranslate();
+    }, 1500);
+
+    return () => {
+      if (translateDebounceRef.current) clearTimeout(translateDebounceRef.current);
+      setAutoTranslating(false);
     };
-    doTranslate();
-    return () => { cancelled = true; setAutoTranslating(false); };
-  }, [post?.id, persianImageText, persianCaptionText, localContent, localTitle]);
+  }, [post?.id, localContent, localTitle]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
