@@ -680,12 +680,8 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       (hasImageText ? `🖼️ متن روی عکس: ${newContent.imageTextFa}\n` : "") +
       `📝 ترجمه کپشن: ${newContent.captionFa || ""}`;
 
-    const fullContent = `${newContent.caption}${PIXEL_CONTACT_INFO}\n\n${newContent.hashtags || ""}${persianBlock}`;
-
-    // 5. Update post in DB
-    const hashtags = (newContent.hashtags || "")
-      .split(/\s+/)
-      .filter((h: string) => h.startsWith("#"));
+    const hashtags = generateHashtags(15);
+    const fullContent = `${newContent.caption}${PIXEL_CONTACT_INFO}\n\n${hashtags.join(" ")}${persianBlock}`;
 
     const { error: updateErr } = await supabase
       .from("social_posts")
