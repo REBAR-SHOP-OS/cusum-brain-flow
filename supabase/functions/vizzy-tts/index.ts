@@ -28,7 +28,8 @@ Deno.serve((req) =>
       );
     }
 
-    const endpoint = `${ttsUrl}/tts`;
+    // TTS_API_URL should be the full base (e.g. https://host:9009/tts)
+    const endpoint = ttsUrl.endsWith("/tts") ? ttsUrl : `${ttsUrl}/tts`;
     log.info("Generating TTS", { textLength: text.length, endpoint });
 
     const ttsResp = await fetch(endpoint, {
