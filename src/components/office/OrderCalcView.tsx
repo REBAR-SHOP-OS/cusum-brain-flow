@@ -294,8 +294,8 @@ export function OrderCalcView() {
                 <TableRow className="bg-muted/30">
                   <TableHead className="text-xs">Bar Size</TableHead>
                   <TableHead className="text-xs text-right">Pieces</TableHead>
-                  <TableHead className="text-xs text-right">Length (m)</TableHead>
-                  <TableHead className="text-xs text-right">+ Waste (m)</TableHead>
+                  <TableHead className="text-xs text-right">Length ({uLabel})</TableHead>
+                  <TableHead className="text-xs text-right">+ Waste ({uLabel})</TableHead>
                   <TableHead className="text-xs text-right">Stock ({stockLength}M)</TableHead>
                   <TableHead className="text-xs text-right font-bold">Bars to Order</TableHead>
                   <TableHead className="text-xs text-right">Weight (kg)</TableHead>
@@ -306,8 +306,8 @@ export function OrderCalcView() {
                   <TableRow key={r.bar_size}>
                     <TableCell className="font-medium">{r.bar_size}</TableCell>
                     <TableCell className="text-right">{r.total_pieces.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.total_length_m.toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{r.length_with_waste_m.toLocaleString()}</TableCell>
+                    <TableCell className="text-right">{formatSourceLength(r.total_length, sourceUnit)}</TableCell>
+                    <TableCell className="text-right">{formatSourceLength(r.length_with_waste, sourceUnit)}</TableCell>
                     <TableCell className="text-right">{stockLength}M</TableCell>
                     <TableCell className="text-right font-bold text-primary">{r.bars_to_order.toLocaleString()}</TableCell>
                     <TableCell className="text-right">{r.total_weight_kg.toLocaleString()}</TableCell>
@@ -317,8 +317,8 @@ export function OrderCalcView() {
                 <TableRow className="bg-muted/20 font-bold border-t-2 border-border">
                   <TableCell>TOTAL</TableCell>
                   <TableCell className="text-right">{results.reduce((s, r) => s + r.total_pieces, 0).toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{results.reduce((s, r) => s + r.total_length_m, 0).toLocaleString()}</TableCell>
-                  <TableCell className="text-right">{results.reduce((s, r) => s + r.length_with_waste_m, 0).toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{formatSourceLength(results.reduce((s, r) => s + r.total_length, 0), sourceUnit)}</TableCell>
+                  <TableCell className="text-right">{formatSourceLength(results.reduce((s, r) => s + r.length_with_waste, 0), sourceUnit)}</TableCell>
                   <TableCell />
                   <TableCell className="text-right text-primary">{totalBars.toLocaleString()}</TableCell>
                   <TableCell className="text-right">{totalWeight.toLocaleString()}</TableCell>
