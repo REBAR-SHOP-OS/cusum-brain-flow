@@ -43,7 +43,7 @@ export function SeoOverview() {
     const check = async () => {
       try {
         const { data } = await supabase.functions.invoke("google-oauth", {
-          body: { action: "check-status", integration: "google-search-console" },
+          body: { action: "check-status", integration: "google-search-console", seo_service_account: true },
         });
         if (data?.status === "connected") {
           setGoogleStatus("connected");
@@ -62,7 +62,7 @@ export function SeoOverview() {
     try {
       const redirectUri = `${window.location.origin}/integrations/callback`;
       const { data, error } = await supabase.functions.invoke("google-oauth", {
-        body: { action: "get-auth-url", integration: "google-search-console", redirectUri },
+        body: { action: "get-auth-url", integration: "google-search-console", redirectUri, seo_service_account: true },
       });
       if (error) throw error;
       if (data?.authUrl) window.location.href = data.authUrl;
@@ -74,7 +74,7 @@ export function SeoOverview() {
   const reconnectGoogle = async () => {
     try {
       await supabase.functions.invoke("google-oauth", {
-        body: { action: "disconnect", integration: "google-search-console" },
+        body: { action: "disconnect", integration: "google-search-console", seo_service_account: true },
       });
       await connectGoogle();
     } catch (e: any) {

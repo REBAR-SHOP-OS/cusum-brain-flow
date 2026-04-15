@@ -50,13 +50,7 @@ Deno.serve((req) =>
       });
     }
 
-    // Get Google OAuth token from user_gmail_tokens (find any user in this company)
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("user_id")
-      .eq("company_id", domain.company_id)
-      .limit(10);
-
+    // Always use ai@rebar.shop's Google token for SEO/GSC operations
     let accessToken: string | null = null;
 
     const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
@@ -69,26 +63,56 @@ Deno.serve((req) =>
       );
     }
 
-    // Try each company user's token
-    for (const profile of profiles || []) {
+    // Prioritize ai@rebar.shop's token
+    const { data: usersData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    const aiAccount = usersData?.users?.find((u: any) => u.email === "ai@rebar.shop");
+
+    if (aiAccount) {
       const { data: tokenRow } = await supabase
         .from("user_gmail_tokens")
         .select("refresh_token, is_encrypted")
-        .eq("user_id", profile.user_id)
+        .eq("user_id", aiAccount.id)
         .maybeSingle();
 
-      if (!tokenRow?.refresh_token) continue;
+      if (tokenRow?.refresh_token) {
+        try {
+          const refreshToken = tokenRow.is_encrypted
+            ? await decryptToken(tokenRow.refresh_token)
+            : tokenRow.refresh_token;
+          accessToken = await getGoogleAccessToken(refreshToken, clientId, clientSecret);
+        } catch (e) {
+          console.log("Token refresh failed for ai@rebar.shop:", e);
+        }
+      }
+    }
 
-      try {
-        const refreshToken = tokenRow.is_encrypted
-          ? await decryptToken(tokenRow.refresh_token)
-          : tokenRow.refresh_token;
+    // Fallback: try other company users if ai@rebar.shop token not available
+    if (!accessToken) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("company_id", domain.company_id)
+        .limit(10);
 
-        accessToken = await getGoogleAccessToken(refreshToken, clientId, clientSecret);
-        break;
-      } catch (e) {
-        console.log(`Token refresh failed for user ${profile.user_id}:`, e);
-        continue;
+      for (const profile of profiles || []) {
+        const { data: tokenRow } = await supabase
+          .from("user_gmail_tokens")
+          .select("refresh_token, is_encrypted")
+          .eq("user_id", profile.user_id)
+          .maybeSingle();
+
+        if (!tokenRow?.refresh_token) continue;
+
+        try {
+          const refreshToken = tokenRow.is_encrypted
+            ? await decryptToken(tokenRow.refresh_token)
+            : tokenRow.refresh_token;
+          accessToken = await getGoogleAccessToken(refreshToken, clientId, clientSecret);
+          break;
+        } catch (e) {
+          console.log(`Token refresh failed for user ${profile.user_id}:`, e);
+          continue;
+        }
       }
     }
 
