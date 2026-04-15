@@ -1,29 +1,47 @@
 
 
-## Plan: Improve SEMrush NO_UNITS Error Handling
-
-### Problem
-When SEMrush API units are exhausted, the edge function throws `SEMRUSH_NO_UNITS` which results in a non-2xx response. The client-side hook (`useSemrushApi.ts`) has a check for `"units exhausted"` in the error message, but the edge function returns a generic 500 error instead of a structured JSON response with the `NO_UNITS` code.
+## Plan: Fix SEMrush Column Mapping + Add Missing Columns
 
 ### Root cause
-In `semrush-api/index.ts`, when `SEMRUSH_NO_UNITS` is thrown, it bubbles up as an unhandled error causing a 500 response with no JSON body. The client never sees the `NO_UNITS` code or the "units exhausted" substring — it only gets the generic Supabase error wrapper.
+The `semrush-api` edge function references ~14 columns that don't exist in the database. Every upsert silently fails. SEMrush charges API units but zero data is saved.
 
-### Fix
+### Changes
 
-**File: `supabase/functions/semrush-api/index.ts`**
+#### Step 1: Database Migration — Add missing columns
 
-In the error handler (where `SEMRUSH_NO_UNITS` is caught), return a **402 JSON response** instead of letting it become a 500:
+**`seo_domains`** — add:
+- `semrush_authority_score` (integer)
+- `semrush_organic_keywords` (integer)
+- `semrush_organic_traffic` (integer)
+- `semrush_organic_cost` (numeric)
+- `last_semrush_sync` (timestamptz)
 
-```typescript
-if (e.message === "SEMRUSH_NO_UNITS") {
-  return new Response(JSON.stringify({ 
-    code: "NO_UNITS", 
-    error: "SEMrush API units exhausted. Top up at semrush.com or wait for monthly reset." 
-  }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-}
-```
+**`seo_keyword_ai`** — add:
+- `cpc` (numeric)
+- `competition` (numeric)
+- `traffic_pct` (numeric)
+- `traffic_cost` (numeric)
+- `results_count` (bigint)
+- `keyword_difficulty` (numeric)
+- `last_synced_at` (timestamptz)
 
-This ensures the client-side `handleResponse` in `useSemrushApi.ts` correctly detects `data.code === "NO_UNITS"` and shows the proper toast message.
+#### Step 2: Fix column name mismatches in edge function
 
-### Result
-Instead of "Edge Function returned a non-2xx status code", users will see: "SEMrush API units exhausted. Top up at semrush.com or wait for monthly reset."
+In `supabase/functions/semrush-api/index.ts`:
+- `search_volume` → `volume` (seo_keyword_ai already has `volume`)
+- `url` → `top_page` (seo_keyword_ai already has `top_page`)
+
+These two fields exist but under different names. The edge function must use the correct column names.
+
+#### Step 3: Redeploy edge function
+
+After fixing the column references, redeploy so the next sync actually saves data.
+
+### Expected result
+- All SEMrush API calls will correctly persist data to the database
+- No more wasted API units on silent failures
+- Next fullExport will populate keywords, pages, backlinks, competitors, and rank history
+
+### Cost note
+The 4,000 units consumed today are lost — SEMrush doesn't refund. After this fix, re-running the sync will use another ~4,000 units but this time the data will actually be saved.
+
