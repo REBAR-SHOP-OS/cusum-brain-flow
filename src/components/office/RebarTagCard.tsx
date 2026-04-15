@@ -76,8 +76,9 @@ export function RebarTagCard({
 
   return (
     <div
-      className="rebar-tag border-2 border-black bg-white text-black overflow-hidden font-mono flex flex-col print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
-      style={{ width: "4in", height: "6in", boxSizing: "border-box" }}
+      className="rebar-tag border-2 border-black bg-white text-black overflow-hidden font-sans flex flex-col print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
+      style={{ width: "4in", height: "6in", boxSizing: "border-box", fontVariantNumeric: "tabular-nums" }}
+      
     >
       {/* Timestamp */}
       <div className="flex justify-between items-center px-2 py-0.5 border-b border-black text-[9px] font-bold shrink-0">
