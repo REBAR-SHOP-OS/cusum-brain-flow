@@ -74,7 +74,7 @@ export default function PrintTags() {
           margin: 0 auto;
           padding: 0;
           background: #fff;
-          font-family: 'JetBrains Mono', 'Courier New', monospace;
+          font-family: 'Roboto Mono', 'Courier New', monospace;
           color: #000;
         }
         .rebar-tag {
