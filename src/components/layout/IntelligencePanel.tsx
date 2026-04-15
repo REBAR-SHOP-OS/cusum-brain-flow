@@ -12,6 +12,7 @@ import { RichMarkdown } from "@/components/chat/RichMarkdown";
 import { ContentActions } from "@/components/shared/ContentActions";
 import { parseQuickReplies } from "@/lib/parseQuickReplies";
 import { QuickReplies } from "@/components/chat/QuickReplies";
+import { useVizzyAutoSpeak } from "@/hooks/useVizzyAutoSpeak";
 
 export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function IntelligencePanel(_props, ref) {
   const { user } = useAuth();
