@@ -1,78 +1,57 @@
 
+Goal: audit the failure path for the Office extraction and identify the root cause from logs, then outline the exact fix.
 
-## Plan: Fix Imperial Dimension Extraction — Root Cause (3rd attempt)
+What I confirmed from the logs:
+- The browser successfully created:
+  - the session `e4280e6a-2674-4c03-bf49-4531b3ac71ac`
+  - the related raw file record
+- The browser then called the backend function `extract-manifest`
+- That request failed at the network layer with `Failed to fetch`
+- UI logs then showed:
+  - `fetched 0 rows`
+  - `retry fetched 0 rows`
+- The session remained stuck in `extracting` with `progress: 0`
 
-### What the data confirms
+Root cause from backend logs:
+- The backend function did not actually run for that failed request because it crashed during boot
+- Exact failure:
+  `Uncaught SyntaxError: The requested module 'https://deno.land/std@0.190.0/encoding/base64.ts' does not provide an export named 'encodeBase64'`
+- This is happening in:
+  `supabase/functions/extract-manifest/index.ts`
+- Because the worker crashes before request handling, the frontend only sees `Failed to fetch`
 
-The latest extraction session (`b56f5e1c`, unit_system=`imperial`) still has:
-- `dim_a = 6`, `dim_c = 6`, `total_length_mm = 8`
-- `source_dims_json = null`
-- No ×25.4 conversion applied
+Important conclusion:
+- This specific failure is not caused by the uploaded `.xls` content
+- It is a backend boot/import failure
+- Later logs show the same function booting and parsing a spreadsheet successfully for a newer session, which means the issue is tied to the deployed function version / cold-started broken worker, not the file itself
 
-This means **two independent bugs**:
+Implementation plan:
+1. Fix the broken import in `supabase/functions/extract-manifest/index.ts`
+   - remove the invalid `encodeBase64` import
+   - replace it with a runtime-safe local base64 helper for `Uint8Array`
+2. Redeploy the extraction function
+   - verify the function boots cleanly with no worker boot error
+3. Harden failure handling
+   - ensure extraction boot/runtime failures write `status: "error"` and `error_message` to the session instead of leaving it stuck on `extracting`
+4. Improve UI resilience in `AIExtractView.tsx`
+   - detect “stuck extracting + zero rows + function failure” and show the real backend error instead of indefinite extracting state
+5. Re-run validation on the same upload flow
+   - create session
+   - upload `.xls`
+   - call extraction
+   - confirm session advances past `extracting`
+   - confirm rows are inserted
+   - confirm the UI no longer shows empty row state for this case
 
-### Bug 1: `parseDimension` parses the raw cell number, not the formatted text
+Technical notes:
+- Broken file: `supabase/functions/extract-manifest/index.ts`
+- Symptom path:
+  `invalid edge import -> worker boot crash -> browser gets Failed to fetch -> session stuck extracting -> rows query returns 0`
+- Secondary hardening needed:
+  current client flow assumes request failures are standard application errors, but a boot crash never returns a normal JSON error body
 
-Line 151: `it[d] = raw != null ? (parseDimension(raw) ?? null) : null`
-
-The `.xls` file stores imperial dimensions as **custom-formatted numbers** (e.g., the number `6.270833` with format `#'-# #"` displays as `6'-3 ¼"`). `sheet_to_json(header:1)` returns the raw number (`6.270833`), not the text. `parseDimension(6.270833)` returns `6.270833` (it's already a number, line 44). `safeDim` rounds to `6`. Even with ×25.4 = 152mm — this is wrong because the actual value is 75.25 inches (1911mm).
-
-**Fix**: Parse from `cellText` (the formatted display string) instead of `raw` when `cellText` contains imperial markers (`'`, `"`, `-`). `cellText` uses the cell's `.w` property which gives "6'-3 ¼"" — the exact source text. `parseDimension("6'-3 ¼\"")` correctly returns 75.25 inches.
-
-### Bug 2: `source_dims_json` is null despite being set in code
-
-The code sets `it.__source_dims = sourceDims` at line 154 and reads it at line 687. If the deployed function doesn't have this code, or if `overlaySheetDims` fails before reaching line 154, `source_dims_json` stays null.
-
-The edge function must be **redeployed** with the latest code. Additionally, add error logging to confirm overlaySheetDims is executing.
-
-### Changes
-
-#### File: `supabase/functions/extract-manifest/index.ts`
-
-**Fix A: Parse dimensions from formatted cell text, not raw numeric values**
-
-Replace lines 147-151 in `overlaySheetDims`:
-```typescript
-const raw = row[colMap[d]];
-const cellText = getCellText(sheetRow, colMap[d]);
-sourceDims[d] = cellText ?? (raw != null ? String(raw).trim() : "");
-// CHANGED: parse from formatted text first (preserves ft-in),
-// fall back to raw only if text is unavailable
-const parseSource = cellText ?? (raw != null ? String(raw) : null);
-it[d] = parseSource != null ? (parseDimension(parseSource) ?? null) : null;
-```
-
-Same fix for length at lines 157-162:
-```typescript
-const raw = row[colMap["__LENGTH__"]];
-const cellText = getCellText(sheetRow, colMap["__LENGTH__"]);
-it.__source_length = cellText ?? (raw != null ? String(raw).trim() : null);
-const parseSource = cellText ?? (raw != null ? String(raw) : null);
-const parsed = parseSource != null ? parseDimension(parseSource) : null;
-if (parsed != null) it.total_length = parsed;
-```
-
-This ensures `6'-3 ¼"` is parsed as 75.25 inches (not 6), and `8'-9 ¼"` is parsed as 105.25 inches (not 8).
-
-**Fix B: Redeploy edge function**
-
-Deploy `extract-manifest` to apply all accumulated fixes (×25.4 conversion, source_dims_json capture, and the new cellText parsing).
-
-#### File: `src/components/office/AIExtractView.tsx`
-
-No changes needed — the display logic is already correct:
-1. Shows `source_dims_json` text when available (e.g., `6'-3 ¼"`)
-2. Falls back to `formatLengthByMode(mmVal)` which converts correct mm to imperial display
-
-### Expected result after fix + re-extraction
-
-| Source | parseDimension result | ×25.4 stored mm | source_dims_json | UI display |
-|--------|----------------------|-----------------|-----------------|------------|
-| `6"` | 6 | 152 | `"6\""` | `6"` |
-| `6'-3 ¼"` | 75.25 | 1911 | `"6'-3 ¼\""` | `6'-3 ¼"` |
-| `8'-9 ¼"` | 105.25 | 2673 | `"8'-9 ¼\""` | `8'-9 ¼"` |
-| `1'-4"` | 16 | 406 | `"1'-4\""` | `1'-4"` |
-
-### Re-extraction required
-After deploying, the current session must be re-extracted to populate correct values.
-
+Expected outcome after implementation:
+- No more silent `Failed to fetch` for this extraction path
+- Failed backend boots become visible, recoverable errors
+- Sessions do not remain stuck in `extracting`
+- The same `.xls` upload path proceeds normally once the function is redeployed with the fixed import
