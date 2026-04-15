@@ -87,16 +87,16 @@ function normalizeDimHeader(raw: string): string | null {
   s = s.replace(/\s*\(.*?\)\s*/g, " ").trim();
   // Strip leading "DIM" or "DIM."
   s = s.replace(/^DIM\.?\s*/i, "").trim();
-  // Keep only letters
-  s = s.replace(/[^A-Z]/g, "");
-  if (s.length === 1 && (DIMS as readonly string[]).includes(s)) return s;
+  // Must be exactly a single letter after cleanup — do NOT strip digits
+  // This prevents "R1" from matching as "R"
+  if (s.length === 1 && /^[A-Z]$/.test(s) && (DIMS as readonly string[]).includes(s)) return s;
   return null;
 }
 
 /** Extract dimension columns deterministically from XLSX sheet, bypassing AI.
  *  Also captures exact source cell text into __source_dims and __source_length.
  *  Returns { items, headersImperial } so the caller can use header-based unit detection. */
-function overlaySheetDims(workbook: any, items: any[]): { items: any[], headersImperial: boolean } {
+function overlaySheetDims(workbook: any, items: any[]): { items: any[], headersImperial: boolean, overlayApplied: boolean } {
   try {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
@@ -104,7 +104,7 @@ function overlaySheetDims(workbook: any, items: any[]): { items: any[], headersI
     const hIdx = rows.findIndex((r) =>
       r.some((c) => c != null && normalizeDimHeader(String(c)) !== null)
     );
-    if (hIdx < 0) { console.log("[overlaySheetDims] No dim header row found"); return { items, headersImperial: false }; }
+    if (hIdx < 0) { console.log("[overlaySheetDims] No dim header row found"); return { items, headersImperial: false, overlayApplied: false }; }
     const hRow = rows[hIdx];
 
     // Detect if headers contain imperial unit hints like "(FT-IN)" or "(IN)"
@@ -126,7 +126,7 @@ function overlaySheetDims(workbook: any, items: any[]): { items: any[], headersI
         colMap["__LENGTH__"] = i;
       }
     });
-    if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return { items, headersImperial: headersHaveImperial }; }
+    if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return { items, headersImperial: headersHaveImperial, overlayApplied: false }; }
     console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
     // Helper: get formatted display text (.w) from a sheet cell, falling back to raw value
     const getCellText = (sheetRow: number, col: number): string | null => {
@@ -168,10 +168,10 @@ function overlaySheetDims(workbook: any, items: any[]): { items: any[], headersI
       if (n < 3) console.log(`[overlaySheetDims] Row ${n}: sourceDims=${JSON.stringify(sourceDims)}, sourceLength=${it.__source_length}`);
       return it;
     });
-    return { items: result, headersImperial: headersHaveImperial };
+    return { items: result, headersImperial: headersHaveImperial, overlayApplied: true };
   } catch (e) {
     console.warn("[overlaySheetDims] Failed, falling back to AI dims:", e);
-    return { items, headersImperial: false };
+    return { items, headersImperial: false, overlayApplied: false };
   }
 }
 
@@ -547,11 +547,14 @@ Rules:
 
         // Deterministic dimension overlay for spreadsheets — bypass AI for dim columns
         let headersIndicateImperial = false;
+        let overlaySucceeded = false;
         if (isSpreadsheet && parsedWorkbook && items.length > 0) {
           console.log(`[extract-manifest] Applying deterministic dim overlay for ${items.length} items`);
           const overlayResult = overlaySheetDims(parsedWorkbook, items);
           items = overlayResult.items;
           headersIndicateImperial = overlayResult.headersImperial;
+          overlaySucceeded = overlayResult.overlayApplied;
+          console.log(`[extract-manifest] Overlay applied: ${overlaySucceeded}`);
         }
 
         // Header-based unit detection: if column headers say "(FT-IN)", trust that
@@ -662,9 +665,30 @@ Rules:
 
         // Recompute conversion after possible guard override
         const finalIsImperial = detectedUnitSystem === "imperial" || detectedUnitSystem === "in";
-        const finalToMm = finalIsImperial ? 25.4 : 1;
+        let finalToMm = finalIsImperial ? 25.4 : 1;
         if (finalIsImperial && !isImperial) {
           console.log(`[extract-manifest] Validation guard upgraded unit to imperial — applying ×25.4`);
+        }
+
+        // Double-conversion guard: if imperial detected but overlay FAILED,
+        // check if AI already returned values in mm (large numbers).
+        // If so, skip the ×25.4 to prevent double conversion.
+        if (finalIsImperial && !overlaySucceeded) {
+          const sampleDims: number[] = [];
+          for (const it of items.slice(0, 10)) {
+            for (const k of DIMS) {
+              const v = safeDim(it[k]);
+              if (v != null && v > 0) sampleDims.push(v);
+            }
+          }
+          if (sampleDims.length > 2) {
+            const sorted = [...sampleDims].sort((a, b) => a - b);
+            const median = sorted[Math.floor(sorted.length / 2)];
+            if (median > 200) {
+              console.warn(`[extract-manifest] AI likely returned mm values (median dim=${median}, overlay failed). Skipping ×25.4 to prevent double conversion.`);
+              finalToMm = 1;
+            }
+          }
         }
 
         /** Final conversion helpers using validated unit */
