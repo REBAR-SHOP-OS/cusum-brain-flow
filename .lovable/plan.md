@@ -1,52 +1,38 @@
 
 
-## Plan: Hardwire SEO Module to Use ai@rebar.shop Google Connection
+## Plan: Fix Smart Scan "0 Sources" + Tasks Not Showing
 
-### Problem
-The SEO module currently checks the **logged-in user's** Google token for GSC/GA4 connection status. But the SEO module should always use `ai@rebar.shop`'s Google connection, regardless of who is logged in. Currently if radin@ logs in, it shows "connected as radin@rebar.shop" — it should always show and use ai@rebar.shop.
+### Root Causes Found
 
-### Changes
+**Problem 1: Smart Scan shows 0 sources synced**
+The `seo-smart-scan` function calls child functions (seo-gsc-sync, wincher-sync, seo-site-crawl, seo-keyword-harvest) via `fetch()` using `Authorization: Bearer ${serviceKey}` (service role key). These child functions use `authMode: "required"` which calls `getClaims()` — but the service role JWT has no `sub` claim, so authentication fails with "Invalid token" for every sub-call. Result: nothing syncs, no tasks created.
 
-#### 1. Frontend: `src/components/seo/SeoOverview.tsx`
-- Change the `check-status` call to pass a flag `seo_service_account: true` so the edge function knows to look up ai@rebar.shop's token instead of the current user's
-- Same for `connectGoogle` and `reconnectGoogle` — these should target ai@rebar.shop
+**Problem 2: Tasks list shows 0 despite 15 tasks in database**
+The database has 15 seo_tasks (2 open, 8 in_progress, 5 done). RLS policy matches the user's company. Most likely the `fetchAllRows` query is failing silently, or the CSS-based mount from SeoModule changes caused a timing issue. Need to add error handling and verify the query works.
 
-#### 2. Edge Function: `supabase/functions/google-oauth/index.ts`
-- In the `check-status` handler: when `seo_service_account: true` is passed, look up the ai@rebar.shop user's token instead of the current user's token
-- This way the SEO dashboard always reflects ai@rebar.shop's connection status
+### Fix
 
-#### 3. Edge Function: `supabase/functions/seo-gsc-sync/index.ts`
-- Instead of looping through all company profiles to find any token, **prioritize ai@rebar.shop's token first**
-- Look up ai@rebar.shop's user_id from auth.users, then check their token in user_gmail_tokens
+#### 1. Fix auth for internal sub-calls in `seo-smart-scan/index.ts`
+The child edge functions need to accept service-role calls. The cleanest approach: add **service role key detection** to the shared `_shared/auth.ts` `requireAuth` function. If the bearer token matches the service role key, skip `getClaims()` and return a system-level context.
 
-#### 4. Edge Function: `supabase/functions/seo-smart-scan/index.ts`
-- Same approach: when checking if GSC is available, look for ai@rebar.shop's token specifically
+**File: `supabase/functions/_shared/auth.ts`**
+- In `requireAuth()`: before calling `getClaims()`, check if the bearer token equals `SUPABASE_SERVICE_ROLE_KEY`. If so, return `userId: "service_role"` with a service client. This allows internal function-to-function calls.
 
-#### 5. Memory Update
-- Save this rule: "SEO module always uses ai@rebar.shop Google connection for GSC/GA4 data"
+#### 2. Add error logging to SeoTasks query
+**File: `src/components/seo/SeoTasks.tsx`**
+- Add `console.error` in the query's error path and ensure `fetchAllRows` errors are caught and displayed.
+- Add a fallback direct query (without `fetchAllRows`) if the paginated fetch fails, to rule out the utility as the cause.
 
-### Technical Details
+#### 3. Verify SeoTasks actually loads when mounted via CSS
+Since `SeoModule.tsx` now uses `display: none/block` pattern, all components mount at once. Verify the seo-tasks query fires on initial mount and data populates correctly.
 
-**Lookup pattern (edge functions):**
-```typescript
-// Find ai@rebar.shop user
-const { data: aiUser } = await supabaseAdmin.auth.admin.listUsers();
-const aiAccount = aiUser.users.find(u => u.email === "ai@rebar.shop");
-if (aiAccount) {
-  const { data: tokenRow } = await supabaseAdmin
-    .from("user_gmail_tokens")
-    .select("refresh_token, is_encrypted, gmail_email")
-    .eq("user_id", aiAccount.id)
-    .maybeSingle();
-}
-```
-
-**Files to modify:**
-- `src/components/seo/SeoOverview.tsx` — pass `seo_service_account: true` flag
-- `supabase/functions/google-oauth/index.ts` — handle SEO service account lookup
-- `supabase/functions/seo-gsc-sync/index.ts` — prioritize ai@rebar.shop token
-- `supabase/functions/seo-smart-scan/index.ts` — use ai@rebar.shop for GSC check
+### Files to modify
+- `supabase/functions/_shared/auth.ts` — detect service role key in `requireAuth()`
+- `src/components/seo/SeoTasks.tsx` — add error handling/logging to diagnose empty tasks
+- Redeploy all SEO edge functions after auth.ts change
 
 ### Result
-SEO module always uses ai@rebar.shop's Google connection for all GSC and GA4 operations, regardless of which user is logged in.
+- Smart Scan will successfully call all sub-functions (GSC, Wincher, site crawl, keyword harvest)
+- Tasks will appear correctly in the Open/In Progress/Done columns
+- New tasks from Smart Scan will be created and immediately visible
 
