@@ -80,40 +80,53 @@ function parseDimension(val: any): number | null {
 
 const DIMS = ["A","B","C","D","E","F","G","H","J","K","O","R"] as const;
 
-/** Normalize a header cell to a single dimension letter (A-R), handling "DIM A", "Dim. B", etc. */
+/** Normalize a header cell to a single dimension letter (A-R), handling "DIM A", "Dim. B", "A (FT-IN)", etc. */
 function normalizeDimHeader(raw: string): string | null {
-  const s = String(raw).trim().toUpperCase()
-    .replace(/^DIM\.?\s*/i, "")   // strip leading "DIM" or "DIM."
-    .replace(/[^A-Z]/g, "");       // keep only letters
+  let s = String(raw).trim().toUpperCase();
+  // Strip parenthesized unit suffixes like "(FT-IN)", "(MM)", "(IN)" first
+  s = s.replace(/\s*\(.*?\)\s*/g, " ").trim();
+  // Strip leading "DIM" or "DIM."
+  s = s.replace(/^DIM\.?\s*/i, "").trim();
+  // Keep only letters
+  s = s.replace(/[^A-Z]/g, "");
   if (s.length === 1 && (DIMS as readonly string[]).includes(s)) return s;
   return null;
 }
 
 /** Extract dimension columns deterministically from XLSX sheet, bypassing AI.
- *  Also captures exact source cell text into __source_dims and __source_length. */
-function overlaySheetDims(workbook: any, items: any[]): any[] {
+ *  Also captures exact source cell text into __source_dims and __source_length.
+ *  Returns { items, headersImperial } so the caller can use header-based unit detection. */
+function overlaySheetDims(workbook: any, items: any[]): { items: any[], headersImperial: boolean } {
   try {
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
-    // Find header row containing dimension letters (exact or prefixed with DIM)
+    // Find header row containing dimension letters (exact or prefixed with DIM, with optional unit suffixes)
     const hIdx = rows.findIndex((r) =>
       r.some((c) => c != null && normalizeDimHeader(String(c)) !== null)
     );
-    if (hIdx < 0) { console.log("[overlaySheetDims] No dim header row found"); return items; }
+    if (hIdx < 0) { console.log("[overlaySheetDims] No dim header row found"); return { items, headersImperial: false }; }
     const hRow = rows[hIdx];
+
+    // Detect if headers contain imperial unit hints like "(FT-IN)" or "(IN)"
+    const headerLine = hRow.map((c: any) => String(c ?? "").toUpperCase()).join(" ");
+    const headersHaveImperial = /\(FT[\s-]*IN\)|\(IN\)|\(INCH\)|FT-IN|FEET|INCHES/i.test(headerLine);
+    if (headersHaveImperial) {
+      console.log("[overlaySheetDims] Imperial unit detected from column headers");
+    }
     const colMap: Record<string, number> = {};
     hRow.forEach((c: any, i: number) => {
       if (c == null) return;
       const letter = normalizeDimHeader(String(c));
       if (letter) colMap[letter] = i;
-      // Also detect length column headers
+      // Also detect length column headers — strip parenthesized unit suffixes first
       const normalized = String(c).trim().toUpperCase()
+        .replace(/\s*\(.*?\)\s*/g, " ")  // strip "(FT-IN)", "(MM)", etc.
         .replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
       if (["CUT LENGTH", "TOTAL LENGTH", "LENGTH", "CUTLENGTH", "CUT LEN", "TOT LENGTH"].includes(normalized)) {
         colMap["__LENGTH__"] = i;
       }
     });
-    if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return items; }
+    if (Object.keys(colMap).length < 2) { console.log("[overlaySheetDims] Only found", Object.keys(colMap).length, "dim columns, skipping"); return { items, headersImperial: headersHaveImperial }; }
     console.log(`[overlaySheetDims] Found ${Object.keys(colMap).length} columns at header row ${hIdx}: ${JSON.stringify(colMap)}`);
     // Helper: get formatted display text (.w) from a sheet cell, falling back to raw value
     const getCellText = (sheetRow: number, col: number): string | null => {
@@ -125,7 +138,7 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
     };
 
     console.log(`[overlaySheetDims] Processing ${items.length} items against ${rows.length} sheet rows`);
-    return items.map((it, n) => {
+    const result = items.map((it, n) => {
       const row = rows[hIdx + 1 + n] || [];
       const sheetRow = hIdx + 1 + n; // 0-based row in the sheet
       const sourceDims: Record<string, string> = {};
@@ -152,9 +165,10 @@ function overlaySheetDims(workbook: any, items: any[]): any[] {
       if (n < 3) console.log(`[overlaySheetDims] Row ${n}: sourceDims=${JSON.stringify(sourceDims)}, sourceLength=${it.__source_length}`);
       return it;
     });
+    return { items: result, headersImperial: headersHaveImperial };
   } catch (e) {
     console.warn("[overlaySheetDims] Failed, falling back to AI dims:", e);
-    return items;
+    return { items, headersImperial: false };
   }
 }
 
@@ -529,9 +543,18 @@ Rules:
         });
 
         // Deterministic dimension overlay for spreadsheets — bypass AI for dim columns
+        let headersIndicateImperial = false;
         if (isSpreadsheet && parsedWorkbook && items.length > 0) {
           console.log(`[extract-manifest] Applying deterministic dim overlay for ${items.length} items`);
-          items = overlaySheetDims(parsedWorkbook, items);
+          const overlayResult = overlaySheetDims(parsedWorkbook, items);
+          items = overlayResult.items;
+          headersIndicateImperial = overlayResult.headersImperial;
+        }
+
+        // Header-based unit detection: if column headers say "(FT-IN)", trust that
+        if (headersIndicateImperial && detectedUnitSystem === "mm") {
+          detectedUnitSystem = "imperial";
+          console.log("Detected imperial unit system from spreadsheet column headers (FT-IN)");
         }
         // Note: primary detection already ran above on raw strings
 
@@ -591,6 +614,7 @@ Rules:
           console.log(`[extract-manifest] Applying ×25.4 conversion (${detectedUnitSystem} → mm) for all dims and lengths`);
         }
 
+
         /** Convert a parsed dimension (which is in inches for imperial) to mm */
         const dimToMm = (val: any): number | null => {
           const v = safeDim(val);
@@ -601,6 +625,55 @@ Rules:
           const v = safeInt(val, 0);
           if (!v) return null;
           return Math.round(v * toMm);
+        };
+
+        // Validation guard: if imperial but converted mm values look suspiciously small,
+        // it means parseDimension returned raw numbers without unit marks.
+        // In that case the values ARE already in source units (inches) and need ×25.4.
+        // If toMm is already 25.4, this is fine. But if detection somehow missed imperial
+        // and toMm=1, we catch it here.
+        if (!isImperial && items.length > 0) {
+          // Check if most dim/length values are suspiciously small (< 50) which would
+          // be unusual for mm but normal for inches
+          const sampleVals: number[] = [];
+          for (const it of items.slice(0, 20)) {
+            for (const k of ["total_length", "A", "B", "C", "D"]) {
+              const v = it[k];
+              if (typeof v === "number" && v > 0) sampleVals.push(v);
+            }
+          }
+          if (sampleVals.length > 3) {
+            const median = sampleVals.sort((a, b) => a - b)[Math.floor(sampleVals.length / 2)];
+            // If median value < 50, these are likely inches not mm (no rebar dim is < 50mm)
+            if (median < 50) {
+              console.warn(`[extract-manifest] VALIDATION GUARD: median dim value is ${median} — too small for mm. Likely unnormalized imperial. Re-detecting as "in".`);
+              detectedUnitSystem = "in";
+              // Re-update session
+              await svcClient
+                .from("extract_sessions")
+                .update({ unit_system: "in" } as any)
+                .eq("id", sessionId);
+            }
+          }
+        }
+
+        // Recompute conversion after possible guard override
+        const finalIsImperial = detectedUnitSystem === "imperial" || detectedUnitSystem === "in";
+        const finalToMm = finalIsImperial ? 25.4 : 1;
+        if (finalIsImperial && !isImperial) {
+          console.log(`[extract-manifest] Validation guard upgraded unit to imperial — applying ×25.4`);
+        }
+
+        /** Final conversion helpers using validated unit */
+        const finalDimToMm = (val: any): number | null => {
+          const v = safeDim(val);
+          if (v == null) return null;
+          return Math.round(v * finalToMm);
+        };
+        const finalLengthToMm = (val: any): number | null => {
+          const v = safeInt(val, 0);
+          if (!v) return null;
+          return Math.round(v * finalToMm);
         };
 
         let savedCount = 0;
@@ -624,19 +697,19 @@ Rules:
               quantity: safeInt(item.quantity, 0),
               bar_size: item.size || null,
               shape_type: item.type || null,
-              total_length_mm: lengthToMm(item.total_length),
-              dim_a: dimToMm(item.A),
-              dim_b: dimToMm(item.B),
-              dim_c: dimToMm(item.C),
-              dim_d: dimToMm(item.D),
-              dim_e: dimToMm(item.E),
-              dim_f: dimToMm(item.F),
-              dim_g: dimToMm(item.G),
-              dim_h: dimToMm(item.H),
-              dim_j: dimToMm(item.J),
-              dim_k: dimToMm(item.K),
-              dim_o: dimToMm(item.O),
-              dim_r: dimToMm(item.R),
+              total_length_mm: finalLengthToMm(item.total_length),
+              dim_a: finalDimToMm(item.A),
+              dim_b: finalDimToMm(item.B),
+              dim_c: finalDimToMm(item.C),
+              dim_d: finalDimToMm(item.D),
+              dim_e: finalDimToMm(item.E),
+              dim_f: finalDimToMm(item.F),
+              dim_g: finalDimToMm(item.G),
+              dim_h: finalDimToMm(item.H),
+              dim_j: finalDimToMm(item.J),
+              dim_k: finalDimToMm(item.K),
+              dim_o: finalDimToMm(item.O),
+              dim_r: finalDimToMm(item.R),
               weight_kg: parseDimension(item.weight),
               customer: item.customer || null,
               reference: item.ref || null,
