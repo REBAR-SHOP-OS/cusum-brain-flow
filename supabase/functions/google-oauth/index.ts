@@ -1,4 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptToken } from "../_shared/tokenEncryption.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
@@ -29,11 +28,9 @@ const SCOPES: Record<string, string[]> = {
   ],
 };
 
-// All Google services that get connected together
 const GOOGLE_SERVICES = Object.keys(SCOPES);
-
-// Combined scopes for unified Google connect
 const ALL_GOOGLE_SCOPES = [...new Set(Object.values(SCOPES).flat())];
+const SEO_SERVICE_ACCOUNT_EMAIL = "ai@rebar.shop";
 
 function getClientCredentials() {
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GMAIL_CLIENT_ID");
@@ -41,7 +38,31 @@ function getClientCredentials() {
   return { clientId, clientSecret };
 }
 
-// verifyAuth removed — handled by handleRequest wrapper
+async function resolveTargetUser(
+  supabaseAdmin: any,
+  currentUserId: string,
+  seoServiceAccount: boolean,
+) {
+  if (!seoServiceAccount) {
+    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(currentUserId);
+    return {
+      targetUserId: currentUserId,
+      targetEmail: userData?.user?.email || "",
+    };
+  }
+
+  const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
+  const aiAccount = usersData?.users?.find((u: any) => u.email === SEO_SERVICE_ACCOUNT_EMAIL);
+
+  if (!aiAccount) {
+    throw new Error(`SEO service account ${SEO_SERVICE_ACCOUNT_EMAIL} not found`);
+  }
+
+  return {
+    targetUserId: aiAccount.id,
+    targetEmail: aiAccount.email || SEO_SERVICE_ACCOUNT_EMAIL,
+  };
+}
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
@@ -52,17 +73,18 @@ Deno.serve((req) =>
 
     if (!action && body.action) action = body.action as string;
 
+    const seoServiceAccount = body.seo_service_account === true;
+    const { targetUserId, targetEmail } = await resolveTargetUser(
+      supabaseAdmin,
+      userId,
+      seoServiceAccount,
+    );
 
-    // ─── Generate OAuth URL (unified — requests ALL scopes) ────────
     if (action === "get-auth-url") {
       const redirectUri = body.redirectUri as string;
 
       const { clientId } = getClientCredentials();
       if (!clientId) throw new Error("Google Client ID not configured");
-
-      // Get user's email to pre-fill the login hint
-      const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
-      const userEmail = userData?.user?.email || "";
 
       const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       authUrl.searchParams.set("client_id", clientId);
@@ -71,8 +93,8 @@ Deno.serve((req) =>
       authUrl.searchParams.set("scope", ALL_GOOGLE_SCOPES.join(" "));
       authUrl.searchParams.set("access_type", "offline");
       authUrl.searchParams.set("prompt", "consent");
-      authUrl.searchParams.set("state", "google"); // unified state
-      if (userEmail) authUrl.searchParams.set("login_hint", userEmail);
+      authUrl.searchParams.set("state", "google");
+      if (targetEmail) authUrl.searchParams.set("login_hint", targetEmail);
 
       return new Response(
         JSON.stringify({ authUrl: authUrl.toString() }),
@@ -80,7 +102,6 @@ Deno.serve((req) =>
       );
     }
 
-    // ─── Exchange code for tokens (connects ALL Google services) ───
     if (action === "exchange-code") {
       const code = body.code as string;
       const redirectUri = body.redirectUri as string;
@@ -111,7 +132,6 @@ Deno.serve((req) =>
         throw new Error("No refresh token received. Please revoke app access in your Google Account and try again.");
       }
 
-      // Get the user's Google email
       let googleEmail = "";
       const profileRes = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
         headers: { Authorization: `Bearer ${tokens.access_token}` },
@@ -121,12 +141,11 @@ Deno.serve((req) =>
         googleEmail = profile.emailAddress || "";
       }
 
-      // Encrypt and save refresh token per-user
       const encryptedRefreshToken = await encryptToken(tokens.refresh_token);
       const { error: upsertError } = await supabaseAdmin
         .from("user_gmail_tokens")
         .upsert({
-          user_id: userId,
+          user_id: targetUserId,
           gmail_email: googleEmail,
           refresh_token: encryptedRefreshToken,
           is_encrypted: true,
@@ -138,12 +157,11 @@ Deno.serve((req) =>
         throw new Error("Failed to save Google credentials");
       }
 
-      // Mark ALL Google services as connected for this user
       for (const svc of GOOGLE_SERVICES) {
         await supabaseAdmin
           .from("integration_connections")
           .upsert({
-            user_id: userId,
+            user_id: targetUserId,
             integration_id: svc,
             status: "connected",
             last_checked_at: new Date().toISOString(),
@@ -164,26 +182,20 @@ Deno.serve((req) =>
       );
     }
 
-    // ─── Check connection status for current user ──────────────────
     if (action === "check-status") {
       const integration = body.integration as string;
-      const seoServiceAccount = body.seo_service_account === true;
 
-      // For SEO module, always check ai@rebar.shop's token
-      let lookupUserId = userId;
-      if (seoServiceAccount) {
-        const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-        const aiAccount = usersData?.users?.find((u: any) => u.email === "ai@rebar.shop");
-        if (aiAccount) {
-          lookupUserId = aiAccount.id;
-        }
+      if (!integration || !SCOPES[integration]) {
+        return new Response(
+          JSON.stringify({ error: "Invalid or missing integration" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
-      // Check if the user has a stored Google token
       const { data: tokenData } = await supabaseAdmin
         .from("user_gmail_tokens")
         .select("gmail_email, updated_at")
-        .eq("user_id", lookupUserId)
+        .eq("user_id", targetUserId)
         .maybeSingle();
 
       if (tokenData) {
@@ -193,11 +205,8 @@ Deno.serve((req) =>
         );
       }
 
-      // Fallback: check if shared env token matches this user's email
       const sharedToken = Deno.env.get("GMAIL_REFRESH_TOKEN");
-      if (sharedToken) {
-        const { data: userData } = await supabaseAdmin.auth.admin.getUserById(userId);
-        const userEmail = userData?.user?.email?.toLowerCase();
+      if (sharedToken && !seoServiceAccount) {
         const { clientId, clientSecret } = getClientCredentials();
 
         if (clientId && clientSecret) {
@@ -220,11 +229,10 @@ Deno.serve((req) =>
               if (profileRes.ok) {
                 const profile = await profileRes.json();
                 const gmailEmail = (profile.emailAddress || "").toLowerCase();
-                if (gmailEmail === userEmail) {
-                  // Auto-migrate token (encrypt it) and connect all services
+                if (gmailEmail === targetEmail.toLowerCase()) {
                   const encMigrated = await encryptToken(sharedToken);
                   await supabaseAdmin.from("user_gmail_tokens").upsert({
-                    user_id: userId,
+                    user_id: targetUserId,
                     gmail_email: gmailEmail,
                     refresh_token: encMigrated,
                     is_encrypted: true,
@@ -233,7 +241,7 @@ Deno.serve((req) =>
 
                   for (const svc of GOOGLE_SERVICES) {
                     await supabaseAdmin.from("integration_connections").upsert({
-                      user_id: userId,
+                      user_id: targetUserId,
                       integration_id: svc,
                       status: "connected",
                       last_checked_at: new Date().toISOString(),
@@ -249,7 +257,6 @@ Deno.serve((req) =>
               }
             }
           } catch {
-            // Shared token check failed, treat as not connected
           }
         }
       }
@@ -260,20 +267,17 @@ Deno.serve((req) =>
       );
     }
 
-    // ─── Disconnect ALL Google services for current user ───────────
     if (action === "disconnect") {
-      // Remove token
       await supabaseAdmin
         .from("user_gmail_tokens")
         .delete()
-        .eq("user_id", userId);
+        .eq("user_id", targetUserId);
 
-      // Remove all Google service connections
       for (const svc of GOOGLE_SERVICES) {
         await supabaseAdmin
           .from("integration_connections")
           .delete()
-          .eq("user_id", userId)
+          .eq("user_id", targetUserId)
           .eq("integration_id", svc);
       }
 

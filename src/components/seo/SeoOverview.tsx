@@ -60,7 +60,7 @@ export function SeoOverview() {
 
   const connectGoogle = async () => {
     try {
-      const redirectUri = `${window.location.origin}/integrations/callback`;
+      const redirectUri = `${window.location.origin}/integrations/callback?seo_service_account=true`;
       const { data, error } = await supabase.functions.invoke("google-oauth", {
         body: { action: "get-auth-url", integration: "google-search-console", redirectUri, seo_service_account: true },
       });

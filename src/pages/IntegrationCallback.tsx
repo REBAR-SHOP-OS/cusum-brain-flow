@@ -14,6 +14,7 @@ export default function IntegrationCallback() {
     const code = searchParams.get("code");
     const state = searchParams.get("state");
     const error = searchParams.get("error");
+    const seoServiceAccount = searchParams.get("seo_service_account") === "true";
 
     // Handle server-side callback results (redirect from edge function)
     const callbackStatus = searchParams.get("status");
@@ -26,7 +27,7 @@ export default function IntegrationCallback() {
         try { window.opener.postMessage({ type: "oauth-success" }, "*"); } catch {}
         setTimeout(() => window.close(), 1500);
       } else {
-        setTimeout(() => navigate(integration === "gmail" ? "/home" : "/integrations"), 2000);
+        setTimeout(() => navigate(integration === "gmail" ? "/home" : seoServiceAccount ? "/seo" : "/integrations"), 2000);
       }
       return;
     }
@@ -36,7 +37,6 @@ export default function IntegrationCallback() {
       return;
     }
 
-    // Handle client-side OAuth callback (code exchange)
     if (error) {
       setStatus("error");
       setMessage(`Authorization denied: ${error}`);
@@ -67,19 +67,17 @@ export default function IntegrationCallback() {
         return;
       }
 
-      await exchangeCode(code, state);
+      await exchangeCode(code, state, seoServiceAccount);
     };
 
     waitForAuthAndExchange();
   }, [searchParams, navigate]);
 
-  const exchangeCode = async (code: string, integration: string) => {
+  const exchangeCode = async (code: string, integration: string, seoServiceAccount = false) => {
     try {
-      const redirectUri = "https://erp.rebar.shop/integrations/callback";
+      const redirectUri = `${window.location.origin}/integrations/callback${seoServiceAccount ? "?seo_service_account=true" : ""}`;
 
-      // Route to the correct edge function based on integration
       const metaIntegrations = ["facebook", "instagram"];
-      // "google" state means unified Google connect
       const isGoogle = integration === "google" || [
         "gmail", "google-calendar", "google-drive", "youtube", "google-analytics", "google-search-console"
       ].includes(integration);
@@ -98,6 +96,7 @@ export default function IntegrationCallback() {
           code,
           redirectUri,
           integration,
+          seo_service_account: seoServiceAccount,
         },
       });
 
@@ -106,12 +105,11 @@ export default function IntegrationCallback() {
       setStatus("success");
       setMessage(data.message || "Successfully connected!");
 
-      // If opened as popup, notify opener and close; otherwise redirect
       if (window.opener) {
         try { window.opener.postMessage({ type: "oauth-success" }, "*"); } catch {}
         setTimeout(() => window.close(), 1500);
       } else {
-        setTimeout(() => navigate("/integrations"), 2000);
+        setTimeout(() => navigate(seoServiceAccount ? "/seo" : "/integrations"), 2000);
       }
     } catch (err) {
       setStatus("error");
