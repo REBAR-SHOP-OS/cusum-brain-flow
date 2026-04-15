@@ -21,6 +21,34 @@ const VISUAL_STYLES_POOL = [
 
 const PIXEL_CONTACT_INFO = `\n\n📍 9 Cedar Ave, Thornhill, Ontario\n📞 647-260-9403\n🌐 www.rebar.shop`;
 
+// ─── Curated construction-industry hashtag pool ───
+const HASHTAG_POOL = {
+  core: ["#rebar", "#rebarshop", "#steelreinforcement", "#reinforcedconcrete", "#construction", "#constructionlife", "#constructionindustry", "#buildingmaterials", "#constructionproject", "#rebarinstallation"],
+  b2b: ["#generalcontractor", "#constructionbusiness", "#builderlife", "#commercialconstruction", "#contractorsofinstagram", "#constructioncompany", "#projectmanagement", "#infrastructure", "#civilengineering", "#sitework"],
+  viral: ["#reelsinstagram", "#constructionreels", "#viralreels", "#explorepage", "#instareels", "#trendingreels", "#reelvideo", "#videooftheday", "#viralcontent"],
+  location: ["#toronto", "#torontoconstruction", "#torontobuilder", "#canada", "#canadaconstruction", "#ontarioconstruction", "#vaughanconstruction", "#richmondhillconstruction", "#gtaconstruction"],
+  content: ["#constructionwork", "#worksite", "#jobsite", "#constructionworkers", "#heavyequipment", "#timelapseconstruction", "#beforeandafter", "#buildingprocess", "#steelwork"],
+  niche: ["#rebarcage", "#rebarfabrication", "#rebarwork", "#structuralsteel", "#steelbars", "#concretereinforcement", "#formwork", "#barbending", "#constructiondetail"],
+};
+
+function generateHashtags(count = 15): string[] {
+  const categories = Object.values(HASHTAG_POOL);
+  const picked = new Set<string>();
+  // First pass: pick at least 2 from each category
+  for (const cat of categories) {
+    const shuffled = [...cat].sort(() => Math.random() - 0.5);
+    for (const tag of shuffled.slice(0, 2)) picked.add(tag);
+    if (picked.size >= count) break;
+  }
+  // Second pass: fill remaining from all categories
+  const allTags = categories.flat().sort(() => Math.random() - 0.5);
+  for (const tag of allTags) {
+    if (picked.size >= count) break;
+    picked.add(tag);
+  }
+  return [...picked].slice(0, count);
+}
+
 // ─── Helpers (same as Pixel agent) ───
 
 function extractImageFromAIResponse(aiData: any): string | null {
@@ -313,18 +341,18 @@ ${brainBlock}
 
 RULES:
 - Write a short, punchy, promotional English caption. Maximum 2 sentences.
-- Write 8-12 relevant hashtags as a single string separated by spaces.
 - Write a short catchy title (max 10 words).
 - Translate the caption to Farsi (Persian). This MUST be a beautiful, fluent, native-quality Persian translation — NOT a word-by-word translation. Rewrite the meaning in elegant, professional Persian that sounds like it was originally written by a native Persian advertising copywriter.
 - CAPTION TONE: PURELY PROMOTIONAL & ADVERTISING — catchy, bold, emotional. Do NOT explain how the product works. Focus on why the customer should buy.
 - ABSOLUTELY FORBIDDEN: scientific explanations, technical specs, engineering terminology, material properties, structural analysis claims.
 - FORBIDDEN WORDS: guarantee, guaranteed, ensures, ensure, promise, warranty, certified, certify, unparalleled, revolutionary, superior, structural integrity, load-bearing, tensile strength, AI-driven, precision-engineered, interlocks, unmatched, finest, unbeatable, top-notch, scientifically, assured
 - Do NOT mention ANY time of day, hour, clock time, AM/PM
+- Do NOT generate hashtags — they will be added separately.
 - Be bold, specific, and direct. Use relevant emojis.
 - SESSION SEED: ${sessionSeed}
 
 Respond with ONLY a valid JSON object (no markdown, no code fences):
-{"title": "...", "caption": "...", "hashtags": "...", "captionFa": "..."}`;
+{"title": "...", "caption": "...", "captionFa": "..."}`;
 
       const contentParts: any[] = [{ type: "text", text: captionOnlyPrompt }];
       // Only attach image if it's NOT a video (AI models can't process MP4/MOV/WebM)
@@ -366,8 +394,8 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       const persianBlock = newCap.captionFa
         ? `\n\n---PERSIAN---\n📝 ترجمه کپشن: ${newCap.captionFa}`
         : "";
-      const fullContent = `${newCap.caption}${PIXEL_CONTACT_INFO}\n\n${newCap.hashtags || ""}${persianBlock}`;
-      const hashtags = (newCap.hashtags || "").split(/\s+/).filter((h: string) => h.startsWith("#"));
+      const hashtags = generateHashtags(15);
+      const fullContent = `${newCap.caption}${PIXEL_CONTACT_INFO}\n\n${hashtags.join(" ")}${persianBlock}`;
 
       const { error: updateErr } = await supabase
         .from("social_posts")
@@ -399,7 +427,7 @@ ${isVideoPost ? `IMPORTANT: This post contains a VIDEO. Write a GENERAL promotio
 1. Write a compelling, UNIQUE English caption (2-4 sentences) ${isVideoPost ? "about REBAR.SHOP company and services broadly" : "for this product/topic"}. Use relevant emojis.
 🚨 ZERO OVERLAP RULE: The caption and the image slogan MUST have ZERO overlapping words or phrases. The slogan sells EMOTION (max 6 words). The caption sells SERVICES (delivery, products, benefits). NEVER repeat, rephrase, or echo the slogan in the caption. VIOLATION = rejection.
 2. Write a SHORT English advertising slogan (MAXIMUM 6 words) that will be printed ON the image. It MUST be: simple, catchy, beautiful, and grammatically perfect English. Pure advertising tagline — NO guarantees, NO technical terms, NO scientific claims. Think billboard: short, emotional, memorable. GOOD: "Steel That Builds Dreams", "Your Project, Our Pride". BAD: "Unparalleled Structural Integrity", "Guaranteed Quality Framework".
-3. Write 8-12 relevant hashtags as a single string separated by spaces.
+3. Do NOT generate hashtags — they will be added separately.
 4. Translate the caption to Farsi (Persian) — this MUST be a premium-quality, natural-sounding Persian translation. Do NOT translate word-by-word. Instead, rewrite the meaning in beautiful, fluent Persian that sounds like it was originally written by a native Persian copywriter. Use elegant vocabulary, proper Persian grammar, and a professional advertising tone.
 5. Translate the image slogan to Farsi (Persian) — same quality standard: fluent, catchy, natural Persian. Not a literal translation.
 6. Write a short catchy title (max 10 words).
@@ -417,7 +445,7 @@ CRITICAL RULES:
 ${brainKnowledge ? "- You MUST follow any brand guidelines from the Brain Context above" : ""}
 
 Respond with ONLY a valid JSON object (no markdown, no code fences):
-{"title": "...", "caption": "...", "hashtags": "...", "imageText": "...", "imageTextFa": "...", "captionFa": "..."}`;
+{"title": "...", "caption": "...", "imageText": "...", "imageTextFa": "...", "captionFa": "..."}`;
 
     const captionModels = ["google/gemini-2.5-flash", "openai/gpt-5-mini"];
     let captionRes: Response | null = null;
@@ -652,12 +680,8 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       (hasImageText ? `🖼️ متن روی عکس: ${newContent.imageTextFa}\n` : "") +
       `📝 ترجمه کپشن: ${newContent.captionFa || ""}`;
 
-    const fullContent = `${newContent.caption}${PIXEL_CONTACT_INFO}\n\n${newContent.hashtags || ""}${persianBlock}`;
-
-    // 5. Update post in DB
-    const hashtags = (newContent.hashtags || "")
-      .split(/\s+/)
-      .filter((h: string) => h.startsWith("#"));
+    const hashtags = generateHashtags(15);
+    const fullContent = `${newContent.caption}${PIXEL_CONTACT_INFO}\n\n${hashtags.join(" ")}${persianBlock}`;
 
     const { error: updateErr } = await supabase
       .from("social_posts")
