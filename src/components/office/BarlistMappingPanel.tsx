@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -167,6 +167,18 @@ interface BarlistMappingPanelProps {
   unitSystem?: LengthUnit;
   /** Callback when user changes unit */
   onUnitSystemChange?: (unit: LengthUnit) => void;
+  /** Source unit detected by extraction (used as default when uncontrolled) */
+  sourceUnitSystem?: string | null;
+}
+
+// Map raw session.unit_system value to a valid LengthUnit selector value
+function normalizeSessionUnit(raw?: string | null): LengthUnit {
+  if (!raw) return "mm";
+  const v = raw.toLowerCase();
+  if (v === "imperial" || v === "ft-in" || v === "ftin") return "imperial";
+  if (v === "in" || v === "inch" || v === "inches") return "in";
+  if (v === "ft" || v === "feet") return "ft";
+  return "mm"; // metric, mm, anything else
 }
 
 export interface MappedRow {
@@ -182,11 +194,17 @@ export interface MappedRow {
   grade: string;
 }
 
-export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disabled, unitSystem: controlledUnit, onUnitSystemChange }: BarlistMappingPanelProps) {
+export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disabled, unitSystem: controlledUnit, onUnitSystemChange, sourceUnitSystem }: BarlistMappingPanelProps) {
   const [mapping, setMapping] = useState<Record<string, string>>(() => autoDetectMapping(rows));
   const [confirmed, setConfirmed] = useState(false);
-  // Use controlled unit from parent if provided, otherwise local state
-  const [localLengthUnit, setLocalLengthUnit] = useState<LengthUnit>("mm");
+  // Use controlled unit from parent if provided, otherwise local state seeded from session-detected unit
+  const [localLengthUnit, setLocalLengthUnit] = useState<LengthUnit>(() => normalizeSessionUnit(sourceUnitSystem));
+  // Sync local state when source unit changes (uncontrolled mode only)
+  useEffect(() => {
+    if (controlledUnit === undefined && sourceUnitSystem) {
+      setLocalLengthUnit(normalizeSessionUnit(sourceUnitSystem));
+    }
+  }, [sourceUnitSystem, controlledUnit]);
   const lengthUnit = controlledUnit ?? localLengthUnit;
   const setLengthUnit = (unit: LengthUnit) => {
     if (onUnitSystemChange) onUnitSystemChange(unit);
