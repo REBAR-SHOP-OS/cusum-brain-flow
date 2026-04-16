@@ -1,10 +1,36 @@
-import { useState } from "react";
-import { Clapperboard, Sparkles } from "lucide-react";
+import { useState, useRef } from "react";
+import { Clapperboard, Sparkles, SkipForward } from "lucide-react";
 import { AdDirectorContent } from "@/components/ad-director/AdDirectorContent";
 import { AdDirectorErrorBoundary } from "@/components/ad-director/AdDirectorErrorBoundary";
 
 export default function AdDirector() {
   const [isEditing, setIsEditing] = useState(false);
+  const [showIntro, setShowIntro] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  if (showIntro) {
+    return (
+      <div className="fixed inset-0 z-50 bg-black flex items-center justify-center">
+        <video
+          ref={videoRef}
+          src="/videos/ad-director-intro.mp4"
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-contain"
+          onEnded={() => setShowIntro(false)}
+          onError={() => setShowIntro(false)}
+        />
+        <button
+          onClick={() => setShowIntro(false)}
+          className="absolute bottom-8 right-8 flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 text-sm text-white/80 hover:bg-white/20 transition-colors"
+        >
+          <SkipForward className="w-4 h-4" />
+          Skip
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-slate-950">
