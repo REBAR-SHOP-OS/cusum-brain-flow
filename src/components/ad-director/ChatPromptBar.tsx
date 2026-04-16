@@ -205,6 +205,29 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     }
   }, [starterPrompt, starterPromptSeed]);
 
+  const handleAiWrite = async () => {
+    setAiWriting(true);
+    try {
+      const parts: string[] = [];
+      if (selectedStyleLabels.length) parts.push(`Style: ${selectedStyleLabels.join(", ")}`);
+      if (selectedProductLabels.length) parts.push(`Products: ${selectedProductLabels.join(", ")}`);
+      parts.push(`Duration: ${duration}s`);
+      const contextString = parts.join(". ") + ".";
+      const result = await invokeEdgeFunction<{ text?: string }>("ad-director-ai", {
+        action: "write-script",
+        input: contextString,
+      });
+      if (result?.text) {
+        setPrompt(result.text);
+        toast({ title: "✨ Prompt ready", description: "Review and edit before creating." });
+      }
+    } catch (err: any) {
+      console.error("AI write error:", err);
+      toast({ title: "AI prompt failed", description: err.message || "Try again", variant: "destructive" });
+    } finally {
+      setAiWriting(false);
+    }
+  };
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
