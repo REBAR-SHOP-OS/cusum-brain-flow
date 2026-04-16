@@ -32,8 +32,9 @@ interface PixelPostCardProps {
 
 const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
   ({ post, onView, onApprove, onRegenerate, onEditImage }, ref) => {
-    const [approved, setApproved] = useState(false);
+  const [approved, setApproved] = useState(false);
     const [regenerating, setRegenerating] = useState(false);
+    const processingRef = React.useRef(false);
     const [imageZoomOpen, setImageZoomOpen] = useState(false);
     const [showImageEdit, setShowImageEdit] = useState(false);
     const [currentImageUrl, setCurrentImageUrl] = useState(post.imageUrl);
@@ -77,16 +78,15 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
     }, [post.id, post.caption]);
 
     const handleApprove = () => {
-      if (!approved) {
-        setApproved(true);
-        // Pass enriched post with latest translations and image
-        onApprove?.({
-          ...post,
-          imageUrl: currentImageUrl,
-          captionTranslation: localCaptionTranslation,
-          imageTextTranslation: localImageTextTranslation,
-        });
-      }
+      if (approved || processingRef.current) return;
+      processingRef.current = true;
+      setApproved(true);
+      onApprove?.({
+        ...post,
+        imageUrl: currentImageUrl,
+        captionTranslation: localCaptionTranslation,
+        imageTextTranslation: localImageTextTranslation,
+      });
     };
 
     const handleRegenerate = () => {
@@ -221,7 +221,8 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
             <>
               <button
                 onClick={handleApprove}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25 transition-colors font-medium text-sm"
+                disabled={approved}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/25 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Approve post"
               >
                 <CheckCircle2 className="w-7 h-7" />

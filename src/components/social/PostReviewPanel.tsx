@@ -148,7 +148,8 @@ export function PostReviewPanel({
   const [persianImageText, setPersianImageText] = useState("");
   const [persianCaptionText, setPersianCaptionText] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [deleting, setDeleting] = useState(false);
+   const [deleting, setDeleting] = useState(false);
+   const [scheduling, setScheduling] = useState(false);
   const captionRef = useRef<HTMLTextAreaElement>(null);
   const [showImageGen, setShowImageGen] = useState(false);
   const [showVideoGen, setShowVideoGen] = useState(false);
@@ -412,6 +413,7 @@ export function PostReviewPanel({
   if (!post) return null;
 
   const handleDelete = async () => {
+    if (!window.confirm("Are you sure you want to delete this post?")) return;
     setDeleting(true);
     try {
       // Find all sibling posts in the same calendar card (same platform + title + day)
@@ -1290,7 +1292,9 @@ export function PostReviewPanel({
                     </Button>
                     <Button
                       className="flex-1"
+                      disabled={scheduling}
                       onClick={async () => {
+                        if (scheduling) return;
                         if (!post.scheduled_date) {
                           toast({ title: "No date set", description: "Please set a publish date first.", variant: "destructive" });
                           return;
@@ -1335,6 +1339,7 @@ export function PostReviewPanel({
                         const isUnassigned = post.platform === "unassigned";
                         const allCombos = combos.map(c => ({ platform: c.platform, page: c.page }));
                         console.log(`[PostReviewPanel] Schedule button — post=${postId} platform=${primary.platform} page=${primary.page} date=${post.scheduled_date} unassigned=${isUnassigned}`);
+                        setScheduling(true);
                         const result = await schedulePost({
                           post_id: postId,
                           scheduled_date: post.scheduled_date!,
@@ -1352,6 +1357,7 @@ export function PostReviewPanel({
                             description: result.error || "Post could not be scheduled. Check permissions and try again.",
                             variant: "destructive",
                           });
+                          setScheduling(false);
                           return;
                         }
                         queryClient.invalidateQueries({ queryKey: ["social_posts"] });
@@ -1359,11 +1365,12 @@ export function PostReviewPanel({
                           title: "Post scheduled ✅",
                           description: `Scheduled for ${format(new Date(post.scheduled_date!), "PPP p")} on ${localPlatforms.length} platform(s) × ${localPages.length} page(s)`,
                         });
+                        setScheduling(false);
                         onClose();
                       }}
                     >
-                      <CalendarDays className="w-4 h-4" />
-                      Schedule
+                      {scheduling ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarDays className="w-4 h-4" />}
+                      {scheduling ? "Scheduling..." : "Schedule"}
                     </Button>
                   </div>
                   <Button
