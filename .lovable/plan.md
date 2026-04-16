@@ -1,41 +1,59 @@
 
 
-## Plan: Recover Deleted Projects from Production Queue
+## Plan: Fix Source-Unit Storage Pipeline End-to-End
 
-### What happened
-The Production Queue delete buttons perform **hard deletes** — they removed projects, barlists, and cut_plans from the database. However, the underlying **extract sessions and extract rows are still intact** because their delete was either skipped or failed silently.
+### Problem
+Two issues:
+1. **Mapping preview rounds decimals** — `Math.round()` at lines 216 and 232 in `BarlistMappingPanel.tsx` rounds 44.5 → 45
+2. **Approve flow copies source-unit values into `cut_length_mm`** — 30+ shop floor files display this with "mm" suffix, so 44.5 inches shows as "44.5mm"
 
-### Recoverable data (still in database)
+### Architecture Decision
 
-| Session | Name | File | Rows | Unit | Status |
-|---------|------|------|------|------|--------|
-| `97c40520` | ET11109 MAZDA | ET11109 MAZDA BAR LIST.xlsx | 2 | mm | approved |
-| `cb20d0df` | ET11109 MAZDA | ET11109 MAZDA BAR LIST.xlsx | 2 | ft | approved |
-| `6568dcdd` | Pink Wall | PINK WALL TAGS.xlsx | 9 | in | mapped |
-| `f84c0267` | Pink wall | PINK WALL TAGS.xlsx | 9 | in | mapped |
-| `4b7a00cf` | ET11109 MAZDA | Cages.xlsx | 2 | imperial | mapped |
-| `71332bf1` | ET11109 MAZDA | Cages.xlsx | 2 | mm | mapped |
-| `ad9c3217` | ET11109 MAZDA | Cages.xlsx | 2 | in | mapped |
-| `37607cb3` | ET11109 MAZDA | Cages.xlsx | 2 | imperial | mapped |
+Since the user wants source-unit values preserved throughout (no mm conversion anywhere), all downstream consumers must be aware of the unit. The `unit_system` from the session must propagate to `cut_plan_items`, `barlist_items`, and `production_tasks`.
 
-The "EPOXY TIES" project + barlist still exists and was **not** deleted.
+```text
+FLOW:
+extract_rows.total_length_mm = 44.5 (inches)
+    ↓ approve
+barlist_items.cut_length_mm = 44.5 (inches)  
+cut_plan_items.cut_length_mm = 44.5 (inches)
+production_tasks.cut_length_mm = 44.5 (inches)
+    ↓ display
+Shop floor shows "44.5 in" (not "44.5mm")
+```
 
-### Recovery steps
+### Changes
 
-1. **Re-create projects** — INSERT into `projects` table for each unique project name that was deleted (ET11109 MAZDA, Pink Wall, etc.) using `company_id = a0000000-0000-0000-0000-000000000001`
+**1. `src/components/office/BarlistMappingPanel.tsx`** — Remove `Math.round()` on lines 216 and 232 to preserve decimal precision (44.5 stays 44.5).
 
-2. **Re-create barlists** — INSERT into `barlists` table, linking each to its project and extract_session_id
+**2. `supabase/functions/manage-extract/index.ts`** — In `approveExtract`, store `session.unit_system` on `cut_plan_items` and `barlist_items` so downstream knows the unit. Add `unit_system` field to the inserted records. (This requires a DB migration to add the column.)
 
-3. **Re-link extract sessions** — The sessions already exist with all their row data; they just need a barlist parent again
+**3. Database migration** — Add `unit_system text` column to:
+- `cut_plan_items`
+- `barlist_items`  
+- `production_tasks`
 
-4. **Cut plans** — These were also deleted. They can be recreated from the Detailed List view by the user when needed (no raw data to recover for these).
+Default: `'mm'` (backward compatible with existing data).
 
-### Questions before proceeding
+**4. Shop floor display files** — Update the ~6 files that hardcode "mm" suffix to read `unit_system` from the record:
+- `src/pages/PoolView.tsx` (line 319)
+- `src/pages/StationView.tsx` (line 526)
+- `src/components/clearance/ClearanceCard.tsx` (line 309)
+- `src/components/cutter/QueueToMachineDialog.tsx` (lines 115, 155)
+- `src/hooks/useLiveMonitorStats.ts` (line 72) — weight calc needs unit-aware conversion to meters
 
-Before I restore, I need to confirm which sessions you actually want recovered — some appear to be duplicates (multiple "ET11109 MAZDA" sessions with different units, and two "Pink Wall" sessions). Should I restore all of them, or only specific ones?
+**5. Weight calculation in `useLiveMonitorStats.ts`** — Currently does `cut_length_mm / 1000` to get meters. Must convert based on `unit_system` first.
 
-### Technical detail
-- Recovery is done via database migration (INSERT statements)
-- No code changes needed — the Production Queue UI will automatically show restored items
-- Extract rows, raw files, and all extraction data are fully intact
+**6. Edge function: `approveExtract`** — Pass `session.unit_system` into `barlist_items`, `cut_plan_items`, and `production_tasks` inserts.
+
+**7. Redeploy** `manage-extract` edge function.
+
+### What stays the same
+- `extract_rows` storage logic — already correct (stores source values)
+- Display logic in `AIExtractView.tsx` — already correct
+- Optimizer `toMm` conversion — already correct
+- `getWeight` in `RebarTagCard.tsx` / `TagsExportView.tsx` — already updated
+
+### Risk
+- Existing approved items in production have no `unit_system` column yet — the default `'mm'` ensures backward compatibility since all previously approved data was in mm.
 
