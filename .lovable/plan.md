@@ -1,36 +1,41 @@
 
 
-## Plan: Remove All Unit Conversion — Store Original Values Throughout Pipeline
+## Plan: Preserve Original Unit Symbols in Extracted Values
 
 ### Problem
-The pipeline converts values to mm in **two places**:
-1. **extract-manifest** (line 674): `finalToMm = 25.4` multiplies all lengths/dims during extraction
-2. **manage-extract → applyMapping** (lines 354-382): `getLengthFactor()` multiplies again during mapping
+Currently, `source_total_length_text` and `source_dims_json` store plain numbers (e.g., `"44"`, `"8"`) without unit symbols. The user wants `5"` for inches, `5'` for feet, `5'-3"` for ft-in, and plain `2790` for mm — preserved from extraction through display.
 
-The user wants **zero conversion anywhere**. Extract the original values in their original units (ft, in, mm, ft-in) and keep them as-is through extract → map → validate → approve.
+### Root Cause
+1. **For AI-extracted (non-spreadsheet) data**: Line 697 builds `sourceLengthText` from `item.total_length` AFTER `parseDimension()` (line 544-545) has already stripped unit markers like `"`, `'` from the string
+2. **For spreadsheet data**: `__source_length` and `__source_dims` correctly preserve the original cell text with symbols — this path already works
 
 ### Changes
 
 **File 1: `supabase/functions/extract-manifest/index.ts`**
-- Line 674: Set `finalToMm = 1` unconditionally (never multiply by 25.4)
-- Remove the entire heuristic block (lines 680-697) that tries to detect double-conversion — no longer needed since we never convert
-- `finalDimToMm` and `finalLengthToMm` become simple pass-through (store raw values as-is)
-- The column is still named `total_length_mm` in the DB but will hold the original unit value
 
-**File 2: `supabase/functions/manage-extract/index.ts`**
-- Remove `getLengthFactor()` function (lines 280-287) entirely
-- In `applyMapping()` (lines 354-382): Remove all unit conversion logic. The mapping step should only handle bar_size mapping, grade mapping, and shape mapping — no length/dim multiplication at all
-- Keep `raw_total_length_mm` / `raw_dims_json` storage for re-apply idempotency, but set them equal to the current values (no factor applied)
-- In `validateExtract()` (lines 577-594): Remove or adjust the `> 18000` mm-specific warning threshold since values may be in inches or feet. Either remove the sanity check entirely or make it unit-aware using the session's `unit_system`
+Before the `parseDimension` pass (line 542), capture the original AI strings with their unit symbols:
+- Add a loop that saves each item's raw `total_length` and dimension strings into `__source_length` / `__source_dims` BEFORE `parseDimension` strips them
+- Only set these if they aren't already set (spreadsheet overlay already populates them)
+- This ensures `source_total_length_text` and `source_dims_json` contain `"44"" `, `"8'"`, `"5'-3""`, or `"2790"` as appropriate
 
-**File 3: Deploy both edge functions**
+**File 2: `src/components/office/AIExtractView.tsx`**
+
+Update `displayLength()` and `displayDim()` to append unit symbols when `source_total_length_text` / `source_dims_json` lack them (legacy data):
+- If `source_total_length_text` already has a symbol (`"`, `'`), show as-is
+- If it's a plain number AND `unit_system` is `"in"`, append `"`
+- If `unit_system` is `"ft"`, append `'`
+- If `unit_system` is `"imperial"` or `"ft-in"`, format as ft-in string
+- If `unit_system` is `"mm"` or `"metric"`, show plain number (no symbol)
+
+**File 3: `src/lib/unitSystem.ts`**
+
+Add a small helper `appendUnitSymbol(value: string | number, unitSystem: string): string` that appends the correct symbol based on unit system — reusable across display components.
 
 ### What stays the same
-- `source_total_length_text` and `source_dims_json` continue storing display text
-- `unit_system` on the session still records what unit the data is in (for UI display)
-- Bar size mapping, grade mapping, shape mapping — unchanged
-- Approval flow — unchanged
+- Numeric columns (`total_length_mm`, `dim_a`..`dim_r`) remain plain numbers for calculations
+- `source_total_length_text` and `source_dims_json` are display-only text fields — no calculation impact
+- Mapping, validation, approval — unchanged
 
 ### Result
-Raw extracted values flow untouched from extraction through mapping, validation, and approval. The `unit_system` field tells the UI what unit the numbers represent for display purposes only.
+Values display with their original symbols: `44"`, `8'`, `5'-3"`, `2790` throughout the extraction UI.
 
