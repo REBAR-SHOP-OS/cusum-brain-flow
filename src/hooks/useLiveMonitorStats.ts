@@ -46,7 +46,7 @@ export function useLiveMonitorStats() {
           .select(`
             id, name, project_name, status, created_at, updated_at,
             cut_plan_items(
-              total_pieces, completed_pieces, cut_length_mm, bar_code,
+              total_pieces, completed_pieces, cut_length_mm, bar_code, unit_system,
               rebar_sizes:bar_code(mass_kg_per_m)
             )
           `)
@@ -69,7 +69,9 @@ export function useLiveMonitorStats() {
             totalPieces += item.total_pieces || 0;
             completedPieces += item.completed_pieces || 0;
             const massPerM = item.rebar_sizes?.mass_kg_per_m || 0;
-            const lengthM = (item.cut_length_mm || 0) / 1000;
+            const rawLen = item.cut_length_mm || 0;
+            const u = item.unit_system || "mm";
+            const lengthM = u === "in" || u === "imperial" ? rawLen * 0.0254 : u === "ft" ? rawLen * 0.3048 : rawLen / 1000;
             totalWeightKg += (item.total_pieces || 0) * lengthM * massPerM;
             completedWeightKg += (item.completed_pieces || 0) * lengthM * massPerM;
           }
