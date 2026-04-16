@@ -1,118 +1,41 @@
 
 
-## Plan: Store Values in Source Units (No mm Conversion)
+## Plan: Recover Deleted Projects from Production Queue
 
-### Current State
-The previous fix converts all values to mm before storing in `total_length_mm` and `dim_*` columns. The user wants the opposite: **store raw source-unit values as-is**. If the source is inches, store inches. If feet, store feet.
+### What happened
+The Production Queue delete buttons perform **hard deletes** — they removed projects, barlists, and cut_plans from the database. However, the underlying **extract sessions and extract rows are still intact** because their delete was either skipped or failed silently.
 
-### Architecture Change
+### Recoverable data (still in database)
 
-```text
-BEFORE (current):                    AFTER (requested):
-─────────────────                    ──────────────────
-44.5" → store 1130mm                 44.5" → store 44.5 (inches)
-100mm → store 100mm                  100mm → store 100 (mm)
-6'    → store 1829mm                 6'    → store 6 (feet)
-```
+| Session | Name | File | Rows | Unit | Status |
+|---------|------|------|------|------|--------|
+| `97c40520` | ET11109 MAZDA | ET11109 MAZDA BAR LIST.xlsx | 2 | mm | approved |
+| `cb20d0df` | ET11109 MAZDA | ET11109 MAZDA BAR LIST.xlsx | 2 | ft | approved |
+| `6568dcdd` | Pink Wall | PINK WALL TAGS.xlsx | 9 | in | mapped |
+| `f84c0267` | Pink wall | PINK WALL TAGS.xlsx | 9 | in | mapped |
+| `4b7a00cf` | ET11109 MAZDA | Cages.xlsx | 2 | imperial | mapped |
+| `71332bf1` | ET11109 MAZDA | Cages.xlsx | 2 | mm | mapped |
+| `ad9c3217` | ET11109 MAZDA | Cages.xlsx | 2 | in | mapped |
+| `37607cb3` | ET11109 MAZDA | Cages.xlsx | 2 | imperial | mapped |
 
-The column `total_length_mm` becomes a **source-unit value** — its name is misleading but renaming columns is destructive. The `unit_system` on the session tells consumers what unit the value is in.
+The "EPOXY TIES" project + barlist still exists and was **not** deleted.
 
-### Changes Required
+### Recovery steps
 
-**1. Edge Function: `supabase/functions/manage-extract/index.ts`** (lines 344-358)
+1. **Re-create projects** — INSERT into `projects` table for each unique project name that was deleted (ET11109 MAZDA, Pink Wall, etc.) using `company_id = a0000000-0000-0000-0000-000000000001`
 
-Revert the conversion block — store raw values directly:
+2. **Re-create barlists** — INSERT into `barlists` table, linking each to its project and extract_session_id
 
-```typescript
-// NO conversion — store in source unit as-is
-if (rawLength != null) {
-  updates.total_length_mm = rawLength;  // raw source-unit value
-}
-for (const col of DIM_COLUMNS) {
-  const rawVal = rawDims[col] ?? row[col];
-  if (rawVal != null) {
-    updates[col] = rawVal;  // no rounding, no conversion
-  }
-}
-```
+3. **Re-link extract sessions** — The sessions already exist with all their row data; they just need a barlist parent again
 
-Response: `length_factor: 1` (no conversion applied).
+4. **Cut plans** — These were also deleted. They can be recreated from the Detailed List view by the user when needed (no raw data to recover for these).
 
-**2. Optimization: `src/components/office/AIExtractView.tsx`** (lines 735-738, 773-776)
+### Questions before proceeding
 
-When feeding `total_length_mm` into the optimizer, convert to mm on-the-fly based on session unit:
+Before I restore, I need to confirm which sessions you actually want recovered — some appear to be duplicates (multiple "ET11109 MAZDA" sessions with different units, and two "Pink Wall" sessions). Should I restore all of them, or only specific ones?
 
-```typescript
-// Convert to mm for optimizer only
-const toMm = (val: number) => {
-  const u = activeSession?.unit_system;
-  if (u === "in" || u === "imperial") return Math.round(val * 25.4);
-  if (u === "ft") return Math.round(val * 304.8);
-  return val; // mm
-};
-
-lengthMm: toMm(r.total_length_mm || 0),
-```
-
-Apply same fix at both optimization call sites (~line 737 and ~line 775).
-
-**3. Weight Calculation: `src/components/office/RebarTagCard.tsx`** (line 11-16)
-
-Update `getWeight` to accept a unit parameter and convert internally:
-
-```typescript
-export function getWeight(
-  size: string | null, 
-  lengthVal: number | null, 
-  qty: number | null, 
-  unit?: string
-): string {
-  if (!size || !lengthVal) return "";
-  const mass = MASS_KG_PER_M[size.toUpperCase()] || 0;
-  if (!mass) return "";
-  // Convert to mm first
-  let mm = lengthVal;
-  if (unit === "in" || unit === "imperial") mm = lengthVal * 25.4;
-  else if (unit === "ft") mm = lengthVal * 304.8;
-  return ((mm / 1000) * mass * (qty || 1)).toFixed(2);
-}
-```
-
-**4. Tags Export: `src/components/office/TagsExportView.tsx`** (line 58-63)
-
-Same fix — its local `getWeight` also divides by 1000 assuming mm. Update to accept unit and convert.
-
-**5. Print Tags: `src/pages/PrintTags.tsx`** (line 111)
-
-Pass unit to `getWeight` calls.
-
-**6. Edit Save: `src/components/office/AIExtractView.tsx`** (lines 951-960)
-
-Currently converts edited values from display unit to mm via `displayModeToMm`. Since we're now storing in source unit, the edit input should store as-is (source unit), not convert to mm:
-
-```typescript
-// Store in source unit — no conversion
-updateData.total_length_mm = raw;
-```
-
-**7. Display: `src/components/office/AIExtractView.tsx`** (lines 270-285)
-
-The display function already handles raw values correctly — `raw_total_length_mm` stores the original. After this change, `total_length_mm` equals `raw_total_length_mm`, so display logic simplifies: just show `total_length_mm` with the session's unit symbol.
-
-**8. Mapping Preview: `src/components/office/BarlistMappingPanel.tsx`** (line 28)
-
-Change label from `"Cut Length (mm)"` to `"Cut Length"` — unit depends on session.
-
-**9. Deploy** the `manage-extract` edge function.
-
-### What stays the same
-- `raw_total_length_mm`, `raw_dims_json` — still stored for backward compat
-- `source_total_length_text`, `source_dims_json` — untouched
-- Cut optimizer internal logic — unchanged (it already works in mm internally)
-- Database schema — no column renames
-- All format/display utilities — unchanged
-
-### Risk Assessment
-- **Shop floor / production**: Uses `cut_length_mm` from `cut_plan_items` (copied during approval). Need to verify this path also preserves source units or converts at copy time. Will check during implementation.
-- **Existing data**: Previously stored values may be in mm (from the recent fix). Re-applying mapping will correct them.
+### Technical detail
+- Recovery is done via database migration (INSERT statements)
+- No code changes needed — the Production Queue UI will automatically show restored items
+- Extract rows, raw files, and all extraction data are fully intact
 
