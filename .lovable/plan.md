@@ -1,83 +1,118 @@
 
 
-## Plan: Fix Unit Conversion Pipeline End-to-End
+## Plan: Store Values in Source Units (No mm Conversion)
 
-### Flow Audit (GPS Routing)
+### Current State
+The previous fix converts all values to mm before storing in `total_length_mm` and `dim_*` columns. The user wants the opposite: **store raw source-unit values as-is**. If the source is inches, store inches. If feet, store feet.
+
+### Architecture Change
 
 ```text
-EXTRACTION (AI)          MAPPING (Edge Fn)         STORAGE (DB)            DISPLAY (UI)              DOWNSTREAM
-─────────────────────    ────────────────────      ──────────────          ────────────────           ──────────────
-AI returns values in     applyMapping() saves      total_length_mm         AIExtractView has         OptimizationView:
-source unit (e.g. 44.5   raw → raw_total_length    stores raw value        defensive heuristic:      lengthMm = total_length_mm
-inches)                  raw_dims_json             (44 not 1118mm)         "if < 50, multiply by     (expects mm!)
-                         Then copies raw → main                            25.4" — fragile hack
-                         columns AS-IS ❌                                                            TagsExportView:
-                                                                                                     getWeight(size, total_length_mm)
-                                                                                                     (expects mm!)
-
-                                                                                                     Production/Shop Floor:
-                                                                                                     all assume mm
+BEFORE (current):                    AFTER (requested):
+─────────────────                    ──────────────────
+44.5" → store 1130mm                 44.5" → store 44.5 (inches)
+100mm → store 100mm                  100mm → store 100 (mm)
+6'    → store 1829mm                 6'    → store 6 (feet)
 ```
 
-### Problems Found
+The column `total_length_mm` becomes a **source-unit value** — its name is misleading but renaming columns is destructive. The `unit_system` on the session tells consumers what unit the value is in.
 
-| Location | Issue |
-|----------|-------|
-| `manage-extract/index.ts` L344 | `total_length_mm` and `dim_*` store raw source-unit values instead of mm |
-| `AIExtractView.tsx` L277-279 | Fragile heuristic: `if mmVal < 50 → multiply by 25.4` — breaks for short metric bars |
-| `AIExtractView.tsx` L316-318 | Same fragile heuristic for dimensions |
-| `OptimizationView.tsx` L48 | Uses `total_length_mm` directly as mm — gets wrong cut plans |
-| `TagsExportView.tsx` L115 | `getWeight()` uses `total_length_mm` as mm — calculates wrong weight |
+### Changes Required
 
-### Fix — 3 Changes
+**1. Edge Function: `supabase/functions/manage-extract/index.ts`** (lines 344-358)
 
-**1. Edge Function: `supabase/functions/manage-extract/index.ts`** (lines 344-354)
-
-Replace the "NO conversion" block with proper unit conversion:
+Revert the conversion block — store raw values directly:
 
 ```typescript
-// Compute conversion factor
-const factor = (effectiveUnit === "in" || effectiveUnit === "imperial") ? 25.4
-             : effectiveUnit === "ft" ? 304.8
-             : 1; // mm
-
-// Convert to mm for main columns
+// NO conversion — store in source unit as-is
 if (rawLength != null) {
-  updates.total_length_mm = Math.round(rawLength * factor);
+  updates.total_length_mm = rawLength;  // raw source-unit value
 }
-
 for (const col of DIM_COLUMNS) {
   const rawVal = rawDims[col] ?? row[col];
   if (rawVal != null) {
-    updates[col] = Math.round(rawVal * factor);
+    updates[col] = rawVal;  // no rounding, no conversion
   }
 }
 ```
 
-Update response (line 460): `length_factor: factor` instead of `1`.
+Response: `length_factor: 1` (no conversion applied).
 
-**2. Display Fix: `src/components/office/AIExtractView.tsx`**
+**2. Optimization: `src/components/office/AIExtractView.tsx`** (lines 735-738, 773-776)
 
-Remove the two defensive heuristic blocks that try to guess unconverted values:
+When feeding `total_length_mm` into the optimizer, convert to mm on-the-fly based on session unit:
 
-- **Lines 275-280**: Remove `if (isImperialSession && mmVal < 50 ...)` block for length — after fix, `total_length_mm` is always mm
-- **Lines 315-319**: Remove same heuristic for dimensions
+```typescript
+// Convert to mm for optimizer only
+const toMm = (val: number) => {
+  const u = activeSession?.unit_system;
+  if (u === "in" || u === "imperial") return Math.round(val * 25.4);
+  if (u === "ft") return Math.round(val * 304.8);
+  return val; // mm
+};
 
-These heuristics would **double-convert** after the edge function fix.
+lengthMm: toMm(r.total_length_mm || 0),
+```
 
-**3. Deploy** the `manage-extract` edge function.
+Apply same fix at both optimization call sites (~line 737 and ~line 775).
+
+**3. Weight Calculation: `src/components/office/RebarTagCard.tsx`** (line 11-16)
+
+Update `getWeight` to accept a unit parameter and convert internally:
+
+```typescript
+export function getWeight(
+  size: string | null, 
+  lengthVal: number | null, 
+  qty: number | null, 
+  unit?: string
+): string {
+  if (!size || !lengthVal) return "";
+  const mass = MASS_KG_PER_M[size.toUpperCase()] || 0;
+  if (!mass) return "";
+  // Convert to mm first
+  let mm = lengthVal;
+  if (unit === "in" || unit === "imperial") mm = lengthVal * 25.4;
+  else if (unit === "ft") mm = lengthVal * 304.8;
+  return ((mm / 1000) * mass * (qty || 1)).toFixed(2);
+}
+```
+
+**4. Tags Export: `src/components/office/TagsExportView.tsx`** (line 58-63)
+
+Same fix — its local `getWeight` also divides by 1000 assuming mm. Update to accept unit and convert.
+
+**5. Print Tags: `src/pages/PrintTags.tsx`** (line 111)
+
+Pass unit to `getWeight` calls.
+
+**6. Edit Save: `src/components/office/AIExtractView.tsx`** (lines 951-960)
+
+Currently converts edited values from display unit to mm via `displayModeToMm`. Since we're now storing in source unit, the edit input should store as-is (source unit), not convert to mm:
+
+```typescript
+// Store in source unit — no conversion
+updateData.total_length_mm = raw;
+```
+
+**7. Display: `src/components/office/AIExtractView.tsx`** (lines 270-285)
+
+The display function already handles raw values correctly — `raw_total_length_mm` stores the original. After this change, `total_length_mm` equals `raw_total_length_mm`, so display logic simplifies: just show `total_length_mm` with the session's unit symbol.
+
+**8. Mapping Preview: `src/components/office/BarlistMappingPanel.tsx`** (line 28)
+
+Change label from `"Cut Length (mm)"` to `"Cut Length"` — unit depends on session.
+
+**9. Deploy** the `manage-extract` edge function.
 
 ### What stays the same
-- `raw_total_length_mm` and `raw_dims_json` — untouched, still store source-unit values
-- `source_total_length_text` and `source_dims_json` — untouched, still store formatted text
-- Display logic using raw values for lossless cross-unit conversion — works correctly
-- `formatLengthByMode`, `formatConvertedLength` — unchanged
-- All downstream consumers (optimization, tags, weight, production) — now get correct mm values
-- Existing sessions that haven't been re-mapped keep their current data; re-applying mapping will fix them
+- `raw_total_length_mm`, `raw_dims_json` — still stored for backward compat
+- `source_total_length_text`, `source_dims_json` — untouched
+- Cut optimizer internal logic — unchanged (it already works in mm internally)
+- Database schema — no column renames
+- All format/display utilities — unchanged
 
-### Impact
-- Optimization cuts will use correct mm lengths
-- Weight calculations will be accurate
-- Tags/export will show correct values
-- No more fragile "guess if it's converted" heuristics
+### Risk Assessment
+- **Shop floor / production**: Uses `cut_length_mm` from `cut_plan_items` (copied during approval). Need to verify this path also preserves source units or converts at copy time. Will check during implementation.
+- **Existing data**: Previously stored values may be in mm (from the recent fix). Re-applying mapping will correct them.
 
