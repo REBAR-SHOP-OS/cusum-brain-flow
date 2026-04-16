@@ -112,7 +112,7 @@ export function QueueToMachineDialog({
           process: "cut" as const,
           status: "queued" as const,
           input_qty: item.qty_bars,
-          notes: `cut_plan_id:${splitPlan.id} | ${item.bar_code} x${item.qty_bars} @ ${item.cut_length_mm}mm`,
+          notes: `cut_plan_id:${splitPlan.id} | ${item.bar_code} x${item.qty_bars} @ ${item.cut_length_mm}${(item as any).unit_system === "in" || (item as any).unit_system === "imperial" ? '"' : (item as any).unit_system === "ft" ? "'" : "mm"}`,
           created_by: user?.id || null,
         }));
         const { error: splitRunsErr } = await supabase.from("machine_runs").insert(splitRuns);
@@ -152,7 +152,7 @@ export function QueueToMachineDialog({
         process: "cut" as const,
         status: "queued" as const,
         input_qty: item.qty_bars,
-        notes: `cut_plan_id:${plan.id} | ${item.bar_code} x${item.qty_bars} @ ${item.cut_length_mm}mm`,
+        notes: `cut_plan_id:${plan.id} | ${item.bar_code} x${item.qty_bars} @ ${item.cut_length_mm}${(item as any).unit_system === "in" || (item as any).unit_system === "imperial" ? '"' : (item as any).unit_system === "ft" ? "'" : "mm"}`,
         created_by: user?.id || null,
       }));
 

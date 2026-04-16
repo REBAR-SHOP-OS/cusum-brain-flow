@@ -751,6 +751,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
       drawing_ref: row.dwg || null,
       source_row_id: row.id,
       status: "approved",
+      unit_system: session.unit_system || "mm",
     }));
     await sb.from("barlist_items").insert(barlistItems);
 
@@ -880,6 +881,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
         bend_dimensions: buildDimensions(row),
         source_total_length_text: row.source_total_length_text || null,
         source_dims_json: row.source_dims_json || null,
+        unit_system: session.unit_system || "mm",
       };
     });
 
@@ -913,6 +915,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
         asa_shape_code: item.asa_shape_code,
         bend_dimensions: item.bend_dimensions,
         created_by: userId,
+        unit_system: session.unit_system || "mm",
       }));
 
       const { data: createdTasks, error: taskErr } = await sb
