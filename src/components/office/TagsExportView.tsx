@@ -55,11 +55,14 @@ function dimUnit(unitSystem: string): string {
   return unitSystem === "imperial" ? "" : "MM";
 }
 
-function getWeight(size: string | null, lengthMm: number | null, qty: number | null): string {
-  if (!size || !lengthMm) return "";
+function getWeight(size: string | null, lengthVal: number | null, qty: number | null, unit?: string): string {
+  if (!size || !lengthVal) return "";
   const mass = MASS_KG_PER_M[size.toUpperCase()] || 0;
   if (!mass) return "";
-  return ((lengthMm / 1000) * mass * (qty || 1)).toFixed(2);
+  let mm = lengthVal;
+  if (unit === "in" || unit === "imperial") mm = lengthVal * 25.4;
+  else if (unit === "ft") mm = lengthVal * 304.8;
+  return ((mm / 1000) * mass * (qty || 1)).toFixed(2);
 }
 
 export function TagsExportView() {

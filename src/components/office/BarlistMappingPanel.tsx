@@ -25,7 +25,7 @@ const CANONICAL_FIELDS: CanonicalField[] = [
   { key: "mark", label: "Mark", required: true, dbColumn: "mark" },
   { key: "size", label: "Bar Size", required: true, dbColumn: "bar_size" },
   { key: "shape", label: "Shape / Type", required: false, dbColumn: "shape_type" },
-  { key: "length", label: "Cut Length (mm)", required: true, dbColumn: "total_length_mm" },
+  { key: "length", label: "Cut Length", required: true, dbColumn: "total_length_mm" },
   { key: "quantity", label: "Quantity", required: true, dbColumn: "quantity" },
   { key: "dwg", label: "Drawing Ref", required: false, dbColumn: "dwg" },
   { key: "grade", label: "Grade", required: false, dbColumn: "grade" },
