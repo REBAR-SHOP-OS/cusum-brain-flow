@@ -272,20 +272,22 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
     const mmVal = row.total_length_mm;
     if (mmVal == null) return "—";
 
-    // total_length_mm is now always stored in mm after mapping — no heuristic needed
-
-    // Same unit, raw available → exact raw number with symbol
-    if (du === srcUnit && row.raw_total_length_mm != null) {
-      return appendUnitSymbol(row.raw_total_length_mm, activeSession?.unit_system || "mm");
+    // total_length_mm now stores source-unit value (not mm)
+    // When display unit matches source unit, just show the value with symbol
+    if (du === srcUnit) {
+      if (row.source_total_length_text != null && row.source_total_length_text !== "") {
+        return appendUnitSymbol(row.source_total_length_text, activeSession?.unit_system || "mm");
+      }
+      return appendUnitSymbol(mmVal, activeSession?.unit_system || "mm");
     }
 
-    // Cross-unit conversion: use raw value (in source unit) to avoid rounding through integer mm
+    // Cross-unit conversion: use raw value (in source unit) to convert
     if (row.raw_total_length_mm != null) {
       return formatConvertedLength(row.raw_total_length_mm, srcUnit, du) || "—";
     }
 
-    // Fallback: convert from stored mm (may have minor rounding)
-    return formatLengthByMode(mmVal, du) || "—";
+    // Fallback: convert from stored value (source unit) treating as source unit
+    return formatConvertedLength(mmVal, srcUnit, du) || "—";
   };
 
   /** Display dimension value — prefer exact source text, use lossless conversion otherwise */
@@ -307,12 +309,14 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
 
     if (mmVal == null) return "";
 
-    // dim_* columns are now always stored in mm after mapping — no heuristic needed
-
-    // Same unit, raw available — append symbol
-    if (du === srcUnit && row.raw_dims_json != null) {
-      const rawVal = row.raw_dims_json[dimKey];
-      if (rawVal != null) return appendUnitSymbol(rawVal, unitSys);
+    // dim_* columns now store source-unit values (not mm)
+    // When display unit matches source unit, show value with symbol
+    if (du === srcUnit) {
+      if (row.raw_dims_json != null) {
+        const rawVal = row.raw_dims_json[dimKey];
+        if (rawVal != null) return appendUnitSymbol(rawVal, unitSys);
+      }
+      return appendUnitSymbol(mmVal, unitSys);
     }
 
     // Cross-unit: use raw dim value to convert losslessly
@@ -323,8 +327,8 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
       }
     }
 
-    // Fallback: convert from stored mm
-    return formatLengthByMode(mmVal, du);
+    // Fallback: convert from stored value treating as source unit
+    return formatConvertedLength(mmVal, srcUnit, du);
   };
 
   const userSetUnitRef = useRef(false);

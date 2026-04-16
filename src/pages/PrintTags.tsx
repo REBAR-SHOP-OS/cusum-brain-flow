@@ -108,7 +108,7 @@ export default function PrintTags() {
         {sortedRows.map((row) => {
           const size = row.bar_size_mapped || row.bar_size || "";
           const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
-          const weight = getWeight(size, row.total_length_mm, row.quantity);
+          const weight = getWeight(size, row.total_length_mm, row.quantity, params.get("unit") || undefined);
           const dims: Record<string, number | null> = {};
           const sourceDimsRaw = (row as any).source_dims_json;
           const sourceDims: Record<string, string> = {};
