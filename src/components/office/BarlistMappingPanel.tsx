@@ -334,7 +334,7 @@ export function BarlistMappingPanel({ rows, sessionId, onConfirmMapping, disable
                 <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
                   Mapped Preview — First {previewRows.length} of {rows.length} rows
                   <span className="ml-2 text-primary">
-                    (source: {unitLabel} → stored as mm)
+                    (source: {unitLabel} → stored as {unitLabel})
                   </span>
                 </span>
               </div>
