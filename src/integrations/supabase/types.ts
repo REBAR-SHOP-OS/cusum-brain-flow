@@ -1101,6 +1101,7 @@ export type Database = {
           shape_code: string | null
           source_row_id: string | null
           status: string
+          unit_system: string
           weight_kg: number | null
         }
         Insert: {
@@ -1118,6 +1119,7 @@ export type Database = {
           shape_code?: string | null
           source_row_id?: string | null
           status?: string
+          unit_system?: string
           weight_kg?: number | null
         }
         Update: {
@@ -1135,6 +1137,7 @@ export type Database = {
           shape_code?: string | null
           source_row_id?: string | null
           status?: string
+          unit_system?: string
           weight_kg?: number | null
         }
         Relationships: [
@@ -3316,6 +3319,7 @@ export type Database = {
           source_dims_json: Json | null
           source_total_length_text: string | null
           total_pieces: number
+          unit_system: string
           work_order_id: string | null
         }
         Insert: {
@@ -3338,6 +3342,7 @@ export type Database = {
           source_dims_json?: Json | null
           source_total_length_text?: string | null
           total_pieces?: number
+          unit_system?: string
           work_order_id?: string | null
         }
         Update: {
@@ -3360,6 +3365,7 @@ export type Database = {
           source_dims_json?: Json | null
           source_total_length_text?: string | null
           total_pieces?: number
+          unit_system?: string
           work_order_id?: string | null
         }
         Relationships: [
@@ -9620,6 +9626,7 @@ export type Database = {
           setup_key: string | null
           status: string
           task_type: string
+          unit_system: string
           updated_at: string
           work_order_id: string | null
         }
@@ -9648,6 +9655,7 @@ export type Database = {
           setup_key?: string | null
           status?: string
           task_type?: string
+          unit_system?: string
           updated_at?: string
           work_order_id?: string | null
         }
@@ -9676,6 +9684,7 @@ export type Database = {
           setup_key?: string | null
           status?: string
           task_type?: string
+          unit_system?: string
           updated_at?: string
           work_order_id?: string | null
         }
