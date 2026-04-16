@@ -1,25 +1,23 @@
 
 
-## Plan: Update "Bars to Load" Counter to Reflect Active Bars During Run
+## Plan: Play Intro Video on AI Video Director Page
 
-### Problem
-When a run is active and bars are removed (completed partial bars or supervisor removals), the "Bars to Load" display stays at the original locked count. It should decrease to show only active bars remaining.
-
-### Root Cause
-- `CutEngine` line 249 displays `lockedBars` during a run, which comes from `slotTracker.slots.length` (total slots, including removed/completed)
-- The `activeBars` prop is already passed correctly but never used in the display
+### What
+When the user clicks the "AI Video Director" card, the uploaded motion graphic video plays as a full-screen intro before showing the Ad Director content.
 
 ### Changes
 
-**File 1: `src/components/shopfloor/CutterStationView.tsx`**
-- Change line 1046: pass `activeBars` count instead of total slot count for `lockedBars`
-  - From: `lockedBars={machineIsRunning ? slotTracker.slots.length : undefined}`
-  - To: `lockedBars={machineIsRunning ? slotTracker.slots.filter(s => s.status === "active" || s.status === "removable").length : undefined}`
+**Step 1: Copy video asset**
+- Copy `user-uploads://Create_motion_graphic_202604161038.mp4` to `public/videos/ad-director-intro.mp4`
 
-This single change makes the "Bars to Load" counter decrease in real-time as bars complete or get removed, while still showing the original count before the run starts.
+**Step 2: Modify `src/pages/AdDirector.tsx`**
+- Add `showIntro` state (default `true`)
+- When `showIntro` is true, render a full-screen `<video>` element that auto-plays the intro video
+- On video end (or click to skip), set `showIntro = false` to reveal the normal Ad Director content
+- Include a "Skip" button in the corner so users can bypass the intro
 
 ### What stays the same
-- Supervisor override logic — unchanged
-- Slot tracker internals — unchanged
-- All other CutEngine props — unchanged
+- All Ad Director functionality, editor, chat prompt bar — unchanged
+- The home page card and navigation — unchanged
+- The intro only plays once per visit (state resets on navigation away)
 
