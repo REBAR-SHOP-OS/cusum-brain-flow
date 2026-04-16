@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer } from "lucide-react";
+import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Wand2, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { useToast } from "@/hooks/use-toast";
 import { Camera, Building2, HardHat, Cpu, TreePine, Megaphone, Flame, Smile, Clapperboard, Palette } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -178,6 +179,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedVideoModel, setSelectedVideoModel] = useState(VIDEO_MODELS[0]);
+  const [aiWriting, setAiWriting] = useState(false);
   
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
@@ -203,6 +205,29 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     }
   }, [starterPrompt, starterPromptSeed]);
 
+  const handleAiWrite = async () => {
+    setAiWriting(true);
+    try {
+      const parts: string[] = [];
+      if (selectedStyleLabels.length) parts.push(`Style: ${selectedStyleLabels.join(", ")}`);
+      if (selectedProductLabels.length) parts.push(`Products: ${selectedProductLabels.join(", ")}`);
+      parts.push(`Duration: ${duration}s`);
+      const contextString = parts.join(". ") + ".";
+      const result = await invokeEdgeFunction<{ text?: string }>("ad-director-ai", {
+        action: "write-script",
+        input: contextString,
+      });
+      if (result?.text) {
+        setPrompt(result.text);
+        toast({ title: "✨ Prompt ready", description: "Review and edit before creating." });
+      }
+    } catch (err: any) {
+      console.error("AI write error:", err);
+      toast({ title: "AI prompt failed", description: err.message || "Try again", variant: "destructive" });
+    } finally {
+      setAiWriting(false);
+    }
+  };
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
@@ -543,6 +568,21 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           </div>
 
           <div className="flex items-center justify-end gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleAiWrite}
+                  disabled={disabled || aiWriting}
+                  className="h-10 rounded-xl border border-white/10 bg-slate-800/60 px-3 text-sm font-medium text-white/70 hover:bg-slate-700/80 hover:text-white gap-1.5"
+                >
+                  {aiWriting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                  {aiWriting ? "Writing..." : "AI Prompt"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">AI writes the prompt based on your selections</TooltipContent>
+            </Tooltip>
 
             <div className="flex items-center gap-2">
               <Button
