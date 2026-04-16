@@ -63,7 +63,7 @@ import { formatLengthByMode, formatConvertedLength, lengthUnitLabelByMode, displ
 function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
   const [showRetry, setShowRetry] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setShowRetry(true), 10000);
+    const t = setTimeout(() => setShowRetry(true), 4000);
     return () => clearTimeout(t);
   }, []);
   return (
@@ -359,6 +359,13 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
       refreshRows();
     }
   }, [activeSession?.status]);
+
+  // Auto-trigger row refresh when entering mapping step (currentStepIndex === 3)
+  useEffect(() => {
+    if (currentStepIndex === 3 && rows.length === 0 && !rowsLoading) {
+      refreshRows();
+    }
+  }, [currentStepIndex]);
 
   // Filter out merged rows for display
   const activeRows = useMemo(() => rows.filter(r => r.status !== "merged"), [rows]);
