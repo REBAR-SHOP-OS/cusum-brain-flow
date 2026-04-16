@@ -1124,7 +1124,7 @@ export function PostReviewPanel({
                     <Button
                       variant="outline"
                       className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 gap-1.5"
-                      disabled={approvingNeel}
+                      disabled={approvingNeel || regeneratingCaption}
                       onClick={async () => {
                         setApprovingNeel(true);
                         try {
