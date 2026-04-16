@@ -539,6 +539,25 @@ Rules:
           }
         }
 
+        // Capture raw AI strings WITH unit symbols BEFORE parseDimension strips them
+        items.forEach((item: any) => {
+          // Only set if not already populated (spreadsheet overlay sets these earlier)
+          if (item.__source_length == null && item.total_length != null) {
+            item.__source_length = String(item.total_length);
+          }
+          if (item.__source_dims == null) {
+            const rawDims: Record<string, string> = {};
+            for (const d of DIMS) {
+              if (item[d] != null) {
+                rawDims[d] = String(item[d]);
+              }
+            }
+            if (Object.keys(rawDims).length > 0) {
+              item.__source_dims = rawDims;
+            }
+          }
+        });
+
         // Post-AI pass: convert any string values in length/dims to numbers
         items.forEach((item: any) => {
           if (typeof item.total_length === "string") {
