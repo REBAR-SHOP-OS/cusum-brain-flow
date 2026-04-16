@@ -1124,7 +1124,7 @@ export function PostReviewPanel({
                     <Button
                       variant="outline"
                       className="w-full border-amber-400 text-amber-700 hover:bg-amber-50 gap-1.5"
-                      disabled={approvingNeel}
+                      disabled={approvingNeel || regeneratingCaption}
                       onClick={async () => {
                         setApprovingNeel(true);
                         try {
@@ -1163,8 +1163,11 @@ export function PostReviewPanel({
                   {/* Publish Now */}
                   <Button
                     className="w-full bg-green-600 hover:bg-green-700 text-white gap-1.5"
-                    disabled={publishing || post.status === "declined" || (!canPublish && !post.neel_approved)}
+                    disabled={publishing || regeneratingCaption || post.status === "declined" || (!canPublish && !post.neel_approved)}
                     onClick={async () => {
+                      // Safety: confirm before publish to prevent accidental clicks
+                      const confirmed = window.confirm("Are you sure you want to publish this post now?");
+                      if (!confirmed) return;
                       if (localPages.length === 0) {
                         toast({ title: "No pages selected", description: "Please select at least one page.", variant: "destructive" });
                         return;
