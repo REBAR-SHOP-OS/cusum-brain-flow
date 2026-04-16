@@ -1936,6 +1936,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
               sessionId={activeSession.id}
               onConfirmMapping={handleMappingConfirmed}
               disabled={processing}
+              sourceUnitSystem={activeSession.unit_system}
               unitSystem={selectedUnitSystem as any}
               onUnitSystemChange={(unit) => {
                 userSetUnitRef.current = true;
