@@ -58,7 +58,7 @@ import brainHero from "@/assets/brain-hero.png";
 
 type ManifestType = "delivery" | "pickup";
 
-import { formatLengthByMode, formatConvertedLength, lengthUnitLabelByMode, displayModeToMm, type LengthDisplayMode } from "@/lib/unitSystem";
+import { formatLengthByMode, formatConvertedLength, lengthUnitLabelByMode, displayModeToMm, appendUnitSymbol, type LengthDisplayMode } from "@/lib/unitSystem";
 
 function LoadingRowsCard({ onRetry }: { onRetry: () => void }) {
   const [showRetry, setShowRetry] = useState(false);
@@ -264,9 +264,9 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
     const du = displayUnit as LengthDisplayMode;
     const srcUnit = sessionSourceUnit as LengthDisplayMode;
 
-    // Same unit as source → show exact source text
+    // Same unit as source → show exact source text (with symbol)
     if (du === srcUnit && row.source_total_length_text != null && row.source_total_length_text !== "") {
-      return row.source_total_length_text;
+      return appendUnitSymbol(row.source_total_length_text, activeSession?.unit_system || "mm");
     }
 
     const mmVal = row.total_length_mm;
@@ -276,12 +276,13 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
     // (suspiciously small for mm), treat them as inches instead of mm
     const isImperialSession = srcUnit === "imperial" || srcUnit === "in" || (srcUnit as string) === "ft-in";
     if (isImperialSession && mmVal < 50 && !row.source_total_length_text && !row.raw_total_length_mm) {
-      // Value is likely raw inches, not mm — format as inches directly
       return formatLengthByMode(Math.round(mmVal * 25.4), du) || "—";
     }
 
-    // Same unit, raw available → exact raw number
-    if (du === srcUnit && row.raw_total_length_mm != null) return String(row.raw_total_length_mm);
+    // Same unit, raw available → exact raw number with symbol
+    if (du === srcUnit && row.raw_total_length_mm != null) {
+      return appendUnitSymbol(row.raw_total_length_mm, activeSession?.unit_system || "mm");
+    }
 
     // Cross-unit conversion: use raw value (in source unit) to avoid rounding through integer mm
     if (row.raw_total_length_mm != null) {
@@ -296,14 +297,15 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   const displayDim = (mmVal: number | null | undefined, dimKey: string, row: any): string => {
     const du = displayUnit as LengthDisplayMode;
     const srcUnit = sessionSourceUnit as LengthDisplayMode;
+    const unitSys = activeSession?.unit_system || "mm";
 
-    // Same unit as source → show exact source text
+    // Same unit as source → show exact source text with symbol
     if (du === srcUnit) {
       const sourceDims = row.source_dims_json;
       if (sourceDims != null) {
         const letter = dimKey.replace("dim_", "").toUpperCase();
         if (sourceDims[letter] != null && sourceDims[letter] !== "") {
-          return sourceDims[letter];
+          return appendUnitSymbol(sourceDims[letter], unitSys);
         }
       }
     }
@@ -316,10 +318,10 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
       return formatLengthByMode(Math.round(mmVal * 25.4), du);
     }
 
-    // Same unit, raw available
+    // Same unit, raw available — append symbol
     if (du === srcUnit && row.raw_dims_json != null) {
       const rawVal = row.raw_dims_json[dimKey];
-      if (rawVal != null) return String(rawVal);
+      if (rawVal != null) return appendUnitSymbol(rawVal, unitSys);
     }
 
     // Cross-unit: use raw dim value to convert losslessly

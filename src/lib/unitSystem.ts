@@ -258,6 +258,44 @@ export function sessionUnitToDisplay(sessionUnit: string | null | undefined): Un
   return "metric"; // mm or unknown → show raw mm
 }
 
+// ─── Append Unit Symbol Helper ──────────────────────────────
+/**
+ * Append the correct unit symbol to a plain numeric value based on unit system.
+ * If the value already contains a symbol (" ' ″ ′), return as-is.
+ * For mm / metric → no symbol appended.
+ */
+export function appendUnitSymbol(value: string | number, unitSystem: string): string {
+  const s = String(value).trim();
+  if (!s || s === "—") return s;
+
+  // Already has a unit symbol? Return as-is
+  if (/[""''′″]/.test(s)) return s;
+  // Already has ft-in pattern like 5'-3"
+  if (/\d+\s*['']\s*-?\s*\d/.test(s)) return s;
+
+  switch (unitSystem) {
+    case "in":
+      return `${s}"`;
+    case "ft":
+      return `${s}'`;
+    case "imperial":
+    case "ft-in": {
+      // Try to format as ft'-in" if it's a plain number (treat as inches)
+      const num = parseFloat(s);
+      if (isNaN(num)) return s;
+      const feet = Math.floor(num / 12);
+      const inches = Math.round(num % 12);
+      if (feet === 0) return `${inches}"`;
+      if (inches === 0) return `${feet}'-0"`;
+      return `${feet}'-${inches}"`;
+    }
+    case "mm":
+    case "metric":
+    default:
+      return s; // No symbol for mm
+  }
+}
+
 // ─── Hook: read company's unit_system ───────────────────────
 export function useUnitSystem(): UnitSystem {
   const { user } = useAuth();
