@@ -457,7 +457,7 @@ async function applyMapping(sb: any, sessionId: string, unitSystem?: string) {
     mapped_count: mappedCount,
     auto_mappings_created: autoMappings.length,
     unit_system: effectiveUnit,
-    length_factor: lengthFactor,
+    length_factor: 1,
   });
 }
 
