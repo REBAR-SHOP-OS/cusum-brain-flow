@@ -71,16 +71,24 @@ export function useExtractRows(sessionId: string | null) {
       console.log("[useExtractRows] fetched", data.length, "rows");
       setRows(data);
 
-      // Auto-retry once after 2s if 0 rows returned (handles transient RLS / race)
+      // Poll up to 3 times at 2s intervals if 0 rows returned (handles transient RLS / race)
       if (data.length === 0 && !retryRef.current) {
-        retryRef.current = setTimeout(async () => {
+        let attempts = 0;
+        const poll = async () => {
+          if (attempts >= 3) { retryRef.current = null; return; }
+          attempts++;
           try {
             const retryData = await fetchExtractRows(sessionId);
-            console.log("[useExtractRows] retry fetched", retryData.length, "rows");
-            setRows(retryData);
+            console.log("[useExtractRows] retry attempt", attempts, "fetched", retryData.length, "rows");
+            if (retryData.length > 0) {
+              setRows(retryData);
+              retryRef.current = null;
+              return;
+            }
           } catch (_) { /* best-effort */ }
-          retryRef.current = null;
-        }, 2000);
+          retryRef.current = setTimeout(poll, 2000);
+        };
+        retryRef.current = setTimeout(poll, 2000);
       }
     } catch (err) {
       console.error("[useExtractRows] Failed to load rows:", err);
