@@ -1,33 +1,14 @@
 
 
-## Plan: Fix Rapid-Click Race Conditions on All Pixel Social Buttons
+## Plan: Redeploy manage-extract Edge Function
 
 ### Problem
-Multiple destructive/important buttons in the social module lack proper double-click protection. Rapid clicking can trigger duplicate API calls before React state updates disable the button.
+The `manage-extract` edge function code was fixed in a previous change (`lengthFactor` → `length_factor: 1` at line 460), but the **deployed version** still runs the old code. The logs confirm the error occurs at runtime despite the source being correct.
 
-### Vulnerable Buttons Found
+### Fix
+**Redeploy** the `manage-extract` edge function. No code changes needed — the fix is already in place.
 
-| Component | Button | Current Protection | Risk |
-|-----------|--------|-------------------|------|
-| `PixelPostCard` | Approve | `if (!approved)` check only | Double approve before state update |
-| `PixelPostCard` | Regenerate | `regenerating` state | Minor — already guarded |
-| `PostReviewPanel` | Schedule | None | Double-schedule, duplicate posts |
-| `PostReviewPanel` | Delete | `disabled={deleting}` only | No confirm dialog — accidental delete |
-| `PostReviewPanel` | Publish Now | ✅ Already fixed | — |
-| `ApprovalsPanel` | Approve/Reject | `isPending` from mutation | Minor — React Query handles it |
-
-### Changes
-
-**File 1: `src/components/social/PixelPostCard.tsx`**
-- Add a `processing` ref guard to `handleApprove` to block rapid double-clicks before React re-renders
-- Disable the Approve button while processing (`disabled={approved}`)
-
-**File 2: `src/components/social/PostReviewPanel.tsx`**
-- **Schedule button**: Add `scheduling` state + `disabled={scheduling}` to prevent double-schedule
-- **Delete button**: Add `window.confirm("Are you sure you want to delete this post?")` before executing
-
-### What stays the same
-- Publish Now — already fixed
-- All API logic, edge function calls, data flow — unchanged
-- ApprovalsPanel — React Query `isPending` is sufficient
+### Steps
+1. Deploy `manage-extract` edge function using the deploy tool
+2. Verify by checking logs after deployment
 
