@@ -1,26 +1,33 @@
 
 
-## Plan: Add AI Prompt Writer Button to ChatPromptBar
+## Plan: Fix Rapid-Click Race Conditions on All Pixel Social Buttons
 
-### What
-Add a `Wand2` (magic wand) icon button in the toolbar row (next to Style, Products, etc.) that generates a cinematic video prompt based on the user's selected style, duration, and products.
+### Problem
+Multiple destructive/important buttons in the social module lack proper double-click protection. Rapid clicking can trigger duplicate API calls before React state updates disable the button.
+
+### Vulnerable Buttons Found
+
+| Component | Button | Current Protection | Risk |
+|-----------|--------|-------------------|------|
+| `PixelPostCard` | Approve | `if (!approved)` check only | Double approve before state update |
+| `PixelPostCard` | Regenerate | `regenerating` state | Minor — already guarded |
+| `PostReviewPanel` | Schedule | None | Double-schedule, duplicate posts |
+| `PostReviewPanel` | Delete | `disabled={deleting}` only | No confirm dialog — accidental delete |
+| `PostReviewPanel` | Publish Now | ✅ Already fixed | — |
+| `ApprovalsPanel` | Approve/Reject | `isPending` from mutation | Minor — React Query handles it |
 
 ### Changes
 
-**File: `src/components/ad-director/ChatPromptBar.tsx`**
+**File 1: `src/components/social/PixelPostCard.tsx`**
+- Add a `processing` ref guard to `handleApprove` to block rapid double-clicks before React re-renders
+- Disable the Approve button while processing (`disabled={approved}`)
 
-1. Import `Wand2` and `Loader2` from lucide-react
-2. Add `aiWriting` state (`useState(false)`)
-3. Add `handleAiWrite` function that:
-   - Collects selected styles, products, and duration
-   - Calls `invokeEdgeFunction("ad-director-ai", { action: "write-script", input: contextString })` where `contextString` summarizes the selections (e.g. "Style: Construction, Realism. Products: Stirrups, Cages. Duration: 30s.")
-   - Sets the returned text into `setPrompt(result.text)`
-4. Add a `Wand2` icon button in the toolbar row (line ~545, before "Create video"), styled as a rounded-full pill matching the other toolbar buttons, with tooltip "AI writes the prompt"
-5. Button shows `Loader2` spinner while generating, disabled when `aiWriting` or `disabled`
+**File 2: `src/components/social/PostReviewPanel.tsx`**
+- **Schedule button**: Add `scheduling` state + `disabled={scheduling}` to prevent double-schedule
+- **Delete button**: Add `window.confirm("Are you sure you want to delete this post?")` before executing
 
 ### What stays the same
-- All existing controls (ratio, duration, style, products, model)
-- Submit / Create video button
-- Reference upload cards
-- Edge function `ad-director-ai` with `write-script` action — already exists
+- Publish Now — already fixed
+- All API logic, edge function calls, data flow — unchanged
+- ApprovalsPanel — React Query `isPending` is sufficient
 
