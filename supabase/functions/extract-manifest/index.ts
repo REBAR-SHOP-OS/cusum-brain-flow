@@ -669,35 +669,11 @@ Rules:
           }
         }
 
-        // Recompute conversion after possible guard override
-        const finalIsImperial = detectedUnitSystem === "imperial" || detectedUnitSystem === "in";
-        let finalToMm = finalIsImperial ? 25.4 : 1;
-        if (finalIsImperial && !isImperial) {
-          console.log(`[extract-manifest] Validation guard upgraded unit to imperial — applying ×25.4`);
-        }
+        // NO CONVERSION — store original values in their original units
+        const finalToMm = 1;
+        console.log(`[extract-manifest] Storing values in original units (unit_system=${detectedUnitSystem}). No conversion applied.`);
 
-        // Double-conversion guard: if imperial detected but overlay FAILED,
-        // check if AI already returned values in mm (large numbers).
-        // If so, skip the ×25.4 to prevent double conversion.
-        if (finalIsImperial && !overlaySucceeded) {
-          const sampleDims: number[] = [];
-          for (const it of items.slice(0, 10)) {
-            for (const k of DIMS) {
-              const v = safeDim(it[k]);
-              if (v != null && v > 0) sampleDims.push(v);
-            }
-          }
-          if (sampleDims.length > 2) {
-            const sorted = [...sampleDims].sort((a, b) => a - b);
-            const median = sorted[Math.floor(sorted.length / 2)];
-            if (median > 200) {
-              console.warn(`[extract-manifest] AI likely returned mm values (median dim=${median}, overlay failed). Skipping ×25.4 to prevent double conversion.`);
-              finalToMm = 1;
-            }
-          }
-        }
-
-        /** Final conversion helpers using validated unit */
+        /** Pass-through helpers — no conversion, just type safety */
         const finalDimToMm = (val: any): number | null => {
           const v = safeDim(val);
           if (v == null) return null;
