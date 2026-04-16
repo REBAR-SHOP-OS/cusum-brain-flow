@@ -306,7 +306,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
               )}
             </div>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              Size: {item.bar_code} | L: {item.cut_length_mm}mm
+              Size: {item.bar_code} | L: {item.cut_length_mm}{(item as any).unit_system === "in" || (item as any).unit_system === "imperial" ? '"' : (item as any).unit_system === "ft" ? "'" : "mm"}
             </p>
           </div>
           {isCleared && <CheckCircle2 className="w-6 h-6 text-primary shrink-0" />}

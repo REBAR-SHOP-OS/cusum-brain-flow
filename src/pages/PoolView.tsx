@@ -316,7 +316,7 @@ export default function PoolView() {
                                     {item.mark_number || "—"}
                                   </p>
                                   <p className="text-[10px] text-muted-foreground font-mono">
-                                    {item.bar_code} • {item.cut_length_mm}mm
+                                    {item.bar_code} • {item.cut_length_mm}{(item as any).unit_system === "in" || (item as any).unit_system === "imperial" ? '"' : (item as any).unit_system === "ft" ? "'" : "mm"}
                                   </p>
                                 </div>
                                 <Badge

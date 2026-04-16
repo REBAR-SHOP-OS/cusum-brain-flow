@@ -523,7 +523,7 @@ export default function StationView() {
                           {item.mark_number || "Unnamed"} — {item.bar_code}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {item.drawing_ref || "No drawing ref"} • {item.cut_length_mm}mm
+                          {item.drawing_ref || "No drawing ref"} • {item.cut_length_mm}{(item as any).unit_system === "in" || (item as any).unit_system === "imperial" ? '"' : (item as any).unit_system === "ft" ? "'" : "mm"}
                         </p>
                       </div>
                     ))
