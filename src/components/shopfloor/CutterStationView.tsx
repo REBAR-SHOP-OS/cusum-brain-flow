@@ -1043,7 +1043,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             isDone={isDone}
             isSupervisor={isSupervisor}
             darkMode
-            lockedBars={machineIsRunning ? slotTracker.slots.length : undefined}
+            lockedBars={machineIsRunning ? slotTracker.slots.filter(s => s.status === "active" || s.status === "removable").length : undefined}
             strokesDone={slotTracker.slots.length > 0 ? Math.max(...slotTracker.slots.map(s => s.cutsDone)) : 0}
             totalStrokesNeeded={computedPiecesPerBar}
             totalPiecesDone={slotTracker.totalCutsDone}
