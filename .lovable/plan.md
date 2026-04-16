@@ -1,23 +1,26 @@
 
 
-## Plan: Play Intro Video on AI Video Director Page
+## Plan: Add AI Prompt Writer Button to ChatPromptBar
 
 ### What
-When the user clicks the "AI Video Director" card, the uploaded motion graphic video plays as a full-screen intro before showing the Ad Director content.
+Add a `Wand2` (magic wand) icon button in the toolbar row (next to Style, Products, etc.) that generates a cinematic video prompt based on the user's selected style, duration, and products.
 
 ### Changes
 
-**Step 1: Copy video asset**
-- Copy `user-uploads://Create_motion_graphic_202604161038.mp4` to `public/videos/ad-director-intro.mp4`
+**File: `src/components/ad-director/ChatPromptBar.tsx`**
 
-**Step 2: Modify `src/pages/AdDirector.tsx`**
-- Add `showIntro` state (default `true`)
-- When `showIntro` is true, render a full-screen `<video>` element that auto-plays the intro video
-- On video end (or click to skip), set `showIntro = false` to reveal the normal Ad Director content
-- Include a "Skip" button in the corner so users can bypass the intro
+1. Import `Wand2` and `Loader2` from lucide-react
+2. Add `aiWriting` state (`useState(false)`)
+3. Add `handleAiWrite` function that:
+   - Collects selected styles, products, and duration
+   - Calls `invokeEdgeFunction("ad-director-ai", { action: "write-script", input: contextString })` where `contextString` summarizes the selections (e.g. "Style: Construction, Realism. Products: Stirrups, Cages. Duration: 30s.")
+   - Sets the returned text into `setPrompt(result.text)`
+4. Add a `Wand2` icon button in the toolbar row (line ~545, before "Create video"), styled as a rounded-full pill matching the other toolbar buttons, with tooltip "AI writes the prompt"
+5. Button shows `Loader2` spinner while generating, disabled when `aiWriting` or `disabled`
 
 ### What stays the same
-- All Ad Director functionality, editor, chat prompt bar — unchanged
-- The home page card and navigation — unchanged
-- The intro only plays once per visit (state resets on navigation away)
+- All existing controls (ratio, duration, style, products, model)
+- Submit / Create video button
+- Reference upload cards
+- Edge function `ad-director-ai` with `write-script` action — already exists
 
