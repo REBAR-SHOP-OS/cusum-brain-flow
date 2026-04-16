@@ -341,15 +341,19 @@ async function applyMapping(sb: any, sessionId: string, unitSystem?: string) {
     updates.raw_total_length_mm = rawLength;
     updates.raw_dims_json = rawDims;
 
-    // ── NO unit conversion — keep original values as-is ──
+    // ── Convert source-unit values to mm for main columns ──
+    const factor = (effectiveUnit === "in" || effectiveUnit === "imperial") ? 25.4
+                 : effectiveUnit === "ft" ? 304.8
+                 : 1; // mm — no conversion needed
+
     if (rawLength != null) {
-      updates.total_length_mm = rawLength;
+      updates.total_length_mm = Math.round(rawLength * factor);
     }
 
     for (const col of DIM_COLUMNS) {
       const rawVal = rawDims[col] ?? row[col];
       if (rawVal != null) {
-        updates[col] = rawVal;
+        updates[col] = Math.round(rawVal * factor);
       }
     }
 
@@ -457,7 +461,7 @@ async function applyMapping(sb: any, sessionId: string, unitSystem?: string) {
     mapped_count: mappedCount,
     auto_mappings_created: autoMappings.length,
     unit_system: effectiveUnit,
-    length_factor: 1,
+    length_factor: factor,
   });
 }
 

@@ -272,12 +272,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
     const mmVal = row.total_length_mm;
     if (mmVal == null) return "—";
 
-    // Defensive fallback: if imperial session and values look like unnormalized source-unit numbers
-    // (suspiciously small for mm), treat them as inches instead of mm
-    const isImperialSession = srcUnit === "imperial" || srcUnit === "in" || (srcUnit as string) === "ft-in";
-    if (isImperialSession && mmVal < 50 && !row.source_total_length_text && !row.raw_total_length_mm) {
-      return formatLengthByMode(Math.round(mmVal * 25.4), du) || "—";
-    }
+    // total_length_mm is now always stored in mm after mapping — no heuristic needed
 
     // Same unit, raw available → exact raw number with symbol
     if (du === srcUnit && row.raw_total_length_mm != null) {
@@ -312,11 +307,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
 
     if (mmVal == null) return "";
 
-    // Defensive fallback: if imperial session and value looks unnormalized (too small for mm)
-    const isImperialSession = srcUnit === "imperial" || srcUnit === "in" || (srcUnit as string) === "ft-in";
-    if (isImperialSession && mmVal < 50 && !row.source_dims_json && !row.raw_dims_json) {
-      return formatLengthByMode(Math.round(mmVal * 25.4), du);
-    }
+    // dim_* columns are now always stored in mm after mapping — no heuristic needed
 
     // Same unit, raw available — append symbol
     if (du === srcUnit && row.raw_dims_json != null) {
