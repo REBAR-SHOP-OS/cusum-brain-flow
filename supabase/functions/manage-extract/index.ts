@@ -271,20 +271,11 @@ async function detectDuplicates(sb: any, sessionId: string, userId: string, dryR
   });
 }
 
-// ─── Unit Conversion Helpers ────────────────────────────────
+// ─── Dimension Column List ──────────────────────────────────
 const DIM_COLUMNS = [
   "dim_a", "dim_b", "dim_c", "dim_d", "dim_e", "dim_f",
   "dim_g", "dim_h", "dim_j", "dim_k", "dim_o", "dim_r",
 ];
-
-function getLengthFactor(unitSystem: string): number {
-  switch (unitSystem) {
-    case "in": return 25.4;
-    case "ft": return 304.8;
-    case "imperial": return 25.4; // imperial stores as inches
-    default: return 1; // mm or metric
-  }
-}
 
 // ─── Apply Mapping ──────────────────────────────────────────
 async function applyMapping(sb: any, sessionId: string, unitSystem?: string) {
@@ -303,8 +294,7 @@ async function applyMapping(sb: any, sessionId: string, unitSystem?: string) {
     await sb.from("extract_sessions").update({ unit_system: unitSystem }).eq("id", sessionId);
     console.log(`[applyMapping] Updated session unit_system: ${session.unit_system} → ${unitSystem}`);
   }
-
-  const lengthFactor = getLengthFactor(effectiveUnit);
+  // NO conversion — values stay in original units
 
   // Get company mappings
   const { data: mappings } = await sb
@@ -351,33 +341,15 @@ async function applyMapping(sb: any, sessionId: string, unitSystem?: string) {
     updates.raw_total_length_mm = rawLength;
     updates.raw_dims_json = rawDims;
 
-    // ── Apply unit conversion to length (with sanity guard) ──
-    if (rawLength != null && lengthFactor !== 1) {
-      const converted = Math.round(Number(rawLength) * lengthFactor);
-      if (converted > 100000 && lengthFactor > 1) {
-        // Value likely already in mm — skip conversion to prevent double-conversion
-        console.warn(`[applyMapping] Row ${row.row_index}: length ${rawLength} × ${lengthFactor} → ${converted}mm exceeds sanity limit. Keeping raw value as mm.`);
-        updates.total_length_mm = Math.round(Number(rawLength));
-      } else {
-        updates.total_length_mm = converted;
-      }
-    } else if (rawLength != null) {
-      updates.total_length_mm = rawLength; // mm → no conversion, but restore from raw
+    // ── NO unit conversion — keep original values as-is ──
+    if (rawLength != null) {
+      updates.total_length_mm = rawLength;
     }
 
-    // ── Apply unit conversion to all dimensions (with sanity guard) ──
     for (const col of DIM_COLUMNS) {
       const rawVal = rawDims[col] ?? row[col];
-      if (rawVal != null && rawVal !== 0 && lengthFactor !== 1) {
-        const converted = Math.round(Number(rawVal) * lengthFactor);
-        if (converted > 100000 && lengthFactor > 1) {
-          console.warn(`[applyMapping] Row ${row.row_index}: dim ${col} ${rawVal} × ${lengthFactor} → ${converted}mm exceeds sanity limit. Keeping raw value.`);
-          updates[col] = Math.round(Number(rawVal));
-        } else {
-          updates[col] = converted;
-        }
-      } else if (rawVal != null) {
-        updates[col] = rawVal; // restore from raw
+      if (rawVal != null) {
+        updates[col] = rawVal;
       }
     }
 
@@ -583,15 +555,8 @@ async function validateExtract(sb: any, sessionId: string) {
         error_type: "warning",
         message: `Row ${row.row_index}: Missing or zero length`,
       });
-    } else if (row.total_length_mm > 18000) {
-      errors.push({
-        session_id: sessionId,
-        row_id: row.id,
-        field: "total_length_mm",
-        error_type: "warning",
-        message: `Row ${row.row_index}: Length ${row.total_length_mm}mm exceeds typical max (18000mm)`,
-      });
     }
+    // No unit-specific sanity check — values are in original units (mm, in, or ft)
 
     // Mark validation
     if (!row.mark) {
