@@ -1,59 +1,57 @@
 
 
-## Plan: Fix Source-Unit Storage Pipeline End-to-End
+## Plan: Eliminate Manual Retry for Row Loading
 
 ### Problem
-Two issues:
-1. **Mapping preview rounds decimals** — `Math.round()` at lines 216 and 232 in `BarlistMappingPanel.tsx` rounds 44.5 → 45
-2. **Approve flow copies source-unit values into `cut_length_mm`** — 30+ shop floor files display this with "mm" suffix, so 44.5 inches shows as "44.5mm"
+After extraction completes, the UI shows "Loading extracted rows..." indefinitely and requires clicking "Retry" (which only appears after 10s). The rows exist in the database but the initial fetch either fails silently or the loading state gets stuck.
 
-### Architecture Decision
-
-Since the user wants source-unit values preserved throughout (no mm conversion anywhere), all downstream consumers must be aware of the unit. The `unit_system` from the session must propagate to `cut_plan_items`, `barlist_items`, and `production_tasks`.
-
-```text
-FLOW:
-extract_rows.total_length_mm = 44.5 (inches)
-    ↓ approve
-barlist_items.cut_length_mm = 44.5 (inches)  
-cut_plan_items.cut_length_mm = 44.5 (inches)
-production_tasks.cut_length_mm = 44.5 (inches)
-    ↓ display
-Shop floor shows "44.5 in" (not "44.5mm")
-```
+### Root Cause
+1. `useExtractRows` hook sets `loading = true` when `sessionId` exists, fetches once, then relies on a single 2s auto-retry if 0 rows returned — but doesn't handle fetch failures or slow responses well
+2. The `LoadingRowsCard` waits 10 seconds before showing the Retry button — too long
+3. No automatic polling fallback if the initial fetch + realtime subscription both miss the data
 
 ### Changes
 
-**1. `src/components/office/BarlistMappingPanel.tsx`** — Remove `Math.round()` on lines 216 and 232 to preserve decimal precision (44.5 stays 44.5).
+**1. `src/hooks/useExtractSessions.ts` — Add aggressive auto-retry with polling**
 
-**2. `supabase/functions/manage-extract/index.ts`** — In `approveExtract`, store `session.unit_system` on `cut_plan_items` and `barlist_items` so downstream knows the unit. Add `unit_system` field to the inserted records. (This requires a DB migration to add the column.)
+Replace the single 2s retry with a short polling loop (3 attempts, 2s apart) when rows come back empty. This handles the race condition where extraction finishes but rows aren't yet visible due to RLS propagation delay:
 
-**3. Database migration** — Add `unit_system text` column to:
-- `cut_plan_items`
-- `barlist_items`  
-- `production_tasks`
+```typescript
+// Poll up to 3 times at 2s intervals if 0 rows returned
+if (data.length === 0 && !retryRef.current) {
+  let attempts = 0;
+  const poll = async () => {
+    if (attempts >= 3) { retryRef.current = null; return; }
+    attempts++;
+    try {
+      const retryData = await fetchExtractRows(sessionId);
+      if (retryData.length > 0) {
+        setRows(retryData);
+        retryRef.current = null;
+        return;
+      }
+    } catch (_) {}
+    retryRef.current = setTimeout(poll, 2000);
+  };
+  retryRef.current = setTimeout(poll, 2000);
+}
+```
 
-Default: `'mm'` (backward compatible with existing data).
+**2. `src/components/office/AIExtractView.tsx` — Reduce Retry button delay from 10s to 4s**
 
-**4. Shop floor display files** — Update the ~6 files that hardcode "mm" suffix to read `unit_system` from the record:
-- `src/pages/PoolView.tsx` (line 319)
-- `src/pages/StationView.tsx` (line 526)
-- `src/components/clearance/ClearanceCard.tsx` (line 309)
-- `src/components/cutter/QueueToMachineDialog.tsx` (lines 115, 155)
-- `src/hooks/useLiveMonitorStats.ts` (line 72) — weight calc needs unit-aware conversion to meters
+Change line 66 from `setTimeout(() => setShowRetry(true), 10000)` to `setTimeout(() => setShowRetry(true), 4000)`. Users shouldn't wait 10 seconds to get a manual fallback.
 
-**5. Weight calculation in `useLiveMonitorStats.ts`** — Currently does `cut_length_mm / 1000` to get meters. Must convert based on `unit_system` first.
+**3. `src/components/office/AIExtractView.tsx` — Auto-trigger refresh when entering mapping step**
 
-**6. Edge function: `approveExtract`** — Pass `session.unit_system` into `barlist_items`, `cut_plan_items`, and `production_tasks` inserts.
-
-**7. Redeploy** `manage-extract` edge function.
+Add a `useEffect` that calls `refreshRows()` when `currentStepIndex` transitions to 3 (mapping step), ensuring rows are fetched fresh when the session advances to this step. This catches cases where the realtime subscription missed the insert.
 
 ### What stays the same
-- `extract_rows` storage logic — already correct (stores source values)
-- Display logic in `AIExtractView.tsx` — already correct
-- Optimizer `toMm` conversion — already correct
-- `getWeight` in `RebarTagCard.tsx` / `TagsExportView.tsx` — already updated
+- Realtime subscription logic — unchanged
+- Row display and filtering — unchanged
+- All downstream consumers — unchanged
 
-### Risk
-- Existing approved items in production have no `unit_system` column yet — the default `'mm'` ensures backward compatibility since all previously approved data was in mm.
+### Impact
+- Rows should load automatically within 2-6 seconds after extraction
+- Retry button appears at 4s instead of 10s as a fallback
+- No more stuck "Loading extracted rows..." requiring manual intervention
 
