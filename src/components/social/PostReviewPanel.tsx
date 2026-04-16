@@ -1354,6 +1354,7 @@ export function PostReviewPanel({
                             description: result.error || "Post could not be scheduled. Check permissions and try again.",
                             variant: "destructive",
                           });
+                          setScheduling(false);
                           return;
                         }
                         queryClient.invalidateQueries({ queryKey: ["social_posts"] });
