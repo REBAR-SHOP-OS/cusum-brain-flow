@@ -272,20 +272,22 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
     const mmVal = row.total_length_mm;
     if (mmVal == null) return "—";
 
-    // total_length_mm is now always stored in mm after mapping — no heuristic needed
-
-    // Same unit, raw available → exact raw number with symbol
-    if (du === srcUnit && row.raw_total_length_mm != null) {
-      return appendUnitSymbol(row.raw_total_length_mm, activeSession?.unit_system || "mm");
+    // total_length_mm now stores source-unit value (not mm)
+    // When display unit matches source unit, just show the value with symbol
+    if (du === srcUnit) {
+      if (row.source_total_length_text != null && row.source_total_length_text !== "") {
+        return appendUnitSymbol(row.source_total_length_text, activeSession?.unit_system || "mm");
+      }
+      return appendUnitSymbol(mmVal, activeSession?.unit_system || "mm");
     }
 
-    // Cross-unit conversion: use raw value (in source unit) to avoid rounding through integer mm
+    // Cross-unit conversion: use raw value (in source unit) to convert
     if (row.raw_total_length_mm != null) {
       return formatConvertedLength(row.raw_total_length_mm, srcUnit, du) || "—";
     }
 
-    // Fallback: convert from stored mm (may have minor rounding)
-    return formatLengthByMode(mmVal, du) || "—";
+    // Fallback: convert from stored value (source unit) treating as source unit
+    return formatConvertedLength(mmVal, srcUnit, du) || "—";
   };
 
   /** Display dimension value — prefer exact source text, use lossless conversion otherwise */
@@ -307,12 +309,14 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
 
     if (mmVal == null) return "";
 
-    // dim_* columns are now always stored in mm after mapping — no heuristic needed
-
-    // Same unit, raw available — append symbol
-    if (du === srcUnit && row.raw_dims_json != null) {
-      const rawVal = row.raw_dims_json[dimKey];
-      if (rawVal != null) return appendUnitSymbol(rawVal, unitSys);
+    // dim_* columns now store source-unit values (not mm)
+    // When display unit matches source unit, show value with symbol
+    if (du === srcUnit) {
+      if (row.raw_dims_json != null) {
+        const rawVal = row.raw_dims_json[dimKey];
+        if (rawVal != null) return appendUnitSymbol(rawVal, unitSys);
+      }
+      return appendUnitSymbol(mmVal, unitSys);
     }
 
     // Cross-unit: use raw dim value to convert losslessly
@@ -323,8 +327,8 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
       }
     }
 
-    // Fallback: convert from stored mm
-    return formatLengthByMode(mmVal, du);
+    // Fallback: convert from stored value treating as source unit
+    return formatConvertedLength(mmVal, srcUnit, du);
   };
 
   const userSetUnitRef = useRef(false);
@@ -728,13 +732,21 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
       // Session stays at "validated" — no separate "optimizing" status
       
       // Run all three modes for comparison
+      // Convert source-unit values to mm for optimizer
+      const toMm = (val: number) => {
+        const u = activeSession?.unit_system;
+        if (u === "in" || u === "imperial") return Math.round(val * 25.4);
+        if (u === "ft") return Math.round(val * 304.8);
+        return val; // mm
+      };
+
       const cutItems: CutItem[] = activeRows
         .filter(r => r.bar_size_mapped || r.bar_size)
         .map((r, i) => ({
           id: r.id,
           mark: r.mark || `Item ${i + 1}`,
           barSize: (r.bar_size_mapped || r.bar_size || "20M"),
-          lengthMm: r.total_length_mm || 0,
+          lengthMm: toMm(r.total_length_mm || 0),
           quantity: r.quantity || 1,
           shapeType: r.shape_code_mapped || r.shape_type || undefined,
         }));
@@ -766,13 +778,19 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   };
 
   const runOptimizationForMode = (mode: OptimizerConfig["mode"]) => {
+    const toMm2 = (val: number) => {
+      const u = activeSession?.unit_system;
+      if (u === "in" || u === "imperial") return Math.round(val * 25.4);
+      if (u === "ft") return Math.round(val * 304.8);
+      return val;
+    };
     const cutItems: CutItem[] = activeRows
       .filter(r => r.bar_size_mapped || r.bar_size)
       .map((r, i) => ({
         id: r.id,
         mark: r.mark || `Item ${i + 1}`,
         barSize: (r.bar_size_mapped || r.bar_size || "20M"),
-        lengthMm: r.total_length_mm || 0,
+        lengthMm: toMm2(r.total_length_mm || 0),
         quantity: r.quantity || 1,
         shapeType: r.shape_code_mapped || r.shape_type || undefined,
       }));
@@ -950,13 +968,15 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
         if (fields.shape_type !== undefined) updateData.shape_type = fields.shape_type || null;
         if (fields.total_length_mm !== undefined) {
           const raw = Number(fields.total_length_mm) || null;
-          updateData.total_length_mm = raw != null ? displayModeToMm(raw, displayUnit as LengthDisplayMode) : null;
+          // Store in source unit — no conversion
+          updateData.total_length_mm = raw;
         }
         dimCols.forEach(d => {
           const key = `dim_${d.toLowerCase()}`;
           if (fields[key] !== undefined) {
             const raw = fields[key] !== "" ? Number(fields[key]) : null;
-            updateData[key] = raw != null ? displayModeToMm(raw, displayUnit as LengthDisplayMode) : null;
+            // Store in source unit — no conversion
+            updateData[key] = raw;
           }
         });
         return supabase.from("extract_rows").update(updateData).eq("id", rowId);

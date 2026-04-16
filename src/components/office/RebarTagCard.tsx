@@ -8,11 +8,15 @@ export const MASS_KG_PER_M: Record<string, number> = {
   "10M": 0.785, "15M": 1.570, "20M": 2.355, "25M": 3.925,
   "30M": 5.495, "35M": 7.850, "45M": 11.775, "55M": 19.625,
 };
-export function getWeight(size: string | null, lengthMm: number | null, qty: number | null): string {
-  if (!size || !lengthMm) return "";
+export function getWeight(size: string | null, lengthVal: number | null, qty: number | null, unit?: string): string {
+  if (!size || !lengthVal) return "";
   const mass = MASS_KG_PER_M[size.toUpperCase()] || 0;
   if (!mass) return "";
-  return ((lengthMm / 1000) * mass * (qty || 1)).toFixed(2);
+  // Convert to mm first based on source unit
+  let mm = lengthVal;
+  if (unit === "in" || unit === "imperial") mm = lengthVal * 25.4;
+  else if (unit === "ft") mm = lengthVal * 304.8;
+  return ((mm / 1000) * mass * (qty || 1)).toFixed(2);
 }
 
 function formatMmToFtIn(mm: number): string {

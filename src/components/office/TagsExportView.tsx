@@ -55,11 +55,14 @@ function dimUnit(unitSystem: string): string {
   return unitSystem === "imperial" ? "" : "MM";
 }
 
-function getWeight(size: string | null, lengthMm: number | null, qty: number | null): string {
-  if (!size || !lengthMm) return "";
+function getWeight(size: string | null, lengthVal: number | null, qty: number | null, unit?: string): string {
+  if (!size || !lengthVal) return "";
   const mass = MASS_KG_PER_M[size.toUpperCase()] || 0;
   if (!mass) return "";
-  return ((lengthMm / 1000) * mass * (qty || 1)).toFixed(2);
+  let mm = lengthVal;
+  if (unit === "in" || unit === "imperial") mm = lengthVal * 25.4;
+  else if (unit === "ft") mm = lengthVal * 304.8;
+  return ((mm / 1000) * mass * (qty || 1)).toFixed(2);
 }
 
 export function TagsExportView() {
@@ -112,7 +115,7 @@ export function TagsExportView() {
     const csvRows = sortedRows.map((r) => {
       const size = r.bar_size_mapped || r.bar_size || "";
       const shapeType = r.shape_code_mapped || r.shape_type || "STRAIGHT";
-      const weight = getWeight(size, r.total_length_mm, r.quantity);
+      const weight = getWeight(size, r.total_length_mm, r.quantity, selectedSession?.unit_system);
       const picture = shapeType ? (getShapeImageUrl(shapeType) || `TYPE-${shapeType}.PNG`) : "";
       const srcDims = (r as any).source_dims_json;
       const formattedLength = (r as any).source_total_length_text || (r.total_length_mm ? String(r.total_length_mm) : "");
@@ -173,7 +176,7 @@ export function TagsExportView() {
         grade: row.grade_mapped || row.grade || "",
         qty: row.quantity,
         total_length_mm: row.total_length_mm,
-        weight: getWeight(size, row.total_length_mm, row.quantity),
+        weight: getWeight(size, row.total_length_mm, row.quantity, selectedSession?.unit_system),
         dwg: row.dwg || "",
         row_index: row.row_index,
         reference: (selectedSession as any)?.invoice_number || "",
@@ -414,7 +417,7 @@ export function TagsExportView() {
                   sortedRows.map((row) => {
                     const size = row.bar_size_mapped || row.bar_size || "";
                     const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
-                    const weight = getWeight(size, row.total_length_mm, row.quantity);
+                    const weight = getWeight(size, row.total_length_mm, row.quantity, selectedSession?.unit_system);
                     const srcDims = (row as any).source_dims_json;
                     const srcLength = (row as any).source_total_length_text;
 
@@ -480,7 +483,7 @@ export function TagsExportView() {
               sortedRows.map((row) => {
                 const size = row.bar_size_mapped || row.bar_size || "";
                 const shapeType = row.shape_code_mapped || row.shape_type || "STRAIGHT";
-                const weight = getWeight(size, row.total_length_mm, row.quantity);
+                const weight = getWeight(size, row.total_length_mm, row.quantity, selectedSession?.unit_system);
                 const dims: Record<string, number | null> = {};
                 const sourceDimsRaw = (row as any).source_dims_json;
                 const sourceDims: Record<string, string> = {};
