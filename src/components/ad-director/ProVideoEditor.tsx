@@ -239,10 +239,11 @@ export function ProVideoEditor({
     "1:1": "1/1",
   };
 
+  // Social media standard dimensions (export resolution)
   const RATIO_DIMS: Record<string, [number, number]> = {
-    "16:9": [1280, 720],
-    "9:16": [720, 1280],
-    "1:1": [1080, 1080],
+    "16:9": [1920, 1080], // YouTube, LinkedIn landscape
+    "9:16": [1080, 1920], // Instagram Reels, TikTok, YouTube Shorts
+    "1:1": [1080, 1080],  // Instagram feed
   };
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
