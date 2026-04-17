@@ -1,11 +1,21 @@
 import { format } from "date-fns";
-import { Download, Play, AlertTriangle, Trash2, FileText, Pencil, Check, X } from "lucide-react";
+import { Download, Play, AlertTriangle, Trash2, FileText, Pencil, Check, X, RotateCw } from "lucide-react";
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { downloadFile } from "@/lib/downloadUtils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import type { AdProjectRow } from "@/hooks/useAdProjectHistory";
+
+/** Count completed vs total scenes for an incomplete-draft badge */
+function getSceneCounts(project: AdProjectRow): { completed: number; total: number } {
+  const total = Array.isArray(project.storyboard) ? project.storyboard.length : 0;
+  const clips = Array.isArray(project.clips) ? (project.clips as any[]) : [];
+  const completed = clips.filter(
+    (c) => c.status === "completed" && c.videoUrl && typeof c.videoUrl === "string" && !c.videoUrl.startsWith("blob:"),
+  ).length;
+  return { completed, total };
+}
 
 interface VideoHistoryProps {
   projects: AdProjectRow[];
