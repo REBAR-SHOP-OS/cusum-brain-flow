@@ -41,6 +41,37 @@ export function fitCover(srcW: number, srcH: number, dstW: number, dstH: number)
   return { sx, sy, sw, sh };
 }
 
+/** A text overlay drawn on top of the video at a specific time window & position. */
+export interface StitchTextOverlay {
+  /** Text content to render */
+  text: string;
+  /** Optional global timing window (seconds across the entire stitched timeline). */
+  startTime?: number;
+  endTime?: number;
+  /** Position in percent (0-100) of canvas dimensions, top-left of the text box. */
+  position?: { x: number; y: number };
+  /** Size in percent (0-100) of canvas dimensions. Used to scale font when provided. */
+  size?: { w: number; h: number };
+  /** Optional colors / weight overrides */
+  color?: string;
+  background?: string;
+  fontWeight?: number;
+}
+
+/** Extra audio track to be mixed into the final stitched video. */
+export interface StitchAudioTrack {
+  audioUrl: string;
+  /** "voiceover" plays full-volume; "music" loops & ducks under voice. */
+  kind: "voiceover" | "music";
+  /** 0-1 base volume. Defaults: voice=1, music=musicVolume option. */
+  volume?: number;
+  /** Optional global start (seconds). Defaults to 0. */
+  globalStartTime?: number;
+  /** If true, treat as a per-scene music bar that should NOT also feed into the master mix
+   *  (the source video's embedded audio plays it). Use only for visual-only tracks. */
+  silentVisual?: boolean;
+}
+
 export interface StitchOverlayOptions {
   logo?: { url: string; enabled: boolean; size?: number };
   /** Target aspect ratio for the final canvas. Defaults to source dims. */
@@ -58,10 +89,16 @@ export interface StitchOverlayOptions {
     enabled: boolean;
     segments: { text: string; startTime: number; endTime: number }[];
   };
+  /** Editor-authored text overlays to burn onto the final video. */
+  textOverlays?: StitchTextOverlay[];
   audioUrl?: string;
   musicUrl?: string;
   musicVolume?: number; // 0-1, default 0.3
   crossfadeDuration?: number; // seconds, default 0.5
+  /** Multiple voiceover/music tracks to mix in (in addition to legacy audioUrl/musicUrl). */
+  audioTracks?: StitchAudioTrack[];
+  /** Per-clip-index flags. true = mute the source clip's embedded audio. */
+  clipMuted?: boolean[];
 }
 
 export interface StitchProgress {
