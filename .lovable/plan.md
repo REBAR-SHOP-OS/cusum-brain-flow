@@ -1,88 +1,64 @@
 
-## درخواست کاربر
-در timeline editor، زیر نوار ویدئو، دو نوار جداگانه نمایش داده شود:
-1. **نوار صدا (Audio)** — اگر کلیپ صدا دارد، waveform یا نوار رنگی نشان داده شود
-2. **نوار متن (Text)** — اگر کلیپ متن/subtitle دارد، به شکل نوار نشان داده شود
+## مشکل کاربر
+وقتی روی نوار ویدئو، playhead روی یک نقطه قرار می‌گیرد و دکمه Split زده می‌شود، انتظار این است:
+- روی نوار ویدئو، در همان نقطه‌ی playhead، یک برش بصری ظاهر شود
+- یک کارت جدید برای نیمه‌ی دوم ساخته شود
+- هر دو کارت مدت‌زمان درست (نسبت به نقطه‌ی برش) را نشان دهند
 
-## بررسی فعلی
+## مشکلات شناسایی‌شده در کد فعلی
 
-نیاز است این فایل‌ها بررسی شوند:
-- `ProVideoEditor.tsx` (~2200 خط) — ساختار timeline و clips
-- `videoOverlay.ts` — overlays شامل text, subtitle, با startTime/endTime
-- ساختار `clips` در `backgroundAdDirectorService` — voiceover URL per clip
+در `ProVideoEditor.tsx` دو تابع `handleSplitScene` تعریف شده — تابع دوم (خط 1038) تابع اول (خط 938) را override می‌کند:
 
-از فایل‌های موجود می‌دانم:
-- `VideoOverlay` فیلد `kind: "text"` دارد + `startTime/endTime` + `sceneId`
-- هر clip ممکن است voiceover (audio URL) داشته باشد
-- Timeline فعلاً فقط thumbnail نوار ویدئو را نشان می‌دهد
-
-## برنامه پیشنهادی
-
-### 1. ساختار Timeline سه‌ردیفه
-زیر نوار ویدئوی موجود، دو track افقی اضافه شود:
-
-```
-┌─────────────────────────────────┐
-│  🎬 Video Track (موجود)         │  ← thumbnails کلیپ‌ها
-├─────────────────────────────────┤
-│  🔊 Audio Track (جدید)          │  ← waveform/bars برای کلیپ‌هایی که voiceover دارند
-├─────────────────────────────────┤
-│  📝 Text Track (جدید)           │  ← bar های رنگی برای text overlays
-└─────────────────────────────────┘
-```
-
-هر track با عرض کامل timeline، segment های هم‌تراز با کلیپ مربوطه.
-
-### 2. Audio Track
-- برای هر clip که `voiceoverUrl` یا `audioUrl` دارد:
-  - یک bar با gradient (مثلاً `from-cyan-500 to-blue-500`)
-  - نمایش بصری ساده‌ی موج به صورت bars متغیر (CSS-only، بدون decoding واقعی audio برای سرعت)
-  - ارتفاع ~24px
-- اگر کلیپی audio ندارد → bar خاکستری کم‌رنگ "No audio"
-- کلیک روی bar → باز کردن VoiceoverDialog برای آن scene
-
-### 3. Text Track
-- برای هر `VideoOverlay` با `kind === "text"` (شامل subtitles):
-  - bar با موقعیت `startTime → endTime` نسبت به scene
-  - رنگ متمایز (مثلاً `from-amber-500 to-orange-500`)
-  - متن truncate شده داخل bar
-  - ارتفاع ~24px
-- کلیک روی bar → باز کردن `EditOverlayDialog` برای edit متن
-- اگر scene متن ندارد → bar خاکستری "No text"
-
-### 4. هم‌ترازی (Alignment)
-هر سه track از یک محاسبه‌ی width استفاده می‌کنند:
+### باگ ۱: محاسبه‌ی غلط نقطه‌ی برش (خط 1045)
 ```ts
-width = (clipDuration / totalDuration) * 100 + "%"
+const splitAt = currentTime;  // ❌ این global time است نه offset داخل scene
 ```
-تا scrub bar و playhead به‌صورت یکپارچه روی هر سه track حرکت کند.
+باید مثل تابع اول (خط 946) از `globalTime - cumulativeStarts[index]` استفاده کند تا offset واقعی داخل scene انتخاب‌شده محاسبه شود.
 
-### 5. State و فایل‌های لازم
-- **فایل جدید**: `src/components/ad-director/editor/TimelineTracks.tsx`
-  - props: `clips`, `overlays`, `currentTime`, `totalDuration`, `onAudioClick`, `onTextClick`
-  - render: سه `<div>` افقی با segment ها
-- **تغییر در `ProVideoEditor.tsx`**: زیر بلوک timeline موجود، `<TimelineTracks ... />` اضافه شود
-- منطق فعلی drag/drop/scrub دست‌نخورده باقی می‌ماند
+### باگ ۲: کلیپ جدید ساخته نمی‌شود (خط 1066-1069)
+Scene جدید فقط در storyboard اضافه می‌شود ولی هیچ entry جدیدی در آرایه‌ی `clips` ساخته نمی‌شود (هیچ `onDuplicateClip` صدا زده نمی‌شود). نتیجه: کارت دوم خالی/no-video نشان داده می‌شود.
 
-### 6. Visual Design
-- پس‌زمینه track ها: `bg-slate-900/50 border-t border-white/5`
-- Label سمت چپ هر track (40px width): آیکن `Volume2` و `Type`
-- Hover state روی هر segment: `ring-1 ring-white/30`
-- Active (currently playing) state: glow ملایم
+### باگ ۳: هر دو کلیپ کل ویدئوی اصلی را نشان می‌دهند
+چون `clipDurations[scene.id]` از طول ویدئوی واقعی (مثلاً ۸ ثانیه) خوانده می‌شود نه از segment timing، حتی بعد از split، هر دو scene می‌گویند "من ۸ ثانیه‌ام". نتیجه: روی timeline دو کارت با pull duration دیده می‌شوند و هیچ برش بصری ای روی نوار ظاهر نمی‌شود.
+
+## برنامه‌ی اصلاح (Surgical)
+
+### ۱. حذف تابع `handleSplitScene` تکراری (خط 1038-1073)
+نگه داشتن نسخه‌ی اول (خط 938) که محاسبه‌ی split را درست انجام می‌دهد.
+
+### ۲. تکمیل تابع باقی‌مانده با سه افزوده
+در همان تابع اول:
+- **ساخت clip جدید**: فراخوانی `onDuplicateClip?.(scene.id, newSceneId)` بعد از insert در storyboard (دقیقاً مثل `handleDuplicateScene`).
+- **lock کردن duration برای هر دو half**: بعد از split، فوراً مقدار جدید را در `clipDurations` state بنویسیم تا visualization بر اساس segment timing باشد نه طول ویدئوی اصلی:
+  ```ts
+  setClipDurations(prev => ({
+    ...prev,
+    [scene.id]: splitPoint,
+    [newSceneId]: sceneDur - splitPoint,
+  }));
+  ```
+- **انتخاب اتوماتیک scene جدید**: `setSelectedSceneIndex(index + 1)` و `setCurrentTime(0)` تا playhead روی شروع کارت دوم منتقل شود.
+
+### ۳. Update `sceneDurations` memo
+این تغییر نیاز به اصلاح memo ندارد — وقتی `clipDurations` برای دو scene جدید با مقادیر برش‌شده پر شد، `sceneDurations` خودکار درست می‌شود و دو کارت با عرض‌های متناسب روی timeline ظاهر می‌شوند.
+
+### ۴. حذف keyboard shortcut تکراری
+خط 808 از `handleSplitScene` تکراری استفاده می‌کند — بعد از حذف، خودکار به نسخه‌ی صحیح اشاره می‌کند.
+
+## فایل‌های تغییرکننده
+- `src/components/ad-director/ProVideoEditor.tsx` — حذف تابع تکراری + افزودن سه خط به تابع اصلی
 
 ## آنچه دست‌نخورده می‌ماند
-- منطق playback (`videoRef`, `currentTime`)
-- Drag & drop reorder کلیپ‌ها
-- Sidebar tabs (Media/Text/Transitions/...)
-- Stitch pipeline / export
+- ساختار `Clip` type
 - DB / RLS / edge functions
-- Voiceover/Subtitle dialog ها (فقط trigger می‌شوند)
+- منطق playback، seek، scrub
+- Stitch pipeline (segments timing درست export می‌شوند)
+- دیگر action ها (duplicate, trim, delete, move)
 
-## نتیجه
-1. ✅ زیر نوار ویدئو، Audio track با visualization waveform نمایش داده می‌شود
-2. ✅ زیر آن، Text track با bars رنگی برای هر overlay متنی
-3. ✅ هم‌ترازی کامل با clips بالایی و playhead مشترک
-4. ✅ کلیک روی Audio bar → ویرایش voiceover
-5. ✅ کلیک روی Text bar → ویرایش متن
-6. ✅ کلیپ‌های بدون صدا/متن، placeholder خاکستری نشان می‌دهند
-7. ✅ زبان UI: کاملاً انگلیسی (طبق memory rule)
+## نتیجه‌ی پس از اصلاح
+1. ✅ Playhead روی scene قرار می‌گیرد → دکمه Split → دقیقاً در همان نقطه برش بصری روی نوار ظاهر می‌شود
+2. ✅ کارت دوم با همان ویدئو اما scene id جدید ساخته می‌شود
+3. ✅ عرض هر دو کارت روی timeline متناسب با duration برش‌شده‌شان است
+4. ✅ playhead به ابتدای کارت دوم منتقل می‌شود تا کاربر فوراً ببیند کجا هست
+5. ✅ undo/redo از طریق `pushHistory` کار می‌کند (موجود)
+6. ✅ زبان UI: کاملاً انگلیسی (طبق memory rule)
