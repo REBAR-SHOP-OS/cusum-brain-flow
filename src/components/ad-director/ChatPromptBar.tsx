@@ -232,14 +232,28 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
       "TONE: Persuasive, cinematic, professional commercial advertisement for rebar.shop.",
     ].join("\n");
 
+    const durationNum = Number(duration) || 15;
+    const wordBudget = Math.round(durationNum * 2.5);
+    const sceneCount = Math.max(1, Math.ceil(durationNum / 5));
+    const durationBlock = [
+      `DURATION CONSTRAINT (CRITICAL — MUST OBEY):`,
+      `- Total video length: EXACTLY ${durationNum} seconds. Not ${durationNum - 5}s. Not ${durationNum + 5}s. EXACTLY ${durationNum}s.`,
+      `- Do NOT write a script longer or shorter than ${durationNum}s.`,
+      `- Do NOT mention any other duration in the output (e.g., never say "30-second ad" or "60-second spot" if the user picked ${durationNum}s).`,
+      `- Pace visuals, voiceover, and scene count to fit within ${durationNum} seconds.`,
+      `- Approximate spoken word budget: ~${wordBudget} words MAX for voiceover.`,
+      `- Scene count guidance: ~1 scene per 5 seconds → target ~${sceneCount} scene${sceneCount === 1 ? "" : "s"} total.`,
+      `- If you reference the duration in the script, you MUST say "${durationNum}-second" — no other number is allowed.`,
+    ].join("\n");
+
     const parts: string[] = [];
     if (selectedStyleLabels.length) parts.push(`Style: ${selectedStyleLabels.join(", ")}`);
     if (selectedProductLabels.length) parts.push(`Products to feature: ${selectedProductLabels.join(", ")}`);
-    parts.push(`Duration: ${duration}s`);
+    parts.push(`Duration: ${duration}s (STRICT — see DURATION CONSTRAINT above)`);
     parts.push(`Ratio: ${ratio}`);
     parts.push(`Engine: ${selectedVideoModel.label}`);
 
-    return `${brandBlock}\n\nUSER SELECTIONS:\n${parts.join(". ")}.\n\nWrite a cinematic advertising prompt for a rebar.shop commercial video using the selections above.`;
+    return `${brandBlock}\n\n${durationBlock}\n\nUSER SELECTIONS:\n${parts.join(". ")}.\n\nWrite a cinematic advertising prompt for a rebar.shop commercial video that is EXACTLY ${duration} seconds long, using the selections above. The output script must fit within the ${duration}-second duration constraint without exception.`;
   };
 
   const runAiWrite = async (): Promise<string | null> => {
