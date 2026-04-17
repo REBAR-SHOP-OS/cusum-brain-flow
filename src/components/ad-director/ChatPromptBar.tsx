@@ -235,11 +235,11 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
 
   const runAiWrite = async (): Promise<string | null> => {
     const contextString = buildContextString();
-    const result = await invokeEdgeFunction<{ text?: string }>("ad-director-ai", {
+    const result = await invokeEdgeFunction<{ result?: { text?: string }; text?: string }>("ad-director-ai", {
       action: "write-script",
       input: contextString,
     });
-    return result?.text ?? null;
+    return result?.result?.text ?? result?.text ?? null;
   };
 
   const handleAiWrite = async () => {
