@@ -1035,7 +1035,13 @@ export function ProVideoEditor({
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); handleDeleteScene(selectedSceneIndex); }
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); }
-      if (e.key === "s" && !e.metaKey && !e.ctrlKey) { handleSplitAtPlayhead(); }
+      if (e.key === "s" && !e.metaKey && !e.ctrlKey) {
+        let playheadIdx = selectedSceneIndex;
+        for (let i = cumulativeStarts.length - 1; i >= 0; i--) {
+          if (globalTime >= (cumulativeStarts[i] || 0)) { playheadIdx = i; break; }
+        }
+        handleSplitScene(playheadIdx);
+      }
       if (e.key === "d" && !e.metaKey && !e.ctrlKey) { handleDuplicateScene(selectedSceneIndex); }
     };
     window.addEventListener("keydown", handler);
