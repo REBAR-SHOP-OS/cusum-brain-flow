@@ -409,10 +409,12 @@ class BackgroundAdDirectorService {
       const storyboardWithDefaults: StoryboardScene[] = rawStoryboard.map((s, idx) => {
         const isFirstScene = idx === 0;
         const isLastVisualScene = idx === lastVisualSceneIdx;
-        // Force image-to-video mode when intro/outro reference image will be used
+        // Force image-to-video mode whenever any reference image is anchored to the scene:
+        // intro on first, outro on last visual, or a character reference on any non-static scene.
         const forcedI2V =
           (isFirstScene && !!introImageUrl) ||
-          (isLastVisualScene && !!outroImageUrl);
+          (isLastVisualScene && !!outroImageUrl) ||
+          (!!characterImageUrl && s.generationMode !== "static-card");
         return {
           ...s,
           prompt: finalPrompts[idx].prompt,
@@ -514,11 +516,13 @@ class BackgroundAdDirectorService {
           const isLastVisualScene = i === lastVisualIdx;
 
           let referenceImage: string | undefined;
+          // Priority: intro/outro override character ONLY for the specific anchor scene.
+          // For all other scenes, the character image (if present) is used so the same face appears throughout.
           if (isFirstScene && introImageUrl) {
             referenceImage = introImageUrl;
           } else if (isLastVisualScene && outroImageUrl) {
             referenceImage = outroImageUrl;
-          } else if (characterImageUrl && scene.generationMode === "image-to-video") {
+          } else if (characterImageUrl) {
             referenceImage = characterImageUrl;
           }
 
@@ -611,11 +615,12 @@ class BackgroundAdDirectorService {
             const isLastVisualScene = sceneIdx === lastVisualIdx;
 
             let referenceImage: string | undefined;
+            // Same priority as initial generation — keep the same character face across retries.
             if (isFirstScene && introImageUrl) {
               referenceImage = introImageUrl;
             } else if (isLastVisualScene && outroImageUrl) {
               referenceImage = outroImageUrl;
-            } else if (characterImageUrl && scene.generationMode === "image-to-video") {
+            } else if (characterImageUrl) {
               referenceImage = characterImageUrl;
             }
 
