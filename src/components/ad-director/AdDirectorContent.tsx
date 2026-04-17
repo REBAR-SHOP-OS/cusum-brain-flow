@@ -288,6 +288,20 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     }
   }, [service, toast]);
 
+  // ─── Reorder clips (and matching storyboard scenes) atomically via drag & drop ───
+  const handleReorderClips = useCallback((from: number, to: number) => {
+    if (from === to || from < 0 || to < 0) return;
+    if (from >= clips.length || to >= clips.length) return;
+    const newClips = [...clips];
+    const newStoryboard = [...storyboard];
+    const [movedClip] = newClips.splice(from, 1);
+    const [movedScene] = newStoryboard.splice(from, 1);
+    newClips.splice(to, 0, movedClip);
+    if (movedScene) newStoryboard.splice(to, 0, movedScene);
+    service.patchState({ clips: newClips, storyboard: newStoryboard });
+    toast({ title: `Scene moved to position ${to + 1}` });
+  }, [clips, storyboard, service, toast]);
+
   // ─── RENDER ──────────────────────────────────────
 
   // Editing mode — full ProVideoEditor
