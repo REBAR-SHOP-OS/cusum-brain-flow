@@ -1,59 +1,91 @@
 
-## درک درخواست
-الآن وقتی کاربر در `CharacterPromptDialog` متن می‌نویسد و **"Save direction"** می‌زند، متن در state داخلی character ذخیره می‌شود ولی **در textarea اصلی "Describe the ad..."** پر نمی‌شود. در نتیجه دکمه‌ی **Create video** غیرفعال می‌ماند (چون آن دکمه با خالی بودن prompt اصلی disabled است).
+## ریشه‌ی مسئله — تأیید‌شده با دیتابیس
 
-کاربر می‌خواهد:
-- وقتی Save direction زده می‌شود → متن character به‌صورت خودکار در textarea اصلی (`prompt` / "Describe the ad...") قرار بگیرد
-- در نتیجه دکمه‌ی **Create video** فعال شود
-- ویدیو بر اساس آن character و دیالوگش ساخته شود
+پروژه «505 Glenlake» (مشتری The Under Pinners) در DB دقیقاً این داده را دارد:
 
-## بررسی
-نیاز به خواندن:
-- `ChatPromptBar.tsx` — جای render شدن `CharacterPromptDialog` و state اصلی `prompt`
-- محل handler مربوط به `onSave` در dialog
-- نحوه‌ی محاسبه‌ی `disabled` بودن دکمه‌ی Create video
+| منبع | نام | وضعیت | ماشین |
+|---|---|---|---|
+| **barlists** | GRADE BEAM 1 + LOOSE REBAR (R1) | in_production | — |
+| **cut_plans** | GRADE BEAM 1 + LOOSE REBAR | queued | CUTTER-02 |
+| **cut_plans** | GRADE BEAM 1 + LOOSE REBAR **(Small)** | queued | CUTTER-01 |
 
-## برنامه (Surgical, Single-File)
+یعنی **۱ barlist + ۲ cut_plan** (که cut_plan دوم به‌صورت auto-split از Small-bars (10M/15M) ساخته شده — منطقی که در `ShopFloorProductionQueue.tsx` خطوط 322-353 وجود دارد).
 
-### تغییر فقط در `src/components/ad-director/ChatPromptBar.tsx`
+تفاوت بین سه صفحه ناشی از این است که هر صفحه از منبع داده‌ی متفاوتی می‌خواند و ردیف‌های (Small) را متفاوت فیلتر/نمایش می‌دهد:
 
-#### handler `onSave` در `<CharacterPromptDialog>`
-به‌جای فقط ذخیره‌کردن متن character در state داخلی، **متن character را در prompt اصلی هم بنویسد**:
-
+### Detailed List → ۱ ردیف
+در `DetailedListView.tsx` خط 125:
 ```ts
-onSave={() => {
-  const trimmed = characterPromptText.trim();
-  if (trimmed) {
-    // متن character را به prompt اصلی منتقل کن (replace کامل)
-    onPromptChange(trimmed);
-    // یا اگر prompt قبلی موجود باشد، append:
-    // const merged = prompt.trim() ? `${prompt.trim()}\n\n${trimmed}` : trimmed;
-    // onPromptChange(merged);
-  }
-  setCharacterDialogOpen(false);
-}}
+for (const plan of plans.filter(p => !p.name.endsWith("(Small)"))) { ... }
+```
+صریحاً ردیف‌های `(Small)` فیلتر می‌شوند. → فقط plan اصلی نمایش داده می‌شود = **۱**.
+
+### Production Queue (Office) → ۲ ردیف
+در `ProductionQueueView.tsx` (تابع `buildProjectNode` خطوط 282-298) cut_plans به barlist match می‌شوند با FK `barlist_id` یا fallback به نام. plan با نام «GRADE BEAM 1 + LOOSE REBAR» داخل barlist match می‌شود (= ۱)، plan با «(Small)» نه FK دارد و نه نام match می‌کند → به‌عنوان `loosePlans` زیر همان پروژه نمایش داده می‌شود (= ۱). جمع: **۲ manifest**.
+
+### Shop Floor Production Queue → ۳ ردیف
+در `ShopFloorProductionQueue.tsx` خطوط 237-248:
+- اول **همه‌ی barlists** پروژه را render می‌کند (= ۱)
+- سپس **همه‌ی cut_plans** پروژه را به‌صورت ردیف‌های جداگانه‌ی `CutPlanRow` در پایین render می‌کند (= ۲)
+- جمع: **۳ ردیف** (که در عکس کاربر هم دقیقاً همین است: ۱ FileText icon + ۲ Wrench icons)
+
+تفاوت معماری روشن است: Office دو مفهوم متفاوت (barlist vs cut_plan/manifest) را در یک سلسله‌مراتب **ادغام** می‌کند، اما ShopFloor آن‌ها را **کنار هم** نمایش می‌دهد.
+
+---
+
+## برنامه‌ی اصلاحی (Surgical, Single-File)
+
+برای ایجاد سازگاری بین سه صفحه، فقط `ShopFloorProductionQueue.tsx` را اصلاح می‌کنیم تا با همان منطق Production Queue (Office) رفتار کند:
+
+### تغییر در `src/components/shopfloor/ShopFloorProductionQueue.tsx`
+
+#### ۱. ادغام cut_plans با barlists در `buildProjectNode`
+به‌جای render کردن جداگانه‌ی barlists و cut_plans، هر cut_plan را زیر barlist مربوطه‌اش قرار دهیم:
+- **Primary match**: `cut_plan.barlist_id === barlist.id`
+- **Fallback match**: `cut_plan.name === barlist.name` (برای داده‌ی legacy)
+- cut_plans بدون match → به‌عنوان "loose plans" زیر پروژه (مثل Office)
+
+#### ۲. تغییر struct گروه `ProjectGroup`
+به جای دو list مجزا (`barlists` + `cutPlans`)، هر barlist شامل `plans: CutPlanForBarlist[]` خواهد بود. UI:
+```
+📁 505 Glenlake
+  📄 GRADE BEAM 1 + LOOSE REBAR  R1  [in_production]
+     🔧 GRADE BEAM 1 + LOOSE REBAR        [queued]  CUTTER-02
+     🔧 GRADE BEAM 1 + LOOSE REBAR (Small) [queued]  CUTTER-01
+```
+دو cut_plan به‌صورت children ایندنت‌شده زیر barlist والد نمایش داده می‌شوند، نه به‌صورت ردیف‌های مستقل.
+
+#### ۳. fetch `barlist_id` در query کلی cut_plans
+خط 57 query را به این تغییر می‌دهیم:
+```ts
+.select("id, name, status, machine_id, project_id, barlist_id, machines(name)")
 ```
 
-**رفتار پیشنهادی (انتخاب نهایی):**
-- اگر textarea اصلی **خالی** بود → متن character کامل در آن نوشته می‌شود
-- اگر textarea اصلی **متن داشت** → متن character به آخر آن append می‌شود (با `\n\n` فاصله) تا کاربر آنچه قبلاً نوشته را از دست ندهد
+#### ۴. حفظ همه‌ی functionality موجود
+- `CutPlanRow` (دکمه‌ی Change/Assign machine + auto-assignment logic) — بدون تغییر در منطق
+- Auto-split برای Small bars — بدون تغییر
+- `BarlistRow` و `StatusBadge` — بدون تغییر
 
-این انتخاب امن‌تر و non-destructive است (مطابق Surgical Execution Law).
+#### ۵. Total در Badge هدر
+`{totalBarlists} Barlists` بدون تغییر می‌ماند (همچنان یک تعداد است).
 
-#### نتیجه‌ی فعال شدن دکمه‌ی Create video
-چون در ChatPromptBar شرط `disabled` دکمه Create video به `prompt.trim().length > 0` وابسته است، با پر شدن خودکار prompt، دکمه فعال می‌شود — **بدون نیاز به هیچ تغییر دیگری**.
+---
 
-#### حفظ state داخلی character
-`characterPromptText` و indicator سبز کنار دکمه‌ی Character (همان `•`) دست‌نخورده می‌ماند تا کاربر بداند character direction ذخیره شده است.
+## نتیجه پس از اصلاح
 
-## آنچه تغییر نمی‌کند
-- `CharacterPromptDialog.tsx` — بدون تغییر (همان onSave callback را صدا می‌زند)
-- منطق generation و edge functions — بدون تغییر
-- AI Prompt dialog و سایر dialogها — بدون تغییر
-- Style/Products/Duration/Engine — بدون تغییر
+برای پروژه «505 Glenlake»، Shop Floor دقیقاً مثل Production Queue (Office) **۱ barlist با ۲ manifest تو در تو** نشان می‌دهد، نه ۳ ردیف مسطح.
 
-## نتیجه
-بعد از کلیک روی **Save direction**:
-1. متن character direction به textarea اصلی منتقل می‌شود
-2. دکمه‌ی **Create video** فوراً فعال می‌شود
-3. کاربر می‌تواند مستقیماً Create video بزند و ویدیو بر اساس character reference + دیالوگ ساخته شود
+| صفحه | قبل | بعد |
+|---|---|---|
+| Detailed List | ۱ | ۱ (بدون تغییر — منطق `(Small)` فیلتر درست است) |
+| Production Queue (Office) | ۲ | ۲ (بدون تغییر) |
+| Shop Floor | ۳ ردیف مسطح | ۱ barlist + ۲ manifest تو در تو ✓ |
+
+### آنچه تغییر **نمی‌کند**
+- منطق Detailed List و Production Queue (Office) — دست‌نخورده
+- منطق auto-assignment ماشین‌ها و Small-split
+- DB schema و RLS
+- صفحات دیگر Shop Floor
+
+### نکته
+اگر کاربر می‌خواهد ردیف‌های `(Small)` در Detailed List هم نمایش داده شوند، آن یک تغییر جداگانه است (حذف فیلتر خط 125). در آن صورت بفرمایید تا به‌صورت option دوم اضافه کنم.
