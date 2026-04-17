@@ -18,6 +18,7 @@ interface CutPlanForBarlist {
   machine_id: string | null;
   machine_name: string | null;
   project_id: string | null;
+  barlist_id: string | null;
 }
 
 interface MachineOption {
@@ -54,7 +55,7 @@ export function ShopFloorProductionQueue() {
     queryFn: async () => {
       const { data } = await supabase
         .from("cut_plans")
-        .select("id, name, status, machine_id, project_id, machines(name)")
+        .select("id, name, status, machine_id, project_id, barlist_id, machines(name)")
         .eq("company_id", companyId!)
         .in("project_id", projectIds);
       return (data || []).map((row: any) => ({
@@ -64,6 +65,7 @@ export function ShopFloorProductionQueue() {
         machine_id: row.machine_id,
         machine_name: row.machines?.name || null,
         project_id: row.project_id,
+        barlist_id: row.barlist_id,
       })) as CutPlanForBarlist[];
     },
   });
@@ -227,6 +229,34 @@ function ProjectGroup({
 }) {
   const [open, setOpen] = useState(false);
 
+  // Match cut_plans to barlists: primary by FK barlist_id, fallback by name
+  const { plansByBarlist, loosePlans } = useMemo(() => {
+    const byBl = new Map<string, CutPlanForBarlist[]>();
+    const loose: CutPlanForBarlist[] = [];
+    const blById = new Map(proj.barlists.map(b => [b.id, b]));
+    const blByName = new Map(proj.barlists.map(b => [b.name, b]));
+
+    for (const cp of cutPlans) {
+      let blId: string | null = null;
+      if (cp.barlist_id && blById.has(cp.barlist_id)) {
+        blId = cp.barlist_id;
+      } else if (blByName.has(cp.name)) {
+        blId = blByName.get(cp.name)!.id;
+      } else {
+        // Fallback: strip "(Small)" suffix and try to match parent
+        const baseName = cp.name.replace(/\s*\(Small\)\s*$/, "").trim();
+        if (blByName.has(baseName)) blId = blByName.get(baseName)!.id;
+      }
+      if (blId) {
+        if (!byBl.has(blId)) byBl.set(blId, []);
+        byBl.get(blId)!.push(cp);
+      } else {
+        loose.push(cp);
+      }
+    }
+    return { plansByBarlist: byBl, loosePlans: loose };
+  }, [cutPlans, proj.barlists]);
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded hover:bg-muted/40 transition-colors">
@@ -236,12 +266,16 @@ function ProjectGroup({
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-6 pt-0.5 space-y-0.5">
         {proj.barlists.map(bl => (
-          <BarlistRow key={bl.id} bl={bl} cutPlans={cutPlans} machines={machines} projectId={proj.projectId} />
+          <BarlistRow
+            key={bl.id}
+            bl={bl}
+            childPlans={plansByBarlist.get(bl.id) || []}
+            machines={machines}
+          />
         ))}
-        {/* Show cut plans with machine assignment */}
-        {cutPlans.length > 0 && (
+        {loosePlans.length > 0 && (
           <div className="pt-1 space-y-1">
-            {cutPlans.map(cp => (
+            {loosePlans.map(cp => (
               <CutPlanRow key={cp.id} plan={cp} machines={machines} />
             ))}
           </div>
@@ -253,21 +287,28 @@ function ProjectGroup({
 
 function BarlistRow({
   bl,
-  cutPlans,
+  childPlans,
   machines,
-  projectId,
 }: {
   bl: { id: string; name: string; revisionNo: number; status: string };
-  cutPlans: CutPlanForBarlist[];
+  childPlans: CutPlanForBarlist[];
   machines: MachineOption[];
-  projectId: string;
 }) {
   return (
-    <div className="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-muted/30 transition-colors">
-      <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
-      <span className="text-foreground truncate">{bl.name}</span>
-      <span className="text-muted-foreground text-[10px]">R{bl.revisionNo}</span>
-      <StatusBadge status={bl.status} />
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-muted/30 transition-colors">
+        <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+        <span className="text-foreground truncate">{bl.name}</span>
+        <span className="text-muted-foreground text-[10px]">R{bl.revisionNo}</span>
+        <StatusBadge status={bl.status} />
+      </div>
+      {childPlans.length > 0 && (
+        <div className="pl-5 space-y-0.5">
+          {childPlans.map(cp => (
+            <CutPlanRow key={cp.id} plan={cp} machines={machines} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
