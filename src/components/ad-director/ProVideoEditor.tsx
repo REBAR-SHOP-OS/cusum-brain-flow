@@ -207,6 +207,25 @@ export function ProVideoEditor({
   const [videoSpeed, setVideoSpeed] = useState(1);
   const [speedPopoverOpen, setSpeedPopoverOpen] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<string>("16:9");
+  const [transitionPreset, setTransitionPreset] = useState<string>(() => {
+    if (typeof window === "undefined") return "Crossfade";
+    return localStorage.getItem(TRANSITION_STORAGE_KEY) || "Crossfade";
+  });
+  const [transitionDuration, setTransitionDuration] = useState<number>(() => {
+    if (typeof window === "undefined") return 0.5;
+    const v = parseFloat(localStorage.getItem(TRANSITION_DURATION_STORAGE_KEY) || "0.5");
+    return isNaN(v) ? 0.5 : v;
+  });
+
+  const handleTransitionSelect = useCallback((preset: string) => {
+    setTransitionPreset(preset);
+    try { localStorage.setItem(TRANSITION_STORAGE_KEY, preset); } catch {}
+  }, []);
+
+  const handleTransitionDurationChange = useCallback((d: number) => {
+    setTransitionDuration(d);
+    try { localStorage.setItem(TRANSITION_DURATION_STORAGE_KEY, String(d)); } catch {}
+  }, []);
 
   // Hide global floating widgets (Vizzy, LiveChat, Feedback) while editor is mounted
   useEffect(() => {
