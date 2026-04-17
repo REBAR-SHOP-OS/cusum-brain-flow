@@ -103,6 +103,7 @@ interface ReferenceUploadCardProps {
   disabled?: boolean;
   onPick: () => void;
   onClear: () => void;
+  lockBadge?: string;
 }
 
 function ReferenceUploadCard({
@@ -114,6 +115,7 @@ function ReferenceUploadCard({
   disabled,
   onPick,
   onClear,
+  lockBadge,
 }: ReferenceUploadCardProps) {
   return (
     <div
@@ -146,6 +148,11 @@ function ReferenceUploadCard({
             <X className="h-3.5 w-3.5" />
           </button>
           <div className="relative z-10 pointer-events-none flex h-full flex-col justify-end gap-1">
+            {lockBadge && (
+              <span className="self-start mb-1 inline-flex items-center gap-1 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-100 backdrop-blur-sm">
+                🎬 {lockBadge}
+              </span>
+            )}
             <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/70">
               {label}
             </span>
@@ -289,6 +296,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           disabled={disabled}
           onPick={() => introRef.current?.click()}
           onClear={() => setIntroImage(null)}
+          lockBadge="Locked to first scene"
         />
 
         <input ref={characterRef} type="file" accept="image/*" hidden onChange={handleCharacterChange} />
@@ -313,6 +321,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           disabled={disabled}
           onPick={() => outroRef.current?.click()}
           onClear={() => setOutroImage(null)}
+          lockBadge="Locked to final scene"
         />
       </div>
 

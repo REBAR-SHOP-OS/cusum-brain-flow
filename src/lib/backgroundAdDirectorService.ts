@@ -264,6 +264,12 @@ class BackgroundAdDirectorService {
     }
 
     try {
+      // ── Force minimum scene count when BOTH intro & outro are uploaded ──
+      // (so the intro image can anchor scene 1 AND the outro image can anchor the final scene)
+      const bothFramesProvided = !!(introImageUrl && outroImageUrl);
+      const baseSceneCount = videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15);
+      const requestedSceneCount = bothFramesProvided ? Math.max(2, baseSceneCount) : baseSceneCount;
+
       // Phase 1: Analyze
       const analyzeResult = await withTimeout(invokeEdgeFunction<{
         result: { segments: ScriptSegment[]; storyboard: StoryboardScene[]; continuityProfile: ContinuityProfile };
@@ -273,7 +279,7 @@ class BackgroundAdDirectorService {
         script: prompt,
         brand,
         targetDuration: videoParams.duration,
-        sceneCount: videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15),
+        sceneCount: requestedSceneCount,
         assetDescriptions: sourceMedia.length > 0
           ? sourceMedia.map((file) => `${file.type.startsWith("video/") ? "video clip" : "image"}: ${file.name}`).join(", ")
           : undefined,
@@ -291,8 +297,8 @@ class BackgroundAdDirectorService {
       let { segments: newSegments, storyboard: rawStoryboard } = analyzeResult.result;
       const continuityProfile = analyzeResult.result.continuityProfile;
 
-      // ── Enforce scene count based on duration ──────────────────────
-      const expectedSceneCount = videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15);
+      // ── Enforce scene count based on duration (or override when both frames set) ──
+      const expectedSceneCount = requestedSceneCount;
       const segmentDuration = videoParams.duration / expectedSceneCount;
 
       if (rawStoryboard.length > expectedSceneCount) {
@@ -394,19 +400,34 @@ class BackgroundAdDirectorService {
         })
       );
 
-      const storyboardWithDefaults: StoryboardScene[] = rawStoryboard.map((s, idx) => ({
-        ...s,
-        prompt: finalPrompts[idx].prompt,
-        continuityLock: true,
-        locked: false,
-        referenceAssetUrl: sourceMediaUrls[idx] ?? sourceMediaUrls[0] ?? null,
-        sceneIntelligence: {
-          plannedBy: analyzeResult.modelUsed,
-          promptWrittenBy: finalPrompts[idx].modelUsed,
-          promptScoredBy: qualityResults[idx]?.scoredBy,
-        },
-        promptQuality: qualityResults[idx]?.quality,
-      }));
+      // Determine which scene index is the "last visual" (for outro frame anchoring)
+      const lastVisualSceneIdx = rawStoryboard.reduce((acc, s, idx) => {
+        const seg = newSegments.find(sg => sg.id === s.segmentId);
+        return (s.generationMode !== "static-card" && seg?.type !== "closing") ? idx : acc;
+      }, 0);
+
+      const storyboardWithDefaults: StoryboardScene[] = rawStoryboard.map((s, idx) => {
+        const isFirstScene = idx === 0;
+        const isLastVisualScene = idx === lastVisualSceneIdx;
+        // Force image-to-video mode when intro/outro reference image will be used
+        const forcedI2V =
+          (isFirstScene && !!introImageUrl) ||
+          (isLastVisualScene && !!outroImageUrl);
+        return {
+          ...s,
+          prompt: finalPrompts[idx].prompt,
+          continuityLock: true,
+          locked: false,
+          generationMode: forcedI2V ? "image-to-video" : s.generationMode,
+          referenceAssetUrl: sourceMediaUrls[idx] ?? sourceMediaUrls[0] ?? null,
+          sceneIntelligence: {
+            plannedBy: analyzeResult.modelUsed,
+            promptWrittenBy: finalPrompts[idx].modelUsed,
+            promptScoredBy: qualityResults[idx]?.scoredBy,
+          },
+          promptQuality: qualityResults[idx]?.quality,
+        };
+      });
 
       const initialClips: ClipOutput[] = storyboardWithDefaults.map(s => ({
         sceneId: s.id, status: "idle" as const, progress: 0,
