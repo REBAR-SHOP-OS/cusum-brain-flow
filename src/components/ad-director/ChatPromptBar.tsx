@@ -611,6 +611,14 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           </div>
         </div>
       </div>
+
+      <AIPromptDialog
+        open={aiDialogOpen}
+        onClose={() => setAiDialogOpen(false)}
+        onGenerate={handleAiGenerate}
+        generating={aiWriting}
+        contextChips={contextChips}
+      />
     </div>
   );
 }
