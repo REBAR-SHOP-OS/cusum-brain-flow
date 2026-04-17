@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { Loader2, Sparkles, Wand2 } from "lucide-react";
+import { Loader2, Sparkles, RefreshCw, Check } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,52 +14,45 @@ import { cn } from "@/lib/utils";
 interface AIPromptDialogProps {
   open: boolean;
   onClose: () => void;
-  onGenerate: (userInput: string) => void;
-  generating: boolean;
+  text: string;
+  onTextChange: (value: string) => void;
+  onUse: () => void;
+  onRegenerate: () => void;
+  regenerating: boolean;
   contextChips: string[];
 }
 
-export function AIPromptDialog({ open, onClose, onGenerate, generating, contextChips }: AIPromptDialogProps) {
-  const [text, setText] = useState("");
-
-  useEffect(() => {
-    if (!open) setText("");
-  }, [open]);
-
+export function AIPromptDialog({
+  open,
+  onClose,
+  text,
+  onTextChange,
+  onUse,
+  onRegenerate,
+  regenerating,
+  contextChips,
+}: AIPromptDialogProps) {
   const isRtl = detectRtl(text);
-  const canSubmit = text.trim().length > 0 && !generating;
+  const canUse = text.trim().length > 0 && !regenerating;
 
   return (
-    <Dialog open={open} onOpenChange={(v) => !v && !generating && onClose()}>
-      <DialogContent className="sm:max-w-xl">
+    <Dialog open={open} onOpenChange={(v) => !v && !regenerating && onClose()}>
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
-            Write prompt with AI
+            AI Prompt Preview
           </DialogTitle>
           <DialogDescription>
-            Tell us what you want — we'll engineer the cinematic prompt.
+            Generated from your selections. Edit if you'd like, then use it.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Describe your ad idea, target audience, mood, key message…"
-            rows={6}
-            dir={isRtl ? "rtl" : "ltr"}
-            className={cn(
-              "w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              isRtl && "text-right"
-            )}
-            autoFocus
-          />
-
           {contextChips.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Auto-included context
+                Based on your selections
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {contextChips.map((chip) => (
@@ -74,19 +66,51 @@ export function AIPromptDialog({ open, onClose, onGenerate, generating, contextC
               </div>
             </div>
           )}
+
+          <div className="relative">
+            <textarea
+              value={text}
+              onChange={(e) => onTextChange(e.target.value)}
+              placeholder="AI is writing your cinematic prompt…"
+              rows={10}
+              dir={isRtl ? "rtl" : "ltr"}
+              disabled={regenerating}
+              className={cn(
+                "w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
+                isRtl && "text-right"
+              )}
+            />
+            {regenerating && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/60 backdrop-blur-sm">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Regenerating…
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={generating}>
-            Cancel
-          </Button>
-          <Button onClick={() => onGenerate(text.trim())} disabled={!canSubmit}>
-            {generating ? (
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button
+            variant="outline"
+            onClick={onRegenerate}
+            disabled={regenerating}
+            className="mr-auto"
+          >
+            {regenerating ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Wand2 className="h-4 w-4" />
+              <RefreshCw className="h-4 w-4" />
             )}
-            {generating ? "Generating..." : "Generate Prompt"}
+            Regenerate
+          </Button>
+          <Button variant="ghost" onClick={onClose} disabled={regenerating}>
+            Cancel
+          </Button>
+          <Button onClick={onUse} disabled={!canUse}>
+            <Check className="h-4 w-4" />
+            Use this prompt
           </Button>
         </DialogFooter>
       </DialogContent>
