@@ -233,6 +233,11 @@ export function ProVideoEditor({
     return () => document.body.classList.remove("hide-floating-widgets");
   }, []);
 
+  // Forward-ref for pushHistory so early useCallbacks can call it before its definition.
+  // The actual implementation is wired to this ref further down.
+  const pushHistoryFnRef = useRef<() => void>(() => {});
+  const pushHistoryDebouncedFnRef = useRef<() => void>(() => {});
+
   const ASPECT_RATIOS: Record<string, string> = {
     "16:9": "16/9",
     "9:16": "9/16",
@@ -332,6 +337,7 @@ export function ProVideoEditor({
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
 
+      pushHistoryFnRef.current();
       setAudioTracks([{
         sceneId: storyboard[0]?.id || "",
         label: result.type === "music" ? "🎵 Generated Music" : "🎙️ Generated Voiceover",
@@ -352,6 +358,7 @@ export function ProVideoEditor({
 
   const handleAudioUpload = useCallback((result: AudioUploadResult) => {
     const audioUrl = URL.createObjectURL(result.file);
+    pushHistoryFnRef.current();
     setAudioTracks(prev => [...prev, {
       sceneId: storyboard[0]?.id || "",
       label: result.kind === "music" ? `🎵 ${result.file.name}` : `🎙️ ${result.file.name}`,
@@ -386,6 +393,7 @@ export function ProVideoEditor({
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
 
+      pushHistoryFnRef.current();
       setAudioTracks([{
         sceneId: storyboard[0]?.id || "",
         label: "🎙️ Voiceover",
@@ -405,6 +413,7 @@ export function ProVideoEditor({
   }, [toast]);
 
   const handleAddSubtitle = useCallback((overlay: VideoOverlay) => {
+    pushHistoryFnRef.current();
     setOverlays(prev => [...prev, overlay]);
     toast({ title: "✅ Subtitle added" });
   }, [toast]);
@@ -519,12 +528,13 @@ export function ProVideoEditor({
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
+    pushHistoryFnRef.current();
     setAudioTracks(prev => [
       ...prev,
       { kind: "music" as const, audioUrl: url, label: file.name, volume: 0.7, sceneId: storyboard[0]?.id || "", startTime: 0, globalStartTime: 0 },
     ]);
     e.target.value = "";
-  }, []);
+  }, [storyboard]);
   const [videoVolume, setVideoVolume] = useState(1);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
@@ -848,43 +858,119 @@ export function ProVideoEditor({
     a.play().catch(() => {});
   }, [globalTime, isPlaying, isMuted, audioTracks, totalDuration, videoSpeed]);
 
-  // Undo/Redo history
-  const [history, setHistory] = useState<StoryboardScene[][]>([]);
+  // ─── Unified Undo/Redo history ───
+  // Snapshot captures storyboard + audioTracks + overlays + segments + mutedScenes
+  interface EditorSnapshot {
+    storyboard: StoryboardScene[];
+    audioTracks: AudioTrackItem[];
+    overlays: VideoOverlay[];
+    segments: ScriptSegment[];
+    mutedScenes: string[];
+  }
+  const HISTORY_CAP = 50;
+  const [history, setHistory] = useState<EditorSnapshot[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const historyIndexRef = useRef(-1);
-
-  // Keep ref in sync
+  // Refs to current state for stable pushHistory closure
+  const storyboardRef = useRef(storyboard);
+  const audioTracksRef = useRef(audioTracks);
+  const overlaysRef = useRef(overlays);
+  const segmentsRef = useRef(segments);
+  const mutedScenesRef = useRef(mutedScenes);
   useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
-
-  // Seed initial storyboard into history
-  useEffect(() => {
-    if (storyboard.length > 0 && history.length === 0) {
-      setHistory([storyboard]);
-      setHistoryIndex(0);
-    }
-  }, [storyboard, history.length]);
+  useEffect(() => { storyboardRef.current = storyboard; }, [storyboard]);
+  useEffect(() => { audioTracksRef.current = audioTracks; }, [audioTracks]);
+  useEffect(() => { overlaysRef.current = overlays; }, [overlays]);
+  useEffect(() => { segmentsRef.current = segments; }, [segments]);
+  useEffect(() => { mutedScenesRef.current = mutedScenes; }, [mutedScenes]);
 
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const pushHistory = useCallback((snapshot: StoryboardScene[]) => {
+  // Deep-clone helper using structuredClone with fallback
+  const cloneSnapshot = (snap: EditorSnapshot): EditorSnapshot => {
+    try { return structuredClone(snap); }
+    catch { return JSON.parse(JSON.stringify(snap)); }
+  };
+
+  // Seed initial unified snapshot
+  useEffect(() => {
+    if (storyboard.length > 0 && history.length === 0) {
+      const seed: EditorSnapshot = {
+        storyboard,
+        audioTracks,
+        overlays,
+        segments,
+        mutedScenes: Array.from(mutedScenes),
+      };
+      setHistory([cloneSnapshot(seed)]);
+      setHistoryIndex(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyboard.length]);
+
+  /** Push current full editor state to history. Call BEFORE applying a mutation. */
+  const pushHistory = useCallback((_legacy?: any) => {
+    const snap: EditorSnapshot = {
+      storyboard: storyboardRef.current,
+      audioTracks: audioTracksRef.current,
+      overlays: overlaysRef.current,
+      segments: segmentsRef.current,
+      mutedScenes: Array.from(mutedScenesRef.current),
+    };
+    const cloned = cloneSnapshot(snap);
     const idx = historyIndexRef.current;
-    setHistory(prev => [...prev.slice(0, idx + 1), snapshot]);
-    setHistoryIndex(idx + 1);
+    setHistory(prev => {
+      const next = [...prev.slice(0, idx + 1), cloned];
+      // Cap to HISTORY_CAP entries
+      if (next.length > HISTORY_CAP) {
+        const excess = next.length - HISTORY_CAP;
+        return next.slice(excess);
+      }
+      return next;
+    });
+    setHistoryIndex(idx => {
+      const newIdx = Math.min(idx + 1, HISTORY_CAP - 1);
+      return newIdx;
+    });
     setHasChanges(true);
   }, []);
 
+  // Debounced push for continuous operations (drag, resize, slider)
+  const pushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushHistoryDebounced = useCallback(() => {
+    if (pushDebounceRef.current) clearTimeout(pushDebounceRef.current);
+    pushDebounceRef.current = setTimeout(() => { pushHistory(); }, 300);
+  }, [pushHistory]);
+
+  // Wire forward refs so early useCallbacks (defined before pushHistory) can call them
+  useEffect(() => {
+    pushHistoryFnRef.current = pushHistory;
+    pushHistoryDebouncedFnRef.current = pushHistoryDebounced;
+  }, [pushHistory, pushHistoryDebounced]);
+
+  // Apply a snapshot to all relevant state
+  const applySnapshot = useCallback((snap: EditorSnapshot) => {
+    onUpdateStoryboard?.(snap.storyboard);
+    setAudioTracks(snap.audioTracks);
+    setOverlays(snap.overlays);
+    setMutedScenes(new Set(snap.mutedScenes));
+    if (onUpdateSegments) onUpdateSegments(snap.segments);
+  }, [onUpdateStoryboard, onUpdateSegments]);
+
   const undo = () => {
     if (historyIndex > 0) {
-      setHistoryIndex(historyIndex - 1);
-      onUpdateStoryboard?.(history[historyIndex - 1]);
+      const target = historyIndex - 1;
+      setHistoryIndex(target);
+      applySnapshot(cloneSnapshot(history[target]));
     }
   };
 
   const redo = () => {
     if (historyIndex < history.length - 1) {
-      setHistoryIndex(historyIndex + 1);
-      onUpdateStoryboard?.(history[historyIndex + 1]);
+      const target = historyIndex + 1;
+      setHistoryIndex(target);
+      applySnapshot(cloneSnapshot(history[target]));
     }
   };
 
@@ -901,11 +987,11 @@ export function ProVideoEditor({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedSceneIndex]);
+  }, [selectedSceneIndex, historyIndex, history.length]);
 
   const resetAll = () => {
     if (history.length > 0) {
-      onUpdateStoryboard?.(history[0]);
+      applySnapshot(cloneSnapshot(history[0]));
       setHistoryIndex(0);
       toast({ title: "All edits reset" });
     }
@@ -1011,20 +1097,24 @@ export function ProVideoEditor({
   }, [audioTracks, selectedSceneIndex, storyboard, mutedScenes]);
 
   const handleVideoVolumeChange = useCallback((v: number) => {
+    pushHistoryDebounced();
     setVideoVolume(v);
-  }, []);
+  }, [pushHistoryDebounced]);
 
   const handleAudioTrackVolumeChange = useCallback((index: number, v: number) => {
+    pushHistoryDebounced();
     setAudioTracks(prev => prev.map((t, i) => i === index ? { ...t, volume: v } : t));
-  }, []);
+  }, [pushHistoryDebounced]);
 
   const handleRemoveAudioTrack = useCallback((index: number) => {
+    pushHistory();
     setAudioTracks(prev => prev.filter((_, i) => i !== index));
-  }, []);
+  }, [pushHistory]);
 
   const handleDeleteOverlay = useCallback((id: string) => {
+    pushHistory();
     setOverlays(prev => prev.filter(o => o.id !== id));
-  }, []);
+  }, [pushHistory]);
 
 
   const handleTrimScene = useCallback((index: number) => {
@@ -1264,13 +1354,14 @@ export function ProVideoEditor({
   const handleMuteScene = useCallback((index: number) => {
     const sceneId = storyboard[index]?.id;
     if (!sceneId) return;
+    pushHistory();
     setMutedScenes(prev => {
       const next = new Set(prev);
       if (next.has(sceneId)) next.delete(sceneId); else next.add(sceneId);
       return next;
     });
     toast({ title: mutedScenes.has(storyboard[index]?.id) ? "Scene unmuted" : "Scene muted" });
-  }, [storyboard, mutedScenes, toast]);
+  }, [storyboard, mutedScenes, toast, pushHistory]);
 
   const handleDeleteScene = useCallback((index: number) => {
     const sceneId = storyboard[index]?.id;
@@ -1292,17 +1383,20 @@ export function ProVideoEditor({
 
   const handleEditOverlayPosition = useCallback((id: string, position: "top" | "center" | "bottom") => {
     const posMap = { top: { x: 25, y: 5 }, center: { x: 25, y: 45 }, bottom: { x: 25, y: 85 } };
+    pushHistory();
     setOverlays(prev => prev.map(o => o.id === id ? { ...o, position: posMap[position] } : o));
-  }, []);
+  }, [pushHistory]);
 
   const handleResizeOverlay = useCallback((id: string, size: "small" | "medium" | "large") => {
     const sizeMap = { small: { w: 30, h: 8 }, medium: { w: 50, h: 10 }, large: { w: 80, h: 15 } };
+    pushHistory();
     setOverlays(prev => prev.map(o => o.id === id ? { ...o, size: sizeMap[size] } : o));
-  }, []);
+  }, [pushHistory]);
 
   const handleToggleOverlayAnimation = useCallback((id: string) => {
+    pushHistory();
     setOverlays(prev => prev.map(o => o.id === id ? { ...o, animated: !o.animated } : o));
-  }, []);
+  }, [pushHistory]);
 
   const handleReRecordVoiceover = useCallback(async (sceneId: string, customText?: string) => {
     const scene = storyboard.find(s => s.id === sceneId);
@@ -1824,6 +1918,7 @@ export function ProVideoEditor({
 
   // Handle music selection — also add to audio tracks
   const handleMusicSelect = (url: string | null) => {
+    pushHistory();
     setMusicUrl(url);
     onMusicSelect?.(url);
     setAudioTracks(prev => {
@@ -1837,6 +1932,7 @@ export function ProVideoEditor({
 
   // ─── Drag-to-reposition handlers ───
   const handleMoveOverlay = useCallback((id: string, newSceneId: string, startTime?: number) => {
+    pushHistoryDebounced();
     setOverlays(prev => prev.map(o => {
       if (o.id !== id) return o;
       const newSceneIdx = storyboard.findIndex(s => s.id === newSceneId);
@@ -1849,9 +1945,10 @@ export function ProVideoEditor({
       }
       return { ...o, sceneId: newSceneId };
     }));
-  }, [storyboard, segments]);
+  }, [storyboard, segments, pushHistoryDebounced]);
 
   const handleMoveAudioTrack = useCallback((index: number, _newSceneId: string, absoluteTime?: number) => {
+    pushHistoryDebounced();
     setAudioTracks(prev => prev.map((at, i) => {
       if (i !== index || absoluteTime == null) return at;
       const totalDur = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0) || 30;
@@ -1957,10 +2054,10 @@ export function ProVideoEditor({
         </Button>
 
         <div className="flex items-center gap-1 ml-2">
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={undo} disabled={historyIndex <= 0} title="Undo">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={undo} disabled={historyIndex <= 0} title={`Undo (${historyIndex} step${historyIndex === 1 ? "" : "s"} back)`}>
             <Undo2 className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={redo} disabled={historyIndex >= history.length - 1} title="Redo">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={redo} disabled={historyIndex >= history.length - 1} title={`Redo (${history.length - 1 - historyIndex} step${(history.length - 1 - historyIndex) === 1 ? "" : "s"} forward)`}>
             <Redo2 className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -2134,6 +2231,7 @@ export function ProVideoEditor({
                       const mouseXPct = ((e.clientX - rect.left) / rect.width) * 100;
                       const mouseYPct = ((e.clientY - rect.top) / rect.height) * 100;
                       dragOffset.current = { x: mouseXPct - ov.position.x, y: mouseYPct - ov.position.y };
+                      pushHistory();
                       setDraggingOverlayId(ov.id);
                     }}
                   >
@@ -2158,6 +2256,7 @@ export function ProVideoEditor({
                               e.preventDefault();
                               e.stopPropagation();
                               resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: ov.size.w, h: ov.size.h, x: ov.position.x, y: ov.position.y };
+                              pushHistory();
                               setResizingOverlay({ id: ov.id, handle });
                             }}
                           />
@@ -2416,14 +2515,14 @@ export function ProVideoEditor({
         storyboard={storyboard}
         segments={segments}
         selectedSceneIndex={selectedSceneIndex}
-        onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
+        onAdd={(overlay) => { pushHistory(); setOverlays(prev => [...prev, overlay]); }}
       />
 
       {/* Edit Overlay Dialog */}
       <EditOverlayDialog
         open={!!editingOverlay}
         overlay={editingOverlay}
-        onSave={(id, newContent) => setOverlays(prev => prev.map(o => o.id === id ? { ...o, content: newContent } : o))}
+        onSave={(id, newContent) => { pushHistory(); setOverlays(prev => prev.map(o => o.id === id ? { ...o, content: newContent } : o)); }}
         onClose={() => setEditingOverlay(null)}
       />
 
@@ -2467,7 +2566,7 @@ export function ProVideoEditor({
         onClose={() => setImageDialogOpen(false)}
         storyboard={storyboard}
         selectedSceneIndex={selectedSceneIndex}
-        onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
+        onAdd={(overlay) => { pushHistory(); setOverlays(prev => [...prev, overlay]); }}
       />
 
       <input
