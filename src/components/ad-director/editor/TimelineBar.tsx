@@ -949,7 +949,7 @@ export function TimelineBar({
               })}
             </div>
           </div>
-        )}
+
 
         {/* ─── Audio (Voiceover) track ─── */}
         {(() => {
