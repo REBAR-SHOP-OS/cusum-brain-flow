@@ -332,6 +332,7 @@ export function ProVideoEditor({
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
 
+      pushHistory();
       setAudioTracks([{
         sceneId: storyboard[0]?.id || "",
         label: result.type === "music" ? "🎵 Generated Music" : "🎙️ Generated Voiceover",
@@ -352,6 +353,7 @@ export function ProVideoEditor({
 
   const handleAudioUpload = useCallback((result: AudioUploadResult) => {
     const audioUrl = URL.createObjectURL(result.file);
+    pushHistory();
     setAudioTracks(prev => [...prev, {
       sceneId: storyboard[0]?.id || "",
       label: result.kind === "music" ? `🎵 ${result.file.name}` : `🎙️ ${result.file.name}`,
@@ -362,7 +364,7 @@ export function ProVideoEditor({
     }]);
     setAudioPromptOpen(false);
     toast({ title: "✅ Audio file added" });
-  }, [toast]);
+  }, [toast, pushHistory]);
 
   const handleGenerateVoiceover = useCallback(async (result: VoiceoverResult) => {
     setGeneratingVoiceover(true);
@@ -386,6 +388,7 @@ export function ProVideoEditor({
       const audioBlob = await response.blob();
       const audioUrl = URL.createObjectURL(audioBlob);
 
+      pushHistory();
       setAudioTracks([{
         sceneId: storyboard[0]?.id || "",
         label: "🎙️ Voiceover",
@@ -519,12 +522,13 @@ export function ProVideoEditor({
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
+    pushHistory();
     setAudioTracks(prev => [
       ...prev,
       { kind: "music" as const, audioUrl: url, label: file.name, volume: 0.7, sceneId: storyboard[0]?.id || "", startTime: 0, globalStartTime: 0 },
     ]);
     e.target.value = "";
-  }, []);
+  }, [storyboard]);
   const [videoVolume, setVideoVolume] = useState(1);
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
