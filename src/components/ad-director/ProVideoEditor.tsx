@@ -1457,6 +1457,38 @@ export function ProVideoEditor({
     }
   };
 
+  // ─── Derive mood keywords from storyboard/brand (no narration text) ───
+  const deriveMood = (): string => {
+    const b: any = brand || {};
+    const tokens: string[] = [];
+
+    // Brand-level cues
+    if (b.industry) tokens.push(String(b.industry).toLowerCase());
+    if (b.tone) tokens.push(String(b.tone).toLowerCase());
+    if (b.referenceAesthetic) {
+      // e.g. "Premium cinematic industrial B2B" → keep as a stylistic hint
+      tokens.push(String(b.referenceAesthetic).toLowerCase());
+    }
+
+    // Scene-level cues (style/mood/emotionalTone), no dialog text
+    const sceneCues = (storyboard || [])
+      .flatMap((s: any) => [s?.emotionalTone, s?.visualStyle, s?.style, s?.mood])
+      .filter(Boolean)
+      .map((x: string) => String(x).toLowerCase());
+    tokens.push(...sceneCues);
+
+    // De-dup, drop very long phrases, cap to ~5 keywords
+    const cleaned = Array.from(new Set(
+      tokens
+        .join(",")
+        .split(/[,;|]/)
+        .map(t => t.trim())
+        .filter(t => t.length > 2 && t.length < 40)
+    )).slice(0, 5);
+
+    return cleaned.length ? cleaned.join(", ") : "professional, uplifting, corporate";
+  };
+
   // ─── Generate background music only ───
   const generateBackgroundMusic = async () => {
     setGeneratingMusic(true);
@@ -1464,8 +1496,14 @@ export function ProVideoEditor({
       // Remove existing music tracks
       setAudioTracks(prev => prev.filter(t => t.kind !== "music"));
 
-      const allTexts = segments.map(s => s.text).filter(Boolean).join(". ");
-      const musicPrompt = `Cinematic instrumental advertising background music for: ${allTexts.slice(0, 300)}`;
+      const moodKeywords = deriveMood();
+      const musicPrompt =
+        `Pure instrumental background music, NO vocals, NO lyrics, NO singing, NO human voice, NO speech, NO words. ` +
+        `Style: cinematic corporate advertising soundtrack. ` +
+        `Mood: ${moodKeywords}. ` +
+        `Tempo: medium, building energy. ` +
+        `Instruments: orchestral strings, subtle percussion, ambient synth pads. ` +
+        `Suitable for B2B brand video background — must not compete with voiceover narration.`;
       const totalDuration = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
 
       toast({ title: "🎵 Generating music..." });
