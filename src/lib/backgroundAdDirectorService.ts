@@ -71,6 +71,13 @@ export interface AdDirectorPipelineState {
   brand: BrandProfile;
   videoParams: VideoParams;
   projectId: string | null;
+  // Persisted generation context — required for per-scene regenerate to mirror initial pipeline
+  characterImageUrl?: string | null;
+  introImageUrl?: string | null;
+  outroImageUrl?: string | null;
+  characterPrompt?: string | null;
+  videoProvider?: string | null;
+  videoModel?: string | null;
 }
 
 class BackgroundAdDirectorService {
@@ -261,8 +268,17 @@ class BackgroundAdDirectorService {
           return null;
         })
       );
-      sourceMediaUrls = uploadedSourceMedia.filter((url): url is string => !!url);
     }
+
+    // Persist generation context so per-scene regenerate can mirror the initial pipeline
+    this.update({
+      characterImageUrl: characterImageUrl ?? null,
+      introImageUrl: introImageUrl ?? null,
+      outroImageUrl: outroImageUrl ?? null,
+      characterPrompt: characterPrompt ?? null,
+      videoProvider: videoProvider ?? null,
+      videoModel: videoModel ?? null,
+    });
 
     try {
       // ── Force minimum scene count when BOTH intro & outro are uploaded ──
@@ -761,6 +777,117 @@ class BackgroundAdDirectorService {
     ctx.fillText(brand.tagline || "", canvas.width / 2, canvas.height / 2 + 20);
     const dataUrl = canvas.toDataURL("image/png");
     this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: dataUrl, progress: 100 } : c));
+  }
+
+  // ─── Regenerate single scene ────────────────────
+  // Mirrors initial-pipeline logic exactly: same i2v/t2v selection, CHARACTER LOCK header,
+  // continuity prefix, character direction, and enhanced negative prompt.
+  async regenerateScene(sceneId: string, customPrompt?: string): Promise<void> {
+    const s = this.state;
+    const scene = s.storyboard.find(sc => sc.id === sceneId);
+    if (!scene) return;
+    const segment = s.segments.find(seg => seg.id === scene.segmentId);
+
+    const effectiveRatio = s.userRatio === "Smart" ? "16:9" : s.userRatio;
+    const wanRatio = ["16:9", "9:16", "1:1", "4:3"].includes(effectiveRatio) ? effectiveRatio : "16:9";
+    const rawDur = s.videoParams?.duration && s.videoParams.duration > 0
+      ? Math.round(s.videoParams.duration / Math.max(1, s.storyboard.length))
+      : (segment ? segment.endTime - segment.startTime : 5);
+    const sceneDuration = Math.max(2, Math.min(15, rawDur));
+
+    // Build motion prompt with continuity prefix (same as initial pipeline)
+    const cp = s.continuity;
+    const characterImageUrl = s.characterImageUrl || undefined;
+    const introImageUrl = s.introImageUrl || undefined;
+    const outroImageUrl = s.outroImageUrl || undefined;
+    const characterPrompt = s.characterPrompt || undefined;
+
+    const continuityPrefix = cp
+      ? `[Visual continuity: ${cp.environment || ""}, ${cp.lightingType || ""}, ${cp.colorMood || ""}` +
+        (characterImageUrl
+          ? `, wardrobe-and-look: see reference image (do not re-describe the person in words)`
+          : `, subject: ${cp.subjectDescriptions || ""}, wardrobe: ${cp.wardrobe || ""}`) +
+        `] `
+      : "";
+
+    const basePrompt = customPrompt?.trim() ? customPrompt.trim() : scene.prompt;
+    const motionPrompt = continuityPrefix + basePrompt + " Shape this into a post-ready ad shot with premium after-effects-style transitions, polished pacing, and a strong intro/outro rhythm. Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+
+    // Determine reference image with same priority as initial pipeline
+    const sceneIdx = s.storyboard.indexOf(scene);
+    const lastVisualIdx = s.storyboard.reduce((acc, sc, idx) => {
+      const seg = s.segments.find(sg => sg.id === sc.segmentId);
+      return (sc.generationMode !== "static-card" && seg?.type !== "closing") ? idx : acc;
+    }, 0);
+    const isFirstScene = sceneIdx === 0;
+    const isLastVisualScene = sceneIdx === lastVisualIdx;
+
+    let referenceImage: string | undefined;
+    if (isFirstScene && introImageUrl) referenceImage = introImageUrl;
+    else if (isLastVisualScene && outroImageUrl) referenceImage = outroImageUrl;
+    else if (characterImageUrl) referenceImage = characterImageUrl;
+
+    const chosenProvider = s.videoProvider || "wan";
+    const isI2V = !!referenceImage;
+    const chosenModel = s.videoModel || (isI2V ? "wan2.6-i2v" : "wan2.6-t2v");
+
+    const usingCharacter = !!characterImageUrl && referenceImage === characterImageUrl;
+    const characterLockHeader = `[CHARACTER LOCK: The person in the reference image is the EXACT spokesperson — preserve their face, skin tone, hair, age, ethnicity, and clothing identically. Do NOT generate a different person, do NOT alter their identity.]\n`;
+    const finalPrompt = usingCharacter
+      ? `${characterLockHeader}${motionPrompt}` +
+        (characterPrompt && characterPrompt.trim()
+          ? `\n\nCharacter direction (actions only — keep face and look unchanged): ${characterPrompt.trim()}`
+          : "")
+      : motionPrompt;
+
+    const baseNegative = "static image, zoom only, no motion, blurry, text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind";
+    const negativePrompt = (isI2V && characterImageUrl)
+      ? `${baseNegative}, different person, different face, identity change, face swap, wrong ethnicity, wrong age, generic stock person, replaced subject, altered facial features`
+      : baseNegative;
+
+    // Mark scene as generating, clear final video (stitched output is now stale)
+    this.update({
+      finalVideoUrl: null,
+      clips: this.state.clips.map(c => c.sceneId === sceneId
+        ? { ...c, status: "generating" as const, progress: 10, error: null, videoUrl: null }
+        : c),
+    });
+
+    try {
+      const result = await invokeEdgeFunction<{
+        url?: string; videoUrl?: string; generationId?: string; jobId?: string;
+        provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
+      }>("generate-video", {
+        action: "generate", prompt: finalPrompt, duration: sceneDuration,
+        aspectRatio: wanRatio, provider: chosenProvider, model: chosenModel,
+        ...(isI2V ? { imageUrl: referenceImage } : {}),
+        negativePrompt,
+      }, { timeoutMs: EDGE_TIMEOUT_MS });
+
+      const videoUrl = result.url || result.videoUrl;
+      const genId = result.jobId || result.generationId;
+      const provider = result.provider || "wan";
+
+      if (result.mode === "slideshow" && result.imageUrls?.length) {
+        try {
+          const slideshowBlobUrl = await slideshowToVideo({ imageUrls: result.imageUrls!, durationPerImage: 4, width: 1280, height: 720 });
+          this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: slideshowBlobUrl, progress: 100 } : c));
+        } catch {
+          this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: result.imageUrls![0], progress: 100 } : c));
+        }
+      } else if (videoUrl) {
+        this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl, progress: 100, generationId: genId } : c));
+      } else if (genId) {
+        this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "generating" as const, generationId: genId, progress: 30 } : c));
+        await this.pollGeneration(sceneId, genId, provider);
+      } else {
+        this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: "No video URL or job ID returned", progress: 0 } : c));
+      }
+    } catch (error) {
+      const msg = getErrorMessage(error, "Scene regeneration failed");
+      this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: msg, progress: 0 } : c));
+      toast.error("Scene regeneration failed", { description: msg });
+    }
   }
 
   // ─── Poll ──────────────────────────────────────
