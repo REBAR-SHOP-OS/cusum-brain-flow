@@ -78,6 +78,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     duration: string, characterImage: File | null,
     selectedProducts?: string[], selectedStyles?: string[],
     videoModel?: string, videoProvider?: string,
+    characterPrompt?: string,
   ) => {
     const currentBrand = service.getState().brand?.name ? service.getState().brand : (savedBrand || DEFAULT_BRAND);
     const currentVideoParams = service.getState().videoParams?.ratio ? service.getState().videoParams : DEFAULT_VIDEO_PARAMS;
@@ -93,6 +94,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         },
         videoModel, videoProvider,
         selectedProducts, selectedStyles,
+        characterPrompt,
       );
     } catch (error) {
       toast({ title: "Failed", description: getErrorMessage(error, "Unable to start video generation."), variant: "destructive" });
