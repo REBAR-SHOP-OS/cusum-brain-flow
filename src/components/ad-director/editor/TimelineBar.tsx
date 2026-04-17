@@ -123,6 +123,7 @@ interface TimelineBarProps {
   onSplitScene?: (index: number) => void;
   onDuplicateScene?: (index: number) => void;
   onMoveScene?: (index: number, dir: -1 | 1) => void;
+  onReorderScene?: (fromIdx: number, toIdx: number) => void;
   onEditPrompt?: (index: number) => void;
   onEditVoiceover?: (index: number) => void;
   onMuteScene?: (index: number) => void;
@@ -156,7 +157,7 @@ export function TimelineBar({
   onRegenerateScene, onDeleteScene,
   sidebarTabs = [], activeSidebarTab, onSidebarTabSelect,
   onTrimScene, onSplitScene, onDuplicateScene,
-  onMoveScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
+  onMoveScene, onReorderScene, onEditPrompt, onEditVoiceover, onMuteScene, onResizeScene, mutedScenes,
   onEditOverlayPosition, onResizeOverlay, onToggleOverlayAnimation,
   onReRecordVoiceover, onUpdateVoiceoverText, onEditVoiceoverText,
   onMoveOverlay, onMoveAudioTrack,
@@ -461,14 +462,19 @@ export function TimelineBar({
     const fromIdx = sceneDragIdx;
     setSceneDragIdx(null);
     setSceneDropIdx(null);
-    if (fromIdx === null || fromIdx === dropIdx || !onMoveScene) return;
+    if (fromIdx === null || fromIdx === dropIdx) return;
+    if (onReorderScene) {
+      onReorderScene(fromIdx, dropIdx);
+      return;
+    }
+    if (!onMoveScene) return;
     const dir = dropIdx > fromIdx ? 1 : -1;
     let current = fromIdx;
     while (current !== dropIdx) {
       onMoveScene(current, dir as -1 | 1);
       current += dir;
     }
-  }, [sceneDragIdx, onMoveScene]);
+  }, [sceneDragIdx, onReorderScene, onMoveScene]);
 
   const handleSceneDragEnd = useCallback(() => {
     setSceneDragIdx(null);
@@ -581,6 +587,11 @@ export function TimelineBar({
           </div>
         )}
         <div className="flex-1" />
+        {storyboard.length > 1 && (
+          <span className="text-[9px] text-zinc-500 italic mr-2 hidden sm:inline">
+            Drag clips to reorder
+          </span>
+        )}
         <Button
           variant="ghost" size="sm"
           className="h-6 px-1.5 text-[9px] gap-1 text-zinc-400 hover:text-white hover:bg-white/10"

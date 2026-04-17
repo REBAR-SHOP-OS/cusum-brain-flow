@@ -1090,6 +1090,18 @@ export function ProVideoEditor({
     toast({ title: "Scene moved" });
   }, [storyboard, pushHistory, onUpdateStoryboard, toast]);
 
+  const handleReorderScene = useCallback((fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+    if (fromIdx >= storyboard.length || toIdx >= storyboard.length) return;
+    pushHistory(storyboard);
+    const updated = [...storyboard];
+    const [moved] = updated.splice(fromIdx, 1);
+    updated.splice(toIdx, 0, moved);
+    onUpdateStoryboard?.(updated);
+    setSelectedSceneIndex(toIdx);
+    toast({ title: `Scene moved to position ${toIdx + 1}` });
+  }, [storyboard, pushHistory, onUpdateStoryboard, toast]);
+
   const handleEditPrompt = useCallback((index: number) => {
     setSelectedSceneIndex(index);
     setActiveTab("media");
@@ -2205,6 +2217,7 @@ export function ProVideoEditor({
         onSplitScene={handleSplitScene}
         onDuplicateScene={handleDuplicateScene}
         onMoveScene={handleMoveScene}
+        onReorderScene={handleReorderScene}
         onEditPrompt={handleEditPrompt}
         onEditVoiceover={handleEditVoiceover}
         onMuteScene={handleMuteScene}
