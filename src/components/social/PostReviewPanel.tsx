@@ -290,7 +290,9 @@ export function PostReviewPanel({
 
   useEffect(() => {
     if (!post) return;
-    const caption = localContent || localTitle || "";
+    // Only the user's manual caption drives translation. Title is NEVER used as
+    // a fallback so it can't accidentally become the saved caption.
+    const caption = localContent.trim();
     if (!caption) return;
     // If we already translated this exact caption, skip
     if (lastTranslatedCaptionRef.current === caption && (persianCaptionText || persianImageText)) return;
@@ -312,11 +314,13 @@ export function PostReviewPanel({
           const imgFa = data.imageTextFa || "";
           setPersianCaptionText(capFa);
           setPersianImageText(imgFa);
-          // Save to DB
-          const persianBlock = "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + imgFa + "\n📝 ترجمه کپشن: " + capFa;
-          const rawContent = post.content || "";
-          const baseContent = rawContent.includes("---PERSIAN---") ? rawContent.slice(0, rawContent.indexOf("---PERSIAN---")).trim() : rawContent;
-          updatePost.mutate({ id: post.id, content: baseContent + persianBlock });
+          // Save to DB — base content is ALWAYS the user's current localContent,
+          // never the stale post.content. This guarantees the user's manual
+          // caption is never overwritten by the auto-translate save path.
+          const editableCaption = localContent.trim();
+          const contentToSave = buildPostContent(editableCaption, imgFa, capFa);
+          lastSubmittedCaptionRef.current = editableCaption;
+          updatePost.mutate({ id: post.id, content: contentToSave });
         } catch (err) {
           console.warn("Auto-translate failed:", err);
         } finally {
