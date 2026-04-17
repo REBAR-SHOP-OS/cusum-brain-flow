@@ -253,6 +253,60 @@ function drawLogo(ctx: CanvasRenderingContext2D, w: number, h: number, logoImg: 
   ctx.globalAlpha = 1.0;
 }
 
+/**
+ * Render an editor-authored text overlay onto the canvas at percent-based
+ * position/size with a soft pill background for legibility.
+ */
+function drawTextOverlay(
+  ctx: CanvasRenderingContext2D, w: number, h: number, ov: StitchTextOverlay,
+) {
+  if (!ov.text) return;
+  const px = ((ov.position?.x ?? 50) / 100) * w;
+  const py = ((ov.position?.y ?? 80) / 100) * h;
+  const boxW = ((ov.size?.w ?? 60) / 100) * w;
+  const fontSize = Math.max(20, Math.round((ov.size?.h ?? 8) / 100 * h));
+
+  ctx.save();
+  ctx.font = `${ov.fontWeight ?? 700} ${fontSize}px 'Inter', 'SF Pro Display', -apple-system, sans-serif`;
+
+  // word-wrap
+  const words = ov.text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > boxW && line) { lines.push(line); line = word; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+
+  const lineHeight = fontSize * 1.3;
+  const padX = fontSize * 0.8;
+  const padY = fontSize * 0.5;
+  let maxLineW = 0;
+  for (const ln of lines) maxLineW = Math.max(maxLineW, ctx.measureText(ln).width);
+
+  const pillW = maxLineW + padX * 2;
+  const pillH = lines.length * lineHeight + padY * 2;
+  const pillX = px - pillW / 2;
+  const pillY = py - pillH / 2;
+
+  ctx.beginPath();
+  (ctx as any).roundRect ? ctx.roundRect(pillX, pillY, pillW, pillH, 12) : ctx.rect(pillX, pillY, pillW, pillH);
+  ctx.fillStyle = ov.background || "rgba(0,0,0,0.55)";
+  ctx.fill();
+
+  ctx.fillStyle = ov.color || "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.shadowColor = "rgba(0,0,0,0.6)";
+  ctx.shadowBlur = 6;
+  lines.forEach((ln, i) => ctx.fillText(ln, px, pillY + padY + i * lineHeight));
+  ctx.restore();
+  ctx.textAlign = "start";
+  ctx.textBaseline = "alphabetic";
+}
+
 function drawEndCard(
   ctx: CanvasRenderingContext2D, w: number, h: number,
   opts: NonNullable<StitchOverlayOptions["endCard"]>,
