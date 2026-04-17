@@ -897,14 +897,16 @@ export function TimelineBar({
           </div>
         </div>
 
-        {/* ─── Text overlay track ─── */}
-        {textOverlays.length > 0 && (
-          <div className="flex items-center gap-0.5 mt-0.5">
-            <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
-              <Type className="w-3 h-3" /> Text
-            </span>
-            <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={handleTrackClick}>
-              {textOverlays.map((ov) => {
+        {/* ─── Text overlay track (always visible) ─── */}
+        <div className="flex items-center gap-0.5 mt-0.5">
+          <span className="w-14 shrink-0 text-[9px] text-zinc-500 flex items-center gap-1">
+            <Type className="w-3 h-3" /> Text
+          </span>
+          <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={handleTrackClick}>
+            {textOverlays.length === 0 && (
+              <span className="absolute inset-0 flex items-center justify-center text-[8px] text-zinc-600 select-none">No text — double-click a clip to add subtitles</span>
+            )}
+            {textOverlays.map((ov) => {
                 const idx = storyboard.findIndex(s => s.id === ov.sceneId);
                 if (idx < 0) return null;
                 const sceneStart = cumulativeStarts[idx] || 0;
