@@ -677,23 +677,21 @@ class BackgroundAdDirectorService {
 
       const unresolvedCount = this.state.clips.filter(c => c.status !== "completed" || !c.videoUrl).length;
       if (unresolvedCount > 0) {
-        console.warn(`[AdDirector] ${unresolvedCount} scene(s) still without video after retries — staying in editing mode`);
-        toast.error(`${unresolvedCount} scene(s) could not be generated. You can retry them individually in the editor.`);
-        this.update({ flowState: "editing", statusText: "", progressValue: 100 });
-        this.running = false;
+        console.warn(`[AdDirector] ${unresolvedCount} scene(s) still without video after retries — showing result view with retry buttons`);
+        toast.warning(`${unresolvedCount} scene(s) failed. Click the retry icon on each card to regenerate.`);
         if (!this.listener) {
           toast.info("Video generation incomplete — some scenes need attention.");
         }
-        return;
+      } else {
+        // Phase 3: Export / stitch (only when all scenes succeeded)
+        this.update({ statusText: "Assembling final video...", progressValue: 90 });
+        await this.handleExportInternal(storyboardWithDefaults, newSegments, brand);
+
+        // Upload completed clips to storage
+        await this.uploadCompletedClips();
       }
 
-      // Phase 3: Export / stitch
-      this.update({ statusText: "Assembling final video...", progressValue: 90 });
-      await this.handleExportInternal(storyboardWithDefaults, newSegments, brand);
-
-      // Upload completed clips to storage
-      await this.uploadCompletedClips();
-
+      // Always land on result view so user sees scene cards (with retry icons for failures)
       this.update({ flowState: "result", statusText: "", progressValue: 100 });
       this.running = false;
 
