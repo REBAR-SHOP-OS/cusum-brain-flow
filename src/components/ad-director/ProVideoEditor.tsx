@@ -1191,7 +1191,14 @@ export function ProVideoEditor({
 
   const handleDeleteOverlay = useCallback((id: string) => {
     pushHistory();
-    setOverlays(prev => prev.filter(o => o.id !== id));
+    setOverlays(prev => {
+      const removed = prev.find(o => o.id === id);
+      // If user explicitly removes a text bar, don't auto-reseed it for this scene
+      if (removed?.kind === "text" && removed.sceneId) {
+        userRemovedTextScenesRef.current.add(removed.sceneId);
+      }
+      return prev.filter(o => o.id !== id);
+    });
   }, [pushHistory]);
 
 
