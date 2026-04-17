@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Wand2, Loader2 } from "lucide-react";
+import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Wand2, Loader2, UserSquare } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { useToast } from "@/hooks/use-toast";
@@ -13,6 +13,7 @@ import {
   DowelIcon, WireMeshIcon, StraightRebarIcon,
 } from "@/components/chat/ProductIcons";
 import { AIPromptDialog } from "./AIPromptDialog";
+import { CharacterPromptDialog } from "./CharacterPromptDialog";
 
 const VIDEO_MODELS: { key: string; provider: string; label: string; description: string }[] = [
   { key: "wan2.6-t2v", provider: "wan", label: "Wan T2V", description: "Text to Video - 1080P" },
@@ -65,6 +66,7 @@ interface ChatPromptBarProps {
     selectedStyles?: string[],
     videoModel?: string,
     videoProvider?: string,
+    characterPrompt?: string,
   ) => void;
   disabled?: boolean;
   starterPrompt?: string;
@@ -190,6 +192,9 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const [aiWriting, setAiWriting] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewText, setPreviewText] = useState("");
+  const [characterPrompt, setCharacterPrompt] = useState("");
+  const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
+  const [characterDraft, setCharacterDraft] = useState("");
   
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
@@ -309,11 +314,28 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
-    onSubmit(prompt.trim(), ratio, [], introImage, outroImage, duration, characterImage, selectedProducts, selectedStyles, selectedVideoModel.key, selectedVideoModel.provider);
+    onSubmit(
+      prompt.trim(), ratio, [], introImage, outroImage, duration, characterImage,
+      selectedProducts, selectedStyles, selectedVideoModel.key, selectedVideoModel.provider,
+      characterPrompt.trim() || undefined,
+    );
     setPrompt("");
     setIntroImage(null);
     setOutroImage(null);
     setCharacterImage(null);
+    setCharacterPrompt("");
+  };
+
+  const openCharacterDialog = () => {
+    setCharacterDraft(characterPrompt);
+    setCharacterDialogOpen(true);
+  };
+  const handleSaveCharacterPrompt = () => {
+    setCharacterPrompt(characterDraft.trim());
+    setCharacterDialogOpen(false);
+    if (characterDraft.trim()) {
+      toast({ title: "✅ Character direction saved", description: "It will be applied to every scene." });
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
