@@ -664,7 +664,24 @@ export function TimelineBar({
                       <img src={thumbnails[scene.id][0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                     </>
-                  ) : null}
+                  ) : clip?.videoUrl && isImageUrl(clip.videoUrl) ? (
+                    <>
+                      <img src={clip.videoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                    </>
+                  ) : clip?.videoUrl ? (
+                    <video
+                      src={clip.videoUrl}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center">
+                      <span className="text-[9px] text-white/60 font-semibold">Scene {i + 1}</span>
+                    </div>
+                  )}
                   <span className="absolute top-0.5 left-0.5 text-[7px] px-1 py-px rounded-full bg-black/60 text-white font-mono z-10">{durSec}s</span>
                   <div className="absolute top-1 right-1 z-10">
                     <div className={`w-2 h-2 rounded-full ${isCompleted ? "bg-emerald-400" : isGenerating ? "bg-blue-400 animate-pulse" : "bg-zinc-600"}`} />
