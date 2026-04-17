@@ -232,8 +232,14 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
           </>
         )}
         {isDraft && (
-          <div className="absolute top-1.5 right-1.5">
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Draft</Badge>
+          <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
+            {isIncompleteDraft ? (
+              <Badge variant="destructive" className="text-[9px] px-1.5 py-0">
+                Incomplete {completedScenes}/{totalScenes}
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Draft</Badge>
+            )}
           </div>
         )}
       </div>
