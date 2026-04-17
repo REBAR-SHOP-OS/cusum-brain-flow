@@ -865,6 +865,9 @@ class BackgroundAdDirectorService {
       console.warn("Export failed:", error);
     } finally {
       this.update({ exporting: false });
+      if (wakeLock) {
+        try { await wakeLock.release(); } catch { /* noop */ }
+      }
     }
   }
 
