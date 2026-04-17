@@ -1,102 +1,103 @@
 
 
 ## درخواست کاربر
-هر ویدئوی source در preview و export باید بر اساس output type انتخاب‌شده resize شود (نه crop ساده، نه letterbox مشکی):
-- **1:1** برای Instagram Posts → 1080×1080
-- **9:16** برای Instagram Reels → 1080×1920
-- **16:9** برای YouTube/Landscape → 1920×1080
-
-سوژه باید centered بماند، بخش‌های مهم cut نشود، و کیفیت خروجی high باشد.
+دکمه‌های Undo / Redo که بالای editor (کنار دکمه Back) هستند باید **هر تغییری** را ذخیره کنند، نه فقط بعضی‌ها — تا کاربر بتواند به مرحله‌ی قبل یا بعد برگردد.
 
 ## یافته‌ی فنی
-1. **Preview** (`ProVideoEditor.tsx` خط 2108): `object-contain` → letterbox سیاه دور ویدئو. کاربر این را نمی‌خواهد.
-2. **Export** (`videoStitch.ts` خط 349-354): `W = video.videoWidth`, `H = video.videoHeight` — **به‌کلی aspect ratio انتخابی کاربر را نادیده می‌گیرد**. خروجی همیشه ابعاد source را دارد، نه target.
-3. هیچ پارامتر `aspectRatio` به `stitchClips` پاس داده نمی‌شود.
-4. `drawImage(video, 0, 0, W, H)` در حال حاضر stretch می‌کند — اگر W/H اضافه کنیم بدون smart-fit، تصویر تحریف می‌شود.
+در `ProVideoEditor.tsx`:
+1. **History فقط `storyboard` را snapshot می‌کند** (خط 852: `useState<StoryboardScene[][]>`). تغییرات روی audio tracks, text overlays, music، volume، mute، segments timing، position overlay اصلاً ضبط نمی‌شوند.
+2. `pushHistory(storyboard)` فقط در 9 جا صدا زده می‌شود (split, trim, duplicate, delete scene, reorder, ...). موارد زیر **هیچ snapshot نمی‌گیرند**:
+   - افزودن/حذف voiceover یا music track (خطوط 335, 355, 1652, 1688, 1716...)
+   - تغییر volume یا mute (خط 1018)
+   - drag/resize/edit text overlay (خط 1793, 1829, 1855)
+   - segment timing change در بسیاری مسیرها
+3. `undo`/`redo` فقط `onUpdateStoryboard` را صدا می‌زنند — حتی اگر history کامل باشد، state های دیگر (audioTracks, …) restore نمی‌شوند.
 
 ## برنامه (Surgical, Additive)
 
-### ۱. ابزار smart-fit (cover with center)
-در `videoStitch.ts` یک helper اضافه کنیم که **"cover" geometry** محاسبه کند — مثل CSS `object-fit: cover`:
-- ویدئوی source را scale کند تا تمام canvas هدف را پر کند
-- center-crop کند روی محور long-axis (مثل کار Instagram)
-- تضمین کند سوژه (که معمولاً وسط فریم است) cut نشود
-
+### ۱. Snapshot یکپارچه (Unified Snapshot)
+به جای `StoryboardScene[]`، history به یک ساختار کامل تغییر کند:
 ```ts
-function fitCover(srcW: number, srcH: number, dstW: number, dstH: number) {
-  const srcRatio = srcW / srcH;
-  const dstRatio = dstW / dstH;
-  let sx = 0, sy = 0, sw = srcW, sh = srcH;
-  if (srcRatio > dstRatio) {
-    // source wider → crop sides
-    sw = srcH * dstRatio;
-    sx = (srcW - sw) / 2;
-  } else {
-    // source taller → crop top/bottom
-    sh = srcW / dstRatio;
-    sy = (srcH - sh) / 2;
-  }
-  return { sx, sy, sw, sh };
+interface EditorSnapshot {
+  storyboard: StoryboardScene[];
+  audioTracks: AudioTrackItem[];
+  // textOverlays در داخل storyboard.overlays هست → جداگانه نیاز نیست
+  segments?: { id: string; startTime: number; endTime: number }[]; // برای trim
 }
 ```
+`history: EditorSnapshot[]` و `pushHistory()` همه‌ی state ها را با هم snapshot می‌کند.
 
-### ۲. پاس دادن `aspectRatio` به stitch pipeline
-- `StitchOverlayOptions` interface → افزودن `aspectRatio?: "16:9" | "9:16" | "1:1"`
-- `RATIO_DIMS` map داخل `videoStitch.ts` → `[W, H]` صحیح برای هر نسبت (1920×1080, 1080×1920, 1080×1080)
-- `stitchClips` پارامتر را بخواند و `canvas.width = targetW`, `canvas.height = targetH` ست کند
-- در `AdDirectorContent.tsx` و `backgroundAdDirectorService.ts` و `useRenderPipeline.ts`، `aspectRatio` فعلی state را پاس دهیم
-
-### ۳. اعمال smart-fit در drawImage
-هر `ctx.drawImage(video, 0, 0, W, H)` (خطوط 623, 628, 633) → 
+### ۲. تابع unified `pushHistory()`
 ```ts
-const { sx, sy, sw, sh } = fitCover(video.videoWidth, video.videoHeight, W, H);
-ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+const pushHistory = useCallback((override?: Partial<EditorSnapshot>) => {
+  const snapshot: EditorSnapshot = {
+    storyboard: override?.storyboard ?? storyboard,
+    audioTracks: override?.audioTracks ?? audioTracks,
+    segments: override?.segments ?? segments,
+  };
+  // deep clone برای جلوگیری از reference mutation
+  const cloned = structuredClone(snapshot);
+  setHistory(prev => [...prev.slice(0, historyIndexRef.current + 1), cloned].slice(-50)); // cap 50
+  setHistoryIndex(idx => Math.min(idx + 1, 49));
+  setHasChanges(true);
+}, [storyboard, audioTracks, segments]);
 ```
-نتیجه: ویدئوی 16:9 درون frame 9:16 → vertically scaled to fill, sides cropped (center-preserving). ویدئوی 16:9 درون 1:1 → horizontally cropped از وسط.
+- Cap به 50 entry برای جلوگیری از memory bloat
+- `structuredClone` تضمین می‌کند redo/undo بعدی state قبلی را خراب نکند
 
-### ۴. کیفیت بالای rendering
-قبل از drawImage، روی ctx این تنظیمات اعمال شود:
+### ۳. `undo()` / `redo()` کامل
+هر دو state را restore کنند:
 ```ts
-ctx.imageSmoothingEnabled = true;
-ctx.imageSmoothingQuality = "high";
+const apply = (snap: EditorSnapshot) => {
+  onUpdateStoryboard?.(snap.storyboard);
+  setAudioTracks(snap.audioTracks);
+  if (snap.segments && onUpdateSegments) onUpdateSegments(snap.segments);
+};
+const undo = () => { if (historyIndex > 0) { setHistoryIndex(i=>i-1); apply(history[historyIndex-1]); } };
+const redo = () => { if (historyIndex < history.length-1) { setHistoryIndex(i=>i+1); apply(history[historyIndex+1]); } };
 ```
-این باعث می‌شود scaling در canvas از bilinear high-quality استفاده کند (نه nearest-neighbor).
 
-### ۵. Preview UI: تغییر `object-contain` → `object-cover`
-در `ProVideoEditor.tsx` خط 2108 و 2086 و 2092:
-- `object-contain` → `object-cover` (ویدئو کل frame را پر می‌کند، crop از وسط، بدون نوار سیاه)
-- این **دقیقاً** بازنمایی export نهایی خواهد بود (WYSIWYG)
-- canvas های static-card همان `object-contain` بمانند (چون از قبل با ابعاد دقیق RATIO_DIMS رندر شده‌اند و نباید crop شوند)
-- یا تنها `<video>` به cover سوییچ شود؛ canvas دست‌نخورده
+### ۴. Auto-snapshot برای همه‌ی mutationهای از‌قلم‌افتاده
+این نقاط `pushHistory()` اضافه می‌شود **قبل** از تغییر:
+- افزودن voiceover/music (خطوط 335, 355, 1688)
+- حذف audio track (1022, 1282, 1716)
+- تغییر volume / mute scene (1018, و در منطق mutedScenes)
+- drag/move/resize text overlay (1793, 1829, 1855) — با debounce 300ms برای جلوگیری از 100 snapshot هنگام درگ
+- edit text content / style overlay (1315, 1347)
+- segment timing change در همه مسیرها
 
-### ۶. Bitrate و کیفیت encoder
-بررسی کنیم encoder در `videoStitch.ts` (احتمالاً MediaRecorder) bitrate مناسب برای 1080p دارد. اگر default پایین است → افزایش به ~5-8 Mbps برای 1080p تا کیفیت high تضمین شود.
+### ۵. Debounce برای عملیات پیوسته (drag, slider)
+helper:
+```ts
+const pushHistoryDebounced = useDebouncedCallback(pushHistory, 300);
+```
+هنگام drag overlay یا تنظیم volume slider، فقط آخرین حالت ذخیره شود، نه هر pixel.
 
-### ۷. آپشن کاربری (اختیاری ولی توصیه‌شده)
-کنار picker aspect ratio، یک toggle کوچک:
-- **Smart Fit (Cover)** ← default — پر کردن frame با center-crop
-- **Fit (Letterbox)** — رفتار قدیمی با نوار سیاه
-این flexibility می‌دهد بدون شکستن کیس‌های خاص.
+### ۶. Seed snapshot کامل در شروع
+useEffect مقداردهی اولیه (خط 860) به‌جای فقط `storyboard`، یک `EditorSnapshot` کامل با audioTracks خالی/فعلی push کند.
+
+### ۷. UI feedback
+دکمه‌های undo/redo (خط 1960-1964) از قبل `disabled` correctly دارند. اضافه کنیم:
+- title پویا: `Undo (N changes)` تا کاربر بفهمد چقدر history دارد
+- بعد از undo/redo یک toast کوتاه: `"Undid: scene split"` (اختیاری — می‌توان با ذخیره `label` در snapshot)
+
+### ۸. Reset (`resetAll`) — هم‌خوان شود
+خط 906: `resetAll` به اولین snapshot کامل برگردد، نه فقط storyboard اول.
 
 ## فایل‌های تغییرکننده
-- `src/lib/videoStitch.ts` — helper `fitCover`, `RATIO_DIMS`, پارامتر `aspectRatio`, اعمال در drawImage، high-quality smoothing
-- `src/components/ad-director/ProVideoEditor.tsx` — `object-contain` → `object-cover` روی video element
-- `src/components/ad-director/AdDirectorContent.tsx` — پاس `aspectRatio` به `stitchClips`
-- `src/lib/backgroundAdDirectorService.ts` — همان (پاس aspectRatio)
-- `src/hooks/useRenderPipeline.ts` — پذیرش/پاس aspectRatio
+- `src/components/ad-director/ProVideoEditor.tsx` — ساختار `EditorSnapshot`، `pushHistory` یکپارچه، `undo`/`redo` کامل، اضافه کردن `pushHistory()` در ~15 mutation point، debounce برای drag
 
 ## آنچه دست‌نخورده می‌ماند
-- منطق timeline, overlays drag/resize (درصدی نسبت به container)
-- voiceover, music, subtitles, transitions
+- Timeline rendering, playback، export pipeline
 - DB / RLS / edge functions
-- منطق تولید scene (Wan 2.6 خودش با size صحیح generate می‌کند — این لایه فقط برای resize نهایی است وقتی source ≠ target)
+- Keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z) — همان‌ها فقط روی undo/redo جدید کار می‌کنند
+- زبان UI: انگلیسی
 
 ## نتیجه
-1. ✅ انتخاب 9:16 → ویدئو full-frame عمودی، center-cropped، بدون نوار سیاه
-2. ✅ انتخاب 1:1 → ویدئو مربعی، center-cropped از وسط
-3. ✅ انتخاب 16:9 → رفتار طبیعی (source معمولاً 16:9)
-4. ✅ Export نهایی دقیقاً ابعاد social standard دارد (1080×1920, 1080×1080, 1920×1080)
-5. ✅ کیفیت high (smoothing high + bitrate مناسب)
-6. ✅ Preview = WYSIWYG export
-7. ✅ زبان UI: انگلیسی
+1. ✅ هر تغییر (split, trim, delete, duplicate, reorder, voiceover add/remove, music add/remove, text overlay add/edit/move, volume, mute, segment timing) snapshot می‌شود
+2. ✅ Undo / Redo همه‌ی state ها (storyboard + audioTracks + segments) را به‌درستی restore می‌کند
+3. ✅ Drag پیوسته با debounce — بدون پر شدن history
+4. ✅ Cap 50 entry → بدون memory leak
+5. ✅ دکمه‌های UI و keyboard shortcuts همچنان کار می‌کنند
+6. ✅ Reset به وضعیت اولیه‌ی کامل
 
