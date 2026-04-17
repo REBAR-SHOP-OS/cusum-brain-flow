@@ -71,6 +71,13 @@ export interface AdDirectorPipelineState {
   brand: BrandProfile;
   videoParams: VideoParams;
   projectId: string | null;
+  // Persisted generation context — required for per-scene regenerate to mirror initial pipeline
+  characterImageUrl?: string | null;
+  introImageUrl?: string | null;
+  outroImageUrl?: string | null;
+  characterPrompt?: string | null;
+  videoProvider?: string | null;
+  videoModel?: string | null;
 }
 
 class BackgroundAdDirectorService {
