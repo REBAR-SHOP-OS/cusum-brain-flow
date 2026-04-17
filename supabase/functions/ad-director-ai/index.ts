@@ -392,7 +392,14 @@ CRITICAL COHERENCE REQUIREMENT:
 - You MUST embed the continuity profile details (subject descriptions, wardrobe, environment, lighting type, color mood) directly into every prompt as visual anchors.
 - The viewer must feel ALL clips are from the SAME film shoot — same location, same day, same camera setup, same color grading.
 - Start continuation prompts with: "In the same [environment] with [lighting], [subject with exact appearance] —"
-- Never introduce new visual elements, color schemes, or lighting setups that contradict the established continuity profile.`;
+- Never introduce new visual elements, color schemes, or lighting setups that contradict the established continuity profile.
+
+CRITICAL NARRATIVE CONTINUITY (story-flow, not just visual style):
+- Each scene MUST narratively pick up from the previous scene's final action — not just match visual style.
+- The first 0.5 seconds of this scene must visually continue the motion, subject pose, and action from the previous scene's "endsWith" / "lastFrameSummary".
+- Frame the OPENING of the prompt to seamlessly resume motion (e.g., "continuing the pan from the previous shot...", "the subject — now mid-gesture from the prior scene — ...").
+- Frame the ENDING of the prompt to set up a clean handoff into the next scene's objective.
+- ALWAYS return an "endsWith" field: a 20-30 word concrete description of the EXACT final frame (subject pose, camera position, action mid-motion, framing) so the next scene can pick it up.`;
 
 const SCORE_QUALITY_PROMPT = `Score this video generation prompt on 7 dimensions (0-10): realism, specificity, visualRichness, continuityStrength, brandRelevance, emotionalPersuasion, cinematicClarity. Include overall score and suggestion if < 7.`;
 
@@ -501,6 +508,7 @@ const WRITE_PROMPT_TOOLS = [{
       properties: {
         prompt: { type: "string", description: "The rewritten cinematic video generation prompt" },
         reasoning: { type: "string", description: "Brief explanation of improvements made" },
+        endsWith: { type: "string", description: "20-30 word concrete description of the EXACT final frame of this scene (subject pose, camera position, action mid-motion, framing) so the next scene can pick it up seamlessly." },
       },
       required: ["prompt"],
     },
