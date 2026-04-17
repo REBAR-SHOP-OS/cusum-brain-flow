@@ -1,34 +1,46 @@
 
-## مشکل
-در بخش "Recent projects / Your Previous Videos" فقط یک کارت قدیمی نشان داده می‌شود. کاربر می‌خواهد **هر پروژه‌ای که ساخته می‌شود** (چه draft، چه completed، چه در حال generation) در این لیست ظاهر شود.
+## درخواست کاربر
+کاربر یک فایل ویدیویی آپلود کرده (`Series_of_pictures_202604170946.mp4`) و می‌خواهد این ویدیو در پس‌زمینه‌ی صفحه‌ی loading/progress (که در screenshot دیده می‌شود — همان جایی که "Re-generating 2 missing scenes of 2..." نمایش داده می‌شود) به صورت **بدون صدا** و loop پخش شود.
 
 ## بررسی لازم
-باید چند فایل را چک کنم تا ریشه را پیدا کنم:
-1. `VideoHistory.tsx` — چطور لیست را می‌خواند
-2. `useAdProjectHistory.ts` — کوئری از DB و فیلترها
-3. `AdDirectorContent.tsx` و `backgroundAdDirectorService.ts` — کجا `saveProject` صدا می‌شود
+1. پیدا کردن کامپوننتی که این صفحه‌ی progress/loading را render می‌کند (احتمالاً در `AdDirectorContent.tsx` یا یک کامپوننت progress جداگانه با Wand icon و progress bar)
+2. تأیید جای دقیق layer پس‌زمینه
 
-## فرضیه‌های احتمالی (نیاز به verify)
-1. **Query محدود است** — مثلاً فقط پروژه‌های با `status='completed'` یا فقط با `final_video_url != null` نشان داده می‌شوند، پس draftهای جدید/ناقص فیلتر می‌شوند.
-2. **saveProject فقط یک‌بار صدا می‌شود** — در ابتدای generation با initial clips. اگر کاربر قبل از کلیک "Create video" پروژه را آغاز نکند، رکوردی ساخته نمی‌شود.
-3. **Realtime subscription نیست** — لیست فقط در mount کوئری می‌گیرد، پس پروژه‌های جدیدی که در همین session ساخته می‌شوند تا refresh دیده نمی‌شوند.
-4. **کوئری limit دارد** (مثلاً `.limit(1)` یا `.limit(5)`) که باعث می‌شود فقط آخرین یک پروژه نمایش داده شود.
+## برنامه (Surgical, Additive)
 
-## برنامه (Surgical)
+### گام ۱ — کپی فایل ویدیو
+```
+lov-copy user-uploads://Series_of_pictures_202604170946.mp4 public/videos/ad-director-loading-bg.mp4
+```
 
-### گام ۱ — بررسی فایل‌ها
-خواندن `VideoHistory.tsx`، `useAdProjectHistory.ts`، و بخش‌های مرتبط `AdDirectorContent.tsx` تا بفهمم دقیقاً کجا فیلتر/limit اعمال می‌شود.
+### گام ۲ — پیدا کردن صفحه‌ی loading
+بررسی `src/components/ad-director/AdDirectorContent.tsx` و فایل‌های مرتبط (مثلاً `GenerationProgress.tsx` یا state `flowState === "generating"`) برای یافتن دقیق محل render UI پیشرفت.
 
-### گام ۲ — Fix احتمالی (بعد از تأیید)
-- **در `useAdProjectHistory.ts`**: حذف هر فیلتری که draftها یا پروژه‌های in-progress را پنهان می‌کند. کوئری باید `select('*').order('updated_at', { ascending: false })` باشد بدون فیلتر روی status.
-- **در `backgroundAdDirectorService.ts`**: اطمینان از اینکه `saveProject` همان لحظه‌ای که کاربر "Create video" می‌زند (یا حتی "Analyze") صدا زده می‌شود تا رکورد فوراً در DB ثبت شود (پیش از این در ابتدای pipeline اضافه شد).
-- **افزودن Realtime subscription** در `useAdProjectHistory.ts` با channel یکتا (طبق memory `subscription-standards`) تا هر insert/update روی `ad_projects` فوراً در لیست reflect شود — بدون نیاز به refresh.
-- **حذف هر `limit()`** که لیست را به n مورد محدود می‌کند (یا تبدیل به limit بزرگتر مثل 50).
+### گام ۳ — افزودن ویدیو پس‌زمینه
+در همان wrapper صفحه‌ی loading، یک تگ `<video>` به‌عنوان absolute background اضافه می‌شود:
+
+```tsx
+<video
+  src="/videos/ad-director-loading-bg.mp4"
+  autoPlay
+  loop
+  muted
+  playsInline
+  className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none -z-10"
+/>
+```
+
+ویژگی‌ها:
+- `muted` + `playsInline` → autoplay در همه‌ی browserها بدون صدا
+- `loop` → پخش مداوم تا پایان generation
+- `opacity-30` تا متن progress و wand icon خوانا باقی بمانند (قابل تنظیم بر اساس preview)
+- یک overlay مشکی نیمه‌شفاف اضافه می‌شود اگر contrast کافی نباشد
 
 ### آنچه تغییر نمی‌کند
-- Schema جدول `ad_projects` — بدون تغییر
-- UI کارت `VideoHistory` و دکمه‌های Resume/Delete — بدون تغییر  
-- منطق sanitization `blob:` URLs — بدون تغییر
+- منطق generation و progress — بدون تغییر
+- پیام‌ها، Wand icon، progress bar — بدون تغییر
+- صفحه‌ی intro (`ad-director-intro.mp4`) — بدون تغییر
+- سایر صفحات (Result، Editor) — بدون تغییر
 
 ### نتیجه
-هر پروژه‌ای که شروع به ساخت می‌شود (حتی نیمه‌تمام، failed، یا draft) **بلافاصله** در "Your Previous Videos" ظاهر می‌شود و با هر تغییر state (تکمیل scene، export نهایی، retry) **realtime** آپدیت می‌شود.
+در مدت زمانی که scenes در حال generation هستند، ویدیوی آپلودشده به‌صورت silent، loop، و full-cover در پس‌زمینه پخش می‌شود و UI پیشرفت روی آن قرار می‌گیرد.
