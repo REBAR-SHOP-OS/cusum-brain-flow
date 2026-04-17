@@ -63,7 +63,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const {
     flowState, userRatio, statusText, progressValue,
     segments, storyboard, continuity, clips, finalVideoUrl,
-    exporting, brand, videoParams,
+    exporting, brand, videoParams, musicTrackUrl, voiceoverUrl,
   } = pipelineState;
 
   // Notify parent when editing state changes
@@ -145,6 +145,8 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           if (ttsResponse.ok) {
             const audioBlob = await ttsResponse.blob();
             audioUrl = URL.createObjectURL(audioBlob);
+            // Persist voiceover URL so the editor can load it as an editable track
+            service.patchState({ voiceoverUrl: audioUrl });
           }
         }
       } catch (e) { console.warn("TTS failed:", e); }
@@ -296,6 +298,8 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           segments={segments}
           brand={brand}
           finalVideoUrl={finalVideoUrl}
+          voiceoverUrl={voiceoverUrl}
+          musicTrackUrl={musicTrackUrl}
           onBack={() => service.patchState({ flowState: "result" })}
           onExport={handleExport}
           exporting={exporting}

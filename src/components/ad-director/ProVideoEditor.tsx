@@ -67,6 +67,8 @@ interface ProVideoEditorProps {
   onAddSceneWithMedia?: (url: string, fileName: string) => void;
   externalActiveTab?: string | null;
   onActiveTabChanged?: (tab: string | null) => void;
+  voiceoverUrl?: string | null;
+  musicTrackUrl?: string | null;
 }
 
 function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: {

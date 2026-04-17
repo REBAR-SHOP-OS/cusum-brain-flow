@@ -68,6 +68,7 @@ export interface AdDirectorPipelineState {
   finalVideoUrl: string | null;
   exporting: boolean;
   musicTrackUrl: string | null;
+  voiceoverUrl: string | null;
   brand: BrandProfile;
   videoParams: VideoParams;
   projectId: string | null;
@@ -105,6 +106,7 @@ class BackgroundAdDirectorService {
       finalVideoUrl: null,
       exporting: false,
       musicTrackUrl: null,
+      voiceoverUrl: null,
       brand: {} as BrandProfile,
       videoParams: {} as VideoParams,
       projectId: null,
