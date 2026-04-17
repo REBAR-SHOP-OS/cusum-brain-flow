@@ -935,7 +935,7 @@ export function TimelineBar({
           </span>
           <div className="flex-1 h-5 relative rounded bg-zinc-900/50 overflow-hidden" onClick={handleTrackClick}>
             {textOverlays.length === 0 && (
-              <span className="absolute inset-0 flex items-center justify-center text-[8px] text-zinc-600 select-none">No text — double-click a clip to add subtitles</span>
+              <span className="absolute inset-0 flex items-center justify-center text-[8px] text-zinc-600 select-none">No text — open Subtitle tab to add</span>
             )}
             {textOverlays.map((ov) => {
                 const idx = storyboard.findIndex(s => s.id === ov.sceneId);
