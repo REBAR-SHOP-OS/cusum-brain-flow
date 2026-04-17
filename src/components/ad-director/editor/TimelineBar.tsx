@@ -85,6 +85,9 @@ export interface AudioTrackItem {
   endTime?: number;
   globalStartTime?: number;
   duration?: number;
+  /** True when this music track was auto-extracted from a video clip's embedded audio.
+   *  Such tracks are visual-only on the timeline (the real audio plays through the <video> element). */
+  extractedFromVideo?: boolean;
 }
 
 interface SidebarTab {
@@ -1061,7 +1064,14 @@ export function TimelineBar({
                 {musicTracks.map(({ track, origIdx }) => {
                   let leftPct: number;
                   let widthPct: number;
-                  if (track.globalStartTime != null && totalDuration > 0) {
+                  if (track.extractedFromVideo && totalDuration > 0) {
+                    // Per-scene positioning: align the blue music bar exactly under its source video clip
+                    const idx = storyboard.findIndex(s => s.id === track.sceneId);
+                    const sceneStart = idx >= 0 ? (cumulativeStarts[idx] || 0) : (track.globalStartTime ?? 0);
+                    const sceneDur = idx >= 0 ? getSceneDur(idx) : (track.duration ?? 0);
+                    leftPct = (sceneStart / totalDuration) * 100;
+                    widthPct = (sceneDur / totalDuration) * 100;
+                  } else if (track.globalStartTime != null && totalDuration > 0) {
                     const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
                     leftPct = 0;
                     widthPct = ((track.globalStartTime + trackDur) / totalDuration) * 100;
@@ -1081,7 +1091,7 @@ export function TimelineBar({
                   return (
                     <div
                       key={itemId}
-                      className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group bg-yellow-500/60 hover:bg-yellow-500/80 ${selectedAudioIdx === origIdx ? 'ring-1 ring-white/60' : ''}`}
+                      className={`absolute top-0.5 bottom-0.5 rounded-sm cursor-grab transition-colors flex items-center px-1 group bg-blue-500/60 hover:bg-blue-500/80 ${selectedAudioIdx === origIdx ? 'ring-1 ring-white/60' : ''}`}
                       style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, 0.8)}%`, transform: isBeingDragged ? `translateX(${itemDragOffsetPx}px)` : undefined, zIndex: isBeingDragged ? 30 : 5, willChange: isBeingDragged ? 'transform' : undefined }}
                       onMouseDown={(e) => handleItemDragStart(e, "audio", String(origIdx), leftPct, widthPct)}
                       onClick={(e) => { e.stopPropagation(); setSelectedAudioIdx(origIdx); }}
