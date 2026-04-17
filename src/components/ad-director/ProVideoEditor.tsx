@@ -591,31 +591,6 @@ export function ProVideoEditor({
 
   const globalTime = (cumulativeStarts[selectedSceneIndex] || 0) + currentTime;
 
-  // Auto-seed mandatory logo overlays for intro/outro scenes
-  useEffect(() => {
-    if (!brand.logoUrl || storyboard.length === 0 || segments.length === 0) return;
-    const newOverlays: VideoOverlay[] = [];
-    for (const scene of storyboard) {
-      const hasLogo = overlays.some(o => o.sceneId === scene.id && o.kind === "logo");
-      if (!hasLogo) {
-        newOverlays.push({
-          id: crypto.randomUUID(),
-          kind: "logo",
-          position: { x: 82, y: 85 },
-          size: { w: 12, h: 10 },
-          content: brand.logoUrl,
-          opacity: 0.9,
-          sceneId: scene.id,
-          animated: false,
-        });
-      }
-    }
-    if (newOverlays.length > 0) {
-      setOverlays(prev => [...prev, ...newOverlays]);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storyboard.length, brand.logoUrl]);
-
   // Helper: split text into caption chunks of ~4-6 words
   const splitIntoChunks = useCallback((text: string, maxWords = 5): string[] => {
     const words = text.split(/\s+/).filter(Boolean);
@@ -644,34 +619,6 @@ export function ProVideoEditor({
     }));
   }, [splitIntoChunks]);
 
-  // Auto-seed & resync text overlays when voiceover durations change
-  useEffect(() => {
-    if (storyboard.length === 0 || segments.length === 0) return;
-    const newOverlays: VideoOverlay[] = [];
-    for (const scene of storyboard) {
-      const seg = segments.find(s => s.id === scene.segmentId);
-      const voText = seg?.text;
-      if (!voText?.trim()) continue;
-      const voDur = voiceoverDurations[scene.id] || clipDurations[scene.id] || (seg ? seg.endTime - seg.startTime : 4);
-      newOverlays.push(...buildTimedOverlays(scene.id, voText, voDur));
-    }
-    // Replace all text overlays, keep logos/shapes
-    setOverlays(prev => [
-      ...prev.filter(o => o.kind !== "text"),
-      ...newOverlays,
-    ]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storyboard.length, segments, voiceoverDurations, clipDurations]);
-
-  // Auto-generate voiceovers on mount
-  const voiceoverGenerated = useRef(false);
-  useEffect(() => {
-    if (voiceoverGenerated.current || segments.length === 0) return;
-    if (audioTracks.some(a => a.kind === "voiceover")) return;
-    voiceoverGenerated.current = true;
-    generateAllVoiceovers();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segments.length]);
 
 
   // Auto-play after scene change
