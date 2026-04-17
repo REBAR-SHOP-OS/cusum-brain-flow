@@ -475,7 +475,6 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                   storyboard: (project?.storyboard as any) ?? [],
                   segments: (project?.segments as any) ?? [],
                   continuity: (project?.continuity as any) ?? null,
-                  script: project?.script ?? "",
                   flowState: "result",
                 });
               }}
