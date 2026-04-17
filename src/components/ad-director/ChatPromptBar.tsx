@@ -103,6 +103,7 @@ interface ReferenceUploadCardProps {
   disabled?: boolean;
   onPick: () => void;
   onClear: () => void;
+  lockBadge?: string;
 }
 
 function ReferenceUploadCard({
@@ -114,6 +115,7 @@ function ReferenceUploadCard({
   disabled,
   onPick,
   onClear,
+  lockBadge,
 }: ReferenceUploadCardProps) {
   return (
     <div
