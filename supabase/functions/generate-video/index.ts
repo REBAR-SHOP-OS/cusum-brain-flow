@@ -300,7 +300,23 @@ async function wanPoll(apiKey: string, taskId: string) {
   }
 
   if (taskStatus === "FAILED") {
-    return { status: "failed", error: output.message || "Wan generation failed" };
+    // Surface the specific DashScope failure code so the UI can show actionable info
+    // (e.g. DataInspectionFailed = content moderation, InvalidParameter.ImageURL = bad I2V image)
+    const code = output.code || data?.code;
+    const message = output.message || data?.message;
+    let friendly = "Wan generation failed";
+    if (code === "DataInspectionFailed" || /inspection|moderation|sensitive/i.test(message || "")) {
+      friendly = "Content moderation rejected the prompt or image. Try simpler wording or a different reference image.";
+    } else if (code && /InvalidParameter\.?ImageURL|ImageURL/i.test(code)) {
+      friendly = "Reference image rejected (invalid URL, format, or size). Remove or replace the intro/outro image.";
+    } else if (code && /InvalidParameter/i.test(code)) {
+      friendly = `Invalid parameter: ${message || code}`;
+    } else if (message) {
+      friendly = message;
+    }
+    const errorStr = code ? `[${code}] ${friendly}` : friendly;
+    console.error("Wan task FAILED:", { code, message, taskMetrics: output.task_metrics });
+    return { status: "failed", error: errorStr };
   }
 
   return { status: "processing", progress: null };
