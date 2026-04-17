@@ -1,87 +1,61 @@
 
 
 ## درخواست کاربر
-وقتی یک ویدئو در سین‌ها لود می‌شود (مخصوصاً ویدئوهای Wan 2.6 که اغلب صدای پس‌زمینه/موسیقی دارند)، صدای آن باید **به‌صورت خودکار جدا شده** و در ردیف **Music** زیر نوار ویدئو به‌شکل **نوار آبی** نمایش داده شود — برای هر سینی که صدا دارد، یک نوار آبی هم‌تراز با همان scene روی ردیف Music ظاهر شود.
+همان قاعده‌ای که الان روی ردیف **Music** درست کار می‌کند (نوار آبی دقیقاً زیر کلیپ ویدئوی مربوطه ظاهر می‌شود، با left و width متناسب با موقعیت scene روی timeline) باید برای ردیف‌های **Text** و **Audio (Voiceover)** هم برقرار باشد.
 
-## یافته‌های فنی
+## یافته‌ی فنی
 
-1. در `TimelineBar.tsx` خط 1084، نوار music با کلاس `bg-yellow-500/60` (زرد) رندر می‌شود. کاربر آبی می‌خواهد.
-2. در `ProVideoEditor.tsx` (خطوط 538–568)، `audioTracks` فقط از پراپ‌های ورودی `voiceoverUrl` و `musicTrackUrl` seed می‌شود — هیچ منطقی برای **استخراج صدا از کلیپ‌های ویدئو** وجود ندارد. اگر کاربر فقط ویدئو generate کند بدون آنکه music جداگانه بسازد، ردیف Music خالی می‌ماند با پیام "No music — click + to add" (خط 1059) — حتی وقتی خود ویدئو موسیقی embedded دارد.
-3. ویدئوهای Wan 2.6 (طبق memory `integrations/video-engines/dashscope-standards`) صدای embedded دارند که الان فقط از `<video>` element پلی می‌شود ولی هیچ نمایش بصری روی timeline ندارند.
-4. مرورگر می‌تواند تشخیص دهد آیا یک video دارای audio track است: `video.mozHasAudio` (فایرفاکس)، `video.webkitAudioDecodedByteCount > 0` (Chrome پس از playback)، یا با `AudioContext` و `MediaElementSource`. ساده‌ترین راه قابل اعتماد: یک `HTMLVideoElement` موقت بسازیم، metadata را load کنیم، و چک کنیم.
+در `TimelineBar.tsx`:
 
-## برنامه (Surgical, Additive)
+1. **ردیف Text (خط 940-980):** برای هر overlay متنی:
+   - `leftPct = 0` ← اشتباه: همیشه از ابتدای timeline شروع می‌شود
+   - `widthPct = (absEnd / totalDuration) * 100` ← عرض از 0 تا انتهای scene محاسبه می‌شود
+   - نتیجه: متنی که برای scene 3 است، روی scene 1/2/3 پخش می‌شود
 
-### ۱. تابع کمکی برای تشخیص صدا در ویدئو
-در `ProVideoEditor.tsx`، یک helper اضافه کنیم:
-```ts
-const detectVideoHasAudio = (videoUrl: string): Promise<{ hasAudio: boolean; duration: number }> => {
-  return new Promise((resolve) => {
-    const v = document.createElement("video");
-    v.preload = "metadata";
-    v.muted = true;
-    v.crossOrigin = "anonymous";
-    v.addEventListener("loadedmetadata", () => {
-      // Heuristic: try multiple browser APIs
-      const hasAudio = (v as any).mozHasAudio || 
-                       Boolean((v as any).webkitAudioDecodedByteCount) ||
-                       ((v as any).audioTracks?.length > 0) ||
-                       true; // Default true for Wan 2.6 (always has audio)
-      resolve({ hasAudio, duration: v.duration || 0 });
-    });
-    v.addEventListener("error", () => resolve({ hasAudio: false, duration: 0 }));
-    v.src = videoUrl;
-  });
-};
-```
+2. **ردیف Audio/Voiceover (خط 998-1051):** همان bug — `leftPct = 0` در هر دو شاخه‌ی شرطی.
 
-### ۲. useEffect جدید برای auto-extract music tracks از clips
-هر بار که `clips` تغییر می‌کند (یا scene جدید generate می‌شود)، چک کنیم:
-- برای هر clip با `status === "completed"` و `videoUrl` معتبر (نه `data:image/`) و `videoUrl` که قبلاً extract نشده،
-- اگر صدا دارد → یک AudioTrackItem با `kind: "music"`, `audioUrl: clip.videoUrl`, `extractedFromVideo: true`, `sceneId: clip.sceneId`, `globalStartTime` محاسبه‌شده از موقعیت scene، `duration` از clip اضافه کنیم.
-- اگر کاربر قبلاً music track دستی اضافه کرده (بدون flag `extractedFromVideo`)، آن را دست‌نخورده نگه می‌داریم.
-- اگر clip حذف یا regenerate شد، track مرتبط را cleanup کنیم.
+3. **ردیف Music (خط 1067-1073):** قبلاً برای `extractedFromVideo` درست شده — `leftPct` با `sceneStart / totalDuration` و `widthPct` با `sceneDur / totalDuration` محاسبه می‌شود. این الگوی درست است.
 
-### ۳. اضافه کردن flag `extractedFromVideo` به type `AudioTrackItem`
-در `TimelineBar.tsx` interface `AudioTrack` (خط 79–87):
-```ts
-extractedFromVideo?: boolean;
-```
+## برنامه‌ی اصلاح (Surgical, Visual-Only)
 
-### ۴. تغییر رنگ نوار Music از زرد به آبی
-در `TimelineBar.tsx` خط 1084:
-- `bg-yellow-500/60 hover:bg-yellow-500/80` → `bg-blue-500/60 hover:bg-blue-500/80`
-- آیکون و رنگ label نیز برای هماهنگی به آبی نزدیک شوند (آیکون Music روی نوار)
+### ۱. ردیف Text — استفاده از موقعیت per-scene
+در منطق `textOverlays.map` (خط 940-980):
+- محاسبه `sceneStart = cumulativeStarts[idx]`
+- `leftPct = (sceneStart + itemStart) / totalDuration * 100`
+- `widthPct = ((Math.min(itemEnd, sceneDur) - itemStart) / totalDuration) * 100`
+- نتیجه: نوار بنفش text دقیقاً زیر کلیپ ویدئویی scene مربوطه ظاهر می‌شود — اگر `startTime/endTime` تعیین شده باشد، فقط همان بازه را پر می‌کند
 
-### ۵. رندر per-scene برای music های extracted
-الان music track‌ها از 0 تا انتها رندر می‌شوند (خط 1062–1078). برای music های `extractedFromVideo: true`، باید مثل voiceover ها بر اساس `sceneId` و `globalStartTime` و `duration` خاص آن scene پوزیشن بگیرند:
-- `leftPct = (globalStartTime / totalDuration) * 100`
-- `widthPct = (duration / totalDuration) * 100`
-- این باعث می‌شود زیر هر کلیپ ویدئو، یک نوار آبی هم‌عرض با همان کلیپ روی ردیف Music دیده شود.
+### ۲. ردیف Audio/Voiceover — همان الگو
+در منطق `voiceoverTracks.map` (خط 998-1015):
+- شاخه‌ی `globalStartTime != null`: 
+  - `leftPct = (globalStartTime / totalDuration) * 100` (به جای 0)
+  - `widthPct = (trackDur / totalDuration) * 100` (فقط طول track، نه globalStartTime + trackDur)
+- شاخه‌ی fallback (بر اساس sceneId):
+  - `leftPct = ((sceneStart + (track.startTime ?? 0)) / totalDuration) * 100`
+  - `widthPct = ((Math.min(itemEnd, sceneDur) - (track.startTime ?? 0)) / totalDuration) * 100`
+- نتیجه: نوار سبز/سایان voiceover دقیقاً زیر scene مربوطه قرار می‌گیرد
 
-### ۶. جلوگیری از double playback
-ویدئوهای generated از طریق `<video>` خودشان صدا پلی می‌کنند. اگر music track extracted هم پلی شود → echo. راه‌حل: track های `extractedFromVideo: true` را از منطق playback در `useEffect` خط 702–759 **استثنا** کنیم — این track‌ها صرفاً **بصری** هستند (نمایش روی timeline)، صدای واقعی از خود `<video>` می‌آید. این تضمین می‌کند هیچ playback اضافی رخ ندهد.
+### ۳. هم‌سو کردن Music دستی (non-extracted)
+شاخه‌ی `globalStartTime != null` در music هم همان bug ظاهری را دارد (`leftPct = 0`). به همان الگو اصلاح می‌شود تا music های دستی با `globalStartTime` هم در جای درست شروع شوند. Music های full-width (بدون globalStartTime یا extracted: false بدون globalStartTime) دست‌نخورده می‌مانند (همان رفتار full-width فعلی).
 
-### ۷. label معنادار
-به جای "🎵 Background Music"، برای track های extracted: `🎵 Scene N audio` تا کاربر بفهمد از کجا آمده.
-
-### ۸. اگر کاربر دستی music اضافه کرد
-رفتار فعلی (یک نوار آبی full-width) حفظ می‌شود — فقط رنگ از زرد به آبی تغییر می‌کند.
+### ۴. حداقل عرض و کلیپ گذاری
+- `Math.max(widthPct, 0.8)` نگه داشته می‌شود تا نوارهای خیلی کوتاه قابل دیدن باشند
+- اگر `leftPct + widthPct > 100`، `widthPct` با `100 - leftPct` cap می‌شود تا از overflow جلوگیری شود
 
 ## فایل‌های تغییرکننده
-- `src/components/ad-director/ProVideoEditor.tsx` — helper `detectVideoHasAudio`، useEffect برای auto-extract، استثنا کردن extracted tracks در playback loop، و label/positioning
-- `src/components/ad-director/editor/TimelineBar.tsx` — افزودن فیلد اختیاری `extractedFromVideo` به interface، تغییر رنگ زرد → آبی، منطق positioning per-scene برای extracted tracks
+- `src/components/ad-director/editor/TimelineBar.tsx` — فقط بخش محاسبه‌ی `leftPct/widthPct` در سه map (text, voiceover, music-non-extracted)
 
 ## آنچه دست‌نخورده می‌ماند
-- منطق voiceover (separate playback)، subtitles، overlays، split, trim, drag, reorder — بدون تغییر
-- export/stitch pipeline — بدون تغییر (صدای embedded ویدئو همیشه در export موجود است)
-- DB / RLS / edge functions — بدون تغییر
-- زبان UI: انگلیسی (طبق memory rule)
+- منطق drag/drop, trim, delete, edit overlay
+- منطق playback (voiceover/music timing از داده‌ی track می‌آید، نه از موقعیت بصری)
+- export/stitch pipeline
+- ردیف ویدئو، split siblings، playhead، transport bar
+- DB / RLS / edge functions
 
 ## نتیجه
-1. ✅ هر کلیپ ویدئو که صدا دارد → یک نوار **آبی** زیر همان کلیپ روی ردیف Music ظاهر می‌شود (هم‌عرض و هم‌تراز با کلیپ)
-2. ✅ Music های دستی کاربر هم آبی نمایش داده می‌شوند (کل عرض)
-3. ✅ هیچ echo/double playback رخ نمی‌دهد — track های extracted فقط visual هستند
-4. ✅ Cleanup خودکار وقتی scene حذف یا regenerate می‌شود
-5. ✅ کلیک روی نوار آبی همان track را select می‌کند (می‌تواند بعداً برای حذف یا replace استفاده شود)
+1. ✅ هر overlay متن دقیقاً زیر scene مربوطه روی ردیف Text ظاهر می‌شود (با offset درست از چپ)
+2. ✅ هر voiceover track دقیقاً زیر scene مربوطه روی ردیف Audio ظاهر می‌شود
+3. ✅ Music های دستی با globalStartTime هم در جای درست
+4. ✅ هیچ تغییری در playback یا export
+5. ✅ زبان UI: انگلیسی (طبق memory rule)
 
