@@ -17,6 +17,15 @@ import type { VideoOverlay } from "@/types/videoOverlay";
 import { ClipTransitionPopover, type ClipTransition } from "./ClipTransitionPopover";
 
 // ─── Thumbnail extraction helper ───────────────────────────
+// Detect whether a clip URL points to a static image rather than a video
+function isImageUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  if (url.startsWith("data:image/")) return true;
+  // Strip query string before testing extension
+  const clean = url.split("?")[0].split("#")[0].toLowerCase();
+  return /\.(jpe?g|png|webp|gif|avif|bmp)$/.test(clean);
+}
+
 function useVideoThumbnails(clips: ClipOutput[]) {
   const [thumbnails, setThumbnails] = useState<Record<string, string[]>>({});
   const extractedRef = useRef<Set<string>>(new Set());
@@ -25,6 +34,14 @@ function useVideoThumbnails(clips: ClipOutput[]) {
     clips.forEach((clip) => {
       if (clip.status !== "completed" || !clip.videoUrl || extractedRef.current.has(clip.sceneId)) return;
       extractedRef.current.add(clip.sceneId);
+
+      // ─── Image scene: use the URL directly, repeated to fill the lane ───
+      if (isImageUrl(clip.videoUrl)) {
+        const url = clip.videoUrl;
+        // Repeat the same image so the expanded lane (which renders multiple frames) is fully covered
+        setThumbnails(prev => ({ ...prev, [clip.sceneId]: [url, url, url, url, url, url] }));
+        return;
+      }
 
       const video = document.createElement("video");
       video.crossOrigin = "anonymous";
@@ -59,7 +76,8 @@ function useVideoThumbnails(clips: ClipOutput[]) {
         if (frameIndex < FRAME_COUNT && frameIndex < timePoints.length) {
           video.currentTime = timePoints[frameIndex];
         } else {
-          setThumbnails(prev => ({ ...prev, [clip.sceneId]: frames }));
+          // Fallback: if no frames could be captured (CORS), use the video URL itself as a poster reference
+          setThumbnails(prev => ({ ...prev, [clip.sceneId]: frames.length ? frames : [] }));
           video.src = "";
           video.load();
         }
