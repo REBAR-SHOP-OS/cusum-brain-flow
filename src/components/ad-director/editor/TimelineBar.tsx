@@ -171,6 +171,7 @@ export function TimelineBar({
   onTrimApply, isTrimming,
   onRegenerateAll, isRegeneratingAll,
   isPlaying, onTogglePlay, onFrameStep, onSkipScene,
+  clipTransitions = {}, onClipTransitionChange,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
@@ -847,6 +848,14 @@ export function TimelineBar({
                         >
                           {trimMode && isSelected && <GripVertical className="w-2.5 h-2.5 text-white/80" />}
                         </div>
+                      )}
+                      {/* Pencil — edit transition to next clip (hide on last clip) */}
+                      {onClipTransitionChange && i < storyboard.length - 1 && !isSiblingOfNext && (
+                        <ClipTransitionPopover
+                          sceneIndex={i}
+                          current={clipTransitions[scene.id] ?? { type: "None", duration: 0.5 }}
+                          onChange={(t) => onClipTransitionChange(scene.id, t)}
+                        />
                       )}
                     </div>
                   {contextMenuScene === i && (
