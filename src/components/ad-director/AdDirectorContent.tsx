@@ -40,6 +40,8 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const [selectedPreviewUrl, setSelectedPreviewUrl] = useState<string | null>(null);
   const [scenePrompts, setScenePrompts] = useState<Record<string, string>>({});
   const [approved, setApproved] = useState(false);
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dropIdx, setDropIdx] = useState<number | null>(null);
 
   // Pipeline state — driven by singleton service
   const [pipelineState, setPipelineState] = useState<AdDirectorPipelineState>(service.getState());
