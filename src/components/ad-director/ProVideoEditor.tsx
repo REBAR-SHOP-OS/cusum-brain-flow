@@ -736,9 +736,9 @@ export function ProVideoEditor({
             ...prev,
             {
               sceneId: clip.sceneId,
-              label: `Scene ${sceneNum} audio`,
+              label: `Scene ${sceneNum} voice`,
               audioUrl: url,
-              kind: "music" as const,
+              kind: "voiceover" as const, // Embedded clip audio is voiceover, not music
               volume: 0,            // visual-only — actual sound comes from <video>
               globalStartTime: sceneStart,
               duration: sceneDur || duration,
@@ -998,8 +998,10 @@ export function ProVideoEditor({
   };
 
   // Pick the video to show
+  // Prefer per-scene clip when scenes exist (sequential playback in editor).
+  // Fall back to finalVideoUrl only if no per-scene clip is available.
   const selectedClip = clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id);
-  const videoSrc = finalVideoUrl || selectedClip?.videoUrl || null;
+  const videoSrc = selectedClip?.videoUrl || finalVideoUrl || null;
 
   // Detect static-card scenes (end cards rendered as PNG data URLs)
   const currentScene = storyboard[selectedSceneIndex];
