@@ -465,8 +465,18 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
             </div>
             <VideoHistory
               projects={projects.data ?? []}
-              onSelect={(url) => {
-                service.patchState({ finalVideoUrl: url, flowState: "result" });
+              onSelect={(url, project) => {
+                // Hydrate FULL project state so the editor has clips/storyboard/segments.
+                // Without this, opening a saved project then clicking "Edit Video" shows
+                // an empty editor because selectedClip is undefined.
+                service.patchState({
+                  finalVideoUrl: url,
+                  clips: (project?.clips as any) ?? [],
+                  storyboard: (project?.storyboard as any) ?? [],
+                  segments: (project?.segments as any) ?? [],
+                  continuity: (project?.continuity as any) ?? null,
+                  flowState: "result",
+                });
               }}
               onSelectDraft={handleSelectProjectDraft}
               onDelete={(id) => deleteProject.mutate(id)}

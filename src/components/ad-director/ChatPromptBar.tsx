@@ -107,6 +107,10 @@ interface ReferenceUploadCardProps {
   onPick: () => void;
   onClear: () => void;
   lockBadge?: string;
+  /** Optional inline prompt button (e.g. for character direction). Shown only when an image is uploaded. */
+  onPromptClick?: () => void;
+  hasPrompt?: boolean;
+  promptTooltip?: string;
 }
 
 function ReferenceUploadCard({
@@ -119,6 +123,9 @@ function ReferenceUploadCard({
   onPick,
   onClear,
   lockBadge,
+  onPromptClick,
+  hasPrompt,
+  promptTooltip,
 }: ReferenceUploadCardProps) {
   return (
     <div
@@ -139,6 +146,28 @@ function ReferenceUploadCard({
         <>
           <img src={previewUrl} alt={label} className="absolute inset-0 h-full w-full object-cover pointer-events-none" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/15 pointer-events-none" />
+          {onPromptClick && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onPromptClick();
+              }}
+              className={cn(
+                "absolute left-3 top-3 z-10 pointer-events-auto flex h-7 w-7 items-center justify-center rounded-full border backdrop-blur transition-colors",
+                hasPrompt
+                  ? "border-cyan-300/60 bg-cyan-500/40 text-white hover:bg-cyan-500/60"
+                  : "border-white/30 bg-black/45 text-white hover:bg-black/70"
+              )}
+              aria-label={promptTooltip || `Edit ${label} prompt`}
+              title={promptTooltip || `Edit ${label} prompt`}
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              {hasPrompt && (
+                <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-cyan-200 ring-2 ring-slate-900" />
+              )}
+            </button>
+          )}
           <button
             type="button"
             onClick={(event) => {
@@ -405,6 +434,9 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           disabled={disabled}
           onPick={() => characterRef.current?.click()}
           onClear={() => setCharacterImage(null)}
+          onPromptClick={openCharacterDialog}
+          hasPrompt={!!characterPrompt}
+          promptTooltip="Write what this character should say or do"
         />
 
         <input ref={outroRef} type="file" accept="image/*" hidden onChange={handleOutroChange} />
