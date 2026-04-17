@@ -224,11 +224,15 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     }
 
     const fixedClips = projectClips.map((clip) => {
-      if (clip.status !== "completed" || !clip.videoUrl) {
-        return { ...clip, status: "failed" as const, error: "Missing video - auto-retry" };
+      if (clip.status !== "completed" || !clip.videoUrl || (typeof clip.videoUrl === "string" && clip.videoUrl.startsWith("blob:"))) {
+        return { ...clip, status: "failed" as const, videoUrl: null, error: "Missing video - auto-retry" };
       }
       return clip;
     });
+
+    const completedCount = fixedClips.filter((c) => c.status === "completed").length;
+    const totalCount = projectStoryboard.length;
+    const missingCount = Math.max(0, totalCount - completedCount);
 
     service.patchState({
       segments: project.segments ?? [],
@@ -236,10 +240,13 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       clips: fixedClips,
       continuity: project.continuity ?? null,
       flowState: "generating",
-      statusText: "Recovering missing scenes...",
-      progressValue: 10,
+      statusText: `Re-generating ${missingCount} missing scene${missingCount === 1 ? "" : "s"} of ${totalCount} (${completedCount} already done)…`,
+      progressValue: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 10,
     });
-    toast({ title: "Recovering missing scenes", description: "Re-generating incomplete video clips..." });
+    toast({
+      title: `Resuming ${completedCount}/${totalCount} scenes`,
+      description: `Re-generating ${missingCount} missing scene${missingCount === 1 ? "" : "s"}…`,
+    });
   };
 
   const handleRenameProject = async (id: string, newName: string) => {
