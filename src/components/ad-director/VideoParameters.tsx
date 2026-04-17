@@ -21,7 +21,7 @@ export const DEFAULT_VIDEO_PARAMS: VideoParams = {
   buildQty: 1,
 };
 
-const RATIOS = ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16", "Smart"];
+const RATIOS = ["16:9", "9:16", "1:1"];
 const RESOLUTIONS = ["480p", "720p", "1080p"];
 
 interface VideoParametersProps {
