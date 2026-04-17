@@ -12,6 +12,7 @@ import {
   FiberglassIcon, StirrupIcon, CageIcon, HookIcon,
   DowelIcon, WireMeshIcon, StraightRebarIcon,
 } from "@/components/chat/ProductIcons";
+import { AIPromptDialog } from "./AIPromptDialog";
 
 const VIDEO_MODELS: { key: string; provider: string; label: string; description: string }[] = [
   { key: "wan2.6-t2v", provider: "wan", label: "Wan T2V", description: "Text to Video - 1080P" },
