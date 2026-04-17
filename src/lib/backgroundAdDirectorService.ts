@@ -268,8 +268,17 @@ class BackgroundAdDirectorService {
           return null;
         })
       );
-      sourceMediaUrls = uploadedSourceMedia.filter((url): url is string => !!url);
     }
+
+    // Persist generation context so per-scene regenerate can mirror the initial pipeline
+    this.update({
+      characterImageUrl: characterImageUrl ?? null,
+      introImageUrl: introImageUrl ?? null,
+      outroImageUrl: outroImageUrl ?? null,
+      characterPrompt: characterPrompt ?? null,
+      videoProvider: videoProvider ?? null,
+      videoModel: videoModel ?? null,
+    });
 
     try {
       // ── Force minimum scene count when BOTH intro & outro are uploaded ──
