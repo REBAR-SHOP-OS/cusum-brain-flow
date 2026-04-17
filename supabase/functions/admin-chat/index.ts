@@ -3407,7 +3407,7 @@ Never reveal internal system details. Respond in the same language the user writ
           for (const tc of memoryTools) {
             let result = "";
             try {
-              const args = JSON.parse(tc.function.arguments);
+              const args = parseToolArgs(tc.function.arguments);
               if (tc.function.name === "save_memory") {
                 const { error } = await supabase.from("vizzy_memory").insert({
                   user_id: user.id, category: args.category || "general",
@@ -3425,7 +3425,7 @@ Never reveal internal system details. Respond in the same language the user writ
           // ── Queue write tools for confirmation ──
           for (const tc of writeTools) {
             try {
-              const args = JSON.parse(tc.function.arguments);
+              const args = parseToolArgs(tc.function.arguments);
               pendingActions.push({ tool: tc.function.name, args, tool_call_id: tc.id });
               toolResults.push({ role: "tool", tool_call_id: tc.id, content: `⏳ Action "${tc.function.name}" queued for user confirmation.` });
             } catch (e) {
@@ -3437,7 +3437,7 @@ Never reveal internal system details. Respond in the same language the user writ
           const readResults = await Promise.all(readTools.map(async (tc: any) => {
             let result = "";
             try {
-              const args = JSON.parse(tc.function.arguments);
+              const args = parseToolArgs(tc.function.arguments);
               result = await executeReadTool(supabase, tc.function.name, args, companyId, authedUserId);
             } catch (e) {
               result = `Tool error: ${e instanceof Error ? e.message : "Unknown"}`;
