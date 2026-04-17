@@ -58,6 +58,23 @@ const PLATFORM_OPTIONS: SelectionOption[] = [
 
 type SubPanelView = null | "content_type" | "platform" | "pages";
 
+// Single source of truth for splitting a stored post.content into its
+// editable English caption and its internal Persian metadata block.
+function stripPersianBlock(content: string): string {
+  if (!content) return "";
+  const idx = content.indexOf("---PERSIAN---");
+  return idx === -1 ? content : content.slice(0, idx);
+}
+
+// Build the full content string to save in DB. The editable caption is ALWAYS
+// the source of truth — Persian block is only appended as internal metadata.
+function buildPostContent(editableCaption: string, persianImageText: string, persianCaptionText: string): string {
+  const base = editableCaption ?? "";
+  if (!persianImageText && !persianCaptionText) return base;
+  const persianBlock = "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + (persianImageText || "") + "\n📝 ترجمه کپشن: " + (persianCaptionText || "");
+  return base + persianBlock;
+}
+
 /* ── Date Schedule Popover ── */
 function DateSchedulePopover({
   post,
@@ -148,6 +165,10 @@ export function PostReviewPanel({
   const [persianImageText, setPersianImageText] = useState("");
   const [persianCaptionText, setPersianCaptionText] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks the last editable caption that was sent to the DB so realtime/query
+  // refreshes cannot overwrite the user's in-flight typing with stale content.
+  const lastSubmittedCaptionRef = useRef<string>("");
+  const isUserEditingRef = useRef<boolean>(false);
    const [deleting, setDeleting] = useState(false);
    const [scheduling, setScheduling] = useState(false);
   const captionRef = useRef<HTMLTextAreaElement>(null);
@@ -220,16 +241,15 @@ export function PostReviewPanel({
     setLocalTitle(post.title || "");
     const rawC = post.content || "";
     const persianSepIdx = rawC.indexOf("---PERSIAN---");
+    let nextEditable = "";
     if (persianSepIdx !== -1) {
-      setLocalContent(rawC.slice(0, persianSepIdx).trim());
+      nextEditable = rawC.slice(0, persianSepIdx).trim();
       const pBlock = rawC.slice(persianSepIdx + "---PERSIAN---".length).trim();
-      // Parse image text and caption translation from Persian block
       const imgMatch = pBlock.match(/🖼️\s*متن روی عکس:\s*([\s\S]*?)(?=📝|$)/);
       const capMatch = pBlock.match(/📝\s*ترجمه کپشن:\s*([\s\S]*?)$/);
       setPersianImageText(imgMatch?.[1]?.trim() || pBlock);
       setPersianCaptionText(capMatch?.[1]?.trim() || "");
     } else {
-      // No separator found — still strip any Persian markers or lines as safety net
       let cleaned = rawC;
       const persianMarker = cleaned.match(/🖼️\s*متن روی عکس:([\s\S]*?)(?=📝|$)/);
       const captionMarker = cleaned.match(/📝\s*ترجمه کپشن:([\s\S]*?)$/);
@@ -245,10 +265,19 @@ export function PostReviewPanel({
       } else {
         setPersianCaptionText("");
       }
-      // Strip any remaining lines with Persian/Arabic characters
       cleaned = cleaned.split("\n").filter(l => !/[\u0600-\u06FF]/.test(l)).join("\n");
-      setLocalContent(cleaned.trim());
+      nextEditable = cleaned.trim();
     }
+    // Safeguard: do NOT overwrite the user's in-flight typing with stale DB content.
+    // Only sync the editable caption when (a) it's a different post, or (b) the
+    // incoming content matches what we last submitted (i.e. confirmed save).
+    setLocalContent(prev => {
+      if (!isUserEditingRef.current) return nextEditable;
+      if (nextEditable === prev) return prev;
+      if (lastSubmittedCaptionRef.current && nextEditable === lastSubmittedCaptionRef.current) return prev;
+      // User is actively typing and DB shipped something different — preserve their input.
+      return prev;
+    });
     setLocalHashtags(post.hashtags?.join(", ") || "");
     setSaveStatus("idle");
     setAutoTranslating(false);
@@ -261,7 +290,9 @@ export function PostReviewPanel({
 
   useEffect(() => {
     if (!post) return;
-    const caption = localContent || localTitle || "";
+    // Only the user's manual caption drives translation. Title is NEVER used as
+    // a fallback so it can't accidentally become the saved caption.
+    const caption = localContent.trim();
     if (!caption) return;
     // If we already translated this exact caption, skip
     if (lastTranslatedCaptionRef.current === caption && (persianCaptionText || persianImageText)) return;
@@ -283,11 +314,13 @@ export function PostReviewPanel({
           const imgFa = data.imageTextFa || "";
           setPersianCaptionText(capFa);
           setPersianImageText(imgFa);
-          // Save to DB
-          const persianBlock = "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + imgFa + "\n📝 ترجمه کپشن: " + capFa;
-          const rawContent = post.content || "";
-          const baseContent = rawContent.includes("---PERSIAN---") ? rawContent.slice(0, rawContent.indexOf("---PERSIAN---")).trim() : rawContent;
-          updatePost.mutate({ id: post.id, content: baseContent + persianBlock });
+          // Save to DB — base content is ALWAYS the user's current localContent,
+          // never the stale post.content. This guarantees the user's manual
+          // caption is never overwritten by the auto-translate save path.
+          const editableCaption = localContent.trim();
+          const contentToSave = buildPostContent(editableCaption, imgFa, capFa);
+          lastSubmittedCaptionRef.current = editableCaption;
+          updatePost.mutate({ id: post.id, content: contentToSave });
         } catch (err) {
           console.warn("Auto-translate failed:", err);
         } finally {
@@ -354,11 +387,10 @@ export function PostReviewPanel({
       .filter((h) => h.length > 0)
       .map((h) => (h.startsWith("#") ? h : `#${h}`));
     setSaveStatus("saving");
-    // Re-append Persian block so it's preserved in DB but never in the editable textarea
-    let contentToSave = localContent;
-    if (persianImageText || persianCaptionText) {
-      contentToSave += "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + (persianImageText || "") + "\n📝 ترجمه کپشن: " + (persianCaptionText || "");
-    }
+    // Editable caption is the source of truth; Persian block is appended only as metadata.
+    const editableCaption = localContent;
+    const contentToSave = buildPostContent(editableCaption, persianImageText, persianCaptionText);
+    lastSubmittedCaptionRef.current = editableCaption.trim();
     updatePost.mutate(
       { id: post.id, title: localTitle, content: contentToSave, hashtags: hashtagArray },
       { onSuccess: () => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); },
@@ -370,8 +402,13 @@ export function PostReviewPanel({
   flushRef.current = flushSave;
 
   const triggerDebouncedSave = useCallback(() => {
+    isUserEditingRef.current = true;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => flushRef.current(), 800);
+    debounceRef.current = setTimeout(() => {
+      flushRef.current();
+      // Allow remote sync to resume shortly after the save lands.
+      setTimeout(() => { isUserEditingRef.current = false; }, 1500);
+    }, 800);
   }, []);
 
   // Flush pending save on post switch or panel close
@@ -379,6 +416,9 @@ export function PostReviewPanel({
   useEffect(() => {
     if (prevPostIdRef.current && prevPostIdRef.current !== post?.id) {
       flushRef.current();
+      // Reset edit guard so the new post syncs cleanly from DB.
+      isUserEditingRef.current = false;
+      lastSubmittedCaptionRef.current = "";
     }
     prevPostIdRef.current = post?.id;
   }, [post?.id]);
