@@ -176,6 +176,7 @@ class BackgroundAdDirectorService {
     videoProvider?: string,
     selectedProducts?: string[],
     selectedStyles?: string[],
+    characterPrompt?: string,
   ) {
     this.cancelFlag = false;
     this.running = true;
