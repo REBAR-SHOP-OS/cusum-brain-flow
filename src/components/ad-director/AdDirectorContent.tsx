@@ -249,6 +249,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       statusText: `Re-generating ${missingCount} missing scene${missingCount === 1 ? "" : "s"} of ${totalCount} (${completedCount} already done)…`,
       progressValue: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 10,
     });
+    service.setRunning(true);
     toast({
       title: `Resuming ${completedCount}/${totalCount} scenes`,
       description: `Re-generating ${missingCount} missing scene${missingCount === 1 ? "" : "s"}…`,

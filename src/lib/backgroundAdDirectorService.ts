@@ -130,6 +130,11 @@ class BackgroundAdDirectorService {
     return this.running;
   }
 
+  /** Mark pipeline as running externally (for resume/recovery flows). */
+  setRunning(value: boolean) {
+    this.running = value;
+  }
+
   subscribe(cb: (s: AdDirectorPipelineState) => void) {
     this.listener = cb;
   }
@@ -856,7 +861,10 @@ class BackgroundAdDirectorService {
       : baseNegative;
 
     // Mark scene as generating, clear final video (stitched output is now stale)
+    this.running = true;
     this.update({
+      statusText: "Regenerating scene...",
+      progressValue: 10,
       finalVideoUrl: null,
       clips: this.state.clips.map(c => c.sceneId === sceneId
         ? { ...c, status: "generating" as const, progress: 10, error: null, videoUrl: null }
@@ -897,6 +905,9 @@ class BackgroundAdDirectorService {
       const msg = getErrorMessage(error, "Scene regeneration failed");
       this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: msg, progress: 0 } : c));
       toast.error("Scene regeneration failed", { description: msg });
+    } finally {
+      this.running = false;
+      this.update({ statusText: "", progressValue: 100 });
     }
   }
 
