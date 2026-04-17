@@ -788,6 +788,7 @@ export async function stitchClips(
         clearTimeout(safetyTimeout);
         cancelAnimationFrame(animFrame);
         video.pause();
+        if (clipAudioEl) { try { clipAudioEl.pause(); } catch {} }
         cumulativeTime = clipStartCumulativeTime + effectiveDuration;
         console.log(`[stitchClips] Clip ${clipIndex + 1}/${validatedClips.length} done, cumTime=${cumulativeTime.toFixed(2)}s`);
         clipIndex++;
