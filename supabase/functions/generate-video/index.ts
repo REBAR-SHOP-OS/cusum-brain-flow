@@ -266,17 +266,18 @@ async function wanI2vGenerate(
   apiKey: string, prompt: string, imageUrl: string, duration: number,
   aspectRatio?: string, negativePrompt?: string, flash = false,
 ) {
-  const wanDuration = Math.max(2, Math.min(15, duration));
+  const wanDuration = snapToWanDuration(duration);
   const url = `${DASHSCOPE_BASE}/services/aigc/video-generation/video-synthesis`;
   const size = WAN_SIZE_MAP[aspectRatio || "16:9"] || "1920*1080";
   const model = flash ? "wan2.6-i2v-flash" : "wan2.6-i2v";
+  const cleanPrompt = sanitizeWanPrompt(prompt);
 
   const params: Record<string, unknown> = {
     size,
     duration: wanDuration,
     prompt_extend: true,
+    negative_prompt: buildWanNegative(negativePrompt),
   };
-  if (negativePrompt) params.negative_prompt = negativePrompt;
 
   const resp = await fetch(url, {
     method: "POST",
@@ -287,7 +288,7 @@ async function wanI2vGenerate(
     },
     body: JSON.stringify({
       model,
-      input: { prompt, img_url: imageUrl },
+      input: { prompt: cleanPrompt, img_url: imageUrl },
       parameters: params,
     }),
   });
