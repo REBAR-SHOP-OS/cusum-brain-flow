@@ -387,11 +387,10 @@ export function PostReviewPanel({
       .filter((h) => h.length > 0)
       .map((h) => (h.startsWith("#") ? h : `#${h}`));
     setSaveStatus("saving");
-    // Re-append Persian block so it's preserved in DB but never in the editable textarea
-    let contentToSave = localContent;
-    if (persianImageText || persianCaptionText) {
-      contentToSave += "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + (persianImageText || "") + "\n📝 ترجمه کپشن: " + (persianCaptionText || "");
-    }
+    // Editable caption is the source of truth; Persian block is appended only as metadata.
+    const editableCaption = localContent;
+    const contentToSave = buildPostContent(editableCaption, persianImageText, persianCaptionText);
+    lastSubmittedCaptionRef.current = editableCaption.trim();
     updatePost.mutate(
       { id: post.id, title: localTitle, content: contentToSave, hashtags: hashtagArray },
       { onSuccess: () => { setSaveStatus("saved"); setTimeout(() => setSaveStatus("idle"), 2000); },
@@ -403,8 +402,13 @@ export function PostReviewPanel({
   flushRef.current = flushSave;
 
   const triggerDebouncedSave = useCallback(() => {
+    isUserEditingRef.current = true;
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => flushRef.current(), 800);
+    debounceRef.current = setTimeout(() => {
+      flushRef.current();
+      // Allow remote sync to resume shortly after the save lands.
+      setTimeout(() => { isUserEditingRef.current = false; }, 1500);
+    }, 800);
   }, []);
 
   // Flush pending save on post switch or panel close
@@ -412,6 +416,9 @@ export function PostReviewPanel({
   useEffect(() => {
     if (prevPostIdRef.current && prevPostIdRef.current !== post?.id) {
       flushRef.current();
+      // Reset edit guard so the new post syncs cleanly from DB.
+      isUserEditingRef.current = false;
+      lastSubmittedCaptionRef.current = "";
     }
     prevPostIdRef.current = post?.id;
   }, [post?.id]);
