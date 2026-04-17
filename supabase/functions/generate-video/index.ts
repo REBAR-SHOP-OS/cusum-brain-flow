@@ -215,16 +215,17 @@ async function wanGenerate(
   apiKey: string, prompt: string, duration: number,
   aspectRatio?: string, negativePrompt?: string, audioUrl?: string,
 ) {
-  const wanDuration = Math.max(2, Math.min(15, duration));
+  const wanDuration = snapToWanDuration(duration);
   const url = `${DASHSCOPE_BASE}/services/aigc/video-generation/video-synthesis`;
   const size = WAN_SIZE_MAP[aspectRatio || "16:9"] || "1920*1080";
+  const cleanPrompt = sanitizeWanPrompt(prompt);
 
   const params: Record<string, unknown> = {
     size,
     duration: wanDuration,
     prompt_extend: true,
+    negative_prompt: buildWanNegative(negativePrompt),
   };
-  if (negativePrompt) params.negative_prompt = negativePrompt;
   if (audioUrl) params.audio_url = audioUrl;
 
   const resp = await fetch(url, {
@@ -236,7 +237,7 @@ async function wanGenerate(
     },
     body: JSON.stringify({
       model: "wan2.6-t2v",
-      input: { prompt },
+      input: { prompt: cleanPrompt },
       parameters: params,
     }),
   });
