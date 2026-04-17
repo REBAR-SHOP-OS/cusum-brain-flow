@@ -2054,10 +2054,10 @@ export function ProVideoEditor({
         </Button>
 
         <div className="flex items-center gap-1 ml-2">
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={undo} disabled={historyIndex <= 0} title="Undo">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={undo} disabled={historyIndex <= 0} title={`Undo (${historyIndex} step${historyIndex === 1 ? "" : "s"} back)`}>
             <Undo2 className="w-3.5 h-3.5" />
           </Button>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={redo} disabled={historyIndex >= history.length - 1} title="Redo">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={redo} disabled={historyIndex >= history.length - 1} title={`Redo (${history.length - 1 - historyIndex} step${(history.length - 1 - historyIndex) === 1 ? "" : "s"} forward)`}>
             <Redo2 className="w-3.5 h-3.5" />
           </Button>
         </div>
