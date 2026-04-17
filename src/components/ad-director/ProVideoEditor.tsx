@@ -1155,7 +1155,9 @@ export function ProVideoEditor({
     setAudioTracks(prev => {
       const removed = prev[index];
       // If removing an extracted-from-video voice track, mute that scene's video audio
+      // and remember the URL so the deterministic seeder won't re-add it.
       if (removed?.extractedFromVideo && removed.sceneId) {
+        if (removed.audioUrl) userRemovedExtractedRef.current.add(removed.audioUrl);
         setMutedScenes(m => {
           const next = new Set(m);
           next.add(removed.sceneId);
