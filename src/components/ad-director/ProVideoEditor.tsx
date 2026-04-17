@@ -2091,6 +2091,11 @@ export function ProVideoEditor({
                 </Button>
               </div>
             )}
+            {/* Dimensions badge */}
+            <div className="absolute top-2 right-2 z-30 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-[10px] font-mono text-white/80 pointer-events-none">
+              {RATIO_DIMS[aspectRatio]?.[0]}×{RATIO_DIMS[aspectRatio]?.[1]} · {aspectRatio}
+            </div>
+          </div>
           </div>
 
           {/* Playback Controls */}
