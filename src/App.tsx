@@ -298,6 +298,7 @@ const App = () => (
 
                     <Route path="*" element={<NotFound />} />
                   </Routes>
+                  <AdDirectorBackgroundIndicator />
                 </WorkspaceProvider>
               </GlobalErrorWatcher>
             </AuthProvider>
