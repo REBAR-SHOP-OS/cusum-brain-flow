@@ -656,6 +656,92 @@ export function ProVideoEditor({
 
   const globalTime = (cumulativeStarts[selectedSceneIndex] || 0) + currentTime;
 
+  // ─── Auto-extract embedded audio from generated video clips ───
+  // Wan 2.6 (and other engines) often include background audio in their output.
+  // We surface that audio as a blue bar on the Music row, aligned per-scene.
+  // The bar is visual-only (real audio plays through the <video> element) — no playback echo.
+  useEffect(() => {
+    let cancelled = false;
+    const detectVideoHasAudio = (videoUrl: string): Promise<{ hasAudio: boolean; duration: number }> => {
+      return new Promise((resolve) => {
+        const v = document.createElement("video");
+        v.preload = "metadata";
+        v.muted = true;
+        v.crossOrigin = "anonymous";
+        const done = (hasAudio: boolean, duration: number) => {
+          try { v.src = ""; } catch { /* noop */ }
+          resolve({ hasAudio, duration });
+        };
+        v.addEventListener("loadedmetadata", () => {
+          const hasAudio =
+            (v as any).mozHasAudio ||
+            Boolean((v as any).webkitAudioDecodedByteCount) ||
+            ((v as any).audioTracks?.length > 0) ||
+            true; // default true: most generated clips include embedded audio
+          done(Boolean(hasAudio), v.duration || 0);
+        });
+        v.addEventListener("error", () => done(false, 0));
+        v.src = videoUrl;
+      });
+    };
+
+    (async () => {
+      const validClips = clips.filter(c =>
+        c.status === "completed" &&
+        c.videoUrl &&
+        !c.videoUrl.startsWith("data:image/")
+      );
+      const validUrls = new Set(validClips.map(c => c.videoUrl as string));
+
+      // Cleanup: remove extracted tracks whose source clip no longer exists
+      setAudioTracks(prev => {
+        const next = prev.filter(t => !t.extractedFromVideo || (t.audioUrl && validUrls.has(t.audioUrl)));
+        return next.length === prev.length ? prev : next;
+      });
+      Array.from(extractedClipUrlsRef.current).forEach(u => {
+        if (!validUrls.has(u)) extractedClipUrlsRef.current.delete(u);
+      });
+
+      // Add a music bar for each new completed clip that has audio
+      for (const clip of validClips) {
+        if (cancelled) return;
+        const url = clip.videoUrl as string;
+        if (extractedClipUrlsRef.current.has(url)) continue;
+        extractedClipUrlsRef.current.add(url);
+
+        const sceneIdx = storyboard.findIndex(s => s.id === clip.sceneId);
+        if (sceneIdx < 0) continue;
+
+        const { hasAudio, duration } = await detectVideoHasAudio(url);
+        if (cancelled) return;
+        if (!hasAudio) continue;
+
+        const sceneStart = cumulativeStarts[sceneIdx] || 0;
+        const sceneDur = sceneDurations[sceneIdx] || duration || 0;
+        const sceneNum = sceneIdx + 1;
+
+        setAudioTracks(prev => {
+          if (prev.some(t => t.extractedFromVideo && t.audioUrl === url)) return prev;
+          return [
+            ...prev,
+            {
+              sceneId: clip.sceneId,
+              label: `Scene ${sceneNum} audio`,
+              audioUrl: url,
+              kind: "music" as const,
+              volume: 0,            // visual-only — actual sound comes from <video>
+              globalStartTime: sceneStart,
+              duration: sceneDur || duration,
+              extractedFromVideo: true,
+            },
+          ];
+        });
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [clips, storyboard, cumulativeStarts, sceneDurations]);
+
   // Helper: split text into caption chunks of ~4-6 words
   const splitIntoChunks = useCallback((text: string, maxWords = 5): string[] => {
     const words = text.split(/\s+/).filter(Boolean);
