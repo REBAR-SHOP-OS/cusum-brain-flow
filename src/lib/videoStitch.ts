@@ -376,13 +376,22 @@ export async function stitchClips(
     endCardLogoImg = await loadImage(blobLogo);
   }
 
-  const W = validatedClips[0].video.videoWidth || 1280;
-  const H = validatedClips[0].video.videoHeight || 720;
+  // Determine target canvas dimensions: explicit aspectRatio takes priority,
+  // otherwise fall back to first clip's native dimensions.
+  const firstSrcW = validatedClips[0].video.videoWidth || 1280;
+  const firstSrcH = validatedClips[0].video.videoHeight || 720;
+  let W = firstSrcW;
+  let H = firstSrcH;
+  if (overlays?.aspectRatio && RATIO_DIMS[overlays.aspectRatio]) {
+    [W, H] = RATIO_DIMS[overlays.aspectRatio];
+  }
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
 
   const canvasStream = canvas.captureStream(30);
   const combinedStream = new MediaStream([...canvasStream.getVideoTracks()]);
