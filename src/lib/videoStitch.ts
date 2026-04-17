@@ -13,8 +13,38 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
+// Target dimensions per aspect ratio (social-standard 1080p class)
+export const RATIO_DIMS: Record<string, [number, number]> = {
+  "16:9": [1920, 1080],
+  "9:16": [1080, 1920],
+  "1:1": [1080, 1080],
+};
+
+/**
+ * "object-fit: cover" geometry — scale source to fully cover the target,
+ * center-crop the overflowing axis. Subject (assumed centered) stays in frame.
+ */
+export function fitCover(srcW: number, srcH: number, dstW: number, dstH: number) {
+  if (!srcW || !srcH) return { sx: 0, sy: 0, sw: srcW || 1, sh: srcH || 1 };
+  const srcRatio = srcW / srcH;
+  const dstRatio = dstW / dstH;
+  let sx = 0, sy = 0, sw = srcW, sh = srcH;
+  if (srcRatio > dstRatio) {
+    // source wider than target → crop sides
+    sw = srcH * dstRatio;
+    sx = (srcW - sw) / 2;
+  } else if (srcRatio < dstRatio) {
+    // source taller than target → crop top/bottom
+    sh = srcW / dstRatio;
+    sy = (srcH - sh) / 2;
+  }
+  return { sx, sy, sw, sh };
+}
+
 export interface StitchOverlayOptions {
   logo?: { url: string; enabled: boolean; size?: number };
+  /** Target aspect ratio for the final canvas. Defaults to source dims. */
+  aspectRatio?: "16:9" | "9:16" | "1:1";
   endCard?: {
     enabled: boolean;
     brandName: string;
