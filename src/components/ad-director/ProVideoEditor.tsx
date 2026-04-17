@@ -2565,7 +2565,7 @@ export function ProVideoEditor({
         onClose={() => setImageDialogOpen(false)}
         storyboard={storyboard}
         selectedSceneIndex={selectedSceneIndex}
-        onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
+        onAdd={(overlay) => { pushHistory(); setOverlays(prev => [...prev, overlay]); }}
       />
 
       <input
