@@ -296,6 +296,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           disabled={disabled}
           onPick={() => introRef.current?.click()}
           onClear={() => setIntroImage(null)}
+          lockBadge="Locked to first scene"
         />
 
         <input ref={characterRef} type="file" accept="image/*" hidden onChange={handleCharacterChange} />
@@ -320,6 +321,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           disabled={disabled}
           onPick={() => outroRef.current?.click()}
           onClear={() => setOutroImage(null)}
+          lockBadge="Locked to final scene"
         />
       </div>
 
