@@ -732,6 +732,27 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         </>
       )}
       </div>
+
+      {/* Confirm scene deletion */}
+      <AlertDialog open={pendingDeleteSceneId !== null} onOpenChange={(open) => { if (!open) setPendingDeleteSceneId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this scene?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the scene and its generated video from this project. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteScene}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
