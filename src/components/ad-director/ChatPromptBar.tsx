@@ -220,32 +220,67 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     ...selectedProductLabels.map((l) => `Product: ${l}`),
     `Duration: ${duration}s`,
     `Ratio: ${ratio}`,
+    `Engine: ${selectedVideoModel.label}`,
   ];
+
+  const buildContextString = () => {
+    const parts: string[] = [];
+    if (selectedStyleLabels.length) parts.push(`Style: ${selectedStyleLabels.join(", ")}`);
+    if (selectedProductLabels.length) parts.push(`Products: ${selectedProductLabels.join(", ")}`);
+    parts.push(`Duration: ${duration}s`);
+    parts.push(`Ratio: ${ratio}`);
+    parts.push(`Engine: ${selectedVideoModel.label}`);
+    return parts.join(". ") + ".";
+  };
+
+  const runAiWrite = async (): Promise<string | null> => {
+    const contextString = buildContextString();
+    const result = await invokeEdgeFunction<{ text?: string }>("ad-director-ai", {
+      action: "write-script",
+      input: contextString,
+    });
+    return result?.text ?? null;
+  };
 
   const handleAiWrite = async () => {
     if (aiWriting || disabled) return;
     setAiWriting(true);
+    setPreviewOpen(true);
+    setPreviewText("");
     try {
-      const parts: string[] = [];
-      if (selectedStyleLabels.length) parts.push(`Style: ${selectedStyleLabels.join(", ")}`);
-      if (selectedProductLabels.length) parts.push(`Products: ${selectedProductLabels.join(", ")}`);
-      parts.push(`Duration: ${duration}s`);
-      parts.push(`Ratio: ${ratio}`);
-      const contextString = parts.join(". ") + ".";
-      const result = await invokeEdgeFunction<{ text?: string }>("ad-director-ai", {
-        action: "write-script",
-        input: contextString,
-      });
-      if (result?.text) {
-        setPrompt(result.text);
-        toast({ title: "✨ Prompt ready", description: "Review and edit before creating." });
+      const text = await runAiWrite();
+      if (text) {
+        setPreviewText(text);
+      } else {
+        toast({ title: "No prompt returned", description: "Try again.", variant: "destructive" });
+        setPreviewOpen(false);
       }
     } catch (err: any) {
       console.error("AI write error:", err);
       toast({ title: "AI prompt failed", description: err.message || "Try again", variant: "destructive" });
+      setPreviewOpen(false);
     } finally {
       setAiWriting(false);
     }
+  };
+
+  const handleRegenerate = async () => {
+    if (aiWriting) return;
+    setAiWriting(true);
+    try {
+      const text = await runAiWrite();
+      if (text) setPreviewText(text);
+    } catch (err: any) {
+      toast({ title: "Regenerate failed", description: err.message || "Try again", variant: "destructive" });
+    } finally {
+      setAiWriting(false);
+    }
+  };
+
+  const handleUsePreview = () => {
+    setPrompt(previewText.trim());
+    setPreviewOpen(false);
+    toast({ title: "✨ Prompt ready", description: "Review and create your video." });
   };
 
 
