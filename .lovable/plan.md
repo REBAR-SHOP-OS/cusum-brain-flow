@@ -1,78 +1,66 @@
 
-## درک درخواست کاربر
-کاربر یک عکس از یک **شخصیت ثابت** را در «Character reference» آپلود می‌کند و انتظار دارد:
-1. **همان چهره** در همه‌ی scene‌ها ظاهر شود (نه شخص دیگر)
-2. آن شخصیت **بر اساس prompt صحبت کند** و تبلیغ شرکت را ارائه دهد (با صدا)
+## درک درخواست
+کاربر می‌خواهد در همان نوار پایین (کنار دکمه‌ی "AI Prompt")، یک **آیکون جدید** اضافه شود که مخصوص نوشتن **prompt اختصاصی برای Character** باشد — یعنی متنی که شخصیت باید بگوید/انجام دهد. مشابه دکمه‌ی AI Prompt اما scope آن فقط character است.
 
-## بررسی یافته‌ها
+## بررسی لازم
+خواندن:
+- `ChatPromptBar.tsx` — جای دکمه‌ی AI Prompt
+- `AIPromptDialog.tsx` — برای الگوبرداری dialog
+- state container که `characterImageUrl` در آن نگهداری می‌شود (احتمالاً `useAdDirector` یا مشابه)
 
-### مشکل ۱ — Character image در همه‌ی scene‌ها استفاده نمی‌شود
-در `backgroundAdDirectorService.ts` (خط ~521 و ~618):
+## برنامه (Surgical, Additive)
+
+### ۱. افزودن state جدید
+در همان hook که `characterImageUrl` را نگه می‌دارد:
 ```ts
-} else if (characterImageUrl && scene.generationMode === "image-to-video") {
-  referenceImage = characterImageUrl;
-}
-```
-- اگر AI mode را روی `text-to-video` یا `reference-continuation` بگذارد → عکس شخصیت **هرگز استفاده نمی‌شود**
-- اگر intro/outro هم آپلود شده، آن‌ها character را در scene اول/آخر **override** می‌کنند
-
-### مشکل ۲ — هیچ صدای گوینده‌ای تولید نمی‌شود
-کل پایپلاین generation هیچ مسیر TTS/voiceover ندارد. خروجی Wan2.6-i2v یک ویدیوی **بدون صدا/بدون lip-sync** است. برای «صحبت کردن شخصیت» نیاز به یکی از این‌هاست:
-- **Voiceover overlay** (ساده): تولید صدا با Lovable AI/ElevenLabs از روی متن `narrationLine` هر scene و mux کردن روی ویدیوی Wan
-- **Lip-sync** (پیشرفته‌تر): استفاده از مدل talking-head مثل Wan2.6 با voice یا یک مدل lip-sync جداگانه — در فاز ۲
-
-## برنامه (Surgical, دو فاز)
-
-### فاز ۱ — اطمینان از حضور شخصیت در همه scene‌ها (الان)
-
-**`src/lib/backgroundAdDirectorService.ts`** — خطوط 516-523 و 613-620:
-
-تغییر منطق انتخاب reference image. اگر `characterImageUrl` تعریف شده باشد، **همیشه** به‌عنوان reference استفاده شود (با اولویت‌بندی صحیح):
-```ts
-let referenceImage: string | undefined;
-// Priority: intro/outro overrides character ONLY for the specific anchor scene
-if (isFirstScene && introImageUrl) {
-  referenceImage = introImageUrl;
-} else if (isLastVisualScene && outroImageUrl) {
-  referenceImage = outroImageUrl;
-} else if (characterImageUrl) {
-  // Use character for ALL middle scenes — regardless of generationMode
-  referenceImage = characterImageUrl;
-}
-// Force I2V mode whenever we have a reference image
-const isI2V = !!referenceImage;
-const chosenModel = videoModel || (isI2V ? "wan2.6-i2v" : "wan2.6-t2v");
+characterPrompt: string  // متن اختصاصی character
+setCharacterPrompt: (v: string) => void
 ```
 
-علاوه بر این، در `storyboardWithDefaults` (خط ~412) شرط forcedI2V را گسترش می‌دهیم تا اگر `characterImageUrl` وجود دارد، **همه** scene‌ها (به جز end-card) به `image-to-video` تبدیل شوند:
-```ts
-const forcedI2V =
-  (isFirstScene && !!introImageUrl) ||
-  (isLastVisualScene && !!outroImageUrl) ||
-  (!!characterImageUrl && s.generationMode !== "static-card");
+### ۲. افزودن دکمه‌ی آیکون در `ChatPromptBar.tsx`
+کنار دکمه‌ی "AI Prompt"، یک دکمه‌ی کوچک با آیکون `UserSquare` (یا `MessageSquareQuote`) اضافه می‌شود:
+- **Disabled** اگر `characterImageUrl` وجود نداشته باشد (با tooltip: "Upload a character first")
+- **فعال + dot indicator** اگر prompt قبلاً نوشته شده
+- کلیک → باز شدن dialog جدید `CharacterPromptDialog`
+
+```tsx
+<Button
+  variant="outline" size="sm"
+  disabled={!characterImageUrl}
+  onClick={() => setCharacterDialogOpen(true)}
+>
+  <UserSquare className="h-4 w-4" />
+  Character
+  {characterPrompt && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-primary" />}
+</Button>
 ```
 
-### فاز ۲ — اضافه کردن Narration/Voiceover (در همین تغییر)
+### ۳. ساخت `CharacterPromptDialog.tsx` (الگوگرفته از `AIPromptDialog`)
+- Textarea با placeholder: "What should the character say or do? e.g. 'Introduce our company REBAR SHOP and invite viewers to request a quote.'"
+- Preview thumbnail کوچک از character image در بالای dialog
+- پشتیبانی RTL خودکار (همان `detectRtl`)
+- دکمه‌ی "✨ Improve with AI" که با Lovable AI (`google/gemini-3-flash-preview`) متن را cinematic و promotional می‌کند
+- دکمه‌های "Cancel" و "Save"
 
-**۱. تولید صدا برای هر scene:**  
-edge function جدید `generate-narration` که از Lovable AI Gateway برای TTS استفاده می‌کند (مدل: `google/gemini-2.5-flash` با خروجی audio، یا fallback به Web Speech API در client). متن narration از `segment.narrationLine` یا `scene.objective` گرفته می‌شود.
+### ۴. تزریق در پایپلاین generation
+در `backgroundAdDirectorService.ts` در همان نقطه‌ای که `characterImageUrl` چک می‌شود، اگر `characterPrompt` تعریف شده، آن را به‌عنوان **override برای narrationLine** همه scene‌های middle (که از character استفاده می‌کنند) اعمال می‌کند — یا حداقل به prompt تکمیلی اضافه می‌شود تا Wan2.6-i2v بداند شخصیت چه کاری انجام دهد:
 
-**۲. Mux کردن صدا روی ویدیو:**  
-بعد از تکمیل scene در `backgroundAdDirectorService.ts`، یک تابع کمکی `attachNarrationToScene(videoUrl, narrationText, language)` صدا می‌زنیم که با ffmpeg.wasm (یا مستقیماً در browser با Web Audio API + MediaRecorder) صدا را روی ویدیو سوار می‌کند.
+```ts
+const enhancedPrompt = characterPrompt
+  ? `${scene.prompt}\n\nCharacter action/dialogue: ${characterPrompt}`
+  : scene.prompt;
+```
 
-**۳. Voice settings در UI:**  
-یک toggle ساده در `ChatPromptBar.tsx` با عنوان «🎙️ Voiceover» (پیش‌فرض: ON اگر character آپلود شده). همچنین یک select برای زبان (English / Persian).
+و در فاز voiceover (در پیاده‌سازی بعدی)، اگر `characterPrompt` موجود باشد، **به‌جای** narrationLine هر scene از این متن استفاده می‌شود.
 
-### فاز ۳ — Lip-sync (آینده، اختیاری)
-بررسی موتورهای talking-head (مثل Wan2.6 talking-head، Hedra، D-ID). نیاز به API key جدید و outside scope این تغییر — فقط placeholder در state می‌گذاریم.
+### ۵. Persistence
+- ذخیره در همان رکورد `ad_projects` (ستون جدید `character_prompt text` با migration)
+- بازیابی هنگام Resume draft
 
 ## آنچه تغییر نمی‌کند
-- UI کارت‌های reference (`ReferenceUploadCard`) — بدون تغییر
-- منطق intro/outro reference — بدون تغییر، فقط اولویت‌بندی نسبت به character روشن می‌شود
-- Schema `ad_projects` — بدون تغییر
+- دکمه‌ی AI Prompt و dialog آن — بدون تغییر
+- ReferenceUploadCard و آپلود character image — بدون تغییر
+- منطق force I2V (همان فاز قبل) — بدون تغییر
 
 ## نتیجه
-وقتی کاربر یک عکس به Character reference می‌دهد:
-1. **همان چهره** در همه scene‌ها (به جز end-card و scene‌هایی که intro/outro override دارند) ظاهر می‌شود — با force به `image-to-video` و `wan2.6-i2v`
-2. **یک voiceover** بر اساس متن narration هر scene تولید می‌شود و روی ویدیوی نهایی mux می‌شود
-3. شخصیت در ویدیو دیده می‌شود + صدای ارائه‌ی تبلیغ شنیده می‌شود
+کنار دکمه‌ی AI Prompt یک آیکون "Character" ظاهر می‌شود. وقتی کاربر یک character آپلود کند، این دکمه فعال می‌شود و با کلیک یک dialog باز می‌کند که می‌تواند متن اختصاصی برای دیالوگ/عملکرد آن شخصیت بنویسد. این متن در همه scene‌های مربوط به character اعمال می‌شود.
