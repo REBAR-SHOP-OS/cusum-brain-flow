@@ -825,8 +825,45 @@ class BackgroundAdDirectorService {
         `] `
       : "";
 
-    const basePrompt = customPrompt?.trim() ? customPrompt.trim() : scene.prompt;
-    const motionPrompt = continuityPrefix + basePrompt + " Shape this into a post-ready ad shot with premium after-effects-style transitions, polished pacing, and a strong intro/outro rhythm. Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
+    // ─── Narrative bridge: connect to previous/next scenes for story flow ───
+    const previousScene = sceneIdx > 0 ? s.storyboard[sceneIdx - 1] : null;
+    const nextScene = sceneIdx < s.storyboard.length - 1 ? s.storyboard[sceneIdx + 1] : null;
+    const prevEndsWith = (previousScene as any)?.endsWith || cp?.lastFrameSummary || "";
+    const prevAction = previousScene?.subjectAction || "";
+    const nextObjective = nextScene?.objective || "";
+
+    const narrativeBridge = previousScene
+      ? `[Narrative bridge: This scene begins exactly where the previous scene ended${prevEndsWith ? ` — previous final frame: "${prevEndsWith}"` : ""}${prevAction ? `, previous action: "${prevAction}"` : ""}. Continue the same motion/pose seamlessly into this scene's action.] `
+      : "";
+    const nextHint = nextScene
+      ? `[Setup for next: Frame the ending so it can flow into "${nextObjective}".] `
+      : "";
+
+    let basePrompt = customPrompt?.trim() ? customPrompt.trim() : scene.prompt;
+
+    // ─── AI bridging for user "Custom prompt..." — wrap user text with adjacent-scene context ───
+    if (customPrompt?.trim()) {
+      try {
+        const bridged = await invokeEdgeFunction<{ type: string; editedPrompt?: string }>(
+          "edit-video-prompt",
+          {
+            originalPrompt: scene.prompt,
+            editAction: "custom",
+            editDetail: customPrompt.trim(),
+            previousSceneSummary: prevEndsWith || prevAction,
+            nextSceneSummary: nextObjective,
+          },
+          { timeoutMs: 30000 },
+        );
+        if (bridged?.editedPrompt && bridged.editedPrompt.trim().length > 0) {
+          basePrompt = bridged.editedPrompt.trim();
+        }
+      } catch {
+        // Fallback: use raw custom prompt if bridging fails
+      }
+    }
+
+    const motionPrompt = continuityPrefix + narrativeBridge + nextHint + basePrompt + " Shape this into a post-ready ad shot with premium after-effects-style transitions, polished pacing, and a strong intro/outro rhythm. Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
 
     // Determine reference image with same priority as initial pipeline
     const sceneIdx = s.storyboard.indexOf(scene);

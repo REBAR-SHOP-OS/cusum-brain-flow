@@ -57,7 +57,7 @@ const EDIT_ACTION_INSTRUCTIONS: Record<EditAction, string> = {
 
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { originalPrompt, editAction, editDetail } = ctx.body;
+    const { originalPrompt, editAction, editDetail, previousSceneSummary, nextSceneSummary } = ctx.body;
     if (!originalPrompt || !editAction) {
       return new Response(JSON.stringify({ error: "originalPrompt and editAction are required" }), {
         status: 400,
@@ -69,7 +69,14 @@ Deno.serve((req) =>
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const instruction = (EDIT_ACTION_INSTRUCTIONS[editAction as EditAction] || "") + (editDetail || "");
-    const userMessage = `Original prompt:\n"${originalPrompt}"\n\nEdit instruction:\n${instruction}`;
+
+    const continuityContext = (previousSceneSummary || nextSceneSummary)
+      ? `\n\nNARRATIVE CONTINUITY CONTEXT (do NOT break this — the edited prompt must remain narratively continuous with the surrounding scenes):
+${previousSceneSummary ? `- Previous scene ends with: "${previousSceneSummary}". This scene's opening must visually continue from that final frame.` : ""}
+${nextSceneSummary ? `- Next scene begins with objective: "${nextSceneSummary}". This scene's ending must set that up cleanly.` : ""}`
+      : "";
+
+    const userMessage = `Original prompt:\n"${originalPrompt}"\n\nEdit instruction:\n${instruction}${continuityContext}`;
 
     const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
