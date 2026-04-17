@@ -758,7 +758,7 @@ class BackgroundAdDirectorService {
       }
 
       // Always land on result view so user sees scene cards (with retry icons for failures)
-      this.update({ flowState: "result", statusText: "", progressValue: 100 });
+      this.update({ flowState: "editing", statusText: "", progressValue: 100 });
       this.running = false;
 
       // Notify if component not mounted

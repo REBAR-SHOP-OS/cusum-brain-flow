@@ -73,6 +73,10 @@ interface ProVideoEditorProps {
   onActiveTabChanged?: (tab: string | null) => void;
   voiceoverUrl?: string | null;
   musicTrackUrl?: string | null;
+  /** Sync editor state back to parent so the export pipeline can use it. */
+  onUpdateOverlays?: (overlays: VideoOverlay[]) => void;
+  onUpdateAudioTracks?: (tracks: AudioTrackItem[]) => void;
+  onUpdateMutedScenes?: (sceneIds: string[]) => void;
 }
 
 function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: {
@@ -198,6 +202,7 @@ export function ProVideoEditor({
   onAddSceneWithMedia,
   externalActiveTab, onActiveTabChanged,
   voiceoverUrl, musicTrackUrl,
+  onUpdateOverlays, onUpdateAudioTracks, onUpdateMutedScenes,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
