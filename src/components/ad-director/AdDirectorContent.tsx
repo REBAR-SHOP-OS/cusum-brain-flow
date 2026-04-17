@@ -609,7 +609,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                               </div>
                             </div>
                             <button
-                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                              className="absolute top-1.5 right-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
                               onClick={(e) => { e.stopPropagation(); handleRegenerateScene(clip.sceneId); }}
                               title="Regenerate scene"
                             >
@@ -624,7 +624,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                           <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center relative">
                             <AlertCircle className="w-5 h-5 text-destructive" />
                             <button
-                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-opacity z-20"
+                              className="absolute top-1.5 right-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-opacity z-20"
                               onClick={(e) => { e.stopPropagation(); handleRegenerateScene(clip.sceneId); }}
                               title="Retry scene"
                             >
