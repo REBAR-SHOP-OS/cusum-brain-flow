@@ -2184,6 +2184,14 @@ export function ProVideoEditor({
                   Select a static card scene to edit
                 </div>
               )}
+              {activeTab === "transitions" && (
+                <TransitionsTab
+                  activeTransition={transitionPreset}
+                  onSelect={handleTransitionSelect}
+                  duration={transitionDuration}
+                  onDurationChange={handleTransitionDurationChange}
+                />
+              )}
             </ScrollArea>
           </div>
         )}
@@ -2195,6 +2203,7 @@ export function ProVideoEditor({
         sidebarTabs={[
           { id: "media", label: "Media", icon: <Film className="w-3.5 h-3.5" /> },
           { id: "text", label: "Text", icon: <FileText className="w-3.5 h-3.5" /> },
+          { id: "transitions", label: "Transitions", icon: <Shuffle className="w-3.5 h-3.5" /> },
           { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
           { id: "image", label: "Image", icon: <ImagePlus className="w-3.5 h-3.5" /> },
           { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
