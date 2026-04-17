@@ -173,6 +173,36 @@ async function veoDownload(apiKey: string, videoUrl: string) {
 const WAN_CLIP_DURATIONS = [5, 10, 15];
 const WAN_MAX_CLIP = 15;
 
+// Snap arbitrary duration to Wan's preferred values to prevent internal re-timing
+// (which causes chipmunk audio + sped-up motion).
+const snapToWanDuration = (d: number): number => {
+  const clamped = Math.max(2, Math.min(15, d));
+  if (clamped <= 7) return 5;
+  if (clamped <= 12) return 10;
+  return 15;
+};
+
+// Strip dialogue / narration / voiceover instructions from prompt so Wan's
+// auto-dubbing has nothing to read. Removes lines like `speaks: ...`,
+// `voiceover: ...`, `narration: ...`, plus quoted dialogue blocks.
+const sanitizeWanPrompt = (raw: string): string => {
+  if (!raw) return raw;
+  let out = raw;
+  // remove "label: ...." lines for known speech labels (until newline)
+  out = out.replace(/\b(voice\s*over|voiceover|narration|narrator|dialogue|subtitle|caption|speaks?|says?|spoken|script)\s*:[^\n]*/gi, "");
+  // remove standalone quoted dialogue blocks ("...." or “....”)
+  out = out.replace(/[""][^""]{0,400}[""]/g, "");
+  out = out.replace(/"[^"\n]{0,400}"/g, "");
+  // collapse extra whitespace / blank lines
+  out = out.replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " ").trim();
+  return out;
+};
+
+// Suppress dubbing + fast-motion artifacts from Wan 2.6 auto-audio.
+const WAN_BASE_NEGATIVE = "spoken dialogue, voiceover, narration, talking, lip-sync, dubbing, subtitles, captions, fast-motion, time-lapse, sped-up, chipmunk voice";
+const buildWanNegative = (extra?: string): string =>
+  extra && extra.trim() ? `${extra}, ${WAN_BASE_NEGATIVE}` : WAN_BASE_NEGATIVE;
+
 // Resolution map for wan2.6-t2v (size parameter uses width*height format)
 const WAN_SIZE_MAP: Record<string, string> = {
   "16:9": "1920*1080",
