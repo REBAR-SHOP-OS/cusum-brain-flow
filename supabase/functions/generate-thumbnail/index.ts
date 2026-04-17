@@ -19,56 +19,57 @@ Deno.serve((req) =>
       });
     }
 
-    // Generate thumbnail image using AI
-    const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3.1-flash-image-preview",
-        messages: [
-          {
-            role: "user",
-            content: `Generate a high-quality, cinematic 16:9 thumbnail image for this video ad concept. Photorealistic, dramatic lighting, professional composition. Concept: ${prompt.substring(0, 500)}`,
-          },
-        ],
-        modalities: ["image", "text"],
-      }),
-    });
+    // Generate thumbnail image using AI — try preview model first, fall back to stable.
+    const promptText = `Generate a high-quality, cinematic 16:9 thumbnail image for this video ad concept. Photorealistic, dramatic lighting, professional composition. Concept: ${prompt.substring(0, 500)}`;
+    const modelsToTry = [
+      "google/gemini-3.1-flash-image-preview",
+      "google/gemini-2.5-flash-image", // stable fallback
+    ];
 
-    if (!imgResp.ok) {
-      const errText = await imgResp.text();
-      console.error("AI image generation failed:", imgResp.status, errText);
+    let b64Url: string | undefined;
+    let lastError: { status: number; text: string } | null = null;
 
-      if (imgResp.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded, please try again later." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (imgResp.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required, please add credits." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      return new Response(JSON.stringify({ error: "Failed to generate thumbnail" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    for (const model of modelsToTry) {
+      const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${lovableKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: "user", content: promptText }],
+          modalities: ["image", "text"],
+        }),
       });
+
+      if (!imgResp.ok) {
+        const errText = await imgResp.text();
+        console.error(`[generate-thumbnail] ${model} failed:`, imgResp.status, errText);
+        lastError = { status: imgResp.status, text: errText };
+        // Don't retry on rate-limit / payment — bubble up immediately.
+        if (imgResp.status === 429 || imgResp.status === 402) {
+          return new Response(
+            JSON.stringify({ error: imgResp.status === 429 ? "Rate limit exceeded, please try again later." : "Payment required, please add credits." }),
+            { status: imgResp.status, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        continue;
+      }
+
+      const imgData = await imgResp.json();
+      b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+      if (b64Url) break;
+
+      // Log the full shape so we can see what came back when no image was returned.
+      console.warn(`[generate-thumbnail] ${model} returned no image. Response:`, JSON.stringify(imgData).substring(0, 800));
     }
 
-    const imgData = await imgResp.json();
-    const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-
     if (!b64Url) {
-      return new Response(JSON.stringify({ error: "No image generated" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "No image generated", detail: lastError?.text ?? "All models returned text-only responses" }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     // Upload to storage
