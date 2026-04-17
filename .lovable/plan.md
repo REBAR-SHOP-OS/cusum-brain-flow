@@ -1,68 +1,48 @@
 
 
-## ریشه‌ی مشکل — تأیید‌شده با مستندات رسمی Alibaba
+## ریشه‌ی مشکل
 
-طبق [مستندات رسمی Wan](https://www.alibabacloud.com/help/en/model-studio/text-to-video-guide/):
+با اینکه auto-seed لوگو از ProVideoEditor حذف شد، لوگو هنوز در سه نقطه‌ی دیگر **اتوماتیک** روی ویدیو می‌نشیند:
 
-| مدل | خروجی |
-|---|---|
-| **wan2.6-t2v** (مدل فعلی ما) | **Video with audio** + audio-video synchronization (auto-dubbing) |
-| **wan2.6-i2v** (مدل فعلی ما) | **Video with audio** + auto-dubbing |
-| wan2.2-t2v-plus | **Silent video** |
-| wan2.1-t2v-plus / turbo | **Silent video** |
+| محل | فایل/خط | چه می‌کند |
+|---|---|---|
+| Stitched preview (auto-assemble) | `AdDirectorContent.tsx` خط 153 | `logo: { enabled: !!currentBrand.logoUrl }` → لوگو روی preview نهایی burn می‌شود |
+| Background pipeline stitch | `backgroundAdDirectorService.ts` خط 975 | همان منطق در سرویس پس‌زمینه |
+| End card | هر دو فایل بالا (`endCard.logoUrl: brand.logoUrl`) | لوگو روی end card رندر می‌شود |
+| Scene thumbnail watermark | `SceneCard.tsx` خط 233-237 | `<img>` لوگو روی هر scene card |
 
-در `supabase/functions/generate-video/index.ts` خط 208 و 241، ما از `wan2.6-t2v` و `wan2.6-i2v` استفاده می‌کنیم. این مدل‌ها **به‌صورت پیش‌فرض و اجباری**:
-1. متن prompt را به صورت **dubbing/narration** به ویدیو می‌چسبانند
-2. اگر prompt طولانی باشد ولی duration کوتاه (5-7 ثانیه)، Wan **هم صدا و هم تصویر را فشرده می‌کند** تا داخل duration جا بگیرد → افکت "chipmunk" روی صدا و حرکت سریع و غیرطبیعی روی تصویر
+**نتیجه:** لوگو در preview، scene thumbnails و end card حتی بدون درخواست کاربر ظاهر می‌شود — دقیقاً همان شکایت تصویر آپلود شده.
 
-علاوه بر این، طبق سند رسمی، duration باید integer در بازه `[2,15]` باشد ولی **مقادیر توصیه‌شده 5/10/15 هستند**. در کد ما هر integer دلخواه (مثلاً 7 یا 8) پاس می‌شود که می‌تواند باعث rounding داخلی شود.
+## انتظار کاربر
+لوگو **هرگز اتوماتیک** اضافه نشود. فقط وقتی کاربر در tab **Brand Kit** خودش می‌خواهد، اضافه شود (و قابل حذف باشد).
 
-## برنامه‌ی اصلاحی (یک فایل، سطحی)
+---
 
-### فایل: `supabase/functions/generate-video/index.ts`
+## برنامه‌ی اصلاحی (سه فایل، سطحی)
 
-**تغییر A — حذف instruction های صوتی از prompt قبل از ارسال به Wan**
+### فایل ۱: `src/components/ad-director/AdDirectorContent.tsx` (خط 152-159)
+در فراخوانی `stitchClips`:
+- `logo.enabled` → `false` (همیشه)
+- `endCard.logoUrl` → `null` (همیشه)
 
-در توابع `wanGenerate` (خط 184) و `wanI2vGenerate` (خط 234)، یک sanitizer اضافه کنیم که از prompt حذف کند:
-- هرگونه دستور `"speaks: ..."`, `"says: ..."`, `"voiceover:"`, `"narration:"`, `"dialogue:"`, متن داخل گیومه برای dubbing
-- segment.text کامل (اگر در prompt تزریق شده)
+### فایل ۲: `src/lib/backgroundAdDirectorService.ts` (خط 974-980)
+دقیقاً همان تغییرات فایل ۱:
+- `logo.enabled` → `false`
+- `endCard.logoUrl` → `null`
 
-این اولین لایه‌ی دفاع است: حتی اگر Wan auto-dub کند، چیزی برای خواندن نخواهد داشت.
-
-**تغییر B — تقویت negative_prompt برای سرکوب dubbing/narration**
-
-در هر دو تابع `wanGenerate` و `wanI2vGenerate`، negative prompt پایه را گسترش دهیم:
-```ts
-const baseNegative = "spoken dialogue, voiceover, narration, talking, lip-sync, dubbing, fast-motion, time-lapse, sped-up, chipmunk voice";
-params.negative_prompt = negativePrompt 
-  ? `${negativePrompt}, ${baseNegative}` 
-  : baseNegative;
-```
-
-**تغییر C — Snap duration به مقادیر امن Wan**
-
-مقدار `wanDuration` را به نزدیک‌ترین `[5, 10, 15]` snap کنیم تا Wan داخلی re-time نکند:
-```ts
-const snapToWanDuration = (d: number): number => {
-  if (d <= 7) return 5;
-  if (d <= 12) return 10;
-  return 15;
-};
-const wanDuration = snapToWanDuration(Math.max(2, Math.min(15, duration)));
-```
-
-این سه تغییر روی هم:
-1. ✅ Wan دیگر متن narration نمی‌خواند (sanitize + negative)
-2. ✅ Wan دیگر ویدیو را compress نمی‌کند (duration snap)
-3. ✅ negative prompt جلوی fast-motion را می‌گیرد
+### فایل ۳: `src/components/ad-director/SceneCard.tsx` (خط 233-237)
+حذف کامل بلاک `<img>` watermark لوگو روی thumbnail. (prop `logoUrl` بدون استفاده باقی می‌ماند که اشکال ندارد.)
 
 ### آنچه دست‌نخورده می‌ماند
-- مدل پیش‌فرض `wan2.6-t2v` / `wan2.6-i2v` — بدون تغییر (تا کیفیت تصویر و CHARACTER LOCK حفظ شود)
-- منطق i2v vs t2v — بدون تغییر
-- stitching, editor, UI — بدون تغییر
-- DB / RLS — بدون تغییر
+- خود `LogoTab` و brand kit storage — کاربر همچنان می‌تواند لوگو آپلود کند
+- توابع `applyLogoToImage`, `applyLogoWatermark`, و منطق logo overlay در ProVideoEditor — کاربر می‌تواند **دستی** از tab مربوطه اضافه کند
+- end card متن (`brandName`, `tagline`, `website`) — حفظ می‌شود، فقط لوگو حذف می‌شود
+- منطق stitching, generate, regenerate, character lock — هیچ تغییری
+- DB / RLS — هیچ تغییری
 
 ## نتیجه پس از اصلاح
-- ویدیوهای scene clip با سرعت طبیعی پخش می‌شوند (نه صدا و نه تصویر سریع نخواهند بود)
-- اگر کاربر بخواهد voiceover داشته باشد، از tab **Voiceover** در editor خودش با ElevenLabs اضافه می‌کند
+1. ✅ Preview نهایی **بدون لوگو** نمایش داده می‌شود
+2. ✅ Scene thumbnails **بدون watermark لوگو**
+3. ✅ End card **بدون لوگو** (فقط متن brand)
+4. ✅ کاربر می‌تواند هر زمان از tab **Brand Kit** در editor، لوگو را به دلخواه اضافه/حذف کند
 
