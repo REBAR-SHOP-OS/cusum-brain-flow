@@ -582,6 +582,11 @@ export function ProVideoEditor({
     }
   }, [voiceoverUrl, musicTrackUrl, storyboard]);
 
+  // ─── Sync editor state to parent (so export reflects user edits) ──────────
+  useEffect(() => { onUpdateOverlays?.(overlays); }, [overlays, onUpdateOverlays]);
+  useEffect(() => { onUpdateAudioTracks?.(audioTracks); }, [audioTracks, onUpdateAudioTracks]);
+  useEffect(() => { onUpdateMutedScenes?.(Array.from(mutedScenes)); }, [mutedScenes, onUpdateMutedScenes]);
+
   // Dedup set used by the auto-extract effect (declared early; effect is registered
   // later in the file once cumulativeStarts/sceneDurations exist)
   const extractedClipUrlsRef = useRef<Set<string>>(new Set());
