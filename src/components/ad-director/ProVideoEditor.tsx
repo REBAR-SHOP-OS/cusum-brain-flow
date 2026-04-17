@@ -1035,7 +1035,7 @@ export function ProVideoEditor({
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); handleDeleteScene(selectedSceneIndex); }
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); }
-      if (e.key === "s" && !e.metaKey && !e.ctrlKey) { handleSplitScene(selectedSceneIndex); }
+      if (e.key === "s" && !e.metaKey && !e.ctrlKey) { handleSplitAtPlayhead(); }
       if (e.key === "d" && !e.metaKey && !e.ctrlKey) { handleDuplicateScene(selectedSceneIndex); }
     };
     window.addEventListener("keydown", handler);
@@ -2567,7 +2567,17 @@ export function ProVideoEditor({
         onDeleteScene={handleDeleteScene}
         onTrimScene={handleTrimScene}
         
-        onSplitScene={handleSplitScene}
+        onSplitScene={(idx) => {
+          // Toolbar passes selectedSceneIndex; per-clip menus pass the actual clip index.
+          // For the toolbar case prefer the scene the playhead is currently inside.
+          const playheadIdx = (() => {
+            for (let i = cumulativeStarts.length - 1; i >= 0; i--) {
+              if (globalTime >= (cumulativeStarts[i] || 0)) return i;
+            }
+            return idx;
+          })();
+          handleSplitScene(idx === selectedSceneIndex ? playheadIdx : idx);
+        }}
         onDuplicateScene={handleDuplicateScene}
         onMoveScene={handleMoveScene}
         onReorderScene={handleReorderScene}
