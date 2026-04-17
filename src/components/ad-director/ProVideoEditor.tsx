@@ -496,7 +496,14 @@ export function ProVideoEditor({
   const [duration, setDuration] = useState(0);
   const [aiCommand, setAiCommand] = useState("");
   const [aiProcessing, setAiProcessing] = useState(false);
-  const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
+  const [selectedSceneIndex, setSelectedSceneIndex] = useState(() => {
+    // Start on the first scene that actually has a playable clip,
+    // so the editor never opens on an empty/failed scene.
+    const idx = storyboard.findIndex((s) =>
+      clips.some((c) => c.sceneId === s.id && c.status === "completed" && c.videoUrl)
+    );
+    return idx >= 0 ? idx : 0;
+  });
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
   const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
   
@@ -1007,9 +1014,12 @@ export function ProVideoEditor({
     }
   };
 
-  // Pick the video to show
+  // Pick the video to show.
+  // Fallback chain guarantees a playable source whenever ANY clip is ready,
+  // even if the currently-selected scene failed or the final stitch is missing.
   const selectedClip = clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id);
-  const videoSrc = finalVideoUrl || selectedClip?.videoUrl || null;
+  const firstCompletedClipUrl = clips.find(c => c.status === "completed" && c.videoUrl)?.videoUrl ?? null;
+  const videoSrc = finalVideoUrl || selectedClip?.videoUrl || firstCompletedClipUrl || null;
 
   // Detect static-card scenes (end cards rendered as PNG data URLs)
   const currentScene = storyboard[selectedSceneIndex];

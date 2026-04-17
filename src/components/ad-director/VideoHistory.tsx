@@ -19,7 +19,7 @@ function getSceneCounts(project: AdProjectRow): { completed: number; total: numb
 
 interface VideoHistoryProps {
   projects: AdProjectRow[];
-  onSelect?: (url: string) => void;
+  onSelect?: (url: string, project: AdProjectRow) => void;
   onSelectDraft?: (project: AdProjectRow) => void;
   onDelete?: (id: string) => void;
   onRename?: (id: string, newName: string) => void;
@@ -88,7 +88,7 @@ export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete, onRe
 function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onRename }: {
   project: AdProjectRow;
   previewUrl: string | null;
-  onSelect?: (url: string) => void;
+  onSelect?: (url: string, project: AdProjectRow) => void;
   onSelectDraft?: (project: AdProjectRow) => void;
   onDelete?: (id: string) => void;
   onRename?: (id: string, newName: string) => void;
@@ -128,7 +128,7 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
       if (isIncompleteDraft) return;
       onSelectDraft?.(project);
     } else if (previewUrl) {
-      onSelect?.(previewUrl);
+      onSelect?.(previewUrl, project);
     }
   };
 
