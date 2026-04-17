@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { ScriptSegment, StoryboardScene, ContinuityProfile, ClipOutput } from "@/types/adDirector";
@@ -34,12 +35,36 @@ export function useAdProjectHistory() {
         .select("*")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false })
-        .limit(50);
+        .limit(200);
       if (error) throw error;
       return (data ?? []) as unknown as AdProjectRow[];
     },
     staleTime: 1000 * 60 * 5,
   });
+
+  // Realtime: any insert/update/delete on ad_projects for this user invalidates the list,
+  // so newly created drafts and in-flight generation progress appear immediately.
+  useEffect(() => {
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const channelName = `ad_projects:${user.id}:${crypto.randomUUID()}`;
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "ad_projects", filter: `user_id=eq.${user.id}` },
+          () => qc.invalidateQueries({ queryKey: QUERY_KEY }),
+        )
+        .subscribe();
+    })();
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [qc]);
 
   const saveProject = useMutation({
     mutationFn: async (project: {
