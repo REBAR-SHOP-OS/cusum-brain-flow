@@ -1,48 +1,68 @@
 
 
-## ریشه‌ی مشکل — تأیید‌شده
+## ریشه‌ی مشکل — تأیید‌شده با مستندات رسمی Alibaba
 
-وقتی کاربر روی **Edit Video** می‌زند، کامپوننت `ProVideoEditor` باز می‌شود. این editor در همان لحظه‌ی mount **سه چیز را به‌صورت اتوماتیک به ویدیو تزریق می‌کند**:
+طبق [مستندات رسمی Wan](https://www.alibabacloud.com/help/en/model-studio/text-to-video-guide/):
 
-| منبع | چه می‌کند | فایل/خط |
-|---|---|---|
-| `useEffect` auto-seed logo | برای هر scene یک overlay **لوگو** اضافه می‌کند (اگر `brand.logoUrl` وجود داشته باشد) | `ProVideoEditor.tsx` خط 595-617 |
-| `useEffect` auto-seed captions | متن هر `segment` را به chunk های 4-5 کلمه‌ای می‌شکند و به‌صورت **subtitle overlay زمان‌بندی‌شده** روی ویدیو می‌گذارد | `ProVideoEditor.tsx` خط 648-664 |
-| `useEffect` auto-generate VO | تابع `generateAllVoiceovers()` را صدا می‌زند → برای متن همه‌ی segmentها **TTS voiceover** می‌سازد و به audioTracks اضافه می‌کند | `ProVideoEditor.tsx` خط 666-674 |
+| مدل | خروجی |
+|---|---|
+| **wan2.6-t2v** (مدل فعلی ما) | **Video with audio** + audio-video synchronization (auto-dubbing) |
+| **wan2.6-i2v** (مدل فعلی ما) | **Video with audio** + auto-dubbing |
+| wan2.2-t2v-plus | **Silent video** |
+| wan2.1-t2v-plus / turbo | **Silent video** |
 
-**نتیجه:** ویدیوی خام تولید‌شده با صدا و کپشن و لوگو روی editor باز می‌شود — کاربر هیچ‌گاه چنین چیزی نخواسته است.
+در `supabase/functions/generate-video/index.ts` خط 208 و 241، ما از `wan2.6-t2v` و `wan2.6-i2v` استفاده می‌کنیم. این مدل‌ها **به‌صورت پیش‌فرض و اجباری**:
+1. متن prompt را به صورت **dubbing/narration** به ویدیو می‌چسبانند
+2. اگر prompt طولانی باشد ولی duration کوتاه (5-7 ثانیه)، Wan **هم صدا و هم تصویر را فشرده می‌کند** تا داخل duration جا بگیرد → افکت "chipmunk" روی صدا و حرکت سریع و غیرطبیعی روی تصویر
 
-## انتظار کاربر
-وقتی **Edit Video** زده می‌شود، باید **همان clipهای خام** بدون صدای اضافه‌شده و بدون متن نوشته‌شده روی ویدیو باز شوند. اگر کاربر بخواهد صدا یا کپشن اضافه کند، از tab های **Voiceover / Subtitle / Brand Kit** خودش اضافه می‌کند (این tab ها از قبل وجود دارند).
-
----
+علاوه بر این، طبق سند رسمی، duration باید integer در بازه `[2,15]` باشد ولی **مقادیر توصیه‌شده 5/10/15 هستند**. در کد ما هر integer دلخواه (مثلاً 7 یا 8) پاس می‌شود که می‌تواند باعث rounding داخلی شود.
 
 ## برنامه‌ی اصلاحی (یک فایل، سطحی)
 
-### فایل: `src/components/ad-director/ProVideoEditor.tsx`
+### فایل: `supabase/functions/generate-video/index.ts`
 
-**حذف هر سه auto-seed effect:**
+**تغییر A — حذف instruction های صوتی از prompt قبل از ارسال به Wan**
 
-1. **خط 594-617** — حذف `useEffect` که اتوماتیک logo overlay اضافه می‌کند. کاربر از tab **Brand Kit** خودش لوگو می‌گذارد.
+در توابع `wanGenerate` (خط 184) و `wanI2vGenerate` (خط 234)، یک sanitizer اضافه کنیم که از prompt حذف کند:
+- هرگونه دستور `"speaks: ..."`, `"says: ..."`, `"voiceover:"`, `"narration:"`, `"dialogue:"`, متن داخل گیومه برای dubbing
+- segment.text کامل (اگر در prompt تزریق شده)
 
-2. **خط 647-664** — حذف `useEffect` که از `segment.text` کپشن‌های زمان‌بندی‌شده می‌سازد. کاربر از tab **Subtitle** خودش زیرنویس اضافه می‌کند.
+این اولین لایه‌ی دفاع است: حتی اگر Wan auto-dub کند، چیزی برای خواندن نخواهد داشت.
 
-3. **خط 666-674** — حذف `useEffect` که `generateAllVoiceovers()` را اتوماتیک صدا می‌زند. کاربر از tab **Voiceover** خودش صدا می‌سازد. (ref `voiceoverGenerated` هم بدون استفاده می‌شود → حذف.)
+**تغییر B — تقویت negative_prompt برای سرکوب dubbing/narration**
+
+در هر دو تابع `wanGenerate` و `wanI2vGenerate`، negative prompt پایه را گسترش دهیم:
+```ts
+const baseNegative = "spoken dialogue, voiceover, narration, talking, lip-sync, dubbing, fast-motion, time-lapse, sped-up, chipmunk voice";
+params.negative_prompt = negativePrompt 
+  ? `${negativePrompt}, ${baseNegative}` 
+  : baseNegative;
+```
+
+**تغییر C — Snap duration به مقادیر امن Wan**
+
+مقدار `wanDuration` را به نزدیک‌ترین `[5, 10, 15]` snap کنیم تا Wan داخلی re-time نکند:
+```ts
+const snapToWanDuration = (d: number): number => {
+  if (d <= 7) return 5;
+  if (d <= 12) return 10;
+  return 15;
+};
+const wanDuration = snapToWanDuration(Math.max(2, Math.min(15, duration)));
+```
+
+این سه تغییر روی هم:
+1. ✅ Wan دیگر متن narration نمی‌خواند (sanitize + negative)
+2. ✅ Wan دیگر ویدیو را compress نمی‌کند (duration snap)
+3. ✅ negative prompt جلوی fast-motion را می‌گیرد
 
 ### آنچه دست‌نخورده می‌ماند
-- خود توابع `generateAllVoiceovers`, `buildTimedOverlays`, `splitIntoChunks` و دکمه‌های Voiceover/Subtitle/Brand Kit — **همه باقی می‌مانند** تا کاربر در صورت نیاز دستی استفاده کند.
-- tab های editor، playback، export، regenerate scene — هیچ تغییری.
-- منطق پایپلاین اصلی، CHARACTER LOCK، intro/outro cards — هیچ تغییری.
-- DB و RLS — هیچ تغییری.
-
----
+- مدل پیش‌فرض `wan2.6-t2v` / `wan2.6-i2v` — بدون تغییر (تا کیفیت تصویر و CHARACTER LOCK حفظ شود)
+- منطق i2v vs t2v — بدون تغییر
+- stitching, editor, UI — بدون تغییر
+- DB / RLS — بدون تغییر
 
 ## نتیجه پس از اصلاح
-
-با کلیک روی **Edit Video**:
-1. ✅ ویدیوهای scene **خام** نمایش داده می‌شوند — بدون voiceover خودکار
-2. ✅ هیچ کپشن/زیرنویسی روی ویدیو ظاهر نمی‌شود
-3. ✅ هیچ logo overlay اتوماتیکی اضافه نمی‌شود
-4. ✅ کاربر می‌تواند با tab های Voiceover / Subtitle / Brand Kit در صورت نیاز خودش اضافه کند
-5. ✅ Export نهایی هم بدون audio/text تزریق‌شده انجام می‌شود (مگر کاربر دستی اضافه کند)
+- ویدیوهای scene clip با سرعت طبیعی پخش می‌شوند (نه صدا و نه تصویر سریع نخواهند بود)
+- اگر کاربر بخواهد voiceover داشته باشد، از tab **Voiceover** در editor خودش با ElevenLabs اضافه می‌کند
 
