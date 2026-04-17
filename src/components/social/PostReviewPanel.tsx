@@ -148,6 +148,10 @@ export function PostReviewPanel({
   const [persianImageText, setPersianImageText] = useState("");
   const [persianCaptionText, setPersianCaptionText] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks the last editable caption that was sent to the DB so realtime/query
+  // refreshes cannot overwrite the user's in-flight typing with stale content.
+  const lastSubmittedCaptionRef = useRef<string>("");
+  const isUserEditingRef = useRef<boolean>(false);
    const [deleting, setDeleting] = useState(false);
    const [scheduling, setScheduling] = useState(false);
   const captionRef = useRef<HTMLTextAreaElement>(null);
