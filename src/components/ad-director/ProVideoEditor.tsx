@@ -510,6 +510,39 @@ export function ProVideoEditor({
   const liveCanvasRef = useRef<HTMLCanvasElement>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
 
+  // Seed audio tracks from the generation pipeline (voiceover + background music)
+  // so the user sees them as editable timeline tracks the moment they open the editor.
+  useEffect(() => {
+    if (tracksSeededRef.current) return;
+    if (!storyboard.length) return;
+    const seeded: AudioTrackItem[] = [];
+    if (voiceoverUrl) {
+      seeded.push({
+        sceneId: storyboard[0].id,
+        label: "🎙️ Voiceover",
+        audioUrl: voiceoverUrl,
+        kind: "voiceover",
+        volume: 1,
+        globalStartTime: 0,
+      });
+    }
+    if (musicTrackUrl) {
+      seeded.push({
+        sceneId: "",
+        label: "🎵 Background Music",
+        audioUrl: musicTrackUrl,
+        kind: "music",
+        volume: 0.5,
+        globalStartTime: 0,
+      });
+      setMusicUrl(musicTrackUrl);
+    }
+    if (seeded.length) {
+      setAudioTracks(seeded);
+      tracksSeededRef.current = true;
+    }
+  }, [voiceoverUrl, musicTrackUrl, storyboard]);
+
   // Preload logo image for card rendering
   useEffect(() => {
     if (brand.logoUrl) {
