@@ -188,7 +188,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedVideoModel, setSelectedVideoModel] = useState(VIDEO_MODELS[0]);
   const [aiWriting, setAiWriting] = useState(false);
-  const [aiDialogOpen, setAiDialogOpen] = useState(false);
   
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
@@ -221,7 +220,8 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     `Ratio: ${ratio}`,
   ];
 
-  const handleAiGenerate = async (userInput: string) => {
+  const handleAiWrite = async () => {
+    if (aiWriting || disabled) return;
     setAiWriting(true);
     try {
       const parts: string[] = [];
@@ -230,14 +230,12 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
       parts.push(`Duration: ${duration}s`);
       parts.push(`Ratio: ${ratio}`);
       const contextString = parts.join(". ") + ".";
-      const combinedInput = `${userInput}\n\nContext: ${contextString}`;
       const result = await invokeEdgeFunction<{ text?: string }>("ad-director-ai", {
         action: "write-script",
-        input: combinedInput,
+        input: contextString,
       });
       if (result?.text) {
         setPrompt(result.text);
-        setAiDialogOpen(false);
         toast({ title: "✨ Prompt ready", description: "Review and edit before creating." });
       }
     } catch (err: any) {
@@ -595,15 +593,15 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={() => setAiDialogOpen(true)}
-                  disabled={disabled}
+                  onClick={handleAiWrite}
+                  disabled={disabled || aiWriting}
                   className="h-10 rounded-xl border border-white/10 bg-slate-800/60 px-3 text-sm font-medium text-white/70 hover:bg-slate-700/80 hover:text-white gap-1.5"
                 >
-                  <Wand2 className="h-4 w-4" />
-                  AI Prompt
+                  {aiWriting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                  {aiWriting ? "Writing..." : "AI Prompt"}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Open AI prompt writer</TooltipContent>
+              <TooltipContent side="top">Auto-write a cinematic prompt from your selections</TooltipContent>
             </Tooltip>
 
             <div className="flex items-center gap-2">
@@ -620,14 +618,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           </div>
         </div>
       </div>
-
-      <AIPromptDialog
-        open={aiDialogOpen}
-        onClose={() => setAiDialogOpen(false)}
-        onGenerate={handleAiGenerate}
-        generating={aiWriting}
-        contextChips={contextChips}
-      />
     </div>
   );
 }
