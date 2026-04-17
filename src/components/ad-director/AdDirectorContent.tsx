@@ -273,95 +273,16 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     }
   };
 
-  // ─── Regenerate scene (from editor) ─────────────
+  // ─── Regenerate scene — delegates to service so it mirrors initial pipeline
+  // (CHARACTER LOCK, i2v with reference image, continuity prefix, enhanced negative prompt).
   const handleRegenerateScene = useCallback(async (sceneId: string, customPrompt?: string) => {
     setApproved(false);
-    const currentState = service.getState();
-    const scene = currentState.storyboard.find(s => s.id === sceneId);
-    if (!scene) return;
-    const segment = currentState.segments.find(seg => seg.id === scene.segmentId);
-    const effectiveRatio = currentState.userRatio === "Smart" ? "16:9" : currentState.userRatio;
-    const wanRatio = ["16:9", "9:16", "1:1"].includes(effectiveRatio) ? effectiveRatio : "16:9";
-    const rawDur = currentState.videoParams.duration > 0 ? currentState.videoParams.duration : (segment ? segment.endTime - segment.startTime : 5);
-    const sceneDuration = Math.min(Math.max(rawDur, 2), 15);
-    const basePrompt = customPrompt?.trim() ? customPrompt.trim() : scene.prompt;
-    const motionPrompt = basePrompt + " Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
-    service.patchState({
-      clips: currentState.clips.map(c => c.sceneId === sceneId ? { ...c, status: "generating" as const, progress: 10 } : c),
-      finalVideoUrl: null,
-    });
     try {
-      const result = await invokeEdgeFunction<{
-        url?: string; videoUrl?: string; jobId?: string; provider?: "wan" | "veo" | "sora";
-      }>("generate-video", {
-        action: "generate", prompt: motionPrompt, duration: sceneDuration,
-        aspectRatio: wanRatio, provider: "wan", model: "wan2.6-t2v",
-        negativePrompt: "static image, zoom only, no motion, blurry, text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind",
-      }, { timeoutMs: EDGE_TIMEOUT_MS });
-      const videoUrl = result.url || result.videoUrl;
-      const genId = result.jobId;
-      const provider = result.provider || "wan";
-
-      if (videoUrl) {
-        service.patchState({
-          clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl, progress: 100 } : c),
-        });
-      } else if (genId) {
-        // Async job — poll until complete
-        const maxAttempts = 120;
-        let completed = false;
-        for (let i = 0; i < maxAttempts; i++) {
-          await new Promise(r => setTimeout(r, 5000));
-          try {
-            const pollResult = await invokeEdgeFunction<{
-              status?: string; url?: string; videoUrl?: string; error?: string;
-            }>("generate-video", {
-              action: "poll", jobId: genId, provider,
-            }, { timeoutMs: 30000 });
-
-            const pollUrl = pollResult.url || pollResult.videoUrl;
-            if (pollResult.status === "completed" || pollUrl) {
-              service.patchState({
-                clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: pollUrl!, progress: 100 } : c),
-              });
-              completed = true;
-              break;
-            }
-            if (pollResult.status === "failed") {
-              service.patchState({
-                clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: pollResult.error || "Generation failed", progress: 0 } : c),
-              });
-              completed = true;
-              break;
-            }
-            // Update progress
-            const progress = Math.min(10 + Math.round((i / maxAttempts) * 85), 95);
-            service.patchState({
-              clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, progress } : c),
-            });
-          } catch {
-            // Continue polling on transient errors
-          }
-        }
-        if (!completed) {
-          service.patchState({
-            clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: "Generation timed out", progress: 0 } : c),
-          });
-        }
-      } else {
-        service.patchState({
-          clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: "No video URL or job ID returned", progress: 0 } : c),
-        });
-      }
+      await service.regenerateScene(sceneId, customPrompt);
     } catch (error) {
-      const msg = getErrorMessage(error, "Scene regeneration failed.");
-      service.patchState({
-        clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: msg, progress: 0 } : c),
-      });
-      // Surface the actual API reason so the user can act on it (moderation, bad image, etc.)
-      toast({ title: "Scene regeneration failed", description: msg, variant: "destructive" });
+      toast({ title: "Scene regeneration failed", description: getErrorMessage(error, "Unable to regenerate scene."), variant: "destructive" });
     }
-  }, [service]);
+  }, [service, toast]);
 
   // ─── RENDER ──────────────────────────────────────
 
