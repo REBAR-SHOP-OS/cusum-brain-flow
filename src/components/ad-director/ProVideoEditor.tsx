@@ -736,9 +736,9 @@ export function ProVideoEditor({
             ...prev,
             {
               sceneId: clip.sceneId,
-              label: `Scene ${sceneNum} audio`,
+              label: `Scene ${sceneNum} voice`,
               audioUrl: url,
-              kind: "music" as const,
+              kind: "voiceover" as const, // Embedded clip audio is voiceover, not music
               volume: 0,            // visual-only — actual sound comes from <video>
               globalStartTime: sceneStart,
               duration: sceneDur || duration,
@@ -751,6 +751,49 @@ export function ProVideoEditor({
 
     return () => { cancelled = true; };
   }, [clips, storyboard, cumulativeStarts, sceneDurations]);
+
+  // ─── Auto-seed text overlay bars per scene ──────────────────
+  // Surfaces caption text on the Text lane so users see what's there and can delete it.
+  // We only seed scenes that have voiceover/segment text and no existing text overlay.
+  const seededTextScenesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!storyboard.length) return;
+    const newOverlays: VideoOverlay[] = [];
+    for (let i = 0; i < storyboard.length; i++) {
+      const scene = storyboard[i];
+      const seg = segments.find(s => s.id === scene.segmentId);
+      const text = (scene.voiceover || seg?.text || "").trim();
+      if (!text) continue;
+      if (seededTextScenesRef.current.has(scene.id)) continue;
+      // Skip if a text overlay already exists for this scene
+      if (overlays.some(o => o.kind === "text" && o.sceneId === scene.id)) {
+        seededTextScenesRef.current.add(scene.id);
+        continue;
+      }
+      const sceneDur = sceneDurations[i] || 4;
+      newOverlays.push({
+        id: crypto.randomUUID(),
+        kind: "text" as const,
+        position: { x: 5, y: 82 },
+        size: { w: 90, h: 12 },
+        content: text,
+        opacity: 0.95,
+        sceneId: scene.id,
+        animated: false,
+        startTime: 0,
+        endTime: sceneDur,
+      });
+      seededTextScenesRef.current.add(scene.id);
+    }
+    if (newOverlays.length) {
+      setOverlays(prev => [...prev, ...newOverlays]);
+    }
+    // Clean up scenes that no longer exist
+    const validIds = new Set(storyboard.map(s => s.id));
+    Array.from(seededTextScenesRef.current).forEach(id => {
+      if (!validIds.has(id)) seededTextScenesRef.current.delete(id);
+    });
+  }, [storyboard, segments, sceneDurations]);
 
   // Helper: split text into caption chunks of ~4-6 words
   const splitIntoChunks = useCallback((text: string, maxWords = 5): string[] => {
@@ -998,8 +1041,10 @@ export function ProVideoEditor({
   };
 
   // Pick the video to show
+  // Prefer per-scene clip when scenes exist (sequential playback in editor).
+  // Fall back to finalVideoUrl only if no per-scene clip is available.
   const selectedClip = clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id);
-  const videoSrc = finalVideoUrl || selectedClip?.videoUrl || null;
+  const videoSrc = selectedClip?.videoUrl || finalVideoUrl || null;
 
   // Detect static-card scenes (end cards rendered as PNG data URLs)
   const currentScene = storyboard[selectedSceneIndex];
@@ -1108,7 +1153,18 @@ export function ProVideoEditor({
 
   const handleRemoveAudioTrack = useCallback((index: number) => {
     pushHistory();
-    setAudioTracks(prev => prev.filter((_, i) => i !== index));
+    setAudioTracks(prev => {
+      const removed = prev[index];
+      // If removing an extracted-from-video voice track, mute that scene's video audio
+      if (removed?.extractedFromVideo && removed.sceneId) {
+        setMutedScenes(m => {
+          const next = new Set(m);
+          next.add(removed.sceneId);
+          return next;
+        });
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   }, [pushHistory]);
 
   const handleDeleteOverlay = useCallback((id: string) => {
