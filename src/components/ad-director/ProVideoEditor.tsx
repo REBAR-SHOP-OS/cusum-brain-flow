@@ -67,6 +67,8 @@ interface ProVideoEditorProps {
   onAddSceneWithMedia?: (url: string, fileName: string) => void;
   externalActiveTab?: string | null;
   onActiveTabChanged?: (tab: string | null) => void;
+  voiceoverUrl?: string | null;
+  musicTrackUrl?: string | null;
 }
 
 function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: {
@@ -191,6 +193,7 @@ export function ProVideoEditor({
   onUpdateStoryboard, onUpdateBrand, onMusicSelect, onDuplicateClip,
   onAddSceneWithMedia,
   externalActiveTab, onActiveTabChanged,
+  voiceoverUrl, musicTrackUrl,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -462,6 +465,7 @@ export function ProVideoEditor({
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [editingOverlay, setEditingOverlay] = useState<VideoOverlay | null>(null);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
+  const tracksSeededRef = useRef(false);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const audioUploadRef = useRef<HTMLInputElement>(null);
@@ -505,6 +509,39 @@ export function ProVideoEditor({
   const [cardSettingsMap, setCardSettingsMap] = useState<Record<string, IntroOutroCardSettings>>({});
   const liveCanvasRef = useRef<HTMLCanvasElement>(null);
   const logoImgRef = useRef<HTMLImageElement | null>(null);
+
+  // Seed audio tracks from the generation pipeline (voiceover + background music)
+  // so the user sees them as editable timeline tracks the moment they open the editor.
+  useEffect(() => {
+    if (tracksSeededRef.current) return;
+    if (!storyboard.length) return;
+    const seeded: AudioTrackItem[] = [];
+    if (voiceoverUrl) {
+      seeded.push({
+        sceneId: storyboard[0].id,
+        label: "🎙️ Voiceover",
+        audioUrl: voiceoverUrl,
+        kind: "voiceover",
+        volume: 1,
+        globalStartTime: 0,
+      });
+    }
+    if (musicTrackUrl) {
+      seeded.push({
+        sceneId: "",
+        label: "🎵 Background Music",
+        audioUrl: musicTrackUrl,
+        kind: "music",
+        volume: 0.5,
+        globalStartTime: 0,
+      });
+      setMusicUrl(musicTrackUrl);
+    }
+    if (seeded.length) {
+      setAudioTracks(seeded);
+      tracksSeededRef.current = true;
+    }
+  }, [voiceoverUrl, musicTrackUrl, storyboard]);
 
   // Preload logo image for card rendering
   useEffect(() => {
