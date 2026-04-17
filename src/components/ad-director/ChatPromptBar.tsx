@@ -332,10 +332,18 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     setCharacterDialogOpen(true);
   };
   const handleSaveCharacterPrompt = () => {
-    setCharacterPrompt(characterDraft.trim());
+    const trimmed = characterDraft.trim();
+    setCharacterPrompt(trimmed);
     setCharacterDialogOpen(false);
-    if (characterDraft.trim()) {
-      toast({ title: "✅ Character direction saved", description: "It will be applied to every scene." });
+    if (trimmed) {
+      // Auto-fill main prompt so Create video activates and uses the character direction
+      setPrompt((prev) => {
+        const prevTrim = prev.trim();
+        if (!prevTrim) return trimmed;
+        if (prevTrim.includes(trimmed)) return prev;
+        return `${prevTrim}\n\n${trimmed}`;
+      });
+      toast({ title: "✅ Character direction saved", description: "Added to your ad description — ready to generate." });
     }
   };
 
