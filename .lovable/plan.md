@@ -1,40 +1,64 @@
 
 
-## چرا «Recovering missing scenes...» ظاهر می‌شود؟
+## ریشه مشکل (Root Cause Analysis)
 
-### علت
+با بررسی کد و دیتابیس، **چند مشکل ریشه‌ای** پیدا شد که باعث می‌شوند یک scene fail شود در حالی که scene‌های دیگر OK هستند:
 
-این پیام یک **bug** نیست — یک **feature برای auto-recovery** است. در `AdDirectorContent.tsx` خط 207-243، تابع `handleSelectProjectDraft` وقتی فعال می‌شود که شما روی یک **پروژه ذخیره‌شده قبلی** از لیست drafts کلیک می‌کنید (نه پروژه کاملاً جدید).
+### مشکل ۱ — Hard-coded duration `15s` در پایپلاین
+در `backgroundAdDirectorService.ts` خط 487:
+```ts
+const sceneDuration = 15;
+```
+بدون توجه به duration انتخابی کاربر یا تعداد scenes، **همه scenes با 15 ثانیه** به Wan API ارسال می‌شوند. اگر کاربر 15s + 2 scenes انتخاب کند، هر scene 15s درخواست می‌شود (مجموع 30s)، نه 7.5s مورد انتظار. این باعث:
+- محتوای تولیدشده با timing intended هماهنگ نیست
+- DashScope گاهی برای prompts تکراری در duration max به‌طور موقت محدودیت می‌گذارد
 
-منطق آن:
-1. لیست scenes پروژه را چک می‌کند
-2. برای هر scene بررسی می‌کند آیا یک clip موفق با `videoUrl` معتبر دارد یا نه
-3. اگر **همه** scenes کامل باشند → مستقیم به result می‌رود ✅
-4. اگر **حتی یک scene** ناقص باشد (status ≠ completed یا videoUrl ندارد) → آن‌ها را `failed` علامت می‌زند و recovery شروع می‌شود → پیام «Recovering missing scenes...» نمایش داده می‌شود
+### مشکل ۲ — DB never updated as scenes complete
+`saveProject` فقط **یکبار** در زمان analyze صدا زده می‌شود (خط 463) با `clips: initialClips` که همه `idle` هستند. هیچ‌وقت بعد از تکمیل scenes آپدیت نمی‌شود مگر کاربر روی "Save Draft" کلیک کند. دلیل اینکه DB هنوز `status:idle` نشان می‌دهد ولی UI failed دارد — state در حافظه و state در DB جدا شده‌اند. روی reload، recovery kicks in (که همان "Recovering missing scenes" قبلی بود).
 
-### چرا scenes ناقص می‌شوند؟
+### مشکل ۳ — اولین scene در معرض fail بیشتر است
+خط 516-517:
+```ts
+if (isFirstScene && introImageUrl) referenceImage = introImageUrl;
+```
+اگر `introImageUrl` ست شده باشد، scene 1 با مدل `wan2.6-i2v` (image-to-video) فراخوانی می‌شود در حالی که scene 2 با `wan2.6-t2v` (text-to-video). I2V حساس‌تر به کیفیت رفرنس image است و اگر URL ناقص/expired/format-incompatible باشد، **فقط scene 1 fail می‌شود**.
 
-پروژه‌های شما ممکن است scene ناقص داشته باشند به این دلایل:
-- **Generation قبلی نیمه‌کاره ماند** — مثلاً tab بسته شد، شبکه قطع شد، یا cancel زدید قبل از تکمیل همه scenes
-- **یک scene در DashScope/Wan engine fail شد** ولی پروژه ذخیره شد
-- **Timeout** روی یکی از clipها (Wan 2.6 گاهی >2 دقیقه طول می‌کشد)
-- **Blob URL منقضی شد** — اگر videoUrl یک blob: URL موقت بوده باشد و در DB ذخیره شده (نه permanent storage URL)، بعد از reload صفحه آن URL دیگر معتبر نیست
+### مشکل ۴ — End card مخفیانه به جای video
+خط 503-505: اگر scene نوع `static-card` یا `closing` داشته باشد، به جای generate-video، یک canvas با لوگو drawing می‌شود (`generateEndCard`). در screenshot شما "Solution" به نظر می‌رسد از این مسیر آمده (تصویر زرد لوگو، نه video واقعی). یعنی فقط 1 scene واقعاً generate شده، و آن یکی fail شده.
 
-### چه زمانی این اتفاق می‌افتد (الگو)
+### مشکل ۵ — خطای واقعی API hidden
+خط 302 از `wanPoll`:
+```ts
+return { status: "failed", error: output.message || "Wan generation failed" };
+```
+وقتی DashScope به دلیل content moderation یا I2V image error رد می‌کند، error message اصلی API در logs ذخیره می‌شود ولی پیام generic ("Generation failed") به UI می‌رسد. کاربر نمی‌تواند بفهمد چرا fail شد.
 
-- وقتی روی یک **draft قدیمی** در لیست projects کلیک می‌کنید
-- نه وقتی پروژه جدید می‌سازید
-- معمولاً برای پروژه‌هایی که status آن‌ها `draft` یا `incomplete` است
+---
 
-### آیا این مشکل است؟
+## راه‌حل ریشه‌ای (Surgical, 3 files)
 
-این auto-recovery درست کار می‌کند و هدف آن نجات پروژه‌های ناقص است. ولی اگر شما مرتباً این پیام را می‌بینید، یعنی scenes شما در نقطه‌ای از pipeline به جای completion، نیمه‌کاره ذخیره می‌شوند.
+### Fix A — `src/lib/backgroundAdDirectorService.ts`
+1. **خط 487**: حذف hardcoded `15` و محاسبه واقعی per-scene:
+   ```ts
+   const sceneDuration = Math.max(2, Math.min(15, Math.round(videoParams.duration / storyboardWithDefaults.length)));
+   ```
+2. **بعد از parallel generation**: یک `saveProject` مجدد با clips نهایی (پس از Promise.allSettled و retry rounds) اضافه شود تا DB با state واقعی sync شود (دیگر "recovery" روی reload اتفاق نیفتد).
+3. **خطاهای واقعی را propagate کن**: در try/catch خطوط 557-558 و 654-656، خطای کامل API را در `error` field کلیپ ذخیره کن (نه فقط generic message).
 
-### اگر می‌خواهید این رفتار تغییر کند، گزینه‌ها:
+### Fix B — `src/components/ad-director/AdDirectorContent.tsx`
+در `handleRegenerateScene` (خط 354-358)، خطای کامل را در toast نمایش بده تا کاربر بفهمد چرا fail شد (مثلاً "Image too small" vs "Content blocked").
 
-1. **Status badge به جای auto-recovery** — وقتی draft ناقص انتخاب می‌شود، یک badge "Incomplete (X/Y scenes)" نشان داده شود و کاربر دکمه «Resume» را خودش بزند (به جای شروع خودکار)
-2. **بهبود نمایش progress** — به جای «Recovering missing scenes...» جزئیات نشان داده شود: "Re-generating scene 3 of 5 (was missing)"
-3. **بررسی root cause** — چک کنیم چرا scenes اصلاً ناقص ذخیره می‌شوند (مثلاً ثبت blob URL به جای permanent URL در DB)
+### Fix C — `supabase/functions/generate-video/index.ts`
+در `wanPoll` (خط 293-307)، علاوه بر `output.message`، فیلدهای `output.code`، `output.task_metrics`، و `data.message` را هم استخراج کن. Wan معمولاً علت رد را در `code` می‌گذارد (مثلاً `DataInspectionFailed` برای moderation، `InvalidParameter.ImageURL` برای I2V image errors).
 
-اگر می‌خواهید یکی از این تغییرات را اعمال کنم، بفرمایید کدام را ترجیح می‌دهید.
+### What Stays the Same
+- معماری Wan integration و provider routing — بدون تغییر
+- UI scene cards و recovery flow قبلی — بدون تغییر
+- Auto-save برای پروژه‌های اولیه — بدون تغییر، فقط یک save اضافی end-of-pipeline
+
+### نتیجه
+- Duration واقعی در هر scene اعمال می‌شود → fail rate کمتر
+- DB همیشه state واقعی را بازتاب می‌دهد → دیگر "Recovering missing scenes" روی reload نمی‌بینید
+- خطای واقعی scene fail در UI قابل مشاهده است (مثلاً "Image moderation rejected" vs generic "failed") → کاربر می‌تواند تصمیم درست بگیرد (تغییر prompt یا حذف intro image)
+- اگر scene 1 به دلیل I2V fail شد، خطا واضح است: "I2V failed because intro image URL invalid"
 
