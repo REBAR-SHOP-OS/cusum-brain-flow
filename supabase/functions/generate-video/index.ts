@@ -173,6 +173,36 @@ async function veoDownload(apiKey: string, videoUrl: string) {
 const WAN_CLIP_DURATIONS = [5, 10, 15];
 const WAN_MAX_CLIP = 15;
 
+// Snap arbitrary duration to Wan's preferred values to prevent internal re-timing
+// (which causes chipmunk audio + sped-up motion).
+const snapToWanDuration = (d: number): number => {
+  const clamped = Math.max(2, Math.min(15, d));
+  if (clamped <= 7) return 5;
+  if (clamped <= 12) return 10;
+  return 15;
+};
+
+// Strip dialogue / narration / voiceover instructions from prompt so Wan's
+// auto-dubbing has nothing to read. Removes lines like `speaks: ...`,
+// `voiceover: ...`, `narration: ...`, plus quoted dialogue blocks.
+const sanitizeWanPrompt = (raw: string): string => {
+  if (!raw) return raw;
+  let out = raw;
+  // remove "label: ...." lines for known speech labels (until newline)
+  out = out.replace(/\b(voice\s*over|voiceover|narration|narrator|dialogue|subtitle|caption|speaks?|says?|spoken|script)\s*:[^\n]*/gi, "");
+  // remove standalone quoted dialogue blocks ("...." or “....”)
+  out = out.replace(/[""][^""]{0,400}[""]/g, "");
+  out = out.replace(/"[^"\n]{0,400}"/g, "");
+  // collapse extra whitespace / blank lines
+  out = out.replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " ").trim();
+  return out;
+};
+
+// Suppress dubbing + fast-motion artifacts from Wan 2.6 auto-audio.
+const WAN_BASE_NEGATIVE = "spoken dialogue, voiceover, narration, talking, lip-sync, dubbing, subtitles, captions, fast-motion, time-lapse, sped-up, chipmunk voice";
+const buildWanNegative = (extra?: string): string =>
+  extra && extra.trim() ? `${extra}, ${WAN_BASE_NEGATIVE}` : WAN_BASE_NEGATIVE;
+
 // Resolution map for wan2.6-t2v (size parameter uses width*height format)
 const WAN_SIZE_MAP: Record<string, string> = {
   "16:9": "1920*1080",
@@ -185,16 +215,17 @@ async function wanGenerate(
   apiKey: string, prompt: string, duration: number,
   aspectRatio?: string, negativePrompt?: string, audioUrl?: string,
 ) {
-  const wanDuration = Math.max(2, Math.min(15, duration));
+  const wanDuration = snapToWanDuration(duration);
   const url = `${DASHSCOPE_BASE}/services/aigc/video-generation/video-synthesis`;
   const size = WAN_SIZE_MAP[aspectRatio || "16:9"] || "1920*1080";
+  const cleanPrompt = sanitizeWanPrompt(prompt);
 
   const params: Record<string, unknown> = {
     size,
     duration: wanDuration,
     prompt_extend: true,
+    negative_prompt: buildWanNegative(negativePrompt),
   };
-  if (negativePrompt) params.negative_prompt = negativePrompt;
   if (audioUrl) params.audio_url = audioUrl;
 
   const resp = await fetch(url, {
@@ -206,7 +237,7 @@ async function wanGenerate(
     },
     body: JSON.stringify({
       model: "wan2.6-t2v",
-      input: { prompt },
+      input: { prompt: cleanPrompt },
       parameters: params,
     }),
   });
@@ -235,17 +266,18 @@ async function wanI2vGenerate(
   apiKey: string, prompt: string, imageUrl: string, duration: number,
   aspectRatio?: string, negativePrompt?: string, flash = false,
 ) {
-  const wanDuration = Math.max(2, Math.min(15, duration));
+  const wanDuration = snapToWanDuration(duration);
   const url = `${DASHSCOPE_BASE}/services/aigc/video-generation/video-synthesis`;
   const size = WAN_SIZE_MAP[aspectRatio || "16:9"] || "1920*1080";
   const model = flash ? "wan2.6-i2v-flash" : "wan2.6-i2v";
+  const cleanPrompt = sanitizeWanPrompt(prompt);
 
   const params: Record<string, unknown> = {
     size,
     duration: wanDuration,
     prompt_extend: true,
+    negative_prompt: buildWanNegative(negativePrompt),
   };
-  if (negativePrompt) params.negative_prompt = negativePrompt;
 
   const resp = await fetch(url, {
     method: "POST",
@@ -256,7 +288,7 @@ async function wanI2vGenerate(
     },
     body: JSON.stringify({
       model,
-      input: { prompt, img_url: imageUrl },
+      input: { prompt: cleanPrompt, img_url: imageUrl },
       parameters: params,
     }),
   });
