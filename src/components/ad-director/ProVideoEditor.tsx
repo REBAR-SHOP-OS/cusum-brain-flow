@@ -1076,9 +1076,17 @@ export function ProVideoEditor({
     updatedSegments.splice(segIdx + 1, 0, newSeg);
     onUpdateSegments?.(updatedSegments);
 
-    // Insert new scene after current
-    const newScene: StoryboardScene = { ...scene, id: newSceneId, segmentId: newSegId };
-    const updated = [...storyboard];
+    // Insert new scene after current — mark sibling relationship for continuous bar rendering
+    const newScene: StoryboardScene = {
+      ...scene,
+      id: newSceneId,
+      segmentId: newSegId,
+      splitFromId: scene.id,
+      splitIntoId: undefined,
+    };
+    const updated = storyboard.map((s, i) =>
+      i === index ? { ...s, splitIntoId: newSceneId } : s
+    );
     updated.splice(index + 1, 0, newScene);
     onUpdateStoryboard?.(updated);
 
