@@ -142,6 +142,10 @@ export interface StoryboardScene {
   locked: boolean;
   sceneIntelligence?: SceneIntelligence;
   promptQuality?: PromptQualityScore;
+  /** ID of the scene this scene was split from (set on the right half) */
+  splitFromId?: string;
+  /** ID of the scene that was created by splitting this scene (set on the left half) */
+  splitIntoId?: string;
 }
 
 export interface ContinuityProfile {
