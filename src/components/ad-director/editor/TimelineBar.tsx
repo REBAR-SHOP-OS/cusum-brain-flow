@@ -573,39 +573,12 @@ export function TimelineBar({
                 {mutedScenes?.has(storyboard[selectedSceneIndex]?.id) ? <VolumeOff className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
               </Button>
             )}
-            {onRegenerateScene && (
-              <Button
-                variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10"
-                onClick={() => onRegenerateScene(storyboard[selectedSceneIndex]?.id)}
-                disabled={clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id)?.status !== "completed"}
-                title="Regenerate All (Video, Audio, Text)"
-              >
-                <RefreshCw className="w-3 h-3" />
-              </Button>
-            )}
             {onDeleteScene && (
               <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10" onClick={() => onDeleteScene(selectedSceneIndex)} title="Delete">
                 <Trash2 className="w-3 h-3" />
               </Button>
             )}
           </div>
-        )}
-        {onRegenerateAll && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-2 text-[9px] gap-1 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10"
-            onClick={onRegenerateAll}
-            disabled={isRegeneratingAll}
-            title="Generate audio & text for all scenes"
-          >
-            {isRegeneratingAll ? (
-              <RefreshCw className="w-3 h-3 animate-spin" />
-            ) : (
-              <Sparkles className="w-3 h-3" />
-            )}
-            <span>{isRegeneratingAll ? "Generating…" : "Generate"}</span>
-          </Button>
         )}
         <div className="flex-1" />
         <Button
