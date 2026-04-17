@@ -547,12 +547,13 @@ async function handleAnalyzeScript(apiKey: string, body: any, modelOverride?: st
   if (!script) throw new Error("Script is required");
 
   const characterBlock = characterImageUrl
-    ? `\n\nIMPORTANT — CHARACTER/NARRATOR REFERENCE: A reference photo of a real spokesperson/narrator has been provided. This person MUST appear in EVERY scene (except closing/end-card) as the primary subject presenting or demonstrating the product/service. Rules:
-- Describe this person consistently across ALL scenes (same appearance, clothing, features).
-- Set generationMode to "image-to-video" for every scene featuring this person.
-- Include this person's description in continuityProfile.subjectDescriptions.
-- The narrator should be performing contextual actions relevant to each scene (speaking, demonstrating, gesturing, walking through the environment).
-- Never replace them with a generic or different person.`
+    ? `\n\nIMPORTANT — CHARACTER REFERENCE (a real photo will be passed as img_url to the video model):
+- Set generationMode to "image-to-video" for every non-static-card scene.
+- In continuityProfile.subjectDescriptions, write ONLY: "the spokesperson shown in reference image" — DO NOT describe their face, age, ethnicity, hair, or facial features (any verbal description would conflict with the actual photo and cause the video model to drift to a different person).
+- In continuityProfile.wardrobe, write: "as worn in reference image".
+- Scene actions/objectives must describe what the person DOES (speaking, demonstrating, gesturing, walking) — NOT how they LOOK.
+- Never use phrases like "a man", "a woman", "bearded", "elderly", "young", "silver-haired", etc. Let the image speak for itself.
+- The same spokesperson appears in EVERY non-closing scene.`
     : "";
 
   const introBlock = introImageUrl
@@ -643,7 +644,12 @@ Original Prompt: ${scene.prompt}
 Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
 ${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the FIRST scene — establish the visual identity that ALL subsequent scenes must follow."}
 ${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}
-${characterImageUrl ? `\nCHARACTER REFERENCE: A real person's photo is provided as the narrator/spokesperson. The prompt MUST describe this person as the central subject performing actions in this scene. Never replace them with a generic person. Ensure the person's appearance matches across all scenes.` : ""}${introRefBlock}${outroRefBlock}${sourceClipPromptBlock}${productStyleDirective}`;
+${characterImageUrl ? `\nCHARACTER REFERENCE (CRITICAL): A reference photo is provided as img_url to the video model. The prompt MUST:
+- Refer to the subject as "the spokesperson shown in the reference image" — DO NOT describe their face, age, ethnicity, hair color, skin tone, or any facial features in words.
+- Only describe their ACTIONS (gestures, walking, speaking, demonstrating the product) and the environment around them.
+- Wardrobe should be referenced as "wearing the same outfit as in the reference image" unless the scene explicitly requires a wardrobe change.
+- Never use words like "man", "woman", "bearded", "elderly", "young", "silver-haired", "tall" — verbal descriptions cause the video model to drift to a different person.
+- This rule is absolute and overrides any other instruction about describing the subject.` : ""}${introRefBlock}${outroRefBlock}${sourceClipPromptBlock}${productStyleDirective}`;
 
   return await callAIAndExtract(
     apiKey,

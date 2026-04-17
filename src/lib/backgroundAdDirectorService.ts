@@ -491,7 +491,11 @@ class BackgroundAdDirectorService {
       const sceneDuration = Math.max(2, Math.min(15, Math.round(requestedTotal / Math.max(1, storyboardWithDefaults.length))));
       const cp = continuityProfile;
       const continuityPrefix = cp
-        ? `[Visual continuity: ${cp.environment || ""}, ${cp.lightingType || ""}, ${cp.colorMood || ""}, subject: ${cp.subjectDescriptions || ""}, wardrobe: ${cp.wardrobe || ""}] `
+        ? `[Visual continuity: ${cp.environment || ""}, ${cp.lightingType || ""}, ${cp.colorMood || ""}` +
+          (characterImageUrl
+            ? `, wardrobe-and-look: see reference image (do not re-describe the person in words)`
+            : `, subject: ${cp.subjectDescriptions || ""}, wardrobe: ${cp.wardrobe || ""}`) +
+          `] `
         : "";
       const lastVisualIdx = storyboardWithDefaults.reduce((acc, s, idx) => {
         const seg = newSegments.find(sg => sg.id === s.segmentId);
@@ -533,9 +537,18 @@ class BackgroundAdDirectorService {
 
           // Inject user-written character direction whenever this scene uses the character ref.
           const usingCharacter = !!characterImageUrl && referenceImage === characterImageUrl;
-          const finalPrompt = (usingCharacter && characterPrompt && characterPrompt.trim())
-            ? `${motionPrompt}\n\nCharacter direction (this person speaks/acts on camera — keep their face and look unchanged): ${characterPrompt.trim()}`
+          const characterLockHeader = `[CHARACTER LOCK: The person in the reference image is the EXACT spokesperson — preserve their face, skin tone, hair, age, ethnicity, and clothing identically. Do NOT generate a different person, do NOT alter their identity.]\n`;
+          const finalPrompt = usingCharacter
+            ? `${characterLockHeader}${motionPrompt}` +
+              (characterPrompt && characterPrompt.trim()
+                ? `\n\nCharacter direction (actions only — keep face and look unchanged): ${characterPrompt.trim()}`
+                : "")
             : motionPrompt;
+
+          const baseNegative = "static image, zoom only, no motion, blurry, text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind";
+          const negativePrompt = (isI2V && characterImageUrl)
+            ? `${baseNegative}, different person, different face, identity change, face swap, wrong ethnicity, wrong age, generic stock person, replaced subject, altered facial features`
+            : baseNegative;
 
           const result = await invokeEdgeFunction<{
             url?: string; videoUrl?: string; generationId?: string; jobId?: string;
@@ -545,7 +558,7 @@ class BackgroundAdDirectorService {
             aspectRatio: wanRatio, provider: chosenProvider,
             model: chosenModel,
             ...(isI2V ? { imageUrl: referenceImage } : {}),
-            negativePrompt: "static image, zoom only, no motion, blurry, text, words, letters, titles, subtitles, captions, watermark, typography, written content, overlay text, any text of any kind",
+            negativePrompt,
           }, { timeoutMs: EDGE_TIMEOUT_MS });
 
           const videoUrl = result.url || result.videoUrl;
