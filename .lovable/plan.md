@@ -1,103 +1,84 @@
 
 
 ## درخواست کاربر
-دکمه‌های Undo / Redo که بالای editor (کنار دکمه Back) هستند باید **هر تغییری** را ذخیره کنند، نه فقط بعضی‌ها — تا کاربر بتواند به مرحله‌ی قبل یا بعد برگردد.
+ویدئوی Veo 3.1 generate شد (از لاگ: `poll` status=completed و URL هم برگشت) ولی در preview هیچ چیز نمایش داده نمی‌شود — صفحه‌ی سیاه با player خالی.
 
-## یافته‌ی فنی
-در `ProVideoEditor.tsx`:
-1. **History فقط `storyboard` را snapshot می‌کند** (خط 852: `useState<StoryboardScene[][]>`). تغییرات روی audio tracks, text overlays, music، volume، mute، segments timing، position overlay اصلاً ضبط نمی‌شوند.
-2. `pushHistory(storyboard)` فقط در 9 جا صدا زده می‌شود (split, trim, duplicate, delete scene, reorder, ...). موارد زیر **هیچ snapshot نمی‌گیرند**:
-   - افزودن/حذف voiceover یا music track (خطوط 335, 355, 1652, 1688, 1716...)
-   - تغییر volume یا mute (خط 1018)
-   - drag/resize/edit text overlay (خط 1793, 1829, 1855)
-   - segment timing change در بسیاری مسیرها
-3. `undo`/`redo` فقط `onUpdateStoryboard` را صدا می‌زنند — حتی اگر history کامل باشد، state های دیگر (audioTracks, …) restore نمی‌شوند.
+## ریشه‌ی مشکل (Root Cause)
+Response از `generate-video` edge function این بود:
+```json
+{
+  "status": "completed",
+  "videoUrl": "https://generativelanguage.googleapis.com/v1beta/files/b52l84tacgbz:download?alt=media",
+  "needsGeminiAuth": true
+}
+```
+
+این URL **نیاز به Gemini API key در header دارد**. وقتی مرورگر آن را به `<video src=...>` می‌دهد، بدون Authorization header request می‌زند → Google 401/403 برمی‌گرداند → ویدئو load نمی‌شود → preview سیاه می‌ماند.
+
+در `VideoStudioContent.tsx` (خط 282-285) این کیس handle شده:
+```ts
+const needsProxy = data.needsAuth || data.needsGeminiAuth;
+if (needsProxy) finalUrl = await proxyDownload(...); // blob with auth
+```
+
+ولی در **AdDirector pipeline** (`backgroundAdDirectorService.ts` خط 954-992 — `pollGeneration`)، کد فقط `result.videoUrl` را مستقیم ذخیره می‌کند و **هیچ بررسی‌ای روی `needsGeminiAuth` / `needsAuth` نمی‌کند**. URL خام Gemini ذخیره می‌شود → scene clip نمی‌تواند load شود → preview سیاه.
+
+Edge function از قبل یک `action: "download"` دارد (خط 1169) که با service key auth می‌کند و blob یا URL عمومی (مثل Supabase Storage upload) برمی‌گرداند. فقط باید AdDirector از آن استفاده کند.
 
 ## برنامه (Surgical, Additive)
 
-### ۱. Snapshot یکپارچه (Unified Snapshot)
-به جای `StoryboardScene[]`، history به یک ساختار کامل تغییر کند:
+### ۱. افزودن helper `proxyAuthenticatedVideo` در `backgroundAdDirectorService.ts`
+مشابه `proxyDownload` در VideoStudioContent:
 ```ts
-interface EditorSnapshot {
-  storyboard: StoryboardScene[];
-  audioTracks: AudioTrackItem[];
-  // textOverlays در داخل storyboard.overlays هست → جداگانه نیاز نیست
-  segments?: { id: string; startTime: number; endTime: number }[]; // برای trim
+private async proxyAuthenticatedVideo(provider: string, jobId: string, remoteUrl: string): Promise<string | null> {
+  // فراخوانی edge function با action:"download" 
+  // تبدیل response.blob() → object URL
+  // اگر edge function خودش URL استوریج برگرداند (JSON)، همان را برگردان
+  // fallback: remoteUrl
 }
 ```
-`history: EditorSnapshot[]` و `pushHistory()` همه‌ی state ها را با هم snapshot می‌کند.
 
-### ۲. تابع unified `pushHistory()`
-```ts
-const pushHistory = useCallback((override?: Partial<EditorSnapshot>) => {
-  const snapshot: EditorSnapshot = {
-    storyboard: override?.storyboard ?? storyboard,
-    audioTracks: override?.audioTracks ?? audioTracks,
-    segments: override?.segments ?? segments,
-  };
-  // deep clone برای جلوگیری از reference mutation
-  const cloned = structuredClone(snapshot);
-  setHistory(prev => [...prev.slice(0, historyIndexRef.current + 1), cloned].slice(-50)); // cap 50
-  setHistoryIndex(idx => Math.min(idx + 1, 49));
-  setHasChanges(true);
-}, [storyboard, audioTracks, segments]);
-```
-- Cap به 50 entry برای جلوگیری از memory bloat
-- `structuredClone` تضمین می‌کند redo/undo بعدی state قبلی را خراب نکند
+نکات:
+- اولویت ۱: اگر response `Content-Type: application/json` بود و `{ url }` داشت → همان URL (Supabase Storage = persistent، قابل stitch)
+- اولویت ۲: اگر binary blob بود → `URL.createObjectURL(blob)` (موقت، فقط برای همان session کار می‌کند — ولی export/stitch قبل از expiration انجام می‌شود)
+- اولویت ۳ (fallback): برگرداندن `remoteUrl` اصلی (همان رفتار broken فعلی — بهتر از crash)
 
-### ۳. `undo()` / `redo()` کامل
-هر دو state را restore کنند:
+### ۲. اعمال در `pollGeneration` (خط 969-976)
 ```ts
-const apply = (snap: EditorSnapshot) => {
-  onUpdateStoryboard?.(snap.storyboard);
-  setAudioTracks(snap.audioTracks);
-  if (snap.segments && onUpdateSegments) onUpdateSegments(snap.segments);
-};
-const undo = () => { if (historyIndex > 0) { setHistoryIndex(i=>i-1); apply(history[historyIndex-1]); } };
-const redo = () => { if (historyIndex < history.length-1) { setHistoryIndex(i=>i+1); apply(history[historyIndex+1]); } };
+if (result.status === "completed" || result.videoUrl || result.url) {
+  let videoUrl = result.videoUrl || result.url;
+  const needsProxy = (result as any).needsAuth || (result as any).needsGeminiAuth;
+  if (needsProxy && videoUrl) {
+    const proxied = await this.proxyAuthenticatedVideo(provider, generationId, videoUrl);
+    if (proxied) videoUrl = proxied;
+  }
+  // ... ادامه‌ی ذخیره در clip
+}
 ```
 
-### ۴. Auto-snapshot برای همه‌ی mutationهای از‌قلم‌افتاده
-این نقاط `pushHistory()` اضافه می‌شود **قبل** از تغییر:
-- افزودن voiceover/music (خطوط 335, 355, 1688)
-- حذف audio track (1022, 1282, 1716)
-- تغییر volume / mute scene (1018, و در منطق mutedScenes)
-- drag/move/resize text overlay (1793, 1829, 1855) — با debounce 300ms برای جلوگیری از 100 snapshot هنگام درگ
-- edit text content / style overlay (1315, 1347)
-- segment timing change در همه مسیرها
+### ۳. Type augmentation برای response
+`invokeEdgeFunction<{ status?, videoUrl?, url?, needsAuth?, needsGeminiAuth? }>` تا TypeScript هم راضی باشد.
 
-### ۵. Debounce برای عملیات پیوسته (drag, slider)
-helper:
-```ts
-const pushHistoryDebounced = useDebouncedCallback(pushHistory, 300);
-```
-هنگام drag overlay یا تنظیم volume slider، فقط آخرین حالت ذخیره شود، نه هر pixel.
+### ۴. همان الگو در `regenerateScene` (اگر جدا poll دارد)
+اگر `regenerateScene` هم از `pollGeneration` همین متد استفاده می‌کند → fix خودکار. اگر route مستقل دارد → همان check اعمال شود.
 
-### ۶. Seed snapshot کامل در شروع
-useEffect مقداردهی اولیه (خط 860) به‌جای فقط `storyboard`، یک `EditorSnapshot` کامل با audioTracks خالی/فعلی push کند.
-
-### ۷. UI feedback
-دکمه‌های undo/redo (خط 1960-1964) از قبل `disabled` correctly دارند. اضافه کنیم:
-- title پویا: `Undo (N changes)` تا کاربر بفهمد چقدر history دارد
-- بعد از undo/redo یک toast کوتاه: `"Undid: scene split"` (اختیاری — می‌توان با ذخیره `label` در snapshot)
-
-### ۸. Reset (`resetAll`) — هم‌خوان شود
-خط 906: `resetAll` به اولین snapshot کامل برگردد، نه فقط storyboard اول.
+### ۵. Persist در DB (اختیاری ولی توصیه‌شده)
+اگر download action خروجی JSON با `storagePath`/`publicUrl` داشته باشد (باید در edge function بررسی شود) → همان را در `ad_projects.clips[].videoUrl` ذخیره کنیم تا بعد از رفرش هم کار کند. اگر فقط blob برمی‌گرداند، blob URL موقت است — توصیه: edge function را تکمیل کنیم که Veo video را در Supabase Storage آپلود کند (مشابه Wan flow). بررسی می‌شود چه آپشن فعال است.
 
 ## فایل‌های تغییرکننده
-- `src/components/ad-director/ProVideoEditor.tsx` — ساختار `EditorSnapshot`، `pushHistory` یکپارچه، `undo`/`redo` کامل، اضافه کردن `pushHistory()` در ~15 mutation point، debounce برای drag
+- `src/lib/backgroundAdDirectorService.ts` — افزودن `proxyAuthenticatedVideo` + check `needsGeminiAuth/needsAuth` در `pollGeneration`
+- (شرطی) `supabase/functions/generate-video/index.ts` — اگر `action:"download"` برای `veo` فقط blob برمی‌گرداند، آن را به آپلود در Storage و برگرداندن `{ url, uploaded:true }` تبدیل کنیم تا URL persistent شود
 
 ## آنچه دست‌نخورده می‌ماند
-- Timeline rendering, playback، export pipeline
-- DB / RLS / edge functions
-- Keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z) — همان‌ها فقط روی undo/redo جدید کار می‌کنند
-- زبان UI: انگلیسی
+- UI editor, stitch pipeline, aspect ratio, undo/redo
+- `VideoStudioContent.tsx` (از قبل درست کار می‌کند)
+- Wan flow (از قبل Storage-uploaded URL برمی‌گرداند و نیاز به proxy ندارد)
+- DB schema / RLS / سایر edge functions
 
 ## نتیجه
-1. ✅ هر تغییر (split, trim, delete, duplicate, reorder, voiceover add/remove, music add/remove, text overlay add/edit/move, volume, mute, segment timing) snapshot می‌شود
-2. ✅ Undo / Redo همه‌ی state ها (storyboard + audioTracks + segments) را به‌درستی restore می‌کند
-3. ✅ Drag پیوسته با debounce — بدون پر شدن history
-4. ✅ Cap 50 entry → بدون memory leak
-5. ✅ دکمه‌های UI و keyboard shortcuts همچنان کار می‌کنند
-6. ✅ Reset به وضعیت اولیه‌ی کامل
+1. ✅ ویدئوی Veo 3.1 در preview AdDirector نمایش داده می‌شود
+2. ✅ Export/stitch روی آن کار می‌کند (چون URL قابل fetch شده)
+3. ✅ تغییرات در Wan و Sora بی‌اثر (فقط branch Veo/needsGeminiAuth)
+4. ✅ Graceful fallback: اگر proxy fail شد، URL خام را می‌دهد (همان رفتار قبلی، بدتر نمی‌شود)
+5. ✅ زبان UI: انگلیسی
 
