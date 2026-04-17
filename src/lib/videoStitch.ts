@@ -657,19 +657,26 @@ export async function stitchClips(
               nv.play().catch(() => {});
             }
 
-            // Draw outgoing clip with decreasing alpha
+            // Draw outgoing clip with decreasing alpha (cover-fit)
             ctx.globalAlpha = 1 - progress;
-            ctx.drawImage(video, 0, 0, W, H);
+            {
+              const f = fitCover(video.videoWidth, video.videoHeight, W, H);
+              ctx.drawImage(video, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
+            }
 
-            // Draw incoming clip with increasing alpha
+            // Draw incoming clip with increasing alpha (cover-fit)
             const nextVideo = validatedClips[clipIndex + 1].video;
             ctx.globalAlpha = progress;
-            ctx.drawImage(nextVideo, 0, 0, W, H);
+            {
+              const f = fitCover(nextVideo.videoWidth, nextVideo.videoHeight, W, H);
+              ctx.drawImage(nextVideo, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
+            }
 
             ctx.globalAlpha = 1.0;
           } else {
             ctx.globalAlpha = 1.0;
-            ctx.drawImage(video, 0, 0, W, H);
+            const f = fitCover(video.videoWidth, video.videoHeight, W, H);
+            ctx.drawImage(video, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
           }
 
           hasDrawnFrame = true;
