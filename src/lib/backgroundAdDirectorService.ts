@@ -825,9 +825,12 @@ class BackgroundAdDirectorService {
         `] `
       : "";
 
+    // Scene index — used for both narrative bridge and reference image selection
+    const sceneIdx = s.storyboard.indexOf(scene);
+
     // ─── Narrative bridge: connect to previous/next scenes for story flow ───
     const previousScene = sceneIdx > 0 ? s.storyboard[sceneIdx - 1] : null;
-    const nextScene = sceneIdx < s.storyboard.length - 1 ? s.storyboard[sceneIdx + 1] : null;
+    const nextScene = sceneIdx >= 0 && sceneIdx < s.storyboard.length - 1 ? s.storyboard[sceneIdx + 1] : null;
     const prevEndsWith = (previousScene as any)?.endsWith || cp?.lastFrameSummary || "";
     const prevAction = previousScene?.subjectAction || "";
     const nextObjective = nextScene?.objective || "";
@@ -866,7 +869,6 @@ class BackgroundAdDirectorService {
     const motionPrompt = continuityPrefix + narrativeBridge + nextHint + basePrompt + " Shape this into a post-ready ad shot with premium after-effects-style transitions, polished pacing, and a strong intro/outro rhythm. Cinematic camera movement with dynamic subject motion throughout the scene. Avoid static shots.";
 
     // Determine reference image with same priority as initial pipeline
-    const sceneIdx = s.storyboard.indexOf(scene);
     const lastVisualIdx = s.storyboard.reduce((acc, sc, idx) => {
       const seg = s.segments.find(sg => sg.id === sc.segmentId);
       return (sc.generationMode !== "static-card" && seg?.type !== "closing") ? idx : acc;
