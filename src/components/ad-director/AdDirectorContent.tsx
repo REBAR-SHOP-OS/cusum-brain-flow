@@ -153,6 +153,14 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         }
       } catch (e) { console.warn("TTS failed:", e); }
 
+      const transitionPreset = (typeof window !== "undefined" && localStorage.getItem("ad-director:transition-preset")) || "Crossfade";
+      const transitionDuration = (() => {
+        if (typeof window === "undefined") return 0.5;
+        const v = parseFloat(localStorage.getItem("ad-director:transition-duration") || "0.5");
+        return isNaN(v) ? 0.5 : v;
+      })();
+      const crossfadeDuration = transitionPreset === "None" ? 0 : transitionDuration;
+
       const finalUrl = await stitchClips(orderedClips, {
         logo: { url: "", enabled: false, size: 80 },
         endCard: {
@@ -164,6 +172,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         audioUrl,
         musicUrl: service.getState().musicTrackUrl || undefined,
         musicVolume: 0.15,
+        crossfadeDuration,
       });
 
       // Upload to storage for permanent URL
