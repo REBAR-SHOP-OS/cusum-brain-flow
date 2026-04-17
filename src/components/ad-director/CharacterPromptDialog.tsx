@@ -44,48 +44,64 @@ export function CharacterPromptDialog({
   const handleImprove = async () => {
     if (improving) return;
     const seed = text.trim();
-    if (seed.length < 3) {
-      toast({
-        title: "Add a starting idea",
-        description: "Write a short note about what the character should do, then improve it.",
-        variant: "destructive",
-      });
-      return;
-    }
+    const isGenerating = seed.length === 0;
     setImproving(true);
     try {
-      const instruction = [
-        "You rewrite a SHORT character-direction note for an AI video model (image-to-video).",
-        "The note describes what THIS specific character (a real person from a reference photo) should SAY and DO on camera.",
-        "Constraints:",
-        "- Keep the character's identity, face, body, and clothing UNCHANGED. Do not describe their appearance.",
-        "- Focus on: dialogue (what they say), tone of voice, facial expression, eye contact, gestures, micro-actions.",
-        "- Cinematic, persuasive, advertising tone.",
-        "- 2–4 sentences maximum. No headings, no bullet lists.",
-        brandContext ? `Brand context: ${brandContext}` : "",
-        "Return ONLY the improved direction text — no preamble, no quotes.",
-      ]
-        .filter(Boolean)
-        .join("\n");
+      const instruction = isGenerating
+        ? [
+            "You WRITE a fresh SHORT character-direction note for an AI video model (image-to-video).",
+            "The note describes what THIS specific character (a real person from a reference photo) should SAY and DO on camera to advertise the brand.",
+            "Constraints:",
+            "- Keep the character's identity, face, body, and clothing UNCHANGED. Do not describe their appearance.",
+            "- Focus on: dialogue (what they say), tone of voice, facial expression, eye contact, gestures.",
+            "- Cinematic, persuasive, advertising tone. End with a clear call-to-action.",
+            "- 2–4 sentences maximum. No headings, no bullet lists.",
+            brandContext ? `Brand context to base the pitch on: ${brandContext}` : "",
+            "Return ONLY the direction text — no preamble, no quotes.",
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : [
+            "You rewrite a SHORT character-direction note for an AI video model (image-to-video).",
+            "The note describes what THIS specific character (a real person from a reference photo) should SAY and DO on camera.",
+            "Constraints:",
+            "- Keep the character's identity, face, body, and clothing UNCHANGED. Do not describe their appearance.",
+            "- Focus on: dialogue (what they say), tone of voice, facial expression, eye contact, gestures, micro-actions.",
+            "- Cinematic, persuasive, advertising tone.",
+            "- 2–4 sentences maximum. No headings, no bullet lists.",
+            brandContext ? `Brand context: ${brandContext}` : "",
+            "Return ONLY the improved direction text — no preamble, no quotes.",
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+      const userPayload = isGenerating
+        ? instruction
+        : `${instruction}\n\nUSER NOTE TO IMPROVE:\n${seed}`;
 
       const result = await invokeEdgeFunction<{ result?: { text?: string }; text?: string }>(
         "ad-director-ai",
         {
           action: "write-script",
-          input: `${instruction}\n\nUSER NOTE TO IMPROVE:\n${seed}`,
+          input: userPayload,
         },
       );
       const improved = (result?.result?.text ?? result?.text ?? "").trim();
       if (improved) {
         onTextChange(improved);
-        toast({ title: "✨ Improved", description: "Character direction refined." });
+        toast({
+          title: isGenerating ? "✨ Generated" : "✨ Improved",
+          description: isGenerating
+            ? "Character direction written from your brand."
+            : "Character direction refined.",
+        });
       } else {
         toast({ title: "No result", description: "Try again.", variant: "destructive" });
       }
     } catch (err) {
       console.error("character improve error:", err);
       toast({
-        title: "Improve failed",
+        title: isGenerating ? "Generation failed" : "Improve failed",
         description: err instanceof Error ? err.message : "Try again",
         variant: "destructive",
       });
