@@ -1,128 +1,81 @@
 
 
 ## درخواست کاربر
-بخش timeline (نوارهای Text / Audio / Music) **ناپایدار** است — هر بار که یک ویدئو وارد editor می‌شود رفتار متفاوتی دارد. کاربر می‌خواهد:
-- **همیشه** و به‌طور قطعی، اگر ویدئو دارای text باشد → نوار آبی Text نشان داده شود
-- اگر ویدئو دارای voice/voiceover باشد → نوار بنفش Audio نشان داده شود  
-- اگر ویدئو دارای music باشد → نوار سبز/نارنجی Music نشان داده شود
-- این رفتار باید **deterministic** باشد، نه تصادفی
+روی هر کارت scene در بخش "Generated Scenes" (زیر preview در صفحه‌ی AdDirector main flow) یک دکمه‌ی **حذف** ✕ نمایش داده شود تا کاربر بتواند scene را حذف کند.
 
-## بررسی کد فعلی
+از screenshot: کارت‌های 1. Hook / 2. Problem / 3. Scene 3 — هیچ کدام دکمه‌ی حذف ندارند. کاربر می‌خواهد بتواند scene دلخواه را پاک کند.
 
-نیاز به مطالعه:
-- `src/components/ad-director/ProVideoEditor.tsx` — جایی که tracks برای lanes ساخته می‌شوند (`seededTextScenesRef`, voice tracks, music)
-- `src/components/ad-director/editor/TimelineBar.tsx` — render نوارها
+## بررسی موردنیاز
 
-از conversation history می‌دانم:
-- `seededTextScenesRef` برای auto-seed text blocks اضافه شد (در یک effect)
-- voice tracks از `extractedFromVideo` می‌آیند
-- مشکل احتمالی: effect هایی که seed می‌کنند **یک بار** اجرا می‌شوند و اگر `storyboard` بعداً تغییر کند (مثلاً scene اضافه شود، split شود، یا ویدئو جدید load شود)، tracks جدید seed نمی‌شوند
+نیاز به یافتن:
+- کامپوننتی که "Generated Scenes" + کارت‌های scene را render می‌کند (احتمالاً در `src/components/ad-director/`)
+- state ای که `scenes`/`storyboard` را نگه می‌دارد و handler `regenerate scene`/`reorder` دارد
+- محل اضافه‌کردن آیکون ✕
 
-## ریشه‌ی ناپایداری (تشخیص)
+احتمالاً فایل: `AdDirectorContent.tsx` یا یک sub-component مثل `ScenesGrid.tsx` / `SceneCard.tsx`.
 
-سه دسته باگ محتمل:
+## برنامه (Surgical, Additive)
 
-1. **Seeding یک‌باره با `Ref`**: اگر `seededTextScenesRef.current.has(sceneId)` چک می‌شود، scene های جدید بعد از mount اولیه هرگز text نمی‌گیرند. ولی اگر storyboard کامل عوض شود (پروژه جدید)، ref خالی نمی‌شود → scene های پروژه جدید با id متفاوت seed می‌شوند، ولی اگر id ها clash کنند، نه.
+### ۱. آیکون حذف روی هر کارت
+- آیکون `X` از lucide-react
+- موقعیت: گوشه‌ی **بالا-راست** کارت (همان جایی که در screenshot دایره‌ی قرمز کشیده شده)
+- اندازه: 20×20px با pill background `bg-black/60 hover:bg-red-600/90`
+- فقط روی hover کارت کاملاً visible شود (opacity 0 → 100 on hover) تا UI شلوغ نشود؛ روی mobile همیشه visible
+- `aria-label="Delete scene"`
 
-2. **شرط seed**: متن از `scene.voiceover || segment.text` می‌آید. اگر هر دو خالی باشند (مثلاً پروژه‌ای که فقط prompt دارد ولی voiceover generate نشده)، هیچ block ساخته نمی‌شود → کاربر می‌بیند "double-click a clip to add subtitles".
-
-3. **Voice tracks فقط برای `extractedFromVideo`**: اگر voice به‌صورت TTS generate شده ولی به‌عنوان `extractedFromVideo` flag نخورده، در lane دیده نمی‌شود.
-
-4. **Music**: اگر music URL در پروژه باشد ولی به lane mapping نشود.
-
-## برنامه (Surgical, Deterministic)
-
-### ۱. Deterministic auto-population effect
-یک effect جامع که هر زمان `storyboard` یا `clips` تغییر می‌کند، **idempotent** اجرا می‌شود:
-
-```ts
-useEffect(() => {
-  storyboard.forEach((scene, idx) => {
-    // Text lane
-    const hasTextBlock = textBlocks.some(b => b.sceneId === scene.id);
-    const textContent = scene.voiceover || scene.subtitle || scene.prompt;
-    if (!hasTextBlock && textContent) {
-      addTextBlock({ sceneId: scene.id, content: textContent, ... });
+### ۲. Handler حذف
+- در parent component که `scenes` state را دارد:
+  ```ts
+  const handleDeleteScene = (sceneId: string) => {
+    if (scenes.length <= 1) {
+      toast.error("Cannot delete the only scene");
+      return;
     }
-    
-    // Voice/Audio lane — هر scene که voiceUrl یا extracted audio دارد
-    const hasVoiceTrack = audioTracks.some(t => t.sceneId === scene.id && t.kind === 'voiceover');
-    if (!hasVoiceTrack && (scene.voiceUrl || clips[idx]?.hasAudio)) {
-      addAudioTrack({ sceneId: scene.id, kind: 'voiceover', ... });
-    }
-  });
+    // confirm dialog (AlertDialog از shadcn) — جلوگیری از حذف اشتباهی
+    setPendingDeleteId(sceneId);
+  };
   
-  // Music lane — یک بار سراسری
-  if (project.musicUrl && !musicTrack) {
-    setMusicTrack({ url: project.musicUrl, duration: totalDuration });
-  }
-}, [storyboard, clips, project.musicUrl]);
-```
+  const confirmDelete = () => {
+    setScenes(prev => prev.filter(s => s.id !== pendingDeleteId));
+    // cleanup وابسته‌ها: clips/videoUrls مربوط به این scene
+    toast.success("Scene deleted");
+    setPendingDeleteId(null);
+  };
+  ```
+- propagate به card component از طریق prop `onDelete?: (id: string) => void`
 
-این effect:
-- بدون `Ref` کار می‌کند → idempotent
-- وقتی scene جدید اضافه/split/load می‌شود، خودکار seed می‌کند
-- duplicate نمی‌سازد چون `hasTextBlock`/`hasVoiceTrack` چک می‌کند
+### ۳. Confirm dialog
+استفاده از `AlertDialog` موجود shadcn:
+- عنوان: `Delete this scene?`
+- متن: `This will remove the scene and its generated video. This action cannot be undone.`
+- دکمه‌ها: `Cancel` / `Delete` (variant=destructive)
 
-### ۲. شرط محتوا برای Text
-به جای فقط `voiceover`، چند fallback:
-- `scene.voiceover` (اگر TTS script هست)
-- `scene.subtitle` (اگر subtitle جدا تعریف شده)
-- `scene.caption`
-- `scene.prompt` (آخرین fallback — همیشه موجود است)
+### ۴. حفاظت‌ها
+- اگر فقط یک scene مانده → دکمه‌ی حذف غیرفعال یا hidden
+- اگر scene در حال generate شدن است → غیرفعال با tooltip "Wait for generation to finish"
+- بعد از حذف: اگر scene انتخاب‌شده/preview همان بود، به scene اول fallback شود
 
-→ تضمین می‌شود **هر scene** حداقل یک text block دارد.
-
-### ۳. شرط محتوا برای Voice/Audio
-- `scene.voiceUrl` (TTS generated)
-- `clip.audioUrl` (extracted from video)
-- `clip.hasAudio === true` (video دارای audio است)
-
-→ هر scene که هر یک را دارد، یک audio block می‌گیرد.
-
-### ۴. Music lane
-- اگر `project.musicUrl` یا `project.backgroundMusic` تعریف شده → یک block سراسری به طول کل ویدئو
-- اگر نیست → placeholder خاکستری "No music — click + to add" (همان رفتار فعلی)
-
-### ۵. پاکسازی هنگام تغییر پروژه
-وقتی project ID عوض می‌شود (یا storyboard کامل reset می‌شود):
-- `seededTextScenesRef.current.clear()` — ولی چون به ref وابسته نیستیم دیگر، این مشکل خود به خود حل می‌شود
-- Block های قدیمی که scene شان دیگر وجود ندارد → cleanup:
-```ts
-const validSceneIds = new Set(storyboard.map(s => s.id));
-setTextBlocks(prev => prev.filter(b => validSceneIds.has(b.sceneId)));
-setAudioTracks(prev => prev.filter(t => validSceneIds.has(t.sceneId)));
-```
-
-### ۶. حفظ حذف دستی کاربر
-اگر کاربر یک text/audio block را **به‌طور دستی حذف کرد**، دوباره seed نشود:
-- یک Set جدید: `userRemovedBlocks: Set<string>` (key = `${sceneId}:${kind}`)
-- در handler حذف: `userRemovedBlocks.add('${sceneId}:text')`
-- در effect seed: `if (!userRemovedBlocks.has('${scene.id}:text')) addBlock(...)`
-
-این مهم است چون اگر کاربر text را حذف کرد و effect دوباره اجرا شد، نباید برگردد.
+### ۵. هماهنگی با Edit Video
+چون قبلاً در ProVideoEditor (Edit Video) منطق حذف orphan blocks برای text/audio داریم (effect cleanup)، حذف scene از main flow هم به‌طور خودکار در Edit Video صحیح کار می‌کند — هیچ تغییر اضافی لازم نیست.
 
 ## فایل‌های تغییرکننده
-- `src/components/ad-director/ProVideoEditor.tsx`:
-  - حذف `seededTextScenesRef` (یا تبدیل به `userRemovedBlocksRef`)
-  - effect جدید deterministic برای seed تمام lanes
-  - cleanup orphan blocks
-  - handler حذف → ثبت در `userRemovedBlocks`
+- کامپوننت کارت scene در main flow (احتمالاً `src/components/ad-director/AdDirectorContent.tsx` یا sub-component) — افزودن آیکون ✕ و prop `onDelete`
+- parent state holder — handler `handleDeleteScene` + AlertDialog
+
+دقیقاً کدام فایل‌ها در فاز execute مشخص می‌شوند بعد از grep سریع روی "Generated Scenes" و "Hook".
 
 ## آنچه دست‌نخورده می‌ماند
-- `TimelineBar.tsx` — رفتار render نوارها (آیکون‌ها، رنگ‌ها) درست است
-- Split / Transition / Playback logic
-- Scene generation pipeline
-- Veo / Wan / Sora
+- Veo / Wan / Sora generation pipeline
+- Drag-to-reorder logic
+- Custom prompt input per scene
+- Edit Video editor و timeline lanes (split / transitions / text-audio seeding)
 - DB / RLS
 - زبان UI: انگلیسی
 
 ## نتیجه‌ی مورد انتظار
-1. ✅ هر بار ویدئو وارد editor می‌شود، نوارهای Text / Audio / Music **به‌طور قطعی** seed می‌شوند
-2. ✅ هر scene که محتوای text دارد → نوار آبی
-3. ✅ هر scene که voice/audio دارد → نوار بنفش
-4. ✅ پروژه که music دارد → نوار music سراسری
-5. ✅ حذف دستی کاربر respect می‌شود (re-seed نمی‌شود)
-6. ✅ Scene های جدید (add / split) خودکار lanes جدید می‌گیرند
-7. ✅ رفتار **یکسان و قابل پیش‌بینی** در همه‌ی پروژه‌ها
+1. ✅ هر کارت scene یک آیکون ✕ در گوشه‌ی بالا-راست دارد
+2. ✅ کلیک → confirm dialog → حذف از لیست + از preview
+3. ✅ آخرین scene قابل حذف نیست (محافظت)
+4. ✅ Toast feedback به کاربر
+5. ✅ سایر بخش‌ها (Edit Video، export) به‌طور خودکار با scene باقی‌مانده کار می‌کنند
 
