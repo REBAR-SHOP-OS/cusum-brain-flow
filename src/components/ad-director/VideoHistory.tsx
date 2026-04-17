@@ -1,11 +1,21 @@
 import { format } from "date-fns";
-import { Download, Play, AlertTriangle, Trash2, FileText, Pencil, Check, X } from "lucide-react";
+import { Download, Play, AlertTriangle, Trash2, FileText, Pencil, Check, X, RotateCw } from "lucide-react";
 import { useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { downloadFile } from "@/lib/downloadUtils";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import type { AdProjectRow } from "@/hooks/useAdProjectHistory";
+
+/** Count completed vs total scenes for an incomplete-draft badge */
+function getSceneCounts(project: AdProjectRow): { completed: number; total: number } {
+  const total = Array.isArray(project.storyboard) ? project.storyboard.length : 0;
+  const clips = Array.isArray(project.clips) ? (project.clips as any[]) : [];
+  const completed = clips.filter(
+    (c) => c.status === "completed" && c.videoUrl && typeof c.videoUrl === "string" && !c.videoUrl.startsWith("blob:"),
+  ).length;
+  return { completed, total };
+}
 
 interface VideoHistoryProps {
   projects: AdProjectRow[];
@@ -123,13 +133,23 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
     if (previewUrl) downloadFile(previewUrl, `${project.name || "video"}.mp4`);
   };
 
+  const { completed: completedScenes, total: totalScenes } = getSceneCounts(project);
+  const isIncompleteDraft = isDraft && totalScenes > 0 && completedScenes < totalScenes;
+
   const handleClick = () => {
     if (isRenaming) return;
     if (isDraft) {
+      // For incomplete drafts, do NOT auto-recover on a casual click — require the explicit Resume button.
+      if (isIncompleteDraft) return;
       onSelectDraft?.(project);
     } else if (previewUrl) {
       onSelect?.(previewUrl);
     }
+  };
+
+  const handleResume = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSelectDraft?.(project);
   };
 
   const startRename = (e: React.MouseEvent) => {
@@ -212,8 +232,14 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
           </>
         )}
         {isDraft && (
-          <div className="absolute top-1.5 right-1.5">
-            <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Draft</Badge>
+          <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
+            {isIncompleteDraft ? (
+              <Badge variant="destructive" className="text-[9px] px-1.5 py-0">
+                Incomplete {completedScenes}/{totalScenes}
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Draft</Badge>
+            )}
           </div>
         )}
       </div>
@@ -259,6 +285,16 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
           )}
         </div>
         <div className="flex items-center gap-0.5">
+          {isIncompleteDraft && onSelectDraft && (
+            <button
+              onClick={handleResume}
+              className="shrink-0 px-2 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1"
+              title={`Resume — ${completedScenes}/${totalScenes} scenes done`}
+            >
+              <RotateCw className="w-3 h-3 text-primary" />
+              <span className="text-[10px] font-medium text-primary">Resume</span>
+            </button>
+          )}
           {!isDraft && previewUrl && !hasError && (
             <button
               onClick={handleDownload}

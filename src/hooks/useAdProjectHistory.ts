@@ -57,6 +57,20 @@ export function useAdProjectHistory() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
+      // Root-cause guard: never persist ephemeral blob: URLs to the database.
+      // A blob: URL is only valid in the browser tab that created it — saving it
+      // means the next session sees "missing" clips and triggers auto-recovery.
+      const sanitizedClips = (project.clips ?? []).map((c) => {
+        const url = c.videoUrl;
+        if (typeof url === "string" && url.startsWith("blob:")) {
+          return { ...c, videoUrl: null, status: "failed" as const, error: "Ephemeral URL discarded — please regenerate" };
+        }
+        return c;
+      });
+      const finalUrl = project.finalVideoUrl && project.finalVideoUrl.startsWith("blob:")
+        ? null
+        : (project.finalVideoUrl ?? null);
+
       const row: any = {
         user_id: user.id,
         name: project.name,
@@ -64,9 +78,9 @@ export function useAdProjectHistory() {
         script: project.script ?? null,
         segments: JSON.parse(JSON.stringify(project.segments ?? [])),
         storyboard: JSON.parse(JSON.stringify(project.storyboard ?? [])),
-        clips: JSON.parse(JSON.stringify(project.clips ?? [])),
+        clips: JSON.parse(JSON.stringify(sanitizedClips)),
         continuity: project.continuity ? JSON.parse(JSON.stringify(project.continuity)) : null,
-        final_video_url: project.finalVideoUrl ?? null,
+        final_video_url: finalUrl,
         status: project.status ?? "draft",
         updated_at: new Date().toISOString(),
       };
