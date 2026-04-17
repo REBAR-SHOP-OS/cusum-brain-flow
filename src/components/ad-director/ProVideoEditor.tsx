@@ -545,6 +545,10 @@ export function ProVideoEditor({
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
   const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
+  // Per-scene playback window into the underlying video (set when a clip is split)
+  const [clipStartOffsets, setClipStartOffsets] = useState<Record<string, number>>({});
+  // Scenes whose duration was explicitly set (split / trim) — protect from being clobbered by handleLoaded
+  const lockedDurationScenesRef = useRef<Set<string>>(new Set());
   const [voiceoverDurations, setVoiceoverDurations] = useState<Record<string, number>>({});
   const [cardSettingsMap, setCardSettingsMap] = useState<Record<string, IntroOutroCardSettings>>({});
   const liveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1521,17 +1525,39 @@ export function ProVideoEditor({
   };
 
   const handleTimeUpdate = () => {
-    if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
+    const v = videoRef.current;
+    if (!v) return;
+    const sceneId = storyboard[selectedSceneIndex]?.id;
+    const startOffset = sceneId ? (clipStartOffsets[sceneId] ?? 0) : 0;
+    const targetDur = sceneId ? clipDurations[sceneId] : undefined;
+
+    // Report scene-relative time for the timeline playhead
+    setCurrentTime(Math.max(0, v.currentTime - startOffset));
+
+    // Auto-advance early when playback exits this scene's window (split halves)
+    if (targetDur !== undefined && lockedDurationScenesRef.current.has(sceneId!)) {
+      if (v.currentTime >= startOffset + targetDur - 0.05) {
+        if (!sceneTransitioning.current) {
+          handleVideoEndedRef.current();
+        }
+      }
+    }
   };
 
   const handleLoaded = () => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-      // Track actual clip duration keyed by scene ID
-      const sceneId = storyboard[selectedSceneIndex]?.id;
-      if (sceneId && videoRef.current.duration > 0) {
-        setClipDurations(prev => ({ ...prev, [sceneId]: videoRef.current!.duration }));
-      }
+    if (!videoRef.current) return;
+    setDuration(videoRef.current.duration);
+    const sceneId = storyboard[selectedSceneIndex]?.id;
+    if (!sceneId || videoRef.current.duration <= 0) return;
+
+    // Respect explicitly-locked durations (split / trim) — never overwrite
+    if (!lockedDurationScenesRef.current.has(sceneId)) {
+      setClipDurations(prev => ({ ...prev, [sceneId]: videoRef.current!.duration }));
+    }
+    // Seek into the correct window for split second-halves
+    const startOffset = clipStartOffsets[sceneId] ?? 0;
+    if (startOffset > 0 && Math.abs(videoRef.current.currentTime - startOffset) > 0.05) {
+      videoRef.current.currentTime = startOffset;
     }
   };
 
