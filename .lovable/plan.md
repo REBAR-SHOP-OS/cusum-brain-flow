@@ -1,37 +1,55 @@
 
 
-## Plan: AI Prompt Dialog with User Requirements
+## Plan: Wire Intro & Outro Reference Images Into Video Generation
 
 ### Problem
-Currently "AI Prompt" button auto-generates a prompt silently using only chip selections (style/products/duration). The user wants: clicking the button opens a dialog where they describe what they want, and the AI writes the cinematic prompt based on **their requirements**.
+The "Intro reference" and "Outro reference" cards (left + right) currently accept image uploads but the AI doesn't actually use them as the **first frame** and **last frame** of the generated video. They appear cosmetic — the generation ignores them.
 
-### Solution
-Add a dialog that opens when "AI Prompt" is clicked. User types their idea/requirements (e.g. "30s contractor ad in Toronto, focus on rebar cages, energetic mood"). Existing chip selections (style, products, duration, ratio) are sent as additional context. The generated prompt fills the main textarea for review/edit before "Create video".
+User wants: when intro/outro images are uploaded, the video MUST start from the intro image and end on the outro image.
 
-### Changes
+### Investigation Needed
+Before finalizing changes, I need to confirm:
+1. How `ChatPromptBar` currently passes intro/outro uploads to the generation pipeline
+2. Whether the storyboard generator (`ad-director-ai`) accepts `firstFrameUrl` / `lastFrameUrl` per scene
+3. Whether the video engine (Wan 2.6 i2v via DashScope) supports first-frame + last-frame conditioning (it does — `wan2.6-i2v` accepts `first_frame_url` and `last_frame_url`)
 
-**1. New file: `src/components/ad-director/AIPromptDialog.tsx`**
-- Dialog (RTL-aware textarea, supports Persian/English) with:
-  - Title: "Write prompt with AI" + sparkle icon
-  - Description: "Tell us what you want — we'll engineer the cinematic prompt"
-  - Textarea (min 6 rows): "Describe your ad idea, target audience, mood, key message…"
-  - Small chip row showing what context will be added (style, products, duration, ratio) — read-only preview so user knows it's auto-included
-  - Footer: Cancel + "Generate Prompt" button (disabled until text entered, shows spinner while loading)
-- Props: `open`, `onClose`, `onGenerate(userInput)`, `generating`, `contextChips: string[]`
+### Changes (high-level)
 
-**2. `src/components/ad-director/ChatPromptBar.tsx`**
-- Add `aiDialogOpen` state
-- Change `handleAiWrite` → opens dialog instead of immediately calling AI
-- Add `handleAiGenerate(userInput)` that calls the edge function with user input + chip context combined:
-  - `input: "${userRequirements}\n\nContext: Style: …, Products: …, Duration: 30s, Ratio: 16:9"`
-- Wire button `onClick={() => setAiDialogOpen(true)}` (remove `disabled={aiWriting}` since dialog handles its own loading)
-- Render `<AIPromptDialog>` at the bottom
+**1. `ChatPromptBar` / generation entrypoint**
+- When intro reference is set → mark **Scene 1** with `firstFrameUrl = introUrl` and force `generationMode = "image-to-video"`
+- When outro reference is set → mark **last scene** with `lastFrameUrl = outroUrl` (and if engine supports both, also `firstFrameUrl` from previous scene's last frame for continuity)
+- If a scene already has its own reference asset, intro/outro takes precedence on first/last scene only
+
+**2. Storyboard generation (`ad-director-ai` write-script / generate-storyboard)**
+- Pass intro/outro context into the prompt so the AI writes Scene 1 as a natural continuation of the intro image and the final scene as leading into the outro frame
+- Add system instruction: "Scene 1 must visually start from the provided intro reference. Final scene must end on the provided outro reference."
+
+**3. Video engine call (DashScope Wan 2.6 i2v)**
+- For Scene 1: send `model=wan2.6-i2v`, `first_frame_url=introUrl`, prompt = scene 1 cinematic prompt
+- For final scene: send `last_frame_url=outroUrl` (use i2v with last-frame conditioning)
+- For middle scenes: unchanged (text-to-video or existing reference-continuation)
+
+**4. UI feedback**
+- Add a small badge/indicator on intro & outro cards when set: "Locked to Scene 1" / "Locked to final scene"
+- In the storyboard view, show "🎬 Starts from intro reference" on Scene 1 and "🎬 Ends on outro reference" on last scene when applicable
 
 ### What stays the same
-- `ad-director-ai` edge function (`write-script` action) — already accepts free-form input, no backend changes
-- All chip selections, upload cards, ratio/duration controls — unchanged
-- Generated prompt still lands in the main textarea for editing before "Create video"
+- All other chips (style, products, duration, ratio) — unchanged
+- Character reference (middle card) — unchanged behavior
+- AI Prompt dialog — unchanged
+- Middle scenes generation — unchanged
+
+### Investigation Step Before Coding
+I'll first read these files to confirm exact wiring points:
+- `src/components/ad-director/ChatPromptBar.tsx` — find where intro/outro state lives
+- `src/components/ad-director/AdDirectorContent.tsx` — find generation orchestration
+- `supabase/functions/ad-director-ai/index.ts` — find storyboard generation logic
+- The DashScope i2v call site (likely `supabase/functions/dashscope-video/index.ts` or similar)
+
+Then apply minimal, surgical edits per the Surgical Execution Law (additive only, no refactoring of stable architecture).
 
 ### Result
-Click "AI Prompt" → dialog opens → user types their requirements → click "Generate Prompt" → AI writes cinematic prompt using user input + chip context → prompt fills main textarea → user edits if needed → "Create video".
+Upload intro image → Scene 1 is generated **starting from that exact frame**.
+Upload outro image → Final scene **ends on that exact frame**.
+The generated video genuinely opens and closes on the user's chosen frames — not just "uses them as inspiration."
 
