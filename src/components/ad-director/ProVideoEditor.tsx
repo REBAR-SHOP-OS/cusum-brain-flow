@@ -590,9 +590,9 @@ export function ProVideoEditor({
     if (musicTrackUrl) setMusicUrl(prev => prev ?? musicTrackUrl);
   }, [voiceoverUrl, musicTrackUrl, storyboard]);
 
-  // Dedup set used by the auto-extract effect (declared early; effect is registered
-  // later in the file once cumulativeStarts/sceneDurations exist)
-  const extractedClipUrlsRef = useRef<Set<string>>(new Set());
+  // Tracks URLs of extracted-from-video audio bars the user manually deleted,
+  // so the deterministic seeder doesn't re-create them.
+  const userRemovedExtractedRef = useRef<Set<string>>(new Set());
 
   // Preload logo image for card rendering
   useEffect(() => {
