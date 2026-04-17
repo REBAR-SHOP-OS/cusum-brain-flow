@@ -1917,6 +1917,7 @@ export function ProVideoEditor({
 
   // Handle music selection — also add to audio tracks
   const handleMusicSelect = (url: string | null) => {
+    pushHistory();
     setMusicUrl(url);
     onMusicSelect?.(url);
     setAudioTracks(prev => {
@@ -1930,6 +1931,7 @@ export function ProVideoEditor({
 
   // ─── Drag-to-reposition handlers ───
   const handleMoveOverlay = useCallback((id: string, newSceneId: string, startTime?: number) => {
+    pushHistoryDebounced();
     setOverlays(prev => prev.map(o => {
       if (o.id !== id) return o;
       const newSceneIdx = storyboard.findIndex(s => s.id === newSceneId);
@@ -1942,9 +1944,10 @@ export function ProVideoEditor({
       }
       return { ...o, sceneId: newSceneId };
     }));
-  }, [storyboard, segments]);
+  }, [storyboard, segments, pushHistoryDebounced]);
 
   const handleMoveAudioTrack = useCallback((index: number, _newSceneId: string, absoluteTime?: number) => {
+    pushHistoryDebounced();
     setAudioTracks(prev => prev.map((at, i) => {
       if (i !== index || absoluteTime == null) return at;
       const totalDur = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0) || 30;
@@ -2227,6 +2230,7 @@ export function ProVideoEditor({
                       const mouseXPct = ((e.clientX - rect.left) / rect.width) * 100;
                       const mouseYPct = ((e.clientY - rect.top) / rect.height) * 100;
                       dragOffset.current = { x: mouseXPct - ov.position.x, y: mouseYPct - ov.position.y };
+                      pushHistory();
                       setDraggingOverlayId(ov.id);
                     }}
                   >
@@ -2251,6 +2255,7 @@ export function ProVideoEditor({
                               e.preventDefault();
                               e.stopPropagation();
                               resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: ov.size.w, h: ov.size.h, x: ov.position.x, y: ov.position.y };
+                              pushHistory();
                               setResizingOverlay({ id: ov.id, handle });
                             }}
                           />
@@ -2509,14 +2514,14 @@ export function ProVideoEditor({
         storyboard={storyboard}
         segments={segments}
         selectedSceneIndex={selectedSceneIndex}
-        onAdd={(overlay) => setOverlays(prev => [...prev, overlay])}
+        onAdd={(overlay) => { pushHistory(); setOverlays(prev => [...prev, overlay]); }}
       />
 
       {/* Edit Overlay Dialog */}
       <EditOverlayDialog
         open={!!editingOverlay}
         overlay={editingOverlay}
-        onSave={(id, newContent) => setOverlays(prev => prev.map(o => o.id === id ? { ...o, content: newContent } : o))}
+        onSave={(id, newContent) => { pushHistory(); setOverlays(prev => prev.map(o => o.id === id ? { ...o, content: newContent } : o)); }}
         onClose={() => setEditingOverlay(null)}
       />
 
