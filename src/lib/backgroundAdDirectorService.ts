@@ -79,6 +79,10 @@ export interface AdDirectorPipelineState {
   characterPrompt?: string | null;
   videoProvider?: string | null;
   videoModel?: string | null;
+  // Editor-authored state, captured so the export pipeline reflects edits
+  editorOverlays?: any[];
+  editorAudioTracks?: any[];
+  editorMutedScenes?: string[];
 }
 
 class BackgroundAdDirectorService {
