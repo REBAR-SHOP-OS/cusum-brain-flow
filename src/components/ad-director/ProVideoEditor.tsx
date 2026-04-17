@@ -1955,24 +1955,14 @@ export function ProVideoEditor({
                     ref={videoRef}
                     src={videoSrc}
                     className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                    muted
+                    muted={isMuted}
+                    playsInline
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoaded}
                     onPlay={() => setIsPlaying(true)}
                     onPause={() => setIsPlaying(false)}
                     onEnded={handleVideoEnded}
                   />
-                )}
-                {brand.logoUrl && (
-                  <div className="absolute bottom-16 right-4 z-10 pointer-events-none">
-                    <div className="bg-black/20 backdrop-blur-sm rounded-lg p-1.5 border border-white/[0.06]">
-                      <img
-                        src={brand.logoUrl}
-                        alt="Brand watermark"
-                        className="h-8 w-auto object-contain opacity-80"
-                      />
-                    </div>
-                  </div>
                 )}
                 {sceneOverlays.map(ov => (
                   <div
