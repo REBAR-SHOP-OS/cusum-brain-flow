@@ -595,6 +595,7 @@ Deno.serve((req) =>
       firstFrameMimeType: z.string().max(50).optional(),
       lastFrameBase64: z.string().optional(),
       lastFrameMimeType: z.string().max(50).optional(),
+      persist: z.boolean().optional(),
     });
     const parsed = videoSchema.safeParse(await rawReq.json());
     if (!parsed.success) {
@@ -603,7 +604,7 @@ Deno.serve((req) =>
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-    let { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt, aspectRatio, firstFrameBase64, firstFrameMimeType, lastFrameBase64, lastFrameMimeType } = parsed.data;
+    let { action, provider, prompt, jobId, jobIds, videoUrl, duration, model, fileId, existingSceneUrls: parsedExistingSceneUrls, imageUrl, audioUrl: inputAudioUrl, negativePrompt, aspectRatio, firstFrameBase64, firstFrameMimeType, lastFrameBase64, lastFrameMimeType, persist } = parsed.data;
 
     // ── Server-side safety net: ensure no text in generated videos ──
     const NO_TEXT_SUFFIX = " No text, no words, no letters, no titles, no typography, no written content anywhere in the video.";
@@ -1181,6 +1182,24 @@ Deno.serve((req) =>
             JSON.stringify({ error: "videoUrl is required for Veo download" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
+        }
+        // When persist=true, download bytes, upload to Supabase Storage, return a persistent public URL as JSON.
+        // This is what AdDirector needs so the scene clip can be played by a plain <video> tag and survives page refresh.
+        if (persist) {
+          try {
+            const bytes = await veoDownloadBytes(apiKey, videoUrl);
+            const publicUrl = await uploadToStorage(auth.userId, bytes);
+            return new Response(
+              JSON.stringify({ url: publicUrl, uploaded: true }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          } catch (e) {
+            console.error("[generate-video] Veo persist upload failed:", e);
+            return new Response(
+              JSON.stringify({ error: `Veo persist failed: ${(e as Error).message}` }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
         }
         return await veoDownload(apiKey, videoUrl);
       } else {
