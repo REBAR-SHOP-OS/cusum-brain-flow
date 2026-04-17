@@ -1,54 +1,88 @@
 
 ## درخواست کاربر
-در ProVideoEditor همیشه بخش **Transitions** قابل دسترس باشد تا بتوان بین کلیپ‌ها ترنزیشن اضافه کرد، با template های مختلف.
+در timeline editor، زیر نوار ویدئو، دو نوار جداگانه نمایش داده شود:
+1. **نوار صدا (Audio)** — اگر کلیپ صدا دارد، waveform یا نوار رنگی نشان داده شود
+2. **نوار متن (Text)** — اگر کلیپ متن/subtitle دارد، به شکل نوار نشان داده شود
 
 ## بررسی فعلی
 
-`TransitionsTab.tsx` از قبل وجود دارد با کاتالوگ کامل (Fades, Wipes, Motion). نیاز است:
-1. مطمئن شوم این tab همیشه در sidebar editor قابل دسترس است
-2. ترنزیشن انتخاب‌شده **per-clip** ذخیره شود (نه فقط global) تا کاربر بتواند بین هر دو کلیپ متوالی ترنزیشن متفاوت بگذارد
-3. هنگام export/stitch، ترنزیشن‌ها اعمال شوند
+نیاز است این فایل‌ها بررسی شوند:
+- `ProVideoEditor.tsx` (~2200 خط) — ساختار timeline و clips
+- `videoOverlay.ts` — overlays شامل text, subtitle, با startTime/endTime
+- ساختار `clips` در `backgroundAdDirectorService` — voiceover URL per clip
 
-## بررسی کد لازم
-
-باید این فایل‌ها را بررسی کنم:
-- `src/components/ad-director/ProVideoEditor.tsx` — sidebar tabs کجاست، چطور TransitionsTab وصل است
-- `src/lib/videoStitch.ts` — آیا transition پشتیبانی می‌کند؟
-- ساختار `clips` در `backgroundAdDirectorService.ts` — آیا فیلد `transition` per-clip دارد؟
+از فایل‌های موجود می‌دانم:
+- `VideoOverlay` فیلد `kind: "text"` دارد + `startTime/endTime` + `sceneId`
+- هر clip ممکن است voiceover (audio URL) داشته باشد
+- Timeline فعلاً فقط thumbnail نوار ویدئو را نشان می‌دهد
 
 ## برنامه پیشنهادی
 
-### 1. UI: Transitions Tab همیشه در دسترس
-- در sidebar (یا tabs panel) ProVideoEditor، یک tab ثابت "Transitions" اضافه/تثبیت شود
-- کنار هر کلیپ در timeline یک آیکن کوچک ⇄ نمایش دهد که با کلیک، TransitionsTab را برای آن نقطه‌ی اتصال (junction) باز کند
-- نوار جداکننده‌ی بین دو کلیپ روی timeline، نشان‌دهنده‌ی نوع transition انتخاب‌شده باشد (با gradient/icon)
+### 1. ساختار Timeline سه‌ردیفه
+زیر نوار ویدئوی موجود، دو track افقی اضافه شود:
 
-### 2. State: per-clip transition
-- در `Clip` type، فیلد `transitionIn?: { type: string; duration: number }` اضافه شود
-- selected junction در state محلی editor نگهداری شود
-- ذخیره از طریق همان `service.patchState({ clips })` که الان وجود دارد
+```
+┌─────────────────────────────────┐
+│  🎬 Video Track (موجود)         │  ← thumbnails کلیپ‌ها
+├─────────────────────────────────┤
+│  🔊 Audio Track (جدید)          │  ← waveform/bars برای کلیپ‌هایی که voiceover دارند
+├─────────────────────────────────┤
+│  📝 Text Track (جدید)           │  ← bar های رنگی برای text overlays
+└─────────────────────────────────┘
+```
 
-### 3. Stitch pipeline (Export)
-- در `videoStitch.ts`، حلقه‌ی trim/concat به ازای هر کلیپ، اگر `transitionIn` دارد، یک بازه‌ی overlap با کلیپ قبلی ایجاد کند و افکت canvas (crossfade / wipe / slide) اعمال کند
-- شروع: فقط Crossfade و Fade Black را پیاده‌سازی می‌کنیم (پرکاربردترین). بقیه‌ی template ها در UI می‌مانند ولی هنگام stitch به crossfade fallback می‌شوند با toast اطلاع‌رسانی
-- مدت پیش‌فرض: 0.5s
+هر track با عرض کامل timeline، segment های هم‌تراز با کلیپ مربوطه.
 
-### 4. حفظ سازگاری
-- اگر کلیپی `transitionIn` ندارد → cut ساده (رفتار فعلی)
-- خروجی دانلودی برای کلیپ‌های قدیمی بدون تغییر
-- زبان UI: کاملاً انگلیسی (طبق memory rule)
+### 2. Audio Track
+- برای هر clip که `voiceoverUrl` یا `audioUrl` دارد:
+  - یک bar با gradient (مثلاً `from-cyan-500 to-blue-500`)
+  - نمایش بصری ساده‌ی موج به صورت bars متغیر (CSS-only، بدون decoding واقعی audio برای سرعت)
+  - ارتفاع ~24px
+- اگر کلیپی audio ندارد → bar خاکستری کم‌رنگ "No audio"
+- کلیک روی bar → باز کردن VoiceoverDialog برای آن scene
+
+### 3. Text Track
+- برای هر `VideoOverlay` با `kind === "text"` (شامل subtitles):
+  - bar با موقعیت `startTime → endTime` نسبت به scene
+  - رنگ متمایز (مثلاً `from-amber-500 to-orange-500`)
+  - متن truncate شده داخل bar
+  - ارتفاع ~24px
+- کلیک روی bar → باز کردن `EditOverlayDialog` برای edit متن
+- اگر scene متن ندارد → bar خاکستری "No text"
+
+### 4. هم‌ترازی (Alignment)
+هر سه track از یک محاسبه‌ی width استفاده می‌کنند:
+```ts
+width = (clipDuration / totalDuration) * 100 + "%"
+```
+تا scrub bar و playhead به‌صورت یکپارچه روی هر سه track حرکت کند.
+
+### 5. State و فایل‌های لازم
+- **فایل جدید**: `src/components/ad-director/editor/TimelineTracks.tsx`
+  - props: `clips`, `overlays`, `currentTime`, `totalDuration`, `onAudioClick`, `onTextClick`
+  - render: سه `<div>` افقی با segment ها
+- **تغییر در `ProVideoEditor.tsx`**: زیر بلوک timeline موجود، `<TimelineTracks ... />` اضافه شود
+- منطق فعلی drag/drop/scrub دست‌نخورده باقی می‌ماند
+
+### 6. Visual Design
+- پس‌زمینه track ها: `bg-slate-900/50 border-t border-white/5`
+- Label سمت چپ هر track (40px width): آیکن `Volume2` و `Type`
+- Hover state روی هر segment: `ring-1 ring-white/30`
+- Active (currently playing) state: glow ملایم
 
 ## آنچه دست‌نخورده می‌ماند
-- منطق clips، storyboard، scene generation
+- منطق playback (`videoRef`, `currentTime`)
+- Drag & drop reorder کلیپ‌ها
+- Sidebar tabs (Media/Text/Transitions/...)
+- Stitch pipeline / export
 - DB / RLS / edge functions
-- Pipeline تولید اولیه‌ی video
-- Drag & drop reorder موجود
+- Voiceover/Subtitle dialog ها (فقط trigger می‌شوند)
 
 ## نتیجه
-1. ✅ Transitions tab همیشه در sidebar editor قابل دسترس
-2. ✅ کلیک بین دو کلیپ روی timeline → انتخاب transition
-3. ✅ نمایش بصری transition بین کلیپ‌ها در timeline
-4. ✅ هنگام Save/Download، crossfade/fade-black واقعاً اعمال می‌شود
-5. ✅ سایر template ها در UI نمایش داده می‌شوند (preview gradient) و در stitch به crossfade map می‌شوند
-
-قبل از شروع کد، باید دو فایل کلیدی را بررسی کنم تا dock points دقیق sidebar tabs و ساختار stitch loop را پیدا کنم. این کار در حالت اجرا انجام می‌شود.
+1. ✅ زیر نوار ویدئو، Audio track با visualization waveform نمایش داده می‌شود
+2. ✅ زیر آن، Text track با bars رنگی برای هر overlay متنی
+3. ✅ هم‌ترازی کامل با clips بالایی و playhead مشترک
+4. ✅ کلیک روی Audio bar → ویرایش voiceover
+5. ✅ کلیک روی Text bar → ویرایش متن
+6. ✅ کلیپ‌های بدون صدا/متن، placeholder خاکستری نشان می‌دهند
+7. ✅ زبان UI: کاملاً انگلیسی (طبق memory rule)
