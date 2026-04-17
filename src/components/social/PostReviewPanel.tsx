@@ -309,34 +309,12 @@ export function PostReviewPanel({
     try {
       const permanentUrl = await uploadSocialMediaAsset(tempUrl, type);
       updatePost.mutate({ id: post.id, image_url: permanentUrl });
-      toast({ title: `${type === "image" ? "Image" : "Video"} attached`, description: "Saved to your post permanently." });
-
-      // Auto-generate general caption for video uploads (skip for stories)
-      if (type === "video" && localContentType !== "story") {
-        setRegeneratingCaption(true);
-        try {
-          // Hybrid: try video-to-social first for context-aware caption
-          const videoData = await invokeEdgeFunction("video-to-social", {
-            videoUrl: permanentUrl, platform: post.platform || "instagram", aspectRatio: "1:1"
-          }, { timeoutMs: 60000 });
-          // Apply video-to-social result to the post
-          const fullContent = (videoData.caption || "") + (videoData.hashtags?.length ? "\n\n" + videoData.hashtags.join(" ") : "");
-          updatePost.mutate({ id: post.id, title: videoData.title || post.title, content: fullContent });
-          queryClient.invalidateQueries({ queryKey: ["social_posts"] });
-          toast({ title: "Caption generated", description: "Video-aware caption created for your post." });
-        } catch (videoErr: any) {
-          console.warn("video-to-social failed, falling back to regenerate-post:", videoErr?.message);
-          try {
-            await invokeEdgeFunction("regenerate-post", { post_id: post.id, caption_only: true, is_video: true }, { timeoutMs: 120000 });
-            queryClient.invalidateQueries({ queryKey: ["social_posts"] });
-            toast({ title: "Caption generated", description: "A general promotional caption was created for your video." });
-          } catch (err: any) {
-            console.error("Auto caption fallback error:", err);
-          }
-        } finally {
-          setRegeneratingCaption(false);
-        }
-      }
+      toast({
+        title: type === "image" ? "Image attached" : "Video attached",
+        description: "Saved to your post permanently.",
+      });
+      // NOTE: Caption is NEVER auto-regenerated on upload. The user's caption is preserved as-is.
+      // To generate a caption, the user must explicitly click the "Regenerate caption" button.
     } catch (err: any) {
       console.error("Upload error:", err);
       toast({ title: "Upload failed", description: err?.message || "Could not save media", variant: "destructive" });
@@ -674,12 +652,12 @@ export function PostReviewPanel({
                         onClick={async () => {
                           setRegenerating(true);
                           try {
-                            const data = await invokeEdgeFunction("regenerate-post", { post_id: post.id, is_video: !!isVideo }, { timeoutMs: 120000 });
+                            await invokeEdgeFunction("regenerate-post", { post_id: post.id, is_video: !!isVideo, image_only: true }, { timeoutMs: 120000 });
                             queryClient.invalidateQueries({ queryKey: ["social_posts"] });
-                            toast({ title: "Post regenerated", description: "New image and caption generated successfully." });
+                            toast({ title: "Image regenerated", description: "A new image was generated. Your caption was not changed." });
                           } catch (err: any) {
                             console.error("Regenerate error:", err);
-                            toast({ title: "Regeneration failed", description: err?.message || "Could not regenerate post", variant: "destructive" });
+                            toast({ title: "Regeneration failed", description: err?.message || "Could not regenerate image", variant: "destructive" });
                           } finally {
                             setRegenerating(false);
                           }

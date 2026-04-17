@@ -277,7 +277,7 @@ Deno.serve((req) =>
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const { post_id, caption_only, is_video, selectedProducts, imageStyles } = body;
+    const { post_id, caption_only, image_only, is_video, selectedProducts, imageStyles } = body;
     if (!post_id) throw new Error("post_id is required");
 
     // 1. Fetch post
