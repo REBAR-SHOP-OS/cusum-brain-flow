@@ -52,6 +52,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const [approved, setApproved] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropIdx, setDropIdx] = useState<number | null>(null);
+  const [pendingDeleteSceneId, setPendingDeleteSceneId] = useState<string | null>(null);
 
   // Pipeline state — driven by singleton service
   const [pipelineState, setPipelineState] = useState<AdDirectorPipelineState>(service.getState());
