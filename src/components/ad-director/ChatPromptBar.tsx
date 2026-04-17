@@ -220,7 +220,8 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     `Ratio: ${ratio}`,
   ];
 
-  const handleAiGenerate = async (userInput: string) => {
+  const handleAiWrite = async () => {
+    if (aiWriting || disabled) return;
     setAiWriting(true);
     try {
       const parts: string[] = [];
@@ -229,14 +230,12 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
       parts.push(`Duration: ${duration}s`);
       parts.push(`Ratio: ${ratio}`);
       const contextString = parts.join(". ") + ".";
-      const combinedInput = `${userInput}\n\nContext: ${contextString}`;
       const result = await invokeEdgeFunction<{ text?: string }>("ad-director-ai", {
         action: "write-script",
-        input: combinedInput,
+        input: contextString,
       });
       if (result?.text) {
         setPrompt(result.text);
-        setAiDialogOpen(false);
         toast({ title: "✨ Prompt ready", description: "Review and edit before creating." });
       }
     } catch (err: any) {
