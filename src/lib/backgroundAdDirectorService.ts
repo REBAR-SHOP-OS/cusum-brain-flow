@@ -530,11 +530,18 @@ class BackgroundAdDirectorService {
           const chosenProvider = videoProvider || "wan";
           const isI2V = !!referenceImage;
           const chosenModel = videoModel || (isI2V ? "wan2.6-i2v" : "wan2.6-t2v");
+
+          // Inject user-written character direction whenever this scene uses the character ref.
+          const usingCharacter = !!characterImageUrl && referenceImage === characterImageUrl;
+          const finalPrompt = (usingCharacter && characterPrompt && characterPrompt.trim())
+            ? `${motionPrompt}\n\nCharacter direction (this person speaks/acts on camera — keep their face and look unchanged): ${characterPrompt.trim()}`
+            : motionPrompt;
+
           const result = await invokeEdgeFunction<{
             url?: string; videoUrl?: string; generationId?: string; jobId?: string;
             provider?: "wan" | "veo" | "sora"; mode?: string; imageUrls?: string[];
           }>("generate-video", {
-            action: "generate", prompt: motionPrompt, duration: sceneDuration,
+            action: "generate", prompt: finalPrompt, duration: sceneDuration,
             aspectRatio: wanRatio, provider: chosenProvider,
             model: chosenModel,
             ...(isI2V ? { imageUrl: referenceImage } : {}),
