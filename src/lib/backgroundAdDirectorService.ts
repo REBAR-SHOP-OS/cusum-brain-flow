@@ -264,6 +264,12 @@ class BackgroundAdDirectorService {
     }
 
     try {
+      // ── Force minimum scene count when BOTH intro & outro are uploaded ──
+      // (so the intro image can anchor scene 1 AND the outro image can anchor the final scene)
+      const bothFramesProvided = !!(introImageUrl && outroImageUrl);
+      const baseSceneCount = videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15);
+      const requestedSceneCount = bothFramesProvided ? Math.max(2, baseSceneCount) : baseSceneCount;
+
       // Phase 1: Analyze
       const analyzeResult = await withTimeout(invokeEdgeFunction<{
         result: { segments: ScriptSegment[]; storyboard: StoryboardScene[]; continuityProfile: ContinuityProfile };
@@ -273,7 +279,7 @@ class BackgroundAdDirectorService {
         script: prompt,
         brand,
         targetDuration: videoParams.duration,
-        sceneCount: videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15),
+        sceneCount: requestedSceneCount,
         assetDescriptions: sourceMedia.length > 0
           ? sourceMedia.map((file) => `${file.type.startsWith("video/") ? "video clip" : "image"}: ${file.name}`).join(", ")
           : undefined,
@@ -291,8 +297,8 @@ class BackgroundAdDirectorService {
       let { segments: newSegments, storyboard: rawStoryboard } = analyzeResult.result;
       const continuityProfile = analyzeResult.result.continuityProfile;
 
-      // ── Enforce scene count based on duration ──────────────────────
-      const expectedSceneCount = videoParams.duration <= 15 ? 1 : videoParams.duration <= 30 ? 2 : Math.ceil(videoParams.duration / 15);
+      // ── Enforce scene count based on duration (or override when both frames set) ──
+      const expectedSceneCount = requestedSceneCount;
       const segmentDuration = videoParams.duration / expectedSceneCount;
 
       if (rawStoryboard.length > expectedSceneCount) {
