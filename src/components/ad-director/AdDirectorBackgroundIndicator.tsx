@@ -43,8 +43,13 @@ export function AdDirectorBackgroundIndicator() {
     });
   }, [state.finalVideoUrl, location.pathname, lastNotifiedUrl, navigate]);
 
-  // Hide on the ad-director route itself
-  if (location.pathname === "/ad-director") return null;
+  // On /ad-director, hide ONLY when the page is showing its own full-screen
+  // generating overlay (avoid duplicate). In editor/result views, still show
+  // the floating indicator so background regenerations are visible.
+  const onAdDirectorPage = location.pathname === "/ad-director";
+  const pageShowsOwnProgress =
+    onAdDirectorPage && state.flowState === "generating" && (state.progressValue ?? 0) < 100;
+  if (pageShowsOwnProgress) return null;
 
   const isFinishedUnviewed =
     !running && !!state.finalVideoUrl && state.finalVideoUrl !== dismissedFinalUrl;
