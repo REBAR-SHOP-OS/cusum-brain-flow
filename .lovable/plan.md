@@ -1,41 +1,67 @@
 
 ## درخواست
-کاربر می‌خواهد فضای خالی بالای کارت references در Ad Director (دایره‌ی قرمز در screenshot) به **لوگوی شرکت** اختصاص داده شود. فایل `LOGO.png` آپلود شده.
+الآن دکمه‌ی "Improve with AI" در `CharacterPromptDialog` فقط وقتی کار می‌کند که کاربر **حداقل ۳ کاراکتر** نوشته باشد (و در غیر این‌صورت toast خطا می‌دهد). کاربر می‌خواهد:
+- اگر textarea **خالی** باشد → AI خودش از صفر یک پرامت کامل برای character بنویسد
+- اگر متن **موجود** باشد → آن را improve کند (مثل الآن)
 
-## برنامه (Surgical, Additive)
-
-### ۱. کپی لوگو
+## بررسی
+در `src/components/ad-director/CharacterPromptDialog.tsx` (خط ~46-58):
+```ts
+const seed = text.trim();
+if (seed.length < 3) {
+  toast({ title: "Add a starting idea", ... variant: "destructive" });
+  return;
+}
 ```
-lov-copy user-uploads://LOGO.png src/assets/company-logo.png
+این gate باید برداشته شود و prompt ارسالی به edge function به‌صورت **شرطی** ساخته شود.
+
+`brandContext` (شامل brand voice، product list، style) از parent به dialog پاس داده می‌شود — می‌توان از آن برای generate from-scratch استفاده کرد.
+
+## برنامه (Surgical, Single-File)
+
+### تغییر فقط در `src/components/ad-director/CharacterPromptDialog.tsx`
+
+#### ۱. حذف gate سخت‌گیرانه‌ی ۳ کاراکتری
+به جای error toast، اگر textarea خالی بود، حالت **"generate from scratch"** فعال شود.
+
+#### ۲. ساخت instruction شرطی
+```ts
+const seed = text.trim();
+const isGenerating = seed.length === 0;
+
+const instruction = isGenerating
+  ? [
+      "You WRITE a fresh SHORT character-direction note for an AI video model (image-to-video).",
+      "The note describes what THIS specific character (a real person from a reference photo) should SAY and DO on camera to advertise the brand.",
+      "Constraints:",
+      "- Keep the character's identity, face, body, and clothing UNCHANGED. Do not describe their appearance.",
+      "- Focus on: dialogue (what they say), tone of voice, facial expression, eye contact, gestures.",
+      "- Cinematic, persuasive, advertising tone. Direct call-to-action at the end.",
+      "- 2–4 sentences maximum. No headings, no bullet lists.",
+      brandContext ? `Brand context to base the pitch on: ${brandContext}` : "",
+      "Return ONLY the direction text — no preamble, no quotes.",
+    ].filter(Boolean).join("\n")
+  : [ /* existing improve instruction */ ].join("\n");
+
+const userPayload = isGenerating
+  ? instruction
+  : `${instruction}\n\nUSER NOTE TO IMPROVE:\n${seed}`;
 ```
-(در `src/assets` تا توسط Vite بهینه‌سازی و bundle شود.)
 
-### ۲. افزودن لوگو در بالای `ChatPromptBar.tsx`
-دقیقاً قبل از `<div className="grid gap-3 md:grid-cols-3">` (خط 368)، یک header کوچک و تمیز اضافه می‌شود:
+#### ۳. به‌روزرسانی UI
+- تغییر label دکمه به‌صورت داینامیک:
+  - خالی → "✨ Write with AI"
+  - دارای متن → "✨ Improve with AI"
+- تغییر toast موفقیت متناسب ("✨ Generated" vs "✨ Improved")
 
-```tsx
-import companyLogo from "@/assets/company-logo.png";
+#### ۴. حذف condition `seed.length < 3` به‌طور کامل
+دکمه در همه حالات فعال می‌ماند (به جز هنگام `improving`).
 
-<div className="flex justify-center pb-2">
-  <img
-    src={companyLogo}
-    alt="Company logo"
-    className="h-16 w-16 md:h-20 md:w-20 object-contain drop-shadow-[0_0_20px_rgba(234,179,8,0.25)]"
-  />
-</div>
-```
+## آنچه تغییر نمی‌کند
+- Edge function `ad-director-ai` — بدون تغییر (همان action `write-script` کار می‌کند)
+- منطق Save / Cancel / RTL / preview thumbnail — بدون تغییر
+- سایر dialogها و کامپوننت‌ها — بدون تغییر
+- پایپلاین generation — بدون تغییر
 
-ویژگی‌ها:
-- وسط‌چین، اندازه‌ی متناسب (64-80px) — همان نقطه‌ی دایره‌ی قرمز
-- `object-contain` تا نسبت تصویر حفظ شود
-- یک `drop-shadow` ملایم طلایی که با رنگ سکه‌ی لوگو هماهنگ است (اختیاری ولی تمیز)
-- responsive: کوچک‌تر در موبایل، بزرگ‌تر در desktop
-
-### آنچه تغییر نمی‌کند
-- کارت‌های Intro/Character/Outro — بدون تغییر
-- نوار prompt و دکمه‌های Style/Products/AI Prompt/Character/Create — بدون تغییر
-- صفحه‌های دیگر (loading, result, editor) — بدون تغییر
-- منطق generation — بدون تغییر
-
-### نتیجه
-لوگوی شرکت دقیقاً در همان نقطه‌ای که کاربر در screenshot دایره کشیده، بالای کارت references نمایش داده می‌شود.
+## نتیجه
+کاربر می‌تواند بدون نوشتن هیچ متنی، روی "Write with AI" کلیک کند و AI بر اساس brand context یک character direction کامل و حرفه‌ای تولید می‌کند. اگر متنی موجود باشد، رفتار قبلی (improve) حفظ می‌شود.
