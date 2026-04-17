@@ -400,19 +400,34 @@ class BackgroundAdDirectorService {
         })
       );
 
-      const storyboardWithDefaults: StoryboardScene[] = rawStoryboard.map((s, idx) => ({
-        ...s,
-        prompt: finalPrompts[idx].prompt,
-        continuityLock: true,
-        locked: false,
-        referenceAssetUrl: sourceMediaUrls[idx] ?? sourceMediaUrls[0] ?? null,
-        sceneIntelligence: {
-          plannedBy: analyzeResult.modelUsed,
-          promptWrittenBy: finalPrompts[idx].modelUsed,
-          promptScoredBy: qualityResults[idx]?.scoredBy,
-        },
-        promptQuality: qualityResults[idx]?.quality,
-      }));
+      // Determine which scene index is the "last visual" (for outro frame anchoring)
+      const lastVisualSceneIdx = rawStoryboard.reduce((acc, s, idx) => {
+        const seg = newSegments.find(sg => sg.id === s.segmentId);
+        return (s.generationMode !== "static-card" && seg?.type !== "closing") ? idx : acc;
+      }, 0);
+
+      const storyboardWithDefaults: StoryboardScene[] = rawStoryboard.map((s, idx) => {
+        const isFirstScene = idx === 0;
+        const isLastVisualScene = idx === lastVisualSceneIdx;
+        // Force image-to-video mode when intro/outro reference image will be used
+        const forcedI2V =
+          (isFirstScene && !!introImageUrl) ||
+          (isLastVisualScene && !!outroImageUrl);
+        return {
+          ...s,
+          prompt: finalPrompts[idx].prompt,
+          continuityLock: true,
+          locked: false,
+          generationMode: forcedI2V ? "image-to-video" : s.generationMode,
+          referenceAssetUrl: sourceMediaUrls[idx] ?? sourceMediaUrls[0] ?? null,
+          sceneIntelligence: {
+            plannedBy: analyzeResult.modelUsed,
+            promptWrittenBy: finalPrompts[idx].modelUsed,
+            promptScoredBy: qualityResults[idx]?.scoredBy,
+          },
+          promptQuality: qualityResults[idx]?.quality,
+        };
+      });
 
       const initialClips: ClipOutput[] = storyboardWithDefaults.map(s => ({
         sceneId: s.id, status: "idle" as const, progress: 0,
