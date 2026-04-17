@@ -590,9 +590,9 @@ export function ProVideoEditor({
     if (musicTrackUrl) setMusicUrl(prev => prev ?? musicTrackUrl);
   }, [voiceoverUrl, musicTrackUrl, storyboard]);
 
-  // Dedup set used by the auto-extract effect (declared early; effect is registered
-  // later in the file once cumulativeStarts/sceneDurations exist)
-  const extractedClipUrlsRef = useRef<Set<string>>(new Set());
+  // Tracks URLs of extracted-from-video audio bars the user manually deleted,
+  // so the deterministic seeder doesn't re-create them.
+  const userRemovedExtractedRef = useRef<Set<string>>(new Set());
 
   // Preload logo image for card rendering
   useEffect(() => {
@@ -679,91 +679,65 @@ export function ProVideoEditor({
 
   const globalTime = (cumulativeStarts[selectedSceneIndex] || 0) + currentTime;
 
-  // ─── Auto-extract embedded audio from generated video clips ───
-  // Wan 2.6 (and other engines) often include background audio in their output.
-  // We surface that audio as a blue bar on the Music row, aligned per-scene.
-  // The bar is visual-only (real audio plays through the <video> element) — no playback echo.
+  // ─── Deterministic embedded-audio seeding ───────────────────
+  // Every completed video clip gets a visual-only voiceover bar in the Audio lane.
+  // Synchronous + idempotent — no CORS / metadata detection, so behavior is
+  // identical for every project regardless of CDN headers.
+  // Real audio plays through the <video> element; the bar is purely visual.
   useEffect(() => {
-    let cancelled = false;
-    const detectVideoHasAudio = (videoUrl: string): Promise<{ hasAudio: boolean; duration: number }> => {
-      return new Promise((resolve) => {
-        const v = document.createElement("video");
-        v.preload = "metadata";
-        v.muted = true;
-        v.crossOrigin = "anonymous";
-        const done = (hasAudio: boolean, duration: number) => {
-          try { v.src = ""; } catch { /* noop */ }
-          resolve({ hasAudio, duration });
-        };
-        v.addEventListener("loadedmetadata", () => {
-          const hasAudio =
-            (v as any).mozHasAudio ||
-            Boolean((v as any).webkitAudioDecodedByteCount) ||
-            ((v as any).audioTracks?.length > 0) ||
-            true; // default true: most generated clips include embedded audio
-          done(Boolean(hasAudio), v.duration || 0);
-        });
-        v.addEventListener("error", () => done(false, 0));
-        v.src = videoUrl;
-      });
-    };
+    if (!storyboard.length) return;
 
-    (async () => {
-      const validClips = clips.filter(c =>
-        c.status === "completed" &&
-        c.videoUrl &&
-        !c.videoUrl.startsWith("data:image/")
-      );
-      const validUrls = new Set(validClips.map(c => c.videoUrl as string));
+    const validClips = clips.filter(c =>
+      c.status === "completed" &&
+      c.videoUrl &&
+      !c.videoUrl.startsWith("data:image/")
+    );
+    const validUrls = new Set(validClips.map(c => c.videoUrl as string));
 
-      // Cleanup: remove extracted tracks whose source clip no longer exists
-      setAudioTracks(prev => {
-        const next = prev.filter(t => !t.extractedFromVideo || (t.audioUrl && validUrls.has(t.audioUrl)));
-        return next.length === prev.length ? prev : next;
-      });
-      Array.from(extractedClipUrlsRef.current).forEach(u => {
-        if (!validUrls.has(u)) extractedClipUrlsRef.current.delete(u);
+    setAudioTracks(prev => {
+      let changed = false;
+
+      // Cleanup orphan extracted tracks (clip removed / url changed)
+      let next = prev.filter(t => {
+        if (!t.extractedFromVideo) return true;
+        const keep = !!(t.audioUrl && validUrls.has(t.audioUrl));
+        if (!keep) changed = true;
+        return keep;
       });
 
-      // Add a music bar for each new completed clip that has audio
+      // Add a bar for each valid clip that doesn't already have one
       for (const clip of validClips) {
-        if (cancelled) return;
         const url = clip.videoUrl as string;
-        if (extractedClipUrlsRef.current.has(url)) continue;
-        extractedClipUrlsRef.current.add(url);
+        if (userRemovedExtractedRef.current.has(url)) continue;
 
         const sceneIdx = storyboard.findIndex(s => s.id === clip.sceneId);
         if (sceneIdx < 0) continue;
 
-        const { hasAudio, duration } = await detectVideoHasAudio(url);
-        if (cancelled) return;
-        if (!hasAudio) continue;
+        const exists = next.some(
+          t => t.extractedFromVideo && t.audioUrl === url && t.sceneId === clip.sceneId
+        );
+        if (exists) continue;
 
         const sceneStart = cumulativeStarts[sceneIdx] || 0;
-        const sceneDur = sceneDurations[sceneIdx] || duration || 0;
-        const sceneNum = sceneIdx + 1;
+        const sceneDur = sceneDurations[sceneIdx] || 0;
 
-        setAudioTracks(prev => {
-          if (prev.some(t => t.extractedFromVideo && t.audioUrl === url)) return prev;
-          return [
-            ...prev,
-            {
-              sceneId: clip.sceneId,
-              label: `Scene ${sceneNum} voice`,
-              audioUrl: url,
-              kind: "voiceover" as const, // Embedded clip audio is voiceover, not music
-              volume: 0,            // visual-only — actual sound comes from <video>
-              globalStartTime: sceneStart,
-              duration: sceneDur || duration,
-              extractedFromVideo: true,
-            },
-          ];
+        next.push({
+          sceneId: clip.sceneId,
+          label: `Scene ${sceneIdx + 1} voice`,
+          audioUrl: url,
+          kind: "voiceover" as const,
+          volume: 0, // visual-only; real audio comes from <video>
+          globalStartTime: sceneStart,
+          duration: sceneDur,
+          extractedFromVideo: true,
         });
+        changed = true;
       }
-    })();
 
-    return () => { cancelled = true; };
+      return changed ? next : prev;
+    });
   }, [clips, storyboard, cumulativeStarts, sceneDurations]);
+
 
   // ─── Deterministic text-overlay seeding per scene ───────────
   // Idempotent: every time storyboard changes (load, add, split, regenerate),
@@ -1181,7 +1155,9 @@ export function ProVideoEditor({
     setAudioTracks(prev => {
       const removed = prev[index];
       // If removing an extracted-from-video voice track, mute that scene's video audio
+      // and remember the URL so the deterministic seeder won't re-add it.
       if (removed?.extractedFromVideo && removed.sceneId) {
+        if (removed.audioUrl) userRemovedExtractedRef.current.add(removed.audioUrl);
         setMutedScenes(m => {
           const next = new Set(m);
           next.add(removed.sceneId);
