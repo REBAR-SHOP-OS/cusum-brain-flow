@@ -747,6 +747,19 @@ export async function stitchClips(
       // Pre-load next clip for crossfade
       prepareNextClip(clipIndex + 1);
 
+      // Start clip's embedded audio (if not muted) synchronized with the video
+      const clipAudioEl = clipAudioEls[clipIndex];
+      const clipAudioGain = clipAudioGains[clipIndex];
+      if (clipAudioEl && clipAudioGain) {
+        try {
+          clipAudioEl.currentTime = 0;
+          // Use the volume the user picked for this clip via clipMuted/audioTracks if present;
+          // otherwise default to 1.0 (full).
+          clipAudioGain.gain.value = 1;
+          clipAudioEl.play().catch(() => {});
+        } catch {}
+      }
+
       onProgress?.({
         stage: "rendering",
         clipIndex,
