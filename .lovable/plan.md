@@ -1,36 +1,37 @@
 
 
-## Plan: Fix "No prompt returned" Error in AI Prompt Dialog
+## Plan: Lock AI Prompt Output to Rebar.Shop Advertising Content
+
+### Problem
+الان AI پرامت‌هایی تولید می‌کند که شرکت را به صورت placeholder ("Company") ذکر می‌کند و محتوا همیشه تبلیغاتی نیست. کاربر می‌خواهد:
+1. **همیشه** محتوای تولیدشده تبلیغاتی (ad/commercial) باشد
+2. شرکت **همیشه rebar.shop** باشد — نه "Company"، نه placeholder
 
 ### Root Cause
-Backend `ad-director-ai` (write-script) returns successfully (logs show 200 OK, ~3-4s). The bug is in the **client response shape**.
+در `ChatPromptBar.tsx` تابع `buildContextString()` فقط chipهای انتخاب‌شده (Style/Product/Duration/Ratio/Engine) را به edge function می‌فرستد. هیچ brand/company context و هیچ "advertising" intent در input نیست. edge function `ad-director-ai` با action `write-script` یک system prompt عمومی دارد که نمی‌داند برای کدام شرکت تبلیغ بنویسد، پس از "Company" به عنوان جایگزین استفاده می‌کند.
 
-The edge function returns:
-```json
-{ "result": { "text": "..." }, "modelUsed": "...", "fallbackUsed": false, "taskType": "write-script" }
-```
+### Fix (Surgical, 1 file)
 
-But `ChatPromptBar.tsx` reads:
-```ts
-const result = await invokeEdgeFunction<{ text?: string }>(...);
-return result?.text ?? null;   // ❌ always null — text is at result.result.text
-```
+**`src/components/ad-director/ChatPromptBar.tsx`** — فقط `buildContextString()`:
+- اضافه کردن brand context ثابت در ابتدای string ارسالی به AI:
+  ```
+  BRAND: rebar.shop (industrial rebar fabrication & supply company)
+  WEBSITE: https://rebar.shop
+  CONTENT TYPE: Advertising / commercial video ad
+  GOAL: Promote rebar.shop products and brand
+  ```
+- بقیه context (chips) بعد از این بلاک می‌آید
+- این تغییر باعث می‌شود AI همیشه بداند:
+  - برند = rebar.shop (نه "Company")
+  - نوع محتوا = تبلیغاتی
+  - هدف = promotion of rebar.shop
 
-So `text` is always `null` → "No prompt returned" toast fires.
-
-### Fix (1 file, surgical)
-
-**`src/components/ad-director/ChatPromptBar.tsx`** — `runAiWrite()`:
-- Update the type to `{ result?: { text?: string }; text?: string }` (defensive)
-- Read `result?.result?.text ?? result?.text ?? null` so it works regardless of wrapping
-
-That's it. No backend changes, no other components touched.
-
-### What stays the same
-- Edge function `ad-director-ai` — unchanged
-- Dialog UI, chips, regenerate, "Use this prompt" — unchanged
-- All other handlers and flows — unchanged
+### What Stays the Same
+- Edge function `ad-director-ai` — بدون تغییر
+- Dialog UI، chips، Regenerate، Use this prompt — بدون تغییر
+- بقیه handlerها — بدون تغییر
+- textarea اصلی و Create video — بدون تغییر
 
 ### Result
-کلیک روی **AI Prompt** → دیالوگ باز می‌شود → پرامت تولیدشده توسط AI نمایش داده می‌شود (دیگر "No prompt returned" نمی‌دهد).
+کلیک روی **AI Prompt** → پرامت تولیدشده **همیشه** تبلیغاتی است، **همیشه** نام rebar.shop را به جای "Company" به کار می‌برد، و محصولات/استایل انتخابی کاربر را در دل یک ad script واقعی برای rebar.shop می‌گنجاند.
 
