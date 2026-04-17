@@ -73,6 +73,10 @@ interface ProVideoEditorProps {
   onActiveTabChanged?: (tab: string | null) => void;
   voiceoverUrl?: string | null;
   musicTrackUrl?: string | null;
+  /** Sync editor state back to parent so the export pipeline can use it. */
+  onUpdateOverlays?: (overlays: VideoOverlay[]) => void;
+  onUpdateAudioTracks?: (tracks: AudioTrackItem[]) => void;
+  onUpdateMutedScenes?: (sceneIds: string[]) => void;
 }
 
 function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: {
@@ -198,6 +202,7 @@ export function ProVideoEditor({
   onAddSceneWithMedia,
   externalActiveTab, onActiveTabChanged,
   voiceoverUrl, musicTrackUrl,
+  onUpdateOverlays, onUpdateAudioTracks, onUpdateMutedScenes,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -576,6 +581,11 @@ export function ProVideoEditor({
       tracksSeededRef.current = true;
     }
   }, [voiceoverUrl, musicTrackUrl, storyboard]);
+
+  // ─── Sync editor state to parent (so export reflects user edits) ──────────
+  useEffect(() => { onUpdateOverlays?.(overlays); }, [overlays, onUpdateOverlays]);
+  useEffect(() => { onUpdateAudioTracks?.(audioTracks); }, [audioTracks, onUpdateAudioTracks]);
+  useEffect(() => { onUpdateMutedScenes?.(Array.from(mutedScenes)); }, [mutedScenes, onUpdateMutedScenes]);
 
   // Dedup set used by the auto-extract effect (declared early; effect is registered
   // later in the file once cumulativeStarts/sceneDurations exist)

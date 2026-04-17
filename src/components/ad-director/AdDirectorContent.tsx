@@ -165,6 +165,52 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         ? videoParams.ratio as "9:16" | "1:1" | "16:9"
         : undefined;
 
+      const editorOverlays = (service.getState() as any).editorOverlays as any[] | undefined;
+      const editorAudioTracks = (service.getState() as any).editorAudioTracks as any[] | undefined;
+      const editorMutedScenes = (service.getState() as any).editorMutedScenes as string[] | undefined;
+
+      // Build per-clip-mute flags aligned with orderedClips order
+      const clipMuted = currentStoryboard
+        .map(scene => {
+          const clip = latestClips.find(c => c.sceneId === scene.id);
+          if (!clip || clip.status !== "completed" || !clip.videoUrl) return null;
+          return editorMutedScenes?.includes(scene.id) === true;
+        })
+        .filter(v => v !== null) as boolean[];
+
+      // Compute global timing for text overlays based on scene order
+      const sceneStarts: Record<string, number> = {};
+      let acc = 0;
+      currentStoryboard.forEach(scene => {
+        const seg = currentSegments.find(s => s.id === scene.segmentId);
+        sceneStarts[scene.id] = acc;
+        acc += seg ? seg.endTime - seg.startTime : 5;
+      });
+
+      const stitchTextOverlays = (editorOverlays || [])
+        .filter(o => o && (o.kind === "text" || o.kind === "logo") && typeof o.content === "string")
+        .map(o => {
+          const sceneStart = sceneStarts[o.sceneId] ?? 0;
+          const start = sceneStart + (o.startTime ?? 0);
+          const end = o.endTime != null ? sceneStart + o.endTime : undefined;
+          return {
+            text: String(o.content),
+            position: o.position,
+            size: o.size,
+            startTime: start,
+            endTime: end,
+          };
+        });
+
+      const stitchAudioTracks = (editorAudioTracks || [])
+        .filter(t => t && t.audioUrl && !t.extractedFromVideo)
+        .map(t => ({
+          audioUrl: t.audioUrl,
+          kind: (t.kind === "voiceover" ? "voiceover" : "music") as "voiceover" | "music",
+          volume: typeof t.volume === "number" ? t.volume : undefined,
+          globalStartTime: t.globalStartTime ?? 0,
+        }));
+
       const finalUrl = await stitchClips(orderedClips, {
         logo: { url: "", enabled: false, size: 80 },
         endCard: {
@@ -173,11 +219,14 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           bgColor: currentBrand.secondaryColor, logoUrl: null,
         },
         subtitles: { enabled: false, segments: [] },
+        textOverlays: stitchTextOverlays,
         audioUrl,
         musicUrl: service.getState().musicTrackUrl || undefined,
         musicVolume: 0.15,
         crossfadeDuration,
         aspectRatio: exportRatio,
+        audioTracks: stitchAudioTracks,
+        clipMuted,
       });
 
       // Upload to storage for permanent URL
@@ -348,6 +397,9 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           onUpdateStoryboard={(sb) => service.patchState({ storyboard: sb })}
           onUpdateBrand={(b) => service.patchState({ brand: b })}
           onMusicSelect={(url) => service.patchState({ musicTrackUrl: url })}
+          onUpdateOverlays={(ov) => service.patchState({ editorOverlays: ov } as any)}
+          onUpdateAudioTracks={(tracks) => service.patchState({ editorAudioTracks: tracks } as any)}
+          onUpdateMutedScenes={(ids) => service.patchState({ editorMutedScenes: ids } as any)}
           onAddSceneWithMedia={(url, fileName) => {
             const state = service.getState();
             const newId = crypto.randomUUID();

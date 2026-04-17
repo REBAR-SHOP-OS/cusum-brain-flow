@@ -79,6 +79,10 @@ export interface AdDirectorPipelineState {
   characterPrompt?: string | null;
   videoProvider?: string | null;
   videoModel?: string | null;
+  // Editor-authored state, captured so the export pipeline reflects edits
+  editorOverlays?: any[];
+  editorAudioTracks?: any[];
+  editorMutedScenes?: string[];
 }
 
 class BackgroundAdDirectorService {
@@ -754,7 +758,7 @@ class BackgroundAdDirectorService {
       }
 
       // Always land on result view so user sees scene cards (with retry icons for failures)
-      this.update({ flowState: "result", statusText: "", progressValue: 100 });
+      this.update({ flowState: "editing", statusText: "", progressValue: 100 });
       this.running = false;
 
       // Notify if component not mounted
