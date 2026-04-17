@@ -223,6 +223,16 @@
   z-index: 99999 !important;
 }
 
+/* Hide global floating widgets (Vizzy, LiveChat, Feedback) on the video editor */
+body.hide-floating-widgets .floating-widgets-zone > * {
+  display: none !important;
+}
+body.hide-floating-widgets [data-feedback-btn="true"],
+body.hide-floating-widgets [data-vizzy-floating="true"],
+body.hide-floating-widgets [data-live-chat-widget="true"] {
+  display: none !important;
+}
+
 /* Odoo HTML body rendering */
 .odoo-html-body {
   word-break: break-word;
