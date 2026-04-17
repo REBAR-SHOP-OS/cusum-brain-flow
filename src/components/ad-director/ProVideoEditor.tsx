@@ -204,6 +204,12 @@ export function ProVideoEditor({
   const [speedPopoverOpen, setSpeedPopoverOpen] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<string>("16:9");
 
+  // Hide global floating widgets (Vizzy, LiveChat, Feedback) while editor is mounted
+  useEffect(() => {
+    document.body.classList.add("hide-floating-widgets");
+    return () => document.body.classList.remove("hide-floating-widgets");
+  }, []);
+
   const ASPECT_RATIOS: Record<string, string> = {
     "16:9": "16/9",
     "9:16": "9/16",

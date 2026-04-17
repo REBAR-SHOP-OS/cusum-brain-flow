@@ -617,14 +617,7 @@ export function TimelineBar({
           {viewMode === "expanded" ? <LayoutGrid className="w-3 h-3" /> : <Rows3 className="w-3 h-3" />}
           {viewMode === "expanded" ? "Cards" : "Track"}
         </Button>
-        {viewMode === "expanded" && (
-          <>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setZoomLevel(z => Math.max(z / 1.3, 0.5))} title="Zoom Out"><ZoomOut className="w-3 h-3" /></Button>
-            <span className="text-[9px] text-zinc-500 font-mono min-w-[28px] text-center">{zoomLevel.toFixed(1)}×</span>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setZoomLevel(z => Math.min(z * 1.3, 20))} title="Zoom In"><ZoomIn className="w-3 h-3" /></Button>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-zinc-400 hover:text-white hover:bg-white/10" onClick={() => setZoomLevel(1)} title="Fit"><Maximize className="w-3 h-3" /></Button>
-          </>
-        )}
+        {/* Zoom controls hidden — use Ctrl+Scroll on timeline to zoom */}
       </div>
 
       {/* ─── Compact card view ─── */}
