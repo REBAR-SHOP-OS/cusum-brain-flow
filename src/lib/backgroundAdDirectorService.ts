@@ -992,6 +992,14 @@ class BackgroundAdDirectorService {
 
       if (orderedClips.length === 0) return;
 
+      const transitionPreset = (typeof window !== "undefined" && localStorage.getItem("ad-director:transition-preset")) || "Crossfade";
+      const transitionDuration = (() => {
+        if (typeof window === "undefined") return 0.5;
+        const v = parseFloat(localStorage.getItem("ad-director:transition-duration") || "0.5");
+        return isNaN(v) ? 0.5 : v;
+      })();
+      const crossfadeDuration = transitionPreset === "None" ? 0 : transitionDuration;
+
       const finalUrl = await stitchClips(orderedClips, {
         logo: { url: "", enabled: false, size: 80 },
         endCard: {
@@ -1002,6 +1010,7 @@ class BackgroundAdDirectorService {
         subtitles: { enabled: false, segments: [] },
         musicUrl: this.state.musicTrackUrl || undefined,
         musicVolume: 0.15,
+        crossfadeDuration,
       });
 
       // Upload to storage for permanent URL
