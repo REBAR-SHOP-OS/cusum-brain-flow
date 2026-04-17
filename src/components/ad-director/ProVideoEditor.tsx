@@ -1096,20 +1096,24 @@ export function ProVideoEditor({
   }, [audioTracks, selectedSceneIndex, storyboard, mutedScenes]);
 
   const handleVideoVolumeChange = useCallback((v: number) => {
+    pushHistoryDebounced();
     setVideoVolume(v);
-  }, []);
+  }, [pushHistoryDebounced]);
 
   const handleAudioTrackVolumeChange = useCallback((index: number, v: number) => {
+    pushHistoryDebounced();
     setAudioTracks(prev => prev.map((t, i) => i === index ? { ...t, volume: v } : t));
-  }, []);
+  }, [pushHistoryDebounced]);
 
   const handleRemoveAudioTrack = useCallback((index: number) => {
+    pushHistory();
     setAudioTracks(prev => prev.filter((_, i) => i !== index));
-  }, []);
+  }, [pushHistory]);
 
   const handleDeleteOverlay = useCallback((id: string) => {
+    pushHistory();
     setOverlays(prev => prev.filter(o => o.id !== id));
-  }, []);
+  }, [pushHistory]);
 
 
   const handleTrimScene = useCallback((index: number) => {
@@ -1349,13 +1353,14 @@ export function ProVideoEditor({
   const handleMuteScene = useCallback((index: number) => {
     const sceneId = storyboard[index]?.id;
     if (!sceneId) return;
+    pushHistory();
     setMutedScenes(prev => {
       const next = new Set(prev);
       if (next.has(sceneId)) next.delete(sceneId); else next.add(sceneId);
       return next;
     });
     toast({ title: mutedScenes.has(storyboard[index]?.id) ? "Scene unmuted" : "Scene muted" });
-  }, [storyboard, mutedScenes, toast]);
+  }, [storyboard, mutedScenes, toast, pushHistory]);
 
   const handleDeleteScene = useCallback((index: number) => {
     const sceneId = storyboard[index]?.id;
@@ -1377,17 +1382,20 @@ export function ProVideoEditor({
 
   const handleEditOverlayPosition = useCallback((id: string, position: "top" | "center" | "bottom") => {
     const posMap = { top: { x: 25, y: 5 }, center: { x: 25, y: 45 }, bottom: { x: 25, y: 85 } };
+    pushHistory();
     setOverlays(prev => prev.map(o => o.id === id ? { ...o, position: posMap[position] } : o));
-  }, []);
+  }, [pushHistory]);
 
   const handleResizeOverlay = useCallback((id: string, size: "small" | "medium" | "large") => {
     const sizeMap = { small: { w: 30, h: 8 }, medium: { w: 50, h: 10 }, large: { w: 80, h: 15 } };
+    pushHistory();
     setOverlays(prev => prev.map(o => o.id === id ? { ...o, size: sizeMap[size] } : o));
-  }, []);
+  }, [pushHistory]);
 
   const handleToggleOverlayAnimation = useCallback((id: string) => {
+    pushHistory();
     setOverlays(prev => prev.map(o => o.id === id ? { ...o, animated: !o.animated } : o));
-  }, []);
+  }, [pushHistory]);
 
   const handleReRecordVoiceover = useCallback(async (sceneId: string, customText?: string) => {
     const scene = storyboard.find(s => s.id === sceneId);
