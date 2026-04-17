@@ -277,7 +277,7 @@ Deno.serve((req) =>
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const { post_id, caption_only, is_video, selectedProducts, imageStyles } = body;
+    const { post_id, caption_only, image_only, is_video, selectedProducts, imageStyles } = body;
     if (!post_id) throw new Error("post_id is required");
 
     // 1. Fetch post
@@ -411,6 +411,74 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
 
       return new Response(
         JSON.stringify({ success: true, title: newCap.title || post.title, content: fullContent, hashtags }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ─── IMAGE-ONLY mode: regenerate ONLY the image. Do NOT touch title / content / hashtags. ───
+    if (image_only) {
+      const logoUrl = await resolveLogoUrl();
+      const IMAGE_STYLE_MAP: Record<string, string> = {
+        realism: "Ultra-photorealistic, shot on professional DSLR, natural lighting, real textures, shallow depth of field",
+        urban: "Urban cityscape setting, modern architecture, street-level industrial aesthetics, city life atmosphere",
+        construction: "Active construction site, heavy machinery, steel structures, workers in safety gear, raw industrial energy",
+        ai_modern: "Futuristic tech-forward aesthetic, clean geometric lines, digital integration with physical world, neon accents",
+        nature: "Natural outdoor setting, lush greenery, calm atmosphere, sustainable construction, blue sky and trees",
+        advertising: "Commercial product photography, polished studio lighting, bold text overlays, brand-forward composition",
+        inspirational: "Dramatic lighting, hero shot, empowering composition, golden hour, motivational atmosphere",
+        cartoon: "Cartoon style illustration, bold outlines, vibrant flat colors, exaggerated proportions",
+        animation: "3D animated render, Pixar/Disney-quality, smooth surfaces, dramatic lighting, cinematic depth of field",
+        painting: "Oil painting style, visible brush strokes, rich color palette, artistic composition",
+      };
+      const PRODUCT_PROMPT_MAP: Record<string, string> = {
+        fiberglass: "Rebar Fiberglass Straight — fiberglass reinforcement bars, lightweight, corrosion-resistant",
+        stirrups: "Rebar Stirrups — bent steel reinforcement loops",
+        cages: "Rebar Cages — pre-assembled cylindrical or rectangular steel reinforcement cages",
+        hooks: "Rebar Hooks — bent steel bars with hooked ends for anchoring in concrete",
+        dowels: "Rebar Dowels — straight steel bars for concrete slab and joint connections",
+        wire_mesh: "Wire Mesh — welded steel wire mesh sheets",
+        straight: "Rebar Straight — standard straight steel reinforcement bars",
+      };
+      const userEffectiveStyle = imageStyles?.length
+        ? imageStyles.map((k: string) => IMAGE_STYLE_MAP[k] || k).join(". ")
+        : "Ultra-photorealistic, shot on professional DSLR, natural lighting, real textures";
+      const userProductFocus = selectedProducts?.length
+        ? selectedProducts.map((k: string) => PRODUCT_PROMPT_MAP[k] || k).join("; ")
+        : (post.title || "rebar and steel reinforcement products");
+
+      // Extract existing slogan from caption if possible, else use title
+      const existingImageText = (post.title || "RebarShop").slice(0, 60);
+
+      const imagePrompt =
+        `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC real-world photography unless style says otherwise.\n\n` +
+        `VISUAL STYLE: ${userEffectiveStyle}. ` +
+        `PRODUCT/TOPIC FOCUS: ${userProductFocus} for REBAR.SHOP. ` +
+        `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${existingImageText}"` +
+        ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}\n\n` +
+        `Ultra high resolution, 1:1 square aspect ratio, perfect for Instagram.`;
+
+      console.log("[regenerate-post] IMAGE-ONLY mode — caption preserved");
+      const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, {
+        styleIndex: "io",
+        previousImageUrl: post.image_url || undefined,
+      });
+
+      if (!imgResult.imageUrl) {
+        throw new Error(`Image generation failed: ${imgResult.error || "unknown error"}`);
+      }
+
+      const { error: updateErr } = await supabase
+        .from("social_posts")
+        .update({
+          image_url: imgResult.imageUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", post_id);
+
+      if (updateErr) throw new Error(`DB update failed: ${updateErr.message}`);
+
+      return new Response(
+        JSON.stringify({ success: true, image_url: imgResult.imageUrl, image_only: true }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
