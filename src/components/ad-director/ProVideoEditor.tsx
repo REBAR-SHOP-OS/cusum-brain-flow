@@ -942,6 +942,12 @@ export function ProVideoEditor({
     pushDebounceRef.current = setTimeout(() => { pushHistory(); }, 300);
   }, [pushHistory]);
 
+  // Wire forward refs so early useCallbacks (defined before pushHistory) can call them
+  useEffect(() => {
+    pushHistoryFnRef.current = pushHistory;
+    pushHistoryDebouncedFnRef.current = pushHistoryDebounced;
+  }, [pushHistory, pushHistoryDebounced]);
+
   // Apply a snapshot to all relevant state
   const applySnapshot = useCallback((snap: EditorSnapshot) => {
     onUpdateStoryboard?.(snap.storyboard);
