@@ -1,37 +1,40 @@
 
 
-## Plan: Make AI Prompt Match Selected Duration Exactly
+## چرا «Recovering missing scenes...» ظاهر می‌شود؟
 
-### Problem
-کاربر duration `15s` انتخاب کرده اما AI یک ad script برای **30 ثانیه** نوشته ("Here's a 30-second ad script..."). پرامت باید **دقیقاً** بر اساس duration انتخابی نوشته شود.
+### علت
 
-### Root Cause
-در `ChatPromptBar.tsx` تابع `buildContextString()` فقط `Duration: 15s` را به عنوان یک chip ساده در لیست انتخاب‌ها می‌فرستد. این به اندازه کافی صریح نیست — AI آن را نادیده می‌گیرد و duration پیش‌فرض خودش (معمولاً 30s) را استفاده می‌کند. علاوه بر این، system prompt در edge function `ad-director-ai` (action: write-script) دستور سختگیرانه‌ای برای رعایت duration ندارد.
+این پیام یک **bug** نیست — یک **feature برای auto-recovery** است. در `AdDirectorContent.tsx` خط 207-243، تابع `handleSelectProjectDraft` وقتی فعال می‌شود که شما روی یک **پروژه ذخیره‌شده قبلی** از لیست drafts کلیک می‌کنید (نه پروژه کاملاً جدید).
 
-### Fix (Surgical, 1 file)
+منطق آن:
+1. لیست scenes پروژه را چک می‌کند
+2. برای هر scene بررسی می‌کند آیا یک clip موفق با `videoUrl` معتبر دارد یا نه
+3. اگر **همه** scenes کامل باشند → مستقیم به result می‌رود ✅
+4. اگر **حتی یک scene** ناقص باشد (status ≠ completed یا videoUrl ندارد) → آن‌ها را `failed` علامت می‌زند و recovery شروع می‌شود → پیام «Recovering missing scenes...» نمایش داده می‌شود
 
-**`src/components/ad-director/ChatPromptBar.tsx`** — فقط `buildContextString()`:
+### چرا scenes ناقص می‌شوند؟
 
-اضافه کردن یک بلاک **DURATION CONSTRAINT** صریح و تأکیدی در input که AI نتواند نادیده بگیرد:
+پروژه‌های شما ممکن است scene ناقص داشته باشند به این دلایل:
+- **Generation قبلی نیمه‌کاره ماند** — مثلاً tab بسته شد، شبکه قطع شد، یا cancel زدید قبل از تکمیل همه scenes
+- **یک scene در DashScope/Wan engine fail شد** ولی پروژه ذخیره شد
+- **Timeout** روی یکی از clipها (Wan 2.6 گاهی >2 دقیقه طول می‌کشد)
+- **Blob URL منقضی شد** — اگر videoUrl یک blob: URL موقت بوده باشد و در DB ذخیره شده (نه permanent storage URL)، بعد از reload صفحه آن URL دیگر معتبر نیست
 
-```
-DURATION CONSTRAINT (CRITICAL — MUST OBEY):
-- Total video length: EXACTLY {duration} seconds
-- Do NOT write a script longer or shorter than {duration}s
-- Do NOT mention any other duration (e.g., never say "30-second ad" if user picked 15s)
-- Pace visuals, voiceover, and scene count to fit within {duration}s
-- Approximate spoken word budget: ~{duration * 2.5} words max for voiceover
-- Scene count guidance: ~1 scene per 5 seconds (so {duration}s ≈ {Math.ceil(duration/5)} scenes)
-```
+### چه زمانی این اتفاق می‌افتد (الگو)
 
-این بلاک قبل از `USER SELECTIONS` و بعد از `BRAND` block قرار می‌گیرد، با تأکید CRITICAL/MUST OBEY که AI آن را نادیده نگیرد.
+- وقتی روی یک **draft قدیمی** در لیست projects کلیک می‌کنید
+- نه وقتی پروژه جدید می‌سازید
+- معمولاً برای پروژه‌هایی که status آن‌ها `draft` یا `incomplete` است
 
-### What Stays the Same
-- Edge function `ad-director-ai` — بدون تغییر
-- Dialog UI، chips، Regenerate، Use this prompt — بدون تغییر
-- Brand block (rebar.shop) — بدون تغییر، فقط duration block بعد از آن اضافه می‌شود
-- بقیه handlerها و textarea اصلی — بدون تغییر
+### آیا این مشکل است؟
 
-### Result
-کاربر duration `15s` انتخاب می‌کند → کلیک روی AI Prompt → پرامت تولیدشده **دقیقاً** برای 15 ثانیه نوشته می‌شود (نه 30s)، با scene count و word budget متناسب با همان زمان. اگر کاربر duration را به 8s یا 30s تغییر دهد و Regenerate بزند، پرامت جدید با همان duration هماهنگ خواهد بود.
+این auto-recovery درست کار می‌کند و هدف آن نجات پروژه‌های ناقص است. ولی اگر شما مرتباً این پیام را می‌بینید، یعنی scenes شما در نقطه‌ای از pipeline به جای completion، نیمه‌کاره ذخیره می‌شوند.
+
+### اگر می‌خواهید این رفتار تغییر کند، گزینه‌ها:
+
+1. **Status badge به جای auto-recovery** — وقتی draft ناقص انتخاب می‌شود، یک badge "Incomplete (X/Y scenes)" نشان داده شود و کاربر دکمه «Resume» را خودش بزند (به جای شروع خودکار)
+2. **بهبود نمایش progress** — به جای «Recovering missing scenes...» جزئیات نشان داده شود: "Re-generating scene 3 of 5 (was missing)"
+3. **بررسی root cause** — چک کنیم چرا scenes اصلاً ناقص ذخیره می‌شوند (مثلاً ثبت blob URL به جای permanent URL در DB)
+
+اگر می‌خواهید یکی از این تغییرات را اعمال کنم، بفرمایید کدام را ترجیح می‌دهید.
 
