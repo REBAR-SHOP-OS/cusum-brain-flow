@@ -655,6 +655,17 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
           </div>
         </div>
       </div>
+
+      <AIPromptDialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        text={previewText}
+        onTextChange={setPreviewText}
+        onUse={handleUsePreview}
+        onRegenerate={handleRegenerate}
+        regenerating={aiWriting}
+        contextChips={contextChips}
+      />
     </div>
   );
 }
