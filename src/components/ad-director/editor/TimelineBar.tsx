@@ -807,9 +807,31 @@ export function TimelineBar({
                           </div>
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                         </>
+                      ) : clip?.videoUrl && isImageUrl(clip.videoUrl) ? (
+                        <>
+                          <img
+                            src={clip.videoUrl}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                        </>
                       ) : clip?.videoUrl ? (
-                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
-                      ) : null}
+                        <>
+                          <video
+                            src={clip.videoUrl}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                        </>
+                      ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center">
+                          <span className="text-[10px] text-white/60 font-semibold">Scene {i + 1}</span>
+                        </div>
+                      )}
                       {/* Trim preview overlay */}
                       {trimPreview && trimPreview.index === i && (
                         <>
