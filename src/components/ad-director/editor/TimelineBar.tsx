@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
+import { ClipTransitionPopover, type ClipTransition } from "./ClipTransitionPopover";
 
 // ─── Thumbnail extraction helper ───────────────────────────
 function useVideoThumbnails(clips: ClipOutput[]) {
@@ -149,6 +150,9 @@ interface TimelineBarProps {
   onTogglePlay?: () => void;
   onFrameStep?: (dir: -1 | 1) => void;
   onSkipScene?: (dir: -1 | 1) => void;
+  // Per-clip transitions
+  clipTransitions?: Record<string, ClipTransition>;
+  onClipTransitionChange?: (sceneId: string, transition: ClipTransition) => void;
 }
 
 export function TimelineBar({
@@ -167,6 +171,7 @@ export function TimelineBar({
   onTrimApply, isTrimming,
   onRegenerateAll, isRegeneratingAll,
   isPlaying, onTogglePlay, onFrameStep, onSkipScene,
+  clipTransitions = {}, onClipTransitionChange,
 }: TimelineBarProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const playheadRef = useRef<HTMLDivElement>(null);
@@ -843,6 +848,14 @@ export function TimelineBar({
                         >
                           {trimMode && isSelected && <GripVertical className="w-2.5 h-2.5 text-white/80" />}
                         </div>
+                      )}
+                      {/* Pencil — edit transition to next clip (hide on last clip) */}
+                      {onClipTransitionChange && i < storyboard.length - 1 && !isSiblingOfNext && (
+                        <ClipTransitionPopover
+                          sceneIndex={i}
+                          current={clipTransitions[scene.id] ?? { type: "None", duration: 0.5 }}
+                          onChange={(t) => onClipTransitionChange(scene.id, t)}
+                        />
                       )}
                     </div>
                   {contextMenuScene === i && (
