@@ -58,25 +58,10 @@ function resolvePreviewText(project: AdProjectRow): string | null {
 }
 
 export function VideoHistory({ projects, onSelect, onSelectDraft, onDelete, onRename }: VideoHistoryProps) {
-  const visible = projects.filter((p) => {
-    const hasVideo = p.final_video_url && !p.final_video_url.startsWith("blob:");
-    // Draft: only show if at least one clip is completed with a valid videoUrl
-    const hasDraftClips = !p.final_video_url && Array.isArray(p.clips) && (p.clips as any[]).some(
-      (c) => c.status === "completed" && c.videoUrl && typeof c.videoUrl === "string" && !c.videoUrl.startsWith("blob:")
-    );
-    const hasThumbnail = !!p.thumbnail_url;
-    return hasVideo || hasDraftClips || hasThumbnail;
-  });
-
-  // Deduplicate: keep only the most recent project per script/name
-  const deduped = Object.values(
-    visible.reduce((acc, p) => {
-      const key = p.script || p.name || p.id;
-      if (!acc[key] || new Date(p.updated_at) > new Date(acc[key].updated_at)) {
-        acc[key] = p;
-      }
-      return acc;
-    }, {} as Record<string, AdProjectRow>)
+  // Show every project the user has ever created — drafts, in-progress, failed, and completed.
+  // Each card already renders an appropriate state (placeholder text, "Incomplete N/M" badge, retry, etc.).
+  const deduped = [...projects].sort(
+    (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
   );
   if (deduped.length === 0) return null;
 
