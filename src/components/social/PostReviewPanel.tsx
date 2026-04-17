@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth } from "@/lib/auth";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play, Copy } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play, Copy, Languages } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
@@ -287,6 +287,30 @@ export function PostReviewPanel({
   const [autoTranslating, setAutoTranslating] = useState(false);
   const lastTranslatedCaptionRef = useRef<string>("");
   const translateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [translateError, setTranslateError] = useState(false);
+
+  // Multi-language reference display state (Persian default, others cached client-side only)
+  type DisplayLang = "fa" | "es" | "fr" | "ar" | "de";
+  const [displayLang, setDisplayLang] = useState<DisplayLang>("fa");
+  const [otherTranslations, setOtherTranslations] = useState<
+    Record<string, { caption: string; imageText: string }>
+  >({});
+  const [otherTranslating, setOtherTranslating] = useState(false);
+  const otherTranslateAbortRef = useRef<AbortController | null>(null);
+
+  // When the post changes and DB has no Persian block but caption exists,
+  // force-reset translation ref so the effect re-triggers for old posts.
+  useEffect(() => {
+    if (!post) return;
+    const hasPersianInDb = (post.content || "").includes("---PERSIAN---");
+    if (!hasPersianInDb && (post.content || "").trim()) {
+      lastTranslatedCaptionRef.current = "";
+      setTranslateError(false);
+    }
+    // Reset cached translations of other languages on post change
+    setOtherTranslations({});
+    setDisplayLang("fa");
+  }, [post?.id]);
 
   useEffect(() => {
     if (!post) return;
@@ -303,15 +327,17 @@ export function PostReviewPanel({
       let cancelled = false;
       const doTranslate = async () => {
         setAutoTranslating(true);
+        setTranslateError(false);
         try {
           const data = await invokeEdgeFunction("translate-caption", {
             caption,
             imageText: "",
+            targetLang: "fa",
           }, { timeoutMs: 30000 });
           if (cancelled) return;
           lastTranslatedCaptionRef.current = caption;
-          const capFa = data.captionFa || "";
-          const imgFa = data.imageTextFa || "";
+          const capFa = data.captionFa || data.captionTranslated || "";
+          const imgFa = data.imageTextFa || data.imageTextTranslated || "";
           setPersianCaptionText(capFa);
           setPersianImageText(imgFa);
           // Save to DB — base content is ALWAYS the user's current localContent,
@@ -323,6 +349,7 @@ export function PostReviewPanel({
           updatePost.mutate({ id: post.id, content: contentToSave });
         } catch (err) {
           console.warn("Auto-translate failed:", err);
+          if (!cancelled) setTranslateError(true);
         } finally {
           if (!cancelled) setAutoTranslating(false);
         }
@@ -335,6 +362,52 @@ export function PostReviewPanel({
       setAutoTranslating(false);
     };
   }, [post?.id, localContent, localTitle]);
+
+  // Fetch translation for a non-Persian language on demand (cache in client state only)
+  const fetchOtherLanguage = useCallback(async (lang: DisplayLang) => {
+    if (lang === "fa") return;
+    const caption = localContent.trim();
+    if (!caption) return;
+    if (otherTranslations[lang]) return; // already cached
+    otherTranslateAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    otherTranslateAbortRef.current = ctrl;
+    setOtherTranslating(true);
+    try {
+      const data = await invokeEdgeFunction("translate-caption", {
+        caption,
+        imageText: "",
+        targetLang: lang,
+      }, { timeoutMs: 30000 });
+      if (ctrl.signal.aborted) return;
+      setOtherTranslations(prev => ({
+        ...prev,
+        [lang]: {
+          caption: data.captionTranslated || data.captionFa || "",
+          imageText: data.imageTextTranslated || data.imageTextFa || "",
+        },
+      }));
+    } catch (err) {
+      console.warn(`Translate to ${lang} failed:`, err);
+    } finally {
+      if (!ctrl.signal.aborted) setOtherTranslating(false);
+    }
+  }, [localContent, otherTranslations]);
+
+  // Manual retry trigger (used by RefreshCw button)
+  const retryTranslate = useCallback(() => {
+    if (displayLang === "fa") {
+      lastTranslatedCaptionRef.current = "";
+      setTranslateError(false);
+      setLocalContent(c => c); // re-trigger effect
+    } else {
+      setOtherTranslations(prev => {
+        const { [displayLang]: _, ...rest } = prev;
+        return rest;
+      });
+      fetchOtherLanguage(displayLang);
+    }
+  }, [displayLang, fetchOtherLanguage]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
@@ -904,33 +977,106 @@ export function PostReviewPanel({
                       </div>
                     </div>
 
-                    {/* Persian translation — always visible, read-only, never published */}
-                    <div className="mx-3 my-2 p-2.5 rounded-lg bg-muted/50 border border-border/50">
-                      <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mb-1.5">
-                        🔒 Internal reference only — not published
-                      </p>
-                      {autoTranslating ? (
-                        <div className="flex items-center gap-2 py-2">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">Translating to Persian…</span>
+                    {/* Internal-only translation reference — multi-language, never published */}
+                    {(() => {
+                      const LANG_OPTIONS: { code: DisplayLang; label: string; flag: string; rtl: boolean }[] = [
+                        { code: "fa", label: "Persian", flag: "🇮🇷", rtl: true },
+                        { code: "ar", label: "Arabic", flag: "🇸🇦", rtl: true },
+                        { code: "es", label: "Spanish", flag: "🇪🇸", rtl: false },
+                        { code: "fr", label: "French", flag: "🇫🇷", rtl: false },
+                        { code: "de", label: "German", flag: "🇩🇪", rtl: false },
+                      ];
+                      const currentLang = LANG_OPTIONS.find(l => l.code === displayLang) || LANG_OPTIONS[0];
+                      const isFa = displayLang === "fa";
+                      const captionDisplay = isFa
+                        ? persianCaptionText
+                        : (otherTranslations[displayLang]?.caption || "");
+                      const imageTextDisplay = isFa
+                        ? persianImageText
+                        : (otherTranslations[displayLang]?.imageText || "");
+                      const isLoading = isFa ? autoTranslating : otherTranslating;
+                      const showError = isFa && translateError && !persianCaptionText && !persianImageText;
+                      const emptyText = isFa ? "ترجمه‌ای موجود نیست" : "No translation available";
+                      const dir = currentLang.rtl ? "rtl" : "ltr";
+                      return (
+                        <div className="mx-3 my-2 p-2.5 rounded-lg bg-muted/50 border border-border/50">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide">
+                              🔒 Internal reference only — not published
+                            </p>
+                            <div className="flex items-center gap-1">
+                              {(showError || (!isLoading && !captionDisplay && !imageTextDisplay && localContent.trim())) && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-5 w-5"
+                                  onClick={retryTranslate}
+                                  title="Retry translation"
+                                >
+                                  <RefreshCw className="w-3 h-3" />
+                                </Button>
+                              )}
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-5 w-5" title="Change language">
+                                    <Languages className="w-3 h-3" />
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-44 p-1" align="end">
+                                  <div className="flex flex-col gap-0.5">
+                                    {LANG_OPTIONS.map(opt => (
+                                      <button
+                                        key={opt.code}
+                                        type="button"
+                                        onClick={() => {
+                                          setDisplayLang(opt.code);
+                                          if (opt.code !== "fa") fetchOtherLanguage(opt.code);
+                                        }}
+                                        className={cn(
+                                          "flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-accent text-left",
+                                          displayLang === opt.code && "bg-accent font-medium"
+                                        )}
+                                      >
+                                        <span>{opt.flag}</span>
+                                        <span>{opt.label}</span>
+                                        {displayLang === opt.code && <Check className="w-3 h-3 ml-auto" />}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          </div>
+                          {isLoading ? (
+                            <div className="flex items-center gap-2 py-2">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">
+                                Translating to {currentLang.label}…
+                              </span>
+                            </div>
+                          ) : showError ? (
+                            <p className="text-xs text-destructive py-1">
+                              Translation failed. Click ↻ to retry.
+                            </p>
+                          ) : (
+                            <>
+                              <div className="mb-1.5">
+                                <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
+                                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir={dir}>
+                                  {imageTextDisplay || emptyText}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
+                                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir={dir}>
+                                  {captionDisplay || emptyText}
+                                </p>
+                              </div>
+                            </>
+                          )}
                         </div>
-                      ) : (
-                        <>
-                          <div className="mb-1.5">
-                            <p className="text-[10px] font-medium text-muted-foreground">🖼️ Image text:</p>
-                            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                              {persianImageText || "ترجمه‌ای موجود نیست"}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-medium text-muted-foreground">📝 Caption translation:</p>
-                            <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-line" dir="rtl">
-                              {persianCaptionText || "ترجمه‌ای موجود نیست"}
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </div>
+                      );
+                    })()}
 
                     {/* Regenerate caption */}
                     <div className="flex gap-2 px-4 pt-3">

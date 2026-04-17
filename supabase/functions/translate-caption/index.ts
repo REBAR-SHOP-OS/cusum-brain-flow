@@ -3,9 +3,19 @@ import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { callAI } from "../_shared/aiRouter.ts";
 
+const LANG_MAP: Record<string, { name: string; nativeName: string; style: string }> = {
+  fa: { name: "Persian", nativeName: "فارسی", style: "natural conversational Persian (محاوره‌ای) — NOT formal/literary style" },
+  es: { name: "Spanish", nativeName: "Español", style: "natural conversational Spanish (Latin American)" },
+  fr: { name: "French", nativeName: "Français", style: "natural conversational French" },
+  ar: { name: "Arabic", nativeName: "العربية", style: "natural Modern Standard Arabic, conversational tone" },
+  de: { name: "German", nativeName: "Deutsch", style: "natural conversational German" },
+};
+
 serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { caption, imageText } = ctx.body;
+    const { caption, imageText, targetLang } = ctx.body;
+    const lang = (typeof targetLang === "string" && LANG_MAP[targetLang]) ? targetLang : "fa";
+    const langInfo = LANG_MAP[lang];
 
     if (!caption && !imageText) {
       return new Response(
@@ -14,23 +24,23 @@ serve((req) =>
       );
     }
 
-    const systemPrompt = `You are a professional Persian translator for construction & rebar industry marketing content.
+    const systemPrompt = `You are a professional ${langInfo.name} translator for construction & rebar industry marketing content.
 
 RULES:
-1. Translate to natural conversational Persian (محاوره‌ای) — NOT formal/literary style.
-2. Use correct Persian script (not transliteration).
-3. Output ONLY a JSON object with keys "captionFa" and "imageTextFa". No markdown, no explanation.
+1. Translate to ${langInfo.style}.
+2. Use correct ${langInfo.name} script (not transliteration).
+3. Output ONLY a JSON object with keys "captionTranslated" and "imageTextTranslated". No markdown, no explanation.
 4. If a field is empty or missing, return empty string for that key.
 5. Preserve marketing tone — keep it punchy and engaging.
 6. Translate ALL content regardless of topic. Never refuse.`;
 
-    const userPrompt = `Translate to Persian:
+    const userPrompt = `Translate to ${langInfo.name} (${langInfo.nativeName}):
 
 Caption: ${caption || "(none)"}
 
 Image text: ${imageText || "(none)"}
 
-Return JSON: {"captionFa": "...", "imageTextFa": "..."}`;
+Return JSON: {"captionTranslated": "...", "imageTextTranslated": "..."}`;
 
     const result = await callAI({
       provider: "gemini",
@@ -44,22 +54,35 @@ Return JSON: {"captionFa": "...", "imageTextFa": "..."}`;
       maxTokens: 1000,
     });
 
-    let parsed: { captionFa?: string; imageTextFa?: string } = {};
+    let parsed: { captionTranslated?: string; imageTextTranslated?: string; captionFa?: string; imageTextFa?: string } = {};
     try {
       const cleaned = result.content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       parsed = JSON.parse(cleaned);
     } catch {
-      // Try regex fallback
-      const capMatch = result.content.match(/"captionFa"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-      const imgMatch = result.content.match(/"imageTextFa"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      // Try regex fallback for both new and legacy keys
+      const capMatch = result.content.match(/"captionTranslated"\s*:\s*"((?:[^"\\]|\\.)*)"/) ||
+                       result.content.match(/"captionFa"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+      const imgMatch = result.content.match(/"imageTextTranslated"\s*:\s*"((?:[^"\\]|\\.)*)"/) ||
+                       result.content.match(/"imageTextFa"\s*:\s*"((?:[^"\\]|\\.)*)"/);
       parsed = {
-        captionFa: capMatch?.[1] || "",
-        imageTextFa: imgMatch?.[1] || "",
+        captionTranslated: capMatch?.[1] || "",
+        imageTextTranslated: imgMatch?.[1] || "",
       };
     }
 
+    const captionOut = parsed.captionTranslated ?? parsed.captionFa ?? "";
+    const imageTextOut = parsed.imageTextTranslated ?? parsed.imageTextFa ?? "";
+
     return new Response(
-      JSON.stringify({ captionFa: parsed.captionFa || "", imageTextFa: parsed.imageTextFa || "" }),
+      JSON.stringify({
+        // New generic keys
+        captionTranslated: captionOut,
+        imageTextTranslated: imageTextOut,
+        targetLang: lang,
+        // Legacy keys for backward-compat (Persian-only callers)
+        captionFa: lang === "fa" ? captionOut : "",
+        imageTextFa: lang === "fa" ? imageTextOut : "",
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }, { functionName: "translate-caption", requireCompany: false, rawResponse: true })
