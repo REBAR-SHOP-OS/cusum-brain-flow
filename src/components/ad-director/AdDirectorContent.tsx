@@ -397,6 +397,9 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           onUpdateStoryboard={(sb) => service.patchState({ storyboard: sb })}
           onUpdateBrand={(b) => service.patchState({ brand: b })}
           onMusicSelect={(url) => service.patchState({ musicTrackUrl: url })}
+          onUpdateOverlays={(ov) => service.patchState({ editorOverlays: ov } as any)}
+          onUpdateAudioTracks={(tracks) => service.patchState({ editorAudioTracks: tracks } as any)}
+          onUpdateMutedScenes={(ids) => service.patchState({ editorMutedScenes: ids } as any)}
           onAddSceneWithMedia={(url, fileName) => {
             const state = service.getState();
             const newId = crypto.randomUUID();
