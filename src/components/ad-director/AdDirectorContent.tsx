@@ -593,6 +593,24 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                           </div>
                         )}
 
+                        {/* Delete scene — always available (disabled if only one or while generating) */}
+                        <button
+                          type="button"
+                          aria-label="Delete scene"
+                          title={
+                            clips.length <= 1
+                              ? "Cannot delete the only scene"
+                              : (clip.status === "generating" || clip.status === "queued")
+                                ? "Wait for generation to finish"
+                                : "Delete scene"
+                          }
+                          disabled={clips.length <= 1 || clip.status === "generating" || clip.status === "queued"}
+                          onClick={(e) => { e.stopPropagation(); handleRequestDeleteScene(clip.sceneId); }}
+                          className="absolute top-1.5 right-1.5 z-30 w-7 h-7 rounded-full bg-black/60 hover:bg-destructive flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <X className="w-3.5 h-3.5 text-white" />
+                        </button>
+
                         {clip.status === "completed" && clip.videoUrl ? (
                           <>
                             <video
