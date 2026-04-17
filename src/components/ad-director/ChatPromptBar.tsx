@@ -207,20 +207,30 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     }
   }, [starterPrompt, starterPromptSeed]);
 
-  const handleAiWrite = async () => {
+  const contextChips: string[] = [
+    ...selectedStyleLabels.map((l) => `Style: ${l}`),
+    ...selectedProductLabels.map((l) => `Product: ${l}`),
+    `Duration: ${duration}s`,
+    `Ratio: ${ratio}`,
+  ];
+
+  const handleAiGenerate = async (userInput: string) => {
     setAiWriting(true);
     try {
       const parts: string[] = [];
       if (selectedStyleLabels.length) parts.push(`Style: ${selectedStyleLabels.join(", ")}`);
       if (selectedProductLabels.length) parts.push(`Products: ${selectedProductLabels.join(", ")}`);
       parts.push(`Duration: ${duration}s`);
+      parts.push(`Ratio: ${ratio}`);
       const contextString = parts.join(". ") + ".";
+      const combinedInput = `${userInput}\n\nContext: ${contextString}`;
       const result = await invokeEdgeFunction<{ text?: string }>("ad-director-ai", {
         action: "write-script",
-        input: contextString,
+        input: combinedInput,
       });
       if (result?.text) {
         setPrompt(result.text);
+        setAiDialogOpen(false);
         toast({ title: "✨ Prompt ready", description: "Review and edit before creating." });
       }
     } catch (err: any) {
@@ -230,6 +240,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
       setAiWriting(false);
     }
   };
+
 
   const handleSubmit = () => {
     if (!prompt.trim() || disabled) return;
