@@ -1,80 +1,70 @@
 
-## درخواست کاربر
-هر پرامپت — چه پرامپت اولیه‌ی Create Video، چه "Custom prompt..." روی هر کارت scene، چه ویرایش پرامپت — باید طوری ساخته شود که کارت‌های ویدئو **روایی به هم متصل** باشند. هر کارت باید ادامه‌ی منطقی کارت قبلی باشد (نه فقط ظاهر یکسان، بلکه ادامه‌ی action/داستان).
+## مشکل کاربر
+وقتی یک نوار ویدئو split می‌شود، الان دو کارت **جداگانه** ساخته می‌شود (با ring، border، status badge، duration label، gap بین‌شان). کاربر می‌خواهد همان نوار قبلی **در همان جا به دو قسمت** تقسیم شود — مثل یک تکه نوار با یک خط برش عمودی، نه دو کارت مستقل کنار هم.
 
-## وضعیت فعلی (یافته‌ها)
+## یافته‌ی فنی
 
-✅ **چه چیزی الان کار می‌کند:**
-- `ContinuityProfile` (شامل `lastFrameSummary` + `nextSceneBridge`) در `analyze-script` ساخته می‌شود
-- `write-cinematic-prompt` صفت‌های ظاهری (environment، lighting، wardrobe، subject) را در هر پرامپت تزریق می‌کند
-- `previousScene.prompt.slice(0, 200)` به مدل پاس می‌شود
+در `TimelineBar.tsx` (خط 689-693) Video Track یک `<div>` اصلی است با `gap-px` بین اسلات‌ها. هر scene یک wrapper مستقل دارد (خط 707) با:
+- `ring-1 ring-white/[0.06]` (border دور هر کارت)
+- `rounded-sm` (گوشه‌های گرد جدا)
+- status badge "(done/gen…/idle)" در بالا-راست
+- duration badge "Xs" در بالا-چپ
+- objective text در پایین
 
-❌ **چه چیزی شکسته/ضعیف است:**
-1. **Regenerate تک‌سینی** (`backgroundAdDirectorService.regenerateScene`): فقط continuity ظاهری (environment/lighting/color/subject) را prefix می‌کند — هیچ ارجاعی به **scene قبلی** یا **scene بعدی** ندارد. وقتی کاربر روی کارت ۲ "Custom prompt" می‌نویسد، کارت ۲ بدون اطلاع از پایان کارت ۱ ساخته می‌شود → گسست روایی.
-2. **پرامپت کاربر در "Custom prompt..."** مستقیم به video model می‌رود (`basePrompt = customPrompt.trim()`) — هیچ مرحله‌ی AI bridging قبل از تولید نیست.
-3. **`edit-video-prompt`** (وقتی کاربر پرامپت را edit می‌کند) هیچ context از scenes اطراف ندارد.
-4. در `write-cinematic-prompt`، فقط 200 کاراکتر اول pervasive هست — `lastFrameSummary` و `nextSceneBridge` از `continuityProfile` استفاده نمی‌شود.
+نتیجه: بعد از split، کاربر دو "کارت" مستقل می‌بیند که با گپ کوچک و borders جدا شده‌اند — درست مثل دو scene جداگانه. logic split کاملاً درست است (segments و clipDurations درست به‌روزرسانی می‌شوند، widths متناسب هستند) — فقط **رندر بصری** هر دو نیمه را به شکل دو کارت کامل نشان می‌دهد.
 
-## برنامه‌ی اصلاح (Surgical, Additive)
+## برنامه‌ی اصلاح (Surgical, Visual-Only)
 
-### ۱. تقویت `write-cinematic-prompt` برای bridge روایی
-در `supabase/functions/ad-director-ai/index.ts` (تابع `handleWriteCinematicPrompt`):
-- اضافه کردن block صریح "NARRATIVE CONTINUITY" به user prompt:
-  - `previousScene.lastFrameSummary` (آخرین فریم visual کارت قبلی)
-  - `previousScene.subjectAction` (action کارت قبلی)
-  - `nextSceneBridge` از continuityProfile
-- دستور صریح به مدل: "Open this scene from the exact visual state where the previous scene ended. The first 0.5s must visually continue the motion/action/subject pose from previous scene's lastFrameSummary."
-- در `WRITE_CINEMATIC_PROMPT_SYSTEM` اضافه کردن: "Each scene MUST narratively pick up from the previous scene's final action — not just match visual style."
+### ۱. اضافه کردن مفهوم "split sibling" در `handleSplitScene`
+به scene جدید (نیمه‌ی دوم) یک flag اختیاری اضافه کنیم:
+```ts
+const newScene: StoryboardScene = { 
+  ...scene, 
+  id: newSceneId, 
+  segmentId: newSegId,
+  splitFromId: scene.id,  // ← جدید
+};
+```
+و scene اصلی هم flag بگیرد:
+```ts
+const updatedOriginal = { ...scene, splitIntoId: newSceneId };
+```
 
-### ۲. اضافه‌ی tab/فیلد `lastFrameSummary` per-scene
-در همان تابع، خروجی `write_prompt` یک فیلد اختیاری `endsWith` (string ~30 کلمه) برگرداند که خلاصه‌ی فریم پایانی این scene است. این به scene بعدی پاس می‌شود (یعنی `previousScene.endsWith` به جای فقط `prompt.slice(0,200)`).
+### ۲. در `TimelineBar.tsx` — نمایش continuous برای split siblings
+هنگام render هر scene wrapper، اگر scene فعلی یا قبلی `splitFromId/splitIntoId` به یکدیگر دارند:
+- **حذف gap**: `gap-px` فقط بین scene های غیر-sibling (با محاسبه‌ی margin به‌جای gap container-level)
+- **حذف border بین آن‌ها**: ring فقط روی edge های بیرونی (left edge اولی، right edge دومی)
+- **یکپارچه کردن thumbnails**: سری پشت‌سرهم thumbnails ها به نظر یکپارچه (با `rounded-none` در edge داخلی)
+- **خط برش بصری**: یک divider قرمز ۲px در نقطه‌ی برش بین دو نیمه (به جای gap)
+- **حذف badge های تکراری**: duration و status badge فقط روی نیمه‌ی selected شده (یا اولی)
+- **selection highlight**: ring قرمز روی نیمه‌ی selected، نه روی هر دو
 
-### ۳. اصلاح `regenerateScene` در `backgroundAdDirectorService.ts`
-قبل از ساختن `motionPrompt`:
-- پیدا کردن `previousScene = storyboard[idx-1]` و `nextScene = storyboard[idx+1]`
-- اضافه کردن **bridge prefix** بعد از continuityPrefix:
-  ```
-  [Narrative bridge: This scene begins exactly where the previous scene ended — 
-   previous scene's final action: "<previousScene.subjectAction>". 
-   Continue the same motion/pose seamlessly into this scene's action.]
-  ```
-- اگر کارت بعدی هم وجود دارد، یک hint اضافه:
-  ```
-  [Setup for next: Frame the ending so it can flow into "<nextScene.objective>".]
-  ```
+### ۳. تغییر container بیرونی video track
+به جای `gap-px` ثابت، از یک منطق conditional استفاده می‌کنیم:
+```tsx
+<div className={`... ${isSplitSibling(scene, prev) ? "ml-0" : "ml-px"}`}>
+```
+یا ساده‌تر: هر pair از split-siblings داخل یک wrapper مشترک قرار می‌گیرند.
 
-### ۴. AI bridging برای "Custom prompt..." کاربر
-وقتی `customPrompt` پاس داده می‌شود (در `regenerateScene`):
-- به جای استفاده‌ی مستقیم، یک فراخوانی سبک به `edit-video-prompt` (یا `write-cinematic-prompt` با scene synthetic) که:
-  - ورودی: متن کاربر + `previousScene` + `nextScene` + continuityProfile
-  - خروجی: پرامپت bridged
-- این یک hop اضافی است ولی کیفیت روایی را تضمین می‌کند. اگر edge function fail شد، fallback به رفتار فعلی.
-
-### ۵. اصلاح `edit-video-prompt` (در `supabase/functions/edit-video-prompt/index.ts`)
-- پذیرش parameter اختیاری `previousSceneSummary` و `nextSceneSummary` در body
-- تزریق در system/user prompt: "The edited prompt must remain narratively continuous with: previous=<...>, next=<...>"
-- تماس‌گیرنده‌ها (`AIPromptDialog`، `ProVideoEditor`) این دو را پاس می‌دهند
-
-### ۶. UI hint کوچک (اختیاری ولی مفید)
-- در input "Custom prompt..." روی هر کارت، placeholder را به این تغییر دهیم: "Custom prompt — will continue from previous scene..."
-- زیر input یک متن ریز خاکستری: "AI will bridge this with scene N-1 and scene N+1"
+### ۴. UX کوچک: highlight cut line
+وقتی playhead روی نقطه‌ی split است (یا hover روی divider)، خط برش پررنگ‌تر شود — feedback بصری که "این جا برش است".
 
 ## فایل‌های تغییرکننده
-- `supabase/functions/ad-director-ai/index.ts` — تقویت `handleWriteCinematicPrompt` + system prompt
-- `supabase/functions/edit-video-prompt/index.ts` — پذیرش previous/next context
-- `src/lib/backgroundAdDirectorService.ts` — bridge prefix در `regenerateScene` + AI bridging برای customPrompt
-- `src/components/ad-director/SceneCard.tsx` — placeholder/hint زیر custom prompt input
+- `src/components/ad-director/ProVideoEditor.tsx` — اضافه کردن `splitFromId`/`splitIntoId` به scene جدید و قبلی در `handleSplitScene`
+- `src/components/ad-director/editor/TimelineBar.tsx` — منطق رندر continuous برای split siblings (بدون gap، بدون border داخلی، divider قرمز، badge مشترک)
+- `src/types` یا inline type — افزودن دو فیلد اختیاری به `StoryboardScene` (یا cast محلی، چون فقط visual است)
 
 ## آنچه دست‌نخورده می‌ماند
-- Schema/DB / RLS / migrations — بدون تغییر
-- Initial pipeline (analyze-script → write-cinematic-prompt → score → improve) — فقط prompt content تقویت می‌شود
-- Stitch / export / overlays / transitions — بدون تغییر
-- Voiceover / subtitles — بدون تغییر
-- زبان UI: کاملاً انگلیسی (طبق memory rule)
+- منطق split (segments, clipDurations, clip duplication) — کاملاً صحیح، تغییر نمی‌کند
+- export/stitch pipeline — همان دو scene مستقل را پردازش می‌کند (هر کدام startTime/endTime خود)
+- drag/reorder/trim/delete — کار می‌کنند روی هر نیمه به‌طور مستقل
+- DB / RLS / edge functions — بدون تغییر
+- Audio & Text tracks — بدون تغییر
 
 ## نتیجه
-1. ✅ هر کارت ۲ به بعد، بصری **و** روایی از کارت قبلی ادامه پیدا می‌کند (action، subject pose، motion flow)
-2. ✅ Regenerate تک‌سینی هم continuity روایی را حفظ می‌کند
-3. ✅ "Custom prompt..." کاربر قبل از رفتن به video model، توسط AI با context کارت‌های مجاور bridge می‌شود
-4. ✅ Edit پرامپت با دانش از scenes اطراف انجام می‌شود
-5. ✅ بدون شکستن هیچ pipeline موجود — اگر AI bridging fail شود، fallback به رفتار فعلی
+1. ✅ بعد از split، کاربر یک نوار continuous با thumbnails پیوسته می‌بیند
+2. ✅ یک خط برش قرمز نازک در نقطه‌ی playhead وجود دارد
+3. ✅ کلیک روی هر نیمه آن نیمه را select می‌کند (با ring قرمز فقط روی selected)
+4. ✅ از نظر داده، هنوز دو scene مستقل هستند (قابل drag، trim، delete جداگانه)
+5. ✅ هیچ تغییری در export/stitch pipeline نیاز نیست
+6. ✅ زبان UI: انگلیسی (طبق memory rule)
