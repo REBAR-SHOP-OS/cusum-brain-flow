@@ -448,22 +448,78 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           {/* Scene Clips Gallery */}
           {clips.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground px-1">Generated Scenes</p>
+              <p className="text-xs font-medium text-muted-foreground px-1">
+                Generated Scenes
+                {clips.length > 1 && (
+                  <span className="text-[10px] text-muted-foreground/70 italic ml-2 font-normal">
+                    · Drag to reorder
+                  </span>
+                )}
+              </p>
               <div className="flex overflow-x-auto gap-3 pb-2 scrollbar-thin">
                 {clips.map((clip, i) => {
                   const scene = storyboard[i];
                   const label = scene?.objective?.split(" ").slice(0, 3).join(" ") || `Scene ${i + 1}`;
                   const segType = segments.find(s => s.id === scene?.segmentId)?.type;
                   const isSelected = clip.videoUrl === selectedPreviewUrl;
+                  const isDraggable = clip.status === "completed";
+                  const isDropTarget = dropIdx === i && dragIdx !== null && dragIdx !== i;
+                  const isDragging = dragIdx === i;
 
                   return (
-                    <div key={clip.sceneId} className="flex-shrink-0 w-[280px] space-y-1.5">
+                    <div
+                      key={clip.sceneId}
+                      className={`flex-shrink-0 w-[280px] space-y-1.5 transition-transform ${
+                        isDropTarget ? "scale-105" : ""
+                      } ${isDragging ? "opacity-40" : ""}`}
+                      draggable={isDraggable}
+                      onDragStart={(e) => {
+                        if (!isDraggable) return;
+                        setDragIdx(i);
+                        e.dataTransfer.effectAllowed = "move";
+                      }}
+                      onDragOver={(e) => {
+                        if (dragIdx === null) return;
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        if (dropIdx !== i) setDropIdx(i);
+                      }}
+                      onDragLeave={() => {
+                        if (dropIdx === i) setDropIdx(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const from = dragIdx;
+                        setDragIdx(null);
+                        setDropIdx(null);
+                        if (from === null || from === i) return;
+                        handleReorderClips(from, i);
+                      }}
+                      onDragEnd={() => {
+                        setDragIdx(null);
+                        setDropIdx(null);
+                      }}
+                    >
                       <div
-                        className={`relative rounded-xl border overflow-hidden cursor-pointer transition-all group ${
+                        className={`relative rounded-xl border overflow-hidden transition-all group ${
+                          isDraggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
+                        } ${
                           isSelected ? "ring-2 ring-primary border-primary" : "border-border/30 hover:border-primary/50"
-                        }`}
+                        } ${isDropTarget ? "ring-2 ring-primary/70" : ""}`}
                         onClick={() => clip.videoUrl && setSelectedPreviewUrl(clip.videoUrl)}
                       >
+                        {/* Number badge — always visible */}
+                        <div className="absolute top-1.5 left-1.5 z-20 w-7 h-7 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shadow-lg ring-2 ring-background">
+                          {i + 1}
+                        </div>
+
+                        {/* Drag grip — hover hint */}
+                        {isDraggable && (
+                          <div className="absolute top-1.5 left-10 z-20 opacity-0 group-hover:opacity-70 transition-opacity pointer-events-none">
+                            <GripVertical className="w-4 h-4 text-white drop-shadow" />
+                          </div>
+                        )}
+
                         {clip.status === "completed" && clip.videoUrl ? (
                           <>
                             <video
@@ -480,7 +536,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                               </div>
                             </div>
                             <button
-                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
                               onClick={(e) => { e.stopPropagation(); handleRegenerateScene(clip.sceneId); }}
                               title="Regenerate scene"
                             >
@@ -495,7 +551,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                           <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center relative">
                             <AlertCircle className="w-5 h-5 text-destructive" />
                             <button
-                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-opacity"
+                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-opacity z-20"
                               onClick={(e) => { e.stopPropagation(); handleRegenerateScene(clip.sceneId); }}
                               title="Retry scene"
                             >
