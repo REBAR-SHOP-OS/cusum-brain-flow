@@ -752,6 +752,49 @@ export function ProVideoEditor({
     return () => { cancelled = true; };
   }, [clips, storyboard, cumulativeStarts, sceneDurations]);
 
+  // ─── Auto-seed text overlay bars per scene ──────────────────
+  // Surfaces caption text on the Text lane so users see what's there and can delete it.
+  // We only seed scenes that have voiceover/segment text and no existing text overlay.
+  const seededTextScenesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!storyboard.length) return;
+    const newOverlays: VideoOverlay[] = [];
+    for (let i = 0; i < storyboard.length; i++) {
+      const scene = storyboard[i];
+      const seg = segments.find(s => s.id === scene.segmentId);
+      const text = (scene.voiceover || seg?.text || "").trim();
+      if (!text) continue;
+      if (seededTextScenesRef.current.has(scene.id)) continue;
+      // Skip if a text overlay already exists for this scene
+      if (overlays.some(o => o.kind === "text" && o.sceneId === scene.id)) {
+        seededTextScenesRef.current.add(scene.id);
+        continue;
+      }
+      const sceneDur = sceneDurations[i] || 4;
+      newOverlays.push({
+        id: crypto.randomUUID(),
+        kind: "text" as const,
+        position: { x: 5, y: 82 },
+        size: { w: 90, h: 12 },
+        content: text,
+        opacity: 0.95,
+        sceneId: scene.id,
+        animated: false,
+        startTime: 0,
+        endTime: sceneDur,
+      });
+      seededTextScenesRef.current.add(scene.id);
+    }
+    if (newOverlays.length) {
+      setOverlays(prev => [...prev, ...newOverlays]);
+    }
+    // Clean up scenes that no longer exist
+    const validIds = new Set(storyboard.map(s => s.id));
+    Array.from(seededTextScenesRef.current).forEach(id => {
+      if (!validIds.has(id)) seededTextScenesRef.current.delete(id);
+    });
+  }, [storyboard, segments, sceneDurations]);
+
   // Helper: split text into caption chunks of ~4-6 words
   const splitIntoChunks = useCallback((text: string, maxWords = 5): string[] => {
     const words = text.split(/\s+/).filter(Boolean);
