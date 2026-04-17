@@ -494,12 +494,21 @@ export async function stitchClips(
   let musicGainNode: GainNode | null = null;
   let voiceGainNode: GainNode | null = null;
 
+  // Extra editor-supplied tracks
+  const extraTrackEls: { el: HTMLAudioElement; gain: GainNode; track: StitchAudioTrack; started: boolean }[] = [];
+  // Per-clip embedded audio elements (from source video clips when not muted)
+  const clipAudioEls: (HTMLAudioElement | null)[] = [];
+  const clipAudioGains: (GainNode | null)[] = [];
+
   const hasVoice = !!overlays?.audioUrl;
   const hasMusic = !!overlays?.musicUrl;
+  const editorTracks = (overlays?.audioTracks || []).filter(t => !t.silentVisual && t.audioUrl);
+  const clipMuted = overlays?.clipMuted || [];
+  const wantClipAudio = validatedClips.length > 0 && validatedClips.some((_, i) => clipMuted[i] !== true);
   const baseMusicVol = overlays?.musicVolume ?? 0.15;
   const duckedMusicVol = Math.min(baseMusicVol * 0.33, 0.05); // duck to 33% or max 0.05
 
-  if (hasVoice || hasMusic) {
+  if (hasVoice || hasMusic || editorTracks.length > 0 || wantClipAudio) {
     try {
       audioCtx = new AudioContext();
       const audioDest = audioCtx.createMediaStreamDestination();
@@ -549,6 +558,59 @@ export async function stitchClips(
         musicGainNode.gain.value = hasVoice ? duckedMusicVol : baseMusicVol;
         musicSource.connect(musicGainNode);
         musicGainNode.connect(compressor);
+      }
+
+      // Editor-supplied extra tracks (multi voiceover / multi music)
+      for (const track of editorTracks) {
+        try {
+          const blobUrl = await fetchAsBlob(track.audioUrl);
+          const el = document.createElement("audio");
+          el.preload = "auto";
+          el.src = blobUrl;
+          el.loop = track.kind === "music";
+          await new Promise<void>((res) => {
+            el.oncanplaythrough = () => res();
+            el.onerror = () => res();
+            setTimeout(() => res(), 4000);
+          });
+          const src = audioCtx.createMediaElementSource(el);
+          const gain = audioCtx.createGain();
+          const baseVol = track.volume ?? (track.kind === "music" ? baseMusicVol : 1);
+          gain.gain.value = baseVol;
+          src.connect(gain);
+          gain.connect(compressor);
+          extraTrackEls.push({ el, gain, track, started: false });
+        } catch (e) {
+          console.warn("[stitchClips] Extra track load failed:", track.audioUrl, e);
+        }
+      }
+
+      // Per-clip embedded audio (source video sound) — re-fetch as <audio> elements
+      // because canvas captureStream() does not capture audio from <video> elements.
+      for (let ci = 0; ci < validatedClips.length; ci++) {
+        const muted = clipMuted[ci] === true; // default = include audio
+        if (muted) { clipAudioEls.push(null); clipAudioGains.push(null); continue; }
+        try {
+          const el = document.createElement("audio");
+          el.preload = "auto";
+          el.src = validatedClips[ci].blobUrl;
+          await new Promise<void>((res) => {
+            el.oncanplaythrough = () => res();
+            el.onerror = () => res();
+            setTimeout(() => res(), 4000);
+          });
+          const src = audioCtx.createMediaElementSource(el);
+          const gain = audioCtx.createGain();
+          gain.gain.value = 1;
+          src.connect(gain);
+          gain.connect(compressor);
+          clipAudioEls.push(el);
+          clipAudioGains.push(gain);
+        } catch (e) {
+          console.warn("[stitchClips] Clip embedded audio load failed for clip", ci, e);
+          clipAudioEls.push(null);
+          clipAudioGains.push(null);
+        }
       }
 
       audioDest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
