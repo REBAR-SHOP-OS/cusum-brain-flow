@@ -848,43 +848,113 @@ export function ProVideoEditor({
     a.play().catch(() => {});
   }, [globalTime, isPlaying, isMuted, audioTracks, totalDuration, videoSpeed]);
 
-  // Undo/Redo history
-  const [history, setHistory] = useState<StoryboardScene[][]>([]);
+  // ─── Unified Undo/Redo history ───
+  // Snapshot captures storyboard + audioTracks + overlays + segments + mutedScenes
+  interface EditorSnapshot {
+    storyboard: StoryboardScene[];
+    audioTracks: AudioTrackItem[];
+    overlays: VideoOverlay[];
+    segments: ScriptSegment[];
+    mutedScenes: string[];
+  }
+  const HISTORY_CAP = 50;
+  const [history, setHistory] = useState<EditorSnapshot[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const historyIndexRef = useRef(-1);
-
-  // Keep ref in sync
+  // Refs to current state for stable pushHistory closure
+  const storyboardRef = useRef(storyboard);
+  const audioTracksRef = useRef(audioTracks);
+  const overlaysRef = useRef(overlays);
+  const segmentsRef = useRef(segments);
+  const mutedScenesRef = useRef(mutedScenes);
   useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
-
-  // Seed initial storyboard into history
-  useEffect(() => {
-    if (storyboard.length > 0 && history.length === 0) {
-      setHistory([storyboard]);
-      setHistoryIndex(0);
-    }
-  }, [storyboard, history.length]);
+  useEffect(() => { storyboardRef.current = storyboard; }, [storyboard]);
+  useEffect(() => { audioTracksRef.current = audioTracks; }, [audioTracks]);
+  useEffect(() => { overlaysRef.current = overlays; }, [overlays]);
+  useEffect(() => { segmentsRef.current = segments; }, [segments]);
+  useEffect(() => { mutedScenesRef.current = mutedScenes; }, [mutedScenes]);
 
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const pushHistory = useCallback((snapshot: StoryboardScene[]) => {
+  // Deep-clone helper using structuredClone with fallback
+  const cloneSnapshot = (snap: EditorSnapshot): EditorSnapshot => {
+    try { return structuredClone(snap); }
+    catch { return JSON.parse(JSON.stringify(snap)); }
+  };
+
+  // Seed initial unified snapshot
+  useEffect(() => {
+    if (storyboard.length > 0 && history.length === 0) {
+      const seed: EditorSnapshot = {
+        storyboard,
+        audioTracks,
+        overlays,
+        segments,
+        mutedScenes: Array.from(mutedScenes),
+      };
+      setHistory([cloneSnapshot(seed)]);
+      setHistoryIndex(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyboard.length]);
+
+  /** Push current full editor state to history. Call BEFORE applying a mutation. */
+  const pushHistory = useCallback((_legacy?: any) => {
+    const snap: EditorSnapshot = {
+      storyboard: storyboardRef.current,
+      audioTracks: audioTracksRef.current,
+      overlays: overlaysRef.current,
+      segments: segmentsRef.current,
+      mutedScenes: Array.from(mutedScenesRef.current),
+    };
+    const cloned = cloneSnapshot(snap);
     const idx = historyIndexRef.current;
-    setHistory(prev => [...prev.slice(0, idx + 1), snapshot]);
-    setHistoryIndex(idx + 1);
+    setHistory(prev => {
+      const next = [...prev.slice(0, idx + 1), cloned];
+      // Cap to HISTORY_CAP entries
+      if (next.length > HISTORY_CAP) {
+        const excess = next.length - HISTORY_CAP;
+        return next.slice(excess);
+      }
+      return next;
+    });
+    setHistoryIndex(idx => {
+      const newIdx = Math.min(idx + 1, HISTORY_CAP - 1);
+      return newIdx;
+    });
     setHasChanges(true);
   }, []);
 
+  // Debounced push for continuous operations (drag, resize, slider)
+  const pushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushHistoryDebounced = useCallback(() => {
+    if (pushDebounceRef.current) clearTimeout(pushDebounceRef.current);
+    pushDebounceRef.current = setTimeout(() => { pushHistory(); }, 300);
+  }, [pushHistory]);
+
+  // Apply a snapshot to all relevant state
+  const applySnapshot = useCallback((snap: EditorSnapshot) => {
+    onUpdateStoryboard?.(snap.storyboard);
+    setAudioTracks(snap.audioTracks);
+    setOverlays(snap.overlays);
+    setMutedScenes(new Set(snap.mutedScenes));
+    if (onUpdateSegments) onUpdateSegments(snap.segments);
+  }, [onUpdateStoryboard, onUpdateSegments]);
+
   const undo = () => {
     if (historyIndex > 0) {
-      setHistoryIndex(historyIndex - 1);
-      onUpdateStoryboard?.(history[historyIndex - 1]);
+      const target = historyIndex - 1;
+      setHistoryIndex(target);
+      applySnapshot(cloneSnapshot(history[target]));
     }
   };
 
   const redo = () => {
     if (historyIndex < history.length - 1) {
-      setHistoryIndex(historyIndex + 1);
-      onUpdateStoryboard?.(history[historyIndex + 1]);
+      const target = historyIndex + 1;
+      setHistoryIndex(target);
+      applySnapshot(cloneSnapshot(history[target]));
     }
   };
 
@@ -901,11 +971,11 @@ export function ProVideoEditor({
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [selectedSceneIndex]);
+  }, [selectedSceneIndex, historyIndex, history.length]);
 
   const resetAll = () => {
     if (history.length > 0) {
-      onUpdateStoryboard?.(history[0]);
+      applySnapshot(cloneSnapshot(history[0]));
       setHistoryIndex(0);
       toast({ title: "All edits reset" });
     }
