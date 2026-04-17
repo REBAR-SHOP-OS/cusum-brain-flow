@@ -241,16 +241,15 @@ export function PostReviewPanel({
     setLocalTitle(post.title || "");
     const rawC = post.content || "";
     const persianSepIdx = rawC.indexOf("---PERSIAN---");
+    let nextEditable = "";
     if (persianSepIdx !== -1) {
-      setLocalContent(rawC.slice(0, persianSepIdx).trim());
+      nextEditable = rawC.slice(0, persianSepIdx).trim();
       const pBlock = rawC.slice(persianSepIdx + "---PERSIAN---".length).trim();
-      // Parse image text and caption translation from Persian block
       const imgMatch = pBlock.match(/🖼️\s*متن روی عکس:\s*([\s\S]*?)(?=📝|$)/);
       const capMatch = pBlock.match(/📝\s*ترجمه کپشن:\s*([\s\S]*?)$/);
       setPersianImageText(imgMatch?.[1]?.trim() || pBlock);
       setPersianCaptionText(capMatch?.[1]?.trim() || "");
     } else {
-      // No separator found — still strip any Persian markers or lines as safety net
       let cleaned = rawC;
       const persianMarker = cleaned.match(/🖼️\s*متن روی عکس:([\s\S]*?)(?=📝|$)/);
       const captionMarker = cleaned.match(/📝\s*ترجمه کپشن:([\s\S]*?)$/);
@@ -266,10 +265,19 @@ export function PostReviewPanel({
       } else {
         setPersianCaptionText("");
       }
-      // Strip any remaining lines with Persian/Arabic characters
       cleaned = cleaned.split("\n").filter(l => !/[\u0600-\u06FF]/.test(l)).join("\n");
-      setLocalContent(cleaned.trim());
+      nextEditable = cleaned.trim();
     }
+    // Safeguard: do NOT overwrite the user's in-flight typing with stale DB content.
+    // Only sync the editable caption when (a) it's a different post, or (b) the
+    // incoming content matches what we last submitted (i.e. confirmed save).
+    setLocalContent(prev => {
+      if (!isUserEditingRef.current) return nextEditable;
+      if (nextEditable === prev) return prev;
+      if (lastSubmittedCaptionRef.current && nextEditable === lastSubmittedCaptionRef.current) return prev;
+      // User is actively typing and DB shipped something different — preserve their input.
+      return prev;
+    });
     setLocalHashtags(post.hashtags?.join(", ") || "");
     setSaveStatus("idle");
     setAutoTranslating(false);
