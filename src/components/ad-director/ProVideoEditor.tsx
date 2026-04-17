@@ -545,6 +545,10 @@ export function ProVideoEditor({
   const [musicUrl, setMusicUrl] = useState<string | null>(null);
   const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
   const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
+  // Per-scene playback window into the underlying video (set when a clip is split)
+  const [clipStartOffsets, setClipStartOffsets] = useState<Record<string, number>>({});
+  // Scenes whose duration was explicitly set (split / trim) — protect from being clobbered by handleLoaded
+  const lockedDurationScenesRef = useRef<Set<string>>(new Set());
   const [voiceoverDurations, setVoiceoverDurations] = useState<Record<string, number>>({});
   const [cardSettingsMap, setCardSettingsMap] = useState<Record<string, IntroOutroCardSettings>>({});
   const liveCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1031,7 +1035,13 @@ export function ProVideoEditor({
       if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); handleDeleteScene(selectedSceneIndex); }
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
       if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); }
-      if (e.key === "s" && !e.metaKey && !e.ctrlKey) { handleSplitScene(selectedSceneIndex); }
+      if (e.key === "s" && !e.metaKey && !e.ctrlKey) {
+        let playheadIdx = selectedSceneIndex;
+        for (let i = cumulativeStarts.length - 1; i >= 0; i--) {
+          if (globalTime >= (cumulativeStarts[i] || 0)) { playheadIdx = i; break; }
+        }
+        handleSplitScene(playheadIdx);
+      }
       if (e.key === "d" && !e.metaKey && !e.ctrlKey) { handleDuplicateScene(selectedSceneIndex); }
     };
     window.addEventListener("keydown", handler);
@@ -1336,19 +1346,30 @@ export function ProVideoEditor({
     // Duplicate the underlying clip so the second half has the same video source
     onDuplicateClip?.(scene.id, newSceneId);
 
-    // Lock visual durations for both halves so timeline cards reflect the cut immediately
+    // Lock visual durations for both halves so timeline cards reflect the cut immediately,
+    // and remember the second half should seek into the underlying video at `splitPoint`.
+    const originalStartOffset = clipStartOffsets[scene.id] ?? 0;
+    const firstHalfDur = splitPoint;
+    const secondHalfDur = sceneDur - splitPoint;
     setClipDurations(prev => ({
       ...prev,
-      [scene.id]: splitPoint,
-      [newSceneId]: sceneDur - splitPoint,
+      [scene.id]: firstHalfDur,
+      [newSceneId]: secondHalfDur,
     }));
+    setClipStartOffsets(prev => ({
+      ...prev,
+      [scene.id]: originalStartOffset,
+      [newSceneId]: originalStartOffset + splitPoint,
+    }));
+    lockedDurationScenesRef.current.add(scene.id);
+    lockedDurationScenesRef.current.add(newSceneId);
 
     // Move selection + playhead to start of the new (second) scene
     setSelectedSceneIndex(index + 1);
     setCurrentTime(0);
 
     toast({ title: "Scene split", description: `Split at ${splitPoint.toFixed(1)}s into the clip` });
-  }, [storyboard, segments, cumulativeStarts, clipDurations, globalTime, pushHistory, onUpdateStoryboard, onUpdateSegments, onDuplicateClip, toast]);
+  }, [storyboard, segments, cumulativeStarts, clipDurations, clipStartOffsets, globalTime, pushHistory, onUpdateStoryboard, onUpdateSegments, onDuplicateClip, toast]);
 
   const handleDuplicateScene = useCallback((index: number) => {
     const scene = storyboard[index];
@@ -1521,17 +1542,39 @@ export function ProVideoEditor({
   };
 
   const handleTimeUpdate = () => {
-    if (videoRef.current) setCurrentTime(videoRef.current.currentTime);
+    const v = videoRef.current;
+    if (!v) return;
+    const sceneId = storyboard[selectedSceneIndex]?.id;
+    const startOffset = sceneId ? (clipStartOffsets[sceneId] ?? 0) : 0;
+    const targetDur = sceneId ? clipDurations[sceneId] : undefined;
+
+    // Report scene-relative time for the timeline playhead
+    setCurrentTime(Math.max(0, v.currentTime - startOffset));
+
+    // Auto-advance early when playback exits this scene's window (split halves)
+    if (targetDur !== undefined && lockedDurationScenesRef.current.has(sceneId!)) {
+      if (v.currentTime >= startOffset + targetDur - 0.05) {
+        if (!sceneTransitioning.current) {
+          handleVideoEndedRef.current();
+        }
+      }
+    }
   };
 
   const handleLoaded = () => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-      // Track actual clip duration keyed by scene ID
-      const sceneId = storyboard[selectedSceneIndex]?.id;
-      if (sceneId && videoRef.current.duration > 0) {
-        setClipDurations(prev => ({ ...prev, [sceneId]: videoRef.current!.duration }));
-      }
+    if (!videoRef.current) return;
+    setDuration(videoRef.current.duration);
+    const sceneId = storyboard[selectedSceneIndex]?.id;
+    if (!sceneId || videoRef.current.duration <= 0) return;
+
+    // Respect explicitly-locked durations (split / trim) — never overwrite
+    if (!lockedDurationScenesRef.current.has(sceneId)) {
+      setClipDurations(prev => ({ ...prev, [sceneId]: videoRef.current!.duration }));
+    }
+    // Seek into the correct window for split second-halves
+    const startOffset = clipStartOffsets[sceneId] ?? 0;
+    if (startOffset > 0 && Math.abs(videoRef.current.currentTime - startOffset) > 0.05) {
+      videoRef.current.currentTime = startOffset;
     }
   };
 
@@ -2530,7 +2573,17 @@ export function ProVideoEditor({
         onDeleteScene={handleDeleteScene}
         onTrimScene={handleTrimScene}
         
-        onSplitScene={handleSplitScene}
+        onSplitScene={(idx) => {
+          // Toolbar passes selectedSceneIndex; per-clip menus pass the actual clip index.
+          // For the toolbar case prefer the scene the playhead is currently inside.
+          const playheadIdx = (() => {
+            for (let i = cumulativeStarts.length - 1; i >= 0; i--) {
+              if (globalTime >= (cumulativeStarts[i] || 0)) return i;
+            }
+            return idx;
+          })();
+          handleSplitScene(idx === selectedSceneIndex ? playheadIdx : idx);
+        }}
         onDuplicateScene={handleDuplicateScene}
         onMoveScene={handleMoveScene}
         onReorderScene={handleReorderScene}
