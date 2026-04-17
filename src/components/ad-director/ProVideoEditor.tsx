@@ -1110,7 +1110,18 @@ export function ProVideoEditor({
 
   const handleRemoveAudioTrack = useCallback((index: number) => {
     pushHistory();
-    setAudioTracks(prev => prev.filter((_, i) => i !== index));
+    setAudioTracks(prev => {
+      const removed = prev[index];
+      // If removing an extracted-from-video voice track, mute that scene's video audio
+      if (removed?.extractedFromVideo && removed.sceneId) {
+        setMutedScenes(m => {
+          const next = new Set(m);
+          next.add(removed.sceneId);
+          return next;
+        });
+      }
+      return prev.filter((_, i) => i !== index);
+    });
   }, [pushHistory]);
 
   const handleDeleteOverlay = useCallback((id: string) => {
