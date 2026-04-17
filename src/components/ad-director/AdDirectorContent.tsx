@@ -4,9 +4,19 @@ import { Button } from "@/components/ui/button";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { ProVideoEditor } from "./ProVideoEditor";
 import { CameraLoader } from "./CameraLoader";
-import { Loader2, Check, Pencil, Film, Play, AlertCircle, Home, RefreshCw, Send, BookmarkCheck, GripVertical } from "lucide-react";
+import { Loader2, Check, Pencil, Film, Play, AlertCircle, Home, RefreshCw, Send, BookmarkCheck, GripVertical, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ChatPromptBar } from "./ChatPromptBar";
 import {
   type ScriptSegment, type StoryboardScene,
@@ -42,6 +52,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
   const [approved, setApproved] = useState(false);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropIdx, setDropIdx] = useState<number | null>(null);
+  const [pendingDeleteSceneId, setPendingDeleteSceneId] = useState<string | null>(null);
 
   // Pipeline state — driven by singleton service
   const [pipelineState, setPipelineState] = useState<AdDirectorPipelineState>(service.getState());
@@ -317,6 +328,39 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     toast({ title: `Scene moved to position ${to + 1}` });
   }, [clips, storyboard, service, toast]);
 
+  // ─── Request scene deletion (opens confirmation dialog) ───
+  const handleRequestDeleteScene = useCallback((sceneId: string) => {
+    if (clips.length <= 1) {
+      toast({ title: "Cannot delete the only scene", variant: "destructive" });
+      return;
+    }
+    const clip = clips.find(c => c.sceneId === sceneId);
+    if (clip && (clip.status === "generating" || clip.status === "queued")) {
+      toast({ title: "Wait for generation to finish before deleting", variant: "destructive" });
+      return;
+    }
+    setPendingDeleteSceneId(sceneId);
+  }, [clips, toast]);
+
+  // ─── Confirm + perform scene deletion ───
+  const handleConfirmDeleteScene = useCallback(() => {
+    const sceneId = pendingDeleteSceneId;
+    if (!sceneId) return;
+    const removedClip = clips.find(c => c.sceneId === sceneId);
+    const newClips = clips.filter(c => c.sceneId !== sceneId);
+    const newStoryboard = storyboard.filter(s => s.id !== sceneId);
+    service.patchState({ clips: newClips, storyboard: newStoryboard });
+
+    // Fallback preview if the deleted clip was selected
+    if (removedClip?.videoUrl && removedClip.videoUrl === selectedPreviewUrl) {
+      const next = newClips.find(c => c.status === "completed" && c.videoUrl)?.videoUrl ?? null;
+      setSelectedPreviewUrl(next);
+    }
+
+    setPendingDeleteSceneId(null);
+    toast({ title: "Scene deleted" });
+  }, [pendingDeleteSceneId, clips, storyboard, service, selectedPreviewUrl, toast]);
+
   // ─── RENDER ──────────────────────────────────────
 
   // Editing mode — full ProVideoEditor
@@ -549,6 +593,24 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                           </div>
                         )}
 
+                        {/* Delete scene — always available (disabled if only one or while generating) */}
+                        <button
+                          type="button"
+                          aria-label="Delete scene"
+                          title={
+                            clips.length <= 1
+                              ? "Cannot delete the only scene"
+                              : (clip.status === "generating" || clip.status === "queued")
+                                ? "Wait for generation to finish"
+                                : "Delete scene"
+                          }
+                          disabled={clips.length <= 1 || clip.status === "generating" || clip.status === "queued"}
+                          onClick={(e) => { e.stopPropagation(); handleRequestDeleteScene(clip.sceneId); }}
+                          className="absolute top-1.5 right-1.5 z-30 w-7 h-7 rounded-full bg-black/60 hover:bg-destructive flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          <X className="w-3.5 h-3.5 text-white" />
+                        </button>
+
                         {clip.status === "completed" && clip.videoUrl ? (
                           <>
                             <video
@@ -565,7 +627,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                               </div>
                             </div>
                             <button
-                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                              className="absolute top-1.5 right-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
                               onClick={(e) => { e.stopPropagation(); handleRegenerateScene(clip.sceneId); }}
                               title="Regenerate scene"
                             >
@@ -580,7 +642,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                           <div className="w-full aspect-video bg-destructive/10 flex items-center justify-center relative">
                             <AlertCircle className="w-5 h-5 text-destructive" />
                             <button
-                              className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-opacity z-20"
+                              className="absolute top-1.5 right-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-opacity z-20"
                               onClick={(e) => { e.stopPropagation(); handleRegenerateScene(clip.sceneId); }}
                               title="Retry scene"
                             >
@@ -670,6 +732,27 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         </>
       )}
       </div>
+
+      {/* Confirm scene deletion */}
+      <AlertDialog open={pendingDeleteSceneId !== null} onOpenChange={(open) => { if (!open) setPendingDeleteSceneId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this scene?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the scene and its generated video from this project. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteScene}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
