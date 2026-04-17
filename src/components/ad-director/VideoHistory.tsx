@@ -133,13 +133,23 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
     if (previewUrl) downloadFile(previewUrl, `${project.name || "video"}.mp4`);
   };
 
+  const { completed: completedScenes, total: totalScenes } = getSceneCounts(project);
+  const isIncompleteDraft = isDraft && totalScenes > 0 && completedScenes < totalScenes;
+
   const handleClick = () => {
     if (isRenaming) return;
     if (isDraft) {
+      // For incomplete drafts, do NOT auto-recover on a casual click — require the explicit Resume button.
+      if (isIncompleteDraft) return;
       onSelectDraft?.(project);
     } else if (previewUrl) {
       onSelect?.(previewUrl);
     }
+  };
+
+  const handleResume = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onSelectDraft?.(project);
   };
 
   const startRename = (e: React.MouseEvent) => {
