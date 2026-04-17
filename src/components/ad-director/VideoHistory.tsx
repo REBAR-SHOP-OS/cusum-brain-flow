@@ -285,6 +285,16 @@ function VideoCard({ project, previewUrl, onSelect, onSelectDraft, onDelete, onR
           )}
         </div>
         <div className="flex items-center gap-0.5">
+          {isIncompleteDraft && onSelectDraft && (
+            <button
+              onClick={handleResume}
+              className="shrink-0 px-2 py-1 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1"
+              title={`Resume — ${completedScenes}/${totalScenes} scenes done`}
+            >
+              <RotateCw className="w-3 h-3 text-primary" />
+              <span className="text-[10px] font-medium text-primary">Resume</span>
+            </button>
+          )}
           {!isDraft && previewUrl && !hasError && (
             <button
               onClick={handleDownload}
