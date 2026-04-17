@@ -703,8 +703,25 @@ export function TimelineBar({
               const durSec = seg ? (seg.endTime - seg.startTime).toFixed(0) : "--";
               const isDropTarget = sceneDropIdx === i && sceneDragIdx !== null && sceneDragIdx !== i;
 
+              // ─── Split-sibling detection ───────────────────────────────
+              // A scene is a "split sibling" with its previous neighbor if either side references the other via splitFromId/splitIntoId
+              const prev = i > 0 ? storyboard[i - 1] : null;
+              const next = i < storyboard.length - 1 ? storyboard[i + 1] : null;
+              const isSiblingOfPrev = !!(prev && (scene.splitFromId === prev.id || prev.splitIntoId === scene.id));
+              const isSiblingOfNext = !!(next && (next.splitFromId === scene.id || scene.splitIntoId === next.id));
+              // Only the first half (left) shows badges/title to avoid duplication on the continuous bar
+              const showBadges = !isSiblingOfPrev;
+
               return (
-                <div key={scene.id} className="relative" style={{ flex: dur, display: 'flex' }}>
+                <div
+                  key={scene.id}
+                  className="relative"
+                  style={{
+                    flex: dur,
+                    display: 'flex',
+                    marginLeft: isSiblingOfPrev ? -1 : 0, // collapse the gap-px between siblings
+                  }}
+                >
                     <div
                       draggable={!!onMoveScene}
                       onDragStart={(e) => handleSceneDragStart(e, i)}
@@ -713,7 +730,8 @@ export function TimelineBar({
                       onDragEnd={handleSceneDragEnd}
                       onClick={(e) => { e.stopPropagation(); onSelectScene(i); if (trackRef.current) { const rect = trackRef.current.getBoundingClientRect(); const pct = (e.clientX - rect.left) / rect.width; onSeek(Math.max(0, Math.min(totalDuration, pct * totalDuration))); } }}
                       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenuScene(i); setContextMenuPos({ x: e.clientX, y: e.clientY }); }}
-                      className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden rounded-sm
+                      className={`relative h-full flex flex-col items-start justify-end transition-all cursor-pointer overflow-hidden
+                        ${isSiblingOfPrev && isSiblingOfNext ? "rounded-none" : isSiblingOfPrev ? "rounded-l-none rounded-r-sm" : isSiblingOfNext ? "rounded-l-sm rounded-r-none" : "rounded-sm"}
                         ${isSelected ? "ring-2 ring-red-500 ring-inset z-10" : "ring-1 ring-white/[0.06] ring-inset"}
                         ${isDropTarget ? "ring-2 ring-red-500 ring-inset" : ""}
                         ${sceneDragIdx === i ? "opacity-40" : ""}
@@ -770,33 +788,43 @@ export function TimelineBar({
                           <div className="text-[9px] text-white animate-pulse">Trimming…</div>
                         </div>
                       )}
-                      {/* Status */}
-                      <div className="absolute top-0.5 right-0.5 z-10">
-                        <span className={`text-[7px] px-1 py-px rounded-full font-medium ${
-                          isCompleted ? "bg-emerald-500/80 text-white" : isGenerating ? "bg-blue-500/80 text-white" : "bg-zinc-700/80 text-zinc-300"
-                        }`}>
-                          {isCompleted ? "done" : isGenerating ? "gen…" : clip?.status || "idle"}
-                        </span>
-                      </div>
-                      {/* Duration */}
-                      <div className="absolute top-0.5 left-0.5 z-10">
-                        <span className="text-[7px] px-1 py-px rounded-full bg-black/60 text-white font-mono">{durSec}s</span>
-                      </div>
+                      {/* Status — hide on the right half of a split pair */}
+                      {showBadges && (
+                        <div className="absolute top-0.5 right-0.5 z-10">
+                          <span className={`text-[7px] px-1 py-px rounded-full font-medium ${
+                            isCompleted ? "bg-emerald-500/80 text-white" : isGenerating ? "bg-blue-500/80 text-white" : "bg-zinc-700/80 text-zinc-300"
+                          }`}>
+                            {isCompleted ? "done" : isGenerating ? "gen…" : clip?.status || "idle"}
+                          </span>
+                        </div>
+                      )}
+                      {/* Duration — hide on the right half of a split pair */}
+                      {showBadges && (
+                        <div className="absolute top-0.5 left-0.5 z-10">
+                          <span className="text-[7px] px-1 py-px rounded-full bg-black/60 text-white font-mono">{durSec}s</span>
+                        </div>
+                      )}
+                      {/* Cut line: thin red divider on the LEFT edge of the right sibling */}
+                      {isSiblingOfPrev && (
+                        <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-red-500 z-30 pointer-events-none shadow-[0_0_4px_rgba(239,68,68,0.6)]" />
+                      )}
                       {/* Drop indicator */}
                       {isDropTarget && (
                         <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-red-500 z-30" />
                       )}
-                      {/* Info */}
-                      <div className="relative z-10 px-1 pb-0.5 w-full">
-                        <div className="text-[8px] text-white font-semibold truncate drop-shadow-sm">
-                          {scene.objective || seg?.label || `Scene ${i + 1}`}
-                        </div>
-                        {seg?.text && (
-                          <div className="text-[7px] text-white/70 truncate drop-shadow-sm">
-                            {seg.text.slice(0, 40)}
+                      {/* Info — hide on the right half of a split pair */}
+                      {showBadges && (
+                        <div className="relative z-10 px-1 pb-0.5 w-full">
+                          <div className="text-[8px] text-white font-semibold truncate drop-shadow-sm">
+                            {scene.objective || seg?.label || `Scene ${i + 1}`}
                           </div>
-                        )}
-                      </div>
+                          {seg?.text && (
+                            <div className="text-[7px] text-white/70 truncate drop-shadow-sm">
+                              {seg.text.slice(0, 40)}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {isSelected && (
                         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-500" />
                       )}
