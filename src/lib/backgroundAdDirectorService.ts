@@ -794,6 +794,26 @@ class BackgroundAdDirectorService {
   // ─── Export (internal) ──────────────────────────
   private async handleExportInternal(sb: StoryboardScene[], segs: ScriptSegment[], brand: BrandProfile) {
     this.update({ exporting: true });
+
+    // Request a Wake Lock so MediaRecorder + rAF in stitchClips don't get
+    // throttled when the user navigates away from /ad-director.
+    let wakeLock: { release: () => Promise<void> } | null = null;
+    try {
+      const nav = navigator as unknown as {
+        wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+      };
+      if (nav.wakeLock?.request) {
+        wakeLock = await nav.wakeLock.request("screen");
+        console.log("[bgService] Wake Lock acquired for stitching");
+      }
+    } catch (e) {
+      console.warn("[bgService] Wake Lock request failed (non-blocking):", e);
+    }
+
+    if (typeof document !== "undefined" && document.hidden) {
+      console.warn("[bgService] Document is hidden — stitching may be throttled by the browser.");
+    }
+
     try {
       const latestClips = this.state.clips;
       const completedClips = latestClips.filter(c => c.status === "completed" && c.videoUrl);
@@ -845,6 +865,9 @@ class BackgroundAdDirectorService {
       console.warn("Export failed:", error);
     } finally {
       this.update({ exporting: false });
+      if (wakeLock) {
+        try { await wakeLock.release(); } catch { /* noop */ }
+      }
     }
   }
 

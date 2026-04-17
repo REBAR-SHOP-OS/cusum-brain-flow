@@ -89,6 +89,7 @@ import VideoStudio from "./pages/VideoStudio";
 import AdDirector from "./pages/AdDirector";
 import AppBuilder from "./pages/AppBuilder";
 import { AppBuilderWorkspace } from "./components/app-builder/AppBuilderWorkspace";
+import { AdDirectorBackgroundIndicator } from "./components/ad-director/AdDirectorBackgroundIndicator";
 
 const QaWar = React.lazy(() => import("./pages/QaWar"));
 const SynologyNAS = React.lazy(() => import("./pages/SynologyNAS"));
@@ -297,6 +298,7 @@ const App = () => (
 
                     <Route path="*" element={<NotFound />} />
                   </Routes>
+                  <AdDirectorBackgroundIndicator />
                 </WorkspaceProvider>
               </GlobalErrorWatcher>
             </AuthProvider>
