@@ -1,69 +1,87 @@
 
-## درک درخواست
-کاربر می‌گوید وقتی در حال ساخت ویدیو است و از صفحه `/ad-director` خارج می‌شود، عملیات نباید متوقف شود — باید تا انتها (آماده شدن واقعی فیلم) ادامه پیدا کند.
+## ریشه‌ی مسئله — تأیید‌شده
 
-## بررسی کد فعلی
+عکس character آپلود می‌شود و url آن (`characterImageUrl`) درست به همه‌جا منتقل می‌شود (analyze → write-prompt → generate-video). پس "اتصال" سالم است. **ولی تصویر ساخته‌شده از شخصیت دیگری استفاده می‌کند**. سه دلیل ریشه‌ای وجود دارد:
 
-### معماری موجود — تا حدی درست است
-- `src/lib/backgroundAdDirectorService.ts` یک **singleton** است که خارج از React lifecycle زندگی می‌کند
-- `AdDirectorContent.tsx` فقط با `service.subscribe()` به آن وصل می‌شود و در unmount فقط `unsubscribe()` می‌زند — **نه `cancel()`**
-- پس از نظر منطق پایپلاین، تماس‌های edge function به `generate-video`، polling، analyze، prompt-writing **در پس‌زمینه ادامه می‌یابند**
+### ۱. پرامت نهایی، شخصیت را با کلمات بازتعریف می‌کند
+در `backgroundAdDirectorService.ts` خط 494، prefix continuity شامل `subject: ${cp.subjectDescriptions}` است. این subject را LLM در analyze نوشته (مثلاً «یک مرد ریش‌دار با موی نقره‌ای در لباس کار صنعتی»). وقتی این متن به Wan i2v داده می‌شود، **مدل بین تصویر مرجع و توصیف متنی تعارض می‌بیند و معمولاً به متن وزن بیشتری می‌دهد** → نتیجه: شخصیت دیگری.
 
-### اما سه مشکل واقعی باعث توقف می‌شوند:
+### ۲. دستور فقط «describe consistently» است، نه «از تصویر مرجع کپی کن»
+در edge function `ad-director-ai/index.ts` خط 646 فقط می‌گوید *"describe this person as the central subject"* — این به LLM اجازه می‌دهد فرد را با کلمات اختراع کند. هیچ دستور صریحی وجود ندارد که **چهره/ویژگی‌ها از img_url گرفته شود و در متن توصیف نشود**.
 
-**۱. Phase 3 (Stitching) به DOM وابسته است**
-در `videoStitch.ts` خطوط 461 و 647:
-- از `MediaRecorder` استفاده می‌کند → وقتی tab/page hidden شود **شدیداً throttle می‌شود یا متوقف می‌شود**
-- از `requestAnimationFrame` در حلقه‌ی draw استفاده می‌کند → در tab مخفی فریم‌ها به ۱ در ثانیه می‌افتند یا کاملاً pause می‌شوند
-- وقتی کاربر از route خارج می‌شود، صفحه قابل‌مشاهده می‌ماند (route دیگر) ولی همان فریم‌ها همچنان در یک canvas جدا اجرا می‌شوند — این بخش معمولاً سالم می‌ماند مگر در tab switch واقعی
+### ۳. negative prompt، انحراف چهره را پوشش نمی‌دهد
+در خط 548 فقط against text/watermark است. هیچ "different person, face change, identity drift" در negative prompt نیست.
 
-**۲. Toast notifications به‌عنوان فیدبک نهایی کافی نیستند**
-سرویس فقط در صورت `!this.listener` (یعنی unmount) toast پایانی می‌فرستد. اما چون toast فقط در لحظه‌ی پایان دیده می‌شود و کاربر در صفحه‌ی دیگری است، **هیچ نشانه‌ای از پیشرفت** در حین کار در سایر صفحات ندارد. کاربر فکر می‌کند همه چیز متوقف شده.
+---
 
-**۳. هنگام بازگشت به route، state ریست نمی‌شود ولی نشانه‌ی واضحی هم نیست**
-useEffect در mount `setPipelineState(service.getState())` صدا می‌زند که خوب است، **اما** اگر `service.isRunning()` نمایش داده نشود کاربر فکر می‌کند چیزی در جریان نیست.
+## برنامه‌ی اصلاحی (Surgical, 2 فایل)
 
-## برنامه‌ی اصلاحی (Surgical, Additive)
+### فایل ۱ — `src/lib/backgroundAdDirectorService.ts`
 
-### تغییر ۱ — یک Floating Progress Indicator سراسری اضافه کنیم
-فایل جدید: `src/components/ad-director/AdDirectorBackgroundIndicator.tsx`
-- در `App.tsx` (یا layout اصلی) همیشه mount می‌شود
-- به `backgroundAdDirectorService` subscribe می‌کند
-- وقتی `isRunning() === true` و route فعلی `/ad-director` نیست → یک **pill شناور** در گوشه نشان می‌دهد:
-  - "🎬 Generating video... 45%"
-  - دکمه‌ی "View" که به `/ad-director` برمی‌گرداند
-- وقتی پایپلاین تمام شد و کاربر هنوز خارج از صفحه است → toast موفقیت + همان pill با CTA "View result"
+#### تغییر A: حذف توصیف کلامی subject وقتی character ref موجود است
+خط 493-495 — وقتی `characterImageUrl` موجود است، **`subject` را از `continuityPrefix` حذف کنیم** تا با تصویر مرجع تعارض نکند:
+```ts
+const continuityPrefix = cp
+  ? `[Visual continuity: ${cp.environment || ""}, ${cp.lightingType || ""}, ${cp.colorMood || ""}` +
+    (characterImageUrl 
+      ? `, wardrobe-and-look: see reference image (do not re-describe person)` 
+      : `, subject: ${cp.subjectDescriptions || ""}, wardrobe: ${cp.wardrobe || ""}`) +
+    `] `
+  : "";
+```
 
-این تأیید بصری به کاربر می‌دهد که **عملیات واقعاً در پس‌زمینه ادامه دارد** و انتخاب می‌کند هر وقت بخواهد برگردد.
+#### تغییر B: اضافه‌کردن دستور صریح به finalPrompt در i2v
+خطوط 534-538 — وقتی `usingCharacter`، یک hard constraint اضافه شود:
+```ts
+const finalPrompt = (usingCharacter)
+  ? `[CHARACTER LOCK: The person in the reference image is the EXACT spokesperson — preserve their face, skin tone, hair, age, ethnicity, and clothing identically. Do NOT generate a different person.]\n${motionPrompt}` +
+    (characterPrompt?.trim() ? `\n\nCharacter direction: ${characterPrompt.trim()}` : "")
+  : motionPrompt;
+```
 
-### تغییر ۲ — جلوگیری از throttle شدن stitching در صفحات مخفی
-در `src/lib/backgroundAdDirectorService.ts` در `handleExportInternal`:
-- قبل از فراخوانی `stitchClips`، یک **Wake Lock** درخواست می‌کنیم (در صورت پشتیبانی مرورگر)
-- علاوه بر آن، تشخیص می‌دهیم اگر document hidden است → یک log warning اما کار را ادامه می‌دهیم
+#### تغییر C: تقویت negative prompt برای i2v
+خط 548 — وقتی `isI2V && characterImageUrl`، اضافه کنیم:
+```ts
+negativePrompt: `${baseNegative}, different person, different face, identity change, face swap, wrong ethnicity, wrong age, generic stock person, replaced subject`
+```
 
-**نکته مهم:** اگر کاربر کاملاً tab را مخفی کند، `MediaRecorder` در پس‌زمینه‌ی برخی مرورگرها throttle می‌شود. تنها راه قطعی، انتقال stitching به یک edge function سمت سرور است (که خارج از scope این تغییر سطحی است). برای جابجایی بین route‌های داخل همان tab — مشکلی نخواهد بود چون document همچنان visible است.
+### فایل ۲ — `supabase/functions/ad-director-ai/index.ts`
 
-### تغییر ۳ — اطمینان از عدم cancel در unmount
-بررسی `AdDirectorContent.tsx` خط 52: فقط `service.unsubscribe()` صدا می‌زند — **هیچ `service.cancel()` در cleanup وجود ندارد** ✓
-این بخش از قبل درست است، فقط در صورت تأیید نهایی نگه داشته می‌شود.
+#### تغییر D: write-cinematic-prompt — منع توصیف چهره وقتی ref موجود است
+خط 646 جایگزین شود با:
+```ts
+${characterImageUrl ? `\nCHARACTER REFERENCE (CRITICAL): A reference photo is provided as img_url to the video model. The prompt MUST:
+- Refer to "the spokesperson shown in the reference image" — DO NOT describe their face, age, ethnicity, hair color, or facial features in words.
+- Only describe their ACTIONS (gestures, walking, speaking, demonstrating) and the environment around them.
+- Wardrobe should be referenced as "wearing the same outfit as in the reference image" unless the scene explicitly requires a change.
+- This prevents the video model from drifting to a different person.` : ""}
+```
 
-### تغییر ۴ — وقتی کاربر برمی‌گردد، loader را با state واقعی نشان دهیم
-در `AdDirectorContent.tsx` بعد از hydrate، اگر `flowState` در حالت `analyzing` یا `generating` است، اتوماتیک loader نمایش داده می‌شود (همین الآن کار می‌کند چون state از service خوانده می‌شود) — فقط اطمینان حاصل می‌کنیم که هیچ reset ناخواسته‌ای در mount وجود ندارد.
+#### تغییر E: analyze-script — همان قانون برای continuityProfile.subjectDescriptions
+خط 549-555 جایگزین شود تا LLM مجبور شود `subjectDescriptions` را به‌صورت neutral بنویسد:
+```ts
+const characterBlock = characterImageUrl
+  ? `\n\nIMPORTANT — CHARACTER REFERENCE (img_url will be passed to video model):
+- Set generationMode to "image-to-video" for every non-static-card scene.
+- In continuityProfile.subjectDescriptions, write ONLY: "the spokesperson shown in reference image" — DO NOT describe their face/age/ethnicity/hair (this would conflict with the actual photo).
+- In continuityProfile.wardrobe, write: "as worn in reference image".
+- Scene actions should describe what the person DOES, not how they LOOK.
+- Never mention "a man", "a woman", "bearded", "elderly", etc. — let the image speak for itself.`
+  : "";
+```
+
+---
+
+## نتیجه پس از اصلاح
+
+- متن پرامت دیگر چهره را بازتعریف نمی‌کند → Wan i2v به `img_url` وزن کامل می‌دهد
+- دستور صریح "CHARACTER LOCK" در ابتدای پرامت نهایی، مدل را قفل می‌کند
+- negative prompt جلوی identity drift را می‌گیرد
+- `subjectDescriptions` در continuity profile به‌صورت neutral ذخیره می‌شود تا در سناریوهای آینده هم تعارض نکند
 
 ## آنچه تغییر **نمی‌کند**
-- منطق `startPipeline`، analyze، generate-video، polling — بدون تغییر
-- Edge functions (`ad-director-ai`, `generate-video`) — بدون تغییر
-- DB schema و RLS — بدون تغییر
-- صفحات دیگر و ad-director sidebar — بدون تغییر
-- `videoStitch.ts` — بدون تغییر در منطق (فقط wake-lock اطراف فراخوانی)
-
-## نتیجه
-- وقتی کاربر در حال ساخت ویدیو از `/ad-director` خارج می‌شود:
-  - پایپلاین کاملاً در پس‌زمینه ادامه می‌دهد (analyze → generate scenes → stitch)
-  - یک **pill شناور سراسری** در سایر صفحات نشان می‌دهد: "🎬 Generating... X%" + دکمه‌ی "View"
-  - وقتی تمام شد، toast موفقیت + لینک به نتیجه نمایش داده می‌شود
-  - Wake Lock تلاش می‌کند مرورگر را از throttle شدن stitching باز دارد
-- وقتی کاربر برمی‌گردد، loader با وضعیت دقیق فعلی نمایش داده می‌شود — هیچ کاری از سر گرفته نمی‌شود
-
-### محدودیت صادقانه
-اگر کاربر کاملاً tab مرورگر را ببندد یا کامپیوتر را خاموش کند، عملیات client-side متوقف خواهد شد (چون stitching و orchestration در browser اجرا می‌شوند). راه‌حل کامل (server-side rendering pipeline) یک پروژه‌ی بزرگ‌تر است که در صورت تمایل می‌توانیم به‌صورت جداگانه برنامه‌ریزی کنیم.
+- آپلود و انتقال `characterImageUrl` — بدون تغییر
+- منطق انتخاب i2v vs t2v — بدون تغییر
+- `CharacterPromptDialog` و UI — بدون تغییر
+- منطق intro/outro reference — بدون تغییر
+- دیتابیس و RLS — بدون تغییر
