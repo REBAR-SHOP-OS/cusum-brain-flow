@@ -1041,36 +1041,63 @@ export function ProVideoEditor({
     const seg = segments.find(s => s.id === scene.segmentId);
     if (!seg) return;
 
-    const sceneDur = seg.endTime - seg.startTime;
-    const splitAt = currentTime;
-    if (splitAt <= 0.05 || splitAt >= sceneDur - 0.05) {
-      toast({ title: "Cannot split", description: "Move playhead inside the scene first." });
+    // Use scene-relative offset (globalTime - sceneStart) so split lands at the playhead inside this clip
+    const sceneStart = cumulativeStarts[index] || 0;
+    const sceneDur = clipDurations[scene.id] ?? (seg.endTime - seg.startTime);
+    const splitPoint = Math.max(0, globalTime - sceneStart);
+
+    if (splitPoint <= 0.1 || splitPoint >= sceneDur - 0.1) {
+      toast({
+        title: "Cannot split",
+        description: "Move the playhead inside this clip (away from the edges).",
+        variant: "destructive",
+      });
       return;
     }
 
     pushHistory(storyboard);
 
-    const absoluteSplit = seg.startTime + splitAt;
+    const absoluteSplit = seg.startTime + splitPoint;
     const newSegId = crypto.randomUUID();
+    const newSceneId = crypto.randomUUID();
 
-    // Trim original segment and create new second half
+    // Trim original segment and insert new second half
     const updatedSegments = segments.map(s =>
       s.id === seg.id ? { ...s, endTime: absoluteSplit } : s
     );
     const segIdx = updatedSegments.findIndex(s => s.id === seg.id);
-    const newSeg = { ...seg, id: newSegId, startTime: absoluteSplit, endTime: seg.endTime };
+    const newSeg: ScriptSegment = {
+      ...seg,
+      id: newSegId,
+      startTime: absoluteSplit,
+      endTime: seg.endTime,
+      label: seg.label + " (2)",
+    };
     updatedSegments.splice(segIdx + 1, 0, newSeg);
     onUpdateSegments?.(updatedSegments);
 
     // Insert new scene after current
-    const newScene: StoryboardScene = { ...scene, id: crypto.randomUUID(), segmentId: newSegId };
+    const newScene: StoryboardScene = { ...scene, id: newSceneId, segmentId: newSegId };
     const updated = [...storyboard];
     updated.splice(index + 1, 0, newScene);
     onUpdateStoryboard?.(updated);
 
+    // Duplicate the underlying clip so the second half has the same video source
+    onDuplicateClip?.(scene.id, newSceneId);
+
+    // Lock visual durations for both halves so timeline cards reflect the cut immediately
+    setClipDurations(prev => ({
+      ...prev,
+      [scene.id]: splitPoint,
+      [newSceneId]: sceneDur - splitPoint,
+    }));
+
+    // Move selection + playhead to start of the new (second) scene
+    setSelectedSceneIndex(index + 1);
     setCurrentTime(0);
-    toast({ title: "Scene split", description: `Split at ${splitAt.toFixed(1)}s` });
-  }, [storyboard, segments, currentTime, pushHistory, onUpdateStoryboard, onUpdateSegments, toast]);
+
+    toast({ title: "Scene split", description: `Split at ${splitPoint.toFixed(1)}s into the clip` });
+  }, [storyboard, segments, cumulativeStarts, clipDurations, globalTime, pushHistory, onUpdateStoryboard, onUpdateSegments, onDuplicateClip, toast]);
 
   const handleDuplicateScene = useCallback((index: number) => {
     const scene = storyboard[index];
