@@ -1,48 +1,81 @@
 
 
-## ریشه‌ی مشکل
+## ریشه‌ی مشکل — تأیید‌شده
 
-با اینکه auto-seed لوگو از ProVideoEditor حذف شد، لوگو هنوز در سه نقطه‌ی دیگر **اتوماتیک** روی ویدیو می‌نشیند:
+دو منبع صدا در پایپلاین اصلی ساخته می‌شوند ولی **هیچ‌گاه به Editor pass نمی‌شوند**:
 
-| محل | فایل/خط | چه می‌کند |
+| منبع صدا | کجا ساخته می‌شود | کجا گم می‌شود |
 |---|---|---|
-| Stitched preview (auto-assemble) | `AdDirectorContent.tsx` خط 153 | `logo: { enabled: !!currentBrand.logoUrl }` → لوگو روی preview نهایی burn می‌شود |
-| Background pipeline stitch | `backgroundAdDirectorService.ts` خط 975 | همان منطق در سرویس پس‌زمینه |
-| End card | هر دو فایل بالا (`endCard.logoUrl: brand.logoUrl`) | لوگو روی end card رندر می‌شود |
-| Scene thumbnail watermark | `SceneCard.tsx` خط 233-237 | `<img>` لوگو روی هر scene card |
+| **Voiceover** (TTS کل narration via `elevenlabs-tts`) | `AdDirectorContent.tsx` خط 131-150 — به‌صورت local variable داخل `handleExport` ساخته می‌شود | بعد از stitch این URL **دور ریخته می‌شود** و در state ذخیره نمی‌شود |
+| **Background Music** (Auto Music) | در state به‌عنوان `musicTrackUrl` ذخیره است | به ProVideoEditor pass نمی‌شود |
 
-**نتیجه:** لوگو در preview، scene thumbnails و end card حتی بدون درخواست کاربر ظاهر می‌شود — دقیقاً همان شکایت تصویر آپلود شده.
+نتیجه: `ProVideoEditor` با `useState<AudioTrackItem[]>([])` خالی شروع می‌شود — کاربر در timeline هیچ نوار صدایی نمی‌بیند، فقط placeholder خالی music ("No music · click + to add"). صدا فقط داخل WebM ترکیبی embedded است و قابل ادیت/حذف/جابجایی نیست.
 
 ## انتظار کاربر
-لوگو **هرگز اتوماتیک** اضافه نشود. فقط وقتی کاربر در tab **Brand Kit** خودش می‌خواهد، اضافه شود (و قابل حذف باشد).
+وقتی **Edit Video** زده می‌شود:
+1. ✅ صدای voiceover (همان TTS که در stitch استفاده شد) باید به‌عنوان یک **track مستقل** در timeline ظاهر شود
+2. ✅ صدای music پس‌زمینه (اگر Auto Music زده شده) باید به‌عنوان track دوم در timeline ظاهر شود
+3. ✅ ویدیوی preview در editor باید **silent** پخش شود تا با track های صدا تداخل نکند (در غیر این صورت دو بار صدا می‌شنود)
 
 ---
 
-## برنامه‌ی اصلاحی (سه فایل، سطحی)
+## برنامه‌ی اصلاحی (سه فایل، سطحی و additive)
 
-### فایل ۱: `src/components/ad-director/AdDirectorContent.tsx` (خط 152-159)
-در فراخوانی `stitchClips`:
-- `logo.enabled` → `false` (همیشه)
-- `endCard.logoUrl` → `null` (همیشه)
+### فایل ۱: `src/lib/backgroundAdDirectorService.ts` (خط 60-111)
+اضافه کردن یک field به state:
+```ts
+voiceoverUrl: string | null;  // TTS narration URL از stitch pipeline
+```
+و در `initialState()` مقدار اولیه `voiceoverUrl: null`.
 
-### فایل ۲: `src/lib/backgroundAdDirectorService.ts` (خط 974-980)
-دقیقاً همان تغییرات فایل ۱:
-- `logo.enabled` → `false`
-- `endCard.logoUrl` → `null`
+### فایل ۲: `src/components/ad-director/AdDirectorContent.tsx` (خط 131-150 + 290-300)
+**A.** بعد از ساخت TTS audioUrl در `handleExport`، آن را در state ذخیره کنیم:
+```ts
+service.patchState({ voiceoverUrl: audioUrl ?? null });
+```
+**B.** در destructuring (خط 63-67)، `voiceoverUrl` را extract کنیم.
+**C.** در render کردن `<ProVideoEditor>` این prop را pass کنیم: `voiceoverUrl={voiceoverUrl}` و `musicTrackUrl={musicTrackUrl}` (که از state موجود است).
 
-### فایل ۳: `src/components/ad-director/SceneCard.tsx` (خط 233-237)
-حذف کامل بلاک `<img>` watermark لوگو روی thumbnail. (prop `logoUrl` بدون استفاده باقی می‌ماند که اشکال ندارد.)
+### فایل ۳: `src/components/ad-director/ProVideoEditor.tsx` (خط 49-70 + 460-465)
+**A.** اضافه کردن دو prop جدید به interface:
+```ts
+voiceoverUrl?: string | null;
+musicTrackUrl?: string | null;
+```
+**B.** اضافه کردن یک `useEffect` بعد از `setAudioTracks` declaration:
+```ts
+const tracksSeededRef = useRef(false);
+useEffect(() => {
+  if (tracksSeededRef.current) return;
+  if (!storyboard.length) return;
+  const seeded: AudioTrackItem[] = [];
+  if (voiceoverUrl) seeded.push({
+    sceneId: storyboard[0].id, label: "🎙️ Voiceover",
+    audioUrl: voiceoverUrl, kind: "voiceover", volume: 1, globalStartTime: 0,
+  });
+  if (musicTrackUrl) seeded.push({
+    sceneId: "", label: "🎵 Background Music",
+    audioUrl: musicTrackUrl, kind: "music", volume: 0.5, globalStartTime: 0,
+  });
+  if (seeded.length) {
+    setAudioTracks(seeded);
+    if (musicTrackUrl) setMusicUrl(musicTrackUrl);
+    tracksSeededRef.current = true;
+  }
+}, [voiceoverUrl, musicTrackUrl, storyboard]);
+```
+**C.** برای جلوگیری از پخش دوبل، روی `<video>` preview در editor `muted={!!voiceoverUrl || !!musicTrackUrl}` اضافه شود (وقتی voiceover/music به‌عنوان track مستقل پخش می‌شود، صدای embedded ویدیو باید silent باشد).
 
 ### آنچه دست‌نخورده می‌ماند
-- خود `LogoTab` و brand kit storage — کاربر همچنان می‌تواند لوگو آپلود کند
-- توابع `applyLogoToImage`, `applyLogoWatermark`, و منطق logo overlay در ProVideoEditor — کاربر می‌تواند **دستی** از tab مربوطه اضافه کند
-- end card متن (`brandName`, `tagline`, `website`) — حفظ می‌شود، فقط لوگو حذف می‌شود
-- منطق stitching, generate, regenerate, character lock — هیچ تغییری
-- DB / RLS — هیچ تغییری
+- پایپلاین stitch، CHARACTER LOCK، duration snap، negative prompts — هیچ تغییری
+- منطق Voiceover/Music tabs در editor (دستی) — کاربر همچنان می‌تواند جایگزین کند
+- Export نهایی، DB schema، RLS — هیچ تغییری
+- TimelineBar — بدون تغییر، همان منطق نمایش audio tracks موجود است
 
 ## نتیجه پس از اصلاح
-1. ✅ Preview نهایی **بدون لوگو** نمایش داده می‌شود
-2. ✅ Scene thumbnails **بدون watermark لوگو**
-3. ✅ End card **بدون لوگو** (فقط متن brand)
-4. ✅ کاربر می‌تواند هر زمان از tab **Brand Kit** در editor، لوگو را به دلخواه اضافه/حذف کند
+1. ✅ با کلیک روی **Edit Video**، voiceover به‌عنوان track «🎙️ Voiceover» در timeline ظاهر می‌شود
+2. ✅ Music پس‌زمینه به‌عنوان track «🎵 Background Music» در timeline ظاهر می‌شود
+3. ✅ ویدیوی preview silent پخش می‌شود → شنیدن دوبل اتفاق نمی‌افتد
+4. ✅ کاربر می‌تواند هر track را trim/move/حذف/volume control کند
+5. ✅ Re-export نهایی همان رفتار قبلی را دارد (audio tracks جزء overlay پایپلاین export هستند)
 
