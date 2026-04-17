@@ -18,6 +18,7 @@ interface CutPlanForBarlist {
   machine_id: string | null;
   machine_name: string | null;
   project_id: string | null;
+  barlist_id: string | null;
 }
 
 interface MachineOption {
