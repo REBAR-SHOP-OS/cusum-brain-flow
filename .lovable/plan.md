@@ -1,84 +1,79 @@
 
 
 ## درخواست کاربر
-ویدئوی Veo 3.1 generate شد (از لاگ: `poll` status=completed و URL هم برگشت) ولی در preview هیچ چیز نمایش داده نمی‌شود — صفحه‌ی سیاه با player خالی.
+وقتی کپشن را دستی می‌نویسد، سیستم حق ندارد خودش آن را regenerate کند یا overwrite نماید. کپشن باید **همیشه خالی** بماند مگر اینکه:
+- کاربر خودش دستی تایپ کند، یا
+- کاربر خودش روی دکمه‌ی **Regenerate caption** کلیک کند.
 
-## ریشه‌ی مشکل (Root Cause)
-Response از `generate-video` edge function این بود:
-```json
-{
-  "status": "completed",
-  "videoUrl": "https://generativelanguage.googleapis.com/v1beta/files/b52l84tacgbz:download?alt=media",
-  "needsGeminiAuth": true
+## ریشه‌ی مشکل (در `src/components/social/PostReviewPanel.tsx`)
+
+دو auto-trigger در حال حاضر بدون اجازه کاربر کپشن را تغییر می‌دهند:
+
+### A) خط 314-339 — `handleMediaReady` بعد از Upload Video
+```ts
+if (type === "video" && localContentType !== "story") {
+  setRegeneratingCaption(true);
+  // video-to-social → updatePost.mutate({ content: fullContent, title: ... })
+  // fallback → regenerate-post caption_only:true
 }
 ```
+→ هر بار کاربر ویدئو آپلود می‌کند، کپشن **به‌اجبار** بازنویسی می‌شود حتی اگر کاربر از قبل چیزی نوشته باشد.
 
-این URL **نیاز به Gemini API key در header دارد**. وقتی مرورگر آن را به `<video src=...>` می‌دهد، بدون Authorization header request می‌زند → Google 401/403 برمی‌گرداند → ویدئو load نمی‌شود → preview سیاه می‌ماند.
+### B) خط 262-304 — Auto-translate effect
+بعد از 1.5s از تایپ کاربر، `updatePost.mutate({ content: baseContent + persianBlock })` صدا زده می‌شود. این فقط بلاک Persian را append می‌کند (base content دست‌نخورده است) پس **کپشن انگلیسی را overwrite نمی‌کند**، ولی باید مطمئن شویم baseContent دقیقاً همان چیزی است که کاربر تایپ کرده — که همین الان هم هست. این OK است و دست‌نخورده می‌ماند.
 
-در `VideoStudioContent.tsx` (خط 282-285) این کیس handle شده:
-```ts
-const needsProxy = data.needsAuth || data.needsGeminiAuth;
-if (needsProxy) finalUrl = await proxyDownload(...); // blob with auth
-```
-
-ولی در **AdDirector pipeline** (`backgroundAdDirectorService.ts` خط 954-992 — `pollGeneration`)، کد فقط `result.videoUrl` را مستقیم ذخیره می‌کند و **هیچ بررسی‌ای روی `needsGeminiAuth` / `needsAuth` نمی‌کند**. URL خام Gemini ذخیره می‌شود → scene clip نمی‌تواند load شود → preview سیاه.
-
-Edge function از قبل یک `action: "download"` دارد (خط 1169) که با service key auth می‌کند و blob یا URL عمومی (مثل Supabase Storage upload) برمی‌گرداند. فقط باید AdDirector از آن استفاده کند.
+### دکمه‌های explicit (OK — دست‌نخورده)
+- `Regenerate caption` (خط 918-954) — کلیک صریح کاربر ← مجاز
+- `Regenerate image` (خط 675-690) — `is_video` پاس می‌دهد ولی `caption_only` نه → edge function هم caption را تولید می‌کند. باید بررسی شود که این دکمه فقط "Regenerate image" نامیده شده ولی caption را هم تغییر می‌دهد. طبق اسم دکمه و توقع کاربر، این هم باید **فقط تصویر** را regenerate کند.
 
 ## برنامه (Surgical, Additive)
 
-### ۱. افزودن helper `proxyAuthenticatedVideo` در `backgroundAdDirectorService.ts`
-مشابه `proxyDownload` در VideoStudioContent:
+### ۱. حذف auto-regenerate کپشن بعد از upload
+در `handleMediaReady` (خط 314-339):
+- بلاک کامل `if (type === "video" && localContentType !== "story") { ... setRegeneratingCaption ... }` **حذف** شود.
+- فقط media آپلود و به post متصل شود؛ کپشن دست‌نخورده باقی بماند.
+- Toast ساده: `"Video attached"` — بدون mention کپشن.
+
+### ۲. محدودسازی دکمه‌ی "Regenerate image"
+خط 677: پارامتر صدا زدن `regenerate-post` را محدود کنیم:
 ```ts
-private async proxyAuthenticatedVideo(provider: string, jobId: string, remoteUrl: string): Promise<string | null> {
-  // فراخوانی edge function با action:"download" 
-  // تبدیل response.blob() → object URL
-  // اگر edge function خودش URL استوریج برگرداند (JSON)، همان را برگردان
-  // fallback: remoteUrl
-}
+await invokeEdgeFunction("regenerate-post", { 
+  post_id: post.id, 
+  is_video: !!isVideo,
+  image_only: true,   // ← افزوده
+}, { timeoutMs: 120000 });
 ```
+و در edge function `regenerate-post/index.ts`، یک branch `image_only` اضافه شود که فقط تصویر جدید تولید و در `image_url` ذخیره کند — **هیچ تغییری در `title` / `content` / `hashtags`**. اگر edge function این قابلیت را ندارد، یک guard کوتاه اضافه شود که اگر `image_only:true` بود، در انتهای update فقط `image_url` را بنویسد.
 
-نکات:
-- اولویت ۱: اگر response `Content-Type: application/json` بود و `{ url }` داشت → همان URL (Supabase Storage = persistent، قابل stitch)
-- اولویت ۲: اگر binary blob بود → `URL.createObjectURL(blob)` (موقت، فقط برای همان session کار می‌کند — ولی export/stitch قبل از expiration انجام می‌شود)
-- اولویت ۳ (fallback): برگرداندن `remoteUrl` اصلی (همان رفتار broken فعلی — بهتر از crash)
+Toast update: `"Image regenerated"` به‌جای `"New image and caption generated successfully."`.
 
-### ۲. اعمال در `pollGeneration` (خط 969-976)
-```ts
-if (result.status === "completed" || result.videoUrl || result.url) {
-  let videoUrl = result.videoUrl || result.url;
-  const needsProxy = (result as any).needsAuth || (result as any).needsGeminiAuth;
-  if (needsProxy && videoUrl) {
-    const proxied = await this.proxyAuthenticatedVideo(provider, generationId, videoUrl);
-    if (proxied) videoUrl = proxied;
-  }
-  // ... ادامه‌ی ذخیره در clip
-}
-```
+### ۳. دکمه‌ی صریح "Regenerate caption" بدون تغییر
+خط 918-954 همان‌طور که هست می‌ماند — این دکمه‌ی صریح کاربر است و مطابق قانون کاربر مجاز است.
 
-### ۳. Type augmentation برای response
-`invokeEdgeFunction<{ status?, videoUrl?, url?, needsAuth?, needsGeminiAuth? }>` تا TypeScript هم راضی باشد.
+### ۴. ضمانت auto-save فقط برای تایپ دستی
+`flushSave` و `triggerDebouncedSave` (خط 367-397) فقط از onChange textarea صدا زده می‌شوند → این خودش فقط محتوای دستی کاربر را ذخیره می‌کند. دست‌نخورده.
 
-### ۴. همان الگو در `regenerateScene` (اگر جدا poll دارد)
-اگر `regenerateScene` هم از `pollGeneration` همین متد استفاده می‌کند → fix خودکار. اگر route مستقل دارد → همان check اعمال شود.
+### ۵. پاک شدن کپشن برای پست جدید (Optional — match user intent)
+کاربر گفت: **"کپشن باید همیشه خالی باشد تا یا من به آن کپشن بنویسم یا ریجنریت کنم"**.
 
-### ۵. Persist در DB (اختیاری ولی توصیه‌شده)
-اگر download action خروجی JSON با `storagePath`/`publicUrl` داشته باشد (باید در edge function بررسی شود) → همان را در `ad_projects.clips[].videoUrl` ذخیره کنیم تا بعد از رفرش هم کار کند. اگر فقط blob برمی‌گرداند، blob URL موقت است — توصیه: edge function را تکمیل کنیم که Veo video را در Supabase Storage آپلود کند (مشابه Wan flow). بررسی می‌شود چه آپشن فعال است.
+بررسی: generator 5-slot در `auto-generate-social` احتمالاً موقع ساخت placeholder پست، کپشن را از قبل پر می‌کند. این در scope این تغییر نیست و بدون دستور کاربر فعلاً دست نمی‌زنیم. فقط auto-overwrite های بعد از اقدامات کاربر حذف می‌شود.
+
+اگر کاربر بخواهد روی کپشن‌های initial هم تأثیر بگذارد، در مرحله‌ی بعد آدرس می‌دهیم.
 
 ## فایل‌های تغییرکننده
-- `src/lib/backgroundAdDirectorService.ts` — افزودن `proxyAuthenticatedVideo` + check `needsGeminiAuth/needsAuth` در `pollGeneration`
-- (شرطی) `supabase/functions/generate-video/index.ts` — اگر `action:"download"` برای `veo` فقط blob برمی‌گرداند، آن را به آپلود در Storage و برگرداندن `{ url, uploaded:true }` تبدیل کنیم تا URL persistent شود
+- `src/components/social/PostReviewPanel.tsx` — حذف auto-caption regen در `handleMediaReady`، افزودن flag `image_only: true` به call regenerate image
+- `supabase/functions/regenerate-post/index.ts` — پذیرش `image_only: true` و skip کردن به‌روزرسانی `title`/`content`/`hashtags` در آن branch
 
 ## آنچه دست‌نخورده می‌ماند
-- UI editor, stitch pipeline, aspect ratio, undo/redo
-- `VideoStudioContent.tsx` (از قبل درست کار می‌کند)
-- Wan flow (از قبل Storage-uploaded URL برمی‌گرداند و نیاز به proxy ندارد)
-- DB schema / RLS / سایر edge functions
+- Auto-translate به Persian (فقط append می‌کند، overwrite نمی‌کند)
+- دکمه‌ی صریح `Regenerate caption` (با کلیک کاربر)
+- Debounced auto-save تایپ دستی
+- UI, DB, RLS, سایر edge functions
+- زبان UI: انگلیسی
 
 ## نتیجه
-1. ✅ ویدئوی Veo 3.1 در preview AdDirector نمایش داده می‌شود
-2. ✅ Export/stitch روی آن کار می‌کند (چون URL قابل fetch شده)
-3. ✅ تغییرات در Wan و Sora بی‌اثر (فقط branch Veo/needsGeminiAuth)
-4. ✅ Graceful fallback: اگر proxy fail شد، URL خام را می‌دهد (همان رفتار قبلی، بدتر نمی‌شود)
-5. ✅ زبان UI: انگلیسی
+1. ✅ آپلود Video / Image هرگز کپشن را عوض نمی‌کند
+2. ✅ دکمه `Regenerate image` فقط تصویر را بازتولید می‌کند، نه کپشن
+3. ✅ کپشن فقط وقتی تغییر می‌کند که کاربر خودش تایپ کند یا روی `Regenerate caption` کلیک کند
+4. ✅ ترجمه‌ی فارسی و auto-save دست‌نخورده و عادی کار می‌کند
 
