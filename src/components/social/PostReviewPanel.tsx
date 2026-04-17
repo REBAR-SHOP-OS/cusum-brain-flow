@@ -287,6 +287,30 @@ export function PostReviewPanel({
   const [autoTranslating, setAutoTranslating] = useState(false);
   const lastTranslatedCaptionRef = useRef<string>("");
   const translateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [translateError, setTranslateError] = useState(false);
+
+  // Multi-language reference display state (Persian default, others cached client-side only)
+  type DisplayLang = "fa" | "es" | "fr" | "ar" | "de";
+  const [displayLang, setDisplayLang] = useState<DisplayLang>("fa");
+  const [otherTranslations, setOtherTranslations] = useState<
+    Record<string, { caption: string; imageText: string }>
+  >({});
+  const [otherTranslating, setOtherTranslating] = useState(false);
+  const otherTranslateAbortRef = useRef<AbortController | null>(null);
+
+  // When the post changes and DB has no Persian block but caption exists,
+  // force-reset translation ref so the effect re-triggers for old posts.
+  useEffect(() => {
+    if (!post) return;
+    const hasPersianInDb = (post.content || "").includes("---PERSIAN---");
+    if (!hasPersianInDb && (post.content || "").trim()) {
+      lastTranslatedCaptionRef.current = "";
+      setTranslateError(false);
+    }
+    // Reset cached translations of other languages on post change
+    setOtherTranslations({});
+    setDisplayLang("fa");
+  }, [post?.id]);
 
   useEffect(() => {
     if (!post) return;
@@ -303,15 +327,17 @@ export function PostReviewPanel({
       let cancelled = false;
       const doTranslate = async () => {
         setAutoTranslating(true);
+        setTranslateError(false);
         try {
           const data = await invokeEdgeFunction("translate-caption", {
             caption,
             imageText: "",
+            targetLang: "fa",
           }, { timeoutMs: 30000 });
           if (cancelled) return;
           lastTranslatedCaptionRef.current = caption;
-          const capFa = data.captionFa || "";
-          const imgFa = data.imageTextFa || "";
+          const capFa = data.captionFa || data.captionTranslated || "";
+          const imgFa = data.imageTextFa || data.imageTextTranslated || "";
           setPersianCaptionText(capFa);
           setPersianImageText(imgFa);
           // Save to DB — base content is ALWAYS the user's current localContent,
@@ -323,6 +349,7 @@ export function PostReviewPanel({
           updatePost.mutate({ id: post.id, content: contentToSave });
         } catch (err) {
           console.warn("Auto-translate failed:", err);
+          if (!cancelled) setTranslateError(true);
         } finally {
           if (!cancelled) setAutoTranslating(false);
         }
@@ -335,6 +362,52 @@ export function PostReviewPanel({
       setAutoTranslating(false);
     };
   }, [post?.id, localContent, localTitle]);
+
+  // Fetch translation for a non-Persian language on demand (cache in client state only)
+  const fetchOtherLanguage = useCallback(async (lang: DisplayLang) => {
+    if (lang === "fa") return;
+    const caption = localContent.trim();
+    if (!caption) return;
+    if (otherTranslations[lang]) return; // already cached
+    otherTranslateAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    otherTranslateAbortRef.current = ctrl;
+    setOtherTranslating(true);
+    try {
+      const data = await invokeEdgeFunction("translate-caption", {
+        caption,
+        imageText: "",
+        targetLang: lang,
+      }, { timeoutMs: 30000 });
+      if (ctrl.signal.aborted) return;
+      setOtherTranslations(prev => ({
+        ...prev,
+        [lang]: {
+          caption: data.captionTranslated || data.captionFa || "",
+          imageText: data.imageTextTranslated || data.imageTextFa || "",
+        },
+      }));
+    } catch (err) {
+      console.warn(`Translate to ${lang} failed:`, err);
+    } finally {
+      if (!ctrl.signal.aborted) setOtherTranslating(false);
+    }
+  }, [localContent, otherTranslations]);
+
+  // Manual retry trigger (used by RefreshCw button)
+  const retryTranslate = useCallback(() => {
+    if (displayLang === "fa") {
+      lastTranslatedCaptionRef.current = "";
+      setTranslateError(false);
+      setLocalContent(c => c); // re-trigger effect
+    } else {
+      setOtherTranslations(prev => {
+        const { [displayLang]: _, ...rest } = prev;
+        return rest;
+      });
+      fetchOtherLanguage(displayLang);
+    }
+  }, [displayLang, fetchOtherLanguage]);
 
   const handleMediaReady = async (tempUrl: string, type: "image" | "video") => {
     if (!post) return;
