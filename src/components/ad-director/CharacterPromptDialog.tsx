@@ -22,6 +22,8 @@ interface CharacterPromptDialogProps {
   onSave: () => void;
   characterPreviewUrl: string | null;
   brandContext?: string;
+  durationSec?: number;
+  productsContext?: string;
 }
 
 const PLACEHOLDER =
