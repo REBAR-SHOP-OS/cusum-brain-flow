@@ -227,6 +227,12 @@ export function ProVideoEditor({
     try { localStorage.setItem(TRANSITION_DURATION_STORAGE_KEY, String(d)); } catch {}
   }, []);
 
+  // Per-clip transitions (pencil icon on each clip in timeline)
+  const [clipTransitions, setClipTransitions] = useState<Record<string, { type: string; duration: number }>>({});
+  const handleClipTransitionChange = useCallback((sceneId: string, transition: { type: string; duration: number }) => {
+    setClipTransitions(prev => ({ ...prev, [sceneId]: transition }));
+  }, []);
+
   // Hide global floating widgets (Vizzy, LiveChat, Feedback) while editor is mounted
   useEffect(() => {
     document.body.classList.add("hide-floating-widgets");
@@ -2553,6 +2559,8 @@ export function ProVideoEditor({
           handleGlobalSeek(Math.max(0, Math.min(totalDuration, globalTime + step)));
         }}
         onSkipScene={skipScene}
+        clipTransitions={clipTransitions}
+        onClipTransitionChange={handleClipTransitionChange}
       />
 
       {/* Audio Prompt Dialog */}
