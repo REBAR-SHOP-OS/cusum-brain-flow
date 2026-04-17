@@ -58,6 +58,23 @@ const PLATFORM_OPTIONS: SelectionOption[] = [
 
 type SubPanelView = null | "content_type" | "platform" | "pages";
 
+// Single source of truth for splitting a stored post.content into its
+// editable English caption and its internal Persian metadata block.
+function stripPersianBlock(content: string): string {
+  if (!content) return "";
+  const idx = content.indexOf("---PERSIAN---");
+  return idx === -1 ? content : content.slice(0, idx);
+}
+
+// Build the full content string to save in DB. The editable caption is ALWAYS
+// the source of truth — Persian block is only appended as internal metadata.
+function buildPostContent(editableCaption: string, persianImageText: string, persianCaptionText: string): string {
+  const base = editableCaption ?? "";
+  if (!persianImageText && !persianCaptionText) return base;
+  const persianBlock = "\n\n---PERSIAN---\n🖼️ متن روی عکس: " + (persianImageText || "") + "\n📝 ترجمه کپشن: " + (persianCaptionText || "");
+  return base + persianBlock;
+}
+
 /* ── Date Schedule Popover ── */
 function DateSchedulePopover({
   post,
