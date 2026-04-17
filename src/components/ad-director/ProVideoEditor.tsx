@@ -1559,6 +1559,10 @@ export function ProVideoEditor({
     const sceneId = storyboard[selectedSceneIndex]?.id;
     if (!sceneId || videoRef.current.duration <= 0) return;
 
+    // Re-apply per-scene mute/volume on src change (browser resets volume when src changes)
+    const isMutedScene = mutedScenes.has(sceneId);
+    videoRef.current.volume = isMutedScene ? 0 : videoVolume;
+
     // Respect explicitly-locked durations (split / trim) — never overwrite
     if (!lockedDurationScenesRef.current.has(sceneId)) {
       setClipDurations(prev => ({ ...prev, [sceneId]: videoRef.current!.duration }));
@@ -2300,7 +2304,7 @@ export function ProVideoEditor({
                     ref={videoRef}
                     src={videoSrc}
                     className={`w-full h-full object-cover transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                    muted={isMuted}
+                    muted={isMuted || (storyboard[selectedSceneIndex]?.id ? mutedScenes.has(storyboard[selectedSceneIndex].id) : false)}
                     playsInline
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoaded}
