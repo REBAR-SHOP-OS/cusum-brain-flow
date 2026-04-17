@@ -224,13 +224,22 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   ];
 
   const buildContextString = () => {
+    const brandBlock = [
+      "BRAND: rebar.shop (industrial rebar fabrication & supply company)",
+      "WEBSITE: https://rebar.shop",
+      "CONTENT TYPE: Advertising / commercial video ad",
+      "GOAL: Promote rebar.shop products and brand. Always use the name 'rebar.shop' explicitly — never use placeholders like 'Company', 'Brand', or 'Your Company'.",
+      "TONE: Persuasive, cinematic, professional commercial advertisement for rebar.shop.",
+    ].join("\n");
+
     const parts: string[] = [];
     if (selectedStyleLabels.length) parts.push(`Style: ${selectedStyleLabels.join(", ")}`);
-    if (selectedProductLabels.length) parts.push(`Products: ${selectedProductLabels.join(", ")}`);
+    if (selectedProductLabels.length) parts.push(`Products to feature: ${selectedProductLabels.join(", ")}`);
     parts.push(`Duration: ${duration}s`);
     parts.push(`Ratio: ${ratio}`);
     parts.push(`Engine: ${selectedVideoModel.label}`);
-    return parts.join(". ") + ".";
+
+    return `${brandBlock}\n\nUSER SELECTIONS:\n${parts.join(". ")}.\n\nWrite a cinematic advertising prompt for a rebar.shop commercial video using the selections above.`;
   };
 
   const runAiWrite = async (): Promise<string | null> => {
