@@ -567,6 +567,97 @@ export function ProVideoEditor({
     }
   }, [voiceoverUrl, musicTrackUrl, storyboard]);
 
+  // ─── Auto-extract embedded audio from generated video clips ───
+  // Wan 2.6 (and other engines) often include background audio in their output.
+  // We surface that audio as a blue bar on the Music row, aligned per-scene.
+  // The bar is visual-only (real audio plays through the <video> element) — no playback echo.
+  const extractedClipUrlsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    let cancelled = false;
+    const detectVideoHasAudio = (videoUrl: string): Promise<{ hasAudio: boolean; duration: number }> => {
+      return new Promise((resolve) => {
+        const v = document.createElement("video");
+        v.preload = "metadata";
+        v.muted = true;
+        v.crossOrigin = "anonymous";
+        const done = (hasAudio: boolean, duration: number) => {
+          try { v.src = ""; } catch { /* noop */ }
+          resolve({ hasAudio, duration });
+        };
+        v.addEventListener("loadedmetadata", () => {
+          // Best-effort detection across browsers; default true (most generated clips include audio)
+          const hasAudio =
+            (v as any).mozHasAudio ||
+            Boolean((v as any).webkitAudioDecodedByteCount) ||
+            ((v as any).audioTracks?.length > 0) ||
+            true;
+          done(Boolean(hasAudio), v.duration || 0);
+        });
+        v.addEventListener("error", () => done(false, 0));
+        v.src = videoUrl;
+      });
+    };
+
+    (async () => {
+      // Build the set of currently-completed clips with real video URLs
+      const validClips = clips.filter(c =>
+        c.status === "completed" &&
+        c.videoUrl &&
+        !c.videoUrl.startsWith("data:image/")
+      );
+
+      // 1) Cleanup: remove extracted tracks whose source clip no longer exists or changed URL
+      const validUrls = new Set(validClips.map(c => c.videoUrl as string));
+      setAudioTracks(prev => {
+        const next = prev.filter(t => !t.extractedFromVideo || (t.audioUrl && validUrls.has(t.audioUrl)));
+        return next.length === prev.length ? prev : next;
+      });
+      // Drop stale URLs from the dedup set
+      Array.from(extractedClipUrlsRef.current).forEach(u => {
+        if (!validUrls.has(u)) extractedClipUrlsRef.current.delete(u);
+      });
+
+      // 2) For each new completed clip, detect audio and add a blue music bar
+      for (const clip of validClips) {
+        if (cancelled) return;
+        const url = clip.videoUrl as string;
+        if (extractedClipUrlsRef.current.has(url)) continue;
+        extractedClipUrlsRef.current.add(url);
+
+        const sceneIdx = storyboard.findIndex(s => s.id === clip.sceneId);
+        if (sceneIdx < 0) continue;
+
+        const { hasAudio, duration } = await detectVideoHasAudio(url);
+        if (cancelled) return;
+        if (!hasAudio) continue;
+
+        const sceneStart = cumulativeStarts[sceneIdx] || 0;
+        const sceneDur = sceneDurations[sceneIdx] || duration || 0;
+        const sceneNum = sceneIdx + 1;
+
+        setAudioTracks(prev => {
+          // Guard against duplicate (e.g. effect re-run after state batch)
+          if (prev.some(t => t.extractedFromVideo && t.audioUrl === url)) return prev;
+          return [
+            ...prev,
+            {
+              sceneId: clip.sceneId,
+              label: `Scene ${sceneNum} audio`,
+              audioUrl: url,
+              kind: "music" as const,
+              volume: 0,            // visual-only — actual sound comes from <video>
+              globalStartTime: sceneStart,
+              duration: sceneDur || duration,
+              extractedFromVideo: true,
+            },
+          ];
+        });
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [clips, storyboard, cumulativeStarts, sceneDurations]);
+
   // Preload logo image for card rendering
   useEffect(() => {
     if (brand.logoUrl) {
