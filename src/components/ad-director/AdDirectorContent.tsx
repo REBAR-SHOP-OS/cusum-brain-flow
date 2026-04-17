@@ -357,7 +357,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: msg, progress: 0 } : c),
       });
       // Surface the actual API reason so the user can act on it (moderation, bad image, etc.)
-      toast.error(`Scene regeneration failed: ${msg}`);
+      toast({ title: "Scene regeneration failed", description: msg, variant: "destructive" });
     }
   }, [service]);
 
