@@ -369,7 +369,7 @@ export function ProVideoEditor({
     }]);
     setAudioPromptOpen(false);
     toast({ title: "✅ Audio file added" });
-  }, [toast, pushHistory]);
+  }, [toast]);
 
   const handleGenerateVoiceover = useCallback(async (result: VoiceoverResult) => {
     setGeneratingVoiceover(true);
