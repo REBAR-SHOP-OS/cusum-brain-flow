@@ -1,75 +1,71 @@
 
 
 ## درخواست کاربر
-در صفحه‌ی **Edit Video** (AdDirector editor):
-1. ویدئو باید کامل (تمام scene ها به‌صورت پیوسته) در preview نمایش داده شود — نه فقط یک scene
-2. Text / Voice / Music باید به‌صورت نوارهای رنگی روی timeline دیده شوند
-3. وقتی کاربر هر نواری را حذف می‌کند، باید از پخش حذف شود
+روی **آخرین کارت** هر clip در timeline (Video lane)، یک آیکون مداد ✏️ نمایش داده شود. با کلیک روی آن، کاربر بین template های **transition** انتخاب کند و transition انتخابی روی ویدئو اعمال شود.
+
+از screenshot معلوم است: روی scene دوم (آخرین کارت) یک دایره‌ی قرمز کشیده شده که نقطه‌ی مورد نظر برای آیکون مداد است.
 
 ## بررسی کد فعلی
+نیاز به بررسی این فایل‌ها:
+- `src/components/ad-director/editor/TimelineBar.tsx` — جایی که Video lane و clip block ها render می‌شوند
+- `src/components/ad-director/editor/TransitionsTab.tsx` — موجود است، شامل لیست transition ها (Crossfade, Cross Blur, Wipe, Zoom...)
+- `src/components/ad-director/ProVideoEditor.tsx` — state ای که transition per-clip را نگه می‌دارد
+- جایی که transition بین کلیپ‌ها روی playback اعمال می‌شود (احتمالاً `transitions: Record<sceneId, string>` در project state)
 
-نیاز به مطالعه‌ی این فایل‌ها:
-- `src/components/ad-director/AdDirectorContent.tsx` (editor wrapper)
-- timeline و preview components
+## برنامه (Surgical, Additive)
 
-می‌سازم plan مختصر بر اساس آنچه از screenshot ها مشخص است:
+### ۱. آیکون مداد روی هر clip (Video lane)
+در `TimelineBar.tsx` روی هر video clip block:
+- یک دکمه‌ی کوچک ✏️ (`Pencil` از lucide-react) در گوشه‌ی **پایین-راست** clip
+- اندازه: 14×14px، نیمه‌شفاف، روی hover کاملاً visible
+- موقعیت: `absolute bottom-1 right-1`
+- این آیکون نشان می‌دهد transition **بعد از این clip** (به clip بعدی) چیست
 
-### مشکلات قابل مشاهده در screenshot
-1. **Preview**: فقط Scene 1 (یا اولین clip) نمایش داده می‌شود؛ Scene 2 نمی‌آید — یعنی preview از یک `<video>` تک‌منبعی استفاده می‌کند، نه از یک playlist/composition.
-2. **Timeline**: 
-   - Video lane هست ✅
-   - Text lane: "double-click a clip to add subtitles" — یعنی اگر متن وجود دارد، نوار رنگی نشان نمی‌دهد
-   - Audio lane: "open Voice tab to generate" — حتی اگر voice generate شده باشد، block رنگی روی lane نیست
-   - Music lane: Scene 2 audio به‌عنوان music ست شده ❌ (label اشتباه — این voiceover است نه music)
-3. **حذف**: مکانیسم حذف per-track block وجود ندارد یا روی playback اعمال نمی‌شود.
+### ۲. Popover انتخاب transition
+کلیک روی مداد → یک `Popover` باز می‌شود:
+- عنوان: `Transition after Scene N`
+- گرید کوچک از template ها (همان لیست `TransitionsTab.tsx` ولی فشرده‌تر):
+  - دسته‌بندی: Fades & Blurs / Wipes / Motion
+  - thumbnail رنگی + اسم زیر هر کدام
+  - گزینه‌ی `None` در ابتدا
+- Slider برای `duration` (0.1s – 2.0s، پیش‌فرض 0.5s)
+- transition فعلی با border رنگی highlight شود
 
-## برنامه (Surgical, focused on Edit Video screen)
+### ۳. State management
+- در `ProVideoEditor.tsx` (یا هر hook بالاتر که project state را نگه می‌دارد):
+  - state جدید: `clipTransitions: Record<string, { type: string; duration: number }>` (key = sceneId)
+  - handler: `setClipTransition(sceneId, type, duration)`
+- propagate به `TimelineBar` props: `clipTransitions`, `onClipTransitionChange`
 
-### ۱. Sequential preview playback
-در preview component:
-- به‌جای پخش یک `videoUrl` تنها، یک playlist از تمام clip ها به ترتیب scene ها ساخته شود
-- وقتی یک clip تمام شد، خودکار به clip بعدی برود (`onEnded` → next index)
-- timeline scrubber هم بر اساس total duration حرکت کند، نه per-clip
-- موقع seek، clip درست انتخاب و به offset مناسب پرش کند
+### ۴. اعمال transition روی playback
+- اگر قبلاً مکانیزم transition (مثل `transitions` state) برای playback داشتیم → از همان استفاده کنیم
+- اگر نداشتیم → روی preview، در لحظه‌ی switch بین clip ها (در `handleVideoEnded`):
+  - بسته به `type`، یک CSS class روی `<video>` اعمال شود (مثلاً `animate-fade`, `animate-slide-up`, `animate-zoom-in`) به مدت `duration` ثانیه
+  - برای `Crossfade`: یک overlay از frame آخر clip قبلی به‌مدت duration روی clip جدید fade out شود
+  - برای `Wipe/Slide/Zoom`: transform/clip-path animation
 
-### ۲. نوارهای رنگی برای Text / Voice / Music
-هر lane باید block های رنگی واقعی نشان دهد:
-- **Video lane** (سبز): همان clip blocks فعلی ✅
-- **Text lane** (آبی): per-scene subtitle/text overlay ها — هر scene یک block آبی به طول همان scene
-- **Voice lane** (بنفش): per-scene voiceover audio — هر scene که `voiceUrl` دارد، block بنفش به طول duration آن
-- **Music lane** (نارنجی): background music track — یک block سراسری به طول کل ویدئو
+> این بخش (export pipeline) بدون تغییر می‌ماند مگر اینکه قبلاً transition support داشته باشد. در preview کافی است که visually اعمال شود.
 
-اگر یک lane خالی است، placeholder خاکستری (مثل الان) بماند؛ ولی اگر داده هست، block رنگی نمایش داده شود.
+### ۵. آخرین clip
+- آخرین clip transition ندارد (چون بعدش clip دیگری نیست)، ولی همان UI آیکون مداد می‌تواند transition **ورودی به این clip** (transition بعد از clip قبلی) را ویرایش کند تا تجربه یکنواخت باشد. یا ساده‌تر: روی آخرین clip آیکون مداد را نمایش ندهیم. **انتخاب می‌کنیم: روی همه‌ی clip ها به‌جز آخرین clip نمایش داده شود** (transition بین این clip و بعدی).
 
-### ۳. حذف block ها و اعمال روی playback
-- هر block یک دکمه‌ی X کوچک یا context menu برای حذف داشته باشد
-- state حذف per-block در project state (مثل `disabledTracks: Set<string>`) نگه‌داری شود
-- preview playback این state را respect کند:
-  - Text disabled → overlay render نشود
-  - Voice disabled → audio element mute/unmount شود
-  - Music disabled → music element mute/unmount شود
-  - Video clip disabled → از playlist skip شود
-- export/render pipeline هم همین state را respect کند
-
-### ۴. اصلاح label اشتباه
-"Scene 2 audio" که الان زیر Music نشسته باید به Voice lane منتقل شود (voiceover است، نه music). فقط background music track (در صورت وجود) در Music lane بماند.
-
-## فایل‌های احتمالاً تغییرکننده
-- `src/components/ad-director/AdDirectorContent.tsx` — entry به editor
-- `src/components/ad-director/editor/*` — preview player, timeline, lanes
-- state hook که project clips/tracks را نگه می‌دارد (احتمالاً `useAdDirectorProject` یا مشابه)
-- export/stitch path فقط در حدی که disabled tracks را skip کند
+## فایل‌های تغییرکننده
+- `src/components/ad-director/editor/TimelineBar.tsx` — افزودن آیکون مداد + Popover روی video clip blocks
+- `src/components/ad-director/ProVideoEditor.tsx` — state `clipTransitions` و propagation
+- `src/components/ad-director/editor/ClipTransitionPopover.tsx` (جدید، کوچک) — popover با لیست template ها (می‌تواند از `TransitionsTab.tsx` استفاده‌ی مجدد کند)
+- منطق playback: اعمال CSS animation روی switch clip ها در preview
 
 ## آنچه دست‌نخورده می‌ماند
+- `TransitionsTab.tsx` کامل (لیست template ها، logic انتخاب، slider) — re-use می‌شود
 - Veo / Wan / Sora generation flow
 - DB schema / RLS
-- Scene generation و prompt engineering
+- Export pipeline (مگر اینکه قبلاً transition support داشته باشد)
+- Audio / Music / Text lanes
 - زبان UI: انگلیسی
 
 ## نتیجه‌ی مورد انتظار
-1. ✅ کل ویدئو (همه scene ها) به‌صورت پیوسته در preview پخش می‌شود
-2. ✅ Text / Voice / Music هر کدام block رنگی واقعی روی timeline دارند
-3. ✅ حذف هر block بلافاصله از preview حذف می‌کند
-4. ✅ Export نهایی هم همان state را respect می‌کند
-5. ✅ Voiceover دیگر اشتباهاً در Music lane نمایش داده نمی‌شود
+1. ✅ روی هر clip در Video lane (به‌جز آخرین) یک آیکون مداد ظاهر می‌شود
+2. ✅ کلیک روی آن، popover انتخاب transition با template های موجود + slider duration نشان می‌دهد
+3. ✅ انتخاب transition بلافاصله روی preview playback اعمال می‌شود
+4. ✅ State per-clip ذخیره و در project نگه‌داری می‌شود
 
