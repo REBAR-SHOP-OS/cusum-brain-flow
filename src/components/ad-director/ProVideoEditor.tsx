@@ -2300,7 +2300,7 @@ export function ProVideoEditor({
                     ref={videoRef}
                     src={videoSrc}
                     className={`w-full h-full object-cover transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                    muted={isMuted}
+                    muted={isMuted || (storyboard[selectedSceneIndex]?.id ? mutedScenes.has(storyboard[selectedSceneIndex].id) : false)}
                     playsInline
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoaded}
