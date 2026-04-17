@@ -180,8 +180,12 @@ export function SceneCard({
               <Textarea
                 value={editPrompt}
                 onChange={(e) => setEditPrompt(e.target.value)}
+                placeholder="Edit prompt — AI will bridge it with the previous and next scenes for narrative continuity…"
                 className="text-xs min-h-[80px] bg-background/50"
               />
+              <p className="text-[9px] text-muted-foreground italic">
+                ✨ AI will automatically connect this prompt with scene {index} and scene {index + 2} so the cards flow as one story.
+              </p>
               <div className="flex gap-2">
                 <Button size="sm" className="h-6 text-[10px]" onClick={handleSavePrompt}>Save</Button>
                 <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setEditing(false)}>Cancel</Button>
