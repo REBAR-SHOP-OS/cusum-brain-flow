@@ -859,10 +859,32 @@ export async function stitchClips(
 
           hasDrawnFrame = true;
 
+          const currentAbsTime = clipStartCumulativeTime + video.currentTime;
+
+          // Start any editor extra-tracks whose globalStartTime has now arrived
+          for (const t of extraTrackEls) {
+            if (t.started) continue;
+            const start = t.track.globalStartTime ?? 0;
+            if (currentAbsTime >= start) {
+              t.started = true;
+              t.el.play().catch(() => {});
+            }
+          }
+
           if (subtitleSegments.length > 0) {
-            const currentAbsTime = clipStartCumulativeTime + video.currentTime;
             const activeSub = subtitleSegments.find(s => currentAbsTime >= s.startTime && currentAbsTime < s.endTime);
             if (activeSub) drawSubtitle(ctx, W, H, activeSub.text);
+          }
+
+          // Draw editor-authored text overlays active at this absolute time
+          if (editorTextOverlays.length > 0) {
+            for (const ov of editorTextOverlays) {
+              const start = ov.startTime ?? 0;
+              const end = ov.endTime ?? Number.POSITIVE_INFINITY;
+              if (currentAbsTime >= start && currentAbsTime < end) {
+                drawTextOverlay(ctx, W, H, ov);
+              }
+            }
           }
 
           if (logoImg) drawLogo(ctx, W, H, logoImg, logoSize);
