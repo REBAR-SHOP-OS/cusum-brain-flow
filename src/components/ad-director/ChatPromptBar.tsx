@@ -232,17 +232,18 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
       "TONE: Persuasive, cinematic, professional commercial advertisement for rebar.shop.",
     ].join("\n");
 
-    const wordBudget = Math.round(duration * 2.5);
-    const sceneCount = Math.max(1, Math.ceil(duration / 5));
+    const durationNum = Number(duration) || 15;
+    const wordBudget = Math.round(durationNum * 2.5);
+    const sceneCount = Math.max(1, Math.ceil(durationNum / 5));
     const durationBlock = [
       `DURATION CONSTRAINT (CRITICAL — MUST OBEY):`,
-      `- Total video length: EXACTLY ${duration} seconds. Not ${duration - 5}s. Not ${duration + 5}s. EXACTLY ${duration}s.`,
-      `- Do NOT write a script longer or shorter than ${duration}s.`,
-      `- Do NOT mention any other duration in the output (e.g., never say "30-second ad" or "60-second spot" if the user picked ${duration}s).`,
-      `- Pace visuals, voiceover, and scene count to fit within ${duration} seconds.`,
+      `- Total video length: EXACTLY ${durationNum} seconds. Not ${durationNum - 5}s. Not ${durationNum + 5}s. EXACTLY ${durationNum}s.`,
+      `- Do NOT write a script longer or shorter than ${durationNum}s.`,
+      `- Do NOT mention any other duration in the output (e.g., never say "30-second ad" or "60-second spot" if the user picked ${durationNum}s).`,
+      `- Pace visuals, voiceover, and scene count to fit within ${durationNum} seconds.`,
       `- Approximate spoken word budget: ~${wordBudget} words MAX for voiceover.`,
       `- Scene count guidance: ~1 scene per 5 seconds → target ~${sceneCount} scene${sceneCount === 1 ? "" : "s"} total.`,
-      `- If you reference the duration in the script, you MUST say "${duration}-second" — no other number is allowed.`,
+      `- If you reference the duration in the script, you MUST say "${durationNum}-second" — no other number is allowed.`,
     ].join("\n");
 
     const parts: string[] = [];
