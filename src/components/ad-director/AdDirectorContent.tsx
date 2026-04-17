@@ -328,6 +328,39 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
     toast({ title: `Scene moved to position ${to + 1}` });
   }, [clips, storyboard, service, toast]);
 
+  // ─── Request scene deletion (opens confirmation dialog) ───
+  const handleRequestDeleteScene = useCallback((sceneId: string) => {
+    if (clips.length <= 1) {
+      toast({ title: "Cannot delete the only scene", variant: "destructive" });
+      return;
+    }
+    const clip = clips.find(c => c.sceneId === sceneId);
+    if (clip && (clip.status === "generating" || clip.status === "queued")) {
+      toast({ title: "Wait for generation to finish before deleting", variant: "destructive" });
+      return;
+    }
+    setPendingDeleteSceneId(sceneId);
+  }, [clips, toast]);
+
+  // ─── Confirm + perform scene deletion ───
+  const handleConfirmDeleteScene = useCallback(() => {
+    const sceneId = pendingDeleteSceneId;
+    if (!sceneId) return;
+    const removedClip = clips.find(c => c.sceneId === sceneId);
+    const newClips = clips.filter(c => c.sceneId !== sceneId);
+    const newStoryboard = storyboard.filter(s => s.id !== sceneId);
+    service.patchState({ clips: newClips, storyboard: newStoryboard });
+
+    // Fallback preview if the deleted clip was selected
+    if (removedClip?.videoUrl && removedClip.videoUrl === selectedPreviewUrl) {
+      const next = newClips.find(c => c.status === "completed" && c.videoUrl)?.videoUrl ?? null;
+      setSelectedPreviewUrl(next);
+    }
+
+    setPendingDeleteSceneId(null);
+    toast({ title: "Scene deleted" });
+  }, [pendingDeleteSceneId, clips, storyboard, service, selectedPreviewUrl, toast]);
+
   // ─── RENDER ──────────────────────────────────────
 
   // Editing mode — full ProVideoEditor
