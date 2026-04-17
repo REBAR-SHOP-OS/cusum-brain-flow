@@ -73,10 +73,6 @@ interface ProVideoEditorProps {
   onActiveTabChanged?: (tab: string | null) => void;
   voiceoverUrl?: string | null;
   musicTrackUrl?: string | null;
-  /** Sync editor state back to parent so the export pipeline can use it. */
-  onUpdateOverlays?: (overlays: VideoOverlay[]) => void;
-  onUpdateAudioTracks?: (tracks: AudioTrackItem[]) => void;
-  onUpdateMutedScenes?: (sceneIds: string[]) => void;
 }
 
 function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: {
@@ -202,7 +198,6 @@ export function ProVideoEditor({
   onAddSceneWithMedia,
   externalActiveTab, onActiveTabChanged,
   voiceoverUrl, musicTrackUrl,
-  onUpdateOverlays, onUpdateAudioTracks, onUpdateMutedScenes,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -496,14 +491,7 @@ export function ProVideoEditor({
   const [duration, setDuration] = useState(0);
   const [aiCommand, setAiCommand] = useState("");
   const [aiProcessing, setAiProcessing] = useState(false);
-  const [selectedSceneIndex, setSelectedSceneIndex] = useState(() => {
-    // Start on the first scene that actually has a playable clip,
-    // so the editor never opens on an empty/failed scene.
-    const idx = storyboard.findIndex((s) =>
-      clips.some((c) => c.sceneId === s.id && c.status === "completed" && c.videoUrl)
-    );
-    return idx >= 0 ? idx : 0;
-  });
+  const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
   const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
   const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
   
@@ -588,11 +576,6 @@ export function ProVideoEditor({
       tracksSeededRef.current = true;
     }
   }, [voiceoverUrl, musicTrackUrl, storyboard]);
-
-  // ─── Sync editor state to parent (so export reflects user edits) ──────────
-  useEffect(() => { onUpdateOverlays?.(overlays); }, [overlays, onUpdateOverlays]);
-  useEffect(() => { onUpdateAudioTracks?.(audioTracks); }, [audioTracks, onUpdateAudioTracks]);
-  useEffect(() => { onUpdateMutedScenes?.(Array.from(mutedScenes)); }, [mutedScenes, onUpdateMutedScenes]);
 
   // Dedup set used by the auto-extract effect (declared early; effect is registered
   // later in the file once cumulativeStarts/sceneDurations exist)
@@ -1014,12 +997,9 @@ export function ProVideoEditor({
     }
   };
 
-  // Pick the video to show.
-  // Fallback chain guarantees a playable source whenever ANY clip is ready,
-  // even if the currently-selected scene failed or the final stitch is missing.
+  // Pick the video to show
   const selectedClip = clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id);
-  const firstCompletedClipUrl = clips.find(c => c.status === "completed" && c.videoUrl)?.videoUrl ?? null;
-  const videoSrc = finalVideoUrl || selectedClip?.videoUrl || firstCompletedClipUrl || null;
+  const videoSrc = finalVideoUrl || selectedClip?.videoUrl || null;
 
   // Detect static-card scenes (end cards rendered as PNG data URLs)
   const currentScene = storyboard[selectedSceneIndex];

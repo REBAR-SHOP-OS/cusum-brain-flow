@@ -41,37 +41,6 @@ export function fitCover(srcW: number, srcH: number, dstW: number, dstH: number)
   return { sx, sy, sw, sh };
 }
 
-/** A text overlay drawn on top of the video at a specific time window & position. */
-export interface StitchTextOverlay {
-  /** Text content to render */
-  text: string;
-  /** Optional global timing window (seconds across the entire stitched timeline). */
-  startTime?: number;
-  endTime?: number;
-  /** Position in percent (0-100) of canvas dimensions, top-left of the text box. */
-  position?: { x: number; y: number };
-  /** Size in percent (0-100) of canvas dimensions. Used to scale font when provided. */
-  size?: { w: number; h: number };
-  /** Optional colors / weight overrides */
-  color?: string;
-  background?: string;
-  fontWeight?: number;
-}
-
-/** Extra audio track to be mixed into the final stitched video. */
-export interface StitchAudioTrack {
-  audioUrl: string;
-  /** "voiceover" plays full-volume; "music" loops & ducks under voice. */
-  kind: "voiceover" | "music";
-  /** 0-1 base volume. Defaults: voice=1, music=musicVolume option. */
-  volume?: number;
-  /** Optional global start (seconds). Defaults to 0. */
-  globalStartTime?: number;
-  /** If true, treat as a per-scene music bar that should NOT also feed into the master mix
-   *  (the source video's embedded audio plays it). Use only for visual-only tracks. */
-  silentVisual?: boolean;
-}
-
 export interface StitchOverlayOptions {
   logo?: { url: string; enabled: boolean; size?: number };
   /** Target aspect ratio for the final canvas. Defaults to source dims. */
@@ -89,16 +58,10 @@ export interface StitchOverlayOptions {
     enabled: boolean;
     segments: { text: string; startTime: number; endTime: number }[];
   };
-  /** Editor-authored text overlays to burn onto the final video. */
-  textOverlays?: StitchTextOverlay[];
   audioUrl?: string;
   musicUrl?: string;
   musicVolume?: number; // 0-1, default 0.3
   crossfadeDuration?: number; // seconds, default 0.5
-  /** Multiple voiceover/music tracks to mix in (in addition to legacy audioUrl/musicUrl). */
-  audioTracks?: StitchAudioTrack[];
-  /** Per-clip-index flags. true = mute the source clip's embedded audio. */
-  clipMuted?: boolean[];
 }
 
 export interface StitchProgress {
@@ -251,60 +214,6 @@ function drawLogo(ctx: CanvasRenderingContext2D, w: number, h: number, logoImg: 
   ctx.globalAlpha = 0.7;
   ctx.drawImage(logoImg, w - drawW - padding, h - drawH - padding, drawW, drawH);
   ctx.globalAlpha = 1.0;
-}
-
-/**
- * Render an editor-authored text overlay onto the canvas at percent-based
- * position/size with a soft pill background for legibility.
- */
-function drawTextOverlay(
-  ctx: CanvasRenderingContext2D, w: number, h: number, ov: StitchTextOverlay,
-) {
-  if (!ov.text) return;
-  const px = ((ov.position?.x ?? 50) / 100) * w;
-  const py = ((ov.position?.y ?? 80) / 100) * h;
-  const boxW = ((ov.size?.w ?? 60) / 100) * w;
-  const fontSize = Math.max(20, Math.round((ov.size?.h ?? 8) / 100 * h));
-
-  ctx.save();
-  ctx.font = `${ov.fontWeight ?? 700} ${fontSize}px 'Inter', 'SF Pro Display', -apple-system, sans-serif`;
-
-  // word-wrap
-  const words = ov.text.split(" ");
-  const lines: string[] = [];
-  let line = "";
-  for (const word of words) {
-    const test = line ? `${line} ${word}` : word;
-    if (ctx.measureText(test).width > boxW && line) { lines.push(line); line = word; }
-    else line = test;
-  }
-  if (line) lines.push(line);
-
-  const lineHeight = fontSize * 1.3;
-  const padX = fontSize * 0.8;
-  const padY = fontSize * 0.5;
-  let maxLineW = 0;
-  for (const ln of lines) maxLineW = Math.max(maxLineW, ctx.measureText(ln).width);
-
-  const pillW = maxLineW + padX * 2;
-  const pillH = lines.length * lineHeight + padY * 2;
-  const pillX = px - pillW / 2;
-  const pillY = py - pillH / 2;
-
-  ctx.beginPath();
-  (ctx as any).roundRect ? ctx.roundRect(pillX, pillY, pillW, pillH, 12) : ctx.rect(pillX, pillY, pillW, pillH);
-  ctx.fillStyle = ov.background || "rgba(0,0,0,0.55)";
-  ctx.fill();
-
-  ctx.fillStyle = ov.color || "#ffffff";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.shadowColor = "rgba(0,0,0,0.6)";
-  ctx.shadowBlur = 6;
-  lines.forEach((ln, i) => ctx.fillText(ln, px, pillY + padY + i * lineHeight));
-  ctx.restore();
-  ctx.textAlign = "start";
-  ctx.textBaseline = "alphabetic";
 }
 
 function drawEndCard(
@@ -494,21 +403,12 @@ export async function stitchClips(
   let musicGainNode: GainNode | null = null;
   let voiceGainNode: GainNode | null = null;
 
-  // Extra editor-supplied tracks
-  const extraTrackEls: { el: HTMLAudioElement; gain: GainNode; track: StitchAudioTrack; started: boolean }[] = [];
-  // Per-clip embedded audio elements (from source video clips when not muted)
-  const clipAudioEls: (HTMLAudioElement | null)[] = [];
-  const clipAudioGains: (GainNode | null)[] = [];
-
   const hasVoice = !!overlays?.audioUrl;
   const hasMusic = !!overlays?.musicUrl;
-  const editorTracks = (overlays?.audioTracks || []).filter(t => !t.silentVisual && t.audioUrl);
-  const clipMuted = overlays?.clipMuted || [];
-  const wantClipAudio = validatedClips.length > 0 && validatedClips.some((_, i) => clipMuted[i] !== true);
   const baseMusicVol = overlays?.musicVolume ?? 0.15;
   const duckedMusicVol = Math.min(baseMusicVol * 0.33, 0.05); // duck to 33% or max 0.05
 
-  if (hasVoice || hasMusic || editorTracks.length > 0 || wantClipAudio) {
+  if (hasVoice || hasMusic) {
     try {
       audioCtx = new AudioContext();
       const audioDest = audioCtx.createMediaStreamDestination();
@@ -560,59 +460,6 @@ export async function stitchClips(
         musicGainNode.connect(compressor);
       }
 
-      // Editor-supplied extra tracks (multi voiceover / multi music)
-      for (const track of editorTracks) {
-        try {
-          const blobUrl = await fetchAsBlob(track.audioUrl);
-          const el = document.createElement("audio");
-          el.preload = "auto";
-          el.src = blobUrl;
-          el.loop = track.kind === "music";
-          await new Promise<void>((res) => {
-            el.oncanplaythrough = () => res();
-            el.onerror = () => res();
-            setTimeout(() => res(), 4000);
-          });
-          const src = audioCtx.createMediaElementSource(el);
-          const gain = audioCtx.createGain();
-          const baseVol = track.volume ?? (track.kind === "music" ? baseMusicVol : 1);
-          gain.gain.value = baseVol;
-          src.connect(gain);
-          gain.connect(compressor);
-          extraTrackEls.push({ el, gain, track, started: false });
-        } catch (e) {
-          console.warn("[stitchClips] Extra track load failed:", track.audioUrl, e);
-        }
-      }
-
-      // Per-clip embedded audio (source video sound) — re-fetch as <audio> elements
-      // because canvas captureStream() does not capture audio from <video> elements.
-      for (let ci = 0; ci < validatedClips.length; ci++) {
-        const muted = clipMuted[ci] === true; // default = include audio
-        if (muted) { clipAudioEls.push(null); clipAudioGains.push(null); continue; }
-        try {
-          const el = document.createElement("audio");
-          el.preload = "auto";
-          el.src = validatedClips[ci].blobUrl;
-          await new Promise<void>((res) => {
-            el.oncanplaythrough = () => res();
-            el.onerror = () => res();
-            setTimeout(() => res(), 4000);
-          });
-          const src = audioCtx.createMediaElementSource(el);
-          const gain = audioCtx.createGain();
-          gain.gain.value = 1;
-          src.connect(gain);
-          gain.connect(compressor);
-          clipAudioEls.push(el);
-          clipAudioGains.push(gain);
-        } catch (e) {
-          console.warn("[stitchClips] Clip embedded audio load failed for clip", ci, e);
-          clipAudioEls.push(null);
-          clipAudioGains.push(null);
-        }
-      }
-
       audioDest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
     } catch (e) {
       console.warn("[stitchClips] Audio mix failed, continuing without audio:", e);
@@ -655,7 +502,6 @@ export async function stitchClips(
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
   const subtitleSegments = overlays?.subtitles?.enabled ? overlays.subtitles.segments : [];
-  const editorTextOverlays = overlays?.textOverlays || [];
   let cumulativeTime = 0;
 
   return new Promise((resolve, reject) => {
@@ -664,8 +510,6 @@ export async function stitchClips(
     recorder.onstop = async () => {
       if (voiceElement) voiceElement.pause();
       if (musicElement) musicElement.pause();
-      extraTrackEls.forEach(t => { try { t.el.pause(); } catch {} });
-      clipAudioEls.forEach(el => { if (el) { try { el.pause(); } catch {} } });
       if (audioCtx) audioCtx.close().catch(() => {});
 
       // Phase 3: Post-stitch validation
@@ -692,14 +536,6 @@ export async function stitchClips(
     if (musicElement) {
       musicElement.play().catch(() => console.warn("[stitchClips] Music play failed"));
     }
-    // Start extra editor tracks that begin at t=0; later ones get started in the loop.
-    extraTrackEls.forEach(t => {
-      const start = t.track.globalStartTime ?? 0;
-      if (start <= 0) {
-        t.started = true;
-        t.el.play().catch(() => console.warn("[stitchClips] Extra track play failed"));
-      }
-    });
 
     // Phase 2: Render clips with crossfade transitions
     let clipIndex = 0;
@@ -747,19 +583,6 @@ export async function stitchClips(
       // Pre-load next clip for crossfade
       prepareNextClip(clipIndex + 1);
 
-      // Start clip's embedded audio (if not muted) synchronized with the video
-      const clipAudioEl = clipAudioEls[clipIndex];
-      const clipAudioGain = clipAudioGains[clipIndex];
-      if (clipAudioEl && clipAudioGain) {
-        try {
-          clipAudioEl.currentTime = 0;
-          // Use the volume the user picked for this clip via clipMuted/audioTracks if present;
-          // otherwise default to 1.0 (full).
-          clipAudioGain.gain.value = 1;
-          clipAudioEl.play().catch(() => {});
-        } catch {}
-      }
-
       onProgress?.({
         stage: "rendering",
         clipIndex,
@@ -788,7 +611,6 @@ export async function stitchClips(
         clearTimeout(safetyTimeout);
         cancelAnimationFrame(animFrame);
         video.pause();
-        if (clipAudioEl) { try { clipAudioEl.pause(); } catch {} }
         cumulativeTime = clipStartCumulativeTime + effectiveDuration;
         console.log(`[stitchClips] Clip ${clipIndex + 1}/${validatedClips.length} done, cumTime=${cumulativeTime.toFixed(2)}s`);
         clipIndex++;
@@ -859,32 +681,10 @@ export async function stitchClips(
 
           hasDrawnFrame = true;
 
-          const currentAbsTime = clipStartCumulativeTime + video.currentTime;
-
-          // Start any editor extra-tracks whose globalStartTime has now arrived
-          for (const t of extraTrackEls) {
-            if (t.started) continue;
-            const start = t.track.globalStartTime ?? 0;
-            if (currentAbsTime >= start) {
-              t.started = true;
-              t.el.play().catch(() => {});
-            }
-          }
-
           if (subtitleSegments.length > 0) {
+            const currentAbsTime = clipStartCumulativeTime + video.currentTime;
             const activeSub = subtitleSegments.find(s => currentAbsTime >= s.startTime && currentAbsTime < s.endTime);
             if (activeSub) drawSubtitle(ctx, W, H, activeSub.text);
-          }
-
-          // Draw editor-authored text overlays active at this absolute time
-          if (editorTextOverlays.length > 0) {
-            for (const ov of editorTextOverlays) {
-              const start = ov.startTime ?? 0;
-              const end = ov.endTime ?? Number.POSITIVE_INFINITY;
-              if (currentAbsTime >= start && currentAbsTime < end) {
-                drawTextOverlay(ctx, W, H, ov);
-              }
-            }
           }
 
           if (logoImg) drawLogo(ctx, W, H, logoImg, logoSize);
