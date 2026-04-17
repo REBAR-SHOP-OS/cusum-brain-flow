@@ -1,71 +1,73 @@
 
 
 ## درخواست کاربر
-روی **آخرین کارت** هر clip در timeline (Video lane)، یک آیکون مداد ✏️ نمایش داده شود. با کلیک روی آن، کاربر بین template های **transition** انتخاب کند و transition انتخابی روی ویدئو اعمال شود.
+وقتی آیکون **Split** ✂️ زده می‌شود، clip ویدئویی فعلی باید دقیقاً در محل **playhead** (خط پیکان عمودی) به دو قسمت مستقل تقسیم شود — هر دو نیمه به‌عنوان clip مجزا در timeline ظاهر شوند و playback پیوسته باقی بماند.
 
-از screenshot معلوم است: روی scene دوم (آخرین کارت) یک دایره‌ی قرمز کشیده شده که نقطه‌ی مورد نظر برای آیکون مداد است.
+## بررسی موردنیاز
+- `TimelineBar.tsx` — جایی که Split toolbar button و playhead position render می‌شوند
+- `ProVideoEditor.tsx` — handler فعلی Split، state کلیپ‌ها (`storyboard`, `clips`)، و playhead time
 
-## بررسی کد فعلی
-نیاز به بررسی این فایل‌ها:
-- `src/components/ad-director/editor/TimelineBar.tsx` — جایی که Video lane و clip block ها render می‌شوند
-- `src/components/ad-director/editor/TransitionsTab.tsx` — موجود است، شامل لیست transition ها (Crossfade, Cross Blur, Wipe, Zoom...)
-- `src/components/ad-director/ProVideoEditor.tsx` — state ای که transition per-clip را نگه می‌دارد
-- جایی که transition بین کلیپ‌ها روی playback اعمال می‌شود (احتمالاً `transitions: Record<sceneId, string>` در project state)
+## برنامه
 
-## برنامه (Surgical, Additive)
+### ۱. شناسایی clip زیر playhead
+- `currentTime` (سراسری timeline) را داریم
+- بر اساس `scene.duration` تجمعی، تشخیص دهیم playhead روی کدام scene قرار دارد و offset داخلی چقدر است (`localT = currentTime - sceneStart`)
+- اگر `localT < 0.2s` یا `localT > duration - 0.2s` → split نکنیم (خیلی نزدیک به edge، toast: "Move playhead inside a clip to split")
 
-### ۱. آیکون مداد روی هر clip (Video lane)
-در `TimelineBar.tsx` روی هر video clip block:
-- یک دکمه‌ی کوچک ✏️ (`Pencil` از lucide-react) در گوشه‌ی **پایین-راست** clip
-- اندازه: 14×14px، نیمه‌شفاف، روی hover کاملاً visible
-- موقعیت: `absolute bottom-1 right-1`
-- این آیکون نشان می‌دهد transition **بعد از این clip** (به clip بعدی) چیست
+### ۲. ساخت دو scene جدید
+- scene اصلی را با دو scene جدید جایگزین کنیم در `storyboard`:
+  - `sceneA`: همان scene با `duration = localT`، `id = ${original.id}-a`
+  - `sceneB`: کپی scene با `duration = original.duration - localT`، `id = ${original.id}-b`
+  - تمام field های دیگر (prompt, voiceover, imagePrompt, ...) duplicate شوند
+- در `clips`: clip مربوطه را با دو entry جایگزین کنیم:
+  - هر دو نیمه به همان `videoUrl` اشاره کنند (URL مشترک)
+  - فیلد `clipStartOffset` (جدید، اختیاری) اضافه شود برای نیمه‌ی دوم تا preview بداند از کجا پخش کند
+  - alternatively: `targetDuration` همان قسمت + `startOffset` در playback
 
-### ۲. Popover انتخاب transition
-کلیک روی مداد → یک `Popover` باز می‌شود:
-- عنوان: `Transition after Scene N`
-- گرید کوچک از template ها (همان لیست `TransitionsTab.tsx` ولی فشرده‌تر):
-  - دسته‌بندی: Fades & Blurs / Wipes / Motion
-  - thumbnail رنگی + اسم زیر هر کدام
-  - گزینه‌ی `None` در ابتدا
-- Slider برای `duration` (0.1s – 2.0s، پیش‌فرض 0.5s)
-- transition فعلی با border رنگی highlight شود
+### ۳. Playback با offset
+در preview player وقتی به clip جدید (نیمه‌ی دوم) می‌رسد:
+```ts
+video.src = clip.videoUrl;
+video.currentTime = clip.startOffset ?? 0;  // seek به نقطه‌ی split
+video.play();
+// onTimeUpdate: اگر video.currentTime >= startOffset + targetDuration → next clip
+```
+- یعنی هر clip یک `startOffset` و `targetDuration` دارد و player به‌جای تکیه بر `onEnded`، روی `timeupdate` چک می‌کند که از window خارج شده یا نه.
 
-### ۳. State management
-- در `ProVideoEditor.tsx` (یا هر hook بالاتر که project state را نگه می‌دارد):
-  - state جدید: `clipTransitions: Record<string, { type: string; duration: number }>` (key = sceneId)
-  - handler: `setClipTransition(sceneId, type, duration)`
-- propagate به `TimelineBar` props: `clipTransitions`, `onClipTransitionChange`
+### ۴. به‌روزرسانی Tracks وابسته
+- **Voice track** آن scene: اگر voice به scene اصلی متصل بود، فقط به نیمه‌ی اول (`sceneA`) نسبت داده شود (نیمه‌ی دوم voice ندارد) — یا کاربر بعداً regenerate کند
+- **Text overlays / captions**: 
+  - اگر overlay دارای `startTime/endTime` در scene بود، بر اساس `localT` بین دو نیمه تقسیم شود
+  - overlay های ساده (بدون timing): به نیمه‌ی اول منتقل شوند
+- **Music**: سراسری است، تغییری نمی‌کند
+- **clipTransitions**: transition بین `sceneA` و `sceneB` پیش‌فرض `None` (cut)؛ transition بعد از scene اصلی به‌صورت طبیعی به `sceneB` منتقل می‌شود
 
-### ۴. اعمال transition روی playback
-- اگر قبلاً مکانیزم transition (مثل `transitions` state) برای playback داشتیم → از همان استفاده کنیم
-- اگر نداشتیم → روی preview، در لحظه‌ی switch بین clip ها (در `handleVideoEnded`):
-  - بسته به `type`، یک CSS class روی `<video>` اعمال شود (مثلاً `animate-fade`, `animate-slide-up`, `animate-zoom-in`) به مدت `duration` ثانیه
-  - برای `Crossfade`: یک overlay از frame آخر clip قبلی به‌مدت duration روی clip جدید fade out شود
-  - برای `Wipe/Slide/Zoom`: transform/clip-path animation
-
-> این بخش (export pipeline) بدون تغییر می‌ماند مگر اینکه قبلاً transition support داشته باشد. در preview کافی است که visually اعمال شود.
-
-### ۵. آخرین clip
-- آخرین clip transition ندارد (چون بعدش clip دیگری نیست)، ولی همان UI آیکون مداد می‌تواند transition **ورودی به این clip** (transition بعد از clip قبلی) را ویرایش کند تا تجربه یکنواخت باشد. یا ساده‌تر: روی آخرین clip آیکون مداد را نمایش ندهیم. **انتخاب می‌کنیم: روی همه‌ی clip ها به‌جز آخرین clip نمایش داده شود** (transition بین این clip و بعدی).
+### ۵. UI و feedback
+- دکمه‌ی Split (آیکون قیچی موجود در toolbar — همان دایره‌ی قرمز در screenshot) فقط زمانی فعال شود که `currentTime` داخل یک clip معتبر باشد
+- بعد از split: یک خط عمودی کوتاه روی timeline در محل cut نمایش داده شود (visual marker) و scene انتخاب‌شده روی `sceneB` ست شود تا کاربر context را گم نکند
+- toast: `"Clip split at 4.2s"`
 
 ## فایل‌های تغییرکننده
-- `src/components/ad-director/editor/TimelineBar.tsx` — افزودن آیکون مداد + Popover روی video clip blocks
-- `src/components/ad-director/ProVideoEditor.tsx` — state `clipTransitions` و propagation
-- `src/components/ad-director/editor/ClipTransitionPopover.tsx` (جدید، کوچک) — popover با لیست template ها (می‌تواند از `TransitionsTab.tsx` استفاده‌ی مجدد کند)
-- منطق playback: اعمال CSS animation روی switch clip ها در preview
+- `src/components/ad-director/ProVideoEditor.tsx`:
+  - `handleSplit` جدید/بازنویسی: محاسبه‌ی محل split، dup کردن scene/clip
+  - Player loop: اضافه کردن `startOffset` handling در `onTimeUpdate`
+- `src/components/ad-director/editor/TimelineBar.tsx`:
+  - فعال/غیرفعال کردن دکمه‌ی Split بر اساس playhead validity
+  - (اختیاری) marker visual بعد از split
+- نوع `Clip` (احتمالاً در همان file): اضافه‌کردن فیلد اختیاری `startOffset?: number`
 
 ## آنچه دست‌نخورده می‌ماند
-- `TransitionsTab.tsx` کامل (لیست template ها، logic انتخاب، slider) — re-use می‌شود
 - Veo / Wan / Sora generation flow
 - DB schema / RLS
-- Export pipeline (مگر اینکه قبلاً transition support داشته باشد)
-- Audio / Music / Text lanes
+- Music / Audio extraction
+- Transition system (فقط جدول state به‌روز می‌شود)
+- Export pipeline (در محدوده‌ی اعمال offset روی stitch — اگر export از همان `clips` array استفاده کند، startOffset باید در stitch هم respect شود؛ در غیر این صورت TODO جداگانه)
 - زبان UI: انگلیسی
 
 ## نتیجه‌ی مورد انتظار
-1. ✅ روی هر clip در Video lane (به‌جز آخرین) یک آیکون مداد ظاهر می‌شود
-2. ✅ کلیک روی آن، popover انتخاب transition با template های موجود + slider duration نشان می‌دهد
-3. ✅ انتخاب transition بلافاصله روی preview playback اعمال می‌شود
-4. ✅ State per-clip ذخیره و در project نگه‌داری می‌شود
+1. ✅ کلیک روی Split → clip فعلی دقیقاً در playhead به دو قسمت تقسیم می‌شود
+2. ✅ هر دو نیمه به‌عنوان block مستقل در Video lane دیده می‌شوند
+3. ✅ Preview بدون قطعی پیوسته پخش می‌شود (نیمه‌ی دوم با seek به offset)
+4. ✅ Text/Voice متناسب با split بین دو نیمه تقسیم می‌شوند
+5. ✅ Split نزدیک edge جلوگیری می‌شود تا clip 0-second ساخته نشود
 
