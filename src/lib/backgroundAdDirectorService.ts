@@ -1039,6 +1039,11 @@ class BackgroundAdDirectorService {
       })();
       const crossfadeDuration = transitionPreset === "None" ? 0 : transitionDuration;
 
+      const stateRatio = this.state.videoParams?.ratio;
+      const exportRatio = (stateRatio === "9:16" || stateRatio === "1:1" || stateRatio === "16:9")
+        ? stateRatio as "9:16" | "1:1" | "16:9"
+        : undefined;
+
       const finalUrl = await stitchClips(orderedClips, {
         logo: { url: "", enabled: false, size: 80 },
         endCard: {
@@ -1050,6 +1055,7 @@ class BackgroundAdDirectorService {
         musicUrl: this.state.musicTrackUrl || undefined,
         musicVolume: 0.15,
         crossfadeDuration,
+        aspectRatio: exportRatio,
       });
 
       // Upload to storage for permanent URL
