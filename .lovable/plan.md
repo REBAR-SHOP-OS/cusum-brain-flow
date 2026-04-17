@@ -1,105 +1,73 @@
 
+
 ## درخواست کاربر
-وقتی کاربر کپشن را دستی تغییر می‌دهد، همان متن باید حفظ و ذخیره شود. سیستم تحت هیچ شرایطی نباید خودش دوباره کپشن انگلیسی بنویسد یا متن کاربر را overwrite کند، مگر فقط با کلیک صریح روی `Regenerate caption`.
+1. بخش "Internal reference only" همیشه ترجمه فارسی **کپشن** و **متن داخل عکس** را نمایش دهد (الان "ترجمه‌ای موجود نیست" نشان می‌دهد چون auto-translate برای پست‌های قدیمی trigger نشده).
+2. تأیید: این بخش هرگز publish نشود (در حال حاضر `stripPersian` در `usePublishPost.ts` این کار را می‌کند ✅).
+3. یک آیکون اضافه شود تا بتوان زبان‌های دیگر (مثلاً اسپانیایی، فرانسوی، عربی) را هم در این بخش دید.
 
-## ریشه‌ی مشکل
-مشکل اصلی هنوز در `src/components/social/PostReviewPanel.tsx` باقی مانده:
+## یافته‌ی فنی
+در `PostReviewPanel.tsx`:
+- خط 291-337: auto-translate effect فقط وقتی trigger می‌شود که `localContent` تغییر کند یا `lastTranslatedCaptionRef` خالی باشد. برای پست‌هایی که از قبل ساخته شده‌اند و `---PERSIAN---` در DB ندارند، effect باید روی mount اجرا شود — ولی اگر در همان لحظه `lastTranslatedCaptionRef === caption` بشود (مثلاً بعد از retry)، skip می‌شود.
+- شرط فعلی: `if (lastTranslatedCaptionRef.current === caption && (persianCaptionText || persianImageText)) return;` — این درست است، اگر ترجمه خالی باشد دوباره تلاش می‌کند.
+- مشکل واقعی: برای پست‌های قدیمی که قبل از deploy فیکس قبلی translate-caption صدا زده نشده، effect روی `[post?.id, localContent, localTitle]` وابسته است. هنگام navigate به پست، `localContent` ست می‌شود ولی شاید edge function fail کرده و silently warn زده باشد (`console.warn("Auto-translate failed:", err);`).
 
-1. **Auto-translate effect از منبع اشتباه برای save استفاده می‌کند**  
-   در effect خطوط `262-304` ترجمه بر اساس `localContent` انجام می‌شود، اما هنگام ذخیره در DB این کد اجرا می‌شود:
-   ```ts
-   const rawContent = post.content || "";
-   const baseContent = rawContent.includes("---PERSIAN---")
-     ? rawContent.slice(0, rawContent.indexOf("---PERSIAN---")).trim()
-     : rawContent;
-   updatePost.mutate({ id: post.id, content: baseContent + persianBlock });
-   ```
-   یعنی به‌جای کپشن فعلیِ تایپ‌شده توسط کاربر، از `post.content` قدیمی استفاده می‌شود.  
-   نتیجه: بعد از تایپ کاربر، mutation ترجمه می‌آید و کپشن قبلی را دوباره روی post می‌نویسد.
+علاوه بر این، edge function `translate-caption` فقط Persian تولید می‌کند — برای multi-language support باید یک پارامتر `targetLang` بپذیرد.
 
-2. **Sync effect همان داده‌ی overwrite‌شده را دوباره داخل textarea می‌ریزد**  
-   در effect خطوط `205-255`، هر بار `post.content` از query/realtime عوض شود، `localContent` دوباره از DB ست می‌شود.  
-   پس وقتی auto-translate کپشن قدیمی را ذخیره کرد، textarea هم با همان متن قدیمی reset می‌شود و کاربر حس می‌کند سیستم خودش کپشن نوشته است.
+`usePublishPost.ts` خط 7-13: `stripPersian` کاملاً Persian block را قبل از publish حذف می‌کند. ✅ پس بند ۲ نیازی به تغییر ندارد.
 
-3. **Upload / Regenerate image ظاهراً قبلاً درست شده‌اند**  
-   در نسخه‌ی فعلی:
-   - `handleMediaReady` دیگر caption regenerate نمی‌کند
-   - `Regenerate image` هم با `image_only: true` صدا زده می‌شود  
-   پس باگ فعلی از این دو مسیر نیست؛ از **auto-translate save path + resync path** است.
+## برنامه (Surgical, Additive)
 
-## برنامه‌ی اصلاح (Root-safe, Surgical)
+### ۱. اضافه کردن آیکون انتخاب زبان
+در `PostReviewPanel.tsx` خط 907-933 (همان box "Internal reference only"):
+- یک `Popover` با آیکون `Languages` (از lucide-react) در گوشه‌ی بالا-راست box
+- لیست زبان‌ها: فارسی (پیش‌فرض), اسپانیایی, فرانسوی, عربی, آلمانی
+- state جدید: `displayLang: "fa" | "es" | "fr" | "ar" | "de"` (پیش‌فرض `fa`)
+- state جدید: `translations: Record<string, { caption: string; imageText: string }>` برای cache کردن ترجمه‌های دیگر
 
-### ۱. ساختن helper واحد برای editable caption
-در `PostReviewPanel.tsx` یک helper کوچک اضافه شود:
-```ts
-function stripPersianBlock(content: string) {
-  const idx = content.indexOf("---PERSIAN---");
-  return idx === -1 ? content.trim() : content.slice(0, idx).trim();
-}
+### ۲. گسترش `translate-caption` edge function
+- اضافه کردن پارامتر اختیاری `targetLang` (پیش‌فرض `fa`)
+- prompt به‌صورت داینامیک نام زبان مقصد را بگیرد
+- response keys ثابت بمانند: `{ captionFa, imageTextFa }` → نام‌گذاری generic: `{ captionTranslated, imageTextTranslated }` ولی برای backward-compat هر دو key را برگردانیم.
+
+### ۳. تضمین trigger ترجمه برای همه‌ی پست‌ها
+- در sync effect (خط 240-284): اگر post.content فاقد `---PERSIAN---` بود **و** `localContent` غیرخالی بود، `lastTranslatedCaptionRef.current` را reset کنیم تا effect ترجمه دوباره trigger شود.
+- در صورت fail بودن edge function، یک retry button کوچک (آیکون `RefreshCw`) داخل box اضافه کنیم.
+
+### ۴. ذخیره‌سازی ترجمه‌های زبان‌های اضافی
+- ترجمه‌های غیر-Persian فقط در state کلاینت cache شوند (نه در DB)، چون فقط reference هستند و هزینه‌ی ذخیره ندارند. وقتی panel بسته/باز شد، یا کاربر روی آیکون زبان جدید کلیک کرد، یک fetch جدید انجام می‌شود.
+- Persian همچنان در `---PERSIAN---` ذخیره می‌شود (تغییری در DB schema نیست).
+
+### ۵. UX بخش "Internal reference"
 ```
-این helper در همه‌ی مسیرها استفاده شود تا منبع caption همیشه یکدست باشد.
-
-### ۲. اصلاح قطعی auto-translate save
-در effect ترجمه:
-- `baseContent` دیگر از `post.content` گرفته نشود
-- فقط از **`localContent` فعلی کاربر** ساخته شود
-- Persian block فقط append شود، بدون هیچ rewrite روی caption اصلی
-
-منطق جدید:
-```ts
-const editableCaption = localContent.trim();
-const contentToSave = editableCaption
-  ? `${editableCaption}\n\n---PERSIAN---\n...`
-  : `---PERSIAN---\n...`
+┌──────────────────────────────────────────────┐
+│ 🔒 Internal reference only — not published 🌐│  ← آیکون Languages
+│ 🖼️ Image text:    ترجمه‌ی متن عکس           │
+│ 📝 Caption:       ترجمه‌ی کپشن               │
+└──────────────────────────────────────────────┘
 ```
-یعنی:
-- اگر کاربر کپشن نوشته، همان متن پایه می‌ماند
-- اگر کپشن خالی است، سیستم هنوز هم caption انگلیسی تولید نمی‌کند
+- `dir` بسته به زبان انتخابی (`rtl` برای fa/ar، `ltr` برای بقیه) داینامیک شود.
 
-### ۳. حذف هر fallback که ممکن است caption بسازد
-در effect ترجمه این خط:
-```ts
-const caption = localContent || localTitle || "";
-```
-به این تبدیل شود:
-```ts
-const caption = localContent.trim();
-```
-تا title هرگز به‌عنوان caption استفاده نشود.  
-این با دستور کاربر هم‌راستا است: caption فقط یا دستی نوشته شود یا با regenerate صریح.
-
-### ۴. مقاوم‌سازی sync از DB تا تایپ کاربر overwrite نشود
-در sync effect مربوط به `post.content`:
-- اگر همان post باز است و کاربر در حال edit دستی است، `localContent` فقط وقتی sync شود که مقدار جدید DB با آخرین save محلی هم‌خوان باشد
-- یک ref مثل `lastSubmittedContentRef` یا `isDirtyRef` اضافه شود تا refresh/realtime نتواند متن در حال تایپ را بی‌دلیل overwrite کند
-
-حداقل safeguard:
-- هنگام `flushSave` آخرین editable caption ذخیره شود
-- هنگام sync، اگر incoming content از آخرین submitted content عقب‌تر بود، روی textarea اعمال نشود
-
-### ۵. یکپارچه‌سازی save pathها
-هم `flushSave` و هم auto-translate از یک helper مشترک مثل `buildPostContent(editableCaption, persianImageText, persianCaptionText)` استفاده کنند تا:
-- caption دستی همیشه source of truth بماند
-- Persian block فقط metadata داخلی باشد
-- اختلاف بین دو مسیر save از بین برود
-
-### ۶. بدون تغییر در regenerate caption
-دکمه‌ی `Regenerate caption` همان‌طور که هست مجاز باقی بماند، چون explicit user action است.  
-اما فقط همان دکمه اجازه‌ی نوشتن caption جدید را داشته باشد.
+### ۶. تضمین عدم publish (بدون تغییر — فقط verify)
+- `usePublishPost.ts` `stripPersian` قبل از ارسال به social-publish فراخوانی می‌شود ✅
+- `PixelChatRenderer.tsx` و `PixelPostCard.tsx` هم Persian block را separate render می‌کنند ✅
+- نیازی به تغییر در publish path نیست.
 
 ## فایل‌های تغییرکننده
-- `src/components/social/PostReviewPanel.tsx`
+- `src/components/social/PostReviewPanel.tsx` — افزودن آیکون Languages، state چند-زبانه، popover، retry trigger
+- `supabase/functions/translate-caption/index.ts` — پذیرش پارامتر `targetLang`، prompt داینامیک، response با key مناسب
 
 ## آنچه دست‌نخورده می‌ماند
-- `regenerate-post` edge function
-- upload media behavior
-- `image_only` regenerate image behavior
-- Persian translation feature به‌عنوان reference داخلی
-- DB schema / RLS / سایر ماژول‌ها
+- `usePublishPost.ts` (Persian strip از قبل OK)
+- `social-publish` edge function
+- DB schema / RLS / `social_posts` table
+- `PixelPostCard.tsx` و `PixelChatRenderer.tsx`
+- منطق auto-save و auto-translate برای Persian
+- زبان UI: انگلیسی
 
 ## نتیجه‌ی مورد انتظار
-1. کاربر هر متنی در Caption بنویسد، همان متن حفظ و save می‌شود
-2. Auto-translate فقط Persian block را به‌روزرسانی می‌کند، نه caption انگلیسی را
-3. Title دیگر هرگز به‌صورت خودکار به caption تبدیل نمی‌شود
-4. Realtime/query refresh دیگر متن در حال تایپ کاربر را overwrite نمی‌کند
-5. سیستم فقط با کلیک صریح روی `Regenerate caption` مجاز به تولید caption است
+1. ✅ بخش Internal Reference همیشه ترجمه را نشان می‌دهد (با retry برای پست‌های قدیمی)
+2. ✅ کاربر با کلیک روی آیکون 🌐 می‌تواند زبان نمایش را تغییر دهد (fa/es/fr/ar/de)
+3. ✅ ترجمه‌ها cache می‌شوند تا fetch مکرر نشود
+4. ✅ این بخش تحت هیچ شرایطی publish نمی‌شود (verified)
+5. ✅ زبان UI انگلیسی، محتوای ترجمه به زبان انتخابی
+
