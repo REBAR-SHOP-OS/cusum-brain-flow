@@ -1,57 +1,34 @@
 
+## مشکل
+در بخش "Recent projects / Your Previous Videos" فقط یک کارت قدیمی نشان داده می‌شود. کاربر می‌خواهد **هر پروژه‌ای که ساخته می‌شود** (چه draft، چه completed، چه در حال generation) در این لیست ظاهر شود.
 
-## Problem
-After analyzing and generating, the user expects to **always** land on the **Result view** (image-528) which shows the "Generated Scenes" card gallery with each scene as a clickable thumbnail (and a retry button for failed ones).
+## بررسی لازم
+باید چند فایل را چک کنم تا ریشه را پیدا کنم:
+1. `VideoHistory.tsx` — چطور لیست را می‌خواند
+2. `useAdProjectHistory.ts` — کوئری از DB و فیلترها
+3. `AdDirectorContent.tsx` و `backgroundAdDirectorService.ts` — کجا `saveProject` صدا می‌شود
 
-But currently, in `backgroundAdDirectorService.ts` line 678-688: if **any** scene fails after retries (`unresolvedCount > 0`), the pipeline jumps to `flowState: "editing"` (ProVideoEditor — full timeline editor) instead of `"result"`. The user never sees the simple cards view in this case.
+## فرضیه‌های احتمالی (نیاز به verify)
+1. **Query محدود است** — مثلاً فقط پروژه‌های با `status='completed'` یا فقط با `final_video_url != null` نشان داده می‌شوند، پس draftهای جدید/ناقص فیلتر می‌شوند.
+2. **saveProject فقط یک‌بار صدا می‌شود** — در ابتدای generation با initial clips. اگر کاربر قبل از کلیک "Create video" پروژه را آغاز نکند، رکوردی ساخته نمی‌شود.
+3. **Realtime subscription نیست** — لیست فقط در mount کوئری می‌گیرد، پس پروژه‌های جدیدی که در همین session ساخته می‌شوند تا refresh دیده نمی‌شوند.
+4. **کوئری limit دارد** (مثلاً `.limit(1)` یا `.limit(5)`) که باعث می‌شود فقط آخرین یک پروژه نمایش داده شود.
 
-## Root Cause
-```ts
-// backgroundAdDirectorService.ts line 682
-if (unresolvedCount > 0) {
-  this.update({ flowState: "editing", ... });  // ← wrong destination
-  return;
-}
-// ... later
-this.update({ flowState: "result", ... });  // ← only reached when 100% succeed
-```
+## برنامه (Surgical)
 
-The Result view already handles partial failures gracefully (line 550-560 in `AdDirectorContent.tsx`): failed scenes show an `AlertCircle` icon with a `RefreshCw` retry button — exactly what the user wants.
+### گام ۱ — بررسی فایل‌ها
+خواندن `VideoHistory.tsx`، `useAdProjectHistory.ts`، و بخش‌های مرتبط `AdDirectorContent.tsx` تا بفهمم دقیقاً کجا فیلتر/limit اعمال می‌شود.
 
-## Fix (single file, surgical)
+### گام ۲ — Fix احتمالی (بعد از تأیید)
+- **در `useAdProjectHistory.ts`**: حذف هر فیلتری که draftها یا پروژه‌های in-progress را پنهان می‌کند. کوئری باید `select('*').order('updated_at', { ascending: false })` باشد بدون فیلتر روی status.
+- **در `backgroundAdDirectorService.ts`**: اطمینان از اینکه `saveProject` همان لحظه‌ای که کاربر "Create video" می‌زند (یا حتی "Analyze") صدا زده می‌شود تا رکورد فوراً در DB ثبت شود (پیش از این در ابتدای pipeline اضافه شد).
+- **افزودن Realtime subscription** در `useAdProjectHistory.ts` با channel یکتا (طبق memory `subscription-standards`) تا هر insert/update روی `ad_projects` فوراً در لیست reflect شود — بدون نیاز به refresh.
+- **حذف هر `limit()`** که لیست را به n مورد محدود می‌کند (یا تبدیل به limit بزرگتر مثل 50).
 
-**`src/lib/backgroundAdDirectorService.ts`** (lines ~678-695):
+### آنچه تغییر نمی‌کند
+- Schema جدول `ad_projects` — بدون تغییر
+- UI کارت `VideoHistory` و دکمه‌های Resume/Delete — بدون تغییر  
+- منطق sanitization `blob:` URLs — بدون تغییر
 
-1. **Always go to `flowState: "result"`** after generation completes — regardless of whether some scenes failed.
-2. Still attempt the stitch/export when possible; if some scenes failed, skip stitching but show the cards.
-3. Keep the toast warning so the user knows some scenes need retry, but don't redirect them to the editor.
-
-```ts
-const unresolvedCount = this.state.clips.filter(c => c.status !== "completed" || !c.videoUrl).length;
-
-if (unresolvedCount > 0) {
-  toast.warning(`${unresolvedCount} scene(s) failed. Click the retry icon on each card.`);
-  // DO NOT switch to editing — stay on result view so user sees all cards
-} else {
-  // All succeeded → stitch final video
-  this.update({ statusText: "Assembling final video...", progressValue: 90 });
-  await this.handleExportInternal(storyboardWithDefaults, newSegments, brand);
-  await this.uploadCompletedClips();
-}
-
-this.update({ flowState: "result", statusText: "", progressValue: 100 });
-this.running = false;
-```
-
-## What Stays the Same
-- Result view UI (cards gallery, retry buttons, preview player) — no change
-- ProVideoEditor — still accessible via "Approve Composition" → "Edit Video" button
-- Scene retry logic (`handleRegenerateScene`) — no change
-- DB sync on completion — no change
-
-## Result
-- After analyze + generate → **always** lands on Result view with scene cards visible
-- Failed scenes show retry icon directly on the card (existing behavior)
-- Successful scenes show video thumbnails as before
-- User can preview, retry individual failures, save draft, or approve to enter the editor — all from the cards view
-
+### نتیجه
+هر پروژه‌ای که شروع به ساخت می‌شود (حتی نیمه‌تمام، failed، یا draft) **بلافاصله** در "Your Previous Videos" ظاهر می‌شود و با هر تغییر state (تکمیل scene، export نهایی، retry) **realtime** آپدیت می‌شود.
