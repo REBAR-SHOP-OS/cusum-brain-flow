@@ -1,66 +1,41 @@
 
-## درک درخواست
-کاربر می‌خواهد در همان نوار پایین (کنار دکمه‌ی "AI Prompt")، یک **آیکون جدید** اضافه شود که مخصوص نوشتن **prompt اختصاصی برای Character** باشد — یعنی متنی که شخصیت باید بگوید/انجام دهد. مشابه دکمه‌ی AI Prompt اما scope آن فقط character است.
-
-## بررسی لازم
-خواندن:
-- `ChatPromptBar.tsx` — جای دکمه‌ی AI Prompt
-- `AIPromptDialog.tsx` — برای الگوبرداری dialog
-- state container که `characterImageUrl` در آن نگهداری می‌شود (احتمالاً `useAdDirector` یا مشابه)
+## درخواست
+کاربر می‌خواهد فضای خالی بالای کارت references در Ad Director (دایره‌ی قرمز در screenshot) به **لوگوی شرکت** اختصاص داده شود. فایل `LOGO.png` آپلود شده.
 
 ## برنامه (Surgical, Additive)
 
-### ۱. افزودن state جدید
-در همان hook که `characterImageUrl` را نگه می‌دارد:
-```ts
-characterPrompt: string  // متن اختصاصی character
-setCharacterPrompt: (v: string) => void
+### ۱. کپی لوگو
 ```
+lov-copy user-uploads://LOGO.png src/assets/company-logo.png
+```
+(در `src/assets` تا توسط Vite بهینه‌سازی و bundle شود.)
 
-### ۲. افزودن دکمه‌ی آیکون در `ChatPromptBar.tsx`
-کنار دکمه‌ی "AI Prompt"، یک دکمه‌ی کوچک با آیکون `UserSquare` (یا `MessageSquareQuote`) اضافه می‌شود:
-- **Disabled** اگر `characterImageUrl` وجود نداشته باشد (با tooltip: "Upload a character first")
-- **فعال + dot indicator** اگر prompt قبلاً نوشته شده
-- کلیک → باز شدن dialog جدید `CharacterPromptDialog`
+### ۲. افزودن لوگو در بالای `ChatPromptBar.tsx`
+دقیقاً قبل از `<div className="grid gap-3 md:grid-cols-3">` (خط 368)، یک header کوچک و تمیز اضافه می‌شود:
 
 ```tsx
-<Button
-  variant="outline" size="sm"
-  disabled={!characterImageUrl}
-  onClick={() => setCharacterDialogOpen(true)}
->
-  <UserSquare className="h-4 w-4" />
-  Character
-  {characterPrompt && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-primary" />}
-</Button>
+import companyLogo from "@/assets/company-logo.png";
+
+<div className="flex justify-center pb-2">
+  <img
+    src={companyLogo}
+    alt="Company logo"
+    className="h-16 w-16 md:h-20 md:w-20 object-contain drop-shadow-[0_0_20px_rgba(234,179,8,0.25)]"
+  />
+</div>
 ```
 
-### ۳. ساخت `CharacterPromptDialog.tsx` (الگوگرفته از `AIPromptDialog`)
-- Textarea با placeholder: "What should the character say or do? e.g. 'Introduce our company REBAR SHOP and invite viewers to request a quote.'"
-- Preview thumbnail کوچک از character image در بالای dialog
-- پشتیبانی RTL خودکار (همان `detectRtl`)
-- دکمه‌ی "✨ Improve with AI" که با Lovable AI (`google/gemini-3-flash-preview`) متن را cinematic و promotional می‌کند
-- دکمه‌های "Cancel" و "Save"
+ویژگی‌ها:
+- وسط‌چین، اندازه‌ی متناسب (64-80px) — همان نقطه‌ی دایره‌ی قرمز
+- `object-contain` تا نسبت تصویر حفظ شود
+- یک `drop-shadow` ملایم طلایی که با رنگ سکه‌ی لوگو هماهنگ است (اختیاری ولی تمیز)
+- responsive: کوچک‌تر در موبایل، بزرگ‌تر در desktop
 
-### ۴. تزریق در پایپلاین generation
-در `backgroundAdDirectorService.ts` در همان نقطه‌ای که `characterImageUrl` چک می‌شود، اگر `characterPrompt` تعریف شده، آن را به‌عنوان **override برای narrationLine** همه scene‌های middle (که از character استفاده می‌کنند) اعمال می‌کند — یا حداقل به prompt تکمیلی اضافه می‌شود تا Wan2.6-i2v بداند شخصیت چه کاری انجام دهد:
+### آنچه تغییر نمی‌کند
+- کارت‌های Intro/Character/Outro — بدون تغییر
+- نوار prompt و دکمه‌های Style/Products/AI Prompt/Character/Create — بدون تغییر
+- صفحه‌های دیگر (loading, result, editor) — بدون تغییر
+- منطق generation — بدون تغییر
 
-```ts
-const enhancedPrompt = characterPrompt
-  ? `${scene.prompt}\n\nCharacter action/dialogue: ${characterPrompt}`
-  : scene.prompt;
-```
-
-و در فاز voiceover (در پیاده‌سازی بعدی)، اگر `characterPrompt` موجود باشد، **به‌جای** narrationLine هر scene از این متن استفاده می‌شود.
-
-### ۵. Persistence
-- ذخیره در همان رکورد `ad_projects` (ستون جدید `character_prompt text` با migration)
-- بازیابی هنگام Resume draft
-
-## آنچه تغییر نمی‌کند
-- دکمه‌ی AI Prompt و dialog آن — بدون تغییر
-- ReferenceUploadCard و آپلود character image — بدون تغییر
-- منطق force I2V (همان فاز قبل) — بدون تغییر
-
-## نتیجه
-کنار دکمه‌ی AI Prompt یک آیکون "Character" ظاهر می‌شود. وقتی کاربر یک character آپلود کند، این دکمه فعال می‌شود و با کلیک یک dialog باز می‌کند که می‌تواند متن اختصاصی برای دیالوگ/عملکرد آن شخصیت بنویسد. این متن در همه scene‌های مربوط به character اعمال می‌شود.
+### نتیجه
+لوگوی شرکت دقیقاً در همان نقطه‌ای که کاربر در screenshot دایره کشیده، بالای کارت references نمایش داده می‌شود.
