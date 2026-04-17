@@ -655,6 +655,7 @@ export async function stitchClips(
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
   const subtitleSegments = overlays?.subtitles?.enabled ? overlays.subtitles.segments : [];
+  const editorTextOverlays = overlays?.textOverlays || [];
   let cumulativeTime = 0;
 
   return new Promise((resolve, reject) => {
@@ -663,6 +664,8 @@ export async function stitchClips(
     recorder.onstop = async () => {
       if (voiceElement) voiceElement.pause();
       if (musicElement) musicElement.pause();
+      extraTrackEls.forEach(t => { try { t.el.pause(); } catch {} });
+      clipAudioEls.forEach(el => { if (el) { try { el.pause(); } catch {} } });
       if (audioCtx) audioCtx.close().catch(() => {});
 
       // Phase 3: Post-stitch validation
@@ -689,6 +692,14 @@ export async function stitchClips(
     if (musicElement) {
       musicElement.play().catch(() => console.warn("[stitchClips] Music play failed"));
     }
+    // Start extra editor tracks that begin at t=0; later ones get started in the loop.
+    extraTrackEls.forEach(t => {
+      const start = t.track.globalStartTime ?? 0;
+      if (start <= 0) {
+        t.started = true;
+        t.el.play().catch(() => console.warn("[stitchClips] Extra track play failed"));
+      }
+    });
 
     // Phase 2: Render clips with crossfade transitions
     let clipIndex = 0;
