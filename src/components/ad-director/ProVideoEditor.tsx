@@ -557,34 +557,37 @@ export function ProVideoEditor({
   // Seed audio tracks from the generation pipeline (voiceover + background music)
   // so the user sees them as editable timeline tracks the moment they open the editor.
   useEffect(() => {
-    if (tracksSeededRef.current) return;
     if (!storyboard.length) return;
-    const seeded: AudioTrackItem[] = [];
-    if (voiceoverUrl) {
-      seeded.push({
-        sceneId: storyboard[0].id,
-        label: "🎙️ Voiceover",
-        audioUrl: voiceoverUrl,
-        kind: "voiceover",
-        volume: 1,
-        globalStartTime: 0,
-      });
-    }
-    if (musicTrackUrl) {
-      seeded.push({
-        sceneId: "",
-        label: "🎵 Background Music",
-        audioUrl: musicTrackUrl,
-        kind: "music",
-        volume: 0.5,
-        globalStartTime: 0,
-      });
-      setMusicUrl(musicTrackUrl);
-    }
-    if (seeded.length) {
-      setAudioTracks(seeded);
-      tracksSeededRef.current = true;
-    }
+    setAudioTracks(prev => {
+      const next = [...prev];
+      let changed = false;
+      // Voiceover from props — add only if not already present
+      if (voiceoverUrl && !next.some(t => t.kind === "voiceover" && t.audioUrl === voiceoverUrl)) {
+        next.push({
+          sceneId: storyboard[0].id,
+          label: "🎙️ Voiceover",
+          audioUrl: voiceoverUrl,
+          kind: "voiceover",
+          volume: 1,
+          globalStartTime: 0,
+        });
+        changed = true;
+      }
+      // Music from props — add only if no music track exists yet
+      if (musicTrackUrl && !next.some(t => t.kind === "music")) {
+        next.push({
+          sceneId: "",
+          label: "🎵 Background Music",
+          audioUrl: musicTrackUrl,
+          kind: "music",
+          volume: 0.5,
+          globalStartTime: 0,
+        });
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+    if (musicTrackUrl) setMusicUrl(prev => prev ?? musicTrackUrl);
   }, [voiceoverUrl, musicTrackUrl, storyboard]);
 
   // Dedup set used by the auto-extract effect (declared early; effect is registered
@@ -762,48 +765,54 @@ export function ProVideoEditor({
     return () => { cancelled = true; };
   }, [clips, storyboard, cumulativeStarts, sceneDurations]);
 
-  // ─── Auto-seed text overlay bars per scene ──────────────────
-  // Surfaces caption text on the Text lane so users see what's there and can delete it.
-  // We only seed scenes that have voiceover/segment text and no existing text overlay.
-  const seededTextScenesRef = useRef<Set<string>>(new Set());
+  // ─── Deterministic text-overlay seeding per scene ───────────
+  // Idempotent: every time storyboard changes (load, add, split, regenerate),
+  // ensure each scene has a text bar in the Text lane — unless the user has
+  // explicitly removed it. Falls back through several content sources so a bar
+  // is created even when voiceover hasn't been generated yet.
+  const userRemovedTextScenesRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!storyboard.length) return;
     const newOverlays: VideoOverlay[] = [];
     for (let i = 0; i < storyboard.length; i++) {
       const scene = storyboard[i];
-      const seg = segments.find(s => s.id === scene.segmentId);
-      const text = (scene.voiceover || seg?.text || "").trim();
-      if (!text) continue;
-      if (seededTextScenesRef.current.has(scene.id)) continue;
+      if (userRemovedTextScenesRef.current.has(scene.id)) continue;
       // Skip if a text overlay already exists for this scene
-      if (overlays.some(o => o.kind === "text" && o.sceneId === scene.id)) {
-        seededTextScenesRef.current.add(scene.id);
-        continue;
-      }
+      if (overlays.some(o => o.kind === "text" && o.sceneId === scene.id)) continue;
+      const seg = segments.find(s => s.id === scene.segmentId);
+      const text = (
+        scene.voiceover ||
+        seg?.text ||
+        scene.subjectAction ||
+        scene.objective ||
+        scene.prompt ||
+        ""
+      ).trim();
+      if (!text) continue;
       const sceneDur = sceneDurations[i] || 4;
       newOverlays.push({
         id: crypto.randomUUID(),
         kind: "text" as const,
         position: { x: 5, y: 82 },
         size: { w: 90, h: 12 },
-        content: text,
+        content: text.length > 140 ? text.slice(0, 140) + "…" : text,
         opacity: 0.95,
         sceneId: scene.id,
         animated: false,
         startTime: 0,
         endTime: sceneDur,
       });
-      seededTextScenesRef.current.add(scene.id);
     }
     if (newOverlays.length) {
       setOverlays(prev => [...prev, ...newOverlays]);
     }
-    // Clean up scenes that no longer exist
+    // Clean up: forget user-removed flags for scenes that no longer exist,
+    // so that re-adding a scene with the same id will re-seed.
     const validIds = new Set(storyboard.map(s => s.id));
-    Array.from(seededTextScenesRef.current).forEach(id => {
-      if (!validIds.has(id)) seededTextScenesRef.current.delete(id);
+    Array.from(userRemovedTextScenesRef.current).forEach(id => {
+      if (!validIds.has(id)) userRemovedTextScenesRef.current.delete(id);
     });
-  }, [storyboard, segments, sceneDurations]);
+  }, [storyboard, segments, sceneDurations, overlays]);
 
   // Helper: split text into caption chunks of ~4-6 words
   const splitIntoChunks = useCallback((text: string, maxWords = 5): string[] => {
@@ -1185,7 +1194,14 @@ export function ProVideoEditor({
 
   const handleDeleteOverlay = useCallback((id: string) => {
     pushHistory();
-    setOverlays(prev => prev.filter(o => o.id !== id));
+    setOverlays(prev => {
+      const removed = prev.find(o => o.id === id);
+      // If user explicitly removes a text bar, don't auto-reseed it for this scene
+      if (removed?.kind === "text" && removed.sceneId) {
+        userRemovedTextScenesRef.current.add(removed.sceneId);
+      }
+      return prev.filter(o => o.id !== id);
+    });
   }, [pushHistory]);
 
 
