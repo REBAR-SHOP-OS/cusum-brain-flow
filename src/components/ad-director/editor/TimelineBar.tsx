@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { ClipOutput, StoryboardScene, ScriptSegment } from "@/types/adDirector";
 import type { VideoOverlay } from "@/types/videoOverlay";
+import { ClipTransitionPopover, type ClipTransition } from "./ClipTransitionPopover";
 
 // ─── Thumbnail extraction helper ───────────────────────────
 function useVideoThumbnails(clips: ClipOutput[]) {
