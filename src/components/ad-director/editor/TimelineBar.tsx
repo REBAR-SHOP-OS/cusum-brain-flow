@@ -150,6 +150,9 @@ interface TimelineBarProps {
   onTogglePlay?: () => void;
   onFrameStep?: (dir: -1 | 1) => void;
   onSkipScene?: (dir: -1 | 1) => void;
+  // Per-clip transitions
+  clipTransitions?: Record<string, ClipTransition>;
+  onClipTransitionChange?: (sceneId: string, transition: ClipTransition) => void;
 }
 
 export function TimelineBar({
