@@ -413,6 +413,7 @@ export function ProVideoEditor({
   }, [toast]);
 
   const handleAddSubtitle = useCallback((overlay: VideoOverlay) => {
+    pushHistoryFnRef.current();
     setOverlays(prev => [...prev, overlay]);
     toast({ title: "✅ Subtitle added" });
   }, [toast]);
