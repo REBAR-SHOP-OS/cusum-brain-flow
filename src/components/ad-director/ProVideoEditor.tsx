@@ -1853,7 +1853,7 @@ export function ProVideoEditor({
           }}
         >
           {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-          {saving ? "در حال ذخیره…" : "ذخیره"}
+          {saving ? "Saving…" : "Save"}
           {hasChanges && !saving && (
             <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />
           )}
@@ -1864,10 +1864,10 @@ export function ProVideoEditor({
           size="sm"
           className="h-7 text-[10px] gap-1"
           disabled={hasChanges}
-          title={hasChanges ? "ابتدا تغییرات را ذخیره کنید" : "دانلود ویدئو"}
+          title={hasChanges ? "Save changes first" : "Download video"}
           onClick={() => {
             const url = finalVideoUrl || videoSrc;
-            if (!url) { toast({ title: "ویدئویی برای دانلود وجود ندارد" }); return; }
+            if (!url) { toast({ title: "No video available to download" }); return; }
             const fname = `${brand.name || "video"}-ad.mp4`;
             downloadFile(url, fname, { provider: "wan" });
           }}
