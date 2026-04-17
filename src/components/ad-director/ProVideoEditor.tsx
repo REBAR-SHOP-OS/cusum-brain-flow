@@ -233,6 +233,11 @@ export function ProVideoEditor({
     return () => document.body.classList.remove("hide-floating-widgets");
   }, []);
 
+  // Forward-ref for pushHistory so early useCallbacks can call it before its definition.
+  // The actual implementation is wired to this ref further down.
+  const pushHistoryFnRef = useRef<() => void>(() => {});
+  const pushHistoryDebouncedFnRef = useRef<() => void>(() => {});
+
   const ASPECT_RATIOS: Record<string, string> = {
     "16:9": "16/9",
     "9:16": "9/16",
