@@ -586,15 +586,15 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
                 <Button
                   type="button"
                   variant="ghost"
-                  onClick={handleAiWrite}
-                  disabled={disabled || aiWriting}
+                  onClick={() => setAiDialogOpen(true)}
+                  disabled={disabled}
                   className="h-10 rounded-xl border border-white/10 bg-slate-800/60 px-3 text-sm font-medium text-white/70 hover:bg-slate-700/80 hover:text-white gap-1.5"
                 >
-                  {aiWriting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                  {aiWriting ? "Writing..." : "AI Prompt"}
+                  <Wand2 className="h-4 w-4" />
+                  AI Prompt
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">AI writes the prompt based on your selections</TooltipContent>
+              <TooltipContent side="top">Open AI prompt writer</TooltipContent>
             </Tooltip>
 
             <div className="flex items-center gap-2">
@@ -607,6 +607,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
                 <Send className="ml-2 h-4 w-4" />
               </Button>
             </div>
+
           </div>
         </div>
       </div>
