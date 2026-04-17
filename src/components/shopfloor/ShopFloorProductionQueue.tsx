@@ -55,7 +55,7 @@ export function ShopFloorProductionQueue() {
     queryFn: async () => {
       const { data } = await supabase
         .from("cut_plans")
-        .select("id, name, status, machine_id, project_id, machines(name)")
+        .select("id, name, status, machine_id, project_id, barlist_id, machines(name)")
         .eq("company_id", companyId!)
         .in("project_id", projectIds);
       return (data || []).map((row: any) => ({
@@ -65,6 +65,7 @@ export function ShopFloorProductionQueue() {
         machine_id: row.machine_id,
         machine_name: row.machines?.name || null,
         project_id: row.project_id,
+        barlist_id: row.barlist_id,
       })) as CutPlanForBarlist[];
     },
   });
