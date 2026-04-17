@@ -1,12 +1,41 @@
-import { useState, useRef } from "react";
-import { Clapperboard, Sparkles, SkipForward } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Clapperboard, Sparkles, SkipForward, Volume2, VolumeX } from "lucide-react";
 import { AdDirectorContent } from "@/components/ad-director/AdDirectorContent";
 import { AdDirectorErrorBoundary } from "@/components/ad-director/AdDirectorErrorBoundary";
 
 export default function AdDirector() {
   const [isEditing, setIsEditing] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!showIntro) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.muted = false;
+    video.play().catch(() => {
+      // Browser blocked unmuted autoplay — fall back to muted playback
+      video.muted = true;
+      setIsMuted(true);
+      video.play().catch(() => {
+        // If even muted playback fails, just skip the intro
+        setShowIntro(false);
+      });
+    });
+  }, [showIntro]);
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    const next = !isMuted;
+    video.muted = next;
+    setIsMuted(next);
+    if (!next) {
+      video.play().catch(() => {});
+    }
+  };
 
   if (showIntro) {
     return (
@@ -16,11 +45,19 @@ export default function AdDirector() {
           src="/videos/ad-director-intro.mp4"
           autoPlay
           playsInline
-          muted
+          controls={false}
           className="w-full h-full object-contain"
           onEnded={() => setShowIntro(false)}
           onError={() => setShowIntro(false)}
         />
+        <button
+          onClick={toggleMute}
+          aria-label={isMuted ? "Unmute" : "Mute"}
+          className="absolute bottom-8 right-32 flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 text-sm text-white/80 hover:bg-white/20 transition-colors"
+        >
+          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          {isMuted ? "Unmute" : "Mute"}
+        </button>
         <button
           onClick={() => setShowIntro(false)}
           className="absolute bottom-8 right-8 flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/20 px-4 py-2 text-sm text-white/80 hover:bg-white/20 transition-colors"
