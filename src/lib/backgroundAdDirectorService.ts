@@ -950,6 +950,59 @@ class BackgroundAdDirectorService {
     }
   }
 
+  // ─── Proxy Veo authenticated video → Supabase Storage URL ──
+  // Veo's Gemini Files URL requires x-goog-api-key header, which a plain
+  // <video src=...> cannot send. Ask the edge function to download it
+  // server-side with auth and re-upload to public Storage.
+  private async proxyAuthenticatedVideo(
+    provider: "wan" | "veo" | "sora",
+    jobId: string,
+    remoteUrl: string,
+  ): Promise<string | null> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return null;
+
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({
+          action: "download",
+          provider,
+          videoUrl: remoteUrl,
+          jobId,
+          persist: true, // ask edge function to upload to Storage and return JSON { url }
+        }),
+      });
+
+      if (!resp.ok) {
+        console.warn("[bgService] proxyAuthenticatedVideo non-OK:", resp.status);
+        return null;
+      }
+
+      const ctype = resp.headers.get("Content-Type") || "";
+      if (ctype.includes("application/json")) {
+        const data = await resp.json();
+        if (data?.url) return data.url as string;
+        if (data?.error) console.warn("[bgService] proxy error:", data.error);
+        return null;
+      }
+
+      // Fallback: binary blob — create object URL (session-only, but stitch
+      // happens inside this session so that's acceptable).
+      const blob = await resp.blob();
+      if (blob.size === 0) return null;
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.error("[bgService] proxyAuthenticatedVideo failed:", e);
+      return null;
+    }
+  }
+
   // ─── Poll ──────────────────────────────────────
   private async pollGeneration(sceneId: string, generationId: string, provider: "wan" | "veo" | "sora" = "wan") {
     const maxAttempts = 120;
@@ -962,17 +1015,38 @@ class BackgroundAdDirectorService {
       const pollDelay = i < 10 ? 3000 : 5000;
       await new Promise(r => setTimeout(r, pollDelay));
       try {
-        const result = await invokeEdgeFunction<{ status?: string; videoUrl?: string; url?: string }>(
+        const result = await invokeEdgeFunction<{
+          status?: string;
+          videoUrl?: string;
+          url?: string;
+          needsAuth?: boolean;
+          needsGeminiAuth?: boolean;
+        }>(
           "generate-video", { action: "poll", jobId: generationId, provider }
         );
         consecutiveErrors = 0;
         if (result.status === "completed" || result.videoUrl || result.url) {
-          const videoUrl = result.videoUrl || result.url;
+          let videoUrl = result.videoUrl || result.url;
           if (!videoUrl) {
             this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: "No video URL", progress: 0 } : c));
             return;
           }
-          this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl, progress: 100 } : c));
+
+          // Veo (and any provider flagged needsAuth) URLs require API-key
+          // headers the browser can't send. Proxy through edge function to
+          // get a plain public Supabase Storage URL.
+          const needsProxy = result.needsAuth || result.needsGeminiAuth;
+          if (needsProxy) {
+            const proxied = await this.proxyAuthenticatedVideo(provider, generationId, videoUrl);
+            if (proxied) {
+              videoUrl = proxied;
+            } else {
+              console.warn("[bgService] Proxy failed for scene", sceneId, "— falling back to raw URL (likely unplayable)");
+            }
+          }
+
+          const finalUrl = videoUrl;
+          this.updateClips(clips => clips.map(c => c.sceneId === sceneId ? { ...c, status: "completed" as const, videoUrl: finalUrl, progress: 100 } : c));
           return;
         }
         if (result.status === "failed") {
