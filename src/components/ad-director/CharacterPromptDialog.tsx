@@ -173,7 +173,7 @@ export function CharacterPromptDialog({
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            Improve with AI
+            {text.trim().length === 0 ? "Write with AI" : "Improve with AI"}
           </Button>
           <Button variant="ghost" onClick={onClose} disabled={improving}>
             Cancel
