@@ -944,9 +944,10 @@ export function TimelineBar({
                 const sceneDur = getSceneDur(idx);
                 const itemStart = ov.startTime ?? 0;
                 const itemEnd = ov.endTime ?? sceneDur;
-                const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-                const leftPct = 0;
-                const widthPct = (absEnd / totalDuration) * 100;
+                const clampedEnd = Math.min(itemEnd, sceneDur);
+                let leftPct = totalDuration > 0 ? ((sceneStart + itemStart) / totalDuration) * 100 : 0;
+                let widthPct = totalDuration > 0 ? ((clampedEnd - itemStart) / totalDuration) * 100 : 0;
+                if (leftPct + widthPct > 100) widthPct = Math.max(0, 100 - leftPct);
                 const isBeingDragged = draggedItemId === ov.id;
                 return (
                   <div
@@ -1000,19 +1001,21 @@ export function TimelineBar({
                   let widthPct: number;
                   if (track.globalStartTime != null && totalDuration > 0) {
                     const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
-                    leftPct = 0;
-                    widthPct = ((track.globalStartTime + trackDur) / totalDuration) * 100;
+                    leftPct = (track.globalStartTime / totalDuration) * 100;
+                    widthPct = (trackDur / totalDuration) * 100;
                   } else {
                     const idx = storyboard.findIndex(s => s.id === track.sceneId);
                     if (idx < 0) { leftPct = 0; widthPct = 100; } else {
                       const sceneStart = cumulativeStarts[idx] || 0;
                       const sceneDur = getSceneDur(idx);
+                      const itemStart = track.startTime ?? 0;
                       const itemEnd = track.endTime ?? sceneDur;
-                      const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-                      leftPct = 0;
-                      widthPct = (absEnd / totalDuration) * 100;
+                      const clampedEnd = Math.min(itemEnd, sceneDur);
+                      leftPct = totalDuration > 0 ? ((sceneStart + itemStart) / totalDuration) * 100 : 0;
+                      widthPct = totalDuration > 0 ? ((clampedEnd - itemStart) / totalDuration) * 100 : 0;
                     }
                   }
+                  if (leftPct + widthPct > 100) widthPct = Math.max(0, 100 - leftPct);
                   const itemId = `audio-${origIdx}`;
                   const isBeingDragged = draggedItemId === itemId;
                   // CSS-only pseudo-waveform: deterministic bar heights from track index/label
@@ -1073,19 +1076,21 @@ export function TimelineBar({
                     widthPct = (sceneDur / totalDuration) * 100;
                   } else if (track.globalStartTime != null && totalDuration > 0) {
                     const trackDur = track.duration ?? (track.endTime != null && track.startTime != null ? track.endTime - track.startTime : totalDuration);
-                    leftPct = 0;
-                    widthPct = ((track.globalStartTime + trackDur) / totalDuration) * 100;
+                    leftPct = (track.globalStartTime / totalDuration) * 100;
+                    widthPct = (trackDur / totalDuration) * 100;
                   } else {
                     const idx = storyboard.findIndex(s => s.id === track.sceneId);
                     if (idx < 0) { leftPct = 0; widthPct = 100; } else {
                       const sceneStart = cumulativeStarts[idx] || 0;
                       const sceneDur = getSceneDur(idx);
+                      const itemStart = track.startTime ?? 0;
                       const itemEnd = track.endTime ?? sceneDur;
-                      const absEnd = sceneStart + Math.min(itemEnd, sceneDur);
-                      leftPct = 0;
-                      widthPct = (absEnd / totalDuration) * 100;
+                      const clampedEnd = Math.min(itemEnd, sceneDur);
+                      leftPct = totalDuration > 0 ? ((sceneStart + itemStart) / totalDuration) * 100 : 0;
+                      widthPct = totalDuration > 0 ? ((clampedEnd - itemStart) / totalDuration) * 100 : 0;
                     }
                   }
+                  if (leftPct + widthPct > 100) widthPct = Math.max(0, 100 - leftPct);
                   const itemId = `audio-${origIdx}`;
                   const isBeingDragged = draggedItemId === itemId;
                   return (
