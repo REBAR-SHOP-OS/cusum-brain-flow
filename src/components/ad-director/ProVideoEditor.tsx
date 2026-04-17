@@ -193,6 +193,7 @@ export function ProVideoEditor({
   onUpdateStoryboard, onUpdateBrand, onMusicSelect, onDuplicateClip,
   onAddSceneWithMedia,
   externalActiveTab, onActiveTabChanged,
+  voiceoverUrl, musicTrackUrl,
 }: ProVideoEditorProps) {
   const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -464,6 +465,7 @@ export function ProVideoEditor({
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [editingOverlay, setEditingOverlay] = useState<VideoOverlay | null>(null);
   const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
+  const tracksSeededRef = useRef(false);
   const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
   const [generatingMusic, setGeneratingMusic] = useState(false);
   const audioUploadRef = useRef<HTMLInputElement>(null);
