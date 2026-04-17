@@ -392,7 +392,14 @@ CRITICAL COHERENCE REQUIREMENT:
 - You MUST embed the continuity profile details (subject descriptions, wardrobe, environment, lighting type, color mood) directly into every prompt as visual anchors.
 - The viewer must feel ALL clips are from the SAME film shoot — same location, same day, same camera setup, same color grading.
 - Start continuation prompts with: "In the same [environment] with [lighting], [subject with exact appearance] —"
-- Never introduce new visual elements, color schemes, or lighting setups that contradict the established continuity profile.`;
+- Never introduce new visual elements, color schemes, or lighting setups that contradict the established continuity profile.
+
+CRITICAL NARRATIVE CONTINUITY (story-flow, not just visual style):
+- Each scene MUST narratively pick up from the previous scene's final action — not just match visual style.
+- The first 0.5 seconds of this scene must visually continue the motion, subject pose, and action from the previous scene's "endsWith" / "lastFrameSummary".
+- Frame the OPENING of the prompt to seamlessly resume motion (e.g., "continuing the pan from the previous shot...", "the subject — now mid-gesture from the prior scene — ...").
+- Frame the ENDING of the prompt to set up a clean handoff into the next scene's objective.
+- ALWAYS return an "endsWith" field: a 20-30 word concrete description of the EXACT final frame (subject pose, camera position, action mid-motion, framing) so the next scene can pick it up.`;
 
 const SCORE_QUALITY_PROMPT = `Score this video generation prompt on 7 dimensions (0-10): realism, specificity, visualRichness, continuityStrength, brandRelevance, emotionalPersuasion, cinematicClarity. Include overall score and suggestion if < 7.`;
 
@@ -501,6 +508,7 @@ const WRITE_PROMPT_TOOLS = [{
       properties: {
         prompt: { type: "string", description: "The rewritten cinematic video generation prompt" },
         reasoning: { type: "string", description: "Brief explanation of improvements made" },
+        endsWith: { type: "string", description: "20-30 word concrete description of the EXACT final frame of this scene (subject pose, camera position, action mid-motion, framing) so the next scene can pick it up seamlessly." },
       },
       required: ["prompt"],
     },
@@ -594,7 +602,7 @@ ${sceneCount ? `\nCRITICAL: You MUST create exactly ${sceneCount} scene(s), each
 }
 
 async function handleWriteCinematicPrompt(apiKey: string, body: any, modelOverride?: string) {
-  const { scene, brand, continuityProfile, previousScene, characterImageUrl, introImageUrl, outroImageUrl, sceneIndex, totalScenes, selectedProducts, selectedStyles, sourceClipDescriptions } = body;
+  const { scene, brand, continuityProfile, previousScene, nextScene, characterImageUrl, introImageUrl, outroImageUrl, sceneIndex, totalScenes, selectedProducts, selectedStyles, sourceClipDescriptions } = body;
   if (!scene) throw new Error("Scene data is required");
 
   const continuityBlock = continuityProfile ? `
@@ -626,8 +634,29 @@ You MUST weave ALL of these visual anchors into the rewritten prompt so the vide
 
   const productStyleDirective = buildProductStyleDirective(selectedProducts, selectedStyles);
 
+  // Narrative continuity block — uses previousScene.endsWith if available, else falls back to action/prompt slice
+  const prevEndsWith = previousScene?.endsWith || previousScene?.lastFrameSummary || continuityProfile?.lastFrameSummary || "";
+  const prevAction = previousScene?.subjectAction || "";
+  const prevObjective = previousScene?.objective || "";
+  const nextObjective = nextScene?.objective || "";
+  const nextBridge = continuityProfile?.nextSceneBridge || "";
+
+  const narrativeBlock = previousScene ? `
+## NARRATIVE CONTINUITY (story-flow — MANDATORY):
+- Previous scene's final frame (endsWith): "${prevEndsWith || "(not provided — infer from previous prompt)"}"
+- Previous scene's action: "${prevAction}"
+- Previous scene's objective: "${prevObjective}"
+- This scene's first 0.5s MUST visually continue the motion/pose/action above. Open the prompt with a phrase that resumes the previous frame seamlessly (e.g., "Continuing from the previous shot, the [subject] now [next action]…").
+${nextObjective ? `- After this scene, the next scene's objective is: "${nextObjective}". Frame this scene's ENDING so it sets up that next objective cleanly.` : ""}
+${nextBridge ? `- Director's bridge note: "${nextBridge}"` : ""}
+- Remember: return an "endsWith" field describing this scene's exact final frame so the next scene can chain from it.` : `
+## NARRATIVE CONTINUITY:
+- This is the FIRST scene — establish the visual identity, motion rhythm, and opening pose that ALL subsequent scenes must continue from.
+- Return an "endsWith" field describing this scene's exact final frame so scene 2 can chain from it.`;
+
   const userPrompt = `Rewrite this scene's prompt into a premium cinematic video generation prompt.
 ${continuityBlock}
+${narrativeBlock}
 
 Scene Objective: ${scene.objective}
 Visual Style: ${scene.visualStyle}
@@ -642,7 +671,6 @@ Continuity Requirements: ${scene.continuityRequirements}
 Original Prompt: ${scene.prompt}
 
 Brand: ${brand?.name || "Rebar.Shop"} — ${brand?.tagline || ""}
-${previousScene ? `Previous Scene Summary: ${previousScene.prompt?.slice(0, 200)}` : "This is the FIRST scene — establish the visual identity that ALL subsequent scenes must follow."}
 ${continuityProfile ? `Full Continuity JSON: ${JSON.stringify(continuityProfile)}` : ""}
 ${characterImageUrl ? `\nCHARACTER REFERENCE (CRITICAL): A reference photo is provided as img_url to the video model. The prompt MUST:
 - Refer to the subject as "the spokesperson shown in the reference image" — DO NOT describe their face, age, ethnicity, hair color, skin tone, or any facial features in words.
