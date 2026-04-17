@@ -37,6 +37,8 @@ export function CharacterPromptDialog({
   onSave,
   characterPreviewUrl,
   brandContext,
+  durationSec,
+  productsContext,
 }: CharacterPromptDialogProps) {
   const [improving, setImproving] = useState(false);
   const { toast } = useToast();
@@ -49,33 +51,44 @@ export function CharacterPromptDialog({
     const isGenerating = seed.length === 0;
     setImproving(true);
     try {
+      const dur = Number.isFinite(durationSec) && (durationSec ?? 0) > 0 ? Math.round(durationSec as number) : 15;
+      // ~140 wpm advertising pace ≈ 2.3 words/sec
+      const wordBudget = Math.max(6, Math.round(dur * 2.3));
+      const sentenceGuidance =
+        dur <= 6 ? "1 short sentence" :
+        dur <= 10 ? "1–2 short sentences" :
+        dur <= 15 ? "2–3 sentences" :
+        dur <= 20 ? "2–3 sentences" :
+        "3–5 sentences";
+
+      const sharedRules = [
+        `VIDEO DURATION: EXACTLY ${dur} seconds (≈ ${wordBudget} spoken words MAX at natural advertising pace).`,
+        `LENGTH: ${sentenceGuidance}. Dialogue MUST be sayable within ${dur}s — do not exceed ${wordBudget} words of spoken text.`,
+        "MUST include (non-negotiable):",
+        "- Explicitly mention the company / brand name on camera.",
+        "- Pitch the specific product or service with one concrete benefit.",
+        "- End with a clear, direct call-to-action for the viewer.",
+        "Constraints:",
+        "- Keep the character's identity, face, body, and clothing UNCHANGED. Do NOT describe their appearance.",
+        "- Focus on: exact words to say (in quotes if helpful), tone of voice, facial expression, eye contact, gestures.",
+        "- Cinematic, persuasive, sales-driven advertising tone.",
+        "- No headings, no bullet lists in the output.",
+        brandContext ? `Brand context: ${brandContext}` : "",
+        productsContext ? `Products / services to advertise: ${productsContext}` : "",
+        "Return ONLY the direction text — no preamble, no quotes around the whole thing.",
+      ].filter(Boolean);
+
       const instruction = isGenerating
         ? [
-            "You WRITE a fresh SHORT character-direction note for an AI video model (image-to-video).",
-            "The note describes what THIS specific character (a real person from a reference photo) should SAY and DO on camera to advertise the brand.",
-            "Constraints:",
-            "- Keep the character's identity, face, body, and clothing UNCHANGED. Do not describe their appearance.",
-            "- Focus on: dialogue (what they say), tone of voice, facial expression, eye contact, gestures.",
-            "- Cinematic, persuasive, advertising tone. End with a clear call-to-action.",
-            "- 2–4 sentences maximum. No headings, no bullet lists.",
-            brandContext ? `Brand context to base the pitch on: ${brandContext}` : "",
-            "Return ONLY the direction text — no preamble, no quotes.",
-          ]
-            .filter(Boolean)
-            .join("\n")
+            "You WRITE a fresh character-direction note for an AI video model (image-to-video).",
+            "The character (a real person from a reference photo) MUST advertise the company and its product on camera.",
+            ...sharedRules,
+          ].join("\n")
         : [
-            "You rewrite a SHORT character-direction note for an AI video model (image-to-video).",
-            "The note describes what THIS specific character (a real person from a reference photo) should SAY and DO on camera.",
-            "Constraints:",
-            "- Keep the character's identity, face, body, and clothing UNCHANGED. Do not describe their appearance.",
-            "- Focus on: dialogue (what they say), tone of voice, facial expression, eye contact, gestures, micro-actions.",
-            "- Cinematic, persuasive, advertising tone.",
-            "- 2–4 sentences maximum. No headings, no bullet lists.",
-            brandContext ? `Brand context: ${brandContext}` : "",
-            "Return ONLY the improved direction text — no preamble, no quotes.",
-          ]
-            .filter(Boolean)
-            .join("\n");
+            "You rewrite a character-direction note for an AI video model (image-to-video).",
+            "The character (a real person from a reference photo) MUST advertise the company and its product on camera.",
+            ...sharedRules,
+          ].join("\n");
 
       const userPayload = isGenerating
         ? instruction
@@ -94,8 +107,8 @@ export function CharacterPromptDialog({
         toast({
           title: isGenerating ? "✨ Generated" : "✨ Improved",
           description: isGenerating
-            ? "Character direction written from your brand."
-            : "Character direction refined.",
+            ? `Character ad direction written for ${dur}s.`
+            : `Character ad direction refined for ${dur}s.`,
         });
       } else {
         toast({ title: "No result", description: "Try again.", variant: "destructive" });
