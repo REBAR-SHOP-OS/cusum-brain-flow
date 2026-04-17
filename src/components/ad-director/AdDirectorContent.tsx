@@ -161,6 +161,10 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       })();
       const crossfadeDuration = transitionPreset === "None" ? 0 : transitionDuration;
 
+      const exportRatio = (videoParams?.ratio === "9:16" || videoParams?.ratio === "1:1" || videoParams?.ratio === "16:9")
+        ? videoParams.ratio as "9:16" | "1:1" | "16:9"
+        : undefined;
+
       const finalUrl = await stitchClips(orderedClips, {
         logo: { url: "", enabled: false, size: 80 },
         endCard: {
@@ -173,6 +177,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         musicUrl: service.getState().musicTrackUrl || undefined,
         musicVolume: 0.15,
         crossfadeDuration,
+        aspectRatio: exportRatio,
       });
 
       // Upload to storage for permanent URL
