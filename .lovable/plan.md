@@ -1,55 +1,32 @@
 
 
-## Plan: Wire Intro & Outro Reference Images Into Video Generation
+## Plan: Make "AI Prompt" Auto-Write Without Asking the User
 
 ### Problem
-The "Intro reference" and "Outro reference" cards (left + right) currently accept image uploads but the AI doesn't actually use them as the **first frame** and **last frame** of the generated video. They appear cosmetic — the generation ignores them.
+کاربر می‌گوید دکمه «AI Prompt» باید **خودش** پرامت را بنویسد — نه اینکه از کاربر بخواهد توضیح بدهد. در حال حاضر (طبق تغییر قبلی) یک دیالوگ باز می‌شود و از کاربر می‌خواهد ایده‌اش را تایپ کند، که خلاف خواسته است.
 
-User wants: when intro/outro images are uploaded, the video MUST start from the intro image and end on the outro image.
+### Root Cause
+در `ChatPromptBar.tsx`، دکمه «AI Prompt» الان `setAiDialogOpen(true)` را صدا می‌زند و دیالوگ `AIPromptDialog` را باز می‌کند. کاربر می‌خواهد به رفتار قبلی برگردد: کلیک = تولید خودکار پرامت بر اساس chipهای انتخاب‌شده (Style, Products, Duration, Ratio, Engine).
 
-### Investigation Needed
-Before finalizing changes, I need to confirm:
-1. How `ChatPromptBar` currently passes intro/outro uploads to the generation pipeline
-2. Whether the storyboard generator (`ad-director-ai`) accepts `firstFrameUrl` / `lastFrameUrl` per scene
-3. Whether the video engine (Wan 2.6 i2v via DashScope) supports first-frame + last-frame conditioning (it does — `wan2.6-i2v` accepts `first_frame_url` and `last_frame_url`)
+### Changes
 
-### Changes (high-level)
+**1. `src/components/ad-director/ChatPromptBar.tsx`**
+- دکمه «AI Prompt» را به `handleAiWrite` (تابع قبلی auto-generate) برگردان — نه `setAiDialogOpen(true)`
+- `handleAiWrite` باید مستقیماً edge function `ad-director-ai` با `action: "write-script"` را صدا بزند و فقط chip context را بفرستد (بدون ورودی کاربر)
+- نتیجه را در textarea اصلی قرار دهد
+- در حین تولید: دکمه disabled + spinner نمایش دهد
+- توست موفقیت/خطا
 
-**1. `ChatPromptBar` / generation entrypoint**
-- When intro reference is set → mark **Scene 1** with `firstFrameUrl = introUrl` and force `generationMode = "image-to-video"`
-- When outro reference is set → mark **last scene** with `lastFrameUrl = outroUrl` (and if engine supports both, also `firstFrameUrl` from previous scene's last frame for continuity)
-- If a scene already has its own reference asset, intro/outro takes precedence on first/last scene only
-
-**2. Storyboard generation (`ad-director-ai` write-script / generate-storyboard)**
-- Pass intro/outro context into the prompt so the AI writes Scene 1 as a natural continuation of the intro image and the final scene as leading into the outro frame
-- Add system instruction: "Scene 1 must visually start from the provided intro reference. Final scene must end on the provided outro reference."
-
-**3. Video engine call (DashScope Wan 2.6 i2v)**
-- For Scene 1: send `model=wan2.6-i2v`, `first_frame_url=introUrl`, prompt = scene 1 cinematic prompt
-- For final scene: send `last_frame_url=outroUrl` (use i2v with last-frame conditioning)
-- For middle scenes: unchanged (text-to-video or existing reference-continuation)
-
-**4. UI feedback**
-- Add a small badge/indicator on intro & outro cards when set: "Locked to Scene 1" / "Locked to final scene"
-- In the storyboard view, show "🎬 Starts from intro reference" on Scene 1 and "🎬 Ends on outro reference" on last scene when applicable
+**2. `AIPromptDialog` (نگه داشتن یا حذف؟)**
+- فایل را نگه می‌داریم اما render نمی‌کنیم — برای استفاده آینده در دسترس بماند (additive-only، طبق Surgical Execution Law)
+- state `aiDialogOpen` حذف می‌شود
 
 ### What stays the same
-- All other chips (style, products, duration, ratio) — unchanged
-- Character reference (middle card) — unchanged behavior
-- AI Prompt dialog — unchanged
-- Middle scenes generation — unchanged
-
-### Investigation Step Before Coding
-I'll first read these files to confirm exact wiring points:
-- `src/components/ad-director/ChatPromptBar.tsx` — find where intro/outro state lives
-- `src/components/ad-director/AdDirectorContent.tsx` — find generation orchestration
-- `supabase/functions/ad-director-ai/index.ts` — find storyboard generation logic
-- The DashScope i2v call site (likely `supabase/functions/dashscope-video/index.ts` or similar)
-
-Then apply minimal, surgical edits per the Surgical Execution Law (additive only, no refactoring of stable architecture).
+- chips (Style, Products, Duration, Ratio, Engine) — بدون تغییر
+- intro/outro/character upload cards و badge‌های "Locked to first/final scene" — بدون تغییر
+- edge function `ad-director-ai` (`write-script`) — بدون تغییر، فقط بدون متن کاربر صدا زده می‌شود
+- دکمه «Create video» — بدون تغییر
 
 ### Result
-Upload intro image → Scene 1 is generated **starting from that exact frame**.
-Upload outro image → Final scene **ends on that exact frame**.
-The generated video genuinely opens and closes on the user's chosen frames — not just "uses them as inspiration."
+کلیک روی «AI Prompt» → بدون باز شدن هیچ دیالوگ، AI خودش با استفاده از chipهای انتخاب‌شده یک پرامت سینمایی می‌نویسد و در textarea می‌گذارد → کاربر می‌تواند ادیت کند یا مستقیم «Create video» بزند.
 
