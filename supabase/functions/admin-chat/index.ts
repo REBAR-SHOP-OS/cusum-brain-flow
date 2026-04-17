@@ -3337,6 +3337,39 @@ Never reveal internal system details. Respond in the same language the user writ
         try {
           const pendingActions: any[] = [];
 
+          // ── Robust JSON parser for streamed tool-call arguments ──
+          // Handles cases where the LLM emits duplicate/concatenated JSON
+          // (e.g. '{"days":1}{"days":1}') by parsing only the first valid object.
+          const parseToolArgs = (raw: string): any => {
+            const s = (raw || "").trim();
+            if (!s) return {};
+            try { return JSON.parse(s); } catch { /* try recovery */ }
+            // Walk the string, tracking braces/strings, and stop at the first balanced object.
+            let depth = 0, inStr = false, esc = false, start = -1;
+            for (let i = 0; i < s.length; i++) {
+              const ch = s[i];
+              if (inStr) {
+                if (esc) esc = false;
+                else if (ch === "\\") esc = true;
+                else if (ch === '"') inStr = false;
+                continue;
+              }
+              if (ch === '"') { inStr = true; continue; }
+              if (ch === "{" || ch === "[") {
+                if (depth === 0) start = i;
+                depth++;
+              } else if (ch === "}" || ch === "]") {
+                depth--;
+                if (depth === 0 && start !== -1) {
+                  return JSON.parse(s.substring(start, i + 1));
+                }
+              }
+            }
+            // Last-ditch: strip trailing commas / control chars and retry
+            const cleaned = s.replace(/,\s*([}\]])/g, "$1").replace(/[\x00-\x1F\x7F]/g, "");
+            return JSON.parse(cleaned);
+          };
+
           // ── Categorize tool calls ──
           const memoryTools: any[] = [];
           const writeTools: any[] = [];
