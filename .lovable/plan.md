@@ -1,103 +1,85 @@
 
 
 ## درخواست کاربر
-دکمه‌های Undo / Redo که بالای editor (کنار دکمه Back) هستند باید **هر تغییری** را ذخیره کنند، نه فقط بعضی‌ها — تا کاربر بتواند به مرحله‌ی قبل یا بعد برگردد.
+دو تغییر:
+1. بعد از تولید ویدئو، خودکار وارد editor شود (بدون نیاز به Approve → Edit Video)
+2. هر چیزی که در ویدئو وجود دارد (text/audio/music) به‌شکل نوار در editor نمایش داده شود، و **حذف نوار = حذف واقعی از ویدئوی export شده**
 
 ## یافته‌ی فنی
-در `ProVideoEditor.tsx`:
-1. **History فقط `storyboard` را snapshot می‌کند** (خط 852: `useState<StoryboardScene[][]>`). تغییرات روی audio tracks, text overlays, music، volume، mute، segments timing، position overlay اصلاً ضبط نمی‌شوند.
-2. `pushHistory(storyboard)` فقط در 9 جا صدا زده می‌شود (split, trim, duplicate, delete scene, reorder, ...). موارد زیر **هیچ snapshot نمی‌گیرند**:
-   - افزودن/حذف voiceover یا music track (خطوط 335, 355, 1652, 1688, 1716...)
-   - تغییر volume یا mute (خط 1018)
-   - drag/resize/edit text overlay (خط 1793, 1829, 1855)
-   - segment timing change در بسیاری مسیرها
-3. `undo`/`redo` فقط `onUpdateStoryboard` را صدا می‌زنند — حتی اگر history کامل باشد، state های دیگر (audioTracks, …) restore نمی‌شوند.
+
+### بخش ۱ — جریان فعلی
+در `AdDirectorContent.tsx` خط 655-666: بعد از `flowState === "result"` کاربر باید:
+1. کلیک "Approve Composition"
+2. سپس کلیک "Edit Video" → `flowState: "editing"`
+
+### بخش ۲ — مشکل اصلی export pipeline
+در `src/lib/videoStitch.ts`:
+- **Text overlays editor (`overlays[]`)** هرگز روی ویدئوی export شده draw نمی‌شوند — فقط `subtitles.segments` از options استفاده می‌شود (خط 504, 684-688). یعنی نوار text در editor الان **فقط visual** است.
+- **صدای embedded source clip** اصلاً در export وجود ندارد — `v.muted = true` (خط 282) و canvas `captureStream` صدا نمی‌گیرد. فقط `audioUrl` (voiceover) و `musicUrl` (music) mix می‌شوند.
+- **حذف نوار music در editor** فقط state داخلی `audioTracks` را تغییر می‌دهد، اما `handleExport` در `AdDirectorContent.tsx` خط 177 از `service.getState().musicTrackUrl` می‌خواند — نه از editor state. پس حذف نوار music روی export اثر ندارد.
+- **حذف نوار voiceover** همان مشکل — `voiceoverUrl` از service خوانده می‌شود (خط 134-153 export)، نه از editor.
 
 ## برنامه (Surgical, Additive)
 
-### ۱. Snapshot یکپارچه (Unified Snapshot)
-به جای `StoryboardScene[]`، history به یک ساختار کامل تغییر کند:
+### ۱. ورود خودکار به Editor بعد از تولید
+در `backgroundAdDirectorService.ts` (یا هرجا flowState بعد از کامل شدن همه scene ها به `"result"` ست می‌شود)، آن را به `"editing"` تغییر دهیم. بدنبال یک‌بار `setFlowState("result")` بعد از موفقیت کامل می‌گردیم و آن را به `"editing"` تبدیل می‌کنیم. حالت "result" برای resume از history (`onSelect` خط 417) و reload draft (خط 241) دست‌نخورده می‌ماند، چون آنجا هنوز clips از history هستند و کاربر می‌خواهد قبل از edit ببیند.
+- **اختیاری امن‌تر**: یک flag `autoOpenEditor=true` فقط هنگام پایان یک generation تازه ست شود.
+
+### ۲. حذف نیاز به Approve (اختیاری اما مرتبط)
+چون حالا مستقیم وارد editor می‌شویم، دکمه‌های "Approve Composition" / "Edit Video" در view "result" دست‌نخورده می‌مانند برای حالت‌های resume، اما در flow اصلی به آن نمی‌رسیم.
+
+### ۳. اتصال واقعی Editor State به Export (تغییر کلیدی)
+الان `handleExport` در `AdDirectorContent.tsx` فقط از `service.state` می‌خواند. اضافه می‌کنیم که editor بتواند state کامل overlay/audio خود را به export پاس دهد:
+
+**۳-الف.** پراپ جدید روی `ProVideoEditor` → `onExportRequest(payload)` که هنگام کلیک Download/Schedule صدا زده می‌شود با:
 ```ts
-interface EditorSnapshot {
-  storyboard: StoryboardScene[];
-  audioTracks: AudioTrackItem[];
-  // textOverlays در داخل storyboard.overlays هست → جداگانه نیاز نیست
-  segments?: { id: string; startTime: number; endTime: number }[]; // برای trim
+{
+  overlays: VideoOverlay[],          // text overlays از editor
+  audioTracks: AudioTrackItem[],     // voiceover + music های editor
+  mutedScenes: string[],             // برای حذف صدای embedded scene
 }
 ```
-`history: EditorSnapshot[]` و `pushHistory()` همه‌ی state ها را با هم snapshot می‌کند.
+یا ساده‌تر و کم‌تهاجمی‌تر: قبل از فراخوانی `onExport()`، `ProVideoEditor` این state ها را از طریق callback های موجود (مثل `onMusicSelect`) به service sync می‌کند:
+- `onUpdateOverlays(overlays)` → پراپ جدید
+- `onUpdateAudioTracks(tracks)` → پراپ جدید
+سپس `handleExport` اینها را به `stitchClips` پاس می‌دهد.
 
-### ۲. تابع unified `pushHistory()`
-```ts
-const pushHistory = useCallback((override?: Partial<EditorSnapshot>) => {
-  const snapshot: EditorSnapshot = {
-    storyboard: override?.storyboard ?? storyboard,
-    audioTracks: override?.audioTracks ?? audioTracks,
-    segments: override?.segments ?? segments,
-  };
-  // deep clone برای جلوگیری از reference mutation
-  const cloned = structuredClone(snapshot);
-  setHistory(prev => [...prev.slice(0, historyIndexRef.current + 1), cloned].slice(-50)); // cap 50
-  setHistoryIndex(idx => Math.min(idx + 1, 49));
-  setHasChanges(true);
-}, [storyboard, audioTracks, segments]);
-```
-- Cap به 50 entry برای جلوگیری از memory bloat
-- `structuredClone` تضمین می‌کند redo/undo بعدی state قبلی را خراب نکند
+**۳-ب.** در `videoStitch.ts`:
+- `StitchOverlayOptions` گسترده شود تا `textOverlays?: { sceneId; text; position; size; startTime?; endTime?; style? }[]` بپذیرد
+- در render loop (خط ~684)، علاوه بر `subtitleSegments`، روی `textOverlays` فعال در زمان جاری iterate شده و draw شوند (با position درصدی نسبت به W/H)
+- برای **music های متعدد** (خط 444-461): به‌جای یک `musicElement`، آرایه‌ی `audioTracks.filter(kind==='music' && !extractedFromVideo)` mix شود. هر کدام gain خودش
+- برای **voiceover های editor** (به جای فقط `audioUrl`): mix همه‌ی `audioTracks.filter(kind==='voiceover')`
+- برای **embedded audio هر scene**: 
+  - اگر scene در `mutedScenes` نیست → یک `<audio>` element با `src = clip.videoUrl` بسازیم، sync با playback همان clip در timeline (currentTime ست شود به clipStart)، connect به audioCtx
+  - اگر scene mute است → skip
+  - این جوری حذف نوار آبی music (که extractedFromVideo است) عملاً همان scene را mute می‌کند
 
-### ۳. `undo()` / `redo()` کامل
-هر دو state را restore کنند:
-```ts
-const apply = (snap: EditorSnapshot) => {
-  onUpdateStoryboard?.(snap.storyboard);
-  setAudioTracks(snap.audioTracks);
-  if (snap.segments && onUpdateSegments) onUpdateSegments(snap.segments);
-};
-const undo = () => { if (historyIndex > 0) { setHistoryIndex(i=>i-1); apply(history[historyIndex-1]); } };
-const redo = () => { if (historyIndex < history.length-1) { setHistoryIndex(i=>i+1); apply(history[historyIndex+1]); } };
-```
+**۳-ج.** ارتباط بصری ↔ منطقی:
+- نوار آبی **Music (extractedFromVideo)** → هنگام delete، scene را به `mutedScenes` اضافه کن (به‌جای فقط حذف از array)
+- نوار **Voiceover/Music دستی** → هنگام delete، track از `audioTracks` حذف، export آن را شامل نمی‌کند
+- نوار **Text** → هنگام delete، overlay از `overlays` حذف، export متن را draw نمی‌کند
 
-### ۴. Auto-snapshot برای همه‌ی mutationهای از‌قلم‌افتاده
-این نقاط `pushHistory()` اضافه می‌شود **قبل** از تغییر:
-- افزودن voiceover/music (خطوط 335, 355, 1688)
-- حذف audio track (1022, 1282, 1716)
-- تغییر volume / mute scene (1018, و در منطق mutedScenes)
-- drag/move/resize text overlay (1793, 1829, 1855) — با debounce 300ms برای جلوگیری از 100 snapshot هنگام درگ
-- edit text content / style overlay (1315, 1347)
-- segment timing change در همه مسیرها
-
-### ۵. Debounce برای عملیات پیوسته (drag, slider)
-helper:
-```ts
-const pushHistoryDebounced = useDebouncedCallback(pushHistory, 300);
-```
-هنگام drag overlay یا تنظیم volume slider، فقط آخرین حالت ذخیره شود، نه هر pixel.
-
-### ۶. Seed snapshot کامل در شروع
-useEffect مقداردهی اولیه (خط 860) به‌جای فقط `storyboard`، یک `EditorSnapshot` کامل با audioTracks خالی/فعلی push کند.
-
-### ۷. UI feedback
-دکمه‌های undo/redo (خط 1960-1964) از قبل `disabled` correctly دارند. اضافه کنیم:
-- title پویا: `Undo (N changes)` تا کاربر بفهمد چقدر history دارد
-- بعد از undo/redo یک toast کوتاه: `"Undid: scene split"` (اختیاری — می‌توان با ذخیره `label` در snapshot)
-
-### ۸. Reset (`resetAll`) — هم‌خوان شود
-خط 906: `resetAll` به اولین snapshot کامل برگردد، نه فقط storyboard اول.
+### ۴. Sync editor state → service قبل از export
+ساده‌ترین مسیر: در `ProVideoEditor` یک `useEffect` اضافه شود که هرگاه `overlays`, `audioTracks`, `mutedScenes` تغییر کرد، callback های جدید `onUpdateOverlays`/`onUpdateAudioTracks`/`onUpdateMutedScenes` را صدا بزند تا service این state ها را نگه دارد. سپس `handleExport` آنها را به `stitchClips` پاس دهد.
 
 ## فایل‌های تغییرکننده
-- `src/components/ad-director/ProVideoEditor.tsx` — ساختار `EditorSnapshot`، `pushHistory` یکپارچه، `undo`/`redo` کامل، اضافه کردن `pushHistory()` در ~15 mutation point، debounce برای drag
+- `src/lib/backgroundAdDirectorService.ts` — flowState پایان generation: "result" → "editing"
+- `src/lib/videoStitch.ts` — پشتیبانی از `textOverlays[]`، چند music، چند voiceover، embedded scene audio با `mutedScenes`
+- `src/components/ad-director/ProVideoEditor.tsx` — sync editor state به service از طریق پراپ‌های جدید؛ تغییر delete نوار آبی به add-to-mutedScenes
+- `src/components/ad-director/AdDirectorContent.tsx` — پراپ‌های جدید به ProVideoEditor، پاس editor-state به `stitchClips` در `handleExport`
+- `src/lib/backgroundAdDirectorService.ts` — افزودن state های `editorOverlays`, `editorAudioTracks`, `editorMutedScenes`
 
 ## آنچه دست‌نخورده می‌ماند
-- Timeline rendering, playback، export pipeline
+- منطق timeline rendering, drag/resize, undo/redo
+- منطق تولید scene و wan 2.6
 - DB / RLS / edge functions
-- Keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z) — همان‌ها فقط روی undo/redo جدید کار می‌کنند
 - زبان UI: انگلیسی
 
 ## نتیجه
-1. ✅ هر تغییر (split, trim, delete, duplicate, reorder, voiceover add/remove, music add/remove, text overlay add/edit/move, volume, mute, segment timing) snapshot می‌شود
-2. ✅ Undo / Redo همه‌ی state ها (storyboard + audioTracks + segments) را به‌درستی restore می‌کند
-3. ✅ Drag پیوسته با debounce — بدون پر شدن history
-4. ✅ Cap 50 entry → بدون memory leak
-5. ✅ دکمه‌های UI و keyboard shortcuts همچنان کار می‌کنند
-6. ✅ Reset به وضعیت اولیه‌ی کامل
+1. ✅ بعد از تولید ویدئو → مستقیم وارد editor می‌شود (بدون Approve)
+2. ✅ نوارهای text / audio (voiceover) / music که در editor دیده می‌شوند، در export نهایی هم وجود دارند
+3. ✅ حذف نوار text → متن از ویدئو حذف می‌شود
+4. ✅ حذف نوار music (دستی یا آبی-extracted) → موزیک/صدا از ویدئو حذف می‌شود
+5. ✅ حذف نوار voiceover → صدای روایت از ویدئو حذف می‌شود
+6. ✅ Preview = WYSIWYG export
 
