@@ -239,10 +239,11 @@ export function ProVideoEditor({
     "1:1": "1/1",
   };
 
+  // Social media standard dimensions (export resolution)
   const RATIO_DIMS: Record<string, [number, number]> = {
-    "16:9": [1280, 720],
-    "9:16": [720, 1280],
-    "1:1": [1080, 1080],
+    "16:9": [1920, 1080], // YouTube, LinkedIn landscape
+    "9:16": [1080, 1920], // Instagram Reels, TikTok, YouTube Shorts
+    "1:1": [1080, 1080],  // Instagram feed
   };
 
   const handleSetActiveTab = useCallback((tab: EditorTab) => {
@@ -1947,8 +1948,10 @@ export function ProVideoEditor({
         {/* ─── Center Canvas ─── */}
         <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative items-center justify-center">
 
-          {/* Video / Static Card */}
-          <div ref={videoContainerRef} className="flex-1 flex items-center justify-center relative overflow-hidden max-h-[60vh]" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9" }}
+          {/* Outer centering wrapper */}
+          <div className="flex-1 w-full flex items-center justify-center p-4 min-h-0">
+          {/* Inner aspect-locked frame — enforces exact social ratio */}
+          <div ref={videoContainerRef} className="relative overflow-hidden bg-black shadow-2xl max-h-[60vh] max-w-full" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9", height: "60vh", width: "auto" }}
             onMouseMove={(e) => {
               if (!videoContainerRef.current) return;
               const rect = videoContainerRef.current.getBoundingClientRect();
@@ -2088,6 +2091,11 @@ export function ProVideoEditor({
                 </Button>
               </div>
             )}
+            {/* Dimensions badge */}
+            <div className="absolute top-2 right-2 z-30 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-[10px] font-mono text-white/80 pointer-events-none">
+              {RATIO_DIMS[aspectRatio]?.[0]}×{RATIO_DIMS[aspectRatio]?.[1]} · {aspectRatio}
+            </div>
+          </div>
           </div>
 
           {/* Playback Controls */}
