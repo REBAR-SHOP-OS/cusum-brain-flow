@@ -1340,19 +1340,30 @@ export function ProVideoEditor({
     // Duplicate the underlying clip so the second half has the same video source
     onDuplicateClip?.(scene.id, newSceneId);
 
-    // Lock visual durations for both halves so timeline cards reflect the cut immediately
+    // Lock visual durations for both halves so timeline cards reflect the cut immediately,
+    // and remember the second half should seek into the underlying video at `splitPoint`.
+    const originalStartOffset = clipStartOffsets[scene.id] ?? 0;
+    const firstHalfDur = splitPoint;
+    const secondHalfDur = sceneDur - splitPoint;
     setClipDurations(prev => ({
       ...prev,
-      [scene.id]: splitPoint,
-      [newSceneId]: sceneDur - splitPoint,
+      [scene.id]: firstHalfDur,
+      [newSceneId]: secondHalfDur,
     }));
+    setClipStartOffsets(prev => ({
+      ...prev,
+      [scene.id]: originalStartOffset,
+      [newSceneId]: originalStartOffset + splitPoint,
+    }));
+    lockedDurationScenesRef.current.add(scene.id);
+    lockedDurationScenesRef.current.add(newSceneId);
 
     // Move selection + playhead to start of the new (second) scene
     setSelectedSceneIndex(index + 1);
     setCurrentTime(0);
 
     toast({ title: "Scene split", description: `Split at ${splitPoint.toFixed(1)}s into the clip` });
-  }, [storyboard, segments, cumulativeStarts, clipDurations, globalTime, pushHistory, onUpdateStoryboard, onUpdateSegments, onDuplicateClip, toast]);
+  }, [storyboard, segments, cumulativeStarts, clipDurations, clipStartOffsets, globalTime, pushHistory, onUpdateStoryboard, onUpdateSegments, onDuplicateClip, toast]);
 
   const handleDuplicateScene = useCallback((index: number) => {
     const scene = storyboard[index];
