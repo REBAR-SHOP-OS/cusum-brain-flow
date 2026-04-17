@@ -188,7 +188,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const [selectedStyles, setSelectedStyles] = useState<string[]>([]);
   const [selectedVideoModel, setSelectedVideoModel] = useState(VIDEO_MODELS[0]);
   const [aiWriting, setAiWriting] = useState(false);
-  const [aiDialogOpen, setAiDialogOpen] = useState(false);
   
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
