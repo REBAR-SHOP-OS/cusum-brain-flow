@@ -1,61 +1,102 @@
 
 
 ## درخواست کاربر
-همان قاعده‌ای که الان روی ردیف **Music** درست کار می‌کند (نوار آبی دقیقاً زیر کلیپ ویدئوی مربوطه ظاهر می‌شود، با left و width متناسب با موقعیت scene روی timeline) باید برای ردیف‌های **Text** و **Audio (Voiceover)** هم برقرار باشد.
+هر ویدئوی source در preview و export باید بر اساس output type انتخاب‌شده resize شود (نه crop ساده، نه letterbox مشکی):
+- **1:1** برای Instagram Posts → 1080×1080
+- **9:16** برای Instagram Reels → 1080×1920
+- **16:9** برای YouTube/Landscape → 1920×1080
+
+سوژه باید centered بماند، بخش‌های مهم cut نشود، و کیفیت خروجی high باشد.
 
 ## یافته‌ی فنی
+1. **Preview** (`ProVideoEditor.tsx` خط 2108): `object-contain` → letterbox سیاه دور ویدئو. کاربر این را نمی‌خواهد.
+2. **Export** (`videoStitch.ts` خط 349-354): `W = video.videoWidth`, `H = video.videoHeight` — **به‌کلی aspect ratio انتخابی کاربر را نادیده می‌گیرد**. خروجی همیشه ابعاد source را دارد، نه target.
+3. هیچ پارامتر `aspectRatio` به `stitchClips` پاس داده نمی‌شود.
+4. `drawImage(video, 0, 0, W, H)` در حال حاضر stretch می‌کند — اگر W/H اضافه کنیم بدون smart-fit، تصویر تحریف می‌شود.
 
-در `TimelineBar.tsx`:
+## برنامه (Surgical, Additive)
 
-1. **ردیف Text (خط 940-980):** برای هر overlay متنی:
-   - `leftPct = 0` ← اشتباه: همیشه از ابتدای timeline شروع می‌شود
-   - `widthPct = (absEnd / totalDuration) * 100` ← عرض از 0 تا انتهای scene محاسبه می‌شود
-   - نتیجه: متنی که برای scene 3 است، روی scene 1/2/3 پخش می‌شود
+### ۱. ابزار smart-fit (cover with center)
+در `videoStitch.ts` یک helper اضافه کنیم که **"cover" geometry** محاسبه کند — مثل CSS `object-fit: cover`:
+- ویدئوی source را scale کند تا تمام canvas هدف را پر کند
+- center-crop کند روی محور long-axis (مثل کار Instagram)
+- تضمین کند سوژه (که معمولاً وسط فریم است) cut نشود
 
-2. **ردیف Audio/Voiceover (خط 998-1051):** همان bug — `leftPct = 0` در هر دو شاخه‌ی شرطی.
+```ts
+function fitCover(srcW: number, srcH: number, dstW: number, dstH: number) {
+  const srcRatio = srcW / srcH;
+  const dstRatio = dstW / dstH;
+  let sx = 0, sy = 0, sw = srcW, sh = srcH;
+  if (srcRatio > dstRatio) {
+    // source wider → crop sides
+    sw = srcH * dstRatio;
+    sx = (srcW - sw) / 2;
+  } else {
+    // source taller → crop top/bottom
+    sh = srcW / dstRatio;
+    sy = (srcH - sh) / 2;
+  }
+  return { sx, sy, sw, sh };
+}
+```
 
-3. **ردیف Music (خط 1067-1073):** قبلاً برای `extractedFromVideo` درست شده — `leftPct` با `sceneStart / totalDuration` و `widthPct` با `sceneDur / totalDuration` محاسبه می‌شود. این الگوی درست است.
+### ۲. پاس دادن `aspectRatio` به stitch pipeline
+- `StitchOverlayOptions` interface → افزودن `aspectRatio?: "16:9" | "9:16" | "1:1"`
+- `RATIO_DIMS` map داخل `videoStitch.ts` → `[W, H]` صحیح برای هر نسبت (1920×1080, 1080×1920, 1080×1080)
+- `stitchClips` پارامتر را بخواند و `canvas.width = targetW`, `canvas.height = targetH` ست کند
+- در `AdDirectorContent.tsx` و `backgroundAdDirectorService.ts` و `useRenderPipeline.ts`، `aspectRatio` فعلی state را پاس دهیم
 
-## برنامه‌ی اصلاح (Surgical, Visual-Only)
+### ۳. اعمال smart-fit در drawImage
+هر `ctx.drawImage(video, 0, 0, W, H)` (خطوط 623, 628, 633) → 
+```ts
+const { sx, sy, sw, sh } = fitCover(video.videoWidth, video.videoHeight, W, H);
+ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+```
+نتیجه: ویدئوی 16:9 درون frame 9:16 → vertically scaled to fill, sides cropped (center-preserving). ویدئوی 16:9 درون 1:1 → horizontally cropped از وسط.
 
-### ۱. ردیف Text — استفاده از موقعیت per-scene
-در منطق `textOverlays.map` (خط 940-980):
-- محاسبه `sceneStart = cumulativeStarts[idx]`
-- `leftPct = (sceneStart + itemStart) / totalDuration * 100`
-- `widthPct = ((Math.min(itemEnd, sceneDur) - itemStart) / totalDuration) * 100`
-- نتیجه: نوار بنفش text دقیقاً زیر کلیپ ویدئویی scene مربوطه ظاهر می‌شود — اگر `startTime/endTime` تعیین شده باشد، فقط همان بازه را پر می‌کند
+### ۴. کیفیت بالای rendering
+قبل از drawImage، روی ctx این تنظیمات اعمال شود:
+```ts
+ctx.imageSmoothingEnabled = true;
+ctx.imageSmoothingQuality = "high";
+```
+این باعث می‌شود scaling در canvas از bilinear high-quality استفاده کند (نه nearest-neighbor).
 
-### ۲. ردیف Audio/Voiceover — همان الگو
-در منطق `voiceoverTracks.map` (خط 998-1015):
-- شاخه‌ی `globalStartTime != null`: 
-  - `leftPct = (globalStartTime / totalDuration) * 100` (به جای 0)
-  - `widthPct = (trackDur / totalDuration) * 100` (فقط طول track، نه globalStartTime + trackDur)
-- شاخه‌ی fallback (بر اساس sceneId):
-  - `leftPct = ((sceneStart + (track.startTime ?? 0)) / totalDuration) * 100`
-  - `widthPct = ((Math.min(itemEnd, sceneDur) - (track.startTime ?? 0)) / totalDuration) * 100`
-- نتیجه: نوار سبز/سایان voiceover دقیقاً زیر scene مربوطه قرار می‌گیرد
+### ۵. Preview UI: تغییر `object-contain` → `object-cover`
+در `ProVideoEditor.tsx` خط 2108 و 2086 و 2092:
+- `object-contain` → `object-cover` (ویدئو کل frame را پر می‌کند، crop از وسط، بدون نوار سیاه)
+- این **دقیقاً** بازنمایی export نهایی خواهد بود (WYSIWYG)
+- canvas های static-card همان `object-contain` بمانند (چون از قبل با ابعاد دقیق RATIO_DIMS رندر شده‌اند و نباید crop شوند)
+- یا تنها `<video>` به cover سوییچ شود؛ canvas دست‌نخورده
 
-### ۳. هم‌سو کردن Music دستی (non-extracted)
-شاخه‌ی `globalStartTime != null` در music هم همان bug ظاهری را دارد (`leftPct = 0`). به همان الگو اصلاح می‌شود تا music های دستی با `globalStartTime` هم در جای درست شروع شوند. Music های full-width (بدون globalStartTime یا extracted: false بدون globalStartTime) دست‌نخورده می‌مانند (همان رفتار full-width فعلی).
+### ۶. Bitrate و کیفیت encoder
+بررسی کنیم encoder در `videoStitch.ts` (احتمالاً MediaRecorder) bitrate مناسب برای 1080p دارد. اگر default پایین است → افزایش به ~5-8 Mbps برای 1080p تا کیفیت high تضمین شود.
 
-### ۴. حداقل عرض و کلیپ گذاری
-- `Math.max(widthPct, 0.8)` نگه داشته می‌شود تا نوارهای خیلی کوتاه قابل دیدن باشند
-- اگر `leftPct + widthPct > 100`، `widthPct` با `100 - leftPct` cap می‌شود تا از overflow جلوگیری شود
+### ۷. آپشن کاربری (اختیاری ولی توصیه‌شده)
+کنار picker aspect ratio، یک toggle کوچک:
+- **Smart Fit (Cover)** ← default — پر کردن frame با center-crop
+- **Fit (Letterbox)** — رفتار قدیمی با نوار سیاه
+این flexibility می‌دهد بدون شکستن کیس‌های خاص.
 
 ## فایل‌های تغییرکننده
-- `src/components/ad-director/editor/TimelineBar.tsx` — فقط بخش محاسبه‌ی `leftPct/widthPct` در سه map (text, voiceover, music-non-extracted)
+- `src/lib/videoStitch.ts` — helper `fitCover`, `RATIO_DIMS`, پارامتر `aspectRatio`, اعمال در drawImage، high-quality smoothing
+- `src/components/ad-director/ProVideoEditor.tsx` — `object-contain` → `object-cover` روی video element
+- `src/components/ad-director/AdDirectorContent.tsx` — پاس `aspectRatio` به `stitchClips`
+- `src/lib/backgroundAdDirectorService.ts` — همان (پاس aspectRatio)
+- `src/hooks/useRenderPipeline.ts` — پذیرش/پاس aspectRatio
 
 ## آنچه دست‌نخورده می‌ماند
-- منطق drag/drop, trim, delete, edit overlay
-- منطق playback (voiceover/music timing از داده‌ی track می‌آید، نه از موقعیت بصری)
-- export/stitch pipeline
-- ردیف ویدئو، split siblings، playhead، transport bar
+- منطق timeline, overlays drag/resize (درصدی نسبت به container)
+- voiceover, music, subtitles, transitions
 - DB / RLS / edge functions
+- منطق تولید scene (Wan 2.6 خودش با size صحیح generate می‌کند — این لایه فقط برای resize نهایی است وقتی source ≠ target)
 
 ## نتیجه
-1. ✅ هر overlay متن دقیقاً زیر scene مربوطه روی ردیف Text ظاهر می‌شود (با offset درست از چپ)
-2. ✅ هر voiceover track دقیقاً زیر scene مربوطه روی ردیف Audio ظاهر می‌شود
-3. ✅ Music های دستی با globalStartTime هم در جای درست
-4. ✅ هیچ تغییری در playback یا export
-5. ✅ زبان UI: انگلیسی (طبق memory rule)
+1. ✅ انتخاب 9:16 → ویدئو full-frame عمودی، center-cropped، بدون نوار سیاه
+2. ✅ انتخاب 1:1 → ویدئو مربعی، center-cropped از وسط
+3. ✅ انتخاب 16:9 → رفتار طبیعی (source معمولاً 16:9)
+4. ✅ Export نهایی دقیقاً ابعاد social standard دارد (1080×1920, 1080×1080, 1920×1080)
+5. ✅ کیفیت high (smoothing high + bitrate مناسب)
+6. ✅ Preview = WYSIWYG export
+7. ✅ زبان UI: انگلیسی
 
