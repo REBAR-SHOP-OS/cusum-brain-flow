@@ -230,13 +230,6 @@ export function SceneCard({
                 onMouseLeave={(e) => { const v = e.target as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
               />
             )}
-            {logoUrl && (
-              <img
-                src={logoUrl}
-                alt="Brand watermark"
-                className="absolute bottom-2 right-2 h-8 w-auto object-contain opacity-70 pointer-events-none"
-              />
-            )}
           </div>
         )}
 

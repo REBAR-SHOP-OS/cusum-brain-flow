@@ -972,11 +972,11 @@ class BackgroundAdDirectorService {
       if (orderedClips.length === 0) return;
 
       const finalUrl = await stitchClips(orderedClips, {
-        logo: { url: brand.logoUrl || "", enabled: !!brand.logoUrl, size: 80 },
+        logo: { url: "", enabled: false, size: 80 },
         endCard: {
           enabled: true, brandName: brand.name, tagline: brand.tagline,
           website: brand.website, primaryColor: brand.primaryColor,
-          bgColor: brand.secondaryColor, logoUrl: brand.logoUrl,
+          bgColor: brand.secondaryColor, logoUrl: null,
         },
         subtitles: { enabled: false, segments: [] },
         musicUrl: this.state.musicTrackUrl || undefined,

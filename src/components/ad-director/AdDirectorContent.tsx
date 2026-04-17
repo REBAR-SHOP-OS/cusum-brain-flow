@@ -150,11 +150,11 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       } catch (e) { console.warn("TTS failed:", e); }
 
       const finalUrl = await stitchClips(orderedClips, {
-        logo: { url: currentBrand.logoUrl || "", enabled: !!currentBrand.logoUrl, size: 80 },
+        logo: { url: "", enabled: false, size: 80 },
         endCard: {
           enabled: true, brandName: currentBrand.name, tagline: currentBrand.tagline,
           website: currentBrand.website, primaryColor: currentBrand.primaryColor,
-          bgColor: currentBrand.secondaryColor, logoUrl: currentBrand.logoUrl,
+          bgColor: currentBrand.secondaryColor, logoUrl: null,
         },
         subtitles: { enabled: false, segments: [] },
         audioUrl,
