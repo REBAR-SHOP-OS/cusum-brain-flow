@@ -759,6 +759,12 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
         onSave={handleSaveCharacterPrompt}
         characterPreviewUrl={characterPreviewUrl}
         brandContext="rebar.shop — industrial rebar fabrication & supply. Persuasive cinematic ad."
+        durationSec={Number(duration) || 15}
+        productsContext={
+          selectedProductLabels.length
+            ? selectedProductLabels.join(", ")
+            : "rebar fabrication, cut & bend service, fast quoting from drawings"
+        }
       />
     </div>
   );
