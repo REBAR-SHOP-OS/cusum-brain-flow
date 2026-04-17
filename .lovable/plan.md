@@ -1,46 +1,78 @@
 
-## درخواست کاربر
-کاربر یک فایل ویدیویی آپلود کرده (`Series_of_pictures_202604170946.mp4`) و می‌خواهد این ویدیو در پس‌زمینه‌ی صفحه‌ی loading/progress (که در screenshot دیده می‌شود — همان جایی که "Re-generating 2 missing scenes of 2..." نمایش داده می‌شود) به صورت **بدون صدا** و loop پخش شود.
+## درک درخواست کاربر
+کاربر یک عکس از یک **شخصیت ثابت** را در «Character reference» آپلود می‌کند و انتظار دارد:
+1. **همان چهره** در همه‌ی scene‌ها ظاهر شود (نه شخص دیگر)
+2. آن شخصیت **بر اساس prompt صحبت کند** و تبلیغ شرکت را ارائه دهد (با صدا)
 
-## بررسی لازم
-1. پیدا کردن کامپوننتی که این صفحه‌ی progress/loading را render می‌کند (احتمالاً در `AdDirectorContent.tsx` یا یک کامپوننت progress جداگانه با Wand icon و progress bar)
-2. تأیید جای دقیق layer پس‌زمینه
+## بررسی یافته‌ها
 
-## برنامه (Surgical, Additive)
-
-### گام ۱ — کپی فایل ویدیو
+### مشکل ۱ — Character image در همه‌ی scene‌ها استفاده نمی‌شود
+در `backgroundAdDirectorService.ts` (خط ~521 و ~618):
+```ts
+} else if (characterImageUrl && scene.generationMode === "image-to-video") {
+  referenceImage = characterImageUrl;
+}
 ```
-lov-copy user-uploads://Series_of_pictures_202604170946.mp4 public/videos/ad-director-loading-bg.mp4
+- اگر AI mode را روی `text-to-video` یا `reference-continuation` بگذارد → عکس شخصیت **هرگز استفاده نمی‌شود**
+- اگر intro/outro هم آپلود شده، آن‌ها character را در scene اول/آخر **override** می‌کنند
+
+### مشکل ۲ — هیچ صدای گوینده‌ای تولید نمی‌شود
+کل پایپلاین generation هیچ مسیر TTS/voiceover ندارد. خروجی Wan2.6-i2v یک ویدیوی **بدون صدا/بدون lip-sync** است. برای «صحبت کردن شخصیت» نیاز به یکی از این‌هاست:
+- **Voiceover overlay** (ساده): تولید صدا با Lovable AI/ElevenLabs از روی متن `narrationLine` هر scene و mux کردن روی ویدیوی Wan
+- **Lip-sync** (پیشرفته‌تر): استفاده از مدل talking-head مثل Wan2.6 با voice یا یک مدل lip-sync جداگانه — در فاز ۲
+
+## برنامه (Surgical, دو فاز)
+
+### فاز ۱ — اطمینان از حضور شخصیت در همه scene‌ها (الان)
+
+**`src/lib/backgroundAdDirectorService.ts`** — خطوط 516-523 و 613-620:
+
+تغییر منطق انتخاب reference image. اگر `characterImageUrl` تعریف شده باشد، **همیشه** به‌عنوان reference استفاده شود (با اولویت‌بندی صحیح):
+```ts
+let referenceImage: string | undefined;
+// Priority: intro/outro overrides character ONLY for the specific anchor scene
+if (isFirstScene && introImageUrl) {
+  referenceImage = introImageUrl;
+} else if (isLastVisualScene && outroImageUrl) {
+  referenceImage = outroImageUrl;
+} else if (characterImageUrl) {
+  // Use character for ALL middle scenes — regardless of generationMode
+  referenceImage = characterImageUrl;
+}
+// Force I2V mode whenever we have a reference image
+const isI2V = !!referenceImage;
+const chosenModel = videoModel || (isI2V ? "wan2.6-i2v" : "wan2.6-t2v");
 ```
 
-### گام ۲ — پیدا کردن صفحه‌ی loading
-بررسی `src/components/ad-director/AdDirectorContent.tsx` و فایل‌های مرتبط (مثلاً `GenerationProgress.tsx` یا state `flowState === "generating"`) برای یافتن دقیق محل render UI پیشرفت.
-
-### گام ۳ — افزودن ویدیو پس‌زمینه
-در همان wrapper صفحه‌ی loading، یک تگ `<video>` به‌عنوان absolute background اضافه می‌شود:
-
-```tsx
-<video
-  src="/videos/ad-director-loading-bg.mp4"
-  autoPlay
-  loop
-  muted
-  playsInline
-  className="absolute inset-0 w-full h-full object-cover opacity-30 pointer-events-none -z-10"
-/>
+علاوه بر این، در `storyboardWithDefaults` (خط ~412) شرط forcedI2V را گسترش می‌دهیم تا اگر `characterImageUrl` وجود دارد، **همه** scene‌ها (به جز end-card) به `image-to-video` تبدیل شوند:
+```ts
+const forcedI2V =
+  (isFirstScene && !!introImageUrl) ||
+  (isLastVisualScene && !!outroImageUrl) ||
+  (!!characterImageUrl && s.generationMode !== "static-card");
 ```
 
-ویژگی‌ها:
-- `muted` + `playsInline` → autoplay در همه‌ی browserها بدون صدا
-- `loop` → پخش مداوم تا پایان generation
-- `opacity-30` تا متن progress و wand icon خوانا باقی بمانند (قابل تنظیم بر اساس preview)
-- یک overlay مشکی نیمه‌شفاف اضافه می‌شود اگر contrast کافی نباشد
+### فاز ۲ — اضافه کردن Narration/Voiceover (در همین تغییر)
 
-### آنچه تغییر نمی‌کند
-- منطق generation و progress — بدون تغییر
-- پیام‌ها، Wand icon، progress bar — بدون تغییر
-- صفحه‌ی intro (`ad-director-intro.mp4`) — بدون تغییر
-- سایر صفحات (Result، Editor) — بدون تغییر
+**۱. تولید صدا برای هر scene:**  
+edge function جدید `generate-narration` که از Lovable AI Gateway برای TTS استفاده می‌کند (مدل: `google/gemini-2.5-flash` با خروجی audio، یا fallback به Web Speech API در client). متن narration از `segment.narrationLine` یا `scene.objective` گرفته می‌شود.
 
-### نتیجه
-در مدت زمانی که scenes در حال generation هستند، ویدیوی آپلودشده به‌صورت silent، loop، و full-cover در پس‌زمینه پخش می‌شود و UI پیشرفت روی آن قرار می‌گیرد.
+**۲. Mux کردن صدا روی ویدیو:**  
+بعد از تکمیل scene در `backgroundAdDirectorService.ts`، یک تابع کمکی `attachNarrationToScene(videoUrl, narrationText, language)` صدا می‌زنیم که با ffmpeg.wasm (یا مستقیماً در browser با Web Audio API + MediaRecorder) صدا را روی ویدیو سوار می‌کند.
+
+**۳. Voice settings در UI:**  
+یک toggle ساده در `ChatPromptBar.tsx` با عنوان «🎙️ Voiceover» (پیش‌فرض: ON اگر character آپلود شده). همچنین یک select برای زبان (English / Persian).
+
+### فاز ۳ — Lip-sync (آینده، اختیاری)
+بررسی موتورهای talking-head (مثل Wan2.6 talking-head، Hedra، D-ID). نیاز به API key جدید و outside scope این تغییر — فقط placeholder در state می‌گذاریم.
+
+## آنچه تغییر نمی‌کند
+- UI کارت‌های reference (`ReferenceUploadCard`) — بدون تغییر
+- منطق intro/outro reference — بدون تغییر، فقط اولویت‌بندی نسبت به character روشن می‌شود
+- Schema `ad_projects` — بدون تغییر
+
+## نتیجه
+وقتی کاربر یک عکس به Character reference می‌دهد:
+1. **همان چهره** در همه scene‌ها (به جز end-card و scene‌هایی که intro/outro override دارند) ظاهر می‌شود — با force به `image-to-video` و `wan2.6-i2v`
+2. **یک voiceover** بر اساس متن narration هر scene تولید می‌شود و روی ویدیوی نهایی mux می‌شود
+3. شخصیت در ویدیو دیده می‌شود + صدای ارائه‌ی تبلیغ شنیده می‌شود
