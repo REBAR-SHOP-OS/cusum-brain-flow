@@ -1,32 +1,30 @@
 
 
-## Plan: Make "AI Prompt" Auto-Write Without Asking the User
+## Plan: Add Sound to AI Video Director Intro Video
 
 ### Problem
-کاربر می‌گوید دکمه «AI Prompt» باید **خودش** پرامت را بنویسد — نه اینکه از کاربر بخواهد توضیح بدهد. در حال حاضر (طبق تغییر قبلی) یک دیالوگ باز می‌شود و از کاربر می‌خواهد ایده‌اش را تایپ کند، که خلاف خواسته است.
+ویدئوی ورودی صفحه AI Video Director (`/videos/ad-director-intro.mp4`) در حال حاضر با ویژگی `muted` پخش می‌شود، بنابراین هیچ صدایی شنیده نمی‌شود. کاربر می‌خواهد ویدئو با صدا پخش شود.
 
 ### Root Cause
-در `ChatPromptBar.tsx`، دکمه «AI Prompt» الان `setAiDialogOpen(true)` را صدا می‌زند و دیالوگ `AIPromptDialog` را باز می‌کند. کاربر می‌خواهد به رفتار قبلی برگردد: کلیک = تولید خودکار پرامت بر اساس chipهای انتخاب‌شده (Style, Products, Duration, Ratio, Engine).
+در `src/pages/AdDirector.tsx` خط ۱۹، تگ `<video>` صفت `muted` دارد. این لازم بود چون مرورگرها autoplay با صدا را به صورت پیش‌فرض بلاک می‌کنند مگر اینکه کاربر تعامل قبلی داشته باشد.
 
-### Changes
+### Solution
+چون این صفحه از طریق کلیک کاربر روی کارت "AI Video Director" در داشبورد باز می‌شود (یعنی user gesture وجود دارد)، می‌توانیم `muted` را حذف کنیم. اما برای اطمینان در صورت بلاک شدن توسط مرورگر، یک fallback اضافه می‌کنیم:
 
-**1. `src/components/ad-director/ChatPromptBar.tsx`**
-- دکمه «AI Prompt» را به `handleAiWrite` (تابع قبلی auto-generate) برگردان — نه `setAiDialogOpen(true)`
-- `handleAiWrite` باید مستقیماً edge function `ad-director-ai` با `action: "write-script"` را صدا بزند و فقط chip context را بفرستد (بدون ورودی کاربر)
-- نتیجه را در textarea اصلی قرار دهد
-- در حین تولید: دکمه disabled + spinner نمایش دهد
-- توست موفقیت/خطا
+### Changes (1 file)
 
-**2. `AIPromptDialog` (نگه داشتن یا حذف؟)**
-- فایل را نگه می‌داریم اما render نمی‌کنیم — برای استفاده آینده در دسترس بماند (additive-only، طبق Surgical Execution Law)
-- state `aiDialogOpen` حذف می‌شود
+**`src/pages/AdDirector.tsx`**
+1. حذف صفت `muted` از تگ `<video>` تا صدا پخش شود
+2. اضافه کردن `controls={false}` صریح برای ظاهر تمیز
+3. اضافه کردن دکمه Mute/Unmute کوچک کنار دکمه Skip (با آیکون `Volume2`/`VolumeX`)
+4. در `useEffect` پس از mount، تلاش برای `play()` با صدا — در صورت reject شدن توسط مرورگر، خودکار به muted fallback می‌شود و دکمه unmute برای کلیک کاربر فعال می‌ماند
+5. اضافه کردن state `isMuted` برای کنترل آیکون
 
 ### What stays the same
-- chips (Style, Products, Duration, Ratio, Engine) — بدون تغییر
-- intro/outro/character upload cards و badge‌های "Locked to first/final scene" — بدون تغییر
-- edge function `ad-director-ai` (`write-script`) — بدون تغییر، فقط بدون متن کاربر صدا زده می‌شود
-- دکمه «Create video» — بدون تغییر
+- مسیر فایل ویدئو، autoPlay، playsInline، onEnded، onError — بدون تغییر
+- رفتار دکمه Skip — بدون تغییر
+- بقیه صفحه AdDirector — بدون تغییر
 
 ### Result
-کلیک روی «AI Prompt» → بدون باز شدن هیچ دیالوگ، AI خودش با استفاده از chipهای انتخاب‌شده یک پرامت سینمایی می‌نویسد و در textarea می‌گذارد → کاربر می‌تواند ادیت کند یا مستقیم «Create video» بزند.
+وقتی کاربر روی "AI Video Director" کلیک می‌کند → ویدئوی ورودی **با صدا** پخش می‌شود. اگر مرورگر autoplay با صدا را بلاک کرد، ویدئو silent شروع می‌شود و کاربر می‌تواند با کلیک روی دکمه speaker آن را unmute کند.
 
