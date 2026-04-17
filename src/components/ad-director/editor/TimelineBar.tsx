@@ -17,6 +17,15 @@ import type { VideoOverlay } from "@/types/videoOverlay";
 import { ClipTransitionPopover, type ClipTransition } from "./ClipTransitionPopover";
 
 // ─── Thumbnail extraction helper ───────────────────────────
+// Detect whether a clip URL points to a static image rather than a video
+function isImageUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  if (url.startsWith("data:image/")) return true;
+  // Strip query string before testing extension
+  const clean = url.split("?")[0].split("#")[0].toLowerCase();
+  return /\.(jpe?g|png|webp|gif|avif|bmp)$/.test(clean);
+}
+
 function useVideoThumbnails(clips: ClipOutput[]) {
   const [thumbnails, setThumbnails] = useState<Record<string, string[]>>({});
   const extractedRef = useRef<Set<string>>(new Set());
@@ -25,6 +34,14 @@ function useVideoThumbnails(clips: ClipOutput[]) {
     clips.forEach((clip) => {
       if (clip.status !== "completed" || !clip.videoUrl || extractedRef.current.has(clip.sceneId)) return;
       extractedRef.current.add(clip.sceneId);
+
+      // ─── Image scene: use the URL directly, repeated to fill the lane ───
+      if (isImageUrl(clip.videoUrl)) {
+        const url = clip.videoUrl;
+        // Repeat the same image so the expanded lane (which renders multiple frames) is fully covered
+        setThumbnails(prev => ({ ...prev, [clip.sceneId]: [url, url, url, url, url, url] }));
+        return;
+      }
 
       const video = document.createElement("video");
       video.crossOrigin = "anonymous";
@@ -59,7 +76,8 @@ function useVideoThumbnails(clips: ClipOutput[]) {
         if (frameIndex < FRAME_COUNT && frameIndex < timePoints.length) {
           video.currentTime = timePoints[frameIndex];
         } else {
-          setThumbnails(prev => ({ ...prev, [clip.sceneId]: frames }));
+          // Fallback: if no frames could be captured (CORS), use the video URL itself as a poster reference
+          setThumbnails(prev => ({ ...prev, [clip.sceneId]: frames.length ? frames : [] }));
           video.src = "";
           video.load();
         }
@@ -646,7 +664,24 @@ export function TimelineBar({
                       <img src={thumbnails[scene.id][0]} alt="" className="absolute inset-0 w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
                     </>
-                  ) : null}
+                  ) : clip?.videoUrl && isImageUrl(clip.videoUrl) ? (
+                    <>
+                      <img src={clip.videoUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                    </>
+                  ) : clip?.videoUrl ? (
+                    <video
+                      src={clip.videoUrl}
+                      className="absolute inset-0 w-full h-full object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center">
+                      <span className="text-[9px] text-white/60 font-semibold">Scene {i + 1}</span>
+                    </div>
+                  )}
                   <span className="absolute top-0.5 left-0.5 text-[7px] px-1 py-px rounded-full bg-black/60 text-white font-mono z-10">{durSec}s</span>
                   <div className="absolute top-1 right-1 z-10">
                     <div className={`w-2 h-2 rounded-full ${isCompleted ? "bg-emerald-400" : isGenerating ? "bg-blue-400 animate-pulse" : "bg-zinc-600"}`} />
@@ -772,9 +807,31 @@ export function TimelineBar({
                           </div>
                           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
                         </>
+                      ) : clip?.videoUrl && isImageUrl(clip.videoUrl) ? (
+                        <>
+                          <img
+                            src={clip.videoUrl}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                        </>
                       ) : clip?.videoUrl ? (
-                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-800/20 to-emerald-700/20" />
-                      ) : null}
+                        <>
+                          <video
+                            src={clip.videoUrl}
+                            className="absolute inset-0 w-full h-full object-cover"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                        </>
+                      ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-zinc-700 to-zinc-900 flex items-center justify-center">
+                          <span className="text-[10px] text-white/60 font-semibold">Scene {i + 1}</span>
+                        </div>
+                      )}
                       {/* Trim preview overlay */}
                       {trimPreview && trimPreview.index === i && (
                         <>
