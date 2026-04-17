@@ -352,9 +352,12 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         });
       }
     } catch (error) {
+      const msg = getErrorMessage(error, "Scene regeneration failed.");
       service.patchState({
-        clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: getErrorMessage(error, "Scene regeneration failed."), progress: 0 } : c),
+        clips: service.getState().clips.map(c => c.sceneId === sceneId ? { ...c, status: "failed" as const, error: msg, progress: 0 } : c),
       });
+      // Surface the actual API reason so the user can act on it (moderation, bad image, etc.)
+      toast({ title: "Scene regeneration failed", description: msg, variant: "destructive" });
     }
   }, [service]);
 

@@ -483,8 +483,9 @@ class BackgroundAdDirectorService {
       const effectiveRatio = ratio === "Smart" ? "16:9" : ratio;
       const wanRatio = ["16:9", "9:16", "1:1", "4:3"].includes(effectiveRatio) ? effectiveRatio : "16:9";
 
-      // Pre-compute shared values
-      const sceneDuration = 15;
+      // Pre-compute shared values — derive per-scene duration from user choice
+      const requestedTotal = videoParams?.duration && videoParams.duration > 0 ? videoParams.duration : 30;
+      const sceneDuration = Math.max(2, Math.min(15, Math.round(requestedTotal / Math.max(1, storyboardWithDefaults.length))));
       const cp = continuityProfile;
       const continuityPrefix = cp
         ? `[Visual continuity: ${cp.environment || ""}, ${cp.lightingType || ""}, ${cp.colorMood || ""}, subject: ${cp.subjectDescriptions || ""}, wardrobe: ${cp.wardrobe || ""}] `
@@ -658,6 +659,21 @@ class BackgroundAdDirectorService {
 
         await Promise.allSettled(retryPromises);
       }
+
+      // Sync DB with final clip state so reload doesn't trigger "Recovering missing scenes"
+      try {
+        const pid = this.state.projectId;
+        if (pid) {
+          const finalStatus = this.state.clips.every(c => c.status === "completed" && c.videoUrl) ? "completed" : "draft";
+          await saveProject({
+            id: pid,
+            name: prompt ? (prompt.length > 50 ? prompt.substring(0, 50).replace(/\s+\S*$/, "…") : prompt) : (brand.name ? `${brand.name} Ad` : "Untitled Ad"),
+            brandName: brand.name, script: prompt,
+            segments: newSegments, storyboard: storyboardWithDefaults,
+            clips: this.state.clips, continuity: continuityProfile, status: finalStatus,
+          });
+        }
+      } catch (e) { console.warn("Post-generation save failed:", e); }
 
       const unresolvedCount = this.state.clips.filter(c => c.status !== "completed" || !c.videoUrl).length;
       if (unresolvedCount > 0) {
