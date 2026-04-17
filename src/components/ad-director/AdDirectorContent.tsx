@@ -468,7 +468,22 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
 
       {/* Analyzing / Generating */}
       {(flowState === "analyzing" || flowState === "generating") && (
-        <CameraLoader statusText={statusText} progressValue={progressValue} sceneCount={storyboard.length} onCancel={handleCancel} />
+        <>
+          <div className="fixed inset-0 z-[5] bg-black overflow-hidden pointer-events-none">
+            <video
+              src="/videos/ad-director-loading-bg.mp4"
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="absolute inset-0 w-full h-full object-cover opacity-40"
+            />
+            <div className="absolute inset-0 bg-black/50" />
+          </div>
+          <div className="relative z-10">
+            <CameraLoader statusText={statusText} progressValue={progressValue} sceneCount={storyboard.length} onCancel={handleCancel} />
+          </div>
+        </>
       )}
 
       {/* Result */}
