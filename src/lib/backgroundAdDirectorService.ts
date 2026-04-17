@@ -159,12 +159,20 @@ class BackgroundAdDirectorService {
     this.listener?.(this.state);
   }
 
-  /** Fire-and-forget: generate an AI thumbnail for the project */
+  /** Fire-and-forget: generate an AI thumbnail for the project. Silently ignores transient failures (rate-limits, payment, timeout). */
   private async generateThumbnail(projectId: string, prompt: string): Promise<void> {
     try {
       await invokeEdgeFunction("generate-thumbnail", { prompt, projectId }, { timeoutMs: 60_000 });
-    } catch (e) {
-      console.warn("Thumbnail generation failed (non-blocking):", e);
+    } catch (e: any) {
+      // Transient — never block the user, never surface as warning/error
+      const status = e?.status ?? e?.cause?.status;
+      const msg = String(e?.message ?? "");
+      const isTransient =
+        status === 429 || status === 402 || status === 408 || status === 504 ||
+        /rate limit|payment required|timeout/i.test(msg);
+      if (!isTransient) {
+        console.info("[thumbnail] skipped:", msg || e);
+      }
     }
   }
 
