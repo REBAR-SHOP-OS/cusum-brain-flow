@@ -14,7 +14,7 @@ import {
   SkipBack, SkipForward,
   Palette, Film, LayoutGrid, X,
   Mic, Captions, Gauge, MessageSquareText,
-  RectangleHorizontal, ImagePlus,
+  RectangleHorizontal, ImagePlus, Shuffle,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -39,12 +39,16 @@ import { SpeedControlDialog } from "./editor/SpeedControlPopover";
 import { EditOverlayDialog } from "./editor/EditOverlayDialog";
 import { ImageOverlayDialog } from "./editor/ImageOverlayDialog";
 import { TextTab } from "./editor/TextTab";
+import { TransitionsTab } from "./editor/TransitionsTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
 import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 
-type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice" | "image";
+type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice" | "image" | "transitions";
+
+const TRANSITION_STORAGE_KEY = "ad-director:transition-preset";
+const TRANSITION_DURATION_STORAGE_KEY = "ad-director:transition-duration";
 
 interface ProVideoEditorProps {
   clips: ClipOutput[];
