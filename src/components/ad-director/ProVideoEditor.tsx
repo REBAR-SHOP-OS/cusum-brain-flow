@@ -14,7 +14,7 @@ import {
   SkipBack, SkipForward,
   Palette, Film, LayoutGrid, X,
   Mic, Captions, Gauge, MessageSquareText,
-  RectangleHorizontal, ImagePlus,
+  RectangleHorizontal, ImagePlus, Shuffle,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -39,12 +39,16 @@ import { SpeedControlDialog } from "./editor/SpeedControlPopover";
 import { EditOverlayDialog } from "./editor/EditOverlayDialog";
 import { ImageOverlayDialog } from "./editor/ImageOverlayDialog";
 import { TextTab } from "./editor/TextTab";
+import { TransitionsTab } from "./editor/TransitionsTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
 import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 
-type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice" | "image";
+type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice" | "image" | "transitions";
+
+const TRANSITION_STORAGE_KEY = "ad-director:transition-preset";
+const TRANSITION_DURATION_STORAGE_KEY = "ad-director:transition-duration";
 
 interface ProVideoEditorProps {
   clips: ClipOutput[];
@@ -203,6 +207,25 @@ export function ProVideoEditor({
   const [videoSpeed, setVideoSpeed] = useState(1);
   const [speedPopoverOpen, setSpeedPopoverOpen] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<string>("16:9");
+  const [transitionPreset, setTransitionPreset] = useState<string>(() => {
+    if (typeof window === "undefined") return "Crossfade";
+    return localStorage.getItem(TRANSITION_STORAGE_KEY) || "Crossfade";
+  });
+  const [transitionDuration, setTransitionDuration] = useState<number>(() => {
+    if (typeof window === "undefined") return 0.5;
+    const v = parseFloat(localStorage.getItem(TRANSITION_DURATION_STORAGE_KEY) || "0.5");
+    return isNaN(v) ? 0.5 : v;
+  });
+
+  const handleTransitionSelect = useCallback((preset: string) => {
+    setTransitionPreset(preset);
+    try { localStorage.setItem(TRANSITION_STORAGE_KEY, preset); } catch {}
+  }, []);
+
+  const handleTransitionDurationChange = useCallback((d: number) => {
+    setTransitionDuration(d);
+    try { localStorage.setItem(TRANSITION_DURATION_STORAGE_KEY, String(d)); } catch {}
+  }, []);
 
   // Hide global floating widgets (Vizzy, LiveChat, Feedback) while editor is mounted
   useEffect(() => {
@@ -2161,6 +2184,14 @@ export function ProVideoEditor({
                   Select a static card scene to edit
                 </div>
               )}
+              {activeTab === "transitions" && (
+                <TransitionsTab
+                  activeTransition={transitionPreset}
+                  onSelect={handleTransitionSelect}
+                  duration={transitionDuration}
+                  onDurationChange={handleTransitionDurationChange}
+                />
+              )}
             </ScrollArea>
           </div>
         )}
@@ -2172,6 +2203,7 @@ export function ProVideoEditor({
         sidebarTabs={[
           { id: "media", label: "Media", icon: <Film className="w-3.5 h-3.5" /> },
           { id: "text", label: "Text", icon: <FileText className="w-3.5 h-3.5" /> },
+          { id: "transitions", label: "Transitions", icon: <Shuffle className="w-3.5 h-3.5" /> },
           { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
           { id: "image", label: "Image", icon: <ImagePlus className="w-3.5 h-3.5" /> },
           { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
