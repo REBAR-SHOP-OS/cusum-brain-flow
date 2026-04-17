@@ -1,67 +1,75 @@
 
-## درخواست
-الآن دکمه‌ی "Improve with AI" در `CharacterPromptDialog` فقط وقتی کار می‌کند که کاربر **حداقل ۳ کاراکتر** نوشته باشد (و در غیر این‌صورت toast خطا می‌دهد). کاربر می‌خواهد:
-- اگر textarea **خالی** باشد → AI خودش از صفر یک پرامت کامل برای character بنویسد
-- اگر متن **موجود** باشد → آن را improve کند (مثل الآن)
+## درک درخواست
+کاربر می‌خواهد پرامت تولید‌شده توسط "Write with AI" در `CharacterPromptDialog`:
+1. **با توجه به مدت زمان ویدیو** (مثلاً 15s یا 30s) نوشته شود — یعنی متن دیالوگ آنقدر باشد که در آن زمان واقعاً قابل گفتن باشد
+2. **محتوای آن صراحتاً تبلیغ شرکت/محصول** باشد — یعنی شخصیت در ویدیو شرکت و محصولات را معرفی و تبلیغ کند (نه فقط حرف کلی)
 
 ## بررسی
-در `src/components/ad-director/CharacterPromptDialog.tsx` (خط ~46-58):
+- در `ChatPromptBar.tsx` (uploaded image-539) دکمه‌ی duration بین Style و Products قرار دارد و مقدارش (مثلاً `15s`) در state موجود است
+- `CharacterPromptDialog` فقط `brandContext` می‌گیرد — نه `durationSec` و نه `productContext` ساخت‌یافته
+- `ChatPromptBar` این dialog را render می‌کند → دسترسی مستقیم به `durationSec` و لیست محصولات دارد
+- AdDirectorContent → ChatPromptBar → CharacterPromptDialog (path پاس دادن props روشن است)
+
+## برنامه (Surgical, Additive)
+
+### تغییر ۱ — `CharacterPromptDialog.tsx`
+افزودن دو prop اختیاری:
 ```ts
-const seed = text.trim();
-if (seed.length < 3) {
-  toast({ title: "Add a starting idea", ... variant: "destructive" });
-  return;
+interface CharacterPromptDialogProps {
+  // ... existing
+  durationSec?: number;        // مثلاً 15
+  productsContext?: string;    // لیست محصولات/شرکت برای تبلیغ
 }
 ```
-این gate باید برداشته شود و prompt ارسالی به edge function به‌صورت **شرطی** ساخته شود.
 
-`brandContext` (شامل brand voice، product list، style) از parent به dialog پاس داده می‌شود — می‌توان از آن برای generate from-scratch استفاده کرد.
+در `handleImprove`، instruction مربوط به حالت `isGenerating` بازنویسی می‌شود تا:
+- **زمان ویدیو** را صراحتاً قید کند: "Total video length: {durationSec}s. Write dialogue that fits naturally within this duration (~{wordCount} words at normal speaking pace)."
+- محاسبه‌ی wordCount: تقریباً `durationSec × 2.3` کلمه (نرخ گفتار طبیعی تبلیغی ~140 wpm)
+- **تبلیغ صریح شرکت/محصول** را الزامی کند: "The character MUST explicitly mention the company name and pitch the product/service to viewers. Include: product name, key benefit, call-to-action."
+- در صورت موجود بودن `productsContext`، آن را به‌عنوان "Products/Services to advertise:" به prompt اضافه کن
+- محدودیت طول جمله متناسب با duration (برای 5-10s → 1-2 جمله، برای 15s → 2-3 جمله، برای 30s → 3-5 جمله)
 
-## برنامه (Surgical, Single-File)
+نمونه instruction جدید برای حالت Generate:
+```
+You WRITE a fresh character-direction note for an AI video model (image-to-video).
+The character (a real person from a reference photo) must ADVERTISE the company and its products on camera.
 
-### تغییر فقط در `src/components/ad-director/CharacterPromptDialog.tsx`
+VIDEO DURATION: {durationSec} seconds (≈ {wordCount} spoken words max)
 
-#### ۱. حذف gate سخت‌گیرانه‌ی ۳ کاراکتری
-به جای error toast، اگر textarea خالی بود، حالت **"generate from scratch"** فعال شود.
+MUST include:
+- Mention the company name explicitly
+- Pitch the specific product/service with its key benefit
+- End with a clear call-to-action
 
-#### ۲. ساخت instruction شرطی
-```ts
-const seed = text.trim();
-const isGenerating = seed.length === 0;
+Constraints:
+- Keep the character's identity, face, body, and clothing UNCHANGED. Do not describe their appearance.
+- Focus on: dialogue (exact words to say), tone, expression, eye contact, gestures.
+- Cinematic, persuasive, sales-driven advertising tone.
+- Length: must fit within {durationSec}s when spoken naturally.
 
-const instruction = isGenerating
-  ? [
-      "You WRITE a fresh SHORT character-direction note for an AI video model (image-to-video).",
-      "The note describes what THIS specific character (a real person from a reference photo) should SAY and DO on camera to advertise the brand.",
-      "Constraints:",
-      "- Keep the character's identity, face, body, and clothing UNCHANGED. Do not describe their appearance.",
-      "- Focus on: dialogue (what they say), tone of voice, facial expression, eye contact, gestures.",
-      "- Cinematic, persuasive, advertising tone. Direct call-to-action at the end.",
-      "- 2–4 sentences maximum. No headings, no bullet lists.",
-      brandContext ? `Brand context to base the pitch on: ${brandContext}` : "",
-      "Return ONLY the direction text — no preamble, no quotes.",
-    ].filter(Boolean).join("\n")
-  : [ /* existing improve instruction */ ].join("\n");
+Brand context: {brandContext}
+Products to advertise: {productsContext}
 
-const userPayload = isGenerating
-  ? instruction
-  : `${instruction}\n\nUSER NOTE TO IMPROVE:\n${seed}`;
+Return ONLY the direction text — no preamble, no quotes.
 ```
 
-#### ۳. به‌روزرسانی UI
-- تغییر label دکمه به‌صورت داینامیک:
-  - خالی → "✨ Write with AI"
-  - دارای متن → "✨ Improve with AI"
-- تغییر toast موفقیت متناسب ("✨ Generated" vs "✨ Improved")
+حالت Improve نیز همان context (duration + products + must-advertise) را دریافت می‌کند تا ویرایش هم در همان framework انجام شود.
 
-#### ۴. حذف condition `seed.length < 3` به‌طور کامل
-دکمه در همه حالات فعال می‌ماند (به جز هنگام `improving`).
+### تغییر ۲ — `ChatPromptBar.tsx`
+هنگام render کردن `<CharacterPromptDialog ... />`، props جدید پاس داده می‌شود:
+- `durationSec={durationSec}` (state موجود — همان مقدار دکمه‌ی 15s/30s)
+- `productsContext={productsContext}` — رشته‌ای ساخته‌شده از لیست محصولات انتخاب‌شده + اطلاعات شرکت (در صورت موجود بودن state مربوطه)
+
+در صورت نبود product picker جداگانه، از همان `brandContext` استخراج می‌شود (یا خالی باقی می‌ماند).
 
 ## آنچه تغییر نمی‌کند
-- Edge function `ad-director-ai` — بدون تغییر (همان action `write-script` کار می‌کند)
-- منطق Save / Cancel / RTL / preview thumbnail — بدون تغییر
-- سایر dialogها و کامپوننت‌ها — بدون تغییر
+- Edge function `ad-director-ai` — بدون تغییر
+- منطق Save / RTL / preview — بدون تغییر
+- AI Prompt dialog کلی — بدون تغییر
 - پایپلاین generation — بدون تغییر
 
 ## نتیجه
-کاربر می‌تواند بدون نوشتن هیچ متنی، روی "Write with AI" کلیک کند و AI بر اساس brand context یک character direction کامل و حرفه‌ای تولید می‌کند. اگر متنی موجود باشد، رفتار قبلی (improve) حفظ می‌شود.
+وقتی کاربر روی "Write with AI" در Character dialog کلیک کند، پرامتی تولید می‌شود که:
+- دقیقاً برای مدت زمان انتخاب‌شده (5/10/15/30s) طول مناسب دارد
+- شخصیت صراحتاً نام شرکت و محصولات را می‌گوید و تبلیغ می‌کند
+- شامل CTA است
