@@ -14,6 +14,7 @@ import {
 } from "@/components/chat/ProductIcons";
 import { AIPromptDialog } from "./AIPromptDialog";
 import { CharacterPromptDialog } from "./CharacterPromptDialog";
+import companyLogo from "@/assets/company-logo.png";
 
 const VIDEO_MODELS: { key: string; provider: string; label: string; description: string }[] = [
   { key: "wan2.6-t2v", provider: "wan", label: "Wan T2V", description: "Text to Video - 1080P" },
@@ -365,6 +366,13 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-4">
+      <div className="flex justify-center pb-1">
+        <img
+          src={companyLogo}
+          alt="Company logo"
+          className="h-16 w-16 md:h-20 md:w-20 object-contain drop-shadow-[0_0_20px_rgba(234,179,8,0.25)]"
+        />
+      </div>
       <div className="grid gap-3 md:grid-cols-3">
         <input ref={introRef} type="file" accept="image/*" hidden onChange={handleIntroChange} />
         <ReferenceUploadCard
