@@ -1,68 +1,119 @@
 
 
-# آپدیت PDF معماری REBAR SHOP OS
+# اتصال به LLM شخصی برای کاهش هزینه
 
-## هدف
-PDF فعلی (نسخه آوریل ۲۰۲۶ — ۷ لایه، ۷۷ کامپوننت، ۹۳ کانکشن) را با وضعیت **واقعی امروز** پروژه به‌روزرسانی کرده و یک فایل PDF جدید برای دانلود بدهم.
+## استراتژی Hybrid (پیشنهاد امن)
 
-## چه چیزهایی در PDF فعلی قدیمی شده‌اند
+agentهای پرمصرف → کلید مستقیم Google Gemini شما  
+agentهای کم‌مصرف → همچنان روی Lovable AI Gateway (بدون تغییر)  
+Vizzy Voice → کلید مستقیم OpenAI شما (Realtime API)
 
-پس از مقایسه با کدبیس فعلی، این بخش‌ها نیاز به آپدیت دارند:
+این روش ~۷۰٪ کاهش هزینه می‌دهد بدون شکستن چیزی.
 
-### ۱) آمار سربرگ
-- **AI / Automation Agents**: قبلاً ۱۱ → الان دقیق‌تر (Vizzy، Nila، Blitz، Accounting، Estimating، Shopfloor، Support، Feedback، SEO Copilot، Social Cron، App-Help)
-- **Edge Functions**: عدد ۱۲ خیلی پایین است؛ پروژه الان ده‌ها edge function دارد
-- **Cron Jobs**: اضافه شدن آمار «۲۳ cron فعال، ~۳,۰۰۰ اجرا/روز»
+## مسیر بندی
 
-### ۲) لایه AI / Automation
-- اضافه کردن **مدل‌های واقعی**: `gemini-2.5-flash` (Vizzy)، `gemini-2.5-pro` (Accounting/Estimating)، `gpt-4o-mini` (App-Help)، OpenAI Realtime (Voice)
-- اضافه کردن **Vizzy Voice** (`/vizzy-live`) جدا از Vizzy متنی
-- اضافه کردن **Business Watchdog** و **Daily Brief** و **Pre-Digest**
-- اضافه کردن **soft-error pattern** (402/429) برای Ad Director
+| Agent | مدل | مسیر جدید |
+|-------|-----|-----------|
+| **vizzy** (متنی) | gemini-2.5-flash | کلید مستقیم Gemini |
+| **vizzy-daily-brief** | gemini-2.5-flash | کلید مستقیم Gemini |
+| **vizzy-briefing** (compressor) | gemini-2.5-flash | کلید مستقیم Gemini |
+| **vizzy-business-watchdog** | gemini-2.5-flash | کلید مستقیم Gemini |
+| **accounting** | gemini-2.5-flash (downgrade از pro) | کلید مستقیم Gemini |
+| **estimating** | gemini-2.5-pro | کلید مستقیم Gemini |
+| **vizzy-voice** | OpenAI Realtime | کلید مستقیم OpenAI |
+| همه agentهای دیگر (shopfloor, support, social, app-help, ad-director, ...) | بدون تغییر | Lovable AI Gateway |
 
-### ۳) لایه Integrations
-- اضافه کردن: **Plaid (BMO observer, read-only)**, **DashScope/Wan 2.6 (video)**, **Synology FileStation proxy**, **ElevenLabs TTS**
-- اضافه کردن **Lovable Cloud / Supabase Edge** به‌عنوان runtime
+## تغییرات فنی
 
-### ۴) لایه Business Modules
-- اضافه کردن: **Ad Director** (مستقل از Video)، **Order Calculator**، **Tasks** (با delegate access)، **Logistics & Delivery**
+### ۱) Provider Adapter (آماده، فقط wire کنیم)
+فایل `supabase/functions/_shared/providers/geminiAdapter.ts` از قبل وجود دارد ولی استفاده نمی‌شود. wire می‌کنیم به `aiRouter.ts`.
 
-### ۵) لایه Security
-- اضافه کردن: **JWT local validation**، **search_path hardening**، **security_invoker views**، **CEO SMS throttling**، **auth signup lockdown trigger**
+### ۲) Router Logic در `_shared/aiRouter.ts`
+اضافه کردن منطق:
+```text
+if (agentName ∈ HEAVY_AGENTS) {
+  if (GEMINI_API_KEY exists) → use GeminiAdapter (direct)
+  else → fallback to Lovable Gateway
+}
+else → use Lovable Gateway (current behavior)
+```
 
-### ۶) بخش جدید: Cost & Usage Profile
-بر اساس داده‌های واقعی ۳۰ روز گذشته:
-- توکن‌های AI به تفکیک agent (Vizzy ~۸۰٪)
-- فراوانی cron‌ها
-- جداول bloated دیتابیس
-- بهینه‌سازی‌های پیشنهادی
+لیست HEAVY_AGENTS:
+- `vizzy`
+- `accounting`
+- `estimating`
+- `vizzy-watchdog`
+- `vizzy-briefing`
 
-### ۷) Workflow State Machine
-- اضافه کردن flow تولید: `cutting → clearance → complete`
-- اضافه کردن workflow hard gates (quote_sent ↔ customer_id)
+### ۳) Accounting Model Downgrade
+در همان روتر، اگر agent = accounting و model = pro → اتوماتیک به flash تبدیل شود (مگر در حالت explicit deep_reconcile).
+
+### ۴) Vizzy Voice
+فایل `supabase/functions/vizzy-voice/index.ts` (WebRTC bridge) اگر `OPENAI_API_KEY` موجود باشد از آن استفاده کند، در غیر این صورت روی مسیر فعلی بماند.
+
+### ۵) Secret Management
+نیاز به دو secret جدید:
+- `GEMINI_API_KEY` — از https://aistudio.google.com/app/apikey
+- `OPENAI_API_KEY` — از https://platform.openai.com/api-keys (فقط اگر می‌خواهید Voice هم مستقل شود)
+
+اگر فقط Gemini می‌دهید → Voice روی Lovable می‌ماند (بدون مشکل).
+
+### ۶) Observability
+- لاگ هر فراخوانی در `ai_usage_log` با ستون جدید `provider_route` (`lovable_gateway` | `direct_gemini` | `direct_openai`) تا بتوانید مصرف و صرفه‌جویی را ببینید.
+
+### ۷) Fallback ایمن
+اگر کلید مستقیم خطا داد (۴۰۱، ۴۲۹، timeout) → خودکار به Lovable Gateway برگردد و در لاگ ثبت کند. کاربر هیچ شکستی نمی‌بیند.
 
 ## محدوده تغییر
-- فقط تولید **یک PDF جدید** در `/mnt/documents/REBAR_SHOP_OS_Architecture_v2.pdf`
-- بدون تغییر هیچ فایل کد پروژه
-- بدون تغییر دیتابیس، RLS، edge functions
-- ساختار ۷ لایه و ۱۲ صفحه‌ای حفظ می‌شود — فقط محتوا و آمار به‌روز می‌شود
 
-## روش اجرا
-1. اسکریپت Python با `reportlab` بنویسم در `/tmp/build_arch_pdf.py`
-2. ساختار قدیم را به‌عنوان template بازسازی کنم با محتوای جدید
-3. فونت helvetica + رنگ accent برای هر لایه (مطابق نسخه قبلی)
-4. بعد از تولید، `pdftoppm` بزنم و **همه صفحات را visual QA** کنم (طبق skill mandate)
-5. اگر کلیپ یا overlap بود، fix کنم و دوباره render
-6. فایل نهایی را به‌عنوان `<lov-artifact>` به شما تحویل بدهم
+تغییر می‌کند:
+- `supabase/functions/_shared/aiRouter.ts` (router logic)
+- `supabase/functions/_shared/providers/geminiAdapter.ts` (موجود — wire only)
+- `supabase/functions/_shared/providers/openaiAdapter.ts` (موجود — wire only)
+- `supabase/functions/vizzy-voice/index.ts` (key picker)
+- `ai_usage_log` (ستون `provider_route` اضافه شود)
 
-## خروجی نهایی
-- فایل: `REBAR_SHOP_OS_Architecture_v2.pdf` (۱۲–۱۴ صفحه)
-- Artifact tag برای دانلود مستقیم
-- خلاصه‌ای از تغییرات اعمال‌شده
+تغییر **نمی‌کند**:
+- هیچ business logic
+- هیچ RLS / دیتابیس entity
+- هیچ UI
+- هیچ یک از ۱۸ agent دیگر
+
+## مراحل اجرا (پس از تایید)
+
+1. درخواست `GEMINI_API_KEY` با add_secret (و اختیاری `OPENAI_API_KEY`)
+2. صبر برای ورود کلید توسط شما
+3. wire کردن adapterها به router
+4. اضافه کردن HEAVY_AGENTS list و logic انتخاب مسیر
+5. accounting model downgrade
+6. migration برای ستون `provider_route` در `ai_usage_log`
+7. تست end-to-end:
+   - یک پیام به Vizzy → باید از کلید Gemini مستقیم برود (در لاگ ثبت شود)
+   - یک پیام به shopfloor → باید همچنان از Lovable برود
+   - شبیه‌سازی خطای کلید Gemini → باید fallback به Lovable کار کند
 
 ## اعتبارسنجی
-- همه صفحات بدون text clipping
-- جداول صحیح render شده
-- آمار دقیق و مطابق وضعیت فعلی پروژه
-- هیچ Unicode subscript/superscript استفاده نشود (طبق skill rule)
+
+- ✅ Vizzy متنی روی `/intelligence` پاسخ بدهد
+- ✅ Daily Brief صبحگاهی build شود
+- ✅ Watchdog هر ۱۵ دقیقه اجرا شود (و early-exit اگر تغییر نباشد)
+- ✅ Accounting روی Flash پاسخ بدهد
+- ✅ بقیه agentها هیچ تغییری حس نکنند
+- ✅ در `ai_usage_log` ستون `provider_route` پر شود
+
+## صرفه‌جویی پیش‌بینی شده
+
+بر اساس مصرف ۳۰ روز اخیر شما:
+- Vizzy: 41.7M توکن → از Lovable Gateway به مستقیم Gemini ≈ **۷۰٪ ارزان‌تر**
+- Accounting: 6.45M توکن (Pro→Flash) → **~۹۰٪ کاهش هزینه این agent**
+- بقیه: بدون تغییر
+
+تخمین کلی: حدود **۶۰–۷۵٪ کاهش هزینه AI ماهانه**.
+
+## سوال قبل از شروع
+
+اگر فقط `GEMINI_API_KEY` بدهید → Voice همچنان روی Lovable می‌ماند (که الان هم مشکلی ندارد).  
+اگر `OPENAI_API_KEY` هم بدهید → Voice هم مستقل می‌شود.
+
+با تایید شما، در default mode فقط Gemini را wire می‌کنم و درخواست secret می‌فرستم. اگر OpenAI هم می‌خواهید، در پیام تایید بگویید.
 
