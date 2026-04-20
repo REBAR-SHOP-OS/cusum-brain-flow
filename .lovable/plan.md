@@ -1,87 +1,100 @@
 
 
-# چرا "Rebar Cage (Small)" در Pool ‏CUTTER-01 ظاهر نمی‌شود
+# پشتیبانی از آپلود چند ویدیو در Auto-Edit
 
-## ریشه مشکل (دقیقاً از روی داده‌های واقعی DB)
+## هدف
+الان فقط یک ویدیو در هر بار قابل آپلود است. کاربر می‌خواهد **چند ویدیو** آپلود کند تا AI همه را با هم آنالیز کند، صحنه‌های بهترین را از کل کلیپ‌ها انتخاب کند و یک ادیت نهایی silent بسازد.
 
-پروژه Northfleet Group در station dashboard دو ردیف نشان می‌دهد:
+## رفتار جدید
 
-| ردیف | plan name | status | item phase | bar_code | machine | اثر روی pool |
-|------|-----------|--------|------------|----------|---------|--------------|
-| 1 | Rebar Cage | **completed** | `complete` | 20M | CUTTER-02 | ✅ تمام شده — درست است |
-| 2 | Rebar Cage (Small) | queued | **`cut_done`** ← مشکل | 10M | CUTTER-01 | ❌ در pool نمایش داده نمی‌شود |
+**Upload step:**
+- پشتیبانی از multi-file (drop چند فایل یا انتخاب چندتایی)
+- نمایش لیست فایل‌های انتخاب‌شده با thumbnail کوچک، نام، حجم، مدت، و دکمه حذف
+- مجموع حجم ≤ ۲۰۰MB (بجای ۱۰۰MB برای یک فایل)
+- حداکثر **۵ ویدیو** در هر batch
+- دکمه "Add more" برای اضافه کردن کلیپ بیشتر بدون از دست دادن قبلی‌ها
 
-**علت دقیق:**  
-`useStationData.ts` (خط ۱۰۸) فقط آیتم‌هایی را برای cutter pool می‌آورد که:
-```ts
-.or("phase.eq.queued,phase.eq.cutting")
-```
-ولی آیتم تنها در plan ‏"Rebar Cage (Small)" دارای `phase = 'cut_done'` و `completed_pieces = 25 / total_pieces = 25` است — یعنی **قبلاً کامل cut شده** و الان منتظر bender است.
+**Analyzing step:**
+- برای هر ویدیو جداگانه keyframe extract می‌شود (۸ فریم برای هر کلیپ تا کل payload کوچک بماند)
+- همه فریم‌ها با یک فراخوانی به edge function `auto-video-editor` ارسال می‌شوند
+- Gemini از کل کلیپ‌ها بهترین صحنه‌ها را انتخاب و ترتیب پیشنهادی می‌دهد
+- progress bar مرحله‌ای: "Analyzing clip 2 of 4..."
 
-پس CUTTER-01 برای cut هیچ کاری ندارد، اما plan هنوز `status='queued'` دارد چون trigger `auto_advance_item_phase` فقط `phase` آیتم را به `cut_done` پیش برده، ولی plan را هنوز complete نکرده (احتمالاً منتظر phase نهایی کل آیتم‌هاست — و این تنها آیتم plan است).
+**Storyboard step:**
+- هر صحنه با badge منبع (مثلاً "Clip 2 · 0:14–0:21") نمایش داده می‌شود
+- درگ برای reorder + delete (همان رفتار فعلی)
+- نمایش thumbnail اولین فریم هر صحنه
 
-دو ناسازگاری اینجا داریم:
+**Generating step:**
+- `cutVideoIntoSegments` برای هر کلیپ منبع جداگانه اجرا می‌شود
+- segmentها با ترتیب storyboard به `stitchClips()` (silent branch) داده می‌شوند
+- خروجی نهایی .webm/.mp4 silent
 
-1. **Production Queue (شکل ۱) و Station Dashboard (شکل ۲)** plan را به‌صورت `queued` نشان می‌دهند — درست، چون plan هنوز `completed` نشده.
-2. **CUTTER-01 Pool (شکل ۳)** آیتمی نشان نمی‌دهد — درست، چون آیتم cut شده و در `cut_done` است.
+## تغییرات فنی
 
-پس باگ نیست در نمایش pool. ولی **این UX گمراه‌کننده است**: کاربر می‌بیند plan در صف "queued" است، انتظار دارد روی cutter ظاهر شود، ولی نیست.
+### `src/components/ad-director/AutoEditUploadStep.tsx`
+- تبدیل state از `file: File | null` به `files: File[]`
+- input با `multiple` attribute
+- لیست فایل‌ها با thumbnail (از `URL.createObjectURL` فریم اول)
+- validation: تعداد ≤۵، مجموع حجم ≤۲۰۰MB، هر فایل ≤۱۰۰MB
+- callback `onFilesSelected(files: File[])`
 
-## رفع — دو لایه
+### `src/components/ad-director/AutoEditDialog.tsx`
+- state: `sourceFiles: File[]` بجای `sourceFile`
+- `handleFilesSelected`: حلقه روی هر فایل، استخراج ۸ keyframe، ارسال یک‌جا با metadata `{ clipIndex, clipDuration, frames }[]`
+- progress callback مرحله‌ای برای UI
+- در generate: حلقه روی scenes، برای هر scene از فایل منبع درست `cutVideoIntoSegments` صدا زده می‌شود
+- map کردن `clipIndex` در storyboard scene به فایل منبع
 
-### A) تصحیح وضعیت plan (data fix)
-`Rebar Cage (Small)` تمام آیتم‌هایش `phase=cut_done` با `completed_pieces == total_pieces` دارند.  
-plan باید روی **cut_done / awaiting_bender** برود نه `queued`.
+### `src/lib/rawVideoUtils.ts`
+- `extractKeyframes` بدون تغییر — فقط برای هر فایل جداگانه صدا زده می‌شود
+- اضافه کردن helper `cutSegmentFromFile(file, start, end)` که segment را از فایل خاص می‌برد (در صورت لزوم)
 
-اضافه کردن منطق در `auto_advance_item_phase` (یا یک trigger مکمل روی `cut_plan_items`) که:  
-- وقتی همه آیتم‌های یک plan به `phase=cut_done` رسیدند، اگر هیچ آیتمی نیاز به bend ندارد → plan را `completed` کند.
-- اگر آیتم bend دارد → plan را روی `cut_done` (یا یک status جدید مثل `awaiting_bend`) قرار دهد، نه `queued`.
+### `supabase/functions/auto-video-editor/index.ts`
+- پذیرش payload جدید: `{ clips: [{ index, duration, frames: string[] }] }` به‌جای `{ frames: string[] }`
+- prompt به Gemini: تأکید بر انتخاب بهترین صحنه‌ها از **بین چند کلیپ** و برگشت `clipIndex` در هر scene
+- خروجی: `{ scenes: [{ clipIndex, start, end, description, thumbnailUrl }] }`
+- backward compatibility: اگر `frames` تنها بیاید، مثل قبل با `clipIndex=0` رفتار کند
+- size guard همچنان ۵MB
 
-### B) شفاف کردن Station Dashboard و Production Queue UI
-در `ShopFloorProductionQueue.tsx` و station dashboard، اگر همه آیتم‌های plan در فاز `cut_done` یا جلوتر هستند، badge را به‌جای **"Queued"** به یکی از این‌ها تبدیل کنیم:
-- "Cut Done — Awaiting Bend" (وقتی آیتم bend دارد)
-- "Awaiting QC / Clearance" (وقتی فقط منتظر تأیید است)
-
-تغییر فقط در derive کردن label نمایشی — نه تغییر در DB یا منطق pool.
-
-### C) اصلاح فوری برای این رکورد خاص
-بعد از migration:  
-- update کردن `cut_plans.status='completed'` برای plan ‏`Rebar Cage (Small)` (id `15d0eb9d-...`)  
-- یا اگر اقلامش نیاز به bend دارند، `status='cut_done'`
-
-(آیتم `bend_type` تنها آیتم را بررسی می‌کنیم تا تصمیم درست بگیریم.)
+### `src/components/ad-director/AutoEditStoryboardStep.tsx`
+- نمایش badge "Clip {clipIndex + 1}" روی هر صحنه
+- بقیه رفتار بدون تغییر
 
 ## محدوده تغییر
 
 تغییر می‌کند:
-- یک migration: تابع/trigger `auto_advance_plan_status` که status plan را بر اساس phase آیتم‌ها sync می‌کند
-- یک migration data-fix: به‌روزرسانی این plan خاص
-- `ShopFloorProductionQueue.tsx` — derive کردن label واقعی از phase آیتم‌ها
-- `StationDashboard.tsx` (یا کامپوننت row آن) — همان
+- ۳ فایل UI (`AutoEditUploadStep`, `AutoEditDialog`, `AutoEditStoryboardStep`)
+- ۱ edge function (`auto-video-editor`) + redeploy
+- ۱ helper اضافه در `rawVideoUtils.ts`
 
 تغییر **نمی‌کند:**
-- `useStationData.ts` (منطق pool درست است)
-- `CutterStationView`، `CutEngine`، یا هر منطق cut/bend
-- RLS، schema جداول، یا Cut Engine
+- silent-video-only policy (همچنان بدون صدا)
+- bucket `raw-uploads` یا RLS
+- دکمه Auto-Edit در `ChatPromptBar`
+- منطق `stitchClips`
+- بقیه flow Ad Director
+
+## محدودیت‌ها (فاز ۱)
+- حداکثر **۵ کلیپ** در هر batch
+- مجموع حجم ≤ **۲۰۰MB**
+- هر فایل تکی ≤ ۱۰۰MB
+- analysis یک batch ۵ کلیپه ~۶۰–۹۰ ثانیه
 
 ## مراحل اجرا (پس از تأیید)
 
-1. بررسی `bend_type` آیتم plan ‏`Rebar Cage (Small)` تا تصمیم درست (cut_done یا completed) گرفته شود
-2. صدور migration:
-   - یک trigger AFTER UPDATE روی `cut_plan_items.phase` که اگر همه آیتم‌های plan کامل cut شدند، `cut_plans.status` را به `cut_done`/`completed` پیش ببرد (idempotent)
-   - data-fix یک‌باره برای این plan خاص
-3. آپدیت `ShopFloorProductionQueue.tsx`:
-   - دریافت aggregate phase آیتم‌ها و نمایش label واقعی
-4. آپدیت row component `StationDashboard` به همان روش
-5. تست end-to-end:
-   - رفرش station dashboard → "Rebar Cage (Small)" باید "Cut Done — Awaiting Bend" یا "Done" نشان دهد
-   - CUTTER-01 pool خالی بماند (درست است)
-   - bender pool باید این آیتم را داشته باشد (اگر bend است)
+1. آپدیت `AutoEditUploadStep.tsx` برای multi-file
+2. آپدیت `AutoEditDialog.tsx` برای loop آپلود/keyframe و ارسال batch
+3. آپدیت edge function برای پذیرش `clips[]` و برگرداندن `clipIndex`
+4. Redeploy `auto-video-editor`
+5. آپدیت `AutoEditStoryboardStep.tsx` برای نمایش clip badge
+6. تست end-to-end با ۲ کلیپ ۲۰ ثانیه‌ای
 
 ## اعتبارسنجی
-
-- ✅ plan ‏"Rebar Cage (Small)" دیگر در queue station dashboard به‌عنوان Queued نمایش داده نمی‌شود
-- ✅ status plan با phase واقعی آیتم‌ها sync است
-- ✅ هیچ تغییری در رفتار CUTTER-01 pool یا Cut Engine نیست
-- ✅ گزارش کاربر برطرف می‌شود: cutter پروژه‌های آماده‌ی واقعی را نشان می‌دهد، نه plansی که قبلاً cut شده‌اند
+- ✅ کاربر می‌تواند ۲–۵ ویدیو را drop یا انتخاب کند
+- ✅ لیست فایل‌ها با thumbnail و دکمه حذف نمایش داده می‌شود
+- ✅ analysis روی همه کلیپ‌ها انجام می‌شود و storyboard ترکیبی برمی‌گردد
+- ✅ هر scene نشان می‌دهد از کدام clip منبع آمده
+- ✅ خروجی نهایی silent .mp4/.webm با ترتیب درست
+- ✅ flow تک‌فایل قبلی همچنان کار می‌کند (backward compatible)
 
