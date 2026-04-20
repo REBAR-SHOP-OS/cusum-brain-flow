@@ -1,78 +1,87 @@
 
 
-# ارتقای Auto Music به Lyria 3 با پرامپت‌های حرفه‌ای
+# قانون Hard: ویدیوها همیشه باید بدون صدا تولید شوند
 
-## هدف
-دکمه‌ی **Auto Music** در Pro Editor (timeline) باید به‌جای پرامپت ساده، از فرمول حرفه‌ای Lyria 3 (Genre + Mood + Instruments + Vocals) استفاده کند و سه preset آماده + یک مسیر "Custom" در اختیار کاربر بگذارد.
+## ریشه مشکل (تأیید‌شده)
 
-## ریشه‌ی فعلی
-الان دکمه‌ی Auto Music در `AudioPromptDialog` فقط یک input متنی ساده می‌دهد و با duration ثابت، prompt را به edge function `lyria-music` (یا `elevenlabs-music`) می‌فرستد. هیچ راهنمایی، preset، یا فیلد ساختاریافته‌ای وجود ندارد.
+دو منبع مستقل صدا روی ویدیو سوار می‌شود:
 
-## رفع (سه فایل، حداقلی)
+### ۱. صدای ذاتی Wan 2.6 (مشکل اصلی تصویر اول)
+مدل‌های `wan2.6-t2v` و `wan2.6-i2v` **به‌طور پیش‌فرض صدای محیطی auto-generate می‌کنند** (ambient sound effects, footsteps, room tone, musical stings). در `generate-video/index.ts` فعلی، negative prompt فقط dialogue/voiceover/dubbing را دفع می‌کند ولی **هیچ‌چیز جلوی صدای ambient/music ذاتی Wan را نمی‌گیرد**. این چیزی است که در ویدیوی ۱۵ ثانیه‌ای تصویر اول می‌شنوید.
 
-### A) `AudioPromptDialog.tsx` — افزودن Tab "Lyria Pro" با preset و custom builder
+Veo و Sora هم همین رفتار را دارند (Sora 2 صدا هم تولید می‌کند).
 
-داخل تب **Generate**، یک sub-toggle اضافه می‌شود:
-- **Quick Prompt** (همان رفتار فعلی، دست‌نخورده)
-- **Lyria Pro** (جدید) → شامل:
-  - **Preset chips** (سه دکمه افقی): "Upbeat Pop-Electronic" / "Lo-Fi Chill" / "Cinematic Epic"
-  - با کلیک روی هر preset، فیلدهای زیر خودکار پر می‌شود ولی قابل ویرایش‌اند:
-    - **Genre** (Input کوتاه)
-    - **Mood** (Input کوتاه)
-    - **Instruments** (Input)
-    - **Vocals** (ToggleGroup: Instrumental / Vocals EN / Vocals FA)
-    - **Lyric Theme** (Textarea کوچک، فقط اگر Vocals انتخاب شد)
-  - **Duration** همان (15/30/60s)
-  - دکمه‌ی **Generate Music** پرامپت نهایی را با فرمول زیر می‌سازد و به handler موجود می‌دهد:
-    ```
-    Generate a {duration}s {genre} track at {bpmHint}. Mood: {mood}. 
-    Instruments: {instruments}. {vocalsClause}
-    ```
-  - اگر Vocals=Instrumental → `vocalsClause = "Fully instrumental, no vocals."`
-  - اگر Vocals=EN/FA → `vocalsClause = "Include realistic vocals in {language} singing about: {lyricTheme}."`
+### ۲. موزیک stitcher (پنهان ولی فعال)
+در `backgroundAdDirectorService.ts:1135` و `AdDirectorContent.tsx:206`، اگر `state.musicTrackUrl` set شده باشد، stitcher آن را روی export نهایی می‌چسباند. حتی اگر کاربر music انتخاب نکند، در صورتی که از قبل از سشن قبلی state داشته باشد، صدا اضافه می‌شود.
 
-ساختار `AudioPromptResult` و callback `onGenerate` بدون تغییر — فقط محتوای `prompt` غنی‌تر می‌شود. backward compatible کامل.
+## رفع — قانون "Silent by Default" در دو لایه
 
-### B) فایل جدید `src/data/lyriaPresets.ts` — تعریف ۳ preset
+### لایه A: حذف صدای ذاتی Wan/Sora در منبع تولید
 
-شامل آرایه‌ای از:
-```ts
-{ id, label, icon, genre, mood, instruments, vocals, lyricTheme, bpmHint }
-```
-سه ورودی: Upbeat Pop-Electronic / Lo-Fi Chill / Cinematic Epic — دقیقاً برگرفته از سه نمونه‌ی پیام شما با مقادیر default.
+**فایل: `supabase/functions/generate-video/index.ts`**
 
-این فایل صرفاً data است؛ هیچ side-effect یا dependency جدید.
+1. اضافه کردن یک constant سراسری:
+   ```ts
+   const SILENT_VIDEO_MODE = true; // HARD RULE: never embed audio
+   ```
 
-### C) (اختیاری، محافظتی) `supabase/functions/lyria-music/index.ts`
+2. در `wanGenerate` و `wanI2vGenerate`:
+   - `WAN_BASE_NEGATIVE` را گسترش بده با: `ambient sound, sound effects, music, background music, audio, sound, breathing, footsteps, room tone, environmental noise`
+   - بلوک `if (audioUrl) params.audio_url = audioUrl;` را حذف کن (یا پشت `!SILENT_VIDEO_MODE` گذاشت)
+   - پارامتر `audioUrl` را از signature حذف کن (یا ignore کن)
 
-افزایش حد بالای duration از 60s به 60s باقی بماند (Lyria 3 معمولاً 30-60s sweet spot). هیچ تغییر منطقی لازم نیست — فقط در صورتی که نیاز شد یک log اضافه کنیم که نشان دهد prompt structured آمده. این تغییر ممکن است انجام نشود اگر edge function هم‌اکنون پرامپت طولانی را به‌خوبی پاس می‌دهد (که می‌دهد).
+3. در `soraGenerate`:
+   - اگر Sora 2 پارامتر `audio: false` یا معادل پشتیبانی می‌کند، اضافه شود (طبق docs OpenAI). در غیر این‌صورت، یک نشانه‌گذار `silent` در state بگذاریم تا frontend در زمان playback صدا را mute کند.
 
-## محدوده‌ی تغییر
+4. در `veoGenerate`: مشابه (Veo 3.1 صدا تولید می‌کند، باید پارامتر `generateAudio: false` به Vertex AI پاس شود).
 
-تغییر می‌کند:
-- `src/components/ad-director/editor/AudioPromptDialog.tsx` — افزودن sub-tab "Lyria Pro" + state structured fields
-- `src/data/lyriaPresets.ts` — جدید (~40 خط)
+### لایه B: حذف کامل music track از stitcher در AdDirector
 
-تغییر **نمی‌کند:**
-- edge function `lyria-music` / `elevenlabs-music` (پرامپت رشته است؛ غنی‌تر شدن آن مشکلی ندارد)
-- منطق timeline / music track / `useAudioGeneration` hook
-- Quick Prompt mode (کاملاً دست‌نخورده برای backward compat)
-- AdDirector main flow
+**فایل‌ها: `src/lib/backgroundAdDirectorService.ts` + `src/components/ad-director/AdDirectorContent.tsx`**
 
-## مراحل اجرا
+1. در `backgroundAdDirectorService.ts:1135` — جایگزین کن:
+   ```ts
+   musicUrl: undefined,  // HARD RULE: no music in generated videos
+   musicVolume: 0,
+   ```
+2. در `AdDirectorContent.tsx:206` — همان تغییر.
+3. State `musicTrackUrl` در سرویس باقی می‌ماند تا UI break نشود، ولی هرگز به stitcher پاس داده نمی‌شود.
 
-1. ساخت `src/data/lyriaPresets.ts` با سه preset
-2. آپدیت `AudioPromptDialog.tsx`:
-   - افزودن sub-toggle داخل تب Generate
-   - فرم structured (Genre/Mood/Instruments/Vocals/LyricTheme)
-   - تابع `buildLyriaPrompt()` که ۴ فاکتور را به یک پرامپت طبیعی تبدیل کند
-3. تست end-to-end: کلیک Auto Music → انتخاب "Cinematic Epic" → Generate → موسیقی ۳۰ ثانیه‌ای ارکسترال در timeline
+### لایه C: Mute اجباری روی playback (safety net)
+
+**فایل: `src/components/ad-director/result/...` و `VideoStudioContent.tsx`**
+
+روی `<video>` المان‌های پیش‌نمایش نتیجه، attribute `muted` را اجباری کن (نه فقط `autoplay`). اگر مدل قبلی صدا داشت یا backfill قدیمی صدا دارد، باز هم سکوت پخش شود.
+
+## محدوده تغییر
+
+**تغییر می‌کند:**
+- `supabase/functions/generate-video/index.ts` — negative prompt گسترده + حذف audio_url + audio:false برای Sora/Veo
+- `src/lib/backgroundAdDirectorService.ts` — `musicUrl: undefined` در stitchClips call
+- `src/components/ad-director/AdDirectorContent.tsx` — `musicUrl: undefined` در stitchClips call
+- `src/components/ad-director/result/AdResultPreview.tsx` (یا فایل preview معادل) — `muted` روی `<video>`
+- `src/components/social/VideoStudioContent.tsx` — `muted` روی `<video>` پیش‌نمایش
+
+**تغییر نمی‌کند:**
+- ProVideoEditor (Pro Editor) — کاربر در آن آگاهانه music track می‌چسباند، آن جریان دست‌نخورده باقی می‌ماند چون **انتخاب صریح کاربر** است نه auto
+- MusicTab / Lyria preset / dialog — کاربر اگر بخواهد در Pro Editor music بسازد و دستی به timeline اضافه کند، آزاد است
+- DB / RLS / edge function های دیگر
+
+## مرز "Silent" در مقابل "Pro Editor"
+
+- **AI Video Director (AdDirector + VideoStudio)**: **همیشه silent**. صدا هرگز embed یا attach نمی‌شود.
+- **Pro Editor**: کاربر صراحتاً music/voiceover به timeline اضافه می‌کند → این explicit user action است و مجاز است.
+
+## Memory Update
+
+یک memory جدید در `mem://rules/silent-video-generation` اضافه می‌شود:
+> All AI-generated videos in AI Video Director (AdDirector + VideoStudio) MUST be silent. Wan/Veo/Sora must receive negative prompts disabling ambient/music, and stitcher must not attach musicUrl. Pro Editor manual music attachment is the only allowed exception.
 
 ## اعتبارسنجی
 
-- ✅ تب Quick Prompt دقیقاً مثل قبل کار می‌کند
-- ✅ تب Lyria Pro با یک کلیک روی preset همه فیلدها را پر می‌کند
-- ✅ کاربر می‌تواند هر فیلد را ویرایش کند قبل از Generate
-- ✅ خروجی edge function همان MP3 است که در track Music قرار می‌گیرد
-- ✅ هیچ تغییری در DB، RLS، یا سایر صفحات
+- ✅ ویدیوی ۱۵ ثانیه‌ای جدید از Wan T2V → کاملاً silent (نه ambient، نه music، نه footsteps)
+- ✅ Export نهایی AdDirector → silent، حتی اگر `musicTrackUrl` در state باشد
+- ✅ پیش‌نمایش video element → muted attribute (safety net)
+- ✅ Pro Editor manual music در timeline → کار می‌کند (دست‌نخورده)
+- ✅ هیچ تغییری در DB، RLS، یا auth
 
