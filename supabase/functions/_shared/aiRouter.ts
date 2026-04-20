@@ -280,6 +280,10 @@ async function _logUsage(
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) return;
 
+  // Provider route — aiRouter always calls direct keys (Gemini/OpenAI)
+  // Lovable Gateway is only used by legacy edge functions that call ai.gateway.lovable.dev directly
+  const providerRoute = provider === "gemini" ? "direct_gemini" : "direct_openai";
+
   await fetch(`${url}/rest/v1/ai_usage_log`, {
     method: "POST",
     headers: {
@@ -297,6 +301,7 @@ async function _logUsage(
       total_tokens: usage.total_tokens || 0,
       company_id: opts.companyId || null,
       user_id: opts.userId || null,
+      provider_route: providerRoute,
     }),
   });
 }
