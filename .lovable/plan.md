@@ -1,100 +1,96 @@
 
 
-# پشتیبانی از آپلود چند ویدیو در Auto-Edit
+# رفع zoom/crop در خروجی Auto-Edit
 
-## هدف
-الان فقط یک ویدیو در هر بار قابل آپلود است. کاربر می‌خواهد **چند ویدیو** آپلود کند تا AI همه را با هم آنالیز کند، صحنه‌های بهترین را از کل کلیپ‌ها انتخاب کند و یک ادیت نهایی silent بسازد.
+## ریشه مشکل
 
-## رفتار جدید
+در `src/lib/videoStitch.ts`، تابع `stitchClips` همیشه از منطق **`fitCover`** استفاده می‌کند (خط ۶۶۷–۶۷۰):
 
-**Upload step:**
-- پشتیبانی از multi-file (drop چند فایل یا انتخاب چندتایی)
-- نمایش لیست فایل‌های انتخاب‌شده با thumbnail کوچک، نام، حجم، مدت، و دکمه حذف
-- مجموع حجم ≤ ۲۰۰MB (بجای ۱۰۰MB برای یک فایل)
-- حداکثر **۵ ویدیو** در هر batch
-- دکمه "Add more" برای اضافه کردن کلیپ بیشتر بدون از دست دادن قبلی‌ها
+```ts
+const drawFit = (v) => {
+  const f = fitCover(v.videoWidth, v.videoHeight, W, H);
+  ctx.drawImage(v, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
+};
+```
 
-**Analyzing step:**
-- برای هر ویدیو جداگانه keyframe extract می‌شود (۸ فریم برای هر کلیپ تا کل payload کوچک بماند)
-- همه فریم‌ها با یک فراخوانی به edge function `auto-video-editor` ارسال می‌شوند
-- Gemini از کل کلیپ‌ها بهترین صحنه‌ها را انتخاب و ترتیب پیشنهادی می‌دهد
-- progress bar مرحله‌ای: "Analyzing clip 2 of 4..."
+`fitCover` معادل CSS `object-fit: cover` است — یعنی منبع را آنقدر بزرگ می‌کند که کل canvas را **بپوشاند** و سپس **center-crop** می‌کند. این برای Ad Director (که aspect ratio هدف از پیش انتخاب شده) درست است، اما برای Auto-Edit مشکل‌ساز است:
 
-**Storyboard step:**
-- هر صحنه با badge منبع (مثلاً "Clip 2 · 0:14–0:21") نمایش داده می‌شود
-- درگ برای reorder + delete (همان رفتار فعلی)
-- نمایش thumbnail اولین فریم هر صحنه
+- Auto-Edit در `AutoEditDialog.tsx` (خط ۱۸۶–۱۹۰) `stitchClips` را با `overlays = {}` صدا می‌زند → هیچ `aspectRatio` نداده.
+- در این حالت `stitchClips` ابعاد canvas را از **`validatedClips[0].video.videoWidth/Height`** می‌گیرد (خط ۳۹۵–۳۹۸).
+- اما segmentهای WebM که توسط `cutVideoIntoSegments` (MediaRecorder + canvas.captureStream) ساخته می‌شوند، در هنگام decode می‌توانند ابعاد گزارش‌شده‌ی متفاوتی داشته باشند (به‌خصوص ویدیوهای عمودی موبایل که codec گاهی به دیمنشن "نرمال" decode می‌کند).
+- وقتی aspect ratio segment با aspect canvas جزئی فرق دارد، `fitCover` بخشی را crop می‌کند → نتیجه‌ای که کاربر می‌بیند: zoom-in و قطع لبه‌ها.
 
-**Generating step:**
-- `cutVideoIntoSegments` برای هر کلیپ منبع جداگانه اجرا می‌شود
-- segmentها با ترتیب storyboard به `stitchClips()` (silent branch) داده می‌شوند
-- خروجی نهایی .webm/.mp4 silent
+## رفع
 
-## تغییرات فنی
+### A) تابع `fitContain` اضافه کن به `videoStitch.ts`
+معادل `object-fit: contain` — منبع کامل نمایش داده می‌شود، اگر aspect نخواند letterbox سیاه/پر اطراف می‌گذارد:
 
-### `src/components/ad-director/AutoEditUploadStep.tsx`
-- تبدیل state از `file: File | null` به `files: File[]`
-- input با `multiple` attribute
-- لیست فایل‌ها با thumbnail (از `URL.createObjectURL` فریم اول)
-- validation: تعداد ≤۵، مجموع حجم ≤۲۰۰MB، هر فایل ≤۱۰۰MB
-- callback `onFilesSelected(files: File[])`
+```ts
+export function fitContain(srcW, srcH, dstW, dstH) {
+  const srcRatio = srcW / srcH;
+  const dstRatio = dstW / dstH;
+  let dw, dh;
+  if (srcRatio > dstRatio) { dw = dstW; dh = dstW / srcRatio; }
+  else { dh = dstH; dw = dstH * srcRatio; }
+  return { dx: (dstW - dw) / 2, dy: (dstH - dh) / 2, dw, dh };
+}
+```
 
-### `src/components/ad-director/AutoEditDialog.tsx`
-- state: `sourceFiles: File[]` بجای `sourceFile`
-- `handleFilesSelected`: حلقه روی هر فایل، استخراج ۸ keyframe، ارسال یک‌جا با metadata `{ clipIndex, clipDuration, frames }[]`
-- progress callback مرحله‌ای برای UI
-- در generate: حلقه روی scenes، برای هر scene از فایل منبع درست `cutVideoIntoSegments` صدا زده می‌شود
-- map کردن `clipIndex` در storyboard scene به فایل منبع
+### B) اضافه کردن گزینه‌ی `fitMode` به `StitchOverlayOptions`
+- مقادیر: `"cover"` (default برای backward compatibility) یا `"contain"`.
+- در `drawFit` هر دو حالت پشتیبانی شود:
+  ```ts
+  if (fitMode === "contain") {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, W, H);
+    const f = fitContain(v.videoWidth, v.videoHeight, W, H);
+    ctx.drawImage(v, 0, 0, v.videoWidth, v.videoHeight, f.dx, f.dy, f.dw, f.dh);
+  } else { /* current fitCover path */ }
+  ```
+- این تغییر در `drawFit` هر دو scope (عادی و در transition) اعمال شود.
 
-### `src/lib/rawVideoUtils.ts`
-- `extractKeyframes` بدون تغییر — فقط برای هر فایل جداگانه صدا زده می‌شود
-- اضافه کردن helper `cutSegmentFromFile(file, start, end)` که segment را از فایل خاص می‌برد (در صورت لزوم)
+### C) برای Auto-Edit: حفظ ابعاد دقیق منبع، بدون crop
+در `AutoEditDialog.tsx` (خط ۱۸۶):
+- پاس دادن `aspectRatio` نه — اما گزینه‌ی **`fitMode: "contain"`** + ست کردن دستی **`canvasWidth/canvasHeight`** برابر اصلی منبع.
+- اضافه کردن دو فیلد جدید به `StitchOverlayOptions`: `canvasWidth?: number` و `canvasHeight?: number` که اگر داده شد، canvas دقیقاً همان ابعاد را می‌گیرد (به‌جای logic فعلی).
+- در `AutoEditDialog`: قبل از `stitchClips`، یک `<video>` موقت روی فایل اول بساز، صبر کن تا metadata بیاید، و `videoWidth/Height` آن را به عنوان canvas dims بفرست. به این ترتیب خروجی نهایی **دقیقاً** ابعاد ویدیوی منبع را دارد و هیچ crop/letterbox رخ نمی‌دهد.
 
-### `supabase/functions/auto-video-editor/index.ts`
-- پذیرش payload جدید: `{ clips: [{ index, duration, frames: string[] }] }` به‌جای `{ frames: string[] }`
-- prompt به Gemini: تأکید بر انتخاب بهترین صحنه‌ها از **بین چند کلیپ** و برگشت `clipIndex` در هر scene
-- خروجی: `{ scenes: [{ clipIndex, start, end, description, thumbnailUrl }] }`
-- backward compatibility: اگر `frames` تنها بیاید، مثل قبل با `clipIndex=0` رفتار کند
-- size guard همچنان ۵MB
-
-### `src/components/ad-director/AutoEditStoryboardStep.tsx`
-- نمایش badge "Clip {clipIndex + 1}" روی هر صحنه
-- بقیه رفتار بدون تغییر
+### D) Backward compatibility
+- پیش‌فرض `fitMode = "cover"` → Ad Director (که aspect ratio هدف انتخاب می‌کند) دست‌نخورده می‌ماند.
+- فقط Auto-Edit از `contain` + dims native استفاده می‌کند.
 
 ## محدوده تغییر
 
 تغییر می‌کند:
-- ۳ فایل UI (`AutoEditUploadStep`, `AutoEditDialog`, `AutoEditStoryboardStep`)
-- ۱ edge function (`auto-video-editor`) + redeploy
-- ۱ helper اضافه در `rawVideoUtils.ts`
+- `src/lib/videoStitch.ts`:
+  - افزودن `fitContain`
+  - افزودن `fitMode`, `canvasWidth`, `canvasHeight` به `StitchOverlayOptions`
+  - استفاده از این مقادیر در logic ابعاد canvas (خطوط ۳۹۳–۴۰۱)
+  - استفاده از `fitMode` در هر دو محل `drawFit` (داخل drawFrame و در شاخه‌های transition)
+- `src/components/ad-director/AutoEditDialog.tsx`:
+  - استخراج `videoWidth/Height` فایل اول قبل از stitch
+  - پاس دادن `{ fitMode: "contain", canvasWidth, canvasHeight }` به `stitchClips`
 
 تغییر **نمی‌کند:**
-- silent-video-only policy (همچنان بدون صدا)
-- bucket `raw-uploads` یا RLS
-- دکمه Auto-Edit در `ChatPromptBar`
-- منطق `stitchClips`
-- بقیه flow Ad Director
+- منطق Ad Director (Chat/Pro Editor) و رفتار `fitCover` پیش‌فرض
+- منطق `cutVideoIntoSegments` یا extractKeyframes
+- silent-video-only policy
+- edge function `auto-video-editor`
+- بقیه pipeline یا RLS
 
-## محدودیت‌ها (فاز ۱)
-- حداکثر **۵ کلیپ** در هر batch
-- مجموع حجم ≤ **۲۰۰MB**
-- هر فایل تکی ≤ ۱۰۰MB
-- analysis یک batch ۵ کلیپه ~۶۰–۹۰ ثانیه
+## مراحل اجرا
 
-## مراحل اجرا (پس از تأیید)
-
-1. آپدیت `AutoEditUploadStep.tsx` برای multi-file
-2. آپدیت `AutoEditDialog.tsx` برای loop آپلود/keyframe و ارسال batch
-3. آپدیت edge function برای پذیرش `clips[]` و برگرداندن `clipIndex`
-4. Redeploy `auto-video-editor`
-5. آپدیت `AutoEditStoryboardStep.tsx` برای نمایش clip badge
-6. تست end-to-end با ۲ کلیپ ۲۰ ثانیه‌ای
+1. اضافه کردن `fitContain` و سه فیلد جدید به `StitchOverlayOptions` در `videoStitch.ts`
+2. آپدیت منطق ابعاد canvas: اگر `canvasWidth/Height` پاس شد همان را استفاده کن
+3. آپدیت `drawFit` (هر دو محل) برای پشتیبانی از `fitMode`
+4. در `AutoEditDialog`: استخراج dims منبع از اولین فایل و پاس دادن مقادیر جدید
+5. تست end-to-end با یک ویدیوی عمودی موبایل و یک ویدیوی landscape
 
 ## اعتبارسنجی
-- ✅ کاربر می‌تواند ۲–۵ ویدیو را drop یا انتخاب کند
-- ✅ لیست فایل‌ها با thumbnail و دکمه حذف نمایش داده می‌شود
-- ✅ analysis روی همه کلیپ‌ها انجام می‌شود و storyboard ترکیبی برمی‌گردد
-- ✅ هر scene نشان می‌دهد از کدام clip منبع آمده
-- ✅ خروجی نهایی silent .mp4/.webm با ترتیب درست
-- ✅ flow تک‌فایل قبلی همچنان کار می‌کند (backward compatible)
+
+- ✅ ویدیوی نهایی Auto-Edit دقیقاً همان framing منبع را نشان می‌دهد (بدون zoom/crop)
+- ✅ ابعاد خروجی برابر ابعاد ویدیوی منبع است (مثلاً منبع 1080×1920 → خروجی 1080×1920)
+- ✅ Ad Director (Chat & Pro Editor) رفتار قبلی را حفظ می‌کند (fitCover با aspectRatio)
+- ✅ silent-video-only policy رعایت می‌شود
+- ✅ multi-clip Auto-Edit همچنان کار می‌کند (canvas dims از اولین کلیپ)
 
