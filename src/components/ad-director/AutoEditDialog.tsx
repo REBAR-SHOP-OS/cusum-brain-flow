@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Download, Sparkles, AlertCircle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Download, Sparkles, AlertCircle, Wand2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { extractKeyframes, cutVideoIntoSegments, type RawSceneCut } from "@/lib/rawVideoUtils";
 import { stitchClips } from "@/lib/videoStitch";
 import { AutoEditUploadStep } from "./AutoEditUploadStep";
 import { AutoEditStoryboardStep, type SceneCut } from "./AutoEditStoryboardStep";
+
+type ClipPayload = { index: number; duration: number; frames: { t: number; dataUrl: string }[] };
 
 type Phase = "upload" | "analyzing" | "review" | "generating" | "done" | "error";
 
@@ -32,7 +35,9 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
   const [summary, setSummary] = useState("");
   const [finalUrl, setFinalUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [regeneratePrompt, setRegeneratePrompt] = useState("");
   const finalUrlRef = useRef<string | null>(null);
+  const clipsPayloadRef = useRef<ClipPayload[] | null>(null);
 
   useEffect(() => {
     finalUrlRef.current = finalUrl;
@@ -52,6 +57,8 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
       setSummary("");
       setFinalUrl(null);
       setError(null);
+      setRegeneratePrompt("");
+      clipsPayloadRef.current = null;
     }
   }, [open]);
 
@@ -67,7 +74,7 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
     try {
       // 1) Extract keyframes for each clip
       const perClipMaxFrames = selected.length === 1 ? 12 : 8;
-      const clipsPayload: Array<{ index: number; duration: number; frames: { t: number; dataUrl: string }[] }> = [];
+      const clipsPayload: ClipPayload[] = [];
       const collected: ClipMeta[] = [];
 
       for (let i = 0; i < selected.length; i++) {
@@ -87,6 +94,7 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
       }
 
       setClips(collected);
+      clipsPayloadRef.current = clipsPayload;
 
       const approxBytes = clipsPayload.reduce(
         (acc, c) => acc + c.frames.reduce((a, f) => a + f.dataUrl.length, 0),
@@ -225,6 +233,125 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
     a.click();
   };
 
+  const handleRegenerate = async () => {
+    const direction = regeneratePrompt.trim();
+    if (!direction) return;
+    if (!clipsPayloadRef.current || clips.length === 0) {
+      toast({ title: "Can't regenerate", description: "Source clips are no longer available. Please re-upload.", variant: "destructive" });
+      return;
+    }
+
+    // Revoke previous final video
+    const prev = finalUrlRef.current;
+    if (prev) {
+      try { URL.revokeObjectURL(prev); } catch {}
+    }
+    setFinalUrl(null);
+
+    setPhase("analyzing");
+    setError(null);
+    setProgress(20);
+    setProgressMsg("Re-editing with your direction…");
+
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke("auto-video-editor", {
+        body: { action: "analyze", clips: clipsPayloadRef.current, userDirection: direction },
+      });
+      if (fnErr) throw new Error(fnErr.message || "AI analysis failed");
+      if (data?.error) throw new Error(data.error);
+      if (!Array.isArray(data?.scenes) || data.scenes.length === 0) {
+        throw new Error("AI returned no scenes");
+      }
+
+      const sceneList: SceneCut[] = data.scenes.map((s: any, i: number) => ({
+        id: `s_${i}_${Math.random().toString(36).slice(2, 8)}`,
+        clipIndex: typeof s.clipIndex === "number" ? s.clipIndex : 0,
+        start: s.start,
+        end: s.end,
+        description: s.description || `Scene ${i + 1}`,
+      }));
+
+      setScenes(sceneList);
+      setSummary(data.summary || "");
+      setRegeneratePrompt("");
+
+      // Skip review — go straight to generating using the new scenes
+      // We need to pass scenes directly since setScenes is async
+      await runGenerateWithScenes(sceneList);
+    } catch (e) {
+      console.error("[AutoEdit] regenerate failed:", e);
+      const msg = e instanceof Error ? e.message : "Regeneration failed";
+      setError(msg);
+      setPhase("error");
+      toast({ title: "Regeneration failed", description: msg, variant: "destructive" });
+    }
+  };
+
+  const runGenerateWithScenes = async (sceneList: SceneCut[]) => {
+    if (clips.length === 0 || sceneList.length === 0) return;
+    setPhase("generating");
+    setError(null);
+    setProgress(0);
+    setProgressMsg("Cutting your scenes…");
+
+    try {
+      const segmentsBySceneId = new Map<string, { blob: Blob; blobUrl: string; duration: number }>();
+      const grouped = new Map<number, SceneCut[]>();
+      for (const s of sceneList) {
+        const ci = Math.min(Math.max(0, s.clipIndex ?? 0), clips.length - 1);
+        if (!grouped.has(ci)) grouped.set(ci, []);
+        grouped.get(ci)!.push(s);
+      }
+      const totalScenes = sceneList.length;
+      let processed = 0;
+      for (const [clipIdx, sceneSubset] of grouped.entries()) {
+        const file = clips[clipIdx].file;
+        const cuts: RawSceneCut[] = sceneSubset.map((s) => ({ start: s.start, end: s.end }));
+        const segs = await cutVideoIntoSegments(file, cuts, ({ index }) => {
+          const localFrac = (processed + index) / totalScenes;
+          setProgress(Math.round(localFrac * 60));
+          setProgressMsg(`Cutting scene ${processed + index + 1} of ${totalScenes}…`);
+        });
+        sceneSubset.forEach((s, i) => segmentsBySceneId.set(s.id, segs[i]));
+        processed += sceneSubset.length;
+      }
+
+      setProgressMsg("Assembling final video…");
+      setProgress(70);
+
+      const orderedSegments = sceneList
+        .map((s) => segmentsBySceneId.get(s.id))
+        .filter((x): x is { blob: Blob; blobUrl: string; duration: number } => Boolean(x));
+
+      const stitchInput = orderedSegments.map((seg) => ({
+        videoUrl: seg.blobUrl,
+        targetDuration: seg.duration,
+      }));
+
+      const probeDims = await probeVideoDimensions(clips[0].file);
+      const result = await stitchClips(
+        stitchInput,
+        { fitMode: "contain", canvasWidth: probeDims.width, canvasHeight: probeDims.height } as any,
+        (p) => {
+          setProgressMsg(p.message || "Assembling…");
+          setProgress((cur) => Math.min(98, Math.max(cur, cur + 1)));
+        },
+      );
+
+      orderedSegments.forEach((s) => URL.revokeObjectURL(s.blobUrl));
+      setFinalUrl(result.blobUrl);
+      setProgress(100);
+      setProgressMsg("Done!");
+      setPhase("done");
+    } catch (e) {
+      console.error("[AutoEdit] regenerate stitch failed:", e);
+      const msg = e instanceof Error ? e.message : "Generation failed";
+      setError(msg);
+      setPhase("error");
+      toast({ title: "Generation failed", description: msg, variant: "destructive" });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col bg-slate-950 border-white/10 text-white p-0 gap-0">
@@ -264,7 +391,7 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
           )}
 
           {phase === "done" && finalUrl && (
-            <div className="flex h-full flex-col items-center justify-center gap-5">
+            <div className="flex h-full flex-col items-center gap-5 overflow-y-auto py-2">
               <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-black">
                 <video src={finalUrl} controls className="w-full" muted />
               </div>
@@ -276,6 +403,36 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
                   Edit more clips
                 </Button>
               </div>
+
+              <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-white/90">
+                  <Wand2 className="h-4 w-4 text-amber-300" />
+                  Not quite right? Tell the AI how to re-edit it
+                </div>
+                <Textarea
+                  value={regeneratePrompt}
+                  onChange={(e) => setRegeneratePrompt(e.target.value)}
+                  placeholder="e.g. faster cuts, only keep the thumbs-up section, drop the last few scenes…"
+                  className="mt-2 min-h-[72px] resize-none border-white/10 bg-slate-900/60 text-sm text-white placeholder:text-white/30"
+                />
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPhase("review")}
+                    className="text-xs text-white/55 underline-offset-2 hover:text-white hover:underline"
+                  >
+                    Edit storyboard manually
+                  </button>
+                  <Button
+                    onClick={handleRegenerate}
+                    disabled={regeneratePrompt.trim().length === 0}
+                    className="gap-2 bg-gradient-to-r from-amber-500 to-fuchsia-500 text-white hover:from-amber-600 hover:to-fuchsia-600 disabled:opacity-50"
+                  >
+                    <Sparkles className="h-4 w-4" /> Regenerate with this prompt
+                  </Button>
+                </div>
+              </div>
+
               <p className="text-xs text-white/40">Silent .webm export · ready to share</p>
             </div>
           )}
