@@ -134,10 +134,10 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           const segment = currentSegments.find(s => s.id === scene.segmentId);
           const targetDur = segment ? segment.endTime - segment.startTime : 5;
           return clip?.status === "completed" && clip.videoUrl
-            ? { videoUrl: clip.videoUrl, targetDuration: targetDur }
+            ? { sceneId: scene.id, videoUrl: clip.videoUrl, targetDuration: targetDur }
             : null;
         })
-        .filter(Boolean) as { videoUrl: string; targetDuration: number }[];
+        .filter(Boolean) as { sceneId: string; videoUrl: string; targetDuration: number }[];
 
       if (orderedClips.length === 0) throw new Error("No completed clips");
 
@@ -172,24 +172,40 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       })();
       const crossfadeDuration = transitionPreset === "None" ? 0 : transitionDuration;
 
+      // Read per-scene transitions chosen in the editor (timeline pencil icons),
+      // align them with orderedClips by sceneId. Falls back to the global preset.
+      const perSceneTxMap: Record<string, { type: string; duration: number }> = (() => {
+        try {
+          const raw = typeof window !== "undefined" ? localStorage.getItem("ad-director:per-scene-transitions") : null;
+          return raw ? JSON.parse(raw) : {};
+        } catch { return {}; }
+      })();
+      const perClipTransitions = orderedClips.map(c =>
+        perSceneTxMap[c.sceneId] ?? { type: transitionPreset, duration: transitionDuration }
+      );
+
       const exportRatio = (videoParams?.ratio === "9:16" || videoParams?.ratio === "1:1" || videoParams?.ratio === "16:9")
         ? videoParams.ratio as "9:16" | "1:1" | "16:9"
         : undefined;
 
-      const finalUrl = await stitchClips(orderedClips, {
-        logo: { url: "", enabled: false, size: 80 },
-        endCard: {
-          enabled: true, brandName: currentBrand.name, tagline: currentBrand.tagline,
-          website: currentBrand.website, primaryColor: currentBrand.primaryColor,
-          bgColor: currentBrand.secondaryColor, logoUrl: null,
-        },
-        subtitles: { enabled: false, segments: [] },
-        audioUrl,
-        musicUrl: service.getState().musicTrackUrl || undefined,
-        musicVolume: 0.15,
-        crossfadeDuration,
-        aspectRatio: exportRatio,
-      });
+      const finalUrl = await stitchClips(
+        orderedClips.map(({ videoUrl, targetDuration }) => ({ videoUrl, targetDuration })),
+        {
+          logo: { url: "", enabled: false, size: 80 },
+          endCard: {
+            enabled: true, brandName: currentBrand.name, tagline: currentBrand.tagline,
+            website: currentBrand.website, primaryColor: currentBrand.primaryColor,
+            bgColor: currentBrand.secondaryColor, logoUrl: null,
+          },
+          subtitles: { enabled: false, segments: [] },
+          audioUrl,
+          musicUrl: service.getState().musicTrackUrl || undefined,
+          musicVolume: 0.15,
+          crossfadeDuration,
+          perClipTransitions,
+          aspectRatio: exportRatio,
+        }
+      );
 
       // Upload to storage for permanent URL
       let permanentUrl = finalUrl.blobUrl;

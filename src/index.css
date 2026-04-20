@@ -394,3 +394,57 @@ body.hide-floating-widgets [data-live-chat-widget="true"] {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ============================================
+   Ad Director — Scene Transition Keyframes
+   Used by ProVideoEditor for live preview
+   between scenes. Exported MP4 uses canvas-
+   based equivalents in src/lib/videoStitch.ts
+   ============================================ */
+@keyframes ad-crossfade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes ad-cross-blur-out {
+  from { opacity: 1; filter: blur(0); }
+  to   { opacity: 0; filter: blur(20px); }
+}
+@keyframes ad-flash-black {
+  0%   { background-color: rgba(0,0,0,0); }
+  50%  { background-color: rgba(0,0,0,1); }
+  100% { background-color: rgba(0,0,0,0); }
+}
+@keyframes ad-flash-white {
+  0%   { background-color: rgba(255,255,255,0); }
+  50%  { background-color: rgba(255,255,255,1); }
+  100% { background-color: rgba(255,255,255,0); }
+}
+@keyframes ad-wipe-down { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(100% 0 0 0); } }
+@keyframes ad-wipe-up   { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 100% 0); } }
+@keyframes ad-wipe-left { from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 100% 0 0); } }
+@keyframes ad-wipe-right{ from { clip-path: inset(0 0 0 0); } to { clip-path: inset(0 0 0 100%); } }
+@keyframes ad-slide-up   { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-100%); opacity: 1; } }
+@keyframes ad-slide-down { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%);  opacity: 1; } }
+@keyframes ad-zoom-in    { from { transform: scale(1); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
+@keyframes ad-zoom-out   { from { transform: scale(1); opacity: 1; } to { transform: scale(0.4); opacity: 0; } }
+@keyframes ad-burn       {
+  0%   { filter: brightness(1) contrast(1) sepia(0); opacity: 1; }
+  60%  { filter: brightness(1.8) contrast(1.6) sepia(0.7); opacity: 1; }
+  100% { filter: brightness(3) contrast(2) sepia(1); opacity: 0; }
+}
+@keyframes ad-tiles      { from { opacity: 1; transform: scale(1) rotate(0); } to { opacity: 0; transform: scale(0.6) rotate(8deg); } }
+
+.ad-tx-Crossfade   { animation: ad-crossfade-out var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Cross-Blur  { animation: ad-cross-blur-out var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Wipe-Down   { animation: ad-wipe-down  var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Wipe-Up     { animation: ad-wipe-up    var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Wipe-Left   { animation: ad-wipe-left  var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Wipe-Right  { animation: ad-wipe-right var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Slide-Up    { animation: ad-slide-up   var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Slide-Down  { animation: ad-slide-down var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Zoom-In     { animation: ad-zoom-in    var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Zoom-Out    { animation: ad-zoom-out   var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Burn        { animation: ad-burn       var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Tiles       { animation: ad-tiles      var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-Fade-Black,
+.ad-tx-Fade-White  { animation: ad-crossfade-out var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+
+.ad-tx-overlay-black { animation: ad-flash-black var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+.ad-tx-overlay-white { animation: ad-flash-white var(--ad-tx-dur, 500ms) ease-in-out forwards; }

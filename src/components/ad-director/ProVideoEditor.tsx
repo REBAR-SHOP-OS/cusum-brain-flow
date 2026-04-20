@@ -228,9 +228,21 @@ export function ProVideoEditor({
   }, []);
 
   // Per-clip transitions (pencil icon on each clip in timeline)
-  const [clipTransitions, setClipTransitions] = useState<Record<string, { type: string; duration: number }>>({});
+  // Mirrored to localStorage so the export pipeline (AdDirectorContent → stitchClips)
+  // can read the same per-scene selection without prop drilling through the service.
+  const PER_SCENE_TX_STORAGE_KEY = "ad-director:per-scene-transitions";
+  const [clipTransitions, setClipTransitions] = useState<Record<string, { type: string; duration: number }>>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(PER_SCENE_TX_STORAGE_KEY) : null;
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
   const handleClipTransitionChange = useCallback((sceneId: string, transition: { type: string; duration: number }) => {
-    setClipTransitions(prev => ({ ...prev, [sceneId]: transition }));
+    setClipTransitions(prev => {
+      const next = { ...prev, [sceneId]: transition };
+      try { localStorage.setItem(PER_SCENE_TX_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
   }, []);
 
   // Hide global floating widgets (Vizzy, LiveChat, Feedback) while editor is mounted
@@ -1574,8 +1586,16 @@ export function ProVideoEditor({
     }
   };
 
-  // ─── Auto-advance on video end with fade transition ───
+  // ─── Auto-advance on video end with per-scene transition ───
   const [sceneTransition, setSceneTransition] = useState(false);
+  const [activeTransition, setActiveTransition] = useState<{ type: string; duration: number } | null>(null);
+
+  // Map a transition type to a CSS class defined in src/index.css.
+  const transitionClassFor = (type: string | undefined | null): string => {
+    if (!type || type === "None") return "ad-tx-Crossfade";
+    const safe = type.replace(/\s+/g, "-");
+    return `ad-tx-${safe}`;
+  };
 
   const advanceToNextScene = useCallback(() => {
     const completedIndices = storyboard
@@ -1597,9 +1617,17 @@ export function ProVideoEditor({
       currentVoUrlRef.current = null;
     }
 
-    doAdvance(nextIdx);
+    // Read user-selected transition for the OUTGOING scene.
+    const outgoingSceneId = storyboard[selectedSceneIndex]?.id;
+    const tx = (outgoingSceneId && clipTransitions[outgoingSceneId])
+      ? clipTransitions[outgoingSceneId]
+      : { type: "Crossfade", duration: 0.5 };
+    const durMs = Math.max(100, Math.round((tx.duration || 0.5) * 1000));
 
-    function doAdvance(idx: number) {
+    doAdvance(nextIdx, tx, durMs);
+
+    function doAdvance(idx: number, transition: { type: string; duration: number }, durationMs: number) {
+      setActiveTransition(transition);
       setSceneTransition(true);
       sceneTransitioning.current = true;
       setTimeout(() => {
@@ -1620,6 +1648,7 @@ export function ProVideoEditor({
         if (nextIsStatic) {
           sceneTransitioning.current = false;
           setSceneTransition(false);
+          setActiveTransition(null);
           setIsPlaying(true);
           autoPlayPending.current = false;
         } else {
@@ -1627,6 +1656,7 @@ export function ProVideoEditor({
             if (videoRef.current && videoRef.current.readyState >= 3) {
               sceneTransitioning.current = false;
               setSceneTransition(false);
+              setActiveTransition(null);
               if (autoPlayPending.current) {
                 videoRef.current.play().catch(() => {});
                 autoPlayPending.current = false;
@@ -1637,9 +1667,9 @@ export function ProVideoEditor({
           };
           setTimeout(checkReady, 50);
         }
-      }, 500);
+      }, durationMs);
     }
-  }, [storyboard, clips, selectedSceneIndex, audioTracks]);
+  }, [storyboard, clips, selectedSceneIndex, audioTracks, clipTransitions]);
 
   const handleVideoEnded = useCallback(() => {
     advanceToNextScene();
@@ -2274,45 +2304,72 @@ export function ProVideoEditor({
           >
             {videoSrc ? (
               <>
-                {isStaticCard ? (
-                  <>
-                    {currentCardSettings ? (
-                      <canvas
-                        ref={liveCanvasRef}
-                        width={RATIO_DIMS[aspectRatio]?.[0] || 1280}
-                        height={RATIO_DIMS[aspectRatio]?.[1] || 720}
-                        className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                      />
-                    ) : (
-                      <img
-                        src={videoSrc}
-                        alt="End Card"
-                        className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                      />
-                    )}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="absolute bottom-20 right-4 z-20 gap-1.5 text-xs"
-                      onClick={openCardEditor}
-                    >
-                      <Palette className="w-3.5 h-3.5" /> Edit Card
-                    </Button>
-                  </>
-                ) : (
-                  <video
-                    ref={videoRef}
-                    src={videoSrc}
-                    className={`w-full h-full object-cover transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                    muted={isMuted || (storyboard[selectedSceneIndex]?.id ? mutedScenes.has(storyboard[selectedSceneIndex].id) : false)}
-                    playsInline
-                    onTimeUpdate={handleTimeUpdate}
-                    onLoadedMetadata={handleLoaded}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onEnded={handleVideoEnded}
-                  />
-                )}
+                {(() => {
+                  const txClass = sceneTransition && activeTransition ? transitionClassFor(activeTransition.type) : "";
+                  const txStyle = sceneTransition && activeTransition
+                    ? ({ ["--ad-tx-dur" as any]: `${Math.round((activeTransition.duration || 0.5) * 1000)}ms` } as React.CSSProperties)
+                    : undefined;
+                  const fallbackOpacity = sceneTransition && !activeTransition ? "opacity-0" : "opacity-100";
+                  return (
+                    <>
+                      {isStaticCard ? (
+                        <>
+                          {currentCardSettings ? (
+                            <canvas
+                              ref={liveCanvasRef}
+                              width={RATIO_DIMS[aspectRatio]?.[0] || 1280}
+                              height={RATIO_DIMS[aspectRatio]?.[1] || 720}
+                              className={`max-w-full max-h-full object-contain ${txClass || `transition-opacity duration-300 ${fallbackOpacity}`}`}
+                              style={txStyle}
+                            />
+                          ) : (
+                            <img
+                              src={videoSrc}
+                              alt="End Card"
+                              className={`max-w-full max-h-full object-contain ${txClass || `transition-opacity duration-300 ${fallbackOpacity}`}`}
+                              style={txStyle}
+                            />
+                          )}
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="absolute bottom-20 right-4 z-20 gap-1.5 text-xs"
+                            onClick={openCardEditor}
+                          >
+                            <Palette className="w-3.5 h-3.5" /> Edit Card
+                          </Button>
+                        </>
+                      ) : (
+                        <video
+                          ref={videoRef}
+                          src={videoSrc}
+                          className={`w-full h-full object-cover ${txClass || `transition-opacity duration-300 ${fallbackOpacity}`}`}
+                          style={txStyle}
+                          muted={isMuted || (storyboard[selectedSceneIndex]?.id ? mutedScenes.has(storyboard[selectedSceneIndex].id) : false)}
+                          playsInline
+                          onTimeUpdate={handleTimeUpdate}
+                          onLoadedMetadata={handleLoaded}
+                          onPlay={() => setIsPlaying(true)}
+                          onPause={() => setIsPlaying(false)}
+                          onEnded={handleVideoEnded}
+                        />
+                      )}
+                      {/* Black/white flash overlay for "Fade Black" / "Fade White" transitions */}
+                      {sceneTransition && activeTransition?.type === "Fade Black" && (
+                        <div
+                          className="absolute inset-0 z-30 pointer-events-none ad-tx-overlay-black"
+                          style={{ ["--ad-tx-dur" as any]: `${Math.round((activeTransition.duration || 0.5) * 1000)}ms` } as React.CSSProperties}
+                        />
+                      )}
+                      {sceneTransition && activeTransition?.type === "Fade White" && (
+                        <div
+                          className="absolute inset-0 z-30 pointer-events-none ad-tx-overlay-white"
+                          style={{ ["--ad-tx-dur" as any]: `${Math.round((activeTransition.duration || 0.5) * 1000)}ms` } as React.CSSProperties}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
                 {sceneOverlays.map(ov => (
                   <div
                     key={ov.id}
