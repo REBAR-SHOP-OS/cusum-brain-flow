@@ -1,85 +1,56 @@
 
-Fix the Ad Director AI failure path so exhausted AI credits never crash the page or leave a blank screen.
 
-## Root cause
-Two issues need to be handled together:
+## Goal
+Stop the *"The app encountered an error / Show logs / Try to fix"* overlay that appears every time the **AI Prompt** preview dialog opens on `/ad-director`. The 402 *AI credits exhausted* toast itself is already correct — it should keep firing as the only user-visible feedback when the workspace balance is empty.
 
-1. The edge function currently reports `"AI credits exhausted."`, but the user-facing error can still surface as a generic 500 depending on where the status is lost.
-2. The Ad Director pipeline treats startup failures as fatal enough to bubble upward from `BackgroundAdDirectorService`, which is risky for async flows and can result in a runtime crash / blank screen instead of a controlled UI recovery.
+## Root cause (confirmed from console logs)
+The overlay is **not** caused by the 402 response. It is caused by a separate React dev warning that the Lovable preview escalates:
 
-## Implementation plan
+```
+Warning: Function components cannot be given refs.
+Check the render method of `AIPromptDialog`.
+    at DialogFooter (src/components/ui/dialog.tsx:101:25)
+    ...
+    at AIPromptDialog
+```
 
-### 1) Normalize AI gateway business errors at the backend
-Update `supabase/functions/ad-director-ai/index.ts` so all Lovable AI gateway failures preserve the real HTTP status on every throw path, especially:
-- 402 for exhausted credits
-- 429 for rate limits
-- 401/403 if auth-related
-- 500 only for true server faults
+In `src/components/ui/dialog.tsx`, `DialogHeader` and `DialogFooter` are plain function components:
 
-This ensures the shared request handler can return the correct status instead of a generic 500.
+```ts
+const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
+  <div className={...} {...props} />
+);
+```
 
-### 2) Harden the shared error contract
-Review `supabase/functions/_shared/requestHandler.ts` and keep the current status inference, but make it deterministic for this function:
-- preserve explicit `err.status` whenever present
-- keep the JSON shape stable as `{ ok: false, error }`
-- never downgrade known payment/rate-limit cases to 500
+Radix's `DialogContent` runs an autofocus pass when it opens and tries to attach a ref through descendant components for focus restoration. Because `DialogHeader` / `DialogFooter` are not `forwardRef`, React logs the warning. Lovable's `GlobalErrorWatcher` / preview error layer treats it as a fatal app error and shows the *"Show logs / Try to fix"* card.
 
-### 3) Stop the pipeline from crashing the screen on expected business failures
-Update `src/lib/backgroundAdDirectorService.ts` so `startPipeline()` does not rethrow known recoverable business errors after resetting state.
-Instead:
-- return the app safely to `flowState: "idle"`
-- clear loading text/progress
-- expose a normalized error result or call a controlled notifier path
-- only reserve hard rethrowing for truly unexpected developer/runtime faults if needed
+The 402 toast appears at the same time only because the AI request also rejects when the dialog opens — it is a coincidence, not the cause. The overlay would also appear on a workspace with full credits.
 
-This is the main fix for the blank-screen symptom.
+## Changes
 
-### 4) Add one shared frontend error classifier
-Create a small shared helper for edge-function failures used by Ad Director UI:
-- map 402 → “AI credits exhausted”
-- map 429 → “Rate limit reached”
-- map 401/403 → auth/access message
-- fall back to the server message for unknown errors
+### 1) `src/components/ui/dialog.tsx` — primary fix (1 file, 2 components)
+Convert `DialogHeader` and `DialogFooter` from plain function components into `React.forwardRef` components, matching the pattern already used by `DialogOverlay`, `DialogContent`, `DialogTitle`, and `DialogDescription` in the same file. Behavior, classes, and props remain identical — only the ref forwarding changes. This silences the warning and removes the trigger for the preview error overlay.
 
-Use it consistently so all entry points show the same message.
+This is a shadcn-standard fix and matches the canonical shadcn `dialog.tsx` template.
 
-### 5) Apply the shared classifier to all Ad Director AI entry points
-Update these callers to use the same normalized handling:
-- `src/components/ad-director/AdDirectorContent.tsx`
-- `src/components/ad-director/ChatPromptBar.tsx`
-- `src/components/ad-director/ScriptInput.tsx`
-- `src/components/ad-director/CharacterPromptDialog.tsx`
+### 2) No other code changes
+- `ChatPromptBar.handleAiWrite` already catches the 402, classifies it via `classifyEdgeFunctionError`, shows the destructive toast, and closes the preview cleanly. No change needed.
+- `invokeEdgeFunction` already preserves `status = 402`. No change needed.
+- `AdDirectorErrorBoundary`, `useGlobalErrorHandler`, and `backgroundAdDirectorService` are correct. No change needed.
+- The 402 toast continues to be the single, accurate message shown to the user when AI credits are exhausted.
 
-Behavior:
-- show a destructive toast for 402/429
-- keep the editor usable
-- close spinners/dialog loading states cleanly
-- never leave the app stuck in analyzing mode
+## Files touched
+- `src/components/ui/dialog.tsx`
 
-### 6) Keep the fallback UI resilient
-Optionally refine `src/components/ad-director/AdDirectorErrorBoundary.tsx` messaging so if an unexpected render error still happens, the user sees a safe recovery screen rather than a broken surface.
-This is a secondary safety net, not the primary fix.
+## Validation (after switch to default mode)
+1. Click **AI Prompt** on `/ad-director` → the *"The app encountered an error / Show logs / Try to fix"* overlay no longer appears.
+2. With exhausted credits → only the red *"AI credits exhausted"* toast is shown; the preview dialog closes cleanly; the page stays interactive.
+3. With sufficient credits → the AI prompt is generated, written into the dialog textarea, and "Use this prompt" works.
+4. No new React console warnings about refs on `DialogFooter` / `DialogHeader`.
+5. Other dialogs across the app (which also use `DialogFooter` / `DialogHeader`) continue to render and behave identically — only the warning disappears.
 
-## Files to change
-- `supabase/functions/ad-director-ai/index.ts`
-- `supabase/functions/_shared/requestHandler.ts`
-- `src/lib/backgroundAdDirectorService.ts`
-- `src/components/ad-director/AdDirectorContent.tsx`
-- `src/components/ad-director/ChatPromptBar.tsx`
-- `src/components/ad-director/ScriptInput.tsx`
-- `src/components/ad-director/CharacterPromptDialog.tsx`
-- optionally a new shared helper such as `src/lib/edgeFunctionError.ts`
+## Out of scope (left untouched)
+- AI credit balance itself (only the user can top up at Settings → Workspace → Cloud & AI balance)
+- Edge function logic, RLS, scene generation, music, transitions, and editor pipeline
+- All other Ad Director surfaces and components
 
-## Validation
-After implementation, verify these cases:
-1. Trigger `write-script` with exhausted credits → toast appears, no blank screen
-2. Trigger full pipeline analysis with exhausted credits → app returns to idle safely
-3. Trigger a rate-limit response → friendly message, no crash
-4. Unknown server error → graceful failure message, no stuck loading state
-5. Ad Director remains interactive after each failure path
-
-## Expected result
-- No Ad Director flow crashes when AI credits are exhausted
-- Known AI billing/rate-limit errors surface as clear user messages
-- The page never goes blank for this class of failure
-- Loading overlays/spinners always unwind cleanly
