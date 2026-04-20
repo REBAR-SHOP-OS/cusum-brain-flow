@@ -198,6 +198,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const [characterPrompt, setCharacterPrompt] = useState("");
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
   const [characterDraft, setCharacterDraft] = useState("");
+  const [autoEditOpen, setAutoEditOpen] = useState(false);
   
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
