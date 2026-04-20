@@ -764,11 +764,17 @@ class BackgroundAdDirectorService {
     } catch (error) {
       this.update({ flowState: "idle", statusText: "", progressValue: 0 });
       this.running = false;
-      if (this.listener) {
-        // Component is mounted, it can handle the error
+      // Always surface a toast so the user gets feedback in any context.
+      const { classifyEdgeFunctionError, isRecoverableEdgeError } = await import("@/lib/edgeFunctionError");
+      const info = classifyEdgeFunctionError(error, "Video generation failed");
+      toast.error(info.title, { description: info.description });
+      // Only rethrow truly unexpected developer/runtime faults so the UI never goes blank
+      // on known business errors (402 credits, 429 rate limit, 401/403 auth, timeouts).
+      if (!isRecoverableEdgeError(error) && !this.listener) {
+        // Background context with unknown error — toast already shown, swallow to avoid unhandled rejection.
+        console.error("[AdDirector] pipeline failed (background):", error);
+      } else if (!isRecoverableEdgeError(error) && this.listener) {
         throw error;
-      } else {
-        toast.error(`Video generation failed: ${getErrorMessage(error, "Unknown error")}`);
       }
     }
   }

@@ -110,7 +110,11 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
         characterPrompt,
       );
     } catch (error) {
-      toast({ title: "Failed", description: getErrorMessage(error, "Unable to start video generation."), variant: "destructive" });
+      // Service already shows its own toast for known business errors; ensure UI is in a safe state.
+      const { classifyEdgeFunctionError } = await import("@/lib/edgeFunctionError");
+      const info = classifyEdgeFunctionError(error, "Unable to start video generation.");
+      toast({ title: info.title, description: info.description, variant: "destructive" });
+      service.patchState({ flowState: "idle", statusText: "", progressValue: 0 });
     }
   }, [modelOverrides, toast, savedBrand, saveProject, service]);
 
