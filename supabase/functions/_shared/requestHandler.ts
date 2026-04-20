@@ -219,9 +219,17 @@ export async function handleRequest(
 
     log.error("Request failed", err);
 
+    // For recoverable business errors (402 credits exhausted, 429 rate limit),
+    // return HTTP 200 with the error embedded in the body. This prevents the
+    // Lovable preview environment from escalating these expected business
+    // outcomes into "RUNTIME_ERROR" overlays / blank screens. Clients still
+    // see { ok:false, status, error } and can show a proper toast.
+    const isRecoverableSoftError = inferredStatus === 402 || inferredStatus === 429;
+    const responseStatus = isRecoverableSoftError ? 200 : inferredStatus;
+
     return new Response(
-      JSON.stringify({ ok: false, error: message }),
-      { status: inferredStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      JSON.stringify({ ok: false, error: message, status: inferredStatus }),
+      { status: responseStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 }
