@@ -1,157 +1,95 @@
 
 
 ## درخواست کاربر
-کاربر transition انتخاب می‌کند (Cross fade, Cross blur, Fade black, Fade white, Wipe Up/Down/Left/Right, Slide Up/Down, Zoom In/Out) ولی **هیچ کدام واقعاً اجرا نمی‌شوند** — نه در preview نه در export.
+وقتی روی **Auto Music** کلیک می‌شود باید:
+1. ✅ یک موسیقی **بی‌کلام** (instrumental, no vocals) ساخته شود
+2. ✅ یک **نوار آبی** در lane Music در timeline بلافاصله ظاهر شود
+3. ✅ موسیقی واقعاً در preview **پخش شود** (هم‌اکنون فقط در export پخش می‌شود)
 
-## ریشه‌ی مشکل (تشخیص قطعی)
+## بررسی کد — وضعیت فعلی
 
-با مطالعه‌ی کد سه باگ مستقل:
+با مطالعه‌ی `ProVideoEditor.tsx` و `editor/TimelineBar.tsx`:
 
-### باگ ۱: Preview transition — hardcoded fade
-در `ProVideoEditor.tsx` خط ۱۶۰۳ تابع `advanceToNextScene`:
-```js
-setSceneTransition(true);  // فقط opacity 0
-setTimeout(() => { ... }, 500);  // همیشه 500ms
-```
-هیچ‌جا `clipTransitions[sceneId]` خوانده نمی‌شود. نوع و duration انتخابی کاربر **کاملاً نادیده گرفته می‌شود**.
+### ✅ آنچه درست کار می‌کند
+- `generateBackgroundMusic()` (خط ۱۸۷۲-۱۹۲۸) prompt صریح "NO vocals, NO lyrics, NO singing" ارسال می‌کند به edge function `lyria-music` (که از ElevenLabs Music API استفاده می‌کند).
+- پس از موفقیت، track با `kind: "music"` به `audioTracks` اضافه می‌شود.
+- `TimelineBar.tsx` خط ۱۱۲۸-۱۱۸۴ یک Music lane اختصاصی دارد که هر track با `kind === "music"` را به‌صورت bar آبی render می‌کند.
 
-### باگ ۲: Export — فقط crossfade alpha-blend
-در `src/lib/videoStitch.ts` خط ۶۴۶-۶۷۵: تنها transition پشتیبانی‌شده، **alpha blending** بین دو clip است (`globalAlpha = 1 - progress`). هیچ منطقی برای blur, fade-to-black, fade-to-white, wipes, slides, zoom وجود ندارد. همچنین `clipTransitions` به stitcher pass نمی‌شود — فقط `crossfadeDuration` global.
+### ❌ ریشه‌های ناپایداری (سه باگ مستقل)
 
-### باگ ۳: متغیر transition انتخابی استفاده نمی‌شود
-`clipTransitions` state می‌نویسد ولی هیچ consumer ندارد جز نمایش رنگ آیکون pencil.
+**باگ ۱: نبود `duration` و `globalStartTime` کامل** — track ساخته‌شده در خط ۱۹۱۳ فقط `globalStartTime: 0` دارد، **بدون `duration`**. در TimelineBar خط ۱۱۴۸: `trackDur = track.duration ?? ... ?? totalDuration`. اگر `endTime` و `startTime` هم نباشند، `widthPct` تا کل عرض گسترش می‌یابد — ولی این OK است. **مشکل واقعی**: اگر `totalDuration === 0` (segments خالی یا قبل از load)، `widthPct = 0` و bar ناپدید می‌شود.
+
+**باگ ۲: hardcoded duration cap = 60 ثانیه** — خط ۱۹۰۱: `duration: Math.min(totalDuration, 60)`. اگر video طولانی‌تر از 60s باشد، music کمتر از کل ویدئو خواهد بود (OK)، ولی اگر `totalDuration` خیلی کم باشد (مثلاً <5s)، endpoint ElevenLabs ممکن است fail کند چون حداقل آن 5s است.
+
+**باگ ۳ (مهم‌ترین): music در preview پخش نمی‌شود** — هیچ `<audio>` element برای music ساخته نمی‌شود. `setMusicUrl` فقط state می‌نویسد ولی consumer ندارد. کاربر می‌بیند نوار ساخته شده ولی صدای موسیقی نمی‌شنود تا زمان export.
+
+**باگ ۴: عدم race-protection** — اگر کاربر دو بار سریع کلیک کند، `setAudioTracks(prev => prev.filter(t => t.kind !== "music"))` در ابتدا اجرا می‌شود ولی track قدیم URL ساخته از قبل revoke نمی‌شود → memory leak.
 
 ## برنامه (Surgical, Deterministic)
 
-### بخش ۱: Preview — اعمال واقعی transition بین scenes
+### بخش ۱: تضمین ساخت قابل دیدن نوار
+در `generateBackgroundMusic` (خط ۱۸۷۲-۱۹۲۸):
 
-در `ProVideoEditor.tsx` `advanceToNextScene` (خط ۱۵۸۰-۱۶۴۰):
-
-1. **خواندن transition انتخابی** برای scene فعلی:
+1. **محاسبه‌ی duration درست**:
    ```ts
-   const currentSceneId = storyboard[selectedSceneIndex]?.id;
-   const t = clipTransitions[currentSceneId] ?? { type: "Crossfade", duration: 0.5 };
-   const durMs = t.duration * 1000;
+   const totalDuration = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
+   const safeDuration = Math.max(5, Math.min(totalDuration || 30, 60)); // floor=5, cap=60
    ```
 
-2. **اضافه‌کردن state جدید برای transition type**:
+2. **Revoke URL قدیمی** قبل از حذف track music قبلی برای جلوگیری از memory leak.
+
+3. **افزودن track با `duration` صریح** تا bar بلافاصله با عرض درست در timeline ظاهر شود:
    ```ts
-   const [activeTransition, setActiveTransition] = useState<{type: string; duration: number} | null>(null);
-   ```
-
-3. **اعمال transition class داینامیک** روی `<video>` و `<canvas>` (خطوط ۲۲۸۴, ۲۲۹۰, ۲۳۰۶):
-   ```tsx
-   className={cn(
-     "w-full h-full object-cover",
-     getTransitionClass(activeTransition, sceneTransition)
-   )}
-   style={getTransitionStyle(activeTransition)}
-   ```
-
-4. **تابع `getTransitionClass`** که هر template را به CSS animation map می‌کند:
-   - `Crossfade` → `opacity` transition (موجود)
-   - `Cross Blur` → `opacity` + `filter: blur(20px)`
-   - `Fade Black` → overlay مشکی fade in/out
-   - `Fade White` → overlay سفید fade in/out
-   - `Wipe Up/Down/Left/Right` → `clip-path: inset(...)` با animation
-   - `Slide Up/Down` → `transform: translateY(...)` 
-   - `Zoom In/Out` → `transform: scale(...)`
-
-5. **افزودن overlay layer** برای fade-to-black/white:
-   ```tsx
-   {sceneTransition && activeTransition?.type === "Fade Black" && (
-     <div className="absolute inset-0 z-40 bg-black animate-flash-black" 
-          style={{animationDuration: `${activeTransition.duration}s`}} />
-   )}
-   ```
-
-6. **تعریف keyframes** در `src/index.css` (یا `tailwind.config.ts`):
-   - `@keyframes flash-black` (0% opacity:0 → 50% opacity:1 → 100% opacity:0)
-   - `@keyframes flash-white` (مشابه با bg-white)
-   - `@keyframes wipe-down` (`clip-path: inset(0 0 100% 0)` → `inset(0)`)
-   - `@keyframes wipe-up`, `wipe-left`, `wipe-right` (مشابه)
-   - `@keyframes slide-up`, `slide-down` (`translateY(100%)` → `0`)
-   - `@keyframes zoom-in` (`scale(0.5)` → `1`), `zoom-out` (`scale(1.5)` → `1`)
-   - `@keyframes blur-fade` (`filter: blur(20px) opacity(0)` → `blur(0) opacity(1)`)
-
-7. **استفاده از duration انتخابی کاربر** برای `setTimeout` به‌جای ۵۰۰ms ثابت:
-   ```ts
-   setTimeout(() => { ... }, durMs);
-   ```
-
-### بخش ۲: Export — pass per-scene transitions
-
-در `videoStitch.ts`:
-
-1. **افزودن `perClipTransitions?: { type: string; duration: number }[]`** به `StitchOverlayOptions` (هم‌اندیس با clips).
-
-2. **در حلقه‌ی render (خط ۶۴۸-۶۷۵)** به‌جای فقط alpha blend:
-   ```ts
-   const transition = perClipTransitions?.[clipIndex] ?? { type: "Crossfade", duration: crossfadeDur };
-   const t = transition.type;
-   const progress = ... ;
-   
-   switch(t) {
-     case "Cross Blur":
-       ctx.filter = `blur(${20 * (1-progress)}px)`;
-       drawOutgoing();
-       ctx.filter = `blur(${20 * progress}px)`;
-       drawIncoming();
-       ctx.filter = "none";
-       break;
-     case "Fade Black":
-       drawOutgoing(1-progress);
-       ctx.fillStyle = "#000";
-       ctx.globalAlpha = (progress < 0.5 ? progress*2 : (1-progress)*2);
-       ctx.fillRect(0,0,W,H);
-       if (progress >= 0.5) drawIncoming(1);
-       break;
-     case "Fade White":  /* مشابه با #fff */
-     case "Wipe Down":
-       drawOutgoing(1);
-       ctx.save();
-       ctx.beginPath();
-       ctx.rect(0, 0, W, H * progress);
-       ctx.clip();
-       drawIncoming(1);
-       ctx.restore();
-       break;
-     case "Wipe Up", "Wipe Left", "Wipe Right":  /* تغییر rect */
-     case "Slide Up":
-       drawOutgoing(1);
-       ctx.save();
-       ctx.translate(0, H * (1 - progress));
-       drawIncoming(1);
-       ctx.restore();
-       break;
-     case "Slide Down", "Zoom In", "Zoom Out":  /* مشابه */
-     default: /* Crossfade — منطق فعلی */
+   {
+     sceneId: "",
+     label: "🎵 Auto Music",
+     audioUrl: musicUrl,
+     kind: "music" as const,
+     globalStartTime: 0,
+     duration: safeDuration,
+     volume: 0.3,
    }
    ```
 
-3. **در `useRenderPipeline`** (یا هرکجا stitcher صدا می‌شود) آرایه‌ی `perClipTransitions` را از `clipTransitions` state بسازد.
+4. **تقویت prompt instrumental** — اضافه‌کردن `"100% instrumental, orchestral only"` تا تضمین شود کلام در آن نباشد (الان prompt قوی است ولی محکم‌ترش می‌کنیم).
 
-### بخش ۳: حذف باگ آیکون pencil
-آیکون pencil فقط برای transitions موجود نمایش رنگ متفاوت دارد ولی duration `transitionDuration` global جداست. اطمینان می‌گیرم که `clipTransitions[sceneId]?.duration` به‌جای `transitionDuration` global پاس داده می‌شود.
+5. **Toast واضح** با موفقیت/شکست.
+
+### بخش ۲: پخش music در preview
+افزودن `<audio>` element مخفی برای music که با video sync باشد:
+
+1. **`musicAudioRef`** جدید با `useRef<HTMLAudioElement | null>(null)`.
+2. **`useEffect`** که وقتی `musicUrl` یا track‌های music تغییر می‌کند، یک Audio element می‌سازد، `loop = false`, `volume = 0.3`.
+3. **Sync با playback ویدئو**:
+   - وقتی `isPlaying === true` → `musicAudio.play()`
+   - وقتی `isPlaying === false` → `musicAudio.pause()`
+   - وقتی scene تعویض می‌شود (advanceToNextScene)، music ادامه می‌یابد (نه restart) چون موسیقی برای کل ویدئو پیوسته است.
+   - drift correction: هر چند ثانیه `musicAudio.currentTime` را با cumulative video time هم‌تراز کن.
+4. **Mute global** هم music را mute می‌کند.
+
+### بخش ۳: توقف cleanup روی unmount
+- `useEffect cleanup` که `musicAudio.pause()` و `URL.revokeObjectURL(musicUrl)` را روی unmount صدا می‌زند.
 
 ## فایل‌های تغییرکننده
-- `src/components/ad-director/ProVideoEditor.tsx` — خواندن `clipTransitions` در `advanceToNextScene`، state `activeTransition`, اعمال className/style داینامیک، اضافه‌کردن overlay layers برای fade-black/white، pass به stitcher
-- `src/index.css` — تعریف `@keyframes` برای wipe-up/down/left/right, slide-up/down, zoom-in/out, flash-black, flash-white, blur-fade + کلاس‌های utility متناظر
-- `src/lib/videoStitch.ts` — افزودن `perClipTransitions` به interface، switch روی `transition.type` در حلقه render
-- `src/hooks/useRenderPipeline.ts` (یا call site stitcher) — pass آرایه‌ی per-clip transitions
+- `src/components/ad-director/ProVideoEditor.tsx`:
+  - تقویت `generateBackgroundMusic` (خط ۱۸۷۲-۱۹۲۸): محاسبه‌ی duration امن، revoke URL قدیم، افزودن `duration` و `volume` به track، prompt محکم‌تر
+  - افزودن `musicAudioRef` و useEffect برای sync پخش music با video
+  - Cleanup در unmount
 
 ## آنچه دست‌نخورده می‌ماند
 - منطق scene generation (Veo / Wan / Sora)
-- Audio extraction / muting
-- Timeline thumbnails / preview cards
-- Subtitle rendering, logo, music
+- Voiceover playback / extraction
+- Timeline thumbnails / transitions
+- Subtitle rendering, logo, end card
+- Edge function `lyria-music` (همان است)
 - DB / RLS
 - زبان UI: انگلیسی
 
 ## نتیجه‌ی مورد انتظار
-1. ✅ هر transition انتخابی **در preview واقعاً اجرا می‌شود** (با animation متناظر)
-2. ✅ duration slider واقعی است (به‌جای hardcoded 500ms)
-3. ✅ هر transition انتخابی **در exported MP4 نیز اجرا می‌شود** (canvas-based)
-4. ✅ هر scene می‌تواند transition مستقل داشته باشد (نه global)
-5. ✅ تمپلیت‌های Wipe / Slide / Zoom / Blur / Fade-Black / Fade-White همگی به‌طور قطعی کار می‌کنند
+1. ✅ کلیک روی **Auto Music** → موسیقی بی‌کلام instrumental ساخته می‌شود
+2. ✅ نوار آبی در lane **Music** در timeline بلافاصله نمایش داده می‌شود (با عرض صحیح)
+3. ✅ موسیقی **واقعاً در preview پخش می‌شود** هم‌زمان با video و voiceover
+4. ✅ Mute سراسری music را هم mute می‌کند
+5. ✅ بدون memory leak از URL‌های قدیم
+6. ✅ کار می‌کند برای ویدئوهای ۵s تا ۶۰s
 
