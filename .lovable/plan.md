@@ -1,61 +1,78 @@
 
 
-# چرا "Cut Done — Awaiting Bend" ولی هیچ Bender نشانش نمی‌دهد
+# ارتقای Auto Music به Lyria 3 با پرامپت‌های حرفه‌ای
 
-## ریشه مشکل (تأیید‌شده از DB)
+## هدف
+دکمه‌ی **Auto Music** در Pro Editor (timeline) باید به‌جای پرامپت ساده، از فرمول حرفه‌ای Lyria 3 (Genre + Mood + Instruments + Vocals) استفاده کند و سه preset آماده + یک مسیر "Custom" در اختیار کاربر بگذارد.
 
-پنج تا cut_plan_item با phase `cut_done` و bend_type=`bend` در DB هست (A1509, A1505, A1502×2, A1503 — همگی shape 17/20, 15M) که **هیچ ردیف `cut_batches`** برایشان ساخته نشده.
+## ریشه‌ی فعلی
+الان دکمه‌ی Auto Music در `AudioPromptDialog` فقط یک input متنی ساده می‌دهد و با duration ثابت، prompt را به edge function `lyria-music` (یا `elevenlabs-music`) می‌فرستد. هیچ راهنمایی، preset، یا فیلد ساختاریافته‌ای وجود ندارد.
 
-تریگر فعلی `auto_create_bend_batch` **روی `cut_batches` AFTER UPDATE** فایر می‌شود (status → completed). اگر cutter آیتم را بدون insert در `cut_batches` به phase `cut_done` پیش ببرد (مسیر `auto_advance_item_phase` فقط روی `cut_plan_items.phase` کار می‌کند، مستقل از batch insert)، تریگر هرگز اجرا نمی‌شود → `bend_batches` خالی می‌ماند → `useBenderBatches` (که فقط از `bend_batches` می‌خواند) چیزی نشان نمی‌دهد.
+## رفع (سه فایل، حداقلی)
 
-نشانه‌ای که در تصویر می‌بینید: badge **"Cut Done — Awaiting Bend"** از روی `cut_plan_items.phase` می‌آید (درست). ولی پنل bender از روی `bend_batches` می‌آید (خالی).
+### A) `AudioPromptDialog.tsx` — افزودن Tab "Lyria Pro" با preset و custom builder
 
-(آیتم Northfleet "Rebar Cage (Small)" که در تصویر دور آن خط کشیدی، A1003/T3 است که الان phase=clearance و قبلاً bend شده — این از قبل OK است. مشکل واقعی روی ۵ آیتم 15M shape 17/20 است.)
+داخل تب **Generate**، یک sub-toggle اضافه می‌شود:
+- **Quick Prompt** (همان رفتار فعلی، دست‌نخورده)
+- **Lyria Pro** (جدید) → شامل:
+  - **Preset chips** (سه دکمه افقی): "Upbeat Pop-Electronic" / "Lo-Fi Chill" / "Cinematic Epic"
+  - با کلیک روی هر preset، فیلدهای زیر خودکار پر می‌شود ولی قابل ویرایش‌اند:
+    - **Genre** (Input کوتاه)
+    - **Mood** (Input کوتاه)
+    - **Instruments** (Input)
+    - **Vocals** (ToggleGroup: Instrumental / Vocals EN / Vocals FA)
+    - **Lyric Theme** (Textarea کوچک، فقط اگر Vocals انتخاب شد)
+  - **Duration** همان (15/30/60s)
+  - دکمه‌ی **Generate Music** پرامپت نهایی را با فرمول زیر می‌سازد و به handler موجود می‌دهد:
+    ```
+    Generate a {duration}s {genre} track at {bpmHint}. Mood: {mood}. 
+    Instruments: {instruments}. {vocalsClause}
+    ```
+  - اگر Vocals=Instrumental → `vocalsClause = "Fully instrumental, no vocals."`
+  - اگر Vocals=EN/FA → `vocalsClause = "Include realistic vocals in {language} singing about: {lyricTheme}."`
 
-## رفع (دو لایه — هر دو لازم)
+ساختار `AudioPromptResult` و callback `onGenerate` بدون تغییر — فقط محتوای `prompt` غنی‌تر می‌شود. backward compatible کامل.
 
-### A) تریگر دومی روی `cut_plan_items.phase` (پوشش مسیر phase-only)
+### B) فایل جدید `src/data/lyriaPresets.ts` — تعریف ۳ preset
 
-migration جدید اضافه می‌کند: تابع `auto_create_bend_batch_from_phase` و تریگر `trg_auto_create_bend_batch_from_phase` روی `cut_plan_items` AFTER UPDATE OF phase.
+شامل آرایه‌ای از:
+```ts
+{ id, label, icon, genre, mood, instruments, vocals, lyricTheme, bpmHint }
+```
+سه ورودی: Upbeat Pop-Electronic / Lo-Fi Chill / Cinematic Epic — دقیقاً برگرفته از سه نمونه‌ی پیام شما با مقادیر default.
 
-منطق:
-- فایر فقط روی transition `* → cut_done` و فقط برای `bend_type='bend'`
-- idempotent: اگر `bend_batches.source_cut_batch_id` یا یک batch با `(company_id, source_job_id=cut_plan_id, shape, size)` مشابه از قبل هست، skip
-- machine_id با همان منطق spiral-priority:
-  - اگر `UPPER(asa_shape_code) IN ('T3','T3A')` → SPIRAL-01
-  - وگرنه از `machine_capabilities (process='bend' AND bar_code=...)`
-  - اگر هیچ‌کدام → NULL (در BendQueueAdmin قابل assign دستی)
-- `source_cut_batch_id = NULL` (چون cut_batch نداریم)، `source_job_id = cut_plan_id`، `planned_qty = COALESCE(total_pieces,0)`
-- status بر اساس `bend_completed_pieces` هوشمند انتخاب می‌شود (مثل backfill قبلی)
+این فایل صرفاً data است؛ هیچ side-effect یا dependency جدید.
 
-تریگر اولی (روی `cut_batches`) دست‌نخورده باقی می‌ماند تا مسیر batch-driven همچنان کار کند. هر دو تریگر idempotent هستند پس duplicate ساخته نمی‌شود.
+### C) (اختیاری، محافظتی) `supabase/functions/lyria-music/index.ts`
 
-### B) Backfill برای ۵ آیتم بلاتکلیف فعلی
+افزایش حد بالای duration از 60s به 60s باقی بماند (Lyria 3 معمولاً 30-60s sweet spot). هیچ تغییر منطقی لازم نیست — فقط در صورتی که نیاز شد یک log اضافه کنیم که نشان دهد prompt structured آمده. این تغییر ممکن است انجام نشود اگر edge function هم‌اکنون پرامپت طولانی را به‌خوبی پاس می‌دهد (که می‌دهد).
 
-INSERT یک‌باره از `cut_plan_items WHERE phase IN ('cut_done','bending','clearance') AND bend_type='bend' AND NOT EXISTS (bend_batch با همان source_job_id+shape+size)` با همان منطق machine assignment بالا.
-
-این فقط برای آیتم‌های گم‌شده ردیف می‌سازد، وضعیت phase آیتم‌ها را تغییر نمی‌دهد.
-
-## محدوده تغییر
+## محدوده‌ی تغییر
 
 تغییر می‌کند:
-- یک migration جدید SQL با:
-  - تابع `auto_create_bend_batch_from_phase` + تریگر روی `cut_plan_items`
-  - INSERT backfill یک‌باره برای آیتم‌های موجود
+- `src/components/ad-director/editor/AudioPromptDialog.tsx` — افزودن sub-tab "Lyria Pro" + state structured fields
+- `src/data/lyriaPresets.ts` — جدید (~40 خط)
 
 تغییر **نمی‌کند:**
-- تریگر فعلی روی `cut_batches` (هنوز برای مسیر batch-driven استفاده می‌شود)
-- منطق spiral routing (T3/T3A → SPIRAL-01) دقیقاً تکرار می‌شود
-- هیچ کد frontend
-- ساختار جداول
-- RLS / access control
-- `auto_advance_item_phase` و سایر تریگرهای production
+- edge function `lyria-music` / `elevenlabs-music` (پرامپت رشته است؛ غنی‌تر شدن آن مشکلی ندارد)
+- منطق timeline / music track / `useAudioGeneration` hook
+- Quick Prompt mode (کاملاً دست‌نخورده برای backward compat)
+- AdDirector main flow
+
+## مراحل اجرا
+
+1. ساخت `src/data/lyriaPresets.ts` با سه preset
+2. آپدیت `AudioPromptDialog.tsx`:
+   - افزودن sub-toggle داخل تب Generate
+   - فرم structured (Genre/Mood/Instruments/Vocals/LyricTheme)
+   - تابع `buildLyriaPrompt()` که ۴ فاکتور را به یک پرامپت طبیعی تبدیل کند
+3. تست end-to-end: کلیک Auto Music → انتخاب "Cinematic Epic" → Generate → موسیقی ۳۰ ثانیه‌ای ارکسترال در timeline
 
 ## اعتبارسنجی
-- ✅ بعد از migration: ۵ ردیف جدید در `bend_batches` با status=queued ظاهر می‌شود (bf913dd8 / shape 20 → BENDER-01 یا 02 طبق capability؛ shape 17 → bender معمولی)
-- ✅ پنل BENDER-01/02/03 آیتم‌های 15M را نشان می‌دهد (با realtime موجود در `useBenderBatches`)
-- ✅ هیچ آیتم T3/T3A در bender معمولی نمی‌رود
-- ✅ آیتم‌های جدیدی که cutter از مسیر phase-only پیش می‌برد، خودکار به bend_batches می‌روند
-- ✅ آیتم‌های با مسیر batch-driven (cut_batches.status=completed) همچنان کار می‌کنند، duplicate نمی‌سازد
-- ✅ هیچ تغییری در آیتم‌های production فعلی یا جریان cutter
+
+- ✅ تب Quick Prompt دقیقاً مثل قبل کار می‌کند
+- ✅ تب Lyria Pro با یک کلیک روی preset همه فیلدها را پر می‌کند
+- ✅ کاربر می‌تواند هر فیلد را ویرایش کند قبل از Generate
+- ✅ خروجی edge function همان MP3 است که در track Music قرار می‌گیرد
+- ✅ هیچ تغییری در DB، RLS، یا سایر صفحات
 
