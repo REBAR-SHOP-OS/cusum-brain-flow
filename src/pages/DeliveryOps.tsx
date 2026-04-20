@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { ReadyToShipBoard } from "@/components/logistics/ReadyToShipBoard";
 
 interface DeliveryCard {
   id: string;
@@ -278,7 +279,8 @@ export default function DeliveryOps() {
         )}
       </header>
 
-      <div className="relative z-10 flex-1 px-4 pb-20">
+      <div className="relative z-10 flex-1 px-4 pb-20 space-y-6">
+        <ReadyToShipBoard />
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />

@@ -3311,14 +3311,21 @@ export type Database = {
           completed_pieces: number
           cut_length_mm: number
           cut_plan_id: string
+          delivery_id: string | null
           drawing_ref: string | null
+          fulfillment_channel:
+            | Database["public"]["Enums"]["fulfillment_channel"]
+            | null
           id: string
+          loading_list_id: string | null
           mark_number: string | null
           needs_fix: boolean
           notes: string | null
           phase: string
+          pickup_id: string | null
           pieces_per_bar: number
           qty_bars: number
+          ready_at: string | null
           source_dims_json: Json | null
           source_total_length_text: string | null
           total_pieces: number
@@ -3334,14 +3341,21 @@ export type Database = {
           completed_pieces?: number
           cut_length_mm: number
           cut_plan_id: string
+          delivery_id?: string | null
           drawing_ref?: string | null
+          fulfillment_channel?:
+            | Database["public"]["Enums"]["fulfillment_channel"]
+            | null
           id?: string
+          loading_list_id?: string | null
           mark_number?: string | null
           needs_fix?: boolean
           notes?: string | null
           phase?: string
+          pickup_id?: string | null
           pieces_per_bar?: number
           qty_bars: number
+          ready_at?: string | null
           source_dims_json?: Json | null
           source_total_length_text?: string | null
           total_pieces?: number
@@ -3357,14 +3371,21 @@ export type Database = {
           completed_pieces?: number
           cut_length_mm?: number
           cut_plan_id?: string
+          delivery_id?: string | null
           drawing_ref?: string | null
+          fulfillment_channel?:
+            | Database["public"]["Enums"]["fulfillment_channel"]
+            | null
           id?: string
+          loading_list_id?: string | null
           mark_number?: string | null
           needs_fix?: boolean
           notes?: string | null
           phase?: string
+          pickup_id?: string | null
           pieces_per_bar?: number
           qty_bars?: number
+          ready_at?: string | null
           source_dims_json?: Json | null
           source_total_length_text?: string | null
           total_pieces?: number
@@ -10107,6 +10128,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           customer_id: string | null
+          default_fulfillment_channel: Database["public"]["Enums"]["fulfillment_channel"]
           id: string
           name: string
           notes: string | null
@@ -10119,6 +10141,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          default_fulfillment_channel?: Database["public"]["Enums"]["fulfillment_channel"]
           id?: string
           name: string
           notes?: string | null
@@ -10131,6 +10154,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          default_fulfillment_channel?: Database["public"]["Enums"]["fulfillment_channel"]
           id?: string
           name?: string
           notes?: string | null
@@ -17245,6 +17269,7 @@ export type Database = {
         | "field"
         | "shop_supervisor"
         | "customer"
+      fulfillment_channel: "pickup" | "loading" | "delivery"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -17382,6 +17407,7 @@ export const Constants = {
         "shop_supervisor",
         "customer",
       ],
+      fulfillment_channel: ["pickup", "loading", "delivery"],
     },
   },
 } as const
