@@ -814,6 +814,8 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
             : "rebar fabrication, cut & bend service, fast quoting from drawings"
         }
       />
+
+      <AutoEditDialog open={autoEditOpen} onOpenChange={setAutoEditOpen} />
     </div>
   );
 }
