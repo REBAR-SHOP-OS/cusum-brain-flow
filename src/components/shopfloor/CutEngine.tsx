@@ -73,13 +73,12 @@ export function CutEngine({
     }
   }, [runPlan?.barsThisRun, runPlan?.feasible, suggestedBars, maxBars, isRunning, operatorOverride]);
 
-  // Reset override flag and bars lock when item changes (new barCode) or run completes
+  // Reset override flag and bars lock ONLY when item changes (new barCode).
+  // Do NOT reset on run completion — supervisor's chosen N must persist across runs of the same mark.
   useEffect(() => {
-    if (!isRunning) {
-      setOperatorOverride(false);
-      barsLocked.current = false;
-    }
-  }, [barCode, isRunning]);
+    setOperatorOverride(false);
+    barsLocked.current = false;
+  }, [barCode]);
 
   // Sync internal bars state to lockedBars when a run starts,
   // so supervisor edits start from the actual loaded value

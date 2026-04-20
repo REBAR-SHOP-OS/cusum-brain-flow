@@ -295,7 +295,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
   const remainingPieces = totalPieces - effectiveCompleted;
   const barsStillNeeded = computedPiecesPerBar > 0 ? Math.ceil(remainingPieces / computedPiecesPerBar) : 0;
   const autoBarsToLoad = Math.max(1, Math.min(barsStillNeeded, maxBars));
-  const barsForThisRun = operatorBars != null ? Math.max(1, Math.min(operatorBars, maxBars)) : (runPlan?.barsThisRun ?? autoBarsToLoad);
+  const barsForThisRun = operatorBars != null
+    ? Math.max(1, Math.min(operatorBars, maxBars, Math.max(1, barsStillNeeded)))
+    : (runPlan?.barsThisRun ?? autoBarsToLoad);
   const isDone = remainingPieces <= 0;
 
   // ── Alternative action handler ──
@@ -642,7 +644,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       setCompletedLocally(true);
       setIsRunning(false);
       setActiveRunId(null);
-      setOperatorBars(null);
+      // Keep operatorBars so the supervisor's chosen N persists across runs of the same mark.
+      // It will be auto-cleared when the item changes (see useEffect on currentItem.id).
       setManualFloorConfirmed(false);
       setCompletedAtRunStart(null);
       setRemnantPromptOpen(false);
@@ -662,10 +665,19 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         });
       }
 
-      // ── Return to pool after completion ──
-      setTimeout(() => {
-        onBack?.();
-      }, 1500);
+      // ── Return to pool ONLY when the entire queue is done ──
+      // Otherwise, stay on this mark page so the operator can immediately
+      // start the next run (or pick the next mark themselves).
+      const remainingMarks = items.filter((i) => {
+        if (i.id === currentItem.id) {
+          return newCompletedPieces < totalPieces;
+        }
+        const eff = localCompletedOverride[i.id] != null ? localCompletedOverride[i.id] : i.completed_pieces;
+        return eff < i.total_pieces;
+      }).length;
+      if (isMarkComplete && remainingMarks === 0) {
+        setTimeout(() => { onBack?.(); }, 1500);
+      }
     } catch (err: any) {
       toast({ title: "Complete failed", description: err.message, variant: "destructive" });
     }
