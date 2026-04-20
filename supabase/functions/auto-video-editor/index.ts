@@ -35,6 +35,8 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Unsupported action" }, 400);
     }
 
+    const userDirection: string = typeof body.userDirection === "string" ? body.userDirection.trim().slice(0, 600) : "";
+
     // Normalize: accept either { clips: [...] } (multi) or legacy { frames, videoDuration }
     let clips: ClipPayload[] = [];
     if (Array.isArray(body.clips) && body.clips.length > 0) {
