@@ -1,94 +1,157 @@
 
 
 ## درخواست کاربر
-در timeline editor، کارت دومی که در screenshot نشان داده شده (`52676.jpeg` — یک scene از نوع image) **هیچ thumbnail/preview ندارد** و فقط یک مستطیل سبز خالی با نام فایل است. کاربر می‌خواهد **هیچ کارتی هرگز بدون preview تصویر یا فیلم نباشد**.
+کاربر transition انتخاب می‌کند (Cross fade, Cross blur, Fade black, Fade white, Wipe Up/Down/Left/Right, Slide Up/Down, Zoom In/Out) ولی **هیچ کدام واقعاً اجرا نمی‌شوند** — نه در preview نه در export.
 
-## بررسی کد
+## ریشه‌ی مشکل (تشخیص قطعی)
 
-نیاز به یافتن:
-- کامپوننتی که timeline clip cards (نوار پایین با thumbnail کوچک) را render می‌کند
-- منطق fallback برای زمانی که `videoUrl` یک `data:image/...` است (image scene)
-- چرا کارت اول thumbnail دارد ("The High Cost of Chaos") ولی کارت دوم خالی است
+با مطالعه‌ی کد سه باگ مستقل:
 
-محتمل‌ترین فایل: `src/components/ad-director/TimelineBar.tsx` یا `ProVideoEditor.tsx` — جایی که thumbnail هر clip در video lane ساخته می‌شود.
-
-## فرضیه‌ی اولیه
-
-با توجه به این که کارت اول شامل یک تصویر کوچک سمت چپ و overlay متن است، احتمالاً منطق thumbnail چیزی شبیه این دارد:
-```tsx
-<video src={clip.videoUrl} /> یا <img src={clip.thumbnailUrl} />
+### باگ ۱: Preview transition — hardcoded fade
+در `ProVideoEditor.tsx` خط ۱۶۰۳ تابع `advanceToNextScene`:
+```js
+setSceneTransition(true);  // فقط opacity 0
+setTimeout(() => { ... }, 500);  // همیشه 500ms
 ```
+هیچ‌جا `clipTransitions[sceneId]` خوانده نمی‌شود. نوع و duration انتخابی کاربر **کاملاً نادیده گرفته می‌شود**.
 
-و وقتی scene از نوع image است (`videoUrl` شامل `data:image/...` یا یک image url مثل `.jpeg`):
-- یا تشخیص داده نمی‌شود
-- یا `<video>` element نمی‌تواند image را render کند
-- یا `thumbnailUrl` فقط برای video scenes ست شده
+### باگ ۲: Export — فقط crossfade alpha-blend
+در `src/lib/videoStitch.ts` خط ۶۴۶-۶۷۵: تنها transition پشتیبانی‌شده، **alpha blending** بین دو clip است (`globalAlpha = 1 - progress`). هیچ منطقی برای blur, fade-to-black, fade-to-white, wipes, slides, zoom وجود ندارد. همچنین `clipTransitions` به stitcher pass نمی‌شود — فقط `crossfadeDuration` global.
 
-## برنامه (Surgical, Additive)
+### باگ ۳: متغیر transition انتخابی استفاده نمی‌شود
+`clipTransitions` state می‌نویسد ولی هیچ consumer ندارد جز نمایش رنگ آیکون pencil.
 
-### ۱. تشخیص نوع clip و انتخاب element مناسب
-در رندر thumbnail کارت timeline:
+## برنامه (Surgical, Deterministic)
 
-```tsx
-const isImage = clip.videoUrl?.startsWith("data:image/") 
-  || /\.(jpe?g|png|webp|gif)$/i.test(clip.videoUrl ?? "");
+### بخش ۱: Preview — اعمال واقعی transition بین scenes
 
-{isImage ? (
-  <img 
-    src={clip.videoUrl} 
-    alt={clip.label ?? "scene"}
-    className="w-full h-full object-cover"
-    loading="lazy"
-  />
-) : clip.videoUrl ? (
-  <video 
-    src={clip.videoUrl}
-    className="w-full h-full object-cover"
-    muted
-    playsInline
-    preload="metadata"
-  />
-) : (
-  // Last-resort fallback: gradient placeholder + scene number
-  <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white/60 text-xs font-semibold">
-    Scene {idx + 1}
-  </div>
-)}
-```
+در `ProVideoEditor.tsx` `advanceToNextScene` (خط ۱۵۸۰-۱۶۴۰):
 
-### ۲. تضمین هرگز خالی نبودن
-سه‌سطحی fallback:
-1. **Image scene** → `<img>` با src مستقیم
-2. **Video scene** → `<video preload="metadata">` (frame اول render می‌شود)
-3. **No url / generating** → placeholder gradient با شماره‌ی scene + spinner در صورت `status: "generating"`
+1. **خواندن transition انتخابی** برای scene فعلی:
+   ```ts
+   const currentSceneId = storyboard[selectedSceneIndex]?.id;
+   const t = clipTransitions[currentSceneId] ?? { type: "Crossfade", duration: 0.5 };
+   const durMs = t.duration * 1000;
+   ```
 
-### ۳. هماهنگی با کارت‌های "Generated Scenes" در main flow
-بررسی می‌کنم همان منطق در `AdDirectorContent.tsx` (کارت‌های scene بالای timeline) هم اعمال شود — اگر آنجا هم image scene بدون preview است، همین fallback را اضافه می‌کنم.
+2. **اضافه‌کردن state جدید برای transition type**:
+   ```ts
+   const [activeTransition, setActiveTransition] = useState<{type: string; duration: number} | null>(null);
+   ```
 
-### ۴. حفاظت از CORS/load failure
-روی `<img>` و `<video>` یک `onError` handler می‌گذارم که در صورت fail، به placeholder gradient سوییچ کند:
-```tsx
-const [failed, setFailed] = useState(false);
-{failed ? <PlaceholderCard /> : <img onError={() => setFailed(true)} ... />}
-```
+3. **اعمال transition class داینامیک** روی `<video>` و `<canvas>` (خطوط ۲۲۸۴, ۲۲۹۰, ۲۳۰۶):
+   ```tsx
+   className={cn(
+     "w-full h-full object-cover",
+     getTransitionClass(activeTransition, sceneTransition)
+   )}
+   style={getTransitionStyle(activeTransition)}
+   ```
+
+4. **تابع `getTransitionClass`** که هر template را به CSS animation map می‌کند:
+   - `Crossfade` → `opacity` transition (موجود)
+   - `Cross Blur` → `opacity` + `filter: blur(20px)`
+   - `Fade Black` → overlay مشکی fade in/out
+   - `Fade White` → overlay سفید fade in/out
+   - `Wipe Up/Down/Left/Right` → `clip-path: inset(...)` با animation
+   - `Slide Up/Down` → `transform: translateY(...)` 
+   - `Zoom In/Out` → `transform: scale(...)`
+
+5. **افزودن overlay layer** برای fade-to-black/white:
+   ```tsx
+   {sceneTransition && activeTransition?.type === "Fade Black" && (
+     <div className="absolute inset-0 z-40 bg-black animate-flash-black" 
+          style={{animationDuration: `${activeTransition.duration}s`}} />
+   )}
+   ```
+
+6. **تعریف keyframes** در `src/index.css` (یا `tailwind.config.ts`):
+   - `@keyframes flash-black` (0% opacity:0 → 50% opacity:1 → 100% opacity:0)
+   - `@keyframes flash-white` (مشابه با bg-white)
+   - `@keyframes wipe-down` (`clip-path: inset(0 0 100% 0)` → `inset(0)`)
+   - `@keyframes wipe-up`, `wipe-left`, `wipe-right` (مشابه)
+   - `@keyframes slide-up`, `slide-down` (`translateY(100%)` → `0`)
+   - `@keyframes zoom-in` (`scale(0.5)` → `1`), `zoom-out` (`scale(1.5)` → `1`)
+   - `@keyframes blur-fade` (`filter: blur(20px) opacity(0)` → `blur(0) opacity(1)`)
+
+7. **استفاده از duration انتخابی کاربر** برای `setTimeout` به‌جای ۵۰۰ms ثابت:
+   ```ts
+   setTimeout(() => { ... }, durMs);
+   ```
+
+### بخش ۲: Export — pass per-scene transitions
+
+در `videoStitch.ts`:
+
+1. **افزودن `perClipTransitions?: { type: string; duration: number }[]`** به `StitchOverlayOptions` (هم‌اندیس با clips).
+
+2. **در حلقه‌ی render (خط ۶۴۸-۶۷۵)** به‌جای فقط alpha blend:
+   ```ts
+   const transition = perClipTransitions?.[clipIndex] ?? { type: "Crossfade", duration: crossfadeDur };
+   const t = transition.type;
+   const progress = ... ;
+   
+   switch(t) {
+     case "Cross Blur":
+       ctx.filter = `blur(${20 * (1-progress)}px)`;
+       drawOutgoing();
+       ctx.filter = `blur(${20 * progress}px)`;
+       drawIncoming();
+       ctx.filter = "none";
+       break;
+     case "Fade Black":
+       drawOutgoing(1-progress);
+       ctx.fillStyle = "#000";
+       ctx.globalAlpha = (progress < 0.5 ? progress*2 : (1-progress)*2);
+       ctx.fillRect(0,0,W,H);
+       if (progress >= 0.5) drawIncoming(1);
+       break;
+     case "Fade White":  /* مشابه با #fff */
+     case "Wipe Down":
+       drawOutgoing(1);
+       ctx.save();
+       ctx.beginPath();
+       ctx.rect(0, 0, W, H * progress);
+       ctx.clip();
+       drawIncoming(1);
+       ctx.restore();
+       break;
+     case "Wipe Up", "Wipe Left", "Wipe Right":  /* تغییر rect */
+     case "Slide Up":
+       drawOutgoing(1);
+       ctx.save();
+       ctx.translate(0, H * (1 - progress));
+       drawIncoming(1);
+       ctx.restore();
+       break;
+     case "Slide Down", "Zoom In", "Zoom Out":  /* مشابه */
+     default: /* Crossfade — منطق فعلی */
+   }
+   ```
+
+3. **در `useRenderPipeline`** (یا هرکجا stitcher صدا می‌شود) آرایه‌ی `perClipTransitions` را از `clipTransitions` state بسازد.
+
+### بخش ۳: حذف باگ آیکون pencil
+آیکون pencil فقط برای transitions موجود نمایش رنگ متفاوت دارد ولی duration `transitionDuration` global جداست. اطمینان می‌گیرم که `clipTransitions[sceneId]?.duration` به‌جای `transitionDuration` global پاس داده می‌شود.
 
 ## فایل‌های تغییرکننده
-- `src/components/ad-director/TimelineBar.tsx` (یا هرکجا thumbnail نوار timeline render می‌شود) — افزودن منطق `isImage` + fallback gradient
-- در صورت نیاز: `src/components/ad-director/AdDirectorContent.tsx` برای کارت‌های Generated Scenes
-
-دقیقاً کدام lines در فاز execute بعد از grep روی `videoUrl` و `thumbnail` در TimelineBar مشخص می‌شوند.
+- `src/components/ad-director/ProVideoEditor.tsx` — خواندن `clipTransitions` در `advanceToNextScene`، state `activeTransition`, اعمال className/style داینامیک، اضافه‌کردن overlay layers برای fade-black/white، pass به stitcher
+- `src/index.css` — تعریف `@keyframes` برای wipe-up/down/left/right, slide-up/down, zoom-in/out, flash-black, flash-white, blur-fade + کلاس‌های utility متناظر
+- `src/lib/videoStitch.ts` — افزودن `perClipTransitions` به interface، switch روی `transition.type` در حلقه render
+- `src/hooks/useRenderPipeline.ts` (یا call site stitcher) — pass آرایه‌ی per-clip transitions
 
 ## آنچه دست‌نخورده می‌ماند
-- منطق scene generation / Veo / Wan / Sora
-- audio track seeding (تغییر اخیر)
-- Split / transitions / playback
+- منطق scene generation (Veo / Wan / Sora)
+- Audio extraction / muting
+- Timeline thumbnails / preview cards
+- Subtitle rendering, logo, music
 - DB / RLS
 - زبان UI: انگلیسی
 
 ## نتیجه‌ی مورد انتظار
-1. ✅ هر کارت در timeline یک preview قابل مشاهده دارد (image یا video frame)
-2. ✅ Image scenes (`.jpeg`, `data:image/...`) به‌جای `<video>` با `<img>` نمایش داده می‌شوند
-3. ✅ اگر url خراب باشد یا load fail کند، placeholder gradient با شماره‌ی scene نمایش داده می‌شود
-4. ✅ هیچ کارتی هرگز بدون visual representation نمی‌ماند
-5. ✅ رفتار consistent بین timeline cards و Generated Scenes cards
+1. ✅ هر transition انتخابی **در preview واقعاً اجرا می‌شود** (با animation متناظر)
+2. ✅ duration slider واقعی است (به‌جای hardcoded 500ms)
+3. ✅ هر transition انتخابی **در exported MP4 نیز اجرا می‌شود** (canvas-based)
+4. ✅ هر scene می‌تواند transition مستقل داشته باشد (نه global)
+5. ✅ تمپلیت‌های Wipe / Slide / Zoom / Blur / Fade-Black / Fade-White همگی به‌طور قطعی کار می‌کنند
 
