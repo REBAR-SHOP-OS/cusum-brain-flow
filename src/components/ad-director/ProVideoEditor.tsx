@@ -1873,18 +1873,33 @@ export function ProVideoEditor({
   const generateBackgroundMusic = async () => {
     setGeneratingMusic(true);
     try {
-      // Remove existing music tracks
-      setAudioTracks(prev => prev.filter(t => t.kind !== "music"));
+      // Revoke previous blob-music URL to avoid leaks, then remove existing music tracks
+      setAudioTracks(prev => {
+        prev.filter(t => t.kind === "music").forEach(t => {
+          if (t.audioUrl?.startsWith("blob:")) {
+            try { URL.revokeObjectURL(t.audioUrl); } catch {}
+          }
+        });
+        return prev.filter(t => t.kind !== "music");
+      });
+      setMusicUrl(prev => {
+        if (prev?.startsWith("blob:")) { try { URL.revokeObjectURL(prev); } catch {} }
+        return null;
+      });
 
       const moodKeywords = deriveMood();
       const musicPrompt =
-        `Pure instrumental background music, NO vocals, NO lyrics, NO singing, NO human voice, NO speech, NO words. ` +
+        `100% instrumental, orchestral only. Pure instrumental background music. ` +
+        `STRICTLY NO vocals, NO lyrics, NO singing, NO human voice, NO speech, NO words, NO choir, NO humming. ` +
         `Style: cinematic corporate advertising soundtrack. ` +
         `Mood: ${moodKeywords}. ` +
         `Tempo: medium, building energy. ` +
-        `Instruments: orchestral strings, subtle percussion, ambient synth pads. ` +
+        `Instruments: orchestral strings, subtle percussion, ambient synth pads — no voice instruments. ` +
         `Suitable for B2B brand video background — must not compete with voiceover narration.`;
-      const totalDuration = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
+
+      const totalDur = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
+      // ElevenLabs Music min ~5s, cap at 60s for cost & UX
+      const safeDuration = Math.max(5, Math.min(totalDur || 30, 60));
 
       toast({ title: "🎵 Generating music..." });
 
@@ -1898,7 +1913,7 @@ export function ProVideoEditor({
             apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
             Authorization: `Bearer ${musicSession?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ prompt: musicPrompt, duration: Math.min(totalDuration, 60) }),
+          body: JSON.stringify({ prompt: musicPrompt, duration: safeDuration }),
         }
       );
 
@@ -1907,18 +1922,21 @@ export function ProVideoEditor({
       }
 
       const musicBlob = await musicResponse.blob();
-      const musicUrl = URL.createObjectURL(musicBlob);
-      setMusicUrl(musicUrl);
+      const newMusicUrl = URL.createObjectURL(musicBlob);
+      setMusicUrl(newMusicUrl);
 
+      pushHistoryFnRef.current?.();
       setAudioTracks(prev => [...prev.filter(t => t.kind !== "music"), {
         sceneId: "",
-        label: "🎵 Background Music",
-        audioUrl: musicUrl,
+        label: "🎵 Auto Music",
+        audioUrl: newMusicUrl,
         kind: "music" as const,
         globalStartTime: 0,
+        duration: safeDuration,
+        volume: 0.3,
       }]);
 
-      toast({ title: "🎵 Music generated" });
+      toast({ title: "🎵 Music generated", description: `${safeDuration}s instrumental track added` });
     } catch (err: any) {
       console.error("Music generation error:", err);
       toast({ title: "Music generation failed", description: err.message, variant: "destructive" });
