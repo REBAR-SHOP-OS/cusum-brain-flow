@@ -92,6 +92,14 @@ function isIgnoredError(message: string): boolean {
     "WebSocket is not connected",
     "WebSocket is already in CLOSING",
     "WebSocket is already in CLOSED",
+    // Recoverable AI gateway business errors — surfaced via toast at the call site
+    "AI credits exhausted",
+    "Payment required",
+    "Rate limit",
+    "rate limit",
+    "Edge function returned 402",
+    "Edge function returned 429",
+    "Edge function ad-director-ai",
   ];
   return ignored.some((pattern) => message.includes(pattern));
 }
