@@ -140,7 +140,8 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
         } as any,
         (p) => {
           setProgressMsg(p.message || "Assembling…");
-          setProgress(70 + Math.min(28, Math.round((p.percent ?? 0) * 0.28)));
+          // Crawl progress from 70 → 98 during stitch
+          setProgress((cur) => Math.min(98, Math.max(cur, cur + 1)));
         },
       );
 
