@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { UploadCloud, FileVideo, X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -166,10 +166,10 @@ export function AutoEditUploadStep({ onFilesSelected }: AutoEditUploadStepProps)
 function ClipRow({ file, index, onRemove }: { file: File; index: number; onRemove: () => void }) {
   const [thumb, setThumb] = useState<string | null>(null);
 
-  // Generate thumbnail (first frame) lazily
-  useState(() => {
+  useEffect(() => {
     const url = URL.createObjectURL(file);
     const v = document.createElement("video");
+    let cancelled = false;
     v.src = url;
     v.muted = true;
     v.playsInline = true;
@@ -184,7 +184,7 @@ function ClipRow({ file, index, onRemove }: { file: File; index: number; onRemov
         const ctx = c.getContext("2d");
         if (ctx) {
           ctx.drawImage(v, 0, 0, w, h);
-          setThumb(c.toDataURL("image/jpeg", 0.6));
+          if (!cancelled) setThumb(c.toDataURL("image/jpeg", 0.6));
         }
       } catch {
         // ignore
@@ -193,8 +193,11 @@ function ClipRow({ file, index, onRemove }: { file: File; index: number; onRemov
       }
     };
     v.onerror = () => URL.revokeObjectURL(url);
-    return () => URL.revokeObjectURL(url);
-  });
+    return () => {
+      cancelled = true;
+      URL.revokeObjectURL(url);
+    };
+  }, [file]);
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2.5">
