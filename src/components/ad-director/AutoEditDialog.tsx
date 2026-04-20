@@ -183,10 +183,17 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
         targetDuration: seg.duration,
       }));
 
+      // Probe first source clip's native dimensions so output preserves
+      // the original framing exactly (no zoom/crop).
+      const probeDims = await probeVideoDimensions(clips[0].file);
+
       const result = await stitchClips(
         stitchInput,
         {
           // SILENT: no audio
+          fitMode: "contain",
+          canvasWidth: probeDims.width,
+          canvasHeight: probeDims.height,
         } as any,
         (p) => {
           setProgressMsg(p.message || "Assembling…");
@@ -305,4 +312,29 @@ function ProgressView({ title, message, progress }: { title: string; message: st
       </div>
     </div>
   );
+}
+
+/** Read native videoWidth/videoHeight from a File without rendering it. */
+function probeVideoDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.muted = true;
+    v.playsInline = true;
+    const cleanup = () => {
+      try { URL.revokeObjectURL(url); } catch {}
+    };
+    v.onloadedmetadata = () => {
+      const width = v.videoWidth || 1280;
+      const height = v.videoHeight || 720;
+      cleanup();
+      resolve({ width, height });
+    };
+    v.onerror = () => {
+      cleanup();
+      resolve({ width: 1280, height: 720 });
+    };
+    v.src = url;
+  });
 }

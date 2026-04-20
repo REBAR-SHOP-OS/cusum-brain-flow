@@ -41,6 +41,25 @@ export function fitCover(srcW: number, srcH: number, dstW: number, dstH: number)
   return { sx, sy, sw, sh };
 }
 
+/**
+ * "object-fit: contain" geometry — scale source to fully fit inside the target,
+ * letterbox (black bars) on the overflowing axis. Nothing is cropped.
+ */
+export function fitContain(srcW: number, srcH: number, dstW: number, dstH: number) {
+  if (!srcW || !srcH) return { dx: 0, dy: 0, dw: dstW, dh: dstH };
+  const srcRatio = srcW / srcH;
+  const dstRatio = dstW / dstH;
+  let dw: number, dh: number;
+  if (srcRatio > dstRatio) {
+    dw = dstW;
+    dh = dstW / srcRatio;
+  } else {
+    dh = dstH;
+    dw = dstH * srcRatio;
+  }
+  return { dx: (dstW - dw) / 2, dy: (dstH - dh) / 2, dw, dh };
+}
+
 export type StitchTransitionType =
   | "None" | "Crossfade" | "Cross Blur" | "Fade Black" | "Fade White"
   | "Burn" | "Tiles"
@@ -53,6 +72,16 @@ export interface StitchOverlayOptions {
   logo?: { url: string; enabled: boolean; size?: number };
   /** Target aspect ratio for the final canvas. Defaults to source dims. */
   aspectRatio?: "16:9" | "9:16" | "1:1";
+  /**
+   * How to fit each source video into the canvas:
+   *  - "cover" (default): fill canvas, center-crop overflow (object-fit: cover)
+   *  - "contain": fit fully inside canvas, letterbox overflow (object-fit: contain)
+   */
+  fitMode?: "cover" | "contain";
+  /** Explicit canvas width override (takes priority over aspectRatio + source dims). */
+  canvasWidth?: number;
+  /** Explicit canvas height override (takes priority over aspectRatio + source dims). */
+  canvasHeight?: number;
   endCard?: {
     enabled: boolean;
     brandName: string;
@@ -390,15 +419,21 @@ export async function stitchClips(
     endCardLogoImg = await loadImage(blobLogo);
   }
 
-  // Determine target canvas dimensions: explicit aspectRatio takes priority,
-  // otherwise fall back to first clip's native dimensions.
+  // Determine target canvas dimensions:
+  // 1) explicit canvasWidth/Height override everything
+  // 2) explicit aspectRatio
+  // 3) fall back to first clip's native dimensions
   const firstSrcW = validatedClips[0].video.videoWidth || 1280;
   const firstSrcH = validatedClips[0].video.videoHeight || 720;
   let W = firstSrcW;
   let H = firstSrcH;
-  if (overlays?.aspectRatio && RATIO_DIMS[overlays.aspectRatio]) {
+  if (overlays?.canvasWidth && overlays?.canvasHeight) {
+    W = overlays.canvasWidth;
+    H = overlays.canvasHeight;
+  } else if (overlays?.aspectRatio && RATIO_DIMS[overlays.aspectRatio]) {
     [W, H] = RATIO_DIMS[overlays.aspectRatio];
   }
+  const fitMode: "cover" | "contain" = overlays?.fitMode ?? "cover";
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -665,8 +700,15 @@ export async function stitchClips(
           const inTransition = !isLastClip && txDur > 0 && t >= fadeStart && clipIndex + 1 < validatedClips.length;
 
           const drawFit = (v: HTMLVideoElement) => {
-            const f = fitCover(v.videoWidth, v.videoHeight, W, H);
-            ctx.drawImage(v, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
+            if (fitMode === "contain") {
+              ctx.fillStyle = "#000";
+              ctx.fillRect(0, 0, W, H);
+              const f = fitContain(v.videoWidth, v.videoHeight, W, H);
+              ctx.drawImage(v, 0, 0, v.videoWidth, v.videoHeight, f.dx, f.dy, f.dw, f.dh);
+            } else {
+              const f = fitCover(v.videoWidth, v.videoHeight, W, H);
+              ctx.drawImage(v, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
+            }
           };
 
           if (inTransition) {
