@@ -57,19 +57,41 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
     if (!productDescription.trim()) return;
     setAiWriting(true);
     try {
-      const res = await invokeEdgeFunction<{ result: { text: string }; modelUsed: string }>(
+      const res = await invokeEdgeFunction<{
+        ok?: boolean;
+        error?: string;
+        status?: number;
+        result?: { text: string };
+        modelUsed?: string;
+      }>(
         "ad-director-ai",
         {
           action: "write-script",
           input: productDescription,
           brand,
         },
-        { timeoutMs: 60_000 }
+        { timeoutMs: 60_000, allowErrorResponse: true }
       );
-      onScriptChange(res.result.text);
+
+      if (res?.ok === false || res?.error) {
+        const { classifyEdgeFunctionError } = await import("@/lib/edgeFunctionError");
+        const info = classifyEdgeFunctionError(
+          { status: res?.status, message: res?.error ?? "Script generation failed" },
+          "Script generation failed",
+        );
+        toast({ title: info.title, description: info.description, variant: "destructive" });
+        return;
+      }
+
+      const text = res?.result?.text ?? "";
+      if (!text) {
+        toast({ title: "No script returned", description: "Try again.", variant: "destructive" });
+        return;
+      }
+      onScriptChange(text);
       setShowAiWriter(false);
       setProductDescription("");
-      toast({ title: "Script generated", description: `Written by ${res.modelUsed}` });
+      toast({ title: "Script generated", description: `Written by ${res.modelUsed ?? "AI"}` });
     } catch (err: unknown) {
       const { classifyEdgeFunctionError } = await import("@/lib/edgeFunctionError");
       const info = classifyEdgeFunctionError(err, "Script generation failed");
