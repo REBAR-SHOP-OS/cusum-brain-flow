@@ -35,7 +35,9 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
   const [summary, setSummary] = useState("");
   const [finalUrl, setFinalUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [regeneratePrompt, setRegeneratePrompt] = useState("");
   const finalUrlRef = useRef<string | null>(null);
+  const clipsPayloadRef = useRef<ClipPayload[] | null>(null);
 
   useEffect(() => {
     finalUrlRef.current = finalUrl;
