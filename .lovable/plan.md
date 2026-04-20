@@ -1,109 +1,70 @@
 
 
-# اضافه کردن دکمه "Auto-Edit" برای آپلود ویدیوی خام
+# رفع خطای "Failed to send a request to the Edge Function" در Auto-Edit
 
-## هدف
-یک action جدید کنار **AI Prompt** و **Character** در composer صفحه `/ad-director` اضافه می‌شود (موقعیت دایره قرمز در اسکرین‌شات). کلیک روی این دکمه یک صفحه/مودال تمام‌صفحه باز می‌کند که flow کامل **آپلود ویدیوی خام → آنالیز AI → ادیت خودکار → خروجی** را در خود دارد.
+## ریشه مشکل
 
-## مکان دکمه
-در `src/components/ad-director/ChatPromptBar.tsx` بین دکمه `AI Prompt` (خط ۷۲۹) و `Character` (خط ۷۴۶) یک دکمه جدید با همان استایل اضافه می‌شود:
+دو علت محتمل، هر دو رفع می‌شود:
 
-```text
-[ ✨ AI Prompt ]   [ 🎬 Auto-Edit ]   [ 👤 Character ]   [ Create video ➤ ]
-```
+### ۱) Edge function هنوز deploy نشده
+لاگ‌های `auto-video-editor` کاملاً خالی است — یعنی **هیچ درخواستی به function نرسیده**. این دقیقاً وقتی پیغام "Failed to send a request to the Edge Function" در client می‌آید، که خود function وجود ندارد یا deploy نشده. فایل `supabase/functions/auto-video-editor/index.ts` ساخته شده ولی هنوز روی edge runtime مستقر نیست.
 
-- آیکون: `Wand2` یا `Film` (Lucide)
-- متن: **"Auto-Edit"** + tooltip: "Upload raw video and let AI edit it for you"
-- استایل: `border-emerald-400/40 bg-emerald-400/10 text-emerald-200` (تا از سایر دکمه‌ها متمایز باشد و حس "جدید" بدهد)
-- یک badge کوچک "NEW" در گوشه بالا-راست دکمه (اختیاری)
+### ۲) حجم body درخواست بیش از حد بزرگ
+کلاینت ۲۴ keyframe به‌صورت base64 data URL در JSON می‌فرستد. هر فریم ~۳۰–۸۰KB، با inflation کل JSON راحت ۲–۳MB می‌شود. حد body در `supabase.functions.invoke` **۶MB** است. ممکن است گاهی به مرز برسد یا توسط CDN reject شود (که آن هم همان پیام "Failed to send" را تولید می‌کند).
 
-## کامپوننت جدید
-فایل جدید: `src/components/ad-director/AutoEditDialog.tsx`
+## رفع
 
-یک Dialog تمام‌صفحه (`Dialog` از shadcn، `max-w-5xl h-[90vh]`) با ۵ مرحله:
+### A) Deploy کردن edge function
+اجرای `supabase--deploy_edge_functions` با `["auto-video-editor"]` تا function روی edge runtime فعال شود.
 
-1. **Upload** — drop zone + button (mp4/mov، ≤۱۰۰MB، یک ویدیو در هر بار)
-2. **Analyzing** — progress bar + پیام "AI is watching your video..." با thumbnail‌های استخراج‌شده
-3. **Storyboard Review** — لیست صحنه‌های پیشنهادی AI با thumbnail، توضیح، مدت، و قابلیت drag-to-reorder + delete
-4. **Generating** — progress bar مرحله render
-5. **Done** — preview ویدیوی نهایی + دکمه Download + دکمه "Send to Editor" (انتقال به ProVideoEditor برای fine-tune)
+### B) کاهش حجم payload در client
+در `src/lib/rawVideoUtils.ts` تابع `extractKeyframes`:
+- کاهش `targetWidth` از `320` به `224`
+- کاهش JPEG quality از `0.7` به `0.55`
+- کاهش پیش‌فرض `maxFrames` از `30` به `16`
 
-## Flow (همان plan قبلی، فشرده)
+در `src/components/ad-director/AutoEditDialog.tsx`:
+- کاهش `maxFrames` از `24` به `12` (کافی برای scene detection)
+- کاهش `intervalSec` از `2` به `dynamic` بر اساس مدت ویدیو
 
-```text
-[1] User clicks "Auto-Edit" → Dialog باز می‌شود
-[2] User آپلود می‌کند (drag-drop یا کلیک) → upload به bucket raw-uploads
-[3] Edge function auto-video-editor (action: "analyze")
-    → استخراج فریم با Mediabunny هر ۲ ثانیه
-    → ارسال به Gemini 2.5 Flash (vision) برای scene detection
-    → برگشت [{ start, end, description, thumbnailUrl }]
-[4] Storyboard review در dialog نمایش داده می‌شود
-[5] User دکمه "Generate Final Video" را می‌زند
-[6] cutVideoIntoSegments() در browser → segmentها
-[7] stitchClips() موجود (silent — بدون audio طبق rule)
-[8] خروجی .mp4 → bucket generated-videos
-[9] preview + download
-```
+نتیجه: payload از ~۲–۳MB به ~۴۰۰–۸۰۰KB کاهش پیدا می‌کند.
 
-## تغییرات فنی
+### C) بهبود error handling
+در `AutoEditDialog.handleFileSelected`:
+- نمایش پیام واضح‌تر اگر `fnErr.message` شامل "Failed to send" باشد → پیشنهاد retry
+- log کردن `frames.length` و حجم تقریبی برای debug آسان آینده
 
-### فایل‌های جدید
-- `src/components/ad-director/AutoEditDialog.tsx` — کل UI و state machine
-- `src/components/ad-director/AutoEditUploadStep.tsx` — drop zone
-- `src/components/ad-director/AutoEditStoryboardStep.tsx` — لیست صحنه‌ها
-- `supabase/functions/auto-video-editor/index.ts` — analyze + auto-script
-- یک migration برای bucket `raw-uploads` (private، RLS بر اساس `auth.uid()`، حداکثر ۱۰۰MB، TTL ۲۴ ساعت)
-
-### فایل‌های تغییریافته
-- `src/components/ad-director/ChatPromptBar.tsx` — اضافه کردن دکمه + state `autoEditOpen`
-- `src/lib/videoStitch.ts` — اضافه کردن helper `cutVideoIntoSegments(file, cuts)` (افزایشی، بقیه دست‌نخورده)
-
-### قانون مهم — رعایت Silent Video Policy
-طبق memory rule موجود (`silent-video-only-policy`):
-- ✅ خروجی Auto-Edit بدون صدا و بدون موزیک خواهد بود
-- ✅ از branch silent در `stitchClips` استفاده می‌شود
-- ✅ هیچ TTS یا music در این flow صدا زده نمی‌شود
-- ✅ حتی audio تعبیه‌شده در ویدیوی خام آپلودی هم در خروجی نهایی حذف می‌شود
-
-### مدل AI
-- `google/gemini-2.5-flash` (vision) — مستقیم از کلید Gemini موجود (طبق memory `ai-routing-cost-strategy`)
-- بدون مدل گران‌قیمت
+### D) اضافه کردن guard در edge function
+در `supabase/functions/auto-video-editor/index.ts`:
+- بررسی `req.headers.get("content-length")` در ابتدا و reject اگر > ۵MB با پیام واضح
+- اضافه کردن `console.log` در ابتدای handler برای دیده شدن در logs (تأیید رسیدن request)
 
 ## محدوده تغییر
 
 تغییر می‌کند:
-- اضافه شدن یک دکمه به composer
-- ۳ کامپوننت جدید (Dialog + ۲ step)
-- ۱ edge function جدید
-- ۱ helper جدید در `videoStitch.ts`
-- ۱ bucket جدید + RLS
+- `src/lib/rawVideoUtils.ts` — کاهش پیش‌فرض‌های فریم
+- `src/components/ad-director/AutoEditDialog.tsx` — کاهش تعداد فریم + بهبود error handling
+- `supabase/functions/auto-video-editor/index.ts` — guard حجم + log ابتدایی
+- Deploy: `auto-video-editor`
 
 تغییر **نمی‌کند**:
-- flow فعلی Ad Director (text → video)
-- `AdDirectorContent`، `ProVideoEditor`، `useRenderPipeline`
-- منطق scenes، prompt engineering، یا history
-- RLS سایر جداول، database entities موجود
-- silent-video policy — کاملاً رعایت می‌شود
-
-## محدودیت‌های فاز ۱
-- حداکثر **۱۰۰MB** فایل (بزرگ‌تر در فاز ۲ با ffmpeg.wasm)
-- ویدیوهای ۳۰ ثانیه تا ۵ دقیقه — analyzing ~۳۰–۶۰ ثانیه
-- حداکثر ۱۲ صحنه پیشنهادی AI
+- منطق scene detection / Gemini prompt
+- silent-video-only policy
+- bucket یا RLS
+- بقیه flow Ad Director
 
 ## مراحل اجرا (پس از تأیید)
-1. ساخت bucket `raw-uploads` با RLS
-2. ساخت edge function `auto-video-editor` (action: analyze)
-3. اضافه کردن `cutVideoIntoSegments()` به `videoStitch.ts`
-4. ساخت `AutoEditDialog.tsx` + ۲ step component
-5. اضافه کردن دکمه Auto-Edit به `ChatPromptBar.tsx` بین AI Prompt و Character
-6. تست end-to-end با یک ویدیو ۳۰ ثانیه‌ای
+
+1. کاهش پیش‌فرض‌های keyframe در `rawVideoUtils.ts`
+2. آپدیت `AutoEditDialog.tsx` با مقادیر کوچک‌تر و error message بهتر
+3. اضافه کردن size guard + entry log به edge function
+4. Deploy کردن `auto-video-editor`
+5. تست end-to-end با یک ویدیو ۳۰ ثانیه‌ای
 
 ## اعتبارسنجی
-- ✅ دکمه Auto-Edit در محل دایره قرمز در اسکرین‌شات نمایش داده می‌شود
-- ✅ کلیک → Dialog باز می‌شود
-- ✅ آپلود ویدیو → analysis < ۶۰ ثانیه
-- ✅ Storyboard نمایش داده می‌شود و قابل ویرایش است
-- ✅ خروجی نهایی .mp4 silent (بدون صدا/موزیک) و قابل دانلود
-- ✅ flow فعلی Ad Director دست‌نخورده باقی می‌ماند
-- ✅ silent-video-only policy رعایت می‌شود
+
+- ✅ پس از deploy، logs `auto-video-editor` فعال می‌شود
+- ✅ آپلود ویدیو → analysis بدون "Failed to send" کامل می‌شود
+- ✅ Storyboard نمایش داده می‌شود
+- ✅ خروجی silent .webm قابل دانلود است
 
