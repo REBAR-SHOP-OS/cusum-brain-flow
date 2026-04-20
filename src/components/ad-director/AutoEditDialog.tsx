@@ -94,6 +94,7 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
       }
 
       setClips(collected);
+      clipsPayloadRef.current = clipsPayload;
 
       const approxBytes = clipsPayload.reduce(
         (acc, c) => acc + c.frames.reduce((a, f) => a + f.dataUrl.length, 0),
