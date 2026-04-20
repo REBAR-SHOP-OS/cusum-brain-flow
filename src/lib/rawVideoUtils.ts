@@ -108,7 +108,7 @@ export async function extractKeyframes(
       try {
         await seekTo(video, t);
         ctx.drawImage(video, 0, 0, cw, ch);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
         frames.push({ t, dataUrl });
       } catch (e) {
         console.warn(`[extractKeyframes] skip t=${t.toFixed(2)}`, e);
