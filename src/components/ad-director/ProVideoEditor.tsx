@@ -2304,45 +2304,72 @@ export function ProVideoEditor({
           >
             {videoSrc ? (
               <>
-                {isStaticCard ? (
-                  <>
-                    {currentCardSettings ? (
-                      <canvas
-                        ref={liveCanvasRef}
-                        width={RATIO_DIMS[aspectRatio]?.[0] || 1280}
-                        height={RATIO_DIMS[aspectRatio]?.[1] || 720}
-                        className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                      />
-                    ) : (
-                      <img
-                        src={videoSrc}
-                        alt="End Card"
-                        className={`max-w-full max-h-full object-contain transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                      />
-                    )}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="absolute bottom-20 right-4 z-20 gap-1.5 text-xs"
-                      onClick={openCardEditor}
-                    >
-                      <Palette className="w-3.5 h-3.5" /> Edit Card
-                    </Button>
-                  </>
-                ) : (
-                  <video
-                    ref={videoRef}
-                    src={videoSrc}
-                    className={`w-full h-full object-cover transition-opacity duration-300 ${sceneTransition ? "opacity-0" : "opacity-100"}`}
-                    muted={isMuted || (storyboard[selectedSceneIndex]?.id ? mutedScenes.has(storyboard[selectedSceneIndex].id) : false)}
-                    playsInline
-                    onTimeUpdate={handleTimeUpdate}
-                    onLoadedMetadata={handleLoaded}
-                    onPlay={() => setIsPlaying(true)}
-                    onPause={() => setIsPlaying(false)}
-                    onEnded={handleVideoEnded}
-                  />
-                )}
+                {(() => {
+                  const txClass = sceneTransition && activeTransition ? transitionClassFor(activeTransition.type) : "";
+                  const txStyle = sceneTransition && activeTransition
+                    ? ({ ["--ad-tx-dur" as any]: `${Math.round((activeTransition.duration || 0.5) * 1000)}ms` } as React.CSSProperties)
+                    : undefined;
+                  const fallbackOpacity = sceneTransition && !activeTransition ? "opacity-0" : "opacity-100";
+                  return (
+                    <>
+                      {isStaticCard ? (
+                        <>
+                          {currentCardSettings ? (
+                            <canvas
+                              ref={liveCanvasRef}
+                              width={RATIO_DIMS[aspectRatio]?.[0] || 1280}
+                              height={RATIO_DIMS[aspectRatio]?.[1] || 720}
+                              className={`max-w-full max-h-full object-contain ${txClass || `transition-opacity duration-300 ${fallbackOpacity}`}`}
+                              style={txStyle}
+                            />
+                          ) : (
+                            <img
+                              src={videoSrc}
+                              alt="End Card"
+                              className={`max-w-full max-h-full object-contain ${txClass || `transition-opacity duration-300 ${fallbackOpacity}`}`}
+                              style={txStyle}
+                            />
+                          )}
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="absolute bottom-20 right-4 z-20 gap-1.5 text-xs"
+                            onClick={openCardEditor}
+                          >
+                            <Palette className="w-3.5 h-3.5" /> Edit Card
+                          </Button>
+                        </>
+                      ) : (
+                        <video
+                          ref={videoRef}
+                          src={videoSrc}
+                          className={`w-full h-full object-cover ${txClass || `transition-opacity duration-300 ${fallbackOpacity}`}`}
+                          style={txStyle}
+                          muted={isMuted || (storyboard[selectedSceneIndex]?.id ? mutedScenes.has(storyboard[selectedSceneIndex].id) : false)}
+                          playsInline
+                          onTimeUpdate={handleTimeUpdate}
+                          onLoadedMetadata={handleLoaded}
+                          onPlay={() => setIsPlaying(true)}
+                          onPause={() => setIsPlaying(false)}
+                          onEnded={handleVideoEnded}
+                        />
+                      )}
+                      {/* Black/white flash overlay for "Fade Black" / "Fade White" transitions */}
+                      {sceneTransition && activeTransition?.type === "Fade Black" && (
+                        <div
+                          className="absolute inset-0 z-30 pointer-events-none ad-tx-overlay-black"
+                          style={{ ["--ad-tx-dur" as any]: `${Math.round((activeTransition.duration || 0.5) * 1000)}ms` } as React.CSSProperties}
+                        />
+                      )}
+                      {sceneTransition && activeTransition?.type === "Fade White" && (
+                        <div
+                          className="absolute inset-0 z-30 pointer-events-none ad-tx-overlay-white"
+                          style={{ ["--ad-tx-dur" as any]: `${Math.round((activeTransition.duration || 0.5) * 1000)}ms` } as React.CSSProperties}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
                 {sceneOverlays.map(ov => (
                   <div
                     key={ov.id}
