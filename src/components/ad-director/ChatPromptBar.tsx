@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Wand2, Loader2, UserSquare } from "lucide-react";
+import { Send, X, ImagePlus, UserRound, ChevronDown, Hash, Paintbrush, RatioIcon, Timer, Wand2, Loader2, UserSquare, Film } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { useToast } from "@/hooks/use-toast";
@@ -14,6 +14,7 @@ import {
 } from "@/components/chat/ProductIcons";
 import { AIPromptDialog } from "./AIPromptDialog";
 import { CharacterPromptDialog } from "./CharacterPromptDialog";
+import { AutoEditDialog } from "./AutoEditDialog";
 import companyLogo from "@/assets/company-logo.png";
 import { classifyEdgeFunctionError } from "@/lib/edgeFunctionError";
 
