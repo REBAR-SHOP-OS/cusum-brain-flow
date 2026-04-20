@@ -1,59 +1,109 @@
 
 
-# اصلاح خطاهای Backend هنگام Cut
+# اضافه کردن دکمه "Auto-Edit" برای آپلود ویدیوی خام
 
-## یافته‌ها
+## هدف
+یک action جدید کنار **AI Prompt** و **Character** در composer صفحه `/ad-director` اضافه می‌شود (موقعیت دایره قرمز در اسکرین‌شات). کلیک روی این دکمه یک صفحه/مودال تمام‌صفحه باز می‌کند که flow کامل **آپلود ویدیوی خام → آنالیز AI → ادیت خودکار → خروجی** را در خود دارد.
 
-تمام درخواست‌های `manage-machine` با **200 OK** و سریع برمی‌گردند. اما در DB logs چهار خطای جدی که هنگام cut تکرار می‌شوند کشف شد:
+## مکان دکمه
+در `src/components/ad-director/ChatPromptBar.tsx` بین دکمه `AI Prompt` (خط ۷۲۹) و `Character` (خط ۷۴۶) یک دکمه جدید با همان استایل اضافه می‌شود:
 
-| # | خطا | منبع | تأثیر |
-|---|-----|------|-------|
-| 1 | `unrecognized configuration parameter "supabase.service_role_key"` | یک trigger/function هر ۶۰ ثانیه (احتمالاً cron) | spam log + ممکن است یک trigger روی `machine_runs` fail کند |
-| 2 | `record "new" has no field "channel"` | trigger روی notifications/messages | exception هنگام insert |
-| 3 | `new row for relation "notifications" violates check constraint "notifications_priority_check"` | کد notification با priority نامعتبر | notification fail می‌شود |
-| 4 | `column integration_connections.provider does not exist` | یک query/function | fail سکوتی |
+```text
+[ ✨ AI Prompt ]   [ 🎬 Auto-Edit ]   [ 👤 Character ]   [ Create video ➤ ]
+```
 
-علاوه بر این:
-5. `duplicate key value violates unique constraint "activity_events_dedupe_key_unique"` — این خطر نیست (dedupe درست کار می‌کند) ولی نویز log است.
+- آیکون: `Wand2` یا `Film` (Lucide)
+- متن: **"Auto-Edit"** + tooltip: "Upload raw video and let AI edit it for you"
+- استایل: `border-emerald-400/40 bg-emerald-400/10 text-emerald-200` (تا از سایر دکمه‌ها متمایز باشد و حس "جدید" بدهد)
+- یک badge کوچک "NEW" در گوشه بالا-راست دکمه (اختیاری)
 
-## رفع
+## کامپوننت جدید
+فایل جدید: `src/components/ad-director/AutoEditDialog.tsx`
 
-### A) Trigger با فیلد `channel` غیرموجود (#۲)
-شناسایی trigger و حذف/تصحیح ارجاع به `NEW.channel` که در جدول هدف وجود ندارد. به‌احتمال زیاد در یک trigger مرتبط با `notifications` یا `chat_messages` است.
+یک Dialog تمام‌صفحه (`Dialog` از shadcn، `max-w-5xl h-[90vh]`) با ۵ مرحله:
 
-### B) `notifications_priority_check` (#۳)
-بررسی check constraint و یافتن کدی که مقدار خارج از enum (`low|normal|high|urgent`) می‌فرستد. تصحیح call site برای استفاده از مقدار معتبر.
+1. **Upload** — drop zone + button (mp4/mov، ≤۱۰۰MB، یک ویدیو در هر بار)
+2. **Analyzing** — progress bar + پیام "AI is watching your video..." با thumbnail‌های استخراج‌شده
+3. **Storyboard Review** — لیست صحنه‌های پیشنهادی AI با thumbnail، توضیح، مدت، و قابلیت drag-to-reorder + delete
+4. **Generating** — progress bar مرحله render
+5. **Done** — preview ویدیوی نهایی + دکمه Download + دکمه "Send to Editor" (انتقال به ProVideoEditor برای fine-tune)
 
-### C) `supabase.service_role_key` (#۱)
-یک DB function یا trigger در حال خواندن `current_setting('supabase.service_role_key')` است که در Postgres تعریف نشده. باید یا با `current_setting(..., true)` (silent) خوانده شود، یا کلاً حذف شود اگر استفاده نمی‌شود. هر ۶۰ ثانیه تکرار می‌شود → احتمالاً یک cron job.
+## Flow (همان plan قبلی، فشرده)
 
-### D) `integration_connections.provider` (#۴)
-یا ستون `provider` به جدول اضافه شود، یا query اصلاح شود به نام درست ستون (احتمالاً `provider_name` یا `service`).
+```text
+[1] User clicks "Auto-Edit" → Dialog باز می‌شود
+[2] User آپلود می‌کند (drag-drop یا کلیک) → upload به bucket raw-uploads
+[3] Edge function auto-video-editor (action: "analyze")
+    → استخراج فریم با Mediabunny هر ۲ ثانیه
+    → ارسال به Gemini 2.5 Flash (vision) برای scene detection
+    → برگشت [{ start, end, description, thumbnailUrl }]
+[4] Storyboard review در dialog نمایش داده می‌شود
+[5] User دکمه "Generate Final Video" را می‌زند
+[6] cutVideoIntoSegments() در browser → segmentها
+[7] stitchClips() موجود (silent — بدون audio طبق rule)
+[8] خروجی .mp4 → bucket generated-videos
+[9] preview + download
+```
 
-## برنامه
+## تغییرات فنی
 
-1. اجرای query روی `pg_trigger` و `pg_proc` برای پیدا کردن:
-   - trigger‌های ارجاع‌دهنده به `NEW.channel`
-   - functionهای استفاده‌کننده از `supabase.service_role_key`
-2. بررسی schema جدول `notifications` برای دیدن `priority_check` و schema `integration_connections` برای ستون درست
-3. صدور یک migration واحد:
-   - DROP/REPLACE trigger خراب `channel`
-   - REPLACE function استفاده‌کننده از `service_role_key` با `current_setting('...', true)` یا حذف اگر بی‌استفاده
-   - تصحیح query که از `integration_connections.provider` استفاده می‌کند
-4. اصلاح call site frontend/edge برای `notifications.priority` (در صورت لزوم)
-5. تست end-to-end یک cut و بررسی DB logs برای نبود این خطاها
+### فایل‌های جدید
+- `src/components/ad-director/AutoEditDialog.tsx` — کل UI و state machine
+- `src/components/ad-director/AutoEditUploadStep.tsx` — drop zone
+- `src/components/ad-director/AutoEditStoryboardStep.tsx` — لیست صحنه‌ها
+- `supabase/functions/auto-video-editor/index.ts` — analyze + auto-script
+- یک migration برای bucket `raw-uploads` (private، RLS بر اساس `auth.uid()`، حداکثر ۱۰۰MB، TTL ۲۴ ساعت)
 
-## محدوده
+### فایل‌های تغییریافته
+- `src/components/ad-director/ChatPromptBar.tsx` — اضافه کردن دکمه + state `autoEditOpen`
+- `src/lib/videoStitch.ts` — اضافه کردن helper `cutVideoIntoSegments(file, cuts)` (افزایشی، بقیه دست‌نخورده)
 
-- فقط رفع باگ‌های backend
-- بدون تغییر در UI، RLS، یا منطق Cut Engine
-- بدون تغییر در `manage-machine` (که سالم است)
+### قانون مهم — رعایت Silent Video Policy
+طبق memory rule موجود (`silent-video-only-policy`):
+- ✅ خروجی Auto-Edit بدون صدا و بدون موزیک خواهد بود
+- ✅ از branch silent در `stitchClips` استفاده می‌شود
+- ✅ هیچ TTS یا music در این flow صدا زده نمی‌شود
+- ✅ حتی audio تعبیه‌شده در ویدیوی خام آپلودی هم در خروجی نهایی حذف می‌شود
+
+### مدل AI
+- `google/gemini-2.5-flash` (vision) — مستقیم از کلید Gemini موجود (طبق memory `ai-routing-cost-strategy`)
+- بدون مدل گران‌قیمت
+
+## محدوده تغییر
+
+تغییر می‌کند:
+- اضافه شدن یک دکمه به composer
+- ۳ کامپوننت جدید (Dialog + ۲ step)
+- ۱ edge function جدید
+- ۱ helper جدید در `videoStitch.ts`
+- ۱ bucket جدید + RLS
+
+تغییر **نمی‌کند**:
+- flow فعلی Ad Director (text → video)
+- `AdDirectorContent`، `ProVideoEditor`، `useRenderPipeline`
+- منطق scenes، prompt engineering، یا history
+- RLS سایر جداول، database entities موجود
+- silent-video policy — کاملاً رعایت می‌شود
+
+## محدودیت‌های فاز ۱
+- حداکثر **۱۰۰MB** فایل (بزرگ‌تر در فاز ۲ با ffmpeg.wasm)
+- ویدیوهای ۳۰ ثانیه تا ۵ دقیقه — analyzing ~۳۰–۶۰ ثانیه
+- حداکثر ۱۲ صحنه پیشنهادی AI
+
+## مراحل اجرا (پس از تأیید)
+1. ساخت bucket `raw-uploads` با RLS
+2. ساخت edge function `auto-video-editor` (action: analyze)
+3. اضافه کردن `cutVideoIntoSegments()` به `videoStitch.ts`
+4. ساخت `AutoEditDialog.tsx` + ۲ step component
+5. اضافه کردن دکمه Auto-Edit به `ChatPromptBar.tsx` بین AI Prompt و Character
+6. تست end-to-end با یک ویدیو ۳۰ ثانیه‌ای
 
 ## اعتبارسنجی
-
-- ✅ هیچ خطای `supabase.service_role_key` در DB logs پس از cut
-- ✅ هیچ خطای `record "new" has no field "channel"` پس از cut
-- ✅ هیچ خطای `notifications_priority_check`
-- ✅ هیچ خطای `integration_connections.provider`
-- ✅ Cut بدون "failed to fetch" کامل می‌شود
+- ✅ دکمه Auto-Edit در محل دایره قرمز در اسکرین‌شات نمایش داده می‌شود
+- ✅ کلیک → Dialog باز می‌شود
+- ✅ آپلود ویدیو → analysis < ۶۰ ثانیه
+- ✅ Storyboard نمایش داده می‌شود و قابل ویرایش است
+- ✅ خروجی نهایی .mp4 silent (بدون صدا/موزیک) و قابل دانلود
+- ✅ flow فعلی Ad Director دست‌نخورده باقی می‌ماند
+- ✅ silent-video-only policy رعایت می‌شود
 
