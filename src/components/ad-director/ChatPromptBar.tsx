@@ -263,18 +263,28 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     return `${brandBlock}\n\n${durationBlock}\n\nUSER SELECTIONS:\n${parts.join(". ")}.\n\nWrite a cinematic advertising prompt for a rebar.shop commercial video that is EXACTLY ${duration} seconds long, using the selections above. The output script must fit within the ${duration}-second duration constraint without exception.`;
   };
 
-  const runAiWrite = async (): Promise<string | null> => {
+  const runAiWrite = async (): Promise<{
+    text: string | null;
+    error?: { title: string; description: string };
+  }> => {
     const contextString = buildContextString();
-    const result = await invokeEdgeFunction<{ result?: { text?: string }; text?: string }>("ad-director-ai", {
-      action: "write-script",
-      input: contextString,
-    });
-    return result?.result?.text ?? result?.text ?? null;
-  };
 
-  const getAiErrorDetails = (err: unknown) => {
-    const info = classifyEdgeFunctionError(err, "AI prompt failed");
-    return { title: info.title, description: info.description };
+    try {
+      const result = await invokeEdgeFunction<{ result?: { text?: string }; text?: string }>("ad-director-ai", {
+        action: "write-script",
+        input: contextString,
+      });
+
+      return {
+        text: result?.result?.text ?? result?.text ?? null,
+      };
+    } catch (err) {
+      const info = classifyEdgeFunctionError(err, "AI prompt failed");
+      return {
+        text: null,
+        error: { title: info.title, description: info.description },
+      };
+    }
   };
 
   const handleAiWrite = async () => {
@@ -282,36 +292,44 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     setAiWriting(true);
     setPreviewOpen(true);
     setPreviewText("");
-    try {
-      const text = await runAiWrite();
-      if (text) {
-        setPreviewText(text);
-      } else {
-        toast({ title: "No prompt returned", description: "Try again.", variant: "destructive" });
-        setPreviewOpen(false);
-      }
-    } catch (err: any) {
-      console.error("AI write error:", err);
-      const { title, description } = getAiErrorDetails(err);
-      toast({ title, description, variant: "destructive" });
+
+    const { text, error } = await runAiWrite();
+
+    if (error) {
+      toast({ title: error.title, description: error.description, variant: "destructive" });
       setPreviewOpen(false);
-    } finally {
       setAiWriting(false);
+      return;
     }
+
+    if (text) {
+      setPreviewText(text);
+    } else {
+      toast({ title: "No prompt returned", description: "Try again.", variant: "destructive" });
+      setPreviewOpen(false);
+    }
+
+    setAiWriting(false);
   };
 
   const handleRegenerate = async () => {
     if (aiWriting) return;
     setAiWriting(true);
-    try {
-      const text = await runAiWrite();
-      if (text) setPreviewText(text);
-    } catch (err: any) {
-      const { title, description } = getAiErrorDetails(err);
-      toast({ title: title === "AI prompt failed" ? "Regenerate failed" : title, description, variant: "destructive" });
-    } finally {
+
+    const { text, error } = await runAiWrite();
+
+    if (error) {
+      toast({
+        title: error.title === "AI prompt failed" ? "Regenerate failed" : error.title,
+        description: error.description,
+        variant: "destructive",
+      });
       setAiWriting(false);
+      return;
     }
+
+    if (text) setPreviewText(text);
+    setAiWriting(false);
   };
 
   const handleUsePreview = () => {
