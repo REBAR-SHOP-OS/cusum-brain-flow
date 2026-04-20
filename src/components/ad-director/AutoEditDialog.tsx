@@ -17,11 +17,15 @@ interface AutoEditDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
+interface ClipMeta {
+  file: File;
+  duration: number;
+}
+
 export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("upload");
-  const [file, setFile] = useState<File | null>(null);
-  const [videoDuration, setVideoDuration] = useState(0);
+  const [clips, setClips] = useState<ClipMeta[]>([]);
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState("");
   const [scenes, setScenes] = useState<SceneCut[]>([]);
@@ -30,21 +34,18 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const finalUrlRef = useRef<string | null>(null);
 
-  // Cleanup blob URL when dialog closes/unmounts
   useEffect(() => {
     finalUrlRef.current = finalUrl;
   }, [finalUrl]);
 
   useEffect(() => {
     if (!open) {
-      // Reset on close
       const url = finalUrlRef.current;
       setTimeout(() => {
         if (url) URL.revokeObjectURL(url);
       }, 500);
       setPhase("upload");
-      setFile(null);
-      setVideoDuration(0);
+      setClips([]);
       setProgress(0);
       setProgressMsg("");
       setScenes([]);
@@ -54,38 +55,53 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
     }
   }, [open]);
 
-  const handleFileSelected = async (selected: File) => {
-    setFile(selected);
+  const totalDuration = clips.reduce((a, c) => a + c.duration, 0);
+
+  const handleFilesSelected = async (selected: File[]) => {
+    if (selected.length === 0) return;
     setPhase("analyzing");
     setError(null);
-    setProgress(5);
-    setProgressMsg("Reading video…");
+    setProgress(2);
+    setProgressMsg("Reading videos…");
 
     try {
-      // 1) Extract keyframes locally (smaller payload to stay <1MB)
-      // Probe duration first via a temporary metadata read by extractKeyframes itself.
-      // Use dynamic interval so longer videos don't blow up frame count.
-      const { frames, duration } = await extractKeyframes(selected, {
-        maxFrames: 12,
-        targetWidth: 224,
-        // intervalSec is auto-bounded by maxFrames inside extractKeyframes
-        onProgress: (p) => {
-          setProgress(5 + Math.round(p * 35));
-          setProgressMsg(`Extracting keyframes… ${Math.round(p * 100)}%`);
-        },
-      });
-      setVideoDuration(duration);
+      // 1) Extract keyframes for each clip
+      const perClipMaxFrames = selected.length === 1 ? 12 : 8;
+      const clipsPayload: Array<{ index: number; duration: number; frames: { t: number; dataUrl: string }[] }> = [];
+      const collected: ClipMeta[] = [];
 
-      // Diagnostic: approximate payload size
-      const approxBytes = frames.reduce((acc, f) => acc + f.dataUrl.length, 0);
-      console.log(`[AutoEdit] frames=${frames.length} duration=${duration.toFixed(1)}s payload≈${(approxBytes / 1024).toFixed(0)}KB`);
+      for (let i = 0; i < selected.length; i++) {
+        const f = selected[i];
+        setProgressMsg(`Analyzing clip ${i + 1} of ${selected.length}…`);
+        const { frames, duration } = await extractKeyframes(f, {
+          maxFrames: perClipMaxFrames,
+          targetWidth: 200,
+          onProgress: (p) => {
+            const base = 2 + (i / selected.length) * 38;
+            const span = (1 / selected.length) * 38;
+            setProgress(Math.round(base + p * span));
+          },
+        });
+        clipsPayload.push({ index: i, duration, frames });
+        collected.push({ file: f, duration });
+      }
 
-      // 2) Send to edge function for AI scene proposal
+      setClips(collected);
+
+      const approxBytes = clipsPayload.reduce(
+        (acc, c) => acc + c.frames.reduce((a, f) => a + f.dataUrl.length, 0),
+        0,
+      );
+      console.log(
+        `[AutoEdit] clips=${clipsPayload.length} totalDur=${collected.reduce((a, c) => a + c.duration, 0).toFixed(1)}s payload≈${(approxBytes / 1024).toFixed(0)}KB`,
+      );
+
+      // 2) Send batch to edge function
       setProgress(45);
-      setProgressMsg("AI is watching your video…");
+      setProgressMsg(`AI is reviewing ${clipsPayload.length} clip${clipsPayload.length > 1 ? "s" : ""}…`);
 
       const { data, error: fnErr } = await supabase.functions.invoke("auto-video-editor", {
-        body: { action: "analyze", frames, videoDuration: duration },
+        body: { action: "analyze", clips: clipsPayload },
       });
 
       if (fnErr) {
@@ -100,8 +116,9 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
         throw new Error("AI returned no scenes");
       }
 
-      const sceneList: SceneCut[] = data.scenes.map((s: RawSceneCut, i: number) => ({
+      const sceneList: SceneCut[] = data.scenes.map((s: any, i: number) => ({
         id: `s_${i}_${Math.random().toString(36).slice(2, 8)}`,
+        clipIndex: typeof s.clipIndex === "number" ? s.clipIndex : 0,
         start: s.start,
         end: s.end,
         description: s.description || `Scene ${i + 1}`,
@@ -122,43 +139,63 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
   };
 
   const handleGenerate = async () => {
-    if (!file || scenes.length === 0) return;
+    if (clips.length === 0 || scenes.length === 0) return;
     setPhase("generating");
     setError(null);
     setProgress(0);
     setProgressMsg("Cutting your scenes…");
 
     try {
-      const cuts: RawSceneCut[] = scenes.map((s) => ({ start: s.start, end: s.end }));
-      const segments = await cutVideoIntoSegments(file, cuts, ({ index, total }) => {
-        const p = Math.round((index / total) * 60);
-        setProgress(p);
-        setProgressMsg(`Cutting scene ${index + 1} of ${total}…`);
-      });
+      // Group scenes by source clip so we cut each file in one pass
+      const segmentsBySceneId = new Map<string, { blob: Blob; blobUrl: string; duration: number }>();
+      const grouped = new Map<number, SceneCut[]>();
+      for (const s of scenes) {
+        const ci = Math.min(Math.max(0, s.clipIndex ?? 0), clips.length - 1);
+        if (!grouped.has(ci)) grouped.set(ci, []);
+        grouped.get(ci)!.push(s);
+      }
 
-      // Stitch silent segments together (no audio overlays)
+      const totalScenes = scenes.length;
+      let processed = 0;
+
+      for (const [clipIdx, sceneSubset] of grouped.entries()) {
+        const file = clips[clipIdx].file;
+        const cuts: RawSceneCut[] = sceneSubset.map((s) => ({ start: s.start, end: s.end }));
+        const segs = await cutVideoIntoSegments(file, cuts, ({ index, total }) => {
+          const localFrac = (processed + index) / totalScenes;
+          setProgress(Math.round(localFrac * 60));
+          setProgressMsg(`Cutting scene ${processed + index + 1} of ${totalScenes}…`);
+        });
+        sceneSubset.forEach((s, i) => segmentsBySceneId.set(s.id, segs[i]));
+        processed += sceneSubset.length;
+      }
+
+      // Stitch in the user's storyboard order
       setProgressMsg("Assembling final video…");
       setProgress(70);
 
-      const stitchClipsInput = segments.map((seg) => ({
+      const orderedSegments = scenes
+        .map((s) => segmentsBySceneId.get(s.id))
+        .filter((x): x is { blob: Blob; blobUrl: string; duration: number } => Boolean(x));
+
+      const stitchInput = orderedSegments.map((seg) => ({
         videoUrl: seg.blobUrl,
         targetDuration: seg.duration,
       }));
 
       const result = await stitchClips(
-        stitchClipsInput,
+        stitchInput,
         {
-          // SILENT: no audioUrl, no musicUrl, no endCard audio
+          // SILENT: no audio
         } as any,
         (p) => {
           setProgressMsg(p.message || "Assembling…");
-          // Crawl progress from 70 → 98 during stitch
           setProgress((cur) => Math.min(98, Math.max(cur, cur + 1)));
         },
       );
 
       // Cleanup segment URLs
-      segments.forEach((s) => URL.revokeObjectURL(s.blobUrl));
+      orderedSegments.forEach((s) => URL.revokeObjectURL(s.blobUrl));
 
       setFinalUrl(result.blobUrl);
       setProgress(100);
@@ -192,16 +229,16 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
             Auto-Edit from Raw Video
           </DialogTitle>
           <DialogDescription className="text-white/55">
-            Upload a raw clip — AI proposes the best edit. Final export is silent (no audio).
+            Upload one or more raw clips — AI picks the best scenes and assembles a silent edit.
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden p-6">
-          {phase === "upload" && <AutoEditUploadStep onFileSelected={handleFileSelected} />}
+          {phase === "upload" && <AutoEditUploadStep onFilesSelected={handleFilesSelected} />}
 
           {(phase === "analyzing" || phase === "generating") && (
             <ProgressView
-              title={phase === "analyzing" ? "Analyzing your video" : "Generating final video"}
+              title={phase === "analyzing" ? "Analyzing your videos" : "Generating final video"}
               message={progressMsg}
               progress={progress}
             />
@@ -211,7 +248,8 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
             <AutoEditStoryboardStep
               scenes={scenes}
               summary={summary}
-              videoDuration={videoDuration}
+              videoDuration={totalDuration}
+              clipCount={clips.length}
               onChange={setScenes}
               onGenerate={handleGenerate}
               onBack={() => setPhase("upload")}
@@ -228,7 +266,7 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
                   <Download className="h-4 w-4" /> Download Video
                 </Button>
                 <Button variant="ghost" onClick={() => setPhase("upload")} className="text-white/70 hover:text-white">
-                  Edit another video
+                  Edit more clips
                 </Button>
               </div>
               <p className="text-xs text-white/40">Silent .webm export · ready to share</p>
