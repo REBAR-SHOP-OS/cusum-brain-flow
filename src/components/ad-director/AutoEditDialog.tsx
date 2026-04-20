@@ -57,6 +57,8 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
       setSummary("");
       setFinalUrl(null);
       setError(null);
+      setRegeneratePrompt("");
+      clipsPayloadRef.current = null;
     }
   }, [open]);
 
