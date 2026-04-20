@@ -1,96 +1,87 @@
 
 
-# رفع zoom/crop در خروجی Auto-Edit
+# Regenerate Auto-Edit با پرامت کاربر
 
-## ریشه مشکل
+## هدف
+در صفحه‌ی "done" (بعد از Download Video)، یک باکس prompt اضافه شود تا کاربر بنویسد چه تغییری در ادیت می‌خواهد (مثلاً "صحنه‌های اکشن بیشتر، کات‌های سریع‌تر، فقط بخش thumbs-up را نگه دار") و دکمه‌ی **Regenerate**. خروجی جدید با همان فایل‌های منبع و keyframes قبلی، اما با storyboard متفاوت بر اساس راهنمایی کاربر، تولید می‌شود.
 
-در `src/lib/videoStitch.ts`، تابع `stitchClips` همیشه از منطق **`fitCover`** استفاده می‌کند (خط ۶۶۷–۶۷۰):
+## رفتار
 
-```ts
-const drawFit = (v) => {
-  const f = fitCover(v.videoWidth, v.videoHeight, W, H);
-  ctx.drawImage(v, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
-};
-```
+**در صفحه done:**
+- زیر دکمه Download، یک کارت با `Textarea` (placeholder: "مثلاً: صحنه‌های پرحرکت‌تر را انتخاب کن، کات‌ها سریع‌تر باشد")
+- دکمه‌ی **"Regenerate with this prompt"** (بنفش/امبر، با آیکون `Sparkles`)
+- وقتی کلیک شد:
+  1. UI به phase `analyzing` برمی‌گردد با پیام "Re-editing with your direction…"
+  2. همان keyframes قبلی (cache شده) + پرامت کاربر دوباره به edge function ارسال می‌شود
+  3. storyboard جدید برمی‌گردد → مستقیم وارد `generating` می‌شود (بدون نمایش review، چون کاربر قبلاً ساخته)
+  4. ویدیوی نهایی جدید نمایش داده می‌شود؛ ویدیوی قبلی revoke می‌شود
+- دکمه‌ی **"Edit storyboard manually"** هم اضافه شود برای کسی که می‌خواهد به جای regenerate، storyboard را دستی ویرایش کند → برمی‌گردد به phase `review`.
 
-`fitCover` معادل CSS `object-fit: cover` است — یعنی منبع را آنقدر بزرگ می‌کند که کل canvas را **بپوشاند** و سپس **center-crop** می‌کند. این برای Ad Director (که aspect ratio هدف از پیش انتخاب شده) درست است، اما برای Auto-Edit مشکل‌ساز است:
+**Cache:**
+- در state یک `clipsPayloadRef` نگه‌داری می‌شود (همان keyframes استخراج‌شده در آپلود اول) تا re-extract لازم نباشد.
+- هر بار regenerate، فقط فراخوانی edge function + cut/stitch جدید — extraction دوباره انجام نمی‌شود.
 
-- Auto-Edit در `AutoEditDialog.tsx` (خط ۱۸۶–۱۹۰) `stitchClips` را با `overlays = {}` صدا می‌زند → هیچ `aspectRatio` نداده.
-- در این حالت `stitchClips` ابعاد canvas را از **`validatedClips[0].video.videoWidth/Height`** می‌گیرد (خط ۳۹۵–۳۹۸).
-- اما segmentهای WebM که توسط `cutVideoIntoSegments` (MediaRecorder + canvas.captureStream) ساخته می‌شوند، در هنگام decode می‌توانند ابعاد گزارش‌شده‌ی متفاوتی داشته باشند (به‌خصوص ویدیوهای عمودی موبایل که codec گاهی به دیمنشن "نرمال" decode می‌کند).
-- وقتی aspect ratio segment با aspect canvas جزئی فرق دارد، `fitCover` بخشی را crop می‌کند → نتیجه‌ای که کاربر می‌بیند: zoom-in و قطع لبه‌ها.
+## تغییرات فنی
 
-## رفع
+### `supabase/functions/auto-video-editor/index.ts`
+- پذیرش فیلد جدید `userDirection?: string` در body
+- اگر آمد، در prompt تزریق شود:
+  > `USER DIRECTION (highest priority): "${userDirection}". Re-edit accordingly while still following the rules above.`
+- بقیه‌ی منطق بدون تغییر. backward compatible.
+- redeploy edge function.
 
-### A) تابع `fitContain` اضافه کن به `videoStitch.ts`
-معادل `object-fit: contain` — منبع کامل نمایش داده می‌شود، اگر aspect نخواند letterbox سیاه/پر اطراف می‌گذارد:
+### `src/components/ad-director/AutoEditDialog.tsx`
+- state جدید:
+  - `clipsPayloadRef = useRef<ClipPayload[] | null>(null)` — ذخیره keyframes برای reuse
+  - `regeneratePrompt: string`
+- در `handleFilesSelected`: بعد از ساخت `clipsPayload`، آن را در ref ذخیره کن.
+- تابع جدید `handleRegenerate(direction: string)`:
+  - اگر `clipsPayloadRef.current` خالی است → toast خطا
+  - phase = `analyzing`, پیام "Re-editing with your direction…"
+  - فراخوانی edge function با `{ action: "analyze", clips: cached, userDirection: direction }`
+  - بعد از دریافت scenes جدید → `setScenes(...)` و مستقیم `handleGenerate()` صدا زده شود (نه نمایش review)
+  - ویدیوی قبلی revoke شود
+- در بخش `phase === "done"`:
+  - زیر دکمه‌های فعلی، یک panel اضافه شود:
+    - `<Textarea>` برای پرامت
+    - `<Button>` "Regenerate with this prompt" (disabled وقتی textarea خالی است)
+    - لینک متنی "Edit storyboard manually" → `setPhase("review")`
 
-```ts
-export function fitContain(srcW, srcH, dstW, dstH) {
-  const srcRatio = srcW / srcH;
-  const dstRatio = dstW / dstH;
-  let dw, dh;
-  if (srcRatio > dstRatio) { dw = dstW; dh = dstW / srcRatio; }
-  else { dh = dstH; dw = dstH * srcRatio; }
-  return { dx: (dstW - dw) / 2, dy: (dstH - dh) / 2, dw, dh };
-}
-```
-
-### B) اضافه کردن گزینه‌ی `fitMode` به `StitchOverlayOptions`
-- مقادیر: `"cover"` (default برای backward compatibility) یا `"contain"`.
-- در `drawFit` هر دو حالت پشتیبانی شود:
-  ```ts
-  if (fitMode === "contain") {
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, W, H);
-    const f = fitContain(v.videoWidth, v.videoHeight, W, H);
-    ctx.drawImage(v, 0, 0, v.videoWidth, v.videoHeight, f.dx, f.dy, f.dw, f.dh);
-  } else { /* current fitCover path */ }
-  ```
-- این تغییر در `drawFit` هر دو scope (عادی و در transition) اعمال شود.
-
-### C) برای Auto-Edit: حفظ ابعاد دقیق منبع، بدون crop
-در `AutoEditDialog.tsx` (خط ۱۸۶):
-- پاس دادن `aspectRatio` نه — اما گزینه‌ی **`fitMode: "contain"`** + ست کردن دستی **`canvasWidth/canvasHeight`** برابر اصلی منبع.
-- اضافه کردن دو فیلد جدید به `StitchOverlayOptions`: `canvasWidth?: number` و `canvasHeight?: number` که اگر داده شد، canvas دقیقاً همان ابعاد را می‌گیرد (به‌جای logic فعلی).
-- در `AutoEditDialog`: قبل از `stitchClips`، یک `<video>` موقت روی فایل اول بساز، صبر کن تا metadata بیاید، و `videoWidth/Height` آن را به عنوان canvas dims بفرست. به این ترتیب خروجی نهایی **دقیقاً** ابعاد ویدیوی منبع را دارد و هیچ crop/letterbox رخ نمی‌دهد.
-
-### D) Backward compatibility
-- پیش‌فرض `fitMode = "cover"` → Ad Director (که aspect ratio هدف انتخاب می‌کند) دست‌نخورده می‌ماند.
-- فقط Auto-Edit از `contain` + dims native استفاده می‌کند.
+### بدون تغییر
+- `AutoEditUploadStep`, `AutoEditStoryboardStep`
+- `cutVideoIntoSegments`, `stitchClips`
+- silent-video-only policy
+- bucket / RLS
 
 ## محدوده تغییر
 
 تغییر می‌کند:
-- `src/lib/videoStitch.ts`:
-  - افزودن `fitContain`
-  - افزودن `fitMode`, `canvasWidth`, `canvasHeight` به `StitchOverlayOptions`
-  - استفاده از این مقادیر در logic ابعاد canvas (خطوط ۳۹۳–۴۰۱)
-  - استفاده از `fitMode` در هر دو محل `drawFit` (داخل drawFrame و در شاخه‌های transition)
-- `src/components/ad-director/AutoEditDialog.tsx`:
-  - استخراج `videoWidth/Height` فایل اول قبل از stitch
-  - پاس دادن `{ fitMode: "contain", canvasWidth, canvasHeight }` به `stitchClips`
+- `src/components/ad-director/AutoEditDialog.tsx` (افزودن regenerate UI + cache + handler)
+- `supabase/functions/auto-video-editor/index.ts` (پذیرش `userDirection` و تزریق در prompt) + redeploy
 
 تغییر **نمی‌کند:**
-- منطق Ad Director (Chat/Pro Editor) و رفتار `fitCover` پیش‌فرض
-- منطق `cutVideoIntoSegments` یا extractKeyframes
-- silent-video-only policy
-- edge function `auto-video-editor`
-- بقیه pipeline یا RLS
+- بقیه‌ی Auto-Edit flow (upload, storyboard editor, generate, stitch)
+- Ad Director یا Pro Editor
+- منطق native dims / fitMode contain
 
 ## مراحل اجرا
 
-1. اضافه کردن `fitContain` و سه فیلد جدید به `StitchOverlayOptions` در `videoStitch.ts`
-2. آپدیت منطق ابعاد canvas: اگر `canvasWidth/Height` پاس شد همان را استفاده کن
-3. آپدیت `drawFit` (هر دو محل) برای پشتیبانی از `fitMode`
-4. در `AutoEditDialog`: استخراج dims منبع از اولین فایل و پاس دادن مقادیر جدید
-5. تست end-to-end با یک ویدیوی عمودی موبایل و یک ویدیوی landscape
+1. آپدیت edge function برای پشتیبانی از `userDirection` و redeploy
+2. آپدیت `AutoEditDialog.tsx`:
+   - cache کردن `clipsPayload` در ref
+   - افزودن `regeneratePrompt` state
+   - افزودن `handleRegenerate` که از کش استفاده می‌کند
+   - افزودن UI پرامت + دکمه در بخش done
+3. تست end-to-end:
+   - یک ویدیو آپلود → ادیت ساخته شود
+   - در done، پرامت بزن: "صحنه‌های آخر را حذف کن"
+   - regenerate → ویدیوی جدید با storyboard متفاوت
 
 ## اعتبارسنجی
-
-- ✅ ویدیوی نهایی Auto-Edit دقیقاً همان framing منبع را نشان می‌دهد (بدون zoom/crop)
-- ✅ ابعاد خروجی برابر ابعاد ویدیوی منبع است (مثلاً منبع 1080×1920 → خروجی 1080×1920)
-- ✅ Ad Director (Chat & Pro Editor) رفتار قبلی را حفظ می‌کند (fitCover با aspectRatio)
-- ✅ silent-video-only policy رعایت می‌شود
-- ✅ multi-clip Auto-Edit همچنان کار می‌کند (canvas dims از اولین کلیپ)
+- ✅ بعد از ساخت اولین ویدیو، باکس پرامت زیر دکمه Download نمایش داده می‌شود
+- ✅ نوشتن پرامت + کلیک Regenerate → بدون آپلود مجدد، ویدیوی جدید با storyboard متفاوت ساخته می‌شود
+- ✅ ویدیوی قبلی به‌درستی revoke می‌شود (بدون memory leak)
+- ✅ "Edit storyboard manually" کاربر را به phase review برمی‌گرداند
+- ✅ پرامت خالی → دکمه disabled
+- ✅ flow اولیه (آپلود اول) دست‌نخورده باقی می‌ماند
 
