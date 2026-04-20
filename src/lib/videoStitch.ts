@@ -41,6 +41,14 @@ export function fitCover(srcW: number, srcH: number, dstW: number, dstH: number)
   return { sx, sy, sw, sh };
 }
 
+export type StitchTransitionType =
+  | "None" | "Crossfade" | "Cross Blur" | "Fade Black" | "Fade White"
+  | "Burn" | "Tiles"
+  | "Wipe Up" | "Wipe Down" | "Wipe Left" | "Wipe Right"
+  | "Slide Up" | "Slide Down"
+  | "Zoom In" | "Zoom Out"
+  | "Horizontal Banding";
+
 export interface StitchOverlayOptions {
   logo?: { url: string; enabled: boolean; size?: number };
   /** Target aspect ratio for the final canvas. Defaults to source dims. */
@@ -61,7 +69,13 @@ export interface StitchOverlayOptions {
   audioUrl?: string;
   musicUrl?: string;
   musicVolume?: number; // 0-1, default 0.3
-  crossfadeDuration?: number; // seconds, default 0.5
+  crossfadeDuration?: number; // seconds, default 0.5 — used as fallback when perClipTransitions is missing
+  /**
+   * Per-clip outgoing transition (index N is the transition FROM clip N TO clip N+1).
+   * Length should equal clips.length; the last entry is ignored. Missing entries fall back
+   * to a Crossfade with crossfadeDuration.
+   */
+  perClipTransitions?: { type: StitchTransitionType | string; duration: number }[];
 }
 
 export interface StitchProgress {
