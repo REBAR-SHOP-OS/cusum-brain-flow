@@ -405,6 +405,10 @@ Rules:
           ],
           temperature: 0.1,
           maxTokens,
+          fallback: {
+            provider: "gpt",
+            model: "gpt-5",
+          },
         });
 
         await svcClient
