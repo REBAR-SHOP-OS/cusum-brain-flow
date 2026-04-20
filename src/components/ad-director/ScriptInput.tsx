@@ -71,7 +71,13 @@ export function ScriptInput({ script, brand, onScriptChange, onBrandChange, onAn
       setProductDescription("");
       toast({ title: "Script generated", description: `Written by ${res.modelUsed}` });
     } catch (err: any) {
-      toast({ title: "Script generation failed", description: err.message, variant: "destructive" });
+      const title = err?.status === 402 ? "AI credits exhausted" : err?.status === 429 ? "Rate limit reached" : "Script generation failed";
+      const description = err?.status === 402
+        ? "Add funds in Settings → Workspace → Cloud & AI balance, then try again."
+        : err?.status === 429
+          ? "Please wait a moment and try again."
+          : err?.message || "Try again";
+      toast({ title, description, variant: "destructive" });
     } finally {
       setAiWriting(false);
     }

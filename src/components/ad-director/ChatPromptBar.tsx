@@ -271,6 +271,25 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     return result?.result?.text ?? result?.text ?? null;
   };
 
+  const getAiErrorDetails = (err: any) => {
+    if (err?.status === 402) {
+      return {
+        title: "AI credits exhausted",
+        description: "Add funds in Settings → Workspace → Cloud & AI balance, then try again.",
+      };
+    }
+    if (err?.status === 429) {
+      return {
+        title: "Rate limit reached",
+        description: "Please wait a moment and try again.",
+      };
+    }
+    return {
+      title: "AI prompt failed",
+      description: err?.message || "Try again",
+    };
+  };
+
   const handleAiWrite = async () => {
     if (aiWriting || disabled) return;
     setAiWriting(true);
@@ -286,7 +305,8 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
       }
     } catch (err: any) {
       console.error("AI write error:", err);
-      toast({ title: "AI prompt failed", description: err.message || "Try again", variant: "destructive" });
+      const { title, description } = getAiErrorDetails(err);
+      toast({ title, description, variant: "destructive" });
       setPreviewOpen(false);
     } finally {
       setAiWriting(false);
@@ -300,7 +320,8 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
       const text = await runAiWrite();
       if (text) setPreviewText(text);
     } catch (err: any) {
-      toast({ title: "Regenerate failed", description: err.message || "Try again", variant: "destructive" });
+      const { title, description } = getAiErrorDetails(err);
+      toast({ title: title === "AI prompt failed" ? "Regenerate failed" : title, description, variant: "destructive" });
     } finally {
       setAiWriting(false);
     }

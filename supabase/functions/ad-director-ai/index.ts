@@ -127,7 +127,12 @@ async function callAI(
     if (!response.ok) {
       const errText = await response.text();
       console.error("Fallback model also failed:", response.status, errText);
-      throw new Error(response.status === 429 ? "Rate limited — please try again." : response.status === 402 ? "AI credits exhausted." : "AI generation failed");
+      const message = response.status === 429
+        ? "Rate limited — please try again."
+        : response.status === 402
+          ? "AI credits exhausted."
+          : "AI generation failed";
+      throw Object.assign(new Error(message), { status: response.status });
     }
 
     const fallbackText = await response.text();
@@ -142,7 +147,12 @@ async function callAI(
   if (!response.ok) {
     const errText = await response.text();
     console.error("AI error:", response.status, errText);
-    throw new Error(response.status === 429 ? "Rate limited — please try again." : response.status === 402 ? "AI credits exhausted." : "AI generation failed");
+    const message = response.status === 429
+      ? "Rate limited — please try again."
+      : response.status === 402
+        ? "AI credits exhausted."
+        : "AI generation failed";
+    throw Object.assign(new Error(message), { status: response.status });
   }
 
   const rawText = await response.text();

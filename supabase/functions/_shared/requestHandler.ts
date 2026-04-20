@@ -200,11 +200,28 @@ export async function handleRequest(
     }
 
     const message = err instanceof Error ? err.message : String(err);
+    const explicitStatus = typeof (err as { status?: unknown })?.status === "number"
+      ? Number((err as { status?: unknown }).status)
+      : null;
+    const normalizedMessage = message.toLowerCase();
+    const inferredStatus =
+      explicitStatus && explicitStatus >= 400 && explicitStatus <= 599
+        ? explicitStatus
+        : normalizedMessage.includes("ai credits exhausted") || normalizedMessage.includes("credits exhausted") || normalizedMessage.includes("payment required")
+          ? 402
+          : normalizedMessage.includes("rate limited") || normalizedMessage.includes("rate limit exceeded")
+            ? 429
+            : normalizedMessage.includes("forbidden")
+              ? 403
+              : normalizedMessage.includes("unauthorized") || normalizedMessage.includes("invalid token")
+                ? 401
+                : 500;
+
     log.error("Request failed", err);
 
     return new Response(
       JSON.stringify({ ok: false, error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: inferredStatus, headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   }
 }
