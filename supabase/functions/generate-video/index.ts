@@ -84,6 +84,8 @@ async function veoGenerate(
         durationSeconds: veoDuration,
         aspectRatio: "16:9",
         personGeneration: "allow_all",
+        // HARD RULE: AI Video Director must never embed audio. Veo 3.1 generates audio by default.
+        generateAudio: !SILENT_VIDEO_MODE,
       },
     }),
   });
@@ -388,6 +390,10 @@ async function soraGenerate(apiKey: string, prompt: string, duration: number, mo
   formData.append("model", model || "sora-2");
   formData.append("size", "1280x720");
   formData.append("seconds", String(soraDuration));
+  // HARD RULE: AI Video Director must never embed audio. Sora 2 generates audio by default.
+  if (SILENT_VIDEO_MODE) {
+    formData.append("audio", "off");
+  }
 
   const resp = await fetch(`${OPENAI_BASE}/videos`, {
     method: "POST",
