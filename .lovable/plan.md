@@ -1,74 +1,70 @@
 
 
-# مسیریابی خودکار T3/T3A به SPIRAL-01
+# رفع خطای "Clip 2 failed to load after retry"
 
-## هدف
-هر آیتم bend که `asa_shape_code` آن **T3** یا **T3A** باشد، **همیشه** به ماشین **SPIRAL-01** (`b0000000-0000-0000-0000-000000000005`, "Circular Spiral Bender") اختصاص داده شود — صرف‌نظر از `machine_capabilities`.
+## ریشه مشکل
 
-## ریشه فعلی
-تابع `auto_create_bend_batch` (تریگر روی `cut_batches`) ماشین را فقط بر اساس `machine_capabilities (process='bend' AND bar_code=...)` انتخاب می‌کند. جدول `machine_capabilities` اصلاً ستون shape ندارد، پس تطبیق shape ممکن نیست و T3/T3A ممکن است به یک bender معمولی برود یا بدون ماشین (NULL) بماند.
+در `src/lib/rawVideoUtils.ts → cutVideoIntoSegments`، هر سگمنت توسط `MediaRecorder` از `canvas.captureStream(30)` ضبط می‌شود. خروجی WebM این روش معمولاً **هدر Duration معتبر ندارد** (`duration = Infinity`) و گاهی Cue هم ندارد.
 
-## رفع
+وقتی `videoStitch.ts → preloadAndValidate` (خط ۳۲۰–۳۵۲) یک `<video>` تازه می‌سازد و `src = blobUrl` می‌دهد، روی برخی بلاب‌ها (مخصوصاً وقتی چند کلیپ پشت هم پردازش می‌شود و حافظه مصرفی بالاست) `onerror` فایر می‌شود قبل از `onloadedmetadata` — مخصوصاً برای کلیپ دوم به بعد. retry هم چون از همان blob URL استفاده می‌کند، باز شکست می‌خورد.
 
-### A) آپدیت `auto_create_bend_batch` با اولویت shape
-قبل از انتخاب از `machine_capabilities`، اگر shape آیتم در لیست spiral است → مستقیم SPIRAL-01 برای همان company انتخاب شود:
+نشانه‌ی دقیق در اسکرین‌شات: **"Clip 2 failed to load after retry: Clip 2 failed to load"** — یعنی هر دو attempt همزمان روی همان blob URL شکست خورده‌اند.
 
-```sql
--- Spiral shapes always go to the company's spiral bender
-IF UPPER(COALESCE(v_item.asa_shape_code, '')) IN ('T3', 'T3A') THEN
-  SELECT id INTO v_machine_id
-    FROM public.machines
-   WHERE company_id = NEW.company_id
-     AND name = 'SPIRAL-01'
-   LIMIT 1;
-END IF;
+دلایل تکمیلی شکست:
+- `crossOrigin` در `videoStitch` تنظیم نشده → برای بعضی بلاب‌ها در ترکیب با رفتار preload، چنک اول دانلود نمی‌شود
+- بدون فراخوانی `v.load()` بعد از set کردن `src`، بعضی محیط‌ها lazy می‌مانند تا یک play trigger
+- retry بدون فاصله زمانی → همان وضعیت مشکل‌دار GC/memory باقی‌ست
 
--- Fallback: capability-based assignment (only if not a spiral shape)
-IF v_machine_id IS NULL THEN
-  SELECT mc.machine_id INTO v_machine_id
-    FROM public.machine_capabilities mc
-    JOIN public.machines m ON m.id = mc.machine_id
-   WHERE mc.process = 'bend'
-     AND mc.bar_code = v_item.bar_code
-     AND m.company_id = NEW.company_id
-   LIMIT 1;
-END IF;
-```
+## رفع (حداقلی، جراحی، فقط ۲ فایل)
 
-این منطق case-insensitive است (`UPPER(...)`) و فقط برای shapeهای spiral (T3/T3A) اعمال می‌شود.
+### A) `src/lib/videoStitch.ts` → تابع `preloadAndValidate` مقاوم‌سازی شود
 
-### B) Backfill: re-route آیتم‌های T3/T3A موجود
-هر `bend_batch` فعلی که shape آن T3/T3A است و هنوز `queued` (یعنی شروع نشده) → machine_id آن به SPIRAL-01 آپدیت شود:
+تغییرات نقطه‌ای داخل تابع `load`:
+1. صدا زدن صریح `v.load()` بعد از set کردن `v.src`.
+2. پذیرش `loadeddata` به‌عنوان سیگنال موفقیت **علاوه بر** `loadedmetadata` (هر کدام زودتر آمد).
+3. اگر `onerror` فایر شد ولی `videoWidth > 0` بود → موفق در نظر بگیر (خطای موقت decoder بعد از init).
+4. افزایش timeout از ۱۵s به ۲۵s برای کلیپ‌های بعد از اولی.
+5. بین retry اول و دوم یک `await sleep(400)` + **rebuild blob URL از همان Blob منبع** اگر در دسترس است (در غیر این صورت همان URL).
+6. لاگ تشخیصی: قبل از reject، `console.error` با `blob URL prefix + videoWidth + readyState` تا debug آینده آسان شود.
 
-```sql
-UPDATE public.bend_batches bb
-   SET machine_id = (
-     SELECT id FROM public.machines
-      WHERE company_id = bb.company_id AND name = 'SPIRAL-01' LIMIT 1
-   )
- WHERE UPPER(COALESCE(bb.shape, '')) IN ('T3', 'T3A')
-   AND bb.status = 'queued';
-```
+### B) `src/components/ad-director/AutoEditDialog.tsx` → پاس دادن Blob خام
 
-batchهای در حال bending یا کامل‌شده دست‌نخورده می‌مانند.
+به جای ارسال فقط `blobUrl` به `stitchClips`، `blob` را هم در stitchInput نگه دار. سپس به `stitchClips` در `videoStitch.ts` یک شکل ورودی اختیاری اضافه‌ای پشتیبانی می‌کنیم: `{ videoUrl, targetDuration, blob? }`. اگر `blob` آمد و retry لازم شد، **یک `URL.createObjectURL(blob)` تازه ساخته شود** و دوباره load انجام شود (این رایج‌ترین راه‌حل برای بلاب‌های MediaRecorder که decoder روی URL اول مشکل پیدا می‌کند).
+
+این کار backward compatible است: ad-director فعلی که فقط `videoUrl` می‌فرستد دست‌نخورده کار می‌کند.
+
+### C) (محافظتی) `cutVideoIntoSegments` — اطمینان از فلاش کامل
+
+در `src/lib/rawVideoUtils.ts`:
+- بعد از `recorder.stop()` و قبل از `new Blob(chunks)`، یک `await new Promise(r => setTimeout(r, 80))` اضافه شود تا آخرین `dataavailable` chunk قطعاً برسد. این باگ MediaRecorder در chromium در ضبط‌های پشت سر هم رخ می‌دهد و chunk آخر گم می‌شود → blob خروجی corrupted.
+- استفاده از `recorder.start(250)` به‌جای `100` برای کاهش تعداد chunkها و چنک‌های ناقص (mux تمیزتر).
+- requestData قبل از stop: `try { recorder.requestData(); } catch {}` تا flush نهایی صریح باشد.
 
 ## محدوده تغییر
 
 تغییر می‌کند:
-- یک migration جدید SQL:
-  - `CREATE OR REPLACE FUNCTION public.auto_create_bend_batch()` با منطق spiral-priority
-  - یک‌بار `UPDATE` روی `bend_batches` در حالت `queued`
+- `src/lib/videoStitch.ts` — منطق `preloadAndValidate` و امضای داخلی `stitchClips` (افزودن فیلد `blob?` به ورودی)
+- `src/lib/rawVideoUtils.ts` — فلاش امن MediaRecorder
+- `src/components/ad-director/AutoEditDialog.tsx` — پاس دادن `blob` در stitchInput
 
 تغییر **نمی‌کند:**
-- هیچ کد frontend
-- ساختار جدول `machines`, `bend_batches`, `machine_capabilities`
-- تریگر یا تابع‌های دیگر
-- batchهای در حال انجام یا کامل‌شده
+- AdDirector / Pro Editor (ورودی `blob?` اختیاری است)
+- منطق `fitMode contain` و dims native
+- silent-video-only policy
+- هیچ edge function، DB، یا RLS
+
+## مراحل اجرا
+
+1. آپدیت `cutVideoIntoSegments`: `requestData` + flush delay + `start(250)`
+2. آپدیت `preloadAndValidate` در `videoStitch.ts` با ۶ مورد بالا
+3. اضافه کردن پشتیبانی `blob?` اختیاری در ورودی stitchClips → اگر retry لازم شد، URL تازه از blob ساخته شود
+4. آپدیت `AutoEditDialog.tsx` برای پاس دادن `blob` در `stitchInput`
+5. تست end-to-end با ۲ کلیپ ۲۰s (همان سناریوی خراب)
 
 ## اعتبارسنجی
-- ✅ هر cut batch جدیدی که آیتم آن T3 یا T3A است، خودکار `bend_batches.machine_id = SPIRAL-01` می‌گیرد
-- ✅ آیتم‌های موجود T3/T3A در حالت queued به SPIRAL-01 منتقل می‌شوند
-- ✅ shapeهای غیر-spiral همان منطق capability قبلی را دنبال می‌کنند
-- ✅ پنل SPIRAL-01 (که از `useBenderBatches` می‌خواند) آیتم‌های spiral را نشان می‌دهد
-- ✅ Trigger idempotent باقی می‌ماند
+- ✅ آپلود ۲+ کلیپ → خطای "Clip 2 failed to load after retry" دیگر رخ نمی‌دهد
+- ✅ خروجی نهایی silent .mp4/.webm با ترتیب درست تولید می‌شود
+- ✅ flow تک‌کلیپ بدون تغییر کار می‌کند
+- ✅ AdDirector/Pro Editor دست‌نخورده باقی می‌ماند
+- ✅ هیچ تغییری در edge function یا DB
 
