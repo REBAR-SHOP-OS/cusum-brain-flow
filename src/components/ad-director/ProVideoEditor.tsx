@@ -906,6 +906,68 @@ export function ProVideoEditor({
     a.play().catch(() => {});
   }, [globalTime, isPlaying, isMuted, audioTracks, totalDuration, videoSpeed]);
 
+  // ─── Background music playback (continuous, synced with video) ───
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+  const currentMusicUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const musicTrack = audioTracks.find(t => t.kind === "music");
+
+    if (!musicTrack) {
+      if (musicAudioRef.current) {
+        musicAudioRef.current.pause();
+        musicAudioRef.current.src = "";
+        musicAudioRef.current = null;
+      }
+      currentMusicUrlRef.current = null;
+      return;
+    }
+
+    if (currentMusicUrlRef.current !== musicTrack.audioUrl) {
+      if (musicAudioRef.current) musicAudioRef.current.pause();
+      const a = new Audio(musicTrack.audioUrl);
+      a.loop = false;
+      a.preload = "auto";
+      a.volume = isMuted ? 0 : (musicTrack.volume ?? 0.3);
+      musicAudioRef.current = a;
+      currentMusicUrlRef.current = musicTrack.audioUrl;
+    } else if (musicAudioRef.current) {
+      musicAudioRef.current.volume = isMuted ? 0 : (musicTrack.volume ?? 0.3);
+    }
+
+    const a = musicAudioRef.current;
+    if (!a) return;
+    a.playbackRate = videoSpeed;
+
+    if (isPlaying && !isMuted) {
+      const musicStart = musicTrack.globalStartTime ?? 0;
+      const musicDur = musicTrack.duration ?? a.duration ?? 0;
+      const offset = globalTime - musicStart;
+
+      if (offset < 0 || (musicDur > 0 && offset >= musicDur)) {
+        if (!a.paused) a.pause();
+      } else {
+        if (Math.abs(a.currentTime - offset) > 0.4) {
+          a.currentTime = offset;
+        }
+        if (a.paused) a.play().catch(() => {});
+      }
+    } else {
+      if (!a.paused) a.pause();
+    }
+  }, [audioTracks, isPlaying, isMuted, globalTime, videoSpeed]);
+
+  // Cleanup music on unmount
+  useEffect(() => {
+    return () => {
+      if (musicAudioRef.current) {
+        musicAudioRef.current.pause();
+        musicAudioRef.current.src = "";
+        musicAudioRef.current = null;
+      }
+    };
+  }, []);
+
   // ─── Unified Undo/Redo history ───
   // Snapshot captures storyboard + audioTracks + overlays + segments + mutedScenes
   interface EditorSnapshot {
