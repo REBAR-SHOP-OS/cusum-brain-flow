@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 export async function invokeEdgeFunction<T = any>(
   functionName: string,
   body: Record<string, unknown>,
-  options?: { timeoutMs?: number; retries?: number },
+  options?: { timeoutMs?: number; retries?: number; allowErrorResponse?: boolean },
 ): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {
@@ -17,6 +17,7 @@ export async function invokeEdgeFunction<T = any>(
 
   const timeoutMs = options?.timeoutMs ?? 30000;
   const maxRetries = options?.retries ?? 0;
+  const allowErrorResponse = options?.allowErrorResponse ?? false;
 
   let lastError: Error | null = null;
 
@@ -47,6 +48,13 @@ export async function invokeEdgeFunction<T = any>(
       }
 
       if (!response.ok) {
+        if (allowErrorResponse) {
+          return {
+            ...data,
+            status: response.status,
+          } as T;
+        }
+
         const errMsg = data?.error || `Edge function ${functionName} failed (${response.status})`;
         const err = new Error(errMsg);
         (err as any).status = response.status;
@@ -65,10 +73,9 @@ export async function invokeEdgeFunction<T = any>(
       } else {
         lastError = err;
       }
-      // Only retry on timeout or network errors, not on business logic errors
       const isRetryable = err.name === "AbortError" || err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError") || ((err as any).status ?? 0) >= 500;
       if (attempt < maxRetries && isRetryable) {
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // backoff
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         continue;
       }
       break;

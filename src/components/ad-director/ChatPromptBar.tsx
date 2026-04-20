@@ -269,22 +269,34 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   }> => {
     const contextString = buildContextString();
 
-    try {
-      const result = await invokeEdgeFunction<{ result?: { text?: string }; text?: string }>("ad-director-ai", {
-        action: "write-script",
-        input: contextString,
-      });
+    const result = await invokeEdgeFunction<{
+      ok?: boolean;
+      error?: string;
+      status?: number;
+      result?: { text?: string };
+      text?: string;
+    }>("ad-director-ai", {
+      action: "write-script",
+      input: contextString,
+    }, {
+      allowErrorResponse: true,
+    });
 
-      return {
-        text: result?.result?.text ?? result?.text ?? null,
-      };
-    } catch (err) {
-      const info = classifyEdgeFunctionError(err, "AI prompt failed");
+    if (result?.ok === false || result?.error) {
+      const info = classifyEdgeFunctionError(
+        { status: result?.status, message: result?.error ?? "AI prompt failed" },
+        "AI prompt failed",
+      );
+
       return {
         text: null,
         error: { title: info.title, description: info.description },
       };
     }
+
+    return {
+      text: result?.result?.text ?? result?.text ?? null,
+    };
   };
 
   const handleAiWrite = async () => {
