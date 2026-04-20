@@ -1586,8 +1586,16 @@ export function ProVideoEditor({
     }
   };
 
-  // ─── Auto-advance on video end with fade transition ───
+  // ─── Auto-advance on video end with per-scene transition ───
   const [sceneTransition, setSceneTransition] = useState(false);
+  const [activeTransition, setActiveTransition] = useState<{ type: string; duration: number } | null>(null);
+
+  // Map a transition type to a CSS class defined in src/index.css.
+  const transitionClassFor = (type: string | undefined | null): string => {
+    if (!type || type === "None") return "ad-tx-Crossfade";
+    const safe = type.replace(/\s+/g, "-");
+    return `ad-tx-${safe}`;
+  };
 
   const advanceToNextScene = useCallback(() => {
     const completedIndices = storyboard
@@ -1609,9 +1617,17 @@ export function ProVideoEditor({
       currentVoUrlRef.current = null;
     }
 
-    doAdvance(nextIdx);
+    // Read user-selected transition for the OUTGOING scene.
+    const outgoingSceneId = storyboard[selectedSceneIndex]?.id;
+    const tx = (outgoingSceneId && clipTransitions[outgoingSceneId])
+      ? clipTransitions[outgoingSceneId]
+      : { type: "Crossfade", duration: 0.5 };
+    const durMs = Math.max(100, Math.round((tx.duration || 0.5) * 1000));
 
-    function doAdvance(idx: number) {
+    doAdvance(nextIdx, tx, durMs);
+
+    function doAdvance(idx: number, transition: { type: string; duration: number }, durationMs: number) {
+      setActiveTransition(transition);
       setSceneTransition(true);
       sceneTransitioning.current = true;
       setTimeout(() => {
@@ -1632,6 +1648,7 @@ export function ProVideoEditor({
         if (nextIsStatic) {
           sceneTransitioning.current = false;
           setSceneTransition(false);
+          setActiveTransition(null);
           setIsPlaying(true);
           autoPlayPending.current = false;
         } else {
@@ -1639,6 +1656,7 @@ export function ProVideoEditor({
             if (videoRef.current && videoRef.current.readyState >= 3) {
               sceneTransitioning.current = false;
               setSceneTransition(false);
+              setActiveTransition(null);
               if (autoPlayPending.current) {
                 videoRef.current.play().catch(() => {});
                 autoPlayPending.current = false;
@@ -1649,9 +1667,9 @@ export function ProVideoEditor({
           };
           setTimeout(checkReady, 50);
         }
-      }, 500);
+      }, durationMs);
     }
-  }, [storyboard, clips, selectedSceneIndex, audioTracks]);
+  }, [storyboard, clips, selectedSceneIndex, audioTracks, clipTransitions]);
 
   const handleVideoEnded = useCallback(() => {
     advanceToNextScene();
