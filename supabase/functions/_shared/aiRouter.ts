@@ -280,6 +280,10 @@ async function _logUsage(
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !serviceKey) return;
 
+  // Provider route — aiRouter always calls direct keys (Gemini/OpenAI)
+  // Lovable Gateway is only used by legacy edge functions that call ai.gateway.lovable.dev directly
+  const providerRoute = provider === "gemini" ? "direct_gemini" : "direct_openai";
+
   await fetch(`${url}/rest/v1/ai_usage_log`, {
     method: "POST",
     headers: {
@@ -297,6 +301,7 @@ async function _logUsage(
       total_tokens: usage.total_tokens || 0,
       company_id: opts.companyId || null,
       user_id: opts.userId || null,
+      provider_route: providerRoute,
     }),
   });
 }
@@ -448,6 +453,8 @@ export class AIError extends Error {
 }
 
 // Intelligent model routing logic moved here
+// Cost optimization: heavy agents downgraded from Pro → Flash unless deep reasoning is required.
+// Override via message keywords: "deep reconcile", "deep analysis", "full report"
 export function selectModel(agent: string, message: string, hasAttachments: boolean, historyLength: number): {
   model: string;
   maxTokens: number;
@@ -455,19 +462,27 @@ export function selectModel(agent: string, message: string, hasAttachments: bool
   reason: string;
   provider: AIProvider;
 } {
-  // Estimation + Docs → Gemini Pro
+  const explicitDeep = /\b(deep reconcile|deep analysis|deep dive|full report|comprehensive)\b/i.test(message);
+
+  // Estimation + Docs → Gemini Pro (vision/document parsing needs Pro)
   if (agent === "estimating" && hasAttachments) {
     return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 8000, temperature: 0.1, reason: "estimating+docs" };
   }
 
-  // Briefings → Gemini Pro
+  // Briefings → Flash by default (Pro only on explicit deep request)
   if (/briefing|daily|report/i.test(message)) {
-    return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 6000, temperature: 0.2, reason: "briefing context" };
+    if (explicitDeep) {
+      return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 6000, temperature: 0.2, reason: "briefing+deep → pro" };
+    }
+    return { provider: "gemini", model: "gemini-2.5-flash", maxTokens: 4000, temperature: 0.2, reason: "briefing → flash (cost)" };
   }
 
-  // Complex reasoning → Gemini 2.5 Pro (GPT quota exhausted; Pro model for depth & quality)
+  // Heavy reasoning agents → Flash by default, Pro only on explicit deep request
   if (["accounting", "legal", "empire", "data", "rebuild"].includes(agent) || /analyze|strategy|plan/i.test(message)) {
-    return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 6000, temperature: 0.2, reason: "complex reasoning → gemini-pro" };
+    if (explicitDeep) {
+      return { provider: "gemini", model: "gemini-2.5-pro", maxTokens: 6000, temperature: 0.2, reason: `${agent}+deep → pro` };
+    }
+    return { provider: "gemini", model: "gemini-2.5-flash", maxTokens: 4000, temperature: 0.3, reason: `${agent} → flash (cost)` };
   }
 
   // Default → Gemini 2.5 Flash with generous token budget

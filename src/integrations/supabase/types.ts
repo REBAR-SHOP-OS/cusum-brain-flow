@@ -367,6 +367,7 @@ export type Database = {
           model: string
           prompt_tokens: number
           provider: string
+          provider_route: string | null
           total_tokens: number
           user_id: string | null
         }
@@ -379,6 +380,7 @@ export type Database = {
           model: string
           prompt_tokens?: number
           provider: string
+          provider_route?: string | null
           total_tokens?: number
           user_id?: string | null
         }
@@ -391,6 +393,7 @@ export type Database = {
           model?: string
           prompt_tokens?: number
           provider?: string
+          provider_route?: string | null
           total_tokens?: number
           user_id?: string | null
         }
