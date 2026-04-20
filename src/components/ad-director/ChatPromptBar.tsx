@@ -744,6 +744,22 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
 
             <Tooltip>
               <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setAutoEditOpen(true)}
+                  className="h-10 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-3 text-sm font-medium text-emerald-200 hover:bg-emerald-400/20 hover:text-emerald-100 gap-1.5 relative"
+                >
+                  <Film className="h-4 w-4" />
+                  Auto-Edit
+                  <span className="absolute -top-1.5 -right-1.5 rounded-full bg-emerald-500 px-1.5 py-px text-[9px] font-semibold leading-none text-white shadow-sm">NEW</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Upload a raw video and let AI edit it for you</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <span>
                   <Button
                     type="button"
