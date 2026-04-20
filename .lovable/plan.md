@@ -1,70 +1,87 @@
 
 
-# رفع خطای "Failed to send a request to the Edge Function" در Auto-Edit
+# چرا "Rebar Cage (Small)" در Pool ‏CUTTER-01 ظاهر نمی‌شود
 
-## ریشه مشکل
+## ریشه مشکل (دقیقاً از روی داده‌های واقعی DB)
 
-دو علت محتمل، هر دو رفع می‌شود:
+پروژه Northfleet Group در station dashboard دو ردیف نشان می‌دهد:
 
-### ۱) Edge function هنوز deploy نشده
-لاگ‌های `auto-video-editor` کاملاً خالی است — یعنی **هیچ درخواستی به function نرسیده**. این دقیقاً وقتی پیغام "Failed to send a request to the Edge Function" در client می‌آید، که خود function وجود ندارد یا deploy نشده. فایل `supabase/functions/auto-video-editor/index.ts` ساخته شده ولی هنوز روی edge runtime مستقر نیست.
+| ردیف | plan name | status | item phase | bar_code | machine | اثر روی pool |
+|------|-----------|--------|------------|----------|---------|--------------|
+| 1 | Rebar Cage | **completed** | `complete` | 20M | CUTTER-02 | ✅ تمام شده — درست است |
+| 2 | Rebar Cage (Small) | queued | **`cut_done`** ← مشکل | 10M | CUTTER-01 | ❌ در pool نمایش داده نمی‌شود |
 
-### ۲) حجم body درخواست بیش از حد بزرگ
-کلاینت ۲۴ keyframe به‌صورت base64 data URL در JSON می‌فرستد. هر فریم ~۳۰–۸۰KB، با inflation کل JSON راحت ۲–۳MB می‌شود. حد body در `supabase.functions.invoke` **۶MB** است. ممکن است گاهی به مرز برسد یا توسط CDN reject شود (که آن هم همان پیام "Failed to send" را تولید می‌کند).
+**علت دقیق:**  
+`useStationData.ts` (خط ۱۰۸) فقط آیتم‌هایی را برای cutter pool می‌آورد که:
+```ts
+.or("phase.eq.queued,phase.eq.cutting")
+```
+ولی آیتم تنها در plan ‏"Rebar Cage (Small)" دارای `phase = 'cut_done'` و `completed_pieces = 25 / total_pieces = 25` است — یعنی **قبلاً کامل cut شده** و الان منتظر bender است.
 
-## رفع
+پس CUTTER-01 برای cut هیچ کاری ندارد، اما plan هنوز `status='queued'` دارد چون trigger `auto_advance_item_phase` فقط `phase` آیتم را به `cut_done` پیش برده، ولی plan را هنوز complete نکرده (احتمالاً منتظر phase نهایی کل آیتم‌هاست — و این تنها آیتم plan است).
 
-### A) Deploy کردن edge function
-اجرای `supabase--deploy_edge_functions` با `["auto-video-editor"]` تا function روی edge runtime فعال شود.
+دو ناسازگاری اینجا داریم:
 
-### B) کاهش حجم payload در client
-در `src/lib/rawVideoUtils.ts` تابع `extractKeyframes`:
-- کاهش `targetWidth` از `320` به `224`
-- کاهش JPEG quality از `0.7` به `0.55`
-- کاهش پیش‌فرض `maxFrames` از `30` به `16`
+1. **Production Queue (شکل ۱) و Station Dashboard (شکل ۲)** plan را به‌صورت `queued` نشان می‌دهند — درست، چون plan هنوز `completed` نشده.
+2. **CUTTER-01 Pool (شکل ۳)** آیتمی نشان نمی‌دهد — درست، چون آیتم cut شده و در `cut_done` است.
 
-در `src/components/ad-director/AutoEditDialog.tsx`:
-- کاهش `maxFrames` از `24` به `12` (کافی برای scene detection)
-- کاهش `intervalSec` از `2` به `dynamic` بر اساس مدت ویدیو
+پس باگ نیست در نمایش pool. ولی **این UX گمراه‌کننده است**: کاربر می‌بیند plan در صف "queued" است، انتظار دارد روی cutter ظاهر شود، ولی نیست.
 
-نتیجه: payload از ~۲–۳MB به ~۴۰۰–۸۰۰KB کاهش پیدا می‌کند.
+## رفع — دو لایه
 
-### C) بهبود error handling
-در `AutoEditDialog.handleFileSelected`:
-- نمایش پیام واضح‌تر اگر `fnErr.message` شامل "Failed to send" باشد → پیشنهاد retry
-- log کردن `frames.length` و حجم تقریبی برای debug آسان آینده
+### A) تصحیح وضعیت plan (data fix)
+`Rebar Cage (Small)` تمام آیتم‌هایش `phase=cut_done` با `completed_pieces == total_pieces` دارند.  
+plan باید روی **cut_done / awaiting_bender** برود نه `queued`.
 
-### D) اضافه کردن guard در edge function
-در `supabase/functions/auto-video-editor/index.ts`:
-- بررسی `req.headers.get("content-length")` در ابتدا و reject اگر > ۵MB با پیام واضح
-- اضافه کردن `console.log` در ابتدای handler برای دیده شدن در logs (تأیید رسیدن request)
+اضافه کردن منطق در `auto_advance_item_phase` (یا یک trigger مکمل روی `cut_plan_items`) که:  
+- وقتی همه آیتم‌های یک plan به `phase=cut_done` رسیدند، اگر هیچ آیتمی نیاز به bend ندارد → plan را `completed` کند.
+- اگر آیتم bend دارد → plan را روی `cut_done` (یا یک status جدید مثل `awaiting_bend`) قرار دهد، نه `queued`.
+
+### B) شفاف کردن Station Dashboard و Production Queue UI
+در `ShopFloorProductionQueue.tsx` و station dashboard، اگر همه آیتم‌های plan در فاز `cut_done` یا جلوتر هستند، badge را به‌جای **"Queued"** به یکی از این‌ها تبدیل کنیم:
+- "Cut Done — Awaiting Bend" (وقتی آیتم bend دارد)
+- "Awaiting QC / Clearance" (وقتی فقط منتظر تأیید است)
+
+تغییر فقط در derive کردن label نمایشی — نه تغییر در DB یا منطق pool.
+
+### C) اصلاح فوری برای این رکورد خاص
+بعد از migration:  
+- update کردن `cut_plans.status='completed'` برای plan ‏`Rebar Cage (Small)` (id `15d0eb9d-...`)  
+- یا اگر اقلامش نیاز به bend دارند، `status='cut_done'`
+
+(آیتم `bend_type` تنها آیتم را بررسی می‌کنیم تا تصمیم درست بگیریم.)
 
 ## محدوده تغییر
 
 تغییر می‌کند:
-- `src/lib/rawVideoUtils.ts` — کاهش پیش‌فرض‌های فریم
-- `src/components/ad-director/AutoEditDialog.tsx` — کاهش تعداد فریم + بهبود error handling
-- `supabase/functions/auto-video-editor/index.ts` — guard حجم + log ابتدایی
-- Deploy: `auto-video-editor`
+- یک migration: تابع/trigger `auto_advance_plan_status` که status plan را بر اساس phase آیتم‌ها sync می‌کند
+- یک migration data-fix: به‌روزرسانی این plan خاص
+- `ShopFloorProductionQueue.tsx` — derive کردن label واقعی از phase آیتم‌ها
+- `StationDashboard.tsx` (یا کامپوننت row آن) — همان
 
-تغییر **نمی‌کند**:
-- منطق scene detection / Gemini prompt
-- silent-video-only policy
-- bucket یا RLS
-- بقیه flow Ad Director
+تغییر **نمی‌کند:**
+- `useStationData.ts` (منطق pool درست است)
+- `CutterStationView`، `CutEngine`، یا هر منطق cut/bend
+- RLS، schema جداول، یا Cut Engine
 
 ## مراحل اجرا (پس از تأیید)
 
-1. کاهش پیش‌فرض‌های keyframe در `rawVideoUtils.ts`
-2. آپدیت `AutoEditDialog.tsx` با مقادیر کوچک‌تر و error message بهتر
-3. اضافه کردن size guard + entry log به edge function
-4. Deploy کردن `auto-video-editor`
-5. تست end-to-end با یک ویدیو ۳۰ ثانیه‌ای
+1. بررسی `bend_type` آیتم plan ‏`Rebar Cage (Small)` تا تصمیم درست (cut_done یا completed) گرفته شود
+2. صدور migration:
+   - یک trigger AFTER UPDATE روی `cut_plan_items.phase` که اگر همه آیتم‌های plan کامل cut شدند، `cut_plans.status` را به `cut_done`/`completed` پیش ببرد (idempotent)
+   - data-fix یک‌باره برای این plan خاص
+3. آپدیت `ShopFloorProductionQueue.tsx`:
+   - دریافت aggregate phase آیتم‌ها و نمایش label واقعی
+4. آپدیت row component `StationDashboard` به همان روش
+5. تست end-to-end:
+   - رفرش station dashboard → "Rebar Cage (Small)" باید "Cut Done — Awaiting Bend" یا "Done" نشان دهد
+   - CUTTER-01 pool خالی بماند (درست است)
+   - bender pool باید این آیتم را داشته باشد (اگر bend است)
 
 ## اعتبارسنجی
 
-- ✅ پس از deploy، logs `auto-video-editor` فعال می‌شود
-- ✅ آپلود ویدیو → analysis بدون "Failed to send" کامل می‌شود
-- ✅ Storyboard نمایش داده می‌شود
-- ✅ خروجی silent .webm قابل دانلود است
+- ✅ plan ‏"Rebar Cage (Small)" دیگر در queue station dashboard به‌عنوان Queued نمایش داده نمی‌شود
+- ✅ status plan با phase واقعی آیتم‌ها sync است
+- ✅ هیچ تغییری در رفتار CUTTER-01 pool یا Cut Engine نیست
+- ✅ گزارش کاربر برطرف می‌شود: cutter پروژه‌های آماده‌ی واقعی را نشان می‌دهد، نه plansی که قبلاً cut شده‌اند
 
