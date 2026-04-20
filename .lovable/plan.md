@@ -1,160 +1,74 @@
 
 
-# چرا Bender ها هیچ کاری نشان نمی‌دهند بعد از Cut
+# مسیریابی خودکار T3/T3A به SPIRAL-01
 
-## ریشه مشکل (تأیید‌شده از DB و کد)
+## هدف
+هر آیتم bend که `asa_shape_code` آن **T3** یا **T3A** باشد، **همیشه** به ماشین **SPIRAL-01** (`b0000000-0000-0000-0000-000000000005`, "Circular Spiral Bender") اختصاص داده شود — صرف‌نظر از `machine_capabilities`.
 
-سه تا یافته‌ی قطعی:
-
-1. **جدول `bend_batches` کاملاً خالی است.** کوئری `SELECT COUNT(*) FROM bend_batches` هیچ ردیفی برنمی‌گرداند. کل تاریخچه‌ی production هیچ‌وقت یک bend batch نساخته.
-
-2. **`useBenderBatches` (که `BenderBatchPanel` را تغذیه می‌کند) فقط از `bend_batches` می‌خواند** — با فیلتر `machine_id = X` + `status IN (queued, bending, paused)`. چون جدول خالی است، panel همیشه پیغام **"No bend batches assigned to this machine"** را نشان می‌دهد.
-
-3. **edge function `create-bend-queue` کد دارد ولی هرگز فراخوانی نمی‌شود.** تنها مرجع‌های آن:
-   - `manage-bend/index.ts` (router)
-   - `manage-bend/handlers/bendQueue.ts` (handler)
-   - `manageBendService.ts` (type literal فقط)
-   
-   هیچ frontend handler، trigger DB، یا cut-completion path آن را صدا نمی‌زند. کاملاً dead code است.
-
-نتیجه: وقتی cutter یک bend item را تمام می‌کند → `cut_plan_items.phase = 'cut_done'` می‌شود (این درست کار می‌کند و در `useStationData` برای bender نمایش داده می‌شود) → اما **هیچ‌وقت یک ردیف در `bend_batches`** ساخته نمی‌شود → `BenderBatchPanel` خالی است.
-
-برای آیتم Northfleet "Rebar Cage (Small)": الان به phase `clearance` رسیده با ۲۵/۲۵ پیس bent، اما هرگز batch‌ای برای آن ثبت نشد.
+## ریشه فعلی
+تابع `auto_create_bend_batch` (تریگر روی `cut_batches`) ماشین را فقط بر اساس `machine_capabilities (process='bend' AND bar_code=...)` انتخاب می‌کند. جدول `machine_capabilities` اصلاً ستون shape ندارد، پس تطبیق shape ممکن نیست و T3/T3A ممکن است به یک bender معمولی برود یا بدون ماشین (NULL) بماند.
 
 ## رفع
 
-اتصال خودکار: وقتی یک `cut_plan_item` با `bend_type='bend'` به phase `cut_done` می‌رسد، یک `bend_batch` متناظر با `status='queued'` ساخته شود.
-
-### A) DB Trigger جدید (اصل راه‌حل — deterministic)
-
-migration جدید:
+### A) آپدیت `auto_create_bend_batch` با اولویت shape
+قبل از انتخاب از `machine_capabilities`، اگر shape آیتم در لیست spiral است → مستقیم SPIRAL-01 برای همان company انتخاب شود:
 
 ```sql
-CREATE OR REPLACE FUNCTION public.auto_create_bend_batch()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_company_id uuid;
-  v_machine_id uuid;
-BEGIN
-  -- Only fire when phase transitions INTO 'cut_done' for bend items
-  IF NEW.phase = 'cut_done'
-     AND (OLD.phase IS DISTINCT FROM NEW.phase)
-     AND NEW.bend_type = 'bend'
-  THEN
-    -- Skip if a bend_batch already exists (idempotent)
-    IF EXISTS (
-      SELECT 1 FROM public.bend_batches
-      WHERE source_cut_batch_id = NEW.id
-    ) THEN
-      RETURN NEW;
-    END IF;
+-- Spiral shapes always go to the company's spiral bender
+IF UPPER(COALESCE(v_item.asa_shape_code, '')) IN ('T3', 'T3A') THEN
+  SELECT id INTO v_machine_id
+    FROM public.machines
+   WHERE company_id = NEW.company_id
+     AND name = 'SPIRAL-01'
+   LIMIT 1;
+END IF;
 
-    -- Resolve company_id from cut_plan
-    SELECT company_id INTO v_company_id
-    FROM public.cut_plans WHERE id = NEW.cut_plan_id;
-
-    -- Best-effort machine assignment: first bender with capability for this bar_code
-    SELECT mc.machine_id INTO v_machine_id
+-- Fallback: capability-based assignment (only if not a spiral shape)
+IF v_machine_id IS NULL THEN
+  SELECT mc.machine_id INTO v_machine_id
     FROM public.machine_capabilities mc
     JOIN public.machines m ON m.id = mc.machine_id
-    WHERE mc.process = 'bend'
-      AND mc.bar_code = NEW.bar_code
-      AND m.company_id = v_company_id
-    LIMIT 1;
-
-    INSERT INTO public.bend_batches (
-      company_id, source_cut_batch_id, source_job_id,
-      machine_id, shape, size, planned_qty, status
-    ) VALUES (
-      v_company_id, NEW.id, NEW.cut_plan_id,
-      v_machine_id, NEW.asa_shape_code, NEW.bar_code,
-      COALESCE(NEW.total_pieces, 0), 'queued'
-    );
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-DROP TRIGGER IF EXISTS trg_auto_create_bend_batch ON public.cut_plan_items;
-CREATE TRIGGER trg_auto_create_bend_batch
-AFTER UPDATE OF phase ON public.cut_plan_items
-FOR EACH ROW
-EXECUTE FUNCTION public.auto_create_bend_batch();
+   WHERE mc.process = 'bend'
+     AND mc.bar_code = v_item.bar_code
+     AND m.company_id = NEW.company_id
+   LIMIT 1;
+END IF;
 ```
 
-**ویژگی‌ها:**
-- فقط روی transition `* → cut_done` فعال می‌شود (نه هر update)
-- فقط برای آیتم‌های `bend_type='bend'` (آیتم‌های straight ندارند)
-- Idempotent: اگر batch قبلاً ساخته شده، دوباره نمی‌سازد
-- machine_id بر اساس `machine_capabilities` (فرآیند bend + bar_code منطبق) خودکار assign می‌شود
-- اگر هیچ bender بدردبخوری نبود → `machine_id = NULL` → batch همچنان ساخته می‌شود و در صفحه‌ی `BendQueueAdmin` قابل assign دستی است
+این منطق case-insensitive است (`UPPER(...)`) و فقط برای shapeهای spiral (T3/T3A) اعمال می‌شود.
 
-### B) Backfill برای آیتم‌های موجود
-
-برای آیتم‌هایی که الان در phase `cut_done` (یا بعدش) هستند ولی batch ندارند:
+### B) Backfill: re-route آیتم‌های T3/T3A موجود
+هر `bend_batch` فعلی که shape آن T3/T3A است و هنوز `queued` (یعنی شروع نشده) → machine_id آن به SPIRAL-01 آپدیت شود:
 
 ```sql
-INSERT INTO public.bend_batches
-  (company_id, source_cut_batch_id, source_job_id, machine_id, shape, size, planned_qty, status)
-SELECT
-  cp.company_id,
-  cpi.id,
-  cpi.cut_plan_id,
-  (SELECT mc.machine_id FROM machine_capabilities mc
-     JOIN machines m ON m.id = mc.machine_id
-    WHERE mc.process = 'bend' AND mc.bar_code = cpi.bar_code
-      AND m.company_id = cp.company_id LIMIT 1),
-  cpi.asa_shape_code,
-  cpi.bar_code,
-  COALESCE(cpi.total_pieces, 0),
-  CASE
-    WHEN cpi.bend_completed_pieces >= cpi.total_pieces THEN 'bend_complete'
-    WHEN cpi.bend_completed_pieces > 0 THEN 'bending'
-    ELSE 'queued'
-  END
-FROM public.cut_plan_items cpi
-JOIN public.cut_plans cp ON cp.id = cpi.cut_plan_id
-WHERE cpi.bend_type = 'bend'
-  AND cpi.phase IN ('cut_done', 'bending', 'clearance', 'complete')
-  AND NOT EXISTS (
-    SELECT 1 FROM public.bend_batches bb WHERE bb.source_cut_batch_id = cpi.id
-  );
+UPDATE public.bend_batches bb
+   SET machine_id = (
+     SELECT id FROM public.machines
+      WHERE company_id = bb.company_id AND name = 'SPIRAL-01' LIMIT 1
+   )
+ WHERE UPPER(COALESCE(bb.shape, '')) IN ('T3', 'T3A')
+   AND bb.status = 'queued';
 ```
 
-این فقط batchهای از دست رفته (مثل "Rebar Cage (Small)" Northfleet) را از روی state فعلی می‌سازد. هیچ آیتم production فعلی را تغییر نمی‌دهد.
+batchهای در حال bending یا کامل‌شده دست‌نخورده می‌مانند.
 
 ## محدوده تغییر
 
 تغییر می‌کند:
-- یک migration جدید SQL با:
-  - تابع `auto_create_bend_batch` + trigger روی `cut_plan_items`
-  - backfill INSERT یک‌باره
+- یک migration جدید SQL:
+  - `CREATE OR REPLACE FUNCTION public.auto_create_bend_batch()` با منطق spiral-priority
+  - یک‌بار `UPDATE` روی `bend_batches` در حالت `queued`
 
 تغییر **نمی‌کند:**
-- هیچ کد frontend (هیچ فایل .tsx لمس نمی‌شود)
-- هیچ edge function
-- منطق `auto_advance_item_phase` (همان دست‌نخورده می‌ماند)
-- جریان cutter یا production queue
-- RLS یا access control (trigger به‌عنوان SECURITY DEFINER اجرا می‌شود)
-- کد `create-bend-queue` در `manage-bend` (همچنان برای ساخت دستی در آینده در دسترس است)
-
-## مراحل اجرا
-
-1. اجرای migration: تابع + trigger + backfill
-2. بررسی: کوئری `SELECT count(*) FROM bend_batches` باید رقم > 0 برگرداند
-3. تست end-to-end:
-   - یک آیتم bend جدید را در cutter تمام کن → خودکار باید یک ردیف queued در `bend_batches` ساخته شود
-   - به BENDER-01 برو → باید بخش "Bend Batches" آن آیتم را نشان دهد با دکمه START
+- هیچ کد frontend
+- ساختار جدول `machines`, `bend_batches`, `machine_capabilities`
+- تریگر یا تابع‌های دیگر
+- batchهای در حال انجام یا کامل‌شده
 
 ## اعتبارسنجی
-
-- ✅ آیتم‌های قدیمی Northfleet (Rebar Cage Small) که قبلاً bend شده‌اند → backfill با status `bend_complete` ثبت می‌شوند
-- ✅ آیتم‌های bend جدیدی که cut آنها تمام می‌شود → خودکار با status `queued` در `bend_batches` ظاهر می‌شوند
-- ✅ صفحه‌ی Bender Station بلافاصله (با realtime موجود در `useBenderBatches`) batchها را نشان می‌دهد
-- ✅ هیچ rollback یا تغییری در آیتم‌های production فعلی رخ نمی‌دهد
-- ✅ Trigger idempotent است → اجرای دوباره backfill duplicate نمی‌سازد
+- ✅ هر cut batch جدیدی که آیتم آن T3 یا T3A است، خودکار `bend_batches.machine_id = SPIRAL-01` می‌گیرد
+- ✅ آیتم‌های موجود T3/T3A در حالت queued به SPIRAL-01 منتقل می‌شوند
+- ✅ shapeهای غیر-spiral همان منطق capability قبلی را دنبال می‌کنند
+- ✅ پنل SPIRAL-01 (که از `useBenderBatches` می‌خواند) آیتم‌های spiral را نشان می‌دهد
+- ✅ Trigger idempotent باقی می‌ماند
 
