@@ -465,6 +465,7 @@ function StatusBadge({ status }: { status: string }) {
     queued: { label: "Queued", cls: "bg-primary/15 text-primary" },
     running: { label: "Running", cls: "bg-warning/15 text-warning" },
     cut_done: { label: "Cut Done — Awaiting Bend", cls: "bg-accent/40 text-accent-foreground" },
+    bend_complete: { label: "Bent — Awaiting QC", cls: "bg-primary/20 text-primary" },
     canceled: { label: "Canceled", cls: "bg-destructive/15 text-destructive" },
   };
   const info = map[status] || { label: status, cls: "bg-muted text-muted-foreground" };
