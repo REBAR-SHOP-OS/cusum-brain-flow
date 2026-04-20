@@ -410,7 +410,7 @@ async function checkLongShifts(supabase: any, now: Date, alerts: any[], adminUse
 async function checkBrokenIntegrations(supabase: any, alerts: any[], adminUserIds: string[]) {
   const { data: broken } = await supabase
     .from("integration_connections")
-    .select("id, provider, status, user_id")
+    .select("id, integration_id, status, user_id")
     .eq("status", "error")
     .limit(20);
 
@@ -419,8 +419,8 @@ async function checkBrokenIntegrations(supabase: any, alerts: any[], adminUserId
       alerts.push({
         user_id: uid,
         type: "alert",
-        title: `Integration down: ${conn.provider}`,
-        description: `${conn.provider} connection has an error. Needs reconnection.`,
+        title: `Integration down: ${conn.integration_id}`,
+        description: `${conn.integration_id} connection has an error. Needs reconnection.`,
         priority: "high",
         dedupe: `broken-int-${conn.id}`,
         link_to: "/settings/integrations",
