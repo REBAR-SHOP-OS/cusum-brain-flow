@@ -1,56 +1,106 @@
 
+## چرا این ارور می‌آید
 
-## Goal
-Stop the *"The app encountered an error / Show logs / Try to fix"* overlay that appears every time the **AI Prompt** preview dialog opens on `/ad-director`. The 402 *AI credits exhausted* toast itself is already correct — it should keep firing as the only user-visible feedback when the workspace balance is empty.
+با کلیک روی **AI Prompt**، کامپوننت `ChatPromptBar` اکشن `write-script` را به فانکشن `ad-director-ai` می‌فرستد.
 
-## Root cause (confirmed from console logs)
-The overlay is **not** caused by the 402 response. It is caused by a separate React dev warning that the Lovable preview escalates:
+بر اساس لاگ شبکه، درخواست واقعا با این پاسخ برمی‌گردد:
+- HTTP status: `402`
+- body: `{"ok":false,"error":"AI credits exhausted."}`
 
+پس علت اصلی این است:
+1. این دکمه برای ساخت پرامپت از AI استفاده می‌کند.
+2. موجودی AI ورک‌اسپیس تمام شده است.
+3. فانکشن بک‌اند درست همین خطا را برمی‌گرداند.
+4. علاوه بر toast قرمز، محیط preview همین `402` را به‌عنوان `RUNTIME_ERROR` هم نشان می‌دهد و کارت سیاه خطا را باز می‌کند.
+
+یعنی:
+- **خطای واقعی کسب‌وکاری**: اعتبار AI تمام شده.
+- **باگ UX/handling**: این خطای recoverable نباید صفحه را شبیه crash نشان بدهد.
+
+## چیزی که باید اصلاح شود
+
+### 1) `supabase/functions/ad-director-ai/index.ts`
+برای خطاهای recoverable مثل:
+- `402` AI credits exhausted
+- `429` rate limit
+
+به‌جای اینکه پاسخ HTTP خطادار برگردد، خروجی کنترل‌شده برگرداند مثل:
+```json
+{ "ok": false, "error": "AI credits exhausted.", "status": 402 }
 ```
-Warning: Function components cannot be given refs.
-Check the render method of `AIPromptDialog`.
-    at DialogFooter (src/components/ui/dialog.tsx:101:25)
-    ...
-    at AIPromptDialog
+تا preview آن را crash حساب نکند.
+
+### 2) `src/lib/invokeEdgeFunction.ts`
+منطق parsing طوری سفت‌تر شود که اگر پاسخ `200` بود ولی payload شامل:
+- `ok: false`
+- `error`
+- `status`
+
+بود، وضعیت خطا را حفظ کند و برای callerها قابل تشخیص بماند.  
+این کار باعث می‌شود همه مسیرها رفتار یکسان داشته باشند، چه `allowErrorResponse` فعال باشد چه نباشد.
+
+### 3) `src/components/ad-director/ChatPromptBar.tsx`
+مسیر **AI Prompt** همین payload کنترل‌شده را بخواند و فقط:
+- toast مناسب نشان بدهد
+- dialog را ببندد
+- loading state را reset کند
+- هیچ blank screen یا overlay نسازد
+
+این فایل الان تا حد زیادی درست هندل می‌کند، ولی بعد از تغییر پاسخ بک‌اند باید با payload جدید نهایی sync شود.
+
+### 4) بررسی مسیرهای مشابه
+چون همین فانکشن `ad-director-ai` در چند جای دیگر هم استفاده شده، این دو مصرف‌کننده هم باید با همان الگوی recoverable سازگار بمانند:
+- `src/components/ad-director/CharacterPromptDialog.tsx`
+- `src/components/ad-director/ScriptInput.tsx`
+
+هدف این است که اگر اعتبار AI تمام بود، همه‌جا فقط پیام کاربرپسند دیده شود، نه خطای runtime.
+
+## جزئیات فنی
+
+```text
+Click AI Prompt
+  -> ChatPromptBar
+  -> invokeEdgeFunction("ad-director-ai", { action: "write-script" })
+  -> ad-director-ai
+  -> AI provider returns credits exhausted
+  -> current behavior: HTTP 402
+  -> preview treats it as runtime error
+  -> user sees toast + black error overlay
 ```
 
-In `src/components/ui/dialog.tsx`, `DialogHeader` and `DialogFooter` are plain function components:
-
-```ts
-const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={...} {...props} />
-);
+### رفتار مطلوب
+```text
+Click AI Prompt
+  -> ad-director-ai returns { ok:false, status:402, error:"AI credits exhausted." } with safe response handling
+  -> client classifies it as recoverable
+  -> only destructive toast is shown
+  -> dialog closes / state resets
+  -> page stays interactive
 ```
 
-Radix's `DialogContent` runs an autofocus pass when it opens and tries to attach a ref through descendant components for focus restoration. Because `DialogHeader` / `DialogFooter` are not `forwardRef`, React logs the warning. Lovable's `GlobalErrorWatcher` / preview error layer treats it as a fatal app error and shows the *"Show logs / Try to fix"* card.
+## محدوده تغییر
+- بدون تغییر دیتابیس
+- بدون تغییر RLS
+- بدون تغییر معماری اصلی Ad Director
+- فقط fix روی error-handling همین flow
 
-The 402 toast appears at the same time only because the AI request also rejects when the dialog opens — it is a coincidence, not the cause. The overlay would also appear on a workspace with full credits.
+## اعتبارسنجی بعد از اجرا
 
-## Changes
+1. روی **AI Prompt** کلیک شود وقتی اعتبار AI تمام است:
+   - فقط toast قرمز نمایش داده شود
+   - کارت سیاه error overlay دیگر ظاهر نشود
+   - صفحه سفید یا blank screen نشود
 
-### 1) `src/components/ui/dialog.tsx` — primary fix (1 file, 2 components)
-Convert `DialogHeader` and `DialogFooter` from plain function components into `React.forwardRef` components, matching the pattern already used by `DialogOverlay`, `DialogContent`, `DialogTitle`, and `DialogDescription` in the same file. Behavior, classes, and props remain identical — only the ref forwarding changes. This silences the warning and removes the trigger for the preview error overlay.
+2. روی **AI Prompt** کلیک شود وقتی اعتبار کافی وجود دارد:
+   - متن پرامپت داخل preview dialog نمایش داده شود
+   - دکمه `Use this prompt` درست کار کند
 
-This is a shadcn-standard fix and matches the canonical shadcn `dialog.tsx` template.
+3. سناریوی `429`:
+   - فقط پیام rate limit دیده شود
+   - UI قفل نکند
 
-### 2) No other code changes
-- `ChatPromptBar.handleAiWrite` already catches the 402, classifies it via `classifyEdgeFunctionError`, shows the destructive toast, and closes the preview cleanly. No change needed.
-- `invokeEdgeFunction` already preserves `status = 402`. No change needed.
-- `AdDirectorErrorBoundary`, `useGlobalErrorHandler`, and `backgroundAdDirectorService` are correct. No change needed.
-- The 402 toast continues to be the single, accurate message shown to the user when AI credits are exhausted.
+4. `CharacterPromptDialog` و `ScriptInput` هم با همین نوع خطا gracefully رفتار کنند.
 
-## Files touched
-- `src/components/ui/dialog.tsx`
-
-## Validation (after switch to default mode)
-1. Click **AI Prompt** on `/ad-director` → the *"The app encountered an error / Show logs / Try to fix"* overlay no longer appears.
-2. With exhausted credits → only the red *"AI credits exhausted"* toast is shown; the preview dialog closes cleanly; the page stays interactive.
-3. With sufficient credits → the AI prompt is generated, written into the dialog textarea, and "Use this prompt" works.
-4. No new React console warnings about refs on `DialogFooter` / `DialogHeader`.
-5. Other dialogs across the app (which also use `DialogFooter` / `DialogHeader`) continue to render and behave identically — only the warning disappears.
-
-## Out of scope (left untouched)
-- AI credit balance itself (only the user can top up at Settings → Workspace → Cloud & AI balance)
-- Edge function logic, RLS, scene generation, music, transitions, and editor pipeline
-- All other Ad Director surfaces and components
-
+## نتیجه مورد انتظار
+بعد از این اصلاح، دلیل خطا همچنان شفاف می‌ماند: **اعتبار AI تمام شده**.  
+اما دیگر این وضعیت به‌صورت crash یا runtime error به کاربر نمایش داده نمی‌شود، و صفحه `/ad-director` کاملا usable باقی می‌ماند.
