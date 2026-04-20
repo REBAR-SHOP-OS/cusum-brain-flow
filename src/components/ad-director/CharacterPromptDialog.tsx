@@ -95,13 +95,30 @@ export function CharacterPromptDialog({
         ? instruction
         : `${instruction}\n\nUSER NOTE TO IMPROVE:\n${seed}`;
 
-      const result = await invokeEdgeFunction<{ result?: { text?: string }; text?: string }>(
+      const result = await invokeEdgeFunction<{
+        ok?: boolean;
+        error?: string;
+        status?: number;
+        result?: { text?: string };
+        text?: string;
+      }>(
         "ad-director-ai",
         {
           action: "write-script",
           input: userPayload,
         },
+        { allowErrorResponse: true },
       );
+
+      if (result?.ok === false || result?.error) {
+        const info = classifyEdgeFunctionError(
+          { status: result?.status, message: result?.error ?? (isGenerating ? "Generation failed" : "Improve failed") },
+          isGenerating ? "Generation failed" : "Improve failed",
+        );
+        toast({ title: info.title, description: info.description, variant: "destructive" });
+        return;
+      }
+
       const improved = (result?.result?.text ?? result?.text ?? "").trim();
       if (improved) {
         onTextChange(improved);
