@@ -15,6 +15,7 @@ import {
 import { AIPromptDialog } from "./AIPromptDialog";
 import { CharacterPromptDialog } from "./CharacterPromptDialog";
 import companyLogo from "@/assets/company-logo.png";
+import { classifyEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 const VIDEO_MODELS: { key: string; provider: string; label: string; description: string }[] = [
   { key: "wan2.6-t2v", provider: "wan", label: "Wan T2V", description: "Text to Video - 1080P" },
@@ -272,10 +273,6 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   };
 
   const getAiErrorDetails = (err: unknown) => {
-    // Use the shared classifier for consistent messaging across the Ad Director.
-    // Lazy require avoids a top-level import churn for hot paths.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { classifyEdgeFunctionError } = require("@/lib/edgeFunctionError") as typeof import("@/lib/edgeFunctionError");
     const info = classifyEdgeFunctionError(err, "AI prompt failed");
     return { title: info.title, description: info.description };
   };
