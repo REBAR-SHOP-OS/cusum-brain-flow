@@ -62,17 +62,23 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
     setProgressMsg("Reading video…");
 
     try {
-      // 1) Extract keyframes locally
+      // 1) Extract keyframes locally (smaller payload to stay <1MB)
+      // Probe duration first via a temporary metadata read by extractKeyframes itself.
+      // Use dynamic interval so longer videos don't blow up frame count.
       const { frames, duration } = await extractKeyframes(selected, {
-        intervalSec: 2,
-        maxFrames: 24,
-        targetWidth: 320,
+        maxFrames: 12,
+        targetWidth: 224,
+        // intervalSec is auto-bounded by maxFrames inside extractKeyframes
         onProgress: (p) => {
           setProgress(5 + Math.round(p * 35));
           setProgressMsg(`Extracting keyframes… ${Math.round(p * 100)}%`);
         },
       });
       setVideoDuration(duration);
+
+      // Diagnostic: approximate payload size
+      const approxBytes = frames.reduce((acc, f) => acc + f.dataUrl.length, 0);
+      console.log(`[AutoEdit] frames=${frames.length} duration=${duration.toFixed(1)}s payload≈${(approxBytes / 1024).toFixed(0)}KB`);
 
       // 2) Send to edge function for AI scene proposal
       setProgress(45);
@@ -82,7 +88,13 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
         body: { action: "analyze", frames, videoDuration: duration },
       });
 
-      if (fnErr) throw new Error(fnErr.message || "AI analysis failed");
+      if (fnErr) {
+        const raw = fnErr.message || "AI analysis failed";
+        if (/failed to send|fetch|network/i.test(raw)) {
+          throw new Error("Couldn't reach the AI service. Please check your connection and try again.");
+        }
+        throw new Error(raw);
+      }
       if (data?.error) throw new Error(data.error);
       if (!Array.isArray(data?.scenes) || data.scenes.length === 0) {
         throw new Error("AI returned no scenes");
