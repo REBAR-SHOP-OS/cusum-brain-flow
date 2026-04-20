@@ -15,6 +15,7 @@ import {
 import { AIPromptDialog } from "./AIPromptDialog";
 import { CharacterPromptDialog } from "./CharacterPromptDialog";
 import companyLogo from "@/assets/company-logo.png";
+import { classifyEdgeFunctionError } from "@/lib/edgeFunctionError";
 
 const VIDEO_MODELS: { key: string; provider: string; label: string; description: string }[] = [
   { key: "wan2.6-t2v", provider: "wan", label: "Wan T2V", description: "Text to Video - 1080P" },
@@ -271,23 +272,9 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
     return result?.result?.text ?? result?.text ?? null;
   };
 
-  const getAiErrorDetails = (err: any) => {
-    if (err?.status === 402) {
-      return {
-        title: "AI credits exhausted",
-        description: "Add funds in Settings → Workspace → Cloud & AI balance, then try again.",
-      };
-    }
-    if (err?.status === 429) {
-      return {
-        title: "Rate limit reached",
-        description: "Please wait a moment and try again.",
-      };
-    }
-    return {
-      title: "AI prompt failed",
-      description: err?.message || "Try again",
-    };
+  const getAiErrorDetails = (err: unknown) => {
+    const info = classifyEdgeFunctionError(err, "AI prompt failed");
+    return { title: info.title, description: info.description };
   };
 
   const handleAiWrite = async () => {

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { detectRtl } from "@/utils/textDirection";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { useToast } from "@/hooks/use-toast";
+import { classifyEdgeFunctionError } from "@/lib/edgeFunctionError";
 import { cn } from "@/lib/utils";
 
 interface CharacterPromptDialogProps {
@@ -115,9 +116,10 @@ export function CharacterPromptDialog({
       }
     } catch (err) {
       console.error("character improve error:", err);
+      const info = classifyEdgeFunctionError(err, isGenerating ? "Generation failed" : "Improve failed");
       toast({
-        title: isGenerating ? "Generation failed" : "Improve failed",
-        description: err instanceof Error ? err.message : "Try again",
+        title: info.title,
+        description: info.description,
         variant: "destructive",
       });
     } finally {
