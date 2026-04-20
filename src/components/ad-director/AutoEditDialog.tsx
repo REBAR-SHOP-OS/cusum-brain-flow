@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Download, Sparkles, AlertCircle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Download, Sparkles, AlertCircle, Wand2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { extractKeyframes, cutVideoIntoSegments, type RawSceneCut } from "@/lib/rawVideoUtils";
 import { stitchClips } from "@/lib/videoStitch";
 import { AutoEditUploadStep } from "./AutoEditUploadStep";
 import { AutoEditStoryboardStep, type SceneCut } from "./AutoEditStoryboardStep";
+
+type ClipPayload = { index: number; duration: number; frames: { t: number; dataUrl: string }[] };
 
 type Phase = "upload" | "analyzing" | "review" | "generating" | "done" | "error";
 
