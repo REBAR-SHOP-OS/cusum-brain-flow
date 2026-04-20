@@ -47,17 +47,28 @@ export async function invokeEdgeFunction<T = any>(
         throw new Error(`Edge function ${functionName} returned non-JSON response (${response.status})`);
       }
 
-      if (!response.ok) {
+      // Detect "soft errors": HTTP 200 with { ok:false, error, status } payload
+      // (used for recoverable business errors like 402 credits / 429 rate limit).
+      const isSoftError =
+        response.ok &&
+        data &&
+        typeof data === "object" &&
+        data.ok === false &&
+        (typeof data.error === "string" || typeof data.status === "number");
+
+      if (!response.ok || isSoftError) {
+        const effectiveStatus = isSoftError ? (data.status ?? response.status) : response.status;
+
         if (allowErrorResponse) {
           return {
             ...data,
-            status: response.status,
+            status: effectiveStatus,
           } as T;
         }
 
-        const errMsg = data?.error || `Edge function ${functionName} failed (${response.status})`;
+        const errMsg = data?.error || `Edge function ${functionName} failed (${effectiveStatus})`;
         const err = new Error(errMsg);
-        (err as any).status = response.status;
+        (err as any).status = effectiveStatus;
         throw err;
       }
 
