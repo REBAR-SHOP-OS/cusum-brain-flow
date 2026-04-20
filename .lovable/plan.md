@@ -1,87 +1,69 @@
 
 
-# قانون Hard: ویدیوها همیشه باید بدون صدا تولید شوند
+# Auto-update `cut_plans.status` past `cut_done` when items finish bending / clearance
 
-## ریشه مشکل (تأیید‌شده)
+## Root cause
 
-دو منبع مستقل صدا روی ویدیو سوار می‌شود:
+The existing trigger `auto_advance_plan_status` (migration `20260420185509`) only checks for two end states:
 
-### ۱. صدای ذاتی Wan 2.6 (مشکل اصلی تصویر اول)
-مدل‌های `wan2.6-t2v` و `wan2.6-i2v` **به‌طور پیش‌فرض صدای محیطی auto-generate می‌کنند** (ambient sound effects, footsteps, room tone, musical stings). در `generate-video/index.ts` فعلی، negative prompt فقط dialogue/voiceover/dubbing را دفع می‌کند ولی **هیچ‌چیز جلوی صدای ambient/music ذاتی Wan را نمی‌گیرد**. این چیزی است که در ویدیوی ۱۵ ثانیه‌ای تصویر اول می‌شنوید.
+- `completed` — when **all** items have `phase='complete'`
+- `cut_done` — when all items reached `cut_done` or beyond
 
-Veo و Sora هم همین رفتار را دارند (Sora 2 صدا هم تولید می‌کند).
+But its "beyond" set is `('cut_done', 'bending', 'bend_done', 'complete')` — **`clearance` is missing**, and there's no `bend_complete` status to represent "bending finished, awaiting QC clearance."
 
-### ۲. موزیک stitcher (پنهان ولی فعال)
-در `backgroundAdDirectorService.ts:1135` و `AdDirectorContent.tsx:206`، اگر `state.musicTrackUrl` set شده باشد، stitcher آن را روی export نهایی می‌چسباند. حتی اگر کاربر music انتخاب نکند، در صورتی که از قبل از سشن قبلی state داشته باشد، صدا اضافه می‌شود.
+Live evidence: plan **Rebar Cage (Small)** has its item in `phase='clearance'` but plan `status` is still `'cut_done'`, so the Production Queue keeps showing the stale "Cut Done — Awaiting Bend" badge.
 
-## رفع — قانون "Silent by Default" در دو لایه
+## Fix — one migration + one UI label addition
 
-### لایه A: حذف صدای ذاتی Wan/Sora در منبع تولید
+### A) Migration: add `bend_complete` status + smarter trigger
 
-**فایل: `supabase/functions/generate-video/index.ts`**
-
-1. اضافه کردن یک constant سراسری:
-   ```ts
-   const SILENT_VIDEO_MODE = true; // HARD RULE: never embed audio
+1. **Extend `validate_cut_plan_status`** to allow `'bend_complete'`:
+   ```
+   IN ('draft', 'queued', 'running', 'cut_done', 'bend_complete', 'completed', 'canceled')
    ```
 
-2. در `wanGenerate` و `wanI2vGenerate`:
-   - `WAN_BASE_NEGATIVE` را گسترش بده با: `ambient sound, sound effects, music, background music, audio, sound, breathing, footsteps, room tone, environmental noise`
-   - بلوک `if (audioUrl) params.audio_url = audioUrl;` را حذف کن (یا پشت `!SILENT_VIDEO_MODE` گذاشت)
-   - پارامتر `audioUrl` را از signature حذف کن (یا ignore کن)
+2. **Rewrite `auto_advance_plan_status`** with a richer phase ladder:
+   - `v_all_complete` = items with `phase='complete'`
+   - `v_all_bend_or_beyond` = items with `phase IN ('bend_done', 'clearance', 'complete')` **OR** (`bend_type='straight'` AND `phase='complete'`)
+   - `v_all_cut_or_beyond` = items with `phase IN ('cut_done', 'bending', 'bend_done', 'clearance', 'complete')`
+   - Has-bend flag = items with `bend_type='bend'`
 
-3. در `soraGenerate`:
-   - اگر Sora 2 پارامتر `audio: false` یا معادل پشتیبانی می‌کند، اضافه شود (طبق docs OpenAI). در غیر این‌صورت، یک نشانه‌گذار `silent` در state بگذاریم تا frontend در زمان playback صدا را mute کند.
+   Decision ladder:
+   - All `complete` → `'completed'`
+   - All bend-or-beyond AND has bend items → `'bend_complete'` (bending finished, awaiting clearance)
+   - All cut-or-beyond AND has bend items → `'cut_done'`
+   - All cut-or-beyond AND no bend items → `'completed'`
+   - Otherwise → leave unchanged
 
-4. در `veoGenerate`: مشابه (Veo 3.1 صدا تولید می‌کند، باید پارامتر `generateAudio: false` به Vertex AI پاس شود).
+3. **Backfill**: re-run `UPDATE cut_plan_items SET phase=phase WHERE id=...` per plan to fire the trigger and recompute every existing plan's status (same idiom already used in the original migration).
 
-### لایه B: حذف کامل music track از stitcher در AdDirector
+The trigger keeps firing on `AFTER INSERT OR UPDATE OF phase` — no signature change.
 
-**فایل‌ها: `src/lib/backgroundAdDirectorService.ts` + `src/components/ad-director/AdDirectorContent.tsx`**
+### B) UI: add `bend_complete` label in `ShopFloorProductionQueue.tsx`
 
-1. در `backgroundAdDirectorService.ts:1135` — جایگزین کن:
-   ```ts
-   musicUrl: undefined,  // HARD RULE: no music in generated videos
-   musicVolume: 0,
-   ```
-2. در `AdDirectorContent.tsx:206` — همان تغییر.
-3. State `musicTrackUrl` در سرویس باقی می‌ماند تا UI break نشود، ولی هرگز به stitcher پاس داده نمی‌شود.
+In the `StatusBadge` map (line 460–469), add:
+```ts
+bend_complete: { label: "Bent — Awaiting QC", cls: "bg-primary/20 text-primary" },
+```
+Existing `cut_done` and `completed` entries stay the same. No other UI touched.
 
-### لایه C: Mute اجباری روی playback (safety net)
+## Scope
 
-**فایل: `src/components/ad-director/result/...` و `VideoStudioContent.tsx`**
+**Changes:**
+- New migration file (single SQL): redefine `validate_cut_plan_status` + `auto_advance_plan_status` + backfill loop
+- `src/components/shopfloor/ShopFloorProductionQueue.tsx`: add one map entry for `bend_complete`
 
-روی `<video>` المان‌های پیش‌نمایش نتیجه، attribute `muted` را اجباری کن (نه فقط `autoplay`). اگر مدل قبلی صدا داشت یا backfill قدیمی صدا دارد، باز هم سکوت پخش شود.
+**Untouched:**
+- `cut_plan_items.phase` enum / `auto_advance_item_phase` trigger
+- All bender / cutter dashboards, hooks, RLS, queues, batches
+- Pro Editor, AdDirector, any unrelated module
 
-## محدوده تغییر
+## Validation
 
-**تغییر می‌کند:**
-- `supabase/functions/generate-video/index.ts` — negative prompt گسترده + حذف audio_url + audio:false برای Sora/Veo
-- `src/lib/backgroundAdDirectorService.ts` — `musicUrl: undefined` در stitchClips call
-- `src/components/ad-director/AdDirectorContent.tsx` — `musicUrl: undefined` در stitchClips call
-- `src/components/ad-director/result/AdResultPreview.tsx` (یا فایل preview معادل) — `muted` روی `<video>`
-- `src/components/social/VideoStudioContent.tsx` — `muted` روی `<video>` پیش‌نمایش
-
-**تغییر نمی‌کند:**
-- ProVideoEditor (Pro Editor) — کاربر در آن آگاهانه music track می‌چسباند، آن جریان دست‌نخورده باقی می‌ماند چون **انتخاب صریح کاربر** است نه auto
-- MusicTab / Lyria preset / dialog — کاربر اگر بخواهد در Pro Editor music بسازد و دستی به timeline اضافه کند، آزاد است
-- DB / RLS / edge function های دیگر
-
-## مرز "Silent" در مقابل "Pro Editor"
-
-- **AI Video Director (AdDirector + VideoStudio)**: **همیشه silent**. صدا هرگز embed یا attach نمی‌شود.
-- **Pro Editor**: کاربر صراحتاً music/voiceover به timeline اضافه می‌کند → این explicit user action است و مجاز است.
-
-## Memory Update
-
-یک memory جدید در `mem://rules/silent-video-generation` اضافه می‌شود:
-> All AI-generated videos in AI Video Director (AdDirector + VideoStudio) MUST be silent. Wan/Veo/Sora must receive negative prompts disabling ambient/music, and stitcher must not attach musicUrl. Pro Editor manual music attachment is the only allowed exception.
-
-## اعتبارسنجی
-
-- ✅ ویدیوی ۱۵ ثانیه‌ای جدید از Wan T2V → کاملاً silent (نه ambient، نه music، نه footsteps)
-- ✅ Export نهایی AdDirector → silent، حتی اگر `musicTrackUrl` در state باشد
-- ✅ پیش‌نمایش video element → muted attribute (safety net)
-- ✅ Pro Editor manual music در timeline → کار می‌کند (دست‌نخورده)
-- ✅ هیچ تغییری در DB، RLS، یا auth
+- ✅ Plan **Rebar Cage (Small)** auto-flips from `cut_done` → `bend_complete` (item in clearance) immediately after migration backfill
+- ✅ When the clearance item is approved → `phase='complete'` → trigger flips plan to `'completed'`
+- ✅ A plan with mixed items (some still `cutting`) stays `'running'` / `'cut_done'` — no regression
+- ✅ Straight-only plans (no bend) still go straight `running → completed`
+- ✅ Production Queue badge for the affected plan reads "Bent — Awaiting QC" instead of stale "Cut Done — Awaiting Bend"
+- ✅ No DB schema changes beyond a string value in the validation whitelist
 
