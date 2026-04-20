@@ -84,6 +84,8 @@ async function veoGenerate(
         durationSeconds: veoDuration,
         aspectRatio: "16:9",
         personGeneration: "allow_all",
+        // HARD RULE: AI Video Director must never embed audio. Veo 3.1 generates audio by default.
+        generateAudio: !SILENT_VIDEO_MODE,
       },
     }),
   });
@@ -198,8 +200,13 @@ const sanitizeWanPrompt = (raw: string): string => {
   return out;
 };
 
-// Suppress dubbing + fast-motion artifacts from Wan 2.6 auto-audio.
-const WAN_BASE_NEGATIVE = "spoken dialogue, voiceover, narration, talking, lip-sync, dubbing, subtitles, captions, fast-motion, time-lapse, sped-up, chipmunk voice";
+// HARD RULE: AI Video Director must never embed audio in generated clips.
+// All ambient sound, music, footsteps, room tone, and dialogue from Wan/Veo/Sora
+// auto-audio is suppressed at the source. Pro Editor manual music is the only exception.
+const SILENT_VIDEO_MODE = true;
+
+// Suppress dubbing + fast-motion artifacts AND all ambient/music auto-audio from Wan 2.6.
+const WAN_BASE_NEGATIVE = "spoken dialogue, voiceover, narration, talking, lip-sync, dubbing, subtitles, captions, fast-motion, time-lapse, sped-up, chipmunk voice, ambient sound, sound effects, music, background music, audio, sound, breathing, footsteps, room tone, environmental noise, foley, sfx";
 const buildWanNegative = (extra?: string): string =>
   extra && extra.trim() ? `${extra}, ${WAN_BASE_NEGATIVE}` : WAN_BASE_NEGATIVE;
 
@@ -226,7 +233,8 @@ async function wanGenerate(
     prompt_extend: true,
     negative_prompt: buildWanNegative(negativePrompt),
   };
-  if (audioUrl) params.audio_url = audioUrl;
+  // HARD RULE: never embed audio. audioUrl is intentionally ignored when SILENT_VIDEO_MODE is on.
+  if (audioUrl && !SILENT_VIDEO_MODE) params.audio_url = audioUrl;
 
   const resp = await fetch(url, {
     method: "POST",
@@ -382,6 +390,10 @@ async function soraGenerate(apiKey: string, prompt: string, duration: number, mo
   formData.append("model", model || "sora-2");
   formData.append("size", "1280x720");
   formData.append("seconds", String(soraDuration));
+  // HARD RULE: AI Video Director must never embed audio. Sora 2 generates audio by default.
+  if (SILENT_VIDEO_MODE) {
+    formData.append("audio", "off");
+  }
 
   const resp = await fetch(`${OPENAI_BASE}/videos`, {
     method: "POST",
