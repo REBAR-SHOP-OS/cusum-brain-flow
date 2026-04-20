@@ -391,7 +391,7 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
           )}
 
           {phase === "done" && finalUrl && (
-            <div className="flex h-full flex-col items-center justify-center gap-5">
+            <div className="flex h-full flex-col items-center gap-5 overflow-y-auto py-2">
               <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-black">
                 <video src={finalUrl} controls className="w-full" muted />
               </div>
@@ -403,6 +403,36 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
                   Edit more clips
                 </Button>
               </div>
+
+              <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className="flex items-center gap-2 text-sm font-medium text-white/90">
+                  <Wand2 className="h-4 w-4 text-amber-300" />
+                  Not quite right? Tell the AI how to re-edit it
+                </div>
+                <Textarea
+                  value={regeneratePrompt}
+                  onChange={(e) => setRegeneratePrompt(e.target.value)}
+                  placeholder="e.g. faster cuts, only keep the thumbs-up section, drop the last few scenes…"
+                  className="mt-2 min-h-[72px] resize-none border-white/10 bg-slate-900/60 text-sm text-white placeholder:text-white/30"
+                />
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPhase("review")}
+                    className="text-xs text-white/55 underline-offset-2 hover:text-white hover:underline"
+                  >
+                    Edit storyboard manually
+                  </button>
+                  <Button
+                    onClick={handleRegenerate}
+                    disabled={regeneratePrompt.trim().length === 0}
+                    className="gap-2 bg-gradient-to-r from-amber-500 to-fuchsia-500 text-white hover:from-amber-600 hover:to-fuchsia-600 disabled:opacity-50"
+                  >
+                    <Sparkles className="h-4 w-4" /> Regenerate with this prompt
+                  </Button>
+                </div>
+              </div>
+
               <p className="text-xs text-white/40">Silent .webm export · ready to share</p>
             </div>
           )}
