@@ -1,161 +1,129 @@
 
 
-# آپلود ویدیو خام و ادیت + خروجی خودکار
+# اصلاح Cut Engine: حفظ تعداد bars و باقی ماندن روی صفحه آیتم پس از هر cut
 
-## جواب کوتاه
-**بله، کاملاً امکان‌پذیر است** — حتی الان زیرساخت لازم برای اکثر این کار موجود است.  
-شما الان می‌توانید ویدیو آپلود کنید، اما فقط جایگزین یک scene می‌شود. کاری که شما می‌خواهید این است:  
-**یک ویدیو بفرستید → هوش‌مصنوعی خودش آن را به صحنه‌ها برش بزند → ادیت کند → خروجی نهایی بدهد.**
+## مشکل فعلی
 
-## وضعیت فعلی Ad Director
+دو رفتار اشتباه پس از هر cut:
 
-✅ **آماده است:**
-- آپلود فایل ویدیو/تصویر در تب Media (`MediaTab.tsx` — موجود)
-- موتور stitch ویدیو (`videoStitch.ts` — برش، crossfade، overlay، voiceover، music)
-- پایپ‌لاین رندر (`useRenderPipeline.ts`)
-- ذخیره در bucket `generated-videos`
-- ادیتور حرفه‌ای (`ProVideoEditor.tsx` — ۱۲ تب: media, text, music, brand-kit, ...)
-- Edge function `edit-video-prompt` (برای ادیت‌های توصیفی)
-- Edge function `video-to-social` (برای تولید خودکار کپشن)
+1. **برگشت ناخواسته به Station Pool (#2):** پس از ۱.۵ ثانیه از تکمیل run، اپ خودکار به صفحه pool برمی‌گردد (`onBack?.()` در `handleCompleteRun`). اپراتور باید دوباره روی همان mark کلیک کند تا run بعدی را شروع کند.
+2. **ریست شدن تعداد bars سوپروایزر:** اگر سوپروایزر از ۱۲ bar (پیشنهاد سیستم) به ۷ bar تغییر داد و LOCK & START زد، پس از تکمیل run اول، `operatorBars` به `null` ریست می‌شود و run بعدی دوباره به ۱۲ برمی‌گردد. سوپروایزر مجبور می‌شود هر بار دستی به ۷ تغییر دهد.
 
-❌ **چیزی که الان وجود ندارد:**
-- اتوماسیون **«یک ویدیو خام بفرست → AI خودش بقیه را انجام دهد»**
-- تشخیص خودکار صحنه‌ها (scene detection) از روی یک ویدیوی تک‌تکه
-- زنجیره خودکار `analyze → cut → enhance → assemble → export`
+## رفتار مورد انتظار
 
-## پلن پیشنهادی
+- **بعد از هر cut → روی صفحه #1 (Mark detail) بمان**، نه pool.
+- **انتخاب سوپروایزر برای bars حفظ شود** برای کل کار این mark، تا run آخری که `barsStillNeeded < operatorBars` می‌شود — آنجا خودکار به مقدار کمتر clamp شود (که الان از قبل کار می‌کند: `Math.min(operatorBars, ...)`).
 
-یک flow جدید اضافه می‌کنیم به نام **"Auto-Edit from Raw Video"** که در `/ad-director` کنار flow فعلی قرار می‌گیرد.
+## تغییرات
 
-### مرحله‌های flow جدید
+### فایل: `src/components/shopfloor/CutterStationView.tsx`
 
+**۱) حذف auto-back در `handleCompleteRun`** (خطوط ۶۶۵–۶۶۸)
+
+حذف بلاک:
 ```text
-[1] User uploads raw video (mp4, mov, max 200MB)
-        ↓
-[2] Upload to Supabase Storage (bucket: raw-uploads)
-        ↓
-[3] Edge function: analyze-raw-video
-    - Extract metadata (duration, resolution, fps) با Mediabunny
-    - Generate frame thumbnails هر ۲ ثانیه
-    - ارسال thumbnailها به Gemini 2.5 Flash برای:
-        • تشخیص scene breaks
-        • توضیح هر صحنه
-        • پیشنهاد ترتیب بهتر
-        • پیشنهاد ادیت‌های بهبود (rate, transition, color)
-        ↓
-[4] Frontend: نمایش storyboard پیشنهادی AI
-    User می‌تواند:
-        - تأیید کند (auto-edit)
-        - دستی ویرایش کند (manual override)
-        ↓
-[5] Edge function: process-video-segments
-    - برش video با MediaRecorder/ffmpeg.wasm در browser
-    - ساخت segmentهای جداگانه
-        ↓
-[6] Run موجود stitchClips() با:
-    - segmentهای cut شده
-    - transition پیش‌فرض (Crossfade 0.5s)
-    - voiceover اختیاری (TTS)
-    - music اختیاری (از Brand Kit)
-    - logo overlay
-        ↓
-[7] خروجی .mp4 → upload به generated-videos bucket
-        ↓
-[8] نمایش لینک دانلود + auto-trigger video-to-social برای caption
+setTimeout(() => { onBack?.(); }, 1500);
 ```
 
-### تغییرات فنی (مینیمال و افزایشی)
+جایگزین با:
+- اگر mark کامل شد (`isMarkComplete === true`) و آیتم دیگری در صف نیست → `onBack?.()` بزن (رفتار فعلی برای پایان کار درست است).
+- اگر mark کامل شد ولی آیتم دیگری وجود دارد → روی همین صفحه بمان، `currentIndex` تغییر نکند (اپراتور خودش انتخاب کند).
+- اگر mark هنوز کامل نشده → روی همین صفحه بمان (هیچ navigation انجام نشود).
 
-#### ۱) UI جدید
-فایل جدید: `src/components/ad-director/RawVideoUploader.tsx`
-- یک کارت در ابتدای `/ad-director`
-- دکمه «Upload raw video — let AI edit it»
-- progress bar برای آپلود + analysis
-- نمایش storyboard پیشنهادی AI با thumbnail‌ها
+منطق نهایی:
+```text
+const allMarksDone = remaining <= 1 && isMarkComplete;
+if (allMarksDone) {
+  setTimeout(() => onBack?.(), 1500);
+}
+// otherwise: stay on this page
+```
 
-اضافه به `AdDirectorContent.tsx`:
-- یک tab/mode جدید: "Auto-Edit from Video"
+**۲) حفظ `operatorBars` بین runهای همان mark** (خط ۶۴۵)
 
-#### ۲) Storage Bucket جدید
-- bucket: `raw-uploads` (private, RLS با user_id)
-- TTL خودکار ۲۴ ساعت (cleanup cron)
-- محدودیت حجم: ۲۰۰MB
+حذف خط `setOperatorBars(null);` از `handleCompleteRun`.
 
-#### ۳) Edge Function جدید: `auto-video-editor`
-مسیر: `supabase/functions/auto-video-editor/index.ts`
+این مقدار فقط زمانی باید null شود که:
+- آیتم عوض شود (که از قبل در `useEffect` خط ۲۱۶ اتفاق می‌افتد — درست است، دست نمی‌خورد)
+- run abort شود (خط ۴۶۷ — درست است، دست نمی‌خورد)
 
-- **action: "analyze"**:
-  - دریافت `videoUrl`
-  - استخراج ۱ فریم در ثانیه با Mediabunny
-  - ارسال batch فریم‌ها به Gemini Flash (vision) برای scene detection
-  - برگشت: `{ scenes: [{ start, end, description, suggested_action }] }`
+نتیجه: انتخاب سوپروایزر (۷) برای کل runهای این mark حفظ می‌شود. در run آخر که `barsStillNeeded` کمتر از ۷ می‌شود، خط ۲۹۸ خودکار clamp می‌کند:
+```text
+const barsForThisRun = operatorBars != null
+  ? Math.max(1, Math.min(operatorBars, maxBars))
+  : (runPlan?.barsThisRun ?? autoBarsToLoad);
+```
+این منطق درست است و هیچ تغییری نیاز ندارد.
 
-- **action: "auto-script"**:
-  - دریافت scene descriptions
-  - تولید کپشن، voiceover، music suggestion
-  - برگشت: storyboard آماده
+⚠️ نکته: `barsForThisRun` فقط `maxBars` را در نظر می‌گیرد، نه `barsStillNeeded`. باید این را به‌روزرسانی کنیم تا run آخر اضافه‌بار نگیرد:
 
-#### ۴) Browser-side Video Cutting
-کتابخانه: استفاده از همان `videoStitch.ts` با تغییر کوچک
-- اضافه کردن helper جدید `cutVideoIntoSegments(file, cuts)` در `src/lib/videoStitch.ts`
-- خروجی: آرایه‌ای از Blob URL برای segmentها
-- سپس مستقیم تغذیه به `stitchClips()` موجود
+```text
+const barsForThisRun = operatorBars != null
+  ? Math.max(1, Math.min(operatorBars, maxBars, barsStillNeeded))
+  : (runPlan?.barsThisRun ?? autoBarsToLoad);
+```
 
-#### ۵) Pipeline Wiring
-در `useRenderPipeline.ts`:
-- اضافه کردن phase جدید `analyzing_raw` قبل از `scenes_ready`
-- بقیه pipeline دست نمی‌خورد
+این تضمین می‌کند:
+- اگر سوپروایزر ۷ انتخاب کرده و ۳ bar دیگر کافی است → run بعدی فقط ۳ bar می‌گیرد (نه ۷).
+- در غیر این صورت، انتخاب ۷ حفظ می‌شود.
 
-### مدل AI استفاده‌شده
-- **Scene detection**: `gemini-2.5-flash` (vision) — ارزان و سریع، مستقیم از کلید Gemini شما
-- **Script generation**: `gemini-2.5-flash` — مسیر فعلی Lovable Gateway
-- **هیچ مدل گران‌قیمتی استفاده نمی‌شود**
+### فایل: `src/components/shopfloor/CutEngine.tsx`
 
-### محدودیت‌های مهم
+**۳) جلوگیری از reset شدن `bars` و `operatorOverride` بین runها**
 
-⚠️ **برش ویدیو در browser محدودیت دارد:**
-- ویدیوهای بالای ۱۰۰MB ممکن است memory crash بدهند
-- برای ویدیوهای بزرگ‌تر، نیاز به ffmpeg.wasm یا edge-side processing است
-- در فاز اول: **محدودیت ۱۰۰MB روی فایل آپلودی**
+در `useEffect` خط ۷۷–۸۲:
+```text
+useEffect(() => {
+  if (!isRunning) {
+    setOperatorOverride(false);
+    barsLocked.current = false;
+  }
+}, [barCode, isRunning]);
+```
 
-⚠️ **پردازش طولانی:**
-- analysis یک ویدیوی ۵ دقیقه‌ای حدود ۳۰–۶۰ ثانیه طول می‌کشد
-- نیاز به Wake Lock (که قبلاً در کد هست) + progress bar روشن
+این effect موقع تمام شدن run (`isRunning` از true به false) همه چیز را ریست می‌کند، حتی اگر `barCode` (یعنی mark) تغییر نکرده باشد. این باعث می‌شود وقتی parent دوباره render کند، مقدار default را بنشاند.
 
-⚠️ **کیفیت scene detection:**
-- در فاز اول، AI صحنه‌ها را بر اساس visual change تشخیص می‌دهد
-- برای کیفیت بهتر، می‌توان later فاز ۲ یا audio-based detection اضافه کرد
+اصلاح: فقط وقتی `barCode` تغییر کرد ریست کن:
+```text
+useEffect(() => {
+  setOperatorOverride(false);
+  barsLocked.current = false;
+}, [barCode]);
+```
 
-### چیزی که عوض **نمی‌شود**
+و در parent (`CutterStationView`)، `suggestedBars` که به CutEngine پاس داده می‌شود باید اولویت با `operatorBars` داشته باشد (که از قبل احتمالاً همینطور است — تأیید می‌شود حین اجرا).
 
-- هیچ تغییر در flow فعلی Ad Director (ساخت ویدیو از prompt)
-- هیچ تغییر در `AdDirectorContent`، `ChatPromptBar`، `ProVideoEditor`
-- هیچ تغییر در RLS، database entities موجود
-- بقیه ۱۸ agent بدون تغییر
+## محدوده تغییر
 
-### مراحل اجرا (پس از تأیید)
+تغییر می‌کند:
+- `src/components/shopfloor/CutterStationView.tsx` — حذف auto-back، حذف ریست `operatorBars`، اضافه شدن `barsStillNeeded` به clamp
+- `src/components/shopfloor/CutEngine.tsx` — وابستگی effect ریست از `[barCode, isRunning]` به `[barCode]`
 
-1. ساخت bucket `raw-uploads` با migration + RLS policy
-2. ساخت edge function `auto-video-editor` با ۲ action
-3. اضافه کردن `cutVideoIntoSegments()` به `videoStitch.ts`
-4. ساخت کامپوننت `RawVideoUploader.tsx`
-5. wire کردن به `AdDirectorContent.tsx` به‌عنوان mode دوم
-6. تست end-to-end:
-   - آپلود یک ویدیو ۳۰ ثانیه‌ای → analysis → storyboard → export
-   - بررسی خروجی .mp4 و قابلیت دانلود
+تغییر **نمی‌کند**:
+- منطق slot tracker
+- منطق `manageMachine` و edge functions
+- RLS / database
+- بقیه stationها (bender, loader)
+- سایر کامپوننت‌های shop floor
 
-### اعتبارسنجی
+## مراحل اجرا (پس از تأیید)
 
-- ✅ ویدیوی ۳۰ ثانیه‌ای آپلود و analyze شود (<۳۰ ثانیه)
-- ✅ Storyboard پیشنهادی نمایش داده شود
-- ✅ خروجی نهایی .mp4 قابل پخش باشد
-- ✅ caption خودکار برای social media تولید شود
-- ✅ flow قدیمی (text-to-video) دست‌نخورده باقی بماند
+1. حذف `setTimeout(onBack, 1500)` در `handleCompleteRun` و جایگزینی با شرط mark-complete + last-mark
+2. حذف `setOperatorBars(null)` از `handleCompleteRun` (خط ۶۴۵)
+3. اضافه کردن `barsStillNeeded` به clamp در `barsForThisRun` (خط ۲۹۸)
+4. تغییر وابستگی useEffect در `CutEngine.tsx` از `[barCode, isRunning]` به `[barCode]`
+5. تست end-to-end:
+   - یک mark با ۷۲ pieces، ۲ pieces/bar → نیاز به ۳۶ bar در ۳ run (۱۲+۱۲+۱۲ یا ۷+۷+۷+...)
+   - سوپروایزر ۷ را انتخاب می‌کند → LOCK & START
+   - بعد از run اول: روی صفحه mark بماند، bars همچنان ۷ نشان دهد، نه ۱۲
+   - run آخر: bars خودکار به مقدار کمتر clamp شود اگر کمتر نیاز است
+   - وقتی mark کامل شد و آیتم دیگری نیست → برگشت به pool
 
-### تخمین زمان
-- یک نسخه قابل‌استفاده (MVP): چند ساعت کار توسعه
-- نسخه pro با ffmpeg.wasm برای فایل‌های بزرگ: فاز ۲
+## اعتبارسنجی
 
-### سوال قبل از شروع
-آیا فاز ۱ (تا ۱۰۰MB، browser-side) برای شما کافی است یا از همان اول می‌خواهید با ffmpeg.wasm کار کنیم تا فایل‌های بزرگ‌تر هم پشتیبانی شوند؟
+- ✅ پس از تکمیل cut، صفحه mark باز می‌ماند (نه pool)
+- ✅ انتخاب ۷ bar توسط سوپروایزر برای runهای بعدی همان mark حفظ می‌شود
+- ✅ run آخر خودکار به `barsStillNeeded` clamp می‌شود (اضافه‌بار نمی‌کند)
+- ✅ تغییر mark یا abort هنوز bars را ریست می‌کند (رفتار درست)
+- ✅ پایان کامل همه marks → برگشت خودکار به pool حفظ می‌شود
 
