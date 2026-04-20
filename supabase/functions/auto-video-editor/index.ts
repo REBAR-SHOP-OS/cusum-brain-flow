@@ -88,6 +88,9 @@ Deno.serve(async (req: Request) => {
           `start < end, both within 0..duration of that clip. Aim for scenes between 1.5s and 6s. Skip boring/blurry/duplicate frames. ` +
           `${isMulti ? "Mix scenes from different clips when it produces a stronger narrative." : ""}\n\n` +
           `IMPORTANT: The final video will be SILENT. Do not propose voiceover or music. Focus only on visuals.\n\n` +
+          (userDirection
+            ? `USER DIRECTION (highest priority): "${userDirection}". Re-edit accordingly while still following the rules above.\n\n`
+            : "") +
           `Return ONLY via the propose_storyboard tool.`,
       },
     ];
