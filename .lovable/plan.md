@@ -1,129 +1,59 @@
 
 
-# اصلاح Cut Engine: حفظ تعداد bars و باقی ماندن روی صفحه آیتم پس از هر cut
+# اصلاح خطاهای Backend هنگام Cut
 
-## مشکل فعلی
+## یافته‌ها
 
-دو رفتار اشتباه پس از هر cut:
+تمام درخواست‌های `manage-machine` با **200 OK** و سریع برمی‌گردند. اما در DB logs چهار خطای جدی که هنگام cut تکرار می‌شوند کشف شد:
 
-1. **برگشت ناخواسته به Station Pool (#2):** پس از ۱.۵ ثانیه از تکمیل run، اپ خودکار به صفحه pool برمی‌گردد (`onBack?.()` در `handleCompleteRun`). اپراتور باید دوباره روی همان mark کلیک کند تا run بعدی را شروع کند.
-2. **ریست شدن تعداد bars سوپروایزر:** اگر سوپروایزر از ۱۲ bar (پیشنهاد سیستم) به ۷ bar تغییر داد و LOCK & START زد، پس از تکمیل run اول، `operatorBars` به `null` ریست می‌شود و run بعدی دوباره به ۱۲ برمی‌گردد. سوپروایزر مجبور می‌شود هر بار دستی به ۷ تغییر دهد.
+| # | خطا | منبع | تأثیر |
+|---|-----|------|-------|
+| 1 | `unrecognized configuration parameter "supabase.service_role_key"` | یک trigger/function هر ۶۰ ثانیه (احتمالاً cron) | spam log + ممکن است یک trigger روی `machine_runs` fail کند |
+| 2 | `record "new" has no field "channel"` | trigger روی notifications/messages | exception هنگام insert |
+| 3 | `new row for relation "notifications" violates check constraint "notifications_priority_check"` | کد notification با priority نامعتبر | notification fail می‌شود |
+| 4 | `column integration_connections.provider does not exist` | یک query/function | fail سکوتی |
 
-## رفتار مورد انتظار
+علاوه بر این:
+5. `duplicate key value violates unique constraint "activity_events_dedupe_key_unique"` — این خطر نیست (dedupe درست کار می‌کند) ولی نویز log است.
 
-- **بعد از هر cut → روی صفحه #1 (Mark detail) بمان**، نه pool.
-- **انتخاب سوپروایزر برای bars حفظ شود** برای کل کار این mark، تا run آخری که `barsStillNeeded < operatorBars` می‌شود — آنجا خودکار به مقدار کمتر clamp شود (که الان از قبل کار می‌کند: `Math.min(operatorBars, ...)`).
+## رفع
 
-## تغییرات
+### A) Trigger با فیلد `channel` غیرموجود (#۲)
+شناسایی trigger و حذف/تصحیح ارجاع به `NEW.channel` که در جدول هدف وجود ندارد. به‌احتمال زیاد در یک trigger مرتبط با `notifications` یا `chat_messages` است.
 
-### فایل: `src/components/shopfloor/CutterStationView.tsx`
+### B) `notifications_priority_check` (#۳)
+بررسی check constraint و یافتن کدی که مقدار خارج از enum (`low|normal|high|urgent`) می‌فرستد. تصحیح call site برای استفاده از مقدار معتبر.
 
-**۱) حذف auto-back در `handleCompleteRun`** (خطوط ۶۶۵–۶۶۸)
+### C) `supabase.service_role_key` (#۱)
+یک DB function یا trigger در حال خواندن `current_setting('supabase.service_role_key')` است که در Postgres تعریف نشده. باید یا با `current_setting(..., true)` (silent) خوانده شود، یا کلاً حذف شود اگر استفاده نمی‌شود. هر ۶۰ ثانیه تکرار می‌شود → احتمالاً یک cron job.
 
-حذف بلاک:
-```text
-setTimeout(() => { onBack?.(); }, 1500);
-```
+### D) `integration_connections.provider` (#۴)
+یا ستون `provider` به جدول اضافه شود، یا query اصلاح شود به نام درست ستون (احتمالاً `provider_name` یا `service`).
 
-جایگزین با:
-- اگر mark کامل شد (`isMarkComplete === true`) و آیتم دیگری در صف نیست → `onBack?.()` بزن (رفتار فعلی برای پایان کار درست است).
-- اگر mark کامل شد ولی آیتم دیگری وجود دارد → روی همین صفحه بمان، `currentIndex` تغییر نکند (اپراتور خودش انتخاب کند).
-- اگر mark هنوز کامل نشده → روی همین صفحه بمان (هیچ navigation انجام نشود).
+## برنامه
 
-منطق نهایی:
-```text
-const allMarksDone = remaining <= 1 && isMarkComplete;
-if (allMarksDone) {
-  setTimeout(() => onBack?.(), 1500);
-}
-// otherwise: stay on this page
-```
+1. اجرای query روی `pg_trigger` و `pg_proc` برای پیدا کردن:
+   - trigger‌های ارجاع‌دهنده به `NEW.channel`
+   - functionهای استفاده‌کننده از `supabase.service_role_key`
+2. بررسی schema جدول `notifications` برای دیدن `priority_check` و schema `integration_connections` برای ستون درست
+3. صدور یک migration واحد:
+   - DROP/REPLACE trigger خراب `channel`
+   - REPLACE function استفاده‌کننده از `service_role_key` با `current_setting('...', true)` یا حذف اگر بی‌استفاده
+   - تصحیح query که از `integration_connections.provider` استفاده می‌کند
+4. اصلاح call site frontend/edge برای `notifications.priority` (در صورت لزوم)
+5. تست end-to-end یک cut و بررسی DB logs برای نبود این خطاها
 
-**۲) حفظ `operatorBars` بین runهای همان mark** (خط ۶۴۵)
+## محدوده
 
-حذف خط `setOperatorBars(null);` از `handleCompleteRun`.
-
-این مقدار فقط زمانی باید null شود که:
-- آیتم عوض شود (که از قبل در `useEffect` خط ۲۱۶ اتفاق می‌افتد — درست است، دست نمی‌خورد)
-- run abort شود (خط ۴۶۷ — درست است، دست نمی‌خورد)
-
-نتیجه: انتخاب سوپروایزر (۷) برای کل runهای این mark حفظ می‌شود. در run آخر که `barsStillNeeded` کمتر از ۷ می‌شود، خط ۲۹۸ خودکار clamp می‌کند:
-```text
-const barsForThisRun = operatorBars != null
-  ? Math.max(1, Math.min(operatorBars, maxBars))
-  : (runPlan?.barsThisRun ?? autoBarsToLoad);
-```
-این منطق درست است و هیچ تغییری نیاز ندارد.
-
-⚠️ نکته: `barsForThisRun` فقط `maxBars` را در نظر می‌گیرد، نه `barsStillNeeded`. باید این را به‌روزرسانی کنیم تا run آخر اضافه‌بار نگیرد:
-
-```text
-const barsForThisRun = operatorBars != null
-  ? Math.max(1, Math.min(operatorBars, maxBars, barsStillNeeded))
-  : (runPlan?.barsThisRun ?? autoBarsToLoad);
-```
-
-این تضمین می‌کند:
-- اگر سوپروایزر ۷ انتخاب کرده و ۳ bar دیگر کافی است → run بعدی فقط ۳ bar می‌گیرد (نه ۷).
-- در غیر این صورت، انتخاب ۷ حفظ می‌شود.
-
-### فایل: `src/components/shopfloor/CutEngine.tsx`
-
-**۳) جلوگیری از reset شدن `bars` و `operatorOverride` بین runها**
-
-در `useEffect` خط ۷۷–۸۲:
-```text
-useEffect(() => {
-  if (!isRunning) {
-    setOperatorOverride(false);
-    barsLocked.current = false;
-  }
-}, [barCode, isRunning]);
-```
-
-این effect موقع تمام شدن run (`isRunning` از true به false) همه چیز را ریست می‌کند، حتی اگر `barCode` (یعنی mark) تغییر نکرده باشد. این باعث می‌شود وقتی parent دوباره render کند، مقدار default را بنشاند.
-
-اصلاح: فقط وقتی `barCode` تغییر کرد ریست کن:
-```text
-useEffect(() => {
-  setOperatorOverride(false);
-  barsLocked.current = false;
-}, [barCode]);
-```
-
-و در parent (`CutterStationView`)، `suggestedBars` که به CutEngine پاس داده می‌شود باید اولویت با `operatorBars` داشته باشد (که از قبل احتمالاً همینطور است — تأیید می‌شود حین اجرا).
-
-## محدوده تغییر
-
-تغییر می‌کند:
-- `src/components/shopfloor/CutterStationView.tsx` — حذف auto-back، حذف ریست `operatorBars`، اضافه شدن `barsStillNeeded` به clamp
-- `src/components/shopfloor/CutEngine.tsx` — وابستگی effect ریست از `[barCode, isRunning]` به `[barCode]`
-
-تغییر **نمی‌کند**:
-- منطق slot tracker
-- منطق `manageMachine` و edge functions
-- RLS / database
-- بقیه stationها (bender, loader)
-- سایر کامپوننت‌های shop floor
-
-## مراحل اجرا (پس از تأیید)
-
-1. حذف `setTimeout(onBack, 1500)` در `handleCompleteRun` و جایگزینی با شرط mark-complete + last-mark
-2. حذف `setOperatorBars(null)` از `handleCompleteRun` (خط ۶۴۵)
-3. اضافه کردن `barsStillNeeded` به clamp در `barsForThisRun` (خط ۲۹۸)
-4. تغییر وابستگی useEffect در `CutEngine.tsx` از `[barCode, isRunning]` به `[barCode]`
-5. تست end-to-end:
-   - یک mark با ۷۲ pieces، ۲ pieces/bar → نیاز به ۳۶ bar در ۳ run (۱۲+۱۲+۱۲ یا ۷+۷+۷+...)
-   - سوپروایزر ۷ را انتخاب می‌کند → LOCK & START
-   - بعد از run اول: روی صفحه mark بماند، bars همچنان ۷ نشان دهد، نه ۱۲
-   - run آخر: bars خودکار به مقدار کمتر clamp شود اگر کمتر نیاز است
-   - وقتی mark کامل شد و آیتم دیگری نیست → برگشت به pool
+- فقط رفع باگ‌های backend
+- بدون تغییر در UI، RLS، یا منطق Cut Engine
+- بدون تغییر در `manage-machine` (که سالم است)
 
 ## اعتبارسنجی
 
-- ✅ پس از تکمیل cut، صفحه mark باز می‌ماند (نه pool)
-- ✅ انتخاب ۷ bar توسط سوپروایزر برای runهای بعدی همان mark حفظ می‌شود
-- ✅ run آخر خودکار به `barsStillNeeded` clamp می‌شود (اضافه‌بار نمی‌کند)
-- ✅ تغییر mark یا abort هنوز bars را ریست می‌کند (رفتار درست)
-- ✅ پایان کامل همه marks → برگشت خودکار به pool حفظ می‌شود
+- ✅ هیچ خطای `supabase.service_role_key` در DB logs پس از cut
+- ✅ هیچ خطای `record "new" has no field "channel"` پس از cut
+- ✅ هیچ خطای `notifications_priority_check`
+- ✅ هیچ خطای `integration_connections.provider`
+- ✅ Cut بدون "failed to fetch" کامل می‌شود
 
