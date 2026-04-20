@@ -74,7 +74,7 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
     try {
       // 1) Extract keyframes for each clip
       const perClipMaxFrames = selected.length === 1 ? 12 : 8;
-      const clipsPayload: Array<{ index: number; duration: number; frames: { t: number; dataUrl: string }[] }> = [];
+      const clipsPayload: ClipPayload[] = [];
       const collected: ClipMeta[] = [];
 
       for (let i = 0; i < selected.length; i++) {
