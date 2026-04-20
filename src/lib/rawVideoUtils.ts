@@ -167,7 +167,7 @@ export async function cutVideoIntoSegments(
         recorder.onstop = () => resolve();
       });
 
-      recorder.start(100);
+      recorder.start(250);
 
       const startWall = performance.now();
       let lastDrawn = -1;
@@ -190,6 +190,8 @@ export async function cutVideoIntoSegments(
           done = true;
           video.pause();
           try {
+            // Explicit final flush so the last dataavailable chunk lands before stop()
+            try { recorder.requestData(); } catch (_e) {}
             recorder.stop();
           } catch (_e) {}
           resolve();
@@ -212,6 +214,9 @@ export async function cutVideoIntoSegments(
       });
 
       await stopped;
+      // Chromium occasionally delivers the trailing dataavailable AFTER onstop —
+      // wait briefly so the final chunk is included and the WebM is well-formed.
+      await new Promise((r) => setTimeout(r, 80));
       const blob = new Blob(chunks, { type: mime });
       const blobUrl = URL.createObjectURL(blob);
       out.push({ blob, blobUrl, duration: dur });

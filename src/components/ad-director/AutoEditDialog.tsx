@@ -189,6 +189,7 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
       const stitchInput = orderedSegments.map((seg) => ({
         videoUrl: seg.blobUrl,
         targetDuration: seg.duration,
+        blob: seg.blob,
       }));
 
       // Probe first source clip's native dimensions so output preserves
@@ -326,6 +327,7 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
       const stitchInput = orderedSegments.map((seg) => ({
         videoUrl: seg.blobUrl,
         targetDuration: seg.duration,
+        blob: seg.blob,
       }));
 
       const probeDims = await probeVideoDimensions(clips[0].file);

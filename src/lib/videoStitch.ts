@@ -307,7 +307,7 @@ interface ValidatedClip {
 }
 
 async function preloadAndValidate(
-  clips: { videoUrl: string; targetDuration: number }[],
+  clips: { videoUrl: string; targetDuration: number; blob?: Blob }[],
   onProgress?: (p: StitchProgress) => void,
 ): Promise<ValidatedClip[]> {
   const results: ValidatedClip[] = [];
@@ -315,18 +315,18 @@ async function preloadAndValidate(
   for (let i = 0; i < clips.length; i++) {
     onProgress?.({ stage: "loading", clipIndex: i, clipTotal: clips.length, message: `Loading clip ${i + 1}/${clips.length}` });
     const clip = clips[i];
-    const blobUrl = await fetchAsBlob(clip.videoUrl);
+    let blobUrl = await fetchAsBlob(clip.videoUrl);
 
-    const load = (url: string): Promise<HTMLVideoElement> =>
+    const load = (url: string, timeoutMs: number): Promise<HTMLVideoElement> =>
       new Promise((resolve, reject) => {
         const v = document.createElement("video");
         v.playsInline = true;
         v.preload = "auto";
         v.muted = true;
-        // Note: crossOrigin intentionally omitted — captureStream() doesn't need it,
-        // and setting it causes CORS failures when fetchAsBlob falls back to raw URLs.
-        const timeout = setTimeout(() => reject(new Error(`Clip ${i + 1} load timed out`)), 15_000);
-        v.onloadedmetadata = () => {
+        let settled = false;
+        const finishOk = () => {
+          if (settled) return;
+          settled = true;
           clearTimeout(timeout);
           if (!v.videoWidth || !v.videoHeight) {
             reject(new Error(`Clip ${i + 1} has no video dimensions`));
@@ -334,19 +334,52 @@ async function preloadAndValidate(
             resolve(v);
           }
         };
-        v.onerror = () => { clearTimeout(timeout); reject(new Error(`Clip ${i + 1} failed to load`)); };
+        const timeout = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error(`Clip ${i + 1} load timed out`));
+        }, timeoutMs);
+        // Accept whichever event fires first
+        v.onloadedmetadata = finishOk;
+        v.onloadeddata = finishOk;
+        v.onerror = () => {
+          if (settled) return;
+          // MediaRecorder WebMs sometimes fire `error` after the decoder has
+          // already initialized — if we have valid dimensions, treat it as success.
+          if (v.videoWidth > 0 && v.videoHeight > 0) {
+            settled = true;
+            clearTimeout(timeout);
+            resolve(v);
+            return;
+          }
+          settled = true;
+          clearTimeout(timeout);
+          console.error(
+            `[stitchClips] Clip ${i + 1} load error — url=${url.substring(0, 40)}… ` +
+            `videoWidth=${v.videoWidth} readyState=${v.readyState} networkState=${v.networkState}`,
+          );
+          reject(new Error(`Clip ${i + 1} failed to load`));
+        };
         v.src = url;
+        try { v.load(); } catch (_e) {}
       });
 
-    // Try twice
+    // Retry strategy: 1st attempt 25s; on failure, sleep 400ms, rebuild blob URL
+    // (if raw Blob is available) since MediaRecorder URLs sometimes get into a
+    // bad state after first failed decode, then 2nd attempt 25s.
     let video: HTMLVideoElement;
     try {
-      video = await load(blobUrl);
+      video = await load(blobUrl, 25_000);
     } catch (firstErr) {
       console.warn(`[stitchClips] Clip ${i + 1} first load failed, retrying...`, firstErr);
+      await new Promise((r) => setTimeout(r, 400));
+      if (clip.blob) {
+        try { URL.revokeObjectURL(blobUrl); } catch (_e) {}
+        blobUrl = URL.createObjectURL(clip.blob);
+      }
       try {
-        video = await load(blobUrl);
-      } catch {
+        video = await load(blobUrl, 25_000);
+      } catch (secondErr) {
         throw new Error(`Clip ${i + 1} failed to load after retry: ${(firstErr as Error).message}`);
       }
     }
@@ -396,7 +429,7 @@ async function validateBlob(blob: Blob, expectedDuration?: number): Promise<{ va
 // ─── Main Stitch Function ──────────────────────────────────
 
 export async function stitchClips(
-  clips: { videoUrl: string; targetDuration: number }[],
+  clips: { videoUrl: string; targetDuration: number; blob?: Blob }[],
   overlays?: StitchOverlayOptions,
   onProgress?: (p: StitchProgress) => void,
 ): Promise<{ blobUrl: string; blob: Blob; duration: number }> {
