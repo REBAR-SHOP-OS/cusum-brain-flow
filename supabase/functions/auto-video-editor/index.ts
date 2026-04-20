@@ -17,6 +17,21 @@ interface AnalyzePayload {
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
+  // Entry log so we can verify requests are reaching the function
+  const contentLength = Number(req.headers.get("content-length") || 0);
+  console.log(`[auto-video-editor] ${req.method} content-length=${contentLength}`);
+
+  // Hard guard: reject anything above 5MB to avoid CDN/edge cutoff (limit is ~6MB)
+  if (contentLength > 5 * 1024 * 1024) {
+    return json(
+      {
+        error:
+          "Video payload too large. Please use a shorter clip or try again — the AI received too much data.",
+      },
+      413,
+    );
+  }
+
   try {
     const body = await req.json();
     if (body?.action !== "analyze") {
@@ -30,6 +45,8 @@ Deno.serve(async (req: Request) => {
     if (!videoDuration || videoDuration <= 0) {
       return json({ error: "videoDuration required" }, 400);
     }
+
+    console.log(`[auto-video-editor] analyze frames=${frames.length} duration=${videoDuration.toFixed(1)}s`);
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) return json({ error: "LOVABLE_API_KEY not set" }, 500);

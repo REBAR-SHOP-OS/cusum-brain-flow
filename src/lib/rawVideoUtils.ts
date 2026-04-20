@@ -77,8 +77,8 @@ export async function extractKeyframes(
   opts: { intervalSec?: number; maxFrames?: number; targetWidth?: number; onProgress?: (p: number) => void } = {},
 ): Promise<{ frames: KeyframeSample[]; duration: number; width: number; height: number }> {
   const intervalSec = opts.intervalSec ?? 2;
-  const maxFrames = opts.maxFrames ?? 30;
-  const targetWidth = opts.targetWidth ?? 320;
+  const maxFrames = opts.maxFrames ?? 16;
+  const targetWidth = opts.targetWidth ?? 224;
 
   const { video, objectUrl } = await loadVideoFile(file);
   try {
@@ -108,7 +108,7 @@ export async function extractKeyframes(
       try {
         await seekTo(video, t);
         ctx.drawImage(video, 0, 0, cw, ch);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.55);
         frames.push({ t, dataUrl });
       } catch (e) {
         console.warn(`[extractKeyframes] skip t=${t.toFixed(2)}`, e);
