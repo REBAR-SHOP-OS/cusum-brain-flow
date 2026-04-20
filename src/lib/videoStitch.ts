@@ -610,7 +610,12 @@ export async function stitchClips(
       let nextClipStarted = false;
 
       const isLastClip = clipIndex >= validatedClips.length - 1;
-      const fadeStart = effectiveDuration - crossfadeDur;
+      // Per-clip outgoing transition (FROM this clip TO next clip).
+      const perClipTx = overlays?.perClipTransitions?.[clipIndex];
+      const txType = (perClipTx?.type ?? "Crossfade") as string;
+      const txDurRaw = perClipTx?.duration ?? crossfadeDur;
+      const txDur = txType === "None" ? 0 : Math.max(0, txDurRaw);
+      const fadeStart = effectiveDuration - txDur;
 
       const safetyTimeout = setTimeout(() => {
         if (!clipDone) {
@@ -657,10 +662,15 @@ export async function stitchClips(
 
         if (!video.paused && !video.ended) {
           const t = video.currentTime;
-          const inCrossfade = !isLastClip && crossfadeDur > 0 && t >= fadeStart && clipIndex + 1 < validatedClips.length;
+          const inTransition = !isLastClip && txDur > 0 && t >= fadeStart && clipIndex + 1 < validatedClips.length;
 
-          if (inCrossfade) {
-            const progress = Math.min((t - fadeStart) / crossfadeDur, 1);
+          const drawFit = (v: HTMLVideoElement) => {
+            const f = fitCover(v.videoWidth, v.videoHeight, W, H);
+            ctx.drawImage(v, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
+          };
+
+          if (inTransition) {
+            const progress = Math.min((t - fadeStart) / txDur, 1);
 
             // Start next clip video if not already
             if (!nextClipStarted) {
@@ -671,26 +681,168 @@ export async function stitchClips(
               nv.play().catch(() => {});
             }
 
-            // Draw outgoing clip with decreasing alpha (cover-fit)
-            ctx.globalAlpha = 1 - progress;
-            {
-              const f = fitCover(video.videoWidth, video.videoHeight, W, H);
-              ctx.drawImage(video, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
-            }
-
-            // Draw incoming clip with increasing alpha (cover-fit)
             const nextVideo = validatedClips[clipIndex + 1].video;
-            ctx.globalAlpha = progress;
-            {
-              const f = fitCover(nextVideo.videoWidth, nextVideo.videoHeight, W, H);
-              ctx.drawImage(nextVideo, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
-            }
-
             ctx.globalAlpha = 1.0;
+            ctx.filter = "none";
+
+            switch (txType) {
+              case "Cross Blur": {
+                ctx.filter = `blur(${20 * progress}px)`;
+                ctx.globalAlpha = 1 - progress;
+                drawFit(video);
+                ctx.filter = `blur(${20 * (1 - progress)}px)`;
+                ctx.globalAlpha = progress;
+                drawFit(nextVideo);
+                ctx.filter = "none";
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Fade Black":
+              case "Fade White": {
+                // First half: outgoing → solid color. Second half: solid color → incoming.
+                const half = progress < 0.5 ? progress * 2 : (progress - 0.5) * 2;
+                if (progress < 0.5) {
+                  ctx.globalAlpha = 1.0;
+                  drawFit(video);
+                  ctx.globalAlpha = half;
+                  ctx.fillStyle = txType === "Fade Black" ? "#000" : "#fff";
+                  ctx.fillRect(0, 0, W, H);
+                } else {
+                  ctx.globalAlpha = 1.0;
+                  drawFit(nextVideo);
+                  ctx.globalAlpha = 1 - half;
+                  ctx.fillStyle = txType === "Fade Black" ? "#000" : "#fff";
+                  ctx.fillRect(0, 0, W, H);
+                }
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Wipe Down": {
+                drawFit(video);
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, 0, W, H * progress);
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Wipe Up": {
+                drawFit(video);
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, H * (1 - progress), W, H * progress);
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Wipe Right": {
+                drawFit(video);
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, 0, W * progress, H);
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Wipe Left": {
+                drawFit(video);
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(W * (1 - progress), 0, W * progress, H);
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Slide Up": {
+                drawFit(video);
+                ctx.save();
+                ctx.translate(0, H * (1 - progress));
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Slide Down": {
+                drawFit(video);
+                ctx.save();
+                ctx.translate(0, -H * (1 - progress));
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Zoom In": {
+                // Outgoing zooms out → reveals incoming behind
+                drawFit(nextVideo);
+                ctx.save();
+                ctx.globalAlpha = 1 - progress;
+                const scale = 1 + progress * 1.2;
+                ctx.translate(W / 2, H / 2);
+                ctx.scale(scale, scale);
+                ctx.translate(-W / 2, -H / 2);
+                drawFit(video);
+                ctx.restore();
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Zoom Out": {
+                drawFit(nextVideo);
+                ctx.save();
+                ctx.globalAlpha = 1 - progress;
+                const scale = 1 - progress * 0.6;
+                ctx.translate(W / 2, H / 2);
+                ctx.scale(scale, scale);
+                ctx.translate(-W / 2, -H / 2);
+                drawFit(video);
+                ctx.restore();
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Burn": {
+                ctx.save();
+                ctx.globalAlpha = 1.0;
+                drawFit(nextVideo);
+                ctx.globalAlpha = 1 - progress;
+                ctx.filter = `brightness(${1 + progress * 2}) contrast(${1 + progress}) sepia(${progress})`;
+                drawFit(video);
+                ctx.filter = "none";
+                ctx.restore();
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Tiles":
+              case "Horizontal Banding": {
+                // Tile/band wipe: reveal next clip in N horizontal bands.
+                drawFit(video);
+                const bands = 8;
+                const bandH = H / bands;
+                ctx.save();
+                ctx.beginPath();
+                for (let i = 0; i < bands; i++) {
+                  const localProgress = Math.max(0, Math.min(1, (progress - i / (bands * 2)) * 2));
+                  ctx.rect(0, i * bandH, W * localProgress, bandH);
+                }
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Crossfade":
+              default: {
+                ctx.globalAlpha = 1 - progress;
+                drawFit(video);
+                ctx.globalAlpha = progress;
+                drawFit(nextVideo);
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+            }
           } else {
             ctx.globalAlpha = 1.0;
-            const f = fitCover(video.videoWidth, video.videoHeight, W, H);
-            ctx.drawImage(video, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
+            ctx.filter = "none";
+            drawFit(video);
           }
 
           hasDrawnFrame = true;
