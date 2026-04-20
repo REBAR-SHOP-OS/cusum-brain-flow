@@ -228,9 +228,21 @@ export function ProVideoEditor({
   }, []);
 
   // Per-clip transitions (pencil icon on each clip in timeline)
-  const [clipTransitions, setClipTransitions] = useState<Record<string, { type: string; duration: number }>>({});
+  // Mirrored to localStorage so the export pipeline (AdDirectorContent → stitchClips)
+  // can read the same per-scene selection without prop drilling through the service.
+  const PER_SCENE_TX_STORAGE_KEY = "ad-director:per-scene-transitions";
+  const [clipTransitions, setClipTransitions] = useState<Record<string, { type: string; duration: number }>>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(PER_SCENE_TX_STORAGE_KEY) : null;
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
   const handleClipTransitionChange = useCallback((sceneId: string, transition: { type: string; duration: number }) => {
-    setClipTransitions(prev => ({ ...prev, [sceneId]: transition }));
+    setClipTransitions(prev => {
+      const next = { ...prev, [sceneId]: transition };
+      try { localStorage.setItem(PER_SCENE_TX_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
   }, []);
 
   // Hide global floating widgets (Vizzy, LiveChat, Feedback) while editor is mounted
