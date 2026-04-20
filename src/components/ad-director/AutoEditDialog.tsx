@@ -233,6 +233,125 @@ export function AutoEditDialog({ open, onOpenChange }: AutoEditDialogProps) {
     a.click();
   };
 
+  const handleRegenerate = async () => {
+    const direction = regeneratePrompt.trim();
+    if (!direction) return;
+    if (!clipsPayloadRef.current || clips.length === 0) {
+      toast({ title: "Can't regenerate", description: "Source clips are no longer available. Please re-upload.", variant: "destructive" });
+      return;
+    }
+
+    // Revoke previous final video
+    const prev = finalUrlRef.current;
+    if (prev) {
+      try { URL.revokeObjectURL(prev); } catch {}
+    }
+    setFinalUrl(null);
+
+    setPhase("analyzing");
+    setError(null);
+    setProgress(20);
+    setProgressMsg("Re-editing with your direction…");
+
+    try {
+      const { data, error: fnErr } = await supabase.functions.invoke("auto-video-editor", {
+        body: { action: "analyze", clips: clipsPayloadRef.current, userDirection: direction },
+      });
+      if (fnErr) throw new Error(fnErr.message || "AI analysis failed");
+      if (data?.error) throw new Error(data.error);
+      if (!Array.isArray(data?.scenes) || data.scenes.length === 0) {
+        throw new Error("AI returned no scenes");
+      }
+
+      const sceneList: SceneCut[] = data.scenes.map((s: any, i: number) => ({
+        id: `s_${i}_${Math.random().toString(36).slice(2, 8)}`,
+        clipIndex: typeof s.clipIndex === "number" ? s.clipIndex : 0,
+        start: s.start,
+        end: s.end,
+        description: s.description || `Scene ${i + 1}`,
+      }));
+
+      setScenes(sceneList);
+      setSummary(data.summary || "");
+      setRegeneratePrompt("");
+
+      // Skip review — go straight to generating using the new scenes
+      // We need to pass scenes directly since setScenes is async
+      await runGenerateWithScenes(sceneList);
+    } catch (e) {
+      console.error("[AutoEdit] regenerate failed:", e);
+      const msg = e instanceof Error ? e.message : "Regeneration failed";
+      setError(msg);
+      setPhase("error");
+      toast({ title: "Regeneration failed", description: msg, variant: "destructive" });
+    }
+  };
+
+  const runGenerateWithScenes = async (sceneList: SceneCut[]) => {
+    if (clips.length === 0 || sceneList.length === 0) return;
+    setPhase("generating");
+    setError(null);
+    setProgress(0);
+    setProgressMsg("Cutting your scenes…");
+
+    try {
+      const segmentsBySceneId = new Map<string, { blob: Blob; blobUrl: string; duration: number }>();
+      const grouped = new Map<number, SceneCut[]>();
+      for (const s of sceneList) {
+        const ci = Math.min(Math.max(0, s.clipIndex ?? 0), clips.length - 1);
+        if (!grouped.has(ci)) grouped.set(ci, []);
+        grouped.get(ci)!.push(s);
+      }
+      const totalScenes = sceneList.length;
+      let processed = 0;
+      for (const [clipIdx, sceneSubset] of grouped.entries()) {
+        const file = clips[clipIdx].file;
+        const cuts: RawSceneCut[] = sceneSubset.map((s) => ({ start: s.start, end: s.end }));
+        const segs = await cutVideoIntoSegments(file, cuts, ({ index }) => {
+          const localFrac = (processed + index) / totalScenes;
+          setProgress(Math.round(localFrac * 60));
+          setProgressMsg(`Cutting scene ${processed + index + 1} of ${totalScenes}…`);
+        });
+        sceneSubset.forEach((s, i) => segmentsBySceneId.set(s.id, segs[i]));
+        processed += sceneSubset.length;
+      }
+
+      setProgressMsg("Assembling final video…");
+      setProgress(70);
+
+      const orderedSegments = sceneList
+        .map((s) => segmentsBySceneId.get(s.id))
+        .filter((x): x is { blob: Blob; blobUrl: string; duration: number } => Boolean(x));
+
+      const stitchInput = orderedSegments.map((seg) => ({
+        videoUrl: seg.blobUrl,
+        targetDuration: seg.duration,
+      }));
+
+      const probeDims = await probeVideoDimensions(clips[0].file);
+      const result = await stitchClips(
+        stitchInput,
+        { fitMode: "contain", canvasWidth: probeDims.width, canvasHeight: probeDims.height } as any,
+        (p) => {
+          setProgressMsg(p.message || "Assembling…");
+          setProgress((cur) => Math.min(98, Math.max(cur, cur + 1)));
+        },
+      );
+
+      orderedSegments.forEach((s) => URL.revokeObjectURL(s.blobUrl));
+      setFinalUrl(result.blobUrl);
+      setProgress(100);
+      setProgressMsg("Done!");
+      setPhase("done");
+    } catch (e) {
+      console.error("[AutoEdit] regenerate stitch failed:", e);
+      const msg = e instanceof Error ? e.message : "Generation failed";
+      setError(msg);
+      setPhase("error");
+      toast({ title: "Generation failed", description: msg, variant: "destructive" });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col bg-slate-950 border-white/10 text-white p-0 gap-0">
