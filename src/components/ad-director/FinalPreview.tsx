@@ -139,6 +139,7 @@ export function FinalPreview({
             ref={videoRef}
             src={finalVideoUrl}
             controls
+            muted
             className="w-full rounded-lg aspect-video bg-black"
           />
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground">

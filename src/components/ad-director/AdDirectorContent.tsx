@@ -203,8 +203,9 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
           },
           subtitles: { enabled: false, segments: [] },
           audioUrl,
-          musicUrl: service.getState().musicTrackUrl || undefined,
-          musicVolume: 0.15,
+          // HARD RULE: AI Video Director exports must never contain music. Pro Editor manual music is the only exception.
+          musicUrl: undefined,
+          musicVolume: 0,
           crossfadeDuration,
           perClipTransitions,
           aspectRatio: exportRatio,
@@ -529,6 +530,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
                 src={selectedPreviewUrl || finalVideoUrl!}
                 controls
                 autoPlay
+                muted
                 className="w-full aspect-video bg-black"
               />
             ) : (

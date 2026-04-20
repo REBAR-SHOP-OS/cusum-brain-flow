@@ -1132,8 +1132,9 @@ class BackgroundAdDirectorService {
           bgColor: brand.secondaryColor, logoUrl: null,
         },
         subtitles: { enabled: false, segments: [] },
-        musicUrl: this.state.musicTrackUrl || undefined,
-        musicVolume: 0.15,
+        // HARD RULE: AI Video Director exports must never contain music. Pro Editor manual music is the only exception.
+        musicUrl: undefined,
+        musicVolume: 0,
         crossfadeDuration,
         aspectRatio: exportRatio,
       });
