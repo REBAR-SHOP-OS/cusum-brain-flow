@@ -1,75 +1,22 @@
 
 
-# Edge Functions Explorer — کاوشگر فانکشن‌ها روی صفحهٔ Architecture
+# دکمه دیده نمی‌شود — مشکل کش/رفرش
 
-یک آیکون جدید کنار دکمهٔ Fullscreen در صفحهٔ `/architecture` اضافه می‌کنم. با کلیک، یک پنل تمام‌صفحه باز می‌شود که همهٔ ۲۰۰+ Edge Function را به‌صورت کارت نمایش می‌دهد. کلیک روی هر کارت اتصالات آن فانکشن را نشان می‌دهد.
+دکمهٔ "Functions" در کد به‌درستی در `src/pages/Architecture.tsx` خط ۷۶۹–۷۷۶ کنار دکمهٔ Fullscreen قرار گرفته. در اسکرین‌شات تو حتی دکمهٔ Fullscreen هم دیده نمی‌شود (با اینکه در کد هست) — این یعنی preview نسخهٔ قدیمی را نشان می‌دهد.
 
-## آیکون و محل قرارگیری
+## راه حل پیشنهادی
 
-- آیکون: `Boxes` از `lucide-react` (یا `Network`) داخل دایرهٔ کوچک سایان‌رنگ.
-- محل: گوشهٔ بالا-چپ canvas، **کنار دکمهٔ Fullscreen** (همان جای دایرهٔ قرمزی که کشیدی).
-- Tooltip: «Edge Functions Explorer».
+### گام ۱ — Hard refresh مرورگر
+- روی preview کلیک کن، سپس **Ctrl+Shift+R** (یا **Cmd+Shift+R** روی Mac) بزن.
+- یا preview را در tab جدید باز کن: https://id-preview--ef512187-6c6b-411e-82cc-200307028719.lovable.app/architecture
 
-## فایل‌های جدید
+### گام ۲ — اگر همچنان دیده نشد
+احتمالاً دکمه‌های `top-2 left-2` پشت کنترل‌های ReactFlow پنهان شده‌اند. در این حالت:
+- موقعیت دکمه را به `top-2 left-1/2 -translate-x-1/2` تغییر می‌دهم تا وسط بالای canvas بیاید.
+- یا z-index را از `z-30` به `z-50` افزایش می‌دهم.
+- یا یک نشانگر بصری واضح‌تر (دایرهٔ سایان درخشان با pulse animation) اضافه می‌کنم تا کاملاً قابل‌دیدن باشد.
 
-### ۱. `src/lib/edgeFunctionsRegistry.ts`
-- آرایهٔ ثابت با نام تمام ۲۰۰+ فانکشن (از روی پوشهٔ `supabase/functions/`).
-- دسته‌بندی خودکار با prefix:
-  - `ai-*`, `vizzy-*`, `seo-*`, `ringcentral-*`, `gmail-*`, `qb-*`, `odoo-*`, `stripe-*`, `face-*`, `social-*`, `wp-*`, `website-*`, `pipeline-*`, `elevenlabs-*`, `camera-*`, `wincher-*` → category خودکار
-  - بقیه → "General"
-- هر فانکشن: `{ name, category, accent }`
+## درخواست
 
-### ۲. `src/lib/edgeFunctionConnections.ts`
-- helper که runtime با grep ساده روی فایل‌های frontend اتصالات هر فانکشن را پیدا می‌کند.
-- چون نمی‌توانیم در runtime به فایل‌سیستم بزنیم، یک **manifest استاتیک** می‌سازم:
-  - برای هر فانکشن، لیست caller هایش از frontend (آن جاهایی که `supabase.functions.invoke("function-name")` صدا زده شده).
-  - با اسکن در زمان build/تولید plan جمع می‌آوریم و در یک object بزرگ ذخیره می‌کنیم: `Record<functionName, { callers: string[], crons?: boolean }>`.
-
-### ۳. `src/components/system-flow/EdgeFunctionsPanel.tsx`
-- Sheet/Dialog تمام‌صفحه (با `Sheet` از shadcn، side="right", w-full md:w-[900px]).
-- Header: "Edge Functions" + شمارنده + Search box + فیلتر دسته‌بندی (chips).
-- Body: grid کارت‌ها (4 ستون desktop / 2 موبایل):
-  ```
-  ┌──────────────┐
-  │ 🤖 ai-extract│
-  │ AI / Extract │
-  │ 3 callers    │
-  └──────────────┘
-  ```
-- کارت رنگ accent مطابق دسته دارد (cyan/violet/orange…).
-- کلیک روی کارت → `EdgeFunctionDetailDialog` باز می‌شود.
-
-### ۴. `src/components/system-flow/EdgeFunctionDetailDialog.tsx`
-نمایش جزئیات اتصال هر فانکشن:
-- نام + دسته + رنگ accent.
-- بخش **Frontend Callers**: لیست فایل‌های `.tsx/.ts` که این فانکشن را invoke می‌کنند (با مسیر).
-- بخش **Triggers**: cron / webhook / manual (از manifest).
-- بخش **Related Functions**: فانکشن‌های هم‌دسته (مثلاً `vizzy-*` همه با هم).
-- دکمهٔ "View Logs" که به Supabase logs لینک می‌دهد (read-only، اگر URL در دست باشد).
-
-## تغییرات روی فایل موجود
-
-### `src/pages/Architecture.tsx`
-- Import: `Boxes` از lucide، `EdgeFunctionsPanel` جدید.
-- state: `const [showFunctionsPanel, setShowFunctionsPanel] = useState(false);`
-- در بلوک `top-2 left-2` (همان‌جای دکمهٔ Fullscreen، خط ~۷۵۸–۷۶۷) یک دکمهٔ دوم اضافه می‌شود کنار آن:
-  ```tsx
-  <button onClick={() => setShowFunctionsPanel(true)} ...>
-    <Boxes /> Functions
-  </button>
-  ```
-- در انتهای JSX، رندر `<EdgeFunctionsPanel open={showFunctionsPanel} onOpenChange={setShowFunctionsPanel} />`.
-
-## آنچه دست نمی‌خورد
-
-- ساختار ReactFlow، nodes، edges، layers و dialog فعلی Architecture.
-- هیچ Edge Function، schema، RLS یا storage.
-- بقیهٔ صفحات و کامپوننت‌ها.
-
-## اعتبارسنجی
-
-1. ورود به `/architecture` → کنار دکمهٔ Fullscreen آیکون جدید "Functions" دیده شود.
-2. کلیک → پنل با ۲۰۰+ کارت باز شود، Search و فیلتر دسته‌بندی کار کند.
-3. کلیک روی هر کارت → جزئیات اتصالات (callers + triggers) نمایش داده شود.
-4. هیچ خطای console نباشد.
+اول **Hard refresh** بزن (Ctrl+Shift+R). اگر بعد از رفرش، دکمهٔ سایان "Functions" کنار "Fullscreen" گوشهٔ بالا-چپ canvas دیدی، تمام است. اگر باز ندیدی، تأیید کن تا گام ۲ را اجرا کنم (تغییر موقعیت/استایل دکمه برای دیده‌شدن قطعی).
 
