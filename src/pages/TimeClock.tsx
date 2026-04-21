@@ -26,6 +26,7 @@ import { MyLeaveTab } from "@/components/timeclock/MyLeaveTab";
 import { TeamCalendarTab } from "@/components/timeclock/TeamCalendarTab";
 import { PayrollSummaryTab } from "@/components/timeclock/PayrollSummaryTab";
 import { FaceMemoryPanel } from "@/components/timeclock/FaceMemoryPanel";
+import { ManualNameFallback } from "@/components/timeclock/ManualNameFallback";
 
 function getInitials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
