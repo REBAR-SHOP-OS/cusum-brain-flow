@@ -56,6 +56,8 @@ export default function TimeClock() {
   
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [showManualFallback, setShowManualFallback] = useState(false);
+  const [attemptCount, setAttemptCount] = useState(0);
+  const MAX_AUTO_ATTEMPTS = 3;
 
   // Cache of profile IDs confirmed during this kiosk session
   const confirmedProfilesRef = useRef<Set<string>>(new Set());
