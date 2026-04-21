@@ -22,7 +22,6 @@ import { toast } from "sonner";
 import { FaceCamera } from "@/components/timeclock/FaceCamera";
 import { FaceEnrollment } from "@/components/timeclock/FaceEnrollment";
 import { FaceRecognitionResult } from "@/components/timeclock/FaceRecognitionResult";
-import { FirstTimeRegistration } from "@/components/timeclock/FirstTimeRegistration";
 import { MyLeaveTab } from "@/components/timeclock/MyLeaveTab";
 import { TeamCalendarTab } from "@/components/timeclock/TeamCalendarTab";
 import { PayrollSummaryTab } from "@/components/timeclock/PayrollSummaryTab";
@@ -53,7 +52,7 @@ export default function TimeClock() {
   const [kioskMode, setKioskMode] = useState(false);
   const [enrollmentCount, setEnrollmentCount] = useState(0);
   const [autoPunchCountdown, setAutoPunchCountdown] = useState(0);
-  const [showRegistration, setShowRegistration] = useState(false);
+  
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
 
   // Cache of profile IDs confirmed during this kiosk session
@@ -162,7 +161,6 @@ export default function TimeClock() {
     if (scanningRef.current) return;
     scanningRef.current = true;
     resetIdleTimer(); // Reset idle on scan activity
-    setShowRegistration(false);
     try {
       const result = await face.recognize();
       if (result && result.confidence >= 75) {
@@ -349,34 +347,14 @@ export default function TimeClock() {
               <ScanFace className="w-5 h-5" /> Scan Face
             </Button>
           )}
-          {showRegistration ? (
-            <FirstTimeRegistration
-              captureFrame={face.captureFrame}
-              onComplete={() => {
-                setShowRegistration(false);
-                face.reset();
-              }}
-              onCancel={() => { setShowRegistration(false); face.reset(); }}
-            />
-          ) : (face.state === "no_match" || face.state === "error" || face.state === "low_confidence") ? (
-            <FirstTimeRegistration
-              captureFrame={face.captureFrame}
-              onComplete={() => {
-                face.reset();
-              }}
-              onCancel={() => face.reset()}
-            />
-          ) : (
-            <FaceRecognitionResult
-              state={face.state}
-              matchResult={face.matchResult}
-              isClockedIn={matchedIsClockedIn}
-              onConfirmPunch={handleConfirmPunch}
-              onReject={() => { face.reset(); }}
-              onNotMe={() => { setShowRegistration(true); }}
-              autoPunchCountdown={autoPunchCountdown}
-            />
-          )}
+          <FaceRecognitionResult
+            state={face.state}
+            matchResult={face.matchResult}
+            isClockedIn={matchedIsClockedIn}
+            onConfirmPunch={handleConfirmPunch}
+            onReject={() => { face.reset(); }}
+            autoPunchCountdown={autoPunchCountdown}
+          />
         </div>
         <p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>
         <p className="text-[10px] text-muted-foreground/60 mt-2 text-center max-w-md leading-relaxed">
@@ -464,14 +442,7 @@ export default function TimeClock() {
               <ScanFace className="w-5 h-5" /> Scan to Punch
             </Button>
           )}
-          {face.state === "low_confidence" && (
-            <FirstTimeRegistration
-              captureFrame={face.captureFrame}
-              onComplete={() => face.reset()}
-              onCancel={() => face.reset()}
-            />
-          )}
-          {(face.state !== "idle" && face.state !== "scanning" && face.state !== "low_confidence") && (
+          {(face.state !== "idle" && face.state !== "scanning") && (
             <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={!!activeEntry} onConfirmPunch={handleConfirmPunch} onReject={() => face.reset()} autoPunchCountdown={autoPunchCountdown} />
           )}
         </div>

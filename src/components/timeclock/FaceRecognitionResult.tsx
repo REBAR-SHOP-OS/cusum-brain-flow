@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Check, AlertTriangle, X, LogIn, LogOut, UserPlus } from "lucide-react";
+import { Check, AlertTriangle, X, LogIn, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { RecognitionState } from "@/hooks/useFaceRecognition";
 
@@ -23,7 +23,6 @@ interface FaceRecognitionResultProps {
   isClockedIn: boolean;
   onConfirmPunch: (profileId: string) => void;
   onReject: () => void;
-  onNotMe?: () => void;
   autoPunchCountdown?: number;
 }
 
@@ -33,23 +32,22 @@ export function FaceRecognitionResult({
   isClockedIn,
   onConfirmPunch,
   onReject,
-  onNotMe,
   autoPunchCountdown,
 }: FaceRecognitionResultProps) {
-  if (state === "idle" || state === "scanning" || state === "low_confidence") return null;
+  if (state === "idle" || state === "scanning") return null;
 
-  if (state === "no_match" || state === "error") {
+  if (state === "no_match" || state === "error" || state === "low_confidence") {
     return (
       <Card className="border-destructive/30 bg-destructive/5">
         <CardContent className="p-6 text-center space-y-2">
           <X className="w-10 h-10 mx-auto text-destructive" />
           <h3 className="font-bold text-lg">
-            {state === "no_match" ? "No Match Found" : "Recognition Error"}
+            {state === "error" ? "Recognition Error" : "No Match Found"}
           </h3>
           <p className="text-sm text-muted-foreground">
-            {state === "no_match"
-              ? "Your face was not recognized. Please try again or use manual punch."
-              : "Something went wrong. Please try again."}
+            {state === "error"
+              ? "Something went wrong. Please try again."
+              : "Your face was not recognized. Please try again."}
           </p>
           <Button variant="outline" onClick={onReject} className="mt-2">
             Try Again
@@ -124,15 +122,9 @@ export function FaceRecognitionResult({
         )}
 
         <div className="flex gap-2">
-          {onNotMe && needsConfirmation ? (
-            <Button variant="outline" className="flex-1 gap-1" onClick={onNotMe}>
-              <UserPlus className="w-4 h-4" /> No, I'm new
-            </Button>
-          ) : (
-            <Button variant="outline" className="flex-1" onClick={onReject}>
-              <X className="w-4 h-4 mr-1" /> Cancel
-            </Button>
-          )}
+          <Button variant="outline" className="flex-1" onClick={onReject}>
+            <X className="w-4 h-4 mr-1" /> Cancel
+          </Button>
           <Button
             className={cn(
               "flex-1 gap-2 font-bold",
