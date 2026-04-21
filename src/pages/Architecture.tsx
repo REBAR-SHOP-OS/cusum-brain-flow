@@ -17,8 +17,9 @@ import {
 import "@xyflow/react/dist/style.css";
 import { AnimatePresence } from "framer-motion";
 import {
-  Plus, Search, X, Eye, EyeOff, Sparkles, Maximize, Minimize,
+  Plus, Search, X, Eye, EyeOff, Sparkles, Maximize, Minimize, Boxes,
 } from "lucide-react";
+import { EdgeFunctionsPanel } from "@/components/system-flow/EdgeFunctionsPanel";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
