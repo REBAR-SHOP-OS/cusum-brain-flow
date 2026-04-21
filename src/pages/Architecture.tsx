@@ -756,11 +756,11 @@ export default function Architecture() {
               color="rgba(34,211,238,0.08)"
             />
             <Controls position="top-right" />
-            {/* Fullscreen toggle button */}
-            <div className="absolute top-2 left-2 z-30 flex items-center gap-2">
+            {/* Top-center toolbar: Fullscreen + Edge Functions Explorer */}
+            <div className="pointer-events-none absolute left-1/2 top-3 z-50 flex -translate-x-1/2 items-center gap-2">
               <button
                 onClick={toggleFullscreen}
-                className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-1.5 text-[11px] font-medium text-zinc-300 backdrop-blur-sm transition-colors hover:bg-slate-900/90 hover:text-white"
+                className="pointer-events-auto flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-1.5 text-[11px] font-medium text-zinc-300 shadow-lg backdrop-blur-sm transition-colors hover:bg-slate-900/90 hover:text-white"
                 title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
               >
                 {isFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
@@ -768,11 +768,18 @@ export default function Architecture() {
               </button>
               <button
                 onClick={() => setShowFunctionsPanel(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-slate-950/80 px-3 py-1.5 text-[11px] font-medium text-cyan-300 backdrop-blur-sm transition-colors hover:border-cyan-400/60 hover:bg-slate-900/90 hover:text-cyan-200"
+                className="pointer-events-auto group relative flex items-center gap-1.5 rounded-lg border border-cyan-400/60 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-200 shadow-[0_0_20px_rgba(34,211,238,0.35)] backdrop-blur-sm transition-all hover:border-cyan-300 hover:bg-cyan-500/20 hover:text-white hover:shadow-[0_0_28px_rgba(34,211,238,0.6)]"
                 title="Edge Functions Explorer"
               >
+                <span className="absolute -left-1 -top-1 flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyan-400" />
+                </span>
                 <Boxes className="h-3.5 w-3.5" />
                 Functions
+                <span className="ml-1 rounded-sm border border-cyan-400/40 bg-cyan-400/10 px-1 py-0.5 font-mono text-[9px]">
+                  214+
+                </span>
               </button>
             </div>
             <MiniMap
