@@ -122,15 +122,9 @@ export function FaceRecognitionResult({
         )}
 
         <div className="flex gap-2">
-          {onNotMe && needsConfirmation ? (
-            <Button variant="outline" className="flex-1 gap-1" onClick={onNotMe}>
-              <UserPlus className="w-4 h-4" /> No, I'm new
-            </Button>
-          ) : (
-            <Button variant="outline" className="flex-1" onClick={onReject}>
-              <X className="w-4 h-4 mr-1" /> Cancel
-            </Button>
-          )}
+          <Button variant="outline" className="flex-1" onClick={onReject}>
+            <X className="w-4 h-4 mr-1" /> Cancel
+          </Button>
           <Button
             className={cn(
               "flex-1 gap-2 font-bold",
