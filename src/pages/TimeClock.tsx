@@ -113,13 +113,15 @@ export default function TimeClock() {
     fetchEnrollmentCount();
   }, [fetchEnrollmentCount]);
 
-  // Auto-enter kiosk mode if ?kiosk=1
+  const isKioskAccount = user?.email?.toLowerCase() === "ai@rebar.shop";
+
+  // Auto-enter kiosk mode if ?kiosk=1 OR if signed in as the dedicated kiosk account
   useEffect(() => {
-    if (searchParams.get("kiosk") === "1") {
+    if (isKioskAccount || searchParams.get("kiosk") === "1") {
       enterKioskMode();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isKioskAccount]);
 
   // Toggle face mode
   const handleFaceModeToggle = async (enabled: boolean) => {
