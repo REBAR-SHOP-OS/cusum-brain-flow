@@ -1,16 +1,29 @@
 
-# به‌روزرسانی GEMINI_API_KEY با کلید جدید
+# حذف کامل قابلیت Auto-Edit
 
-کلید جدیدی که از پروژهٔ Google Cloud تازه‌ساخته صادر کرده‌ای را در secret `GEMINI_API_KEY` ذخیره می‌کنم.
+## فرانت‌اند
+حذف از `src/components/ad-director/ChatPromptBar.tsx`:
+- import: `AutoEditDialog` و آیکون `Film` (اگر جای دیگری استفاده نشده).
+- state: `autoEditOpen` (خط ۲۰۱).
+- بلوک Tooltip دکمهٔ Auto-Edit (خطوط ۷۴۵–۷۵۹).
+- رندر `<AutoEditDialog ... />` (خط ۸۳۴).
 
-## اقدام
-- استفاده از ابزار `add_secret` برای جایگزینی مقدار `GEMINI_API_KEY` با کلید جدید (`AIza…`).
-- نیازی به redeploy نیست — secrets در runtime تزریق می‌شوند.
+## فایل‌های فرانت‌اند که کامل پاک می‌شوند
+- `src/components/ad-director/AutoEditDialog.tsx`
+- `src/components/ad-director/AutoEditUploadStep.tsx`
+- `src/components/ad-director/AutoEditStoryboardStep.tsx`
+- `src/lib/rawVideoUtils.ts` (مخصوص همین flow)
 
-## اعتبارسنجی پس از ذخیره
-1. صفحهٔ AI Extract → آپلود یک PDF تستی → باید بدون خطای 403 از مرحلهٔ Extracting عبور کند.
-2. اگر باز خطای «reported as leaked» آمد، یعنی کلید هنوز از پروژهٔ قبلی صادر شده و باید مرحلهٔ ساخت پروژهٔ جدید تکرار شود.
+## بکند (Edge Function)
+- حذف کامل `supabase/functions/auto-video-editor/` با `supabase--delete_edge_functions`.
+- `supabase/config.toml` نیازی به ویرایش ندارد (بلوکی برای این function ندارد).
 
 ## آنچه دست نمی‌خورد
-- هیچ کد frontend یا edge function تغییر نمی‌کند.
-- هیچ schema/RLS/storage دست‌کاری نمی‌شود.
+- بقیهٔ دکمه‌های ChatPromptBar (AI Prompt، Character، Create video).
+- بقیهٔ صفحهٔ `/ad-director` و سایر edge functionها.
+- هیچ schema/RLS/storage.
+
+## اعتبارسنجی
+1. صفحهٔ `/ad-director` لود شود — دکمهٔ سبز Auto-Edit دیگر دیده نشود.
+2. هیچ خطای import در console نباشد.
+3. در لیست Edge Functions، `auto-video-editor` حذف شده باشد.
