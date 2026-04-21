@@ -329,9 +329,11 @@ export default function TimeClock() {
               <Brain className="w-4 h-4" /> Memory
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={exitKioskMode}>
-            Exit Kiosk
-          </Button>
+          {!isKioskAccount && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={exitKioskMode}>
+              Exit Kiosk
+            </Button>
+          )}
         </div>
         {/* FaceMemoryPanel moved to shared scope below */}
         <div className="flex items-center gap-3 mb-6">
