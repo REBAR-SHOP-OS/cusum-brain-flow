@@ -14,7 +14,7 @@ import {
 } from "@/components/chat/ProductIcons";
 import { AIPromptDialog } from "./AIPromptDialog";
 import { CharacterPromptDialog } from "./CharacterPromptDialog";
-import { AutoEditDialog } from "./AutoEditDialog";
+
 import companyLogo from "@/assets/company-logo.png";
 import { classifyEdgeFunctionError } from "@/lib/edgeFunctionError";
 
@@ -198,7 +198,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
   const [characterPrompt, setCharacterPrompt] = useState("");
   const [characterDialogOpen, setCharacterDialogOpen] = useState(false);
   const [characterDraft, setCharacterDraft] = useState("");
-  const [autoEditOpen, setAutoEditOpen] = useState(false);
+  
   
   const introRef = useRef<HTMLInputElement>(null);
   const outroRef = useRef<HTMLInputElement>(null);
@@ -742,21 +742,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
               <TooltipContent side="top">Auto-write a cinematic prompt from your selections</TooltipContent>
             </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setAutoEditOpen(true)}
-                  className="h-10 rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-3 text-sm font-medium text-emerald-200 hover:bg-emerald-400/20 hover:text-emerald-100 gap-1.5 relative"
-                >
-                  <Film className="h-4 w-4" />
-                  Auto-Edit
-                  <span className="absolute -top-1.5 -right-1.5 rounded-full bg-emerald-500 px-1.5 py-px text-[9px] font-semibold leading-none text-white shadow-sm">NEW</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Upload a raw video and let AI edit it for you</TooltipContent>
-            </Tooltip>
+
 
             <Tooltip>
               <TooltipTrigger asChild>
@@ -831,7 +817,7 @@ export function ChatPromptBar({ onSubmit, disabled, starterPrompt, starterPrompt
         }
       />
 
-      <AutoEditDialog open={autoEditOpen} onOpenChange={setAutoEditOpen} />
+      
     </div>
   );
 }
