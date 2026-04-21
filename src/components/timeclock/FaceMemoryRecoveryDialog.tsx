@@ -4,7 +4,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, ImageOff, Trash2, CheckCircle2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
