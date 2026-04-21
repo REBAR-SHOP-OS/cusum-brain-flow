@@ -22,7 +22,6 @@ import { toast } from "sonner";
 import { FaceCamera } from "@/components/timeclock/FaceCamera";
 import { FaceEnrollment } from "@/components/timeclock/FaceEnrollment";
 import { FaceRecognitionResult } from "@/components/timeclock/FaceRecognitionResult";
-import { FirstTimeRegistration } from "@/components/timeclock/FirstTimeRegistration";
 import { MyLeaveTab } from "@/components/timeclock/MyLeaveTab";
 import { TeamCalendarTab } from "@/components/timeclock/TeamCalendarTab";
 import { PayrollSummaryTab } from "@/components/timeclock/PayrollSummaryTab";
