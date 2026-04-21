@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useProfiles } from "@/hooks/useProfiles";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Trash2, ImageOff, Brain, UserPlus, Camera, Check, X, ArrowLeft } from "lucide-react";
+import { Loader2, Trash2, ImageOff, Brain, UserPlus, Camera, Check, X, ArrowLeft, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { FaceMemoryRecoveryDialog } from "./FaceMemoryRecoveryDialog";
 
 const PHOTO_LABELS = ["Front", "Slight Left", "Slight Right"] as const;
 
@@ -51,8 +53,10 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
   const streamRef = useRef<MediaStream | null>(null);
 
   const { profiles, createProfile } = useProfiles();
+  const { isSuperAdmin } = useSuperAdmin();
   const [newPersonName, setNewPersonName] = useState("");
   const [creatingNewPerson, setCreatingNewPerson] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   const videoCallbackRef = useCallback((video: HTMLVideoElement | null) => {
     videoRef.current = video;
@@ -289,17 +293,35 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
             <Brain className="w-5 h-5 text-primary" />
             FACE MEMORY
           </SheetTitle>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <p className="text-xs text-muted-foreground">
               {groups.length} people enrolled · {groups.reduce((s, g) => s + g.enrollments.length, 0)} photos total
             </p>
-            {!adding && (
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setAdding(true)}>
-                <UserPlus className="w-3.5 h-3.5" /> Add Person
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {isSuperAdmin && !adding && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={() => setRecoveryOpen(true)}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Recover Orphans
+                </Button>
+              )}
+              {!adding && (
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setAdding(true)}>
+                  <UserPlus className="w-3.5 h-3.5" /> Add Person
+                </Button>
+              )}
+            </div>
           </div>
         </SheetHeader>
+
+        <FaceMemoryRecoveryDialog
+          open={recoveryOpen}
+          onOpenChange={setRecoveryOpen}
+          onAssigned={fetchData}
+        />
 
         <canvas ref={canvasRef} className="hidden" />
 
