@@ -23,6 +23,7 @@ interface FaceRecognitionResultProps {
   isClockedIn: boolean;
   onConfirmPunch: (profileId: string) => void;
   onReject: () => void;
+  onManualFallback?: () => void;
   autoPunchCountdown?: number;
 }
 
