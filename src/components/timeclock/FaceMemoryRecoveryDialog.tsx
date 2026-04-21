@@ -221,7 +221,7 @@ export function FaceMemoryRecoveryDialog({ open, onOpenChange, onAssigned }: Pro
               })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
