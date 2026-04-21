@@ -161,7 +161,6 @@ export default function TimeClock() {
     if (scanningRef.current) return;
     scanningRef.current = true;
     resetIdleTimer(); // Reset idle on scan activity
-    setShowRegistration(false);
     try {
       const result = await face.recognize();
       if (result && result.confidence >= 75) {
