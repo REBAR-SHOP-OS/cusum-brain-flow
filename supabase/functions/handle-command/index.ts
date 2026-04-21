@@ -1,7 +1,7 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
-import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
+import { z } from "npm:zod@3.23.8";
 
 interface CommandRequest {
   input: string;
