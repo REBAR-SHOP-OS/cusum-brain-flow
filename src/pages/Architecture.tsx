@@ -245,6 +245,7 @@ export default function Architecture() {
   const [lockedNode, setLockedNode] = useState<string | null>(null);
   const [showAllEdges, setShowAllEdges] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showFunctionsPanel, setShowFunctionsPanel] = useState(false);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((prev) => {
@@ -756,7 +757,7 @@ export default function Architecture() {
             />
             <Controls position="top-right" />
             {/* Fullscreen toggle button */}
-            <div className="absolute top-2 left-2 z-30">
+            <div className="absolute top-2 left-2 z-30 flex items-center gap-2">
               <button
                 onClick={toggleFullscreen}
                 className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-1.5 text-[11px] font-medium text-zinc-300 backdrop-blur-sm transition-colors hover:bg-slate-900/90 hover:text-white"
@@ -764,6 +765,14 @@ export default function Architecture() {
               >
                 {isFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
                 {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              </button>
+              <button
+                onClick={() => setShowFunctionsPanel(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-slate-950/80 px-3 py-1.5 text-[11px] font-medium text-cyan-300 backdrop-blur-sm transition-colors hover:border-cyan-400/60 hover:bg-slate-900/90 hover:text-cyan-200"
+                title="Edge Functions Explorer"
+              >
+                <Boxes className="h-3.5 w-3.5" />
+                Functions
               </button>
             </div>
             <MiniMap
