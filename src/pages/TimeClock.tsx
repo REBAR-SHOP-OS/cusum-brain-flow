@@ -377,15 +377,15 @@ export default function TimeClock() {
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
         </div>
         <div className="w-full max-w-lg mt-4">
-          {face.state === "idle" && !showManualFallback && (
-            <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
-              <ScanFace className="w-5 h-5" /> Scan Face
-            </Button>
+          {!showManualFallback && face.state === "scanning" && attemptCount > 0 && (
+            <p className="text-center text-sm text-muted-foreground mb-3">
+              Attempt {attemptCount} of {MAX_AUTO_ATTEMPTS}…
+            </p>
           )}
           {showManualFallback ? (
             <ManualNameFallback
               onSelect={(profileId) => handleConfirmPunch(profileId)}
-              onBack={() => { setShowManualFallback(false); face.reset(); }}
+              onBack={() => { setShowManualFallback(false); face.reset(); setAttemptCount(0); }}
             />
           ) : (
             <FaceRecognitionResult
@@ -393,7 +393,7 @@ export default function TimeClock() {
               matchResult={face.matchResult}
               isClockedIn={matchedIsClockedIn}
               onConfirmPunch={handleConfirmPunch}
-              onReject={() => { face.reset(); }}
+              onReject={() => { face.reset(); setAttemptCount(0); }}
               onManualFallback={() => setShowManualFallback(true)}
               autoPunchCountdown={autoPunchCountdown}
             />
