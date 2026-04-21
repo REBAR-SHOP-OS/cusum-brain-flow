@@ -348,34 +348,14 @@ export default function TimeClock() {
               <ScanFace className="w-5 h-5" /> Scan Face
             </Button>
           )}
-          {showRegistration ? (
-            <FirstTimeRegistration
-              captureFrame={face.captureFrame}
-              onComplete={() => {
-                setShowRegistration(false);
-                face.reset();
-              }}
-              onCancel={() => { setShowRegistration(false); face.reset(); }}
-            />
-          ) : (face.state === "no_match" || face.state === "error" || face.state === "low_confidence") ? (
-            <FirstTimeRegistration
-              captureFrame={face.captureFrame}
-              onComplete={() => {
-                face.reset();
-              }}
-              onCancel={() => face.reset()}
-            />
-          ) : (
-            <FaceRecognitionResult
-              state={face.state}
-              matchResult={face.matchResult}
-              isClockedIn={matchedIsClockedIn}
-              onConfirmPunch={handleConfirmPunch}
-              onReject={() => { face.reset(); }}
-              onNotMe={() => { setShowRegistration(true); }}
-              autoPunchCountdown={autoPunchCountdown}
-            />
-          )}
+          <FaceRecognitionResult
+            state={face.state}
+            matchResult={face.matchResult}
+            isClockedIn={matchedIsClockedIn}
+            onConfirmPunch={handleConfirmPunch}
+            onReject={() => { face.reset(); }}
+            autoPunchCountdown={autoPunchCountdown}
+          />
         </div>
         <p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>
         <p className="text-[10px] text-muted-foreground/60 mt-2 text-center max-w-md leading-relaxed">
