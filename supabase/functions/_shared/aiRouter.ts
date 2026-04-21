@@ -258,11 +258,15 @@ export async function callAIStream(opts: AIRequestOptions): Promise<Response> {
           continue;
         }
         // Fallback on 429/503/504 after retries exhausted
-        if (e.status === 429 || e.status === 503 || e.status === 504) {
+        if (e.status === 429 || e.status === 403 || e.status === 503 || e.status === 504) {
           const fb = opts.fallback || { provider: "gemini" as AIProvider, model: "gemini-2.5-flash" };
           // Don't fallback to the same model
           if (fb.provider !== provider || fb.model !== model) {
-            console.warn(`AI stream ${model} error ${e.status}, falling back to ${fb.model}`);
+            if (e.status === 403) {
+              console.warn(`[gemini-403-fallback] AI stream ${provider}/${model} returned 403 (likely leaked/revoked API key) — falling back to ${fb.provider}/${fb.model}`);
+            } else {
+              console.warn(`AI stream ${model} error ${e.status}, falling back to ${fb.model}`);
+            }
             return await _callAIStreamSingle(fb.provider, fb.model, opts);
           }
         }
