@@ -32,23 +32,22 @@ export function FaceRecognitionResult({
   isClockedIn,
   onConfirmPunch,
   onReject,
-  onNotMe,
   autoPunchCountdown,
 }: FaceRecognitionResultProps) {
-  if (state === "idle" || state === "scanning" || state === "low_confidence") return null;
+  if (state === "idle" || state === "scanning") return null;
 
-  if (state === "no_match" || state === "error") {
+  if (state === "no_match" || state === "error" || state === "low_confidence") {
     return (
       <Card className="border-destructive/30 bg-destructive/5">
         <CardContent className="p-6 text-center space-y-2">
           <X className="w-10 h-10 mx-auto text-destructive" />
           <h3 className="font-bold text-lg">
-            {state === "no_match" ? "No Match Found" : "Recognition Error"}
+            {state === "error" ? "Recognition Error" : "No Match Found"}
           </h3>
           <p className="text-sm text-muted-foreground">
-            {state === "no_match"
-              ? "Your face was not recognized. Please try again or use manual punch."
-              : "Something went wrong. Please try again."}
+            {state === "error"
+              ? "Something went wrong. Please try again."
+              : "Your face was not recognized. Please try again."}
           </p>
           <Button variant="outline" onClick={onReject} className="mt-2">
             Try Again
