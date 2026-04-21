@@ -227,9 +227,39 @@ export default function TimeClock() {
     face.reset();
     setAutoPunchCountdown(0);
     setShowManualFallback(false);
+    setAttemptCount(0);
 
-    // Kiosk resets — user must tap "Scan Face" for next person
+    // Kiosk resets — auto-scan loop will restart
   };
+
+  // Kiosk: auto-start scanning ~1s after camera is ready
+  useEffect(() => {
+    if (!kioskMode || kioskSleeping || showManualFallback) return;
+    if (!face.cameraStream) return;
+    if (face.state !== "idle") return;
+    if (attemptCount > 0) return; // first attempt only here
+    const t = setTimeout(() => {
+      setAttemptCount(1);
+      handleScan();
+    }, 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kioskMode, kioskSleeping, showManualFallback, face.cameraStream, face.state]);
+
+  // Kiosk: auto-retry on no_match / error up to MAX_AUTO_ATTEMPTS
+  useEffect(() => {
+    if (!kioskMode || kioskSleeping || showManualFallback) return;
+    if (face.state !== "no_match" && face.state !== "error") return;
+    if (attemptCount >= MAX_AUTO_ATTEMPTS) return;
+    const t = setTimeout(() => {
+      face.reset();
+      setAttemptCount((c) => c + 1);
+      handleScan();
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [face.state, kioskMode, kioskSleeping, showManualFallback, attemptCount]);
+
 
   // Build status map
   const statusMap = new Map<string, { clocked_in: boolean; clock_in: string; clock_out: string | null }>();
