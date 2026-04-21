@@ -56,6 +56,8 @@ export default function TimeClock() {
   
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [showManualFallback, setShowManualFallback] = useState(false);
+  const [attemptCount, setAttemptCount] = useState(0);
+  const MAX_AUTO_ATTEMPTS = 3;
 
   // Cache of profile IDs confirmed during this kiosk session
   const confirmedProfilesRef = useRef<Set<string>>(new Set());
@@ -225,9 +227,39 @@ export default function TimeClock() {
     face.reset();
     setAutoPunchCountdown(0);
     setShowManualFallback(false);
+    setAttemptCount(0);
 
-    // Kiosk resets — user must tap "Scan Face" for next person
+    // Kiosk resets — auto-scan loop will restart
   };
+
+  // Kiosk: auto-start scanning ~1s after camera is ready
+  useEffect(() => {
+    if (!kioskMode || kioskSleeping || showManualFallback) return;
+    if (!face.cameraStream) return;
+    if (face.state !== "idle") return;
+    if (attemptCount > 0) return; // first attempt only here
+    const t = setTimeout(() => {
+      setAttemptCount(1);
+      handleScan();
+    }, 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kioskMode, kioskSleeping, showManualFallback, face.cameraStream, face.state]);
+
+  // Kiosk: auto-retry on no_match / error up to MAX_AUTO_ATTEMPTS
+  useEffect(() => {
+    if (!kioskMode || kioskSleeping || showManualFallback) return;
+    if (face.state !== "no_match" && face.state !== "error") return;
+    if (attemptCount >= MAX_AUTO_ATTEMPTS) return;
+    const t = setTimeout(() => {
+      face.reset();
+      setAttemptCount((c) => c + 1);
+      handleScan();
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [face.state, kioskMode, kioskSleeping, showManualFallback, attemptCount]);
+
 
   // Build status map
   const statusMap = new Map<string, { clocked_in: boolean; clock_in: string; clock_out: string | null }>();
@@ -345,15 +377,15 @@ export default function TimeClock() {
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
         </div>
         <div className="w-full max-w-lg mt-4">
-          {face.state === "idle" && !showManualFallback && (
-            <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
-              <ScanFace className="w-5 h-5" /> Scan Face
-            </Button>
+          {!showManualFallback && face.state === "scanning" && attemptCount > 0 && (
+            <p className="text-center text-sm text-muted-foreground mb-3">
+              Attempt {attemptCount} of {MAX_AUTO_ATTEMPTS}…
+            </p>
           )}
           {showManualFallback ? (
             <ManualNameFallback
               onSelect={(profileId) => handleConfirmPunch(profileId)}
-              onBack={() => { setShowManualFallback(false); face.reset(); }}
+              onBack={() => { setShowManualFallback(false); face.reset(); setAttemptCount(0); }}
             />
           ) : (
             <FaceRecognitionResult
@@ -361,7 +393,7 @@ export default function TimeClock() {
               matchResult={face.matchResult}
               isClockedIn={matchedIsClockedIn}
               onConfirmPunch={handleConfirmPunch}
-              onReject={() => { face.reset(); }}
+              onReject={() => { face.reset(); setAttemptCount(0); }}
               onManualFallback={() => setShowManualFallback(true)}
               autoPunchCountdown={autoPunchCountdown}
             />
