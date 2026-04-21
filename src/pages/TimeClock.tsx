@@ -38,7 +38,7 @@ function formatDuration(mins: number) {
 }
 
 export default function TimeClock() {
-  const { allEntries, activeEntry, loading, punching, clockIn, clockOut, adminClockOut, myProfile, profiles } = useTimeClock();
+  const { allEntries, activeEntry, loading, punching, adminClockOut, myProfile, profiles } = useTimeClock();
   const leave = useLeaveManagement();
   const { isAdmin } = useUserRole();
   const { user } = useAuth();
@@ -48,7 +48,7 @@ export default function TimeClock() {
   const [clockOutTarget, setClockOutTarget] = useState<{ id: string; name: string } | null>(null);
   const [searchParams] = useSearchParams();
 
-  const [faceMode, setFaceMode] = useState(false);
+  const faceMode = true;
   const [kioskMode, setKioskMode] = useState(false);
   const [enrollmentCount, setEnrollmentCount] = useState(0);
   const [autoPunchCountdown, setAutoPunchCountdown] = useState(0);
@@ -122,21 +122,22 @@ export default function TimeClock() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isKioskAccount]);
 
-  // Toggle face mode
-  const handleFaceModeToggle = async (enabled: boolean) => {
-    setFaceMode(enabled);
-    if (enabled) {
-      await face.startCamera();
-    } else {
-      face.stopCamera();
-      face.reset();
+  // HARD RULE: Time Clock is Face-ID-only. Auto-start camera for every user
+  // so the manual UI is never reachable. See mem://features/timeclock/face-only-enforcement
+  useEffect(() => {
+    if (kioskMode || isKioskAccount) return;
+    if (!face.cameraStream) {
+      face.startCamera();
     }
-  };
+    return () => {
+      // Camera lifecycle is owned by useFaceRecognition's own cleanup
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kioskMode, isKioskAccount]);
 
   // Toggle kiosk mode
   const enterKioskMode = async () => {
     setKioskMode(true);
-    setFaceMode(true);
     await face.startCamera();
     try {
       document.documentElement.requestFullscreen?.();
@@ -421,11 +422,6 @@ export default function TimeClock() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <ScanFace className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">Face ID</span>
-              <Switch checked={faceMode} onCheckedChange={handleFaceModeToggle} />
-            </div>
             {user?.email?.toLowerCase() === "ai@rebar.shop" && (
               <Button variant="outline" size="sm" className="gap-1" onClick={enterKioskMode}>
                 <Maximize className="w-3.5 h-3.5" /> Kiosk
@@ -454,81 +450,25 @@ export default function TimeClock() {
         </div>
       </div>
 
-      {/* Face Mode */}
-      {faceMode ? (
-        <div className="relative z-10 w-full max-w-4xl px-6 py-4 space-y-4">
-          <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
-          {face.state === "idle" && (
-            <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
-              <ScanFace className="w-5 h-5" /> Scan to Punch
-            </Button>
-          )}
-          {face.state === "low_confidence" && (
-            <FirstTimeRegistration
-              captureFrame={face.captureFrame}
-              onComplete={() => face.reset()}
-              onCancel={() => face.reset()}
-            />
-          )}
-          {(face.state !== "idle" && face.state !== "scanning" && face.state !== "low_confidence") && (
-            <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={!!activeEntry} onConfirmPunch={handleConfirmPunch} onReject={() => face.reset()} autoPunchCountdown={autoPunchCountdown} />
-          )}
-        </div>
-      ) : (
-        /* Manual Mode - My Clock Card */
-        <div className="relative z-10 w-full max-w-4xl px-6 py-4">
-          <Card className="border-primary/20 bg-card/80 backdrop-blur-sm">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Avatar className="w-14 h-14">
-                    <AvatarImage src={myProfile?.avatar_url || ""} />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold">
-                      {getInitials(myProfile?.full_name || "ME")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h2 className="text-xl font-bold">{myProfile?.full_name || "You"}</h2>
-                    <div className="flex items-center gap-2 mt-1">
-                      {activeEntry ? (
-                        <>
-                          <Badge className="bg-green-500/15 text-green-500 border-green-500/30">
-                            <Timer className="w-3 h-3 mr-1" /> Clocked In
-                          </Badge>
-                          <span className="text-sm text-muted-foreground">
-                            since {format(new Date(activeEntry.clock_in), "h:mm a")}
-                            {" · "}
-                            {formatDuration(differenceInMinutes(now, new Date(activeEntry.clock_in)))}
-                            {(() => {
-                              const myTotalMins = allEntries.filter(e => e.profile_id === myProfile?.id).reduce((sum, e) => {
-                                const end = e.clock_out ? new Date(e.clock_out) : now;
-                                return sum + differenceInMinutes(end, new Date(e.clock_in));
-                              }, 0);
-                              const currentElapsed = differenceInMinutes(now, new Date(activeEntry.clock_in));
-                              return myTotalMins > currentElapsed ? ` · Total: ${formatDuration(myTotalMins)}` : "";
-                            })()}
-                          </span>
-                        </>
-                      ) : (
-                        <Badge variant="secondary" className="text-muted-foreground">Not Clocked In</Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {activeEntry ? (
-                  <Button size="lg" variant="destructive" className="gap-2 text-base font-bold px-8" onClick={clockOut} disabled={punching}>
-                    <LogOut className="w-5 h-5" /> Clock Out
-                  </Button>
-                ) : (
-                  <Button size="lg" className="gap-2 text-base font-bold px-8 bg-green-600 hover:bg-green-700 text-white" onClick={clockIn} disabled={punching}>
-                    <LogIn className="w-5 h-5" /> Clock In
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* Face Mode (only mode — manual punch removed permanently) */}
+      <div className="relative z-10 w-full max-w-4xl px-6 py-4 space-y-4">
+        <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
+        {face.state === "idle" && (
+          <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
+            <ScanFace className="w-5 h-5" /> Scan to Punch
+          </Button>
+        )}
+        {face.state === "low_confidence" && (
+          <FirstTimeRegistration
+            captureFrame={face.captureFrame}
+            onComplete={() => face.reset()}
+            onCancel={() => face.reset()}
+          />
+        )}
+        {(face.state !== "idle" && face.state !== "scanning" && face.state !== "low_confidence") && (
+          <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={!!activeEntry} onConfirmPunch={handleConfirmPunch} onReject={() => face.reset()} autoPunchCountdown={autoPunchCountdown} />
+        )}
+      </div>
 
       {/* Tabbed Content: Team Status / My Leave / Team Calendar */}
       <div className="relative z-10 w-full max-w-4xl px-6 py-4 flex-1">
