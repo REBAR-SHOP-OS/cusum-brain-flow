@@ -4,7 +4,7 @@ import { useProfiles } from "@/hooks/useProfiles";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, ImageOff, Trash2, CheckCircle2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -122,7 +122,7 @@ export function FaceMemoryRecoveryDialog({ open, onOpenChange, onAssigned }: Pro
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 p-6">
+        <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -221,7 +221,7 @@ export function FaceMemoryRecoveryDialog({ open, onOpenChange, onAssigned }: Pro
               })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
