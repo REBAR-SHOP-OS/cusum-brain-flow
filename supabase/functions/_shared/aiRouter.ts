@@ -125,9 +125,10 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        if ((e.status === 429 || e.status === 403 || e.status === 503 || e.status === 504) && opts.fallback) {
-          if (e.status === 403) {
-            console.warn(`[gemini-403-fallback] AI ${provider}/${model} returned 403 (likely leaked/revoked API key) — falling back to ${opts.fallback.provider}/${opts.fallback.model}`);
+        const isInvalidKey400 = e.status === 400 && /API_KEY_INVALID|API key expired|API key not valid/i.test(e.message);
+        if ((e.status === 429 || e.status === 403 || e.status === 503 || e.status === 504 || isInvalidKey400) && opts.fallback) {
+          if (e.status === 403 || isInvalidKey400) {
+            console.warn(`[gemini-key-fallback] AI ${provider}/${model} returned ${e.status} (likely leaked/expired/invalid API key) — falling back to ${opts.fallback.provider}/${opts.fallback.model}`);
           } else {
             console.warn(`AI ${model} error ${e.status}, falling back to ${opts.fallback.model}`);
           }
