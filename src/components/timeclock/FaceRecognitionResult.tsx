@@ -44,22 +44,15 @@ export function FaceRecognitionResult({
         <CardContent className="p-6 text-center space-y-3">
           <X className="w-10 h-10 mx-auto text-destructive" />
           <h3 className="font-bold text-lg">
-            {state === "error" ? "Recognition Error" : "No Match Found"}
+            {state === "error" ? "Recognition Error" : "Face Not Recognized"}
           </h3>
           <p className="text-sm text-muted-foreground">
-            {state === "error"
-              ? "Something went wrong. Please try again."
-              : "Your face was not recognized. Please try again or type your name."}
+            Please look directly at the camera and try again. If the problem persists, ask an admin to re-enroll your face.
           </p>
-          <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
+          <div className="flex justify-center pt-1">
             <Button variant="outline" onClick={onReject}>
               Try Again
             </Button>
-            {onManualFallback && (
-              <Button variant="default" onClick={onManualFallback}>
-                Type My Name
-              </Button>
-            )}
           </div>
         </CardContent>
       </Card>

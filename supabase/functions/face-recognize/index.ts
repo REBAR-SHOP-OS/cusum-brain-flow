@@ -192,6 +192,7 @@ Call face_match_result with your answer.`,
         messages: [{ role: "user", content: contentParts }],
         tools: [toolDef],
         toolChoice: { type: "function", function: { name: "face_match_result" } },
+        fallback: { provider: "gpt", model: "gpt-5-mini" },
       });
       console.log(`[face-recognize] AI response: toolCalls=${aiResult.toolCalls?.length}, content=${aiResult.content?.slice(0, 200)}`);
     } catch (aiErr) {
