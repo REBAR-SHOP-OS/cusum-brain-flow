@@ -1,59 +1,58 @@
 
 
-# Manual Name Fallback for Face ID Failure
+# اسکن خودکار + فقط در صورت نشناختن، درخواست نام
+
+## مشکل فعلی
+کیوسک Face ID فعلاً منتظر کلیک کاربر روی دکمهٔ **Scan Face** می‌ماند. کاربر باید به‌صورت دستی scan را trigger کند. همچنین گزینهٔ "Type My Name" حتی قبل از تلاش برای اسکن هم در دسترس قرار می‌گیرد (پس از error/no_match).
 
 ## رفتار جدید
-وقتی Face ID نتواند صورتی را تشخیص دهد (`no_match` / `error` / `low_confidence`)، علاوه بر دکمهٔ **Try Again**، یک دکمهٔ ثانویه **Type My Name** نمایش داده می‌شود. این دکمه فرمی باز می‌کند که:
 
-1. کارمند بخشی از **نام** خود را تایپ می‌کند.
-2. سیستم لیست enrolled افراد در Face Memory را با تطابق **case-insensitive substring** فیلتر می‌کند.
-3. فقط profile‌هایی که حداقل یک enrollment فعال در `face_enrollments` دارند نمایش داده می‌شوند.
-4. اگر هیچ تطابقی نبود: پیغام «No enrolled employee found».
-5. اگر تطابق‌ها وجود داشت: کارت‌هایی با avatar + full name نمایش داده می‌شود.
-6. کارمند روی نام خودش کلیک می‌کند → کارت تأیید ظاهر می‌شود با دکمهٔ **Clock In** یا **Clock Out**.
-7. تأیید → فراخوانی همان `kiosk-punch` edge function → punch ثبت می‌شود.
+### فاز ۱ — اسکن خودکار و دقیق
+1. ورود به کیوسک → دوربین **به‌صورت خودکار** فعال می‌شود (بدون نیاز به کلیک).
+2. پس از آماده شدن دوربین (~۱ ثانیه برای stabilization)، اسکن **به‌صورت خودکار** آغاز می‌شود.
+3. اگر تشخیص confidence پایین داشت یا fail شد، سیستم **به‌صورت خودکار تا ۳ بار** تلاش مجدد می‌کند (با فاصلهٔ ۱.۵ ثانیه بین هر تلاش) تا به نتیجهٔ قطعی برسد.
+4. در طول اسکن، overlay واضح "Scanning..." با انیمیشن دایرهٔ نقطه‌چین نمایش داده می‌شود.
 
-## محدودیت‌ها (Anti-Abuse)
-- دکمهٔ «Type My Name» فقط بعد از شکست Face ID ظاهر می‌شود — هرگز به‌عنوان مسیر اصلی.
-- فقط افرادی که در Face Memory (جدول `face_enrollments`) ثبت شده‌اند قابل انتخاب هستند.
-- افراد بدون enrollment اصلاً در لیست ظاهر نمی‌شوند.
-
-## به‌روزرسانی قانون Hard Rule
-قانون `mem://features/timeclock/face-only-enforcement` به‌روزرسانی می‌شود تا fallback نام‌محور فقط پس از شکست Face ID و فقط برای کاربران enrolled مجاز باشد.
+### فاز ۲ — فقط در صورت شکست قطعی
+- پس از ۳ تلاش ناموفق (یا `no_match` صریح)، کارت قرمز نمایش داده می‌شود با دو دکمه:
+  - **Try Again** → ریست و شروع مجدد چرخهٔ اسکن خودکار
+  - **Type My Name** → ورود به فرم انتخاب نام (مسیر فعلی `ManualNameFallback`)
+- در حالت `matched` یا `low_confidence` بالا (۷۵٪+)، رفتار فعلی حفظ می‌شود (auto-punch countdown یا دکمهٔ تأیید).
 
 ## تغییرات کد
 
-### 1. کامپوننت جدید: `src/components/timeclock/ManualNameFallback.tsx`
-- یک input field برای تایپ نام.
-- Query به `face_enrollments` (join با `profiles`) برای گرفتن لیست افراد enrolled.
-- فیلتر client-side بر اساس متن تایپ‌شده (case-insensitive substring match).
-- نمایش کارت‌های تطابق‌یافته با avatar و نام.
-- کلیک روی هر کارت → callback به parent با `profileId` انتخاب‌شده.
-- دکمهٔ Back برای بازگشت به صفحهٔ اسکن.
+### 1. `src/pages/TimeClock.tsx` (بخش kiosk، خطوط ~۳۲۰–۴۲۰)
+- اضافه کردن `useEffect` که در mount کیوسک:
+  - `face.startCamera()` را خودکار فراخوانی می‌کند.
+  - پس از ۱ ثانیه delay (برای stabilization دوربین)، `face.recognize()` را trigger می‌کند.
+- اضافه کردن state `attemptCount` (شمارندهٔ تلاش‌های خودکار، حداکثر ۳).
+- `useEffect` دوم که وقتی `face.state === "no_match"` یا `"error"` و `attemptCount < 3`:
+  - پس از ۱.۵ ثانیه delay، `face.recognize()` دوباره اجرا می‌شود.
+  - `attemptCount` افزایش می‌یابد.
+- وقتی `attemptCount >= 3` یا state `matched`/`low_confidence` شد، چرخهٔ خودکار متوقف می‌شود.
+- ریست `attemptCount` در `handleConfirmPunch` و `face.reset()`.
+- **حذف یا مخفی کردن** دکمهٔ دستی **Scan Face** در حالت kiosk (چون اسکن خودکار است). در حالت non-kiosk دست‌نخورده باقی می‌ماند.
+- دکمهٔ **Try Again** (در `FaceRecognitionResult`) باید `attemptCount = 0` و `face.reset()` کند تا چرخهٔ خودکار از نو شروع شود.
 
-### 2. ویرایش: `src/components/timeclock/FaceRecognitionResult.tsx`
-- اضافه کردن prop جدید `onManualFallback: () => void`.
-- در بلوک `no_match` / `error` / `low_confidence`: اضافه کردن دکمهٔ **Type My Name** کنار دکمهٔ **Try Again**.
+### 2. `src/components/timeclock/FaceRecognitionResult.tsx`
+- بدون تغییر رفتاری — همان دکمه‌های Try Again + Type My Name حفظ می‌شوند.
+- (اختیاری) نمایش متن "Attempt 2 of 3..." در حالت scanning بین تلاش‌ها برای شفافیت.
 
-### 3. ویرایش: `src/pages/TimeClock.tsx`
-- اضافه کردن state `showManualFallback` (boolean).
-- در بخش kiosk: وقتی `showManualFallback === true`، رندر `ManualNameFallback` به جای `FaceRecognitionResult`.
-- وقتی کاربر از `ManualNameFallback` یک profile انتخاب کرد، همان `handleConfirmPunch(profileId)` فراخوانی می‌شود.
-- وقتی کاربر Back می‌زند، `showManualFallback = false` و `face.reset()`.
-
-### 4. ویرایش: `mem://features/timeclock/face-only-enforcement.md`
-- به‌روزرسانی قانون: fallback نام‌محور پس از شکست Face ID فقط برای enrolled users مجاز است.
+### 3. `src/components/timeclock/FaceCamera.tsx`
+- بدون تغییر — قبلاً `scanning` overlay را پشتیبانی می‌کند.
 
 ## آنچه دست نمی‌خورد
-- `face-recognize` edge function
-- `kiosk-punch` edge function (همان endpoint استفاده می‌شود)
-- `FaceMemoryPanel.tsx` و `FaceEnrollment.tsx`
-- `useFaceRecognition.ts`
-- هیچ migration دیتابیسی لازم نیست — فقط read از `face_enrollments` + `profiles`
+- `useFaceRecognition.ts` — منطق capture/recognize کاملاً حفظ می‌شود.
+- `face-recognize` و `kiosk-punch` edge functions.
+- `ManualNameFallback.tsx` — همان کامپوننت موجود استفاده می‌شود.
+- حالت non-kiosk (`/timeclock` بدون `?kiosk=1`) — رفتار فعلی (دکمهٔ دستی Scan Face) حفظ می‌شود.
+- `FaceMemoryPanel.tsx`, `accessPolicies.ts` — بدون تغییر.
 
 ## اعتبارسنجی
-1. در کیوسک، Face scan → شکست → کارت قرمز ظاهر می‌شود با **Try Again** + **Type My Name**.
-2. کلیک **Type My Name** → فرم نام → تایپ «Kou» → کارت «Kourosh Zand» ظاهر → کلیک → تأیید clock in/out.
-3. تایپ نام فردی که enroll نشده → «No enrolled employee found».
-4. بدون شکست Face ID، دکمهٔ Type My Name در دسترس نیست.
+1. باز کردن `/timeclock?kiosk=1` → دوربین خودکار روشن می‌شود → پس از ~۱ ثانیه اسکن خودکار آغاز می‌شود.
+2. صورت enrolled → match → کارت تأیید + auto-punch.
+3. صورت ناشناس → ۳ بار تلاش خودکار (با indicator "Attempt X of 3") → نمایش کارت قرمز با دکمه‌های Try Again و Type My Name.
+4. کلیک Try Again → چرخهٔ خودکار از نو.
+5. کلیک Type My Name → فرم انتخاب نام (بدون تغییر).
+6. در `/timeclock` بدون kiosk → رفتار فعلی (دکمهٔ دستی) حفظ.
 
