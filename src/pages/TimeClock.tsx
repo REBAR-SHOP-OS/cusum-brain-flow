@@ -345,20 +345,27 @@ export default function TimeClock() {
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
         </div>
         <div className="w-full max-w-lg mt-4">
-          {face.state === "idle" && (
+          {face.state === "idle" && !showManualFallback && (
             <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
               <ScanFace className="w-5 h-5" /> Scan Face
             </Button>
           )}
-          <FaceRecognitionResult
-            state={face.state}
-            matchResult={face.matchResult}
-            isClockedIn={matchedIsClockedIn}
-            onConfirmPunch={handleConfirmPunch}
-            onReject={() => { face.reset(); }}
-            autoPunchCountdown={autoPunchCountdown}
-          />
-        </div>
+          {showManualFallback ? (
+            <ManualNameFallback
+              onSelect={(profileId) => handleConfirmPunch(profileId)}
+              onBack={() => { setShowManualFallback(false); face.reset(); }}
+            />
+          ) : (
+            <FaceRecognitionResult
+              state={face.state}
+              matchResult={face.matchResult}
+              isClockedIn={matchedIsClockedIn}
+              onConfirmPunch={handleConfirmPunch}
+              onReject={() => { face.reset(); }}
+              onManualFallback={() => setShowManualFallback(true)}
+              autoPunchCountdown={autoPunchCountdown}
+            />
+          )}
         <p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>
         <p className="text-[10px] text-muted-foreground/60 mt-2 text-center max-w-md leading-relaxed">
           Your photo and name are securely stored in this app's memory for clock-in and clock-out purposes.
