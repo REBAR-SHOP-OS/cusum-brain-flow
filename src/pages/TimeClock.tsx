@@ -224,7 +224,6 @@ export default function TimeClock() {
 
     face.reset();
     setAutoPunchCountdown(0);
-    setShowManualFallback(false);
     setAttemptCount(0);
 
     // Kiosk resets — auto-scan loop will restart
@@ -232,7 +231,7 @@ export default function TimeClock() {
 
   // Kiosk: auto-start scanning ~1s after camera is ready
   useEffect(() => {
-    if (!kioskMode || kioskSleeping || showManualFallback) return;
+    if (!kioskMode || kioskSleeping) return;
     if (!face.cameraStream) return;
     if (face.state !== "idle") return;
     if (attemptCount > 0) return; // first attempt only here
@@ -242,11 +241,11 @@ export default function TimeClock() {
     }, 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kioskMode, kioskSleeping, showManualFallback, face.cameraStream, face.state]);
+  }, [kioskMode, kioskSleeping, face.cameraStream, face.state]);
 
   // Kiosk: auto-retry on no_match / error up to MAX_AUTO_ATTEMPTS
   useEffect(() => {
-    if (!kioskMode || kioskSleeping || showManualFallback) return;
+    if (!kioskMode || kioskSleeping) return;
     if (face.state !== "no_match" && face.state !== "error") return;
     if (attemptCount >= MAX_AUTO_ATTEMPTS) return;
     const t = setTimeout(() => {
@@ -256,7 +255,7 @@ export default function TimeClock() {
     }, 1500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [face.state, kioskMode, kioskSleeping, showManualFallback, attemptCount]);
+  }, [face.state, kioskMode, kioskSleeping, attemptCount]);
 
 
   // Build status map
@@ -375,27 +374,19 @@ export default function TimeClock() {
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
         </div>
         <div className="w-full max-w-lg mt-4">
-          {!showManualFallback && face.state === "scanning" && attemptCount > 0 && (
+          {face.state === "scanning" && attemptCount > 0 && (
             <p className="text-center text-sm text-muted-foreground mb-3">
               Attempt {attemptCount} of {MAX_AUTO_ATTEMPTS}…
             </p>
           )}
-          {showManualFallback ? (
-            <ManualNameFallback
-              onSelect={(profileId) => handleConfirmPunch(profileId)}
-              onBack={() => { setShowManualFallback(false); face.reset(); setAttemptCount(0); }}
-            />
-          ) : (
-            <FaceRecognitionResult
-              state={face.state}
-              matchResult={face.matchResult}
-              isClockedIn={matchedIsClockedIn}
-              onConfirmPunch={handleConfirmPunch}
-              onReject={() => { face.reset(); setAttemptCount(0); }}
-              onManualFallback={() => setShowManualFallback(true)}
-              autoPunchCountdown={autoPunchCountdown}
-            />
-          )}
+          <FaceRecognitionResult
+            state={face.state}
+            matchResult={face.matchResult}
+            isClockedIn={matchedIsClockedIn}
+            onConfirmPunch={handleConfirmPunch}
+            onReject={() => { face.reset(); setAttemptCount(0); }}
+            autoPunchCountdown={autoPunchCountdown}
+          />
         </div>
         <p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>
         <p className="text-[10px] text-muted-foreground/60 mt-2 text-center max-w-md leading-relaxed">
@@ -478,28 +469,20 @@ export default function TimeClock() {
       {faceMode ? (
         <div className="relative z-10 w-full max-w-4xl px-6 py-4 space-y-4">
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
-          {face.state === "idle" && !showManualFallback && (
+          {face.state === "idle" && (
             <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
               <ScanFace className="w-5 h-5" /> Scan to Punch
             </Button>
           )}
-          {showManualFallback ? (
-            <ManualNameFallback
-              onSelect={(profileId) => handleConfirmPunch(profileId)}
-              onBack={() => { setShowManualFallback(false); face.reset(); }}
+          {(face.state !== "idle" && face.state !== "scanning") && (
+            <FaceRecognitionResult
+              state={face.state}
+              matchResult={face.matchResult}
+              isClockedIn={!!activeEntry}
+              onConfirmPunch={handleConfirmPunch}
+              onReject={() => face.reset()}
+              autoPunchCountdown={autoPunchCountdown}
             />
-          ) : (
-            (face.state !== "idle" && face.state !== "scanning") && (
-              <FaceRecognitionResult
-                state={face.state}
-                matchResult={face.matchResult}
-                isClockedIn={!!activeEntry}
-                onConfirmPunch={handleConfirmPunch}
-                onReject={() => face.reset()}
-                onManualFallback={() => setShowManualFallback(true)}
-                autoPunchCountdown={autoPunchCountdown}
-              />
-            )
           )}
         </div>
       ) : (
