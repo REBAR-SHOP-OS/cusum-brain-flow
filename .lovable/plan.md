@@ -1,58 +1,58 @@
 
 
-# اسکن خودکار + فقط در صورت نشناختن، درخواست نام
+# بازگرداندن عکس Face Memory برای Kourosh
 
-## مشکل فعلی
-کیوسک Face ID فعلاً منتظر کلیک کاربر روی دکمهٔ **Scan Face** می‌ماند. کاربر باید به‌صورت دستی scan را trigger کند. همچنین گزینهٔ "Type My Name" حتی قبل از تلاش برای اسکن هم در دسترس قرار می‌گیرد (پس از error/no_match).
+## یافته‌های تشخیصی
 
-## رفتار جدید
+بررسی دیتابیس و storage نشان داد:
 
-### فاز ۱ — اسکن خودکار و دقیق
-1. ورود به کیوسک → دوربین **به‌صورت خودکار** فعال می‌شود (بدون نیاز به کلیک).
-2. پس از آماده شدن دوربین (~۱ ثانیه برای stabilization)، اسکن **به‌صورت خودکار** آغاز می‌شود.
-3. اگر تشخیص confidence پایین داشت یا fail شد، سیستم **به‌صورت خودکار تا ۳ بار** تلاش مجدد می‌کند (با فاصلهٔ ۱.۵ ثانیه بین هر تلاش) تا به نتیجهٔ قطعی برسد.
-4. در طول اسکن، overlay واضح "Scanning..." با انیمیشن دایرهٔ نقطه‌چین نمایش داده می‌شود.
+1. **پروفایل فعلی Kourosh**: `id=3ce7629d-0358-4f43-b910-1fde71b5f787`، email=`kourosh@rebar.shop`، **created_at=2026-04-21 12:28** (امروز ساخته شده).
+2. **تعداد enrollment‌های فعال در DB**: صفر.
+3. **تعداد عکس‌های متعلق به این profile_id در storage**: صفر.
+4. **یافتهٔ کلیدی**: در bucket `face-enrollments` تعداد **15 پوشهٔ orphan** وجود دارد — متعلق به profile_id‌هایی که دیگر در جدول `profiles` نیستند. این یعنی پروفایل قبلی Kourosh (به همراه Behnam، Vicky و سایرین) قبلاً حذف شده و CASCADE رکوردهای `face_enrollments` را پاک کرده، اما **عکس‌های storage باقی مانده‌اند**.
+5. هیچ ردی در `field_audit_trail` از profile_id قدیمی Kourosh وجود ندارد، پس از روی DB نمی‌توان مستقیماً تشخیص داد کدام پوشهٔ orphan متعلق به اوست.
 
-### فاز ۲ — فقط در صورت شکست قطعی
-- پس از ۳ تلاش ناموفق (یا `no_match` صریح)، کارت قرمز نمایش داده می‌شود با دو دکمه:
-  - **Try Again** → ریست و شروع مجدد چرخهٔ اسکن خودکار
-  - **Type My Name** → ورود به فرم انتخاب نام (مسیر فعلی `ManualNameFallback`)
-- در حالت `matched` یا `low_confidence` بالا (۷۵٪+)، رفتار فعلی حفظ می‌شود (auto-punch countdown یا دکمهٔ تأیید).
+## راه‌حل پیشنهادی: ابزار بازیابی بصری Orphan Photos
+
+ساخت یک ابزار ادمین یک‌بارمصرف که:
+
+1. **لیست 15 پوشهٔ orphan را با thumbnail عکس‌ها نمایش می‌دهد** (به ترتیب جدیدترین).
+2. ادمین (Sattar/Radin/Zahra) از روی صورت تشخیص می‌دهد کدام متعلق به Kourosh است (و در صورت تمایل، سایر افراد).
+3. روی پوشه کلیک می‌کند → یک dropdown از پروفایل‌های موجود نشان می‌دهد → ادمین `Kourosh Zand` را انتخاب می‌کند.
+4. Edge function ادمینی **عکس‌ها را به profile_id جدید (`3ce7629d…`) منتقل می‌کند** (storage copy + insert در `face_enrollments`).
+5. پس از تخصیص، Face Memory برای Kourosh دوباره فعال می‌شود.
 
 ## تغییرات کد
 
-### 1. `src/pages/TimeClock.tsx` (بخش kiosk، خطوط ~۳۲۰–۴۲۰)
-- اضافه کردن `useEffect` که در mount کیوسک:
-  - `face.startCamera()` را خودکار فراخوانی می‌کند.
-  - پس از ۱ ثانیه delay (برای stabilization دوربین)، `face.recognize()` را trigger می‌کند.
-- اضافه کردن state `attemptCount` (شمارندهٔ تلاش‌های خودکار، حداکثر ۳).
-- `useEffect` دوم که وقتی `face.state === "no_match"` یا `"error"` و `attemptCount < 3`:
-  - پس از ۱.۵ ثانیه delay، `face.recognize()` دوباره اجرا می‌شود.
-  - `attemptCount` افزایش می‌یابد.
-- وقتی `attemptCount >= 3` یا state `matched`/`low_confidence` شد، چرخهٔ خودکار متوقف می‌شود.
-- ریست `attemptCount` در `handleConfirmPunch` و `face.reset()`.
-- **حذف یا مخفی کردن** دکمهٔ دستی **Scan Face** در حالت kiosk (چون اسکن خودکار است). در حالت non-kiosk دست‌نخورده باقی می‌ماند.
-- دکمهٔ **Try Again** (در `FaceRecognitionResult`) باید `attemptCount = 0` و `face.reset()` کند تا چرخهٔ خودکار از نو شروع شود.
+### 1. Edge function جدید: `supabase/functions/face-recover-orphans/index.ts`
+- محافظت‌شده با `SUPER_ADMIN_EMAILS` از `_shared/accessPolicies.ts`.
+- دو endpoint:
+  - `GET /list` → لیست پوشه‌های orphan + signed URL هر عکس + تاریخ.
+  - `POST /assign` → بدنه `{ orphanProfileId, targetProfileId }`. عکس‌ها را در storage کپی می‌کند به `targetProfileId/recovered-<timestamp>-<i>.jpg`، رکورد در `face_enrollments` با `is_active=true` می‌سازد، و پوشهٔ orphan را حذف می‌کند.
 
-### 2. `src/components/timeclock/FaceRecognitionResult.tsx`
-- بدون تغییر رفتاری — همان دکمه‌های Try Again + Type My Name حفظ می‌شوند.
-- (اختیاری) نمایش متن "Attempt 2 of 3..." در حالت scanning بین تلاش‌ها برای شفافیت.
+### 2. کامپوننت جدید: `src/components/timeclock/FaceMemoryRecoveryDialog.tsx`
+- دیالوگی که با دکمهٔ «Recover Orphan Photos» در `FaceMemoryPanel.tsx` باز می‌شود (فقط برای super admins نمایش داده می‌شود).
+- گرید thumbnail با ۳ عکس از هر پوشهٔ orphan.
+- روی هر کارت، dropdown «Assign to…» با لیست پروفایل‌های موجود (sorted by name).
+- دکمه‌های «Assign» و «Skip».
+- بعد از assign، toast موفقیت + refresh پنل.
 
-### 3. `src/components/timeclock/FaceCamera.tsx`
-- بدون تغییر — قبلاً `scanning` overlay را پشتیبانی می‌کند.
+### 3. ویرایش جزئی: `src/components/settings/FaceMemoryPanel.tsx`
+- اضافه کردن دکمهٔ «🔄 Recover Orphans (15)» در header (فقط super admin).
+- باز کردن دیالوگ بالا.
 
 ## آنچه دست نمی‌خورد
-- `useFaceRecognition.ts` — منطق capture/recognize کاملاً حفظ می‌شود.
-- `face-recognize` و `kiosk-punch` edge functions.
-- `ManualNameFallback.tsx` — همان کامپوننت موجود استفاده می‌شود.
-- حالت non-kiosk (`/timeclock` بدون `?kiosk=1`) — رفتار فعلی (دکمهٔ دستی Scan Face) حفظ می‌شود.
-- `FaceMemoryPanel.tsx`, `accessPolicies.ts` — بدون تغییر.
+- `face-recognize`, `kiosk-punch`, `useFaceRecognition.ts` — بدون تغییر.
+- منطق enrollment فعلی، `FaceEnrollment.tsx` — بدون تغییر.
+- Hard rule TimeClock Face-Only — بدون تغییر.
+- هیچ migration دیتابیسی لازم نیست.
 
 ## اعتبارسنجی
-1. باز کردن `/timeclock?kiosk=1` → دوربین خودکار روشن می‌شود → پس از ~۱ ثانیه اسکن خودکار آغاز می‌شود.
-2. صورت enrolled → match → کارت تأیید + auto-punch.
-3. صورت ناشناس → ۳ بار تلاش خودکار (با indicator "Attempt X of 3") → نمایش کارت قرمز با دکمه‌های Try Again و Type My Name.
-4. کلیک Try Again → چرخهٔ خودکار از نو.
-5. کلیک Type My Name → فرم انتخاب نام (بدون تغییر).
-6. در `/timeclock` بدون kiosk → رفتار فعلی (دکمهٔ دستی) حفظ.
+1. Sattar وارد Settings → Face Memory می‌شود → دکمهٔ «Recover Orphans (15)» را می‌بیند.
+2. کلیک می‌کند → دیالوگ با ۱۵ کارت ظاهر می‌شود (هر کدام ۱-۶ عکس).
+3. صورت Kourosh را شناسایی می‌کند → از dropdown «Kourosh Zand» را انتخاب → Assign.
+4. عکس‌ها به profile_id جدید Kourosh منتقل و در `face_enrollments` ثبت می‌شوند.
+5. پنل Face Memory refresh می‌شود → Kourosh با ۳ photos نمایش داده می‌شود.
+6. Kourosh به `/timeclock?kiosk=1` می‌رود → صورتش شناسایی می‌شود → punch موفق.
+7. به‌صورت اختیاری ادمین می‌تواند سایر orphans (Behnam, Vicky و …) را هم به همین روش بازیابی کند.
 
