@@ -125,8 +125,12 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        if ((e.status === 429 || e.status === 503 || e.status === 504) && opts.fallback) {
-          console.warn(`AI ${model} error ${e.status}, falling back to ${opts.fallback.model}`);
+        if ((e.status === 429 || e.status === 403 || e.status === 503 || e.status === 504) && opts.fallback) {
+          if (e.status === 403) {
+            console.warn(`[gemini-403-fallback] AI ${provider}/${model} returned 403 (likely leaked/revoked API key) — falling back to ${opts.fallback.provider}/${opts.fallback.model}`);
+          } else {
+            console.warn(`AI ${model} error ${e.status}, falling back to ${opts.fallback.model}`);
+          }
           _logExecution(requestId, provider, model, "error", undefined, opts, Math.round(performance.now() - callStart), `error-${e.status}`, e.message, e.status).catch(() => {});
           const fallbackStart = performance.now();
           const result = await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
@@ -254,11 +258,15 @@ export async function callAIStream(opts: AIRequestOptions): Promise<Response> {
           continue;
         }
         // Fallback on 429/503/504 after retries exhausted
-        if (e.status === 429 || e.status === 503 || e.status === 504) {
+        if (e.status === 429 || e.status === 403 || e.status === 503 || e.status === 504) {
           const fb = opts.fallback || { provider: "gemini" as AIProvider, model: "gemini-2.5-flash" };
           // Don't fallback to the same model
           if (fb.provider !== provider || fb.model !== model) {
-            console.warn(`AI stream ${model} error ${e.status}, falling back to ${fb.model}`);
+            if (e.status === 403) {
+              console.warn(`[gemini-403-fallback] AI stream ${provider}/${model} returned 403 (likely leaked/revoked API key) — falling back to ${fb.provider}/${fb.model}`);
+            } else {
+              console.warn(`AI stream ${model} error ${e.status}, falling back to ${fb.model}`);
+            }
             return await _callAIStreamSingle(fb.provider, fb.model, opts);
           }
         }
