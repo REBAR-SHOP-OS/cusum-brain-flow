@@ -125,8 +125,12 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        if ((e.status === 429 || e.status === 503 || e.status === 504) && opts.fallback) {
-          console.warn(`AI ${model} error ${e.status}, falling back to ${opts.fallback.model}`);
+        if ((e.status === 429 || e.status === 403 || e.status === 503 || e.status === 504) && opts.fallback) {
+          if (e.status === 403) {
+            console.warn(`[gemini-403-fallback] AI ${provider}/${model} returned 403 (likely leaked/revoked API key) — falling back to ${opts.fallback.provider}/${opts.fallback.model}`);
+          } else {
+            console.warn(`AI ${model} error ${e.status}, falling back to ${opts.fallback.model}`);
+          }
           _logExecution(requestId, provider, model, "error", undefined, opts, Math.round(performance.now() - callStart), `error-${e.status}`, e.message, e.status).catch(() => {});
           const fallbackStart = performance.now();
           const result = await _callAISingle(opts.fallback.provider, opts.fallback.model, opts);
