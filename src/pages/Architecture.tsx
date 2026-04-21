@@ -970,6 +970,8 @@ export default function Architecture() {
           </Dialog>
         )}
       </AnimatePresence>
+
+      <EdgeFunctionsPanel open={showFunctionsPanel} onOpenChange={setShowFunctionsPanel} />
     </div>
   );
 }
