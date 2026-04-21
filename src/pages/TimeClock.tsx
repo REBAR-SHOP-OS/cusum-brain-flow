@@ -388,6 +388,16 @@ export default function TimeClock() {
     );
   }
 
+  // Defensive: never render the manual UI for the kiosk account
+  if (isKioskAccount) {
+    return (
+      <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center gap-4">
+        <ScanFace className="w-12 h-12 text-primary animate-pulse" />
+        <p className="text-sm text-muted-foreground tracking-widest uppercase">Loading kiosk…</p>
+      </div>
+    );
+  }
+
   return (
     <>
     <div className="relative flex flex-col items-center min-h-screen bg-background overflow-hidden">
