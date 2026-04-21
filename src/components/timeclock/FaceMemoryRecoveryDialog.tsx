@@ -122,7 +122,7 @@ export function FaceMemoryRecoveryDialog({ open, onOpenChange, onAssigned }: Pro
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 p-6">
+        <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
