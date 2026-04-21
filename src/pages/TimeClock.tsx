@@ -224,6 +224,7 @@ export default function TimeClock() {
 
     face.reset();
     setAutoPunchCountdown(0);
+    setShowManualFallback(false);
 
     // Kiosk resets — user must tap "Scan Face" for next person
   };
