@@ -40,32 +40,12 @@ export function useWebPhone(): [WebPhoneState, WebPhoneActions] {
       // Get SIP info from edge function
       const { data, error } = await supabase.functions.invoke("ringcentral-sip-provision");
 
-      // Handle FunctionsHttpError (non-2xx) — parse body to check for expected "not connected"/"Forbidden"
+      // Any error from the provision endpoint (403 super-admin gate, RC not connected, etc.)
+      // is non-critical for users without telephony access — silently no-op.
       if (error) {
-        let bodyError: string | null = null;
-        let status: number | null = null;
-        try {
-          const ctx = (error as any).context;
-          status = ctx?.status ?? null;
-          if (ctx && typeof ctx.json === "function") {
-            const body = await ctx.json().catch(() => null);
-            bodyError = body?.error ?? null;
-          } else if (ctx && typeof ctx.text === "function") {
-            const text = await ctx.text().catch(() => "");
-            try { bodyError = JSON.parse(text)?.error ?? null; } catch { bodyError = text || null; }
-          }
-        } catch {}
-
-        // 403 (super-admin gate) or known soft errors → silent no-op
-        if (
-          status === 403 ||
-          bodyError === "RingCentral not connected" ||
-          bodyError === "Forbidden"
-        ) {
-          setState((s) => ({ ...s, status: "idle", error: null }));
-          return false;
-        }
-        throw error;
+        console.log("[useWebPhone] provision unavailable, skipping WebPhone init");
+        setState((s) => ({ ...s, status: "idle", error: null }));
+        return false;
       }
 
       if (data?.error) {
