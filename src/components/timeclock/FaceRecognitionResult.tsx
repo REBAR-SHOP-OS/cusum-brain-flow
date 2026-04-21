@@ -23,6 +23,7 @@ interface FaceRecognitionResultProps {
   isClockedIn: boolean;
   onConfirmPunch: (profileId: string) => void;
   onReject: () => void;
+  onManualFallback?: () => void;
   autoPunchCountdown?: number;
 }
 
@@ -32,6 +33,7 @@ export function FaceRecognitionResult({
   isClockedIn,
   onConfirmPunch,
   onReject,
+  onManualFallback,
   autoPunchCountdown,
 }: FaceRecognitionResultProps) {
   if (state === "idle" || state === "scanning") return null;
@@ -39,7 +41,7 @@ export function FaceRecognitionResult({
   if (state === "no_match" || state === "error" || state === "low_confidence") {
     return (
       <Card className="border-destructive/30 bg-destructive/5">
-        <CardContent className="p-6 text-center space-y-2">
+        <CardContent className="p-6 text-center space-y-3">
           <X className="w-10 h-10 mx-auto text-destructive" />
           <h3 className="font-bold text-lg">
             {state === "error" ? "Recognition Error" : "No Match Found"}
@@ -47,11 +49,18 @@ export function FaceRecognitionResult({
           <p className="text-sm text-muted-foreground">
             {state === "error"
               ? "Something went wrong. Please try again."
-              : "Your face was not recognized. Please try again."}
+              : "Your face was not recognized. Please try again or type your name."}
           </p>
-          <Button variant="outline" onClick={onReject} className="mt-2">
-            Try Again
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2 justify-center pt-1">
+            <Button variant="outline" onClick={onReject}>
+              Try Again
+            </Button>
+            {onManualFallback && (
+              <Button variant="default" onClick={onManualFallback}>
+                Type My Name
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
     );

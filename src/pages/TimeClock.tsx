@@ -26,6 +26,7 @@ import { MyLeaveTab } from "@/components/timeclock/MyLeaveTab";
 import { TeamCalendarTab } from "@/components/timeclock/TeamCalendarTab";
 import { PayrollSummaryTab } from "@/components/timeclock/PayrollSummaryTab";
 import { FaceMemoryPanel } from "@/components/timeclock/FaceMemoryPanel";
+import { ManualNameFallback } from "@/components/timeclock/ManualNameFallback";
 
 function getInitials(name: string) {
   return name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -54,6 +55,7 @@ export default function TimeClock() {
   const [autoPunchCountdown, setAutoPunchCountdown] = useState(0);
   
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
+  const [showManualFallback, setShowManualFallback] = useState(false);
 
   // Cache of profile IDs confirmed during this kiosk session
   const confirmedProfilesRef = useRef<Set<string>>(new Set());
@@ -222,6 +224,7 @@ export default function TimeClock() {
 
     face.reset();
     setAutoPunchCountdown(0);
+    setShowManualFallback(false);
 
     // Kiosk resets — user must tap "Scan Face" for next person
   };
@@ -342,19 +345,27 @@ export default function TimeClock() {
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
         </div>
         <div className="w-full max-w-lg mt-4">
-          {face.state === "idle" && (
+          {face.state === "idle" && !showManualFallback && (
             <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
               <ScanFace className="w-5 h-5" /> Scan Face
             </Button>
           )}
-          <FaceRecognitionResult
-            state={face.state}
-            matchResult={face.matchResult}
-            isClockedIn={matchedIsClockedIn}
-            onConfirmPunch={handleConfirmPunch}
-            onReject={() => { face.reset(); }}
-            autoPunchCountdown={autoPunchCountdown}
-          />
+          {showManualFallback ? (
+            <ManualNameFallback
+              onSelect={(profileId) => handleConfirmPunch(profileId)}
+              onBack={() => { setShowManualFallback(false); face.reset(); }}
+            />
+          ) : (
+            <FaceRecognitionResult
+              state={face.state}
+              matchResult={face.matchResult}
+              isClockedIn={matchedIsClockedIn}
+              onConfirmPunch={handleConfirmPunch}
+              onReject={() => { face.reset(); }}
+              onManualFallback={() => setShowManualFallback(true)}
+              autoPunchCountdown={autoPunchCountdown}
+            />
+          )}
         </div>
         <p className="text-xs text-muted-foreground mt-6">{format(now, "EEEE, MMMM d, yyyy · h:mm a")}</p>
         <p className="text-[10px] text-muted-foreground/60 mt-2 text-center max-w-md leading-relaxed">
@@ -437,13 +448,28 @@ export default function TimeClock() {
       {faceMode ? (
         <div className="relative z-10 w-full max-w-4xl px-6 py-4 space-y-4">
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
-          {face.state === "idle" && (
+          {face.state === "idle" && !showManualFallback && (
             <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
               <ScanFace className="w-5 h-5" /> Scan to Punch
             </Button>
           )}
-          {(face.state !== "idle" && face.state !== "scanning") && (
-            <FaceRecognitionResult state={face.state} matchResult={face.matchResult} isClockedIn={!!activeEntry} onConfirmPunch={handleConfirmPunch} onReject={() => face.reset()} autoPunchCountdown={autoPunchCountdown} />
+          {showManualFallback ? (
+            <ManualNameFallback
+              onSelect={(profileId) => handleConfirmPunch(profileId)}
+              onBack={() => { setShowManualFallback(false); face.reset(); }}
+            />
+          ) : (
+            (face.state !== "idle" && face.state !== "scanning") && (
+              <FaceRecognitionResult
+                state={face.state}
+                matchResult={face.matchResult}
+                isClockedIn={!!activeEntry}
+                onConfirmPunch={handleConfirmPunch}
+                onReject={() => face.reset()}
+                onManualFallback={() => setShowManualFallback(true)}
+                autoPunchCountdown={autoPunchCountdown}
+              />
+            )
           )}
         </div>
       ) : (
