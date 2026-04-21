@@ -113,13 +113,15 @@ export default function TimeClock() {
     fetchEnrollmentCount();
   }, [fetchEnrollmentCount]);
 
-  // Auto-enter kiosk mode if ?kiosk=1
+  const isKioskAccount = user?.email?.toLowerCase() === "ai@rebar.shop";
+
+  // Auto-enter kiosk mode if ?kiosk=1 OR if signed in as the dedicated kiosk account
   useEffect(() => {
-    if (searchParams.get("kiosk") === "1") {
+    if (isKioskAccount || searchParams.get("kiosk") === "1") {
       enterKioskMode();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isKioskAccount]);
 
   // Toggle face mode
   const handleFaceModeToggle = async (enabled: boolean) => {
@@ -327,9 +329,11 @@ export default function TimeClock() {
               <Brain className="w-4 h-4" /> Memory
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={exitKioskMode}>
-            Exit Kiosk
-          </Button>
+          {!isKioskAccount && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={exitKioskMode}>
+              Exit Kiosk
+            </Button>
+          )}
         </div>
         {/* FaceMemoryPanel moved to shared scope below */}
         <div className="flex items-center gap-3 mb-6">
@@ -380,6 +384,16 @@ export default function TimeClock() {
           <br />
           عکس و نام شما در حافظه این برنامه برای ثبت ورود و خروج ذخیره می‌شود.
         </p>
+      </div>
+    );
+  }
+
+  // Defensive: never render the manual UI for the kiosk account
+  if (isKioskAccount) {
+    return (
+      <div className="fixed inset-0 z-50 bg-background flex flex-col items-center justify-center gap-4">
+        <ScanFace className="w-12 h-12 text-primary animate-pulse" />
+        <p className="text-sm text-muted-foreground tracking-widest uppercase">Loading kiosk…</p>
       </div>
     );
   }
