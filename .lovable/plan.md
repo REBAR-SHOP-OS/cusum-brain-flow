@@ -1,44 +1,52 @@
 
 
-# اضافه کردن Profile کوروش به سیستم تا در Face Memory ظاهر شود
+# حذف کامل قابلیت ساخت اکانت خودکار از Face Kiosk
 
-## وضعیت فعلی
-- ایمیل `kourosh@rebar.shop` در whitelist لاگین (`accessPolicies.ts`) و در `allowed_login_emails` ثبت است.
-- اما در جدول `profiles` هیچ ردیفی برای کوروش وجود ندارد (۱۰ profile موجود است؛ کوروش بینشان نیست).
-- چون پنل Face Memory و dropdown «Add Person» داده‌هایش را از `profiles` می‌خواند، کوروش نه در لیست enrolled افراد دیده می‌شود و نه قابل enroll شدن است.
-- علت: کوروش هرگز با اکانت خودش sign-in نکرده، پس trigger ساخت profile اجرا نشده. (یا profile قدیمی‌اش دستی پاک شده — در database لاگ حذفی ندیدیم.)
+## وضعیت فعلی (مشکل)
+وقتی کیوسک Face Memory نتواند کسی را تشخیص دهد (`no_match` / `error` / `low_confidence`) یا وقتی کاربر روی «Not me» کلیک کند، کامپوننت `FirstTimeRegistration` ظاهر می‌شود که:
+- اسم می‌گیرد
+- در دیتابیس جستجو می‌کند (`kiosk-lookup`)
+- اگر پیدا نکرد، **profile جدید می‌سازد و فوراً clock-in می‌کند** (`kiosk-register`)
 
-## راه‌حل (یک migration کوچک، بدون تغییر کد)
+این دقیقاً برخلاف خواستهٔ شماست — کیوسک باید **فقط اسکن و تطابق** انجام دهد.
 
-ساخت یک profile جدید برای کوروش با همان `company_id` که بقیه پروفایل‌های `@rebar.shop` دارند:
+## رفتار جدید (هدف)
+- Scan Face → تطابق با enrollments موجود در Face Memory.
+- اگر match: clock-in/out طبق روال فعلی.
+- اگر **no match / error / low confidence**: فقط پیغام «شناخته نشد» نشان داده شود به همراه دکمهٔ Try Again. **هیچ مسیری برای ساخت اکانت یا ثبت‌نام جدید وجود ندارد.**
+- ثبت افراد جدید فقط از طریق پنل **Face Memory → Add Person** (که قبلاً توسط ادمین انجام می‌شود) امکان‌پذیر است — این مسیر دست‌نخورده باقی می‌ماند.
 
-```sql
-INSERT INTO public.profiles (full_name, email, company_id, is_active, user_id)
-SELECT 'Kourosh Zand', 'kourosh@rebar.shop',
-       (SELECT company_id FROM profiles WHERE email='radin@rebar.shop' LIMIT 1),
-       true, NULL
-WHERE NOT EXISTS (
-  SELECT 1 FROM profiles WHERE email='kourosh@rebar.shop'
-);
-```
+## تغییرات کد (سرجیکال و حداقلی)
 
-- `full_name` = `Kourosh Zand` (مطابق نامش در `agents/operations.ts` و `vizzyFullContext.ts`)
-- `is_active = true` تا در پنل dropdown ظاهر شود
-- `user_id = NULL` — وقتی روزی کوروش لاگین کند، با ایمیل auto-link می‌شود
-- idempotent — اگر profile وجود داشته باشد، چیزی نمی‌سازد
+### 1. `src/pages/TimeClock.tsx`
+- حذف import مربوط به `FirstTimeRegistration`.
+- در حالت **kiosk** (خطوط ۳۵۲–۳۶۸): حذف کامل بلوک `showRegistration ? <FirstTimeRegistration ... /> : (no_match ...) ? <FirstTimeRegistration ... />`. به جایش، در همهٔ حالت‌ها `FaceRecognitionResult` رندر می‌شود (که از قبل برای `no_match` پیام «No Match Found» با دکمهٔ Try Again دارد).
+- حذف prop `onNotMe` از `FaceRecognitionResult` (دیگر کاربردی ندارد چون مقصد آن باز کردن `FirstTimeRegistration` بود).
+- حذف state `showRegistration` و هر setter مربوطه.
+- در حالت **non-kiosk** (خطوط ۴۶۷–۴۷۳): حذف بلوک `face.state === "low_confidence"` که `FirstTimeRegistration` را رندر می‌کرد. در عوض، `low_confidence` هم به `FaceRecognitionResult` می‌رود.
 
-## بعد از migration (دستی توسط رادین یا ساتار)
-1. روی دستگاه کیوسک (`ai@rebar.shop`)، پنل **Face Memory** → دکمهٔ **Add Person**
-2. **Kourosh Zand** را از لیست انتخاب کنید
-3. سه عکس از صورت کوروش بگیرید
-4. کوروش به‌عنوان نفر نهم در Face Memory ظاهر می‌شود و از این به بعد Face ID او را می‌شناسد و clock in/out می‌کند
+### 2. `src/components/timeclock/FaceRecognitionResult.tsx`
+- حذف prop و دکمهٔ `onNotMe` (دکمه‌ای که قبلاً registration را trigger می‌کرد).
+- منطق `low_confidence`: به جای نشان ندادن چیزی (return null فعلی)، آن را مثل `no_match` نمایش بده با همان پیام «No Match Found / Try Again».
 
-## Files
-- یک migration جدید SQL (تنها INSERT شرطی)
+### 3. `src/components/timeclock/FirstTimeRegistration.tsx`
+- **حذف کامل فایل** (دیگر هیچ‌کجا استفاده نمی‌شود).
 
-## Untouched
-- `FaceMemoryPanel.tsx`, `useProfiles.ts`, `face-recognize`, `kiosk-punch`, `accessPolicies.ts`, `TimeClock.tsx` — هیچ‌کدام دست نمی‌خورد
+### 4. Edge functions `kiosk-lookup` و `kiosk-register`
+- **حذف کامل هر دو پوشه** از `supabase/functions/`. این دو فقط برای ساخت/lookup اکانت در flow ثبت‌نام خودکار بودند و دیگر هیچ caller-ای ندارند.
+- ارجاع به `kiosk-lookup` در `src/lib/rolloutRegistry.ts` (فقط یک comment تاریخی) دست‌نخورده می‌ماند چون فقط متن یادداشت است، اثری در runtime ندارد.
 
-## Validation
-بعد از migration: `SELECT full_name FROM profiles WHERE email='kourosh@rebar.shop'` باید **Kourosh Zand** را برگرداند، و نام او بلافاصله در dropdown «Add Person» داخل پنل Face Memory ظاهر می‌شود.
+## آنچه دست نمی‌خورد
+- `face-recognize` edge function — همان‌طور باقی می‌ماند (فقط تطابق می‌دهد، اکانت نمی‌سازد).
+- `kiosk-punch` edge function — همان‌طور باقی می‌ماند (پس از match صحیح، clock in/out می‌کند).
+- `FaceMemoryPanel.tsx` و دکمهٔ **Add Person** آن — تنها مسیر مجاز برای ثبت کاربر جدید (توسط ادمین).
+- `useFaceRecognition.ts` — تغییر نمی‌کند؛ همان state‌های `no_match`/`low_confidence`/`error` برمی‌گردد، فقط UI واکنشش متفاوت می‌شود.
+- منطق kiosk fullscreen، sleep overlay، Memory button، و دکمهٔ Exit Kiosk — همه دست‌نخورده.
+
+## اعتبارسنجی پس از اعمال
+1. وارد `ai@rebar.shop` شوید → `/timeclock?kiosk=1` → دوربین فعال → دکمهٔ Scan Face دیده می‌شود.
+2. صورت یک نفر **enrolled** را اسکن کنید → کارت تأیید match ظاهر می‌شود → clock-in/out اجرا می‌شود. (بدون تغییر)
+3. صورت یک نفر **enroll نشده** را اسکن کنید → کارت قرمز «No Match Found» با پیام «Your face was not recognized. Please try again» و یک دکمهٔ Try Again. **هیچ فرم نام، جستجو، یا ساخت اکانت ظاهر نمی‌شود.**
+4. در پنل Face Memory (دسترس رادین/ساتار/نیل) دکمهٔ Add Person کار می‌کند و افراد جدید را می‌توان دستی enroll کرد.
+5. هیچ profile جدیدی به صورت خودکار از مسیر کیوسک ساخته نمی‌شود.
 
