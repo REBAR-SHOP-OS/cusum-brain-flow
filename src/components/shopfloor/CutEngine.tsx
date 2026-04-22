@@ -29,9 +29,17 @@ interface CutEngineProps {
   totalPiecesPlanned?: number;
   activeBars?: number;
   isDone?: boolean;
+  /** Display unit for stock-length labels. Storage stays mm. Default "metric". */
+  displayUnit?: "metric" | "imperial";
 }
 
+// Stock lengths are stored in mm. Imperial labels approximate to 20'/40'/60'.
 const STOCK_LENGTHS = [6000, 12000, 18000];
+const STOCK_LABEL_IMPERIAL: Record<number, string> = {
+  6000: "20'",
+  12000: "40'",
+  18000: "60'",
+};
 
 export function CutEngine({
   barCode,
