@@ -124,7 +124,7 @@ function ActiveBarRemovalSection({
               {confirmSlot && (
                 <>
                   This bar has <strong>{confirmSlot.cutsDone}</strong> cut{confirmSlot.cutsDone !== 1 ? "s" : ""} done.
-                  The remnant ({computeLeftover(stockLengthMm, confirmSlot.cutsDone, cutLengthMm)}mm) will be set aside.
+                  The remnant ({fmtLen(computeLeftover(stockLengthMm, confirmSlot.cutsDone, cutLengthMm), displayUnit)}) will be set aside.
                 </>
               )}
             </AlertDialogDescription>
