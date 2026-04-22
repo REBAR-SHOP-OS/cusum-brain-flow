@@ -162,6 +162,7 @@ export function SlotTracker({
   onRemoveBar,
   onCompleteRun,
   canWrite,
+  displayUnit = "metric",
 }: SlotTrackerProps) {
   const activeSlots = slots.filter((s) => s.status === "active");
   const removableSlots = slots.filter((s) => s.status === "removable");
