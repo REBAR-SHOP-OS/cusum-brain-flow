@@ -158,7 +158,7 @@ export function CutEngine({
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
             >
-              {len / 1000}M
+              {displayUnit === "imperial" ? (STOCK_LABEL_IMPERIAL[len] || `${len}mm`) : `${len / 1000}M`}
             </button>
           ))}
         </div>
