@@ -1,37 +1,51 @@
 
+# بررسی: آیا واقعاً به `info@deltoidconsulting.com` ایمیل ارسال شده؟
 
-# ادغام واقعی plan «(Small)» با plan والد در DB
+## یافته‌های اولیه از DB
+در بررسی قبلی، جدول‌های `email_campaign_sends` و `lead_communications` خالی بودند. اما سیستم چندین مسیر ارسال ایمیل دارد که هنوز چک نشده‌اند. باید قبل از پاسخ نهایی، **همهٔ منابع ارسال** را روی این آدرس خاص جستجو کنم.
 
-## یافتهٔ DB
+## مسیرهای ارسال احتمالی که باید بررسی شوند
 
-دو plan «(Small)» در کل سیستم وجود دارد، هر دو با `barlist_id = NULL` و `status = completed`:
+1. **`email_send_log`** — جدول مرجع همهٔ ارسال‌های Lovable Email infrastructure (transactional + auth).
+2. **`prospects`** — اگر این آدرس در seed/lead data باشد و وضعیت `emailed` داشته باشد.
+3. **`contacts`** — آیا اصلاً این آدرس در دیتابیس مشتری‌ها هست؟
+4. **`leads` / `lead_communications`** — لاگ ارتباطات لیدها.
+5. **Edge function logs** — لاگ‌های `gmail-send`, `email-campaign-send`, `send-quote-email`, `send-transactional-email` با فیلتر روی این ایمیل.
+6. **`alert_dispatch_log`** و سایر جدول‌های نوتیفیکیشن — اگر آدرس به‌عنوان مقصد ثبت شده باشد.
 
-| ID والد (با barlist_id) | ID «(Small)» (بدون barlist_id) | پروژه | آیتم‌ها در (Small) | clearance_evidence |
-|---|---|---|---|---|
-| `4f3569a4` Rebar Cage | `8cb4dee1` Rebar Cage (Small) | Innis College | ۱ (A1003) | ۳ |
-| `d5c0d80e` GRADE BEAM 1 + LOOSE REBAR | `668a2d3f` GRADE BEAM 1 + LOOSE REBAR (Small) | 505 Glenlake | ۴ (A1001, cage) | ۱ |
+## برنامهٔ اقدام (Read-Only Investigation)
 
-دیگر downstreamها (`cut_output_batches`, `inventory_reservations`, `loading_checklist`, deliveries) صفر — ادغام امن است. در کد هیچ‌جا plan «(Small)» تولید نمی‌شود (legacy data، نه pipeline فعال).
+### مرحلهٔ ۱ — جستجوی DB
+کوئری‌های هدفمند روی هر جدول:
+```sql
+SELECT 'email_send_log' src, * FROM email_send_log WHERE recipient_email ILIKE '%deltoid%';
+SELECT 'prospects' src, * FROM prospects WHERE email ILIKE '%deltoid%';
+SELECT 'contacts' src, * FROM contacts WHERE email ILIKE '%deltoid%';
+SELECT 'leads' src, * FROM leads WHERE customer_email ILIKE '%deltoid%' OR notes ILIKE '%deltoid%';
+SELECT 'lead_communications' src, * FROM lead_communications WHERE recipient ILIKE '%deltoid%' OR body ILIKE '%deltoid%';
+SELECT 'email_campaign_sends' src, * FROM email_campaign_sends WHERE email ILIKE '%deltoid%';
+SELECT 'alert_dispatch_log' src, * FROM alert_dispatch_log WHERE recipient ILIKE '%deltoid%' OR payload::text ILIKE '%deltoid%';
+```
 
-## تغییر (یک data migration، بدون schema change)
+### مرحلهٔ ۲ — جستجوی edge function logs
+بررسی لاگ‌های ۴ تابع کلیدی با فیلتر `deltoid`:
+- `gmail-send`
+- `email-campaign-send`
+- `send-quote-email`
+- `send-transactional-email`
 
-برای هر جفت:
-1. **انتقال آیتم‌ها**: `UPDATE cut_plan_items SET cut_plan_id = <والد> WHERE cut_plan_id = <(Small)>` — این کار `clearance_evidence` را خودکار با خود می‌برد چون evidence به `cut_plan_item_id` چسبیده، نه `cut_plan_id`.
-2. **حذف plan خالی «(Small)»**: `DELETE FROM cut_plans WHERE id IN ('8cb4dee1…', '668a2d3f…') AND NOT EXISTS (SELECT 1 FROM cut_plan_items WHERE cut_plan_id = cut_plans.id)`.
+### مرحلهٔ ۳ — گزارش به کاربر
+ارائهٔ تصویر کامل:
+- **اگر یافته شد**: تاریخ دقیق، منبع (کدام تابع/دکمه)، فرستنده (کاربر یا cron)، محتوا/subject، وضعیت تحویل.
+- **اگر یافته نشد**: تأیید قطعی که از این سیستم به آن آدرس ایمیلی نرفته — احتمالاً ایمیل از سیستم دیگری (Gmail شخصی، QuickBooks، RingCentral) ارسال شده یا کاربر اشتباه می‌کند.
 
-محدودسازی: فقط همین دو ID صریح؛ هیچ pattern matching روی `name LIKE '% (Small)'` تا اگر روزی plan قانونی با این اسم ساخته شود، اشتباه پاک نشود.
+## چه چیزی تغییر نمی‌کند
+- هیچ داده‌ای حذف یا اصلاح نمی‌شود.
+- این فقط یک **تحقیق فقط-خواندنی** است.
+- اگر بعد از بررسی نیاز به اقدام (مثلاً suppress کردن آدرس یا پاک‌سازی) باشد، plan جداگانه ارائه می‌دهم.
 
-## چه چیزی دست نمی‌خورد
-
-- `ProductionQueueView.tsx`، `useClearanceData.ts`، RLS، schema، triggers، edge functions.
-- `clearance_evidence` ردیف‌ها (همراه آیتم منتقل می‌شوند، رابطه پایدار).
-- plan‌های والد (`4f3569a4`, `d5c0d80e`) — فقط `item_count` آن‌ها افزایش می‌یابد.
-- بقیهٔ پروژه‌ها (CAGES, J-HOOKS, R01, …).
-
-## اعتبارسنجی
-
-1. در `/office` → Production Queue: ذیل barlist «Rebar Cage» فقط یک ردیف (نه دو) و ذیل barlist «GRADE BEAM 1 + LOOSE REBAR» فقط یک ردیف.
-2. در Clearance Station: کارت INNIS COLLEGE همچنان شامل A1003 + A2001 (هر دو زیر همان manifest والد، نه دو plan).
-3. شمارش‌ها: plan والد `Rebar Cage` آیتم‌ها = ۲ (A2001 + A1003)، plan والد `GRADE BEAM 1 + LOOSE REBAR` آیتم‌ها = ۸ (۴ قبلی + ۴ منتقل‌شده).
-4. هیچ ردیف بی‌پدر در `cut_plan_items` یا `clearance_evidence`.
-
+## خروجی نهایی
+گزارش شفاف به فارسی شامل:
+1. آیا ارسال انجام شده؟ (بله/خیر)
+2. اگر بله: کِی، توسط چه کسی، با کدام template/دکمه، با چه محتوایی.
+3. اگر خیر: منابع جایگزین احتمالی برای بررسی خارج از ERP.
