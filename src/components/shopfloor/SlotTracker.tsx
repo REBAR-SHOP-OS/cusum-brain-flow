@@ -320,8 +320,8 @@ export function SlotTracker({
                 <p className="text-xs text-muted-foreground">
                   {slot.cutsDone}/{slot.plannedCuts} cuts done — 
                   {isRemnant
-                    ? ` set aside as remnant (${leftover}mm)`
-                    : ` scrap (${leftover}mm < ${REMNANT_THRESHOLD_MM}mm threshold)`}
+                    ? ` set aside as remnant (${fmtLen(leftover, displayUnit)})`
+                    : ` scrap (${fmtLen(leftover, displayUnit)} < ${fmtLen(REMNANT_THRESHOLD_MM, displayUnit)} threshold)`}
                 </p>
               </div>
               {canWrite && (
