@@ -112,14 +112,17 @@ export function useClearanceData() {
 
   const byProject = new Map<string, { label: string; items: ClearanceItem[] }>();
   for (const item of data || []) {
-    // Use cut_plan_id as grouping key to avoid same-name project collision
-    const key = item.cut_plan_id;
-    const label = item.project_name || item.plan_name || "Unassigned";
+    // Group by canonical project_id so multiple cut_plans of the same project merge into one card.
+    // Orphan items without a project_id fall back under "Unassigned".
+    const key = item.project_id || "__unassigned__";
+    const label = item.project_id
+      ? (item.project_name || item.plan_name || "Unassigned")
+      : "Unassigned";
     if (!byProject.has(key)) byProject.set(key, { label, items: [] });
     byProject.get(key)!.items.push(item);
   }
 
-  // Flatten to Map<label, items> for backward compat but using unique keys
+  // Flatten to Map<label, items> for backward compat with ClearanceStation consumer.
   const byProjectLabel = new Map<string, ClearanceItem[]>();
   for (const [, group] of byProject) {
     const existing = byProjectLabel.get(group.label);
