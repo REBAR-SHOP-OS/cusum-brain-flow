@@ -7,6 +7,7 @@ import { useCompanyId } from "@/hooks/useCompanyId";
 export interface ClearanceItem {
   id: string;
   cut_plan_id: string;
+  project_id: string | null;
   bar_code: string;
   cut_length_mm: number;
   mark_number: string | null;
