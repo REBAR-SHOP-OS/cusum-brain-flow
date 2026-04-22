@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { computeForemanDecision, type ForemanContext } from "./foremanBrain";
 import type { StationItem } from "@/hooks/useStationData";
