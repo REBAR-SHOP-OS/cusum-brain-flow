@@ -443,7 +443,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     {
       step: 1,
       text: "Set stopper to",
-      emphasis: `${item.cut_length_mm} mm`,
+      emphasis: lengthLabel(item),
     },
     {
       step: 2,
