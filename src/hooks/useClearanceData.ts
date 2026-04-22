@@ -72,6 +72,7 @@ export function useClearanceData() {
         return {
           id: item.id,
           cut_plan_id: item.cut_plan_id,
+          project_id: item.cut_plans?.project_id || null,
           bar_code: item.bar_code,
           cut_length_mm: item.cut_length_mm,
           mark_number: item.mark_number,
@@ -80,7 +81,7 @@ export function useClearanceData() {
           total_pieces: item.total_pieces,
           bend_completed_pieces: item.bend_completed_pieces,
           plan_name: item.cut_plans?.name || "",
-          project_name: item.cut_plans?.project_name || null,
+          project_name: item.cut_plans?.projects?.name || item.cut_plans?.project_name || null,
           evidence_id: ev?.id || null,
           material_photo_url: ev?.material_photo_url || null,
           tag_scan_url: ev?.tag_scan_url || null,
