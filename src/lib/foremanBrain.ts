@@ -14,6 +14,12 @@ import type { InventoryLot, FloorStockItem, CutOutputBatch } from "@/hooks/useIn
 
 const REMNANT_THRESHOLD_MM = 300;
 
+// Display the cut length using the original source text (e.g. `60"`, `2'-6"`, `750 mm`)
+// when available, falling back to the raw cut_length_mm value with a "mm" suffix.
+function lengthLabel(item: StationItem): string {
+  return item.source_total_length_text || `${item.cut_length_mm} mm`;
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type ForemanModule = "cut" | "bend" | "spiral" | "inventory" | "queue";
