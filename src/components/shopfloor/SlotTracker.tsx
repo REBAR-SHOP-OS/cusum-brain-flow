@@ -347,6 +347,7 @@ export function SlotTracker({
           cutLengthMm={cutLengthMm}
           stockLengthMm={stockLengthMm}
           onRemoveBar={onRemoveBar}
+          displayUnit={displayUnit}
         />
       )}
 
