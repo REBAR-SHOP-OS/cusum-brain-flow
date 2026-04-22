@@ -1,41 +1,37 @@
 
 
-# اصلاح گروه‌بندی Clearance Station — یک پروژه، نه دو
+# ادغام واقعی plan «(Small)» با plan والد در DB
 
-## ریشهٔ مشکل
-`Rebar Cage` و `Rebar Cage (Small)` هر دو **متعلق به همان پروژه** (`Innis College`, project_id `e11ffd9f…`) هستند، اما در Clearance Station به‌صورت دو manifest جدا دیده می‌شوند چون:
+## یافتهٔ DB
 
-- در `useClearanceData.ts` خط ۸۲ و ۱۱۵، برچسبِ گروه از فیلد denormalized **`cut_plans.project_name`** خوانده می‌شود (نه از join واقعی `projects`).
-- داده‌های فعلی این فیلد را غلط دارند:
-  - Plan `Rebar Cage` → `project_name = 'Rebar Cage'` (همان نام plan، اشتباه)
-  - Plan `Rebar Cage (Small)` → `project_name = NULL` → fallback به `plan_name`
-- نتیجه: دو لیبل متفاوت → دو ردیف در UI.
+دو plan «(Small)» در کل سیستم وجود دارد، هر دو با `barlist_id = NULL` و `status = completed`:
 
-## اصلاح (فقط همین یک hook)
-**فایل:** `src/hooks/useClearanceData.ts`
+| ID والد (با barlist_id) | ID «(Small)» (بدون barlist_id) | پروژه | آیتم‌ها در (Small) | clearance_evidence |
+|---|---|---|---|---|
+| `4f3569a4` Rebar Cage | `8cb4dee1` Rebar Cage (Small) | Innis College | ۱ (A1003) | ۳ |
+| `d5c0d80e` GRADE BEAM 1 + LOOSE REBAR | `668a2d3f` GRADE BEAM 1 + LOOSE REBAR (Small) | 505 Glenlake | ۴ (A1001, cage) | ۱ |
 
-۱. **Join واقعی به `projects`** برای گرفتن نام معتبر پروژه:
-```ts
-.select("*, cut_plans!inner(id, name, project_id, company_id, projects(id, name))")
-```
+دیگر downstreamها (`cut_output_batches`, `inventory_reservations`, `loading_checklist`, deliveries) صفر — ادغام امن است. در کد هیچ‌جا plan «(Small)» تولید نمی‌شود (legacy data، نه pipeline فعال).
 
-۲. در map خط ۶۹–۹۰، فیلد `project_name` از `item.cut_plans.projects?.name` خوانده شود (نه از `cut_plans.project_name` denormalized). همچنین اضافه‌کردن `project_id` به interface برای کلید گروه‌بندی پایدار.
+## تغییر (یک data migration، بدون schema change)
 
-۳. در گروه‌بندی خط ۱۱۱–۱۲۹:
-   - کلید group: **`project_id`** (نه `cut_plan_id`).
-   - label: `projects.name` (یعنی `Innis College`).
-   - آیتم‌های هر دو plan تحت یک کارت تجمیع می‌شوند.
+برای هر جفت:
+1. **انتقال آیتم‌ها**: `UPDATE cut_plan_items SET cut_plan_id = <والد> WHERE cut_plan_id = <(Small)>` — این کار `clearance_evidence` را خودکار با خود می‌برد چون evidence به `cut_plan_item_id` چسبیده، نه `cut_plan_id`.
+2. **حذف plan خالی «(Small)»**: `DELETE FROM cut_plans WHERE id IN ('8cb4dee1…', '668a2d3f…') AND NOT EXISTS (SELECT 1 FROM cut_plan_items WHERE cut_plan_id = cut_plans.id)`.
 
-۴. آیتم‌های بدون `project_id` (orphan) همچنان زیر `Unassigned` گروه می‌خورند.
+محدودسازی: فقط همین دو ID صریح؛ هیچ pattern matching روی `name LIKE '% (Small)'` تا اگر روزی plan قانونی با این اسم ساخته شود، اشتباه پاک نشود.
 
 ## چه چیزی دست نمی‌خورد
-- `ClearanceStation.tsx`: تغییر نمی‌کند (همان `byProject: Map<string, ClearanceItem[]>` را مصرف می‌کند).
-- `ClearanceCard.tsx`، RLS، schema، migrationها، realtime channel.
-- بقیهٔ hookها (`useReadyToShip`, `useProductionQueues`, …).
-- داده در DB: فیلد `cut_plans.project_name` همچنان همان مقدار غلط را دارد ولی دیگر منبع حقیقت نیست (اصلاح آن یک data-cleanup جداگانه است که در این تغییر لازم نیست).
+
+- `ProductionQueueView.tsx`، `useClearanceData.ts`، RLS، schema، triggers، edge functions.
+- `clearance_evidence` ردیف‌ها (همراه آیتم منتقل می‌شوند، رابطه پایدار).
+- plan‌های والد (`4f3569a4`, `d5c0d80e`) — فقط `item_count` آن‌ها افزایش می‌یابد.
+- بقیهٔ پروژه‌ها (CAGES, J-HOOKS, R01, …).
 
 ## اعتبارسنجی
-1. در Clearance Station باید فقط یک کارت **«INNIS COLLEGE»** برای این پروژه دیده شود — شامل هر دو مارک‌ست (A1003 + A2001) با شمارش تجمیعی (مثلاً `3/4`).
-2. کارت‌های بقیهٔ پروژه‌ها (CAGES, J-HOOKS, R01, …) دست‌نخورده باقی بمانند.
-3. شمارهٔ هدر `3 / 7 Cleared` تغییر نمی‌کند (فقط نحوهٔ گروه‌بندی عوض می‌شود، نه تعداد آیتم‌ها).
+
+1. در `/office` → Production Queue: ذیل barlist «Rebar Cage» فقط یک ردیف (نه دو) و ذیل barlist «GRADE BEAM 1 + LOOSE REBAR» فقط یک ردیف.
+2. در Clearance Station: کارت INNIS COLLEGE همچنان شامل A1003 + A2001 (هر دو زیر همان manifest والد، نه دو plan).
+3. شمارش‌ها: plan والد `Rebar Cage` آیتم‌ها = ۲ (A2001 + A1003)، plan والد `GRADE BEAM 1 + LOOSE REBAR` آیتم‌ها = ۸ (۴ قبلی + ۴ منتقل‌شده).
+4. هیچ ردیف بی‌پدر در `cut_plan_items` یا `clearance_evidence`.
 
