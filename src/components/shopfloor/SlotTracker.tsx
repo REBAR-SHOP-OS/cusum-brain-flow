@@ -52,6 +52,8 @@ interface SlotTrackerProps {
   onRemoveBar: (slotIndex: number) => void;
   onCompleteRun: () => void;
   canWrite: boolean;
+  /** Display unit for length labels. Storage stays mm. Default "metric". */
+  displayUnit?: UnitSystem;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
