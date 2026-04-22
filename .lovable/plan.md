@@ -1,59 +1,41 @@
 
 
-# اصلاح نمایش واحد در دستورالعمل‌های Foreman (mm → unit واقعی)
+# تست‌های واحد برای واحد طول در Foreman Instructions
 
-## تشخیص واقعی
+## هدف
+تأیید این‌که `computeForemanDecision` در ماژول `cut`:
+1. وقتی `source_total_length_text = "60""` باشد → instructions و recommendation عبارت `60"` را نشان دهند، نه `60 mm`.
+2. وقتی `source_total_length_text = "2'-6""` باشد → همان متن ft-in نمایش داده شود.
+3. وقتی `source_total_length_text = null` باشد → fallback به `<cut_length_mm> mm` کار کند.
 
-فایل `src/features/shopfloor/components/TagDetails.tsx` در پروژه وجود ندارد و هیچ ضرب در `25.4` در نمایش طول مارک انجام نمی‌شود. باگ واقعی که در اسکرین‌شات قرمز شده ("60 mm" در پنل Foreman) از این جا می‌آید:
+## فایل جدید
+**`src/lib/foremanBrain.test.ts`** — کنار خود ماژول.
 
-- **`src/lib/foremanBrain.ts`** خطوط ۴۴۶ و ۴۸۰: متن دستورالعمل و پیشنهاد روی طول‌ها به‌شکل hardcode عبارت `mm` می‌چسباند.
-- در حالی که فیلد `cut_length_mm` در DB طبق memory `import-unit-detection` مقدار **خام در واحد منبع** را نگه می‌دارد (در این مارک: `60` به اینچ — همان عددی که کارت بزرگ "Cut Each Piece To" با لیبل **IN** درست نشان می‌دهد).
-
-نتیجه: کارت بزرگ درست است؛ فقط متن Foreman اشتباه `mm` می‌گذارد.
-
-## تغییرات
-
-### ۱. `src/lib/foremanBrain.ts`
-
-اضافه کردن یک helper کوچک داخل ماژول:
+## ساختار تست
 ```ts
-function unitSuffix(item: StationItem): string {
-  const t = item.source_total_length_text || "";
-  if (t.includes('"') && t.includes("'")) return ' ft-in';
-  if (t.includes('"')) return '"';      // inches
-  if (t.includes("'")) return "'";      // feet
-  return ' mm';
-}
-function lengthLabel(item: StationItem): string {
-  return item.source_total_length_text || `${item.cut_length_mm} mm`;
-}
+import { describe, it, expect } from "vitest";
+import { computeForemanDecision, type ForemanContext } from "./foremanBrain";
+import type { StationItem } from "@/hooks/useStationData";
+
+function makeItem(over: Partial<StationItem>): StationItem { /* defaults: cut_length_mm=1524, total_pieces=100, completed=0, bar_code="15M", phase="cutting", ... */ }
+
+function makeCtx(item: StationItem): ForemanContext { /* module:"cut", machineStatus:"running", canWrite:true, selectedStockLength:12000, maxBars:10, lots/floorStock/wipBatches:[], currentIndex:0, ... */ }
 ```
 
-سپس در دو نقطه:
+سه `it` block:
 
-- **خط ۴۴۶** — `emphasis: \`${item.cut_length_mm} mm\`` → جایگزینی با:
-  ```ts
-  emphasis: lengthLabel(item),
-  ```
+- **inches**: item با `source_total_length_text: '60"'` → `instructions[0].emphasis === '60"'` و `recommendation` شامل `cut at 60"` (و **نباید** شامل `60 mm`).
+- **ft-in**: `source_total_length_text: `2'-6"`` → `instructions[0].emphasis === `2'-6"`` و recommendation شامل همان رشته.
+- **mm fallback**: `source_total_length_text: null`, `cut_length_mm: 750` → `instructions[0].emphasis === '750 mm'` و recommendation شامل `cut at 750 mm`.
 
-- **خط ۴۸۰** — جملهٔ `→ cut at ${item.cut_length_mm}mm →` → جایگزینی با:
-  ```ts
-  → cut at ${lengthLabel(item)} →
-  ```
-
-این کار باعث می‌شود وقتی `source_total_length_text` موجود باشد (مثلاً `60"`) همان نمایش داده شود و وقتی موجود نباشد، fallback امن `<عدد> mm` بماند تا روی داده‌های قدیمی regression رخ ندهد.
+برای هر تست بررسی می‌شود `decision.instructions.length >= 1` و `decision.runPlan?.feasible !== false` (با manualFloorStockConfirmed=true تا blocker موجودی فعال نشود و instructionها تولید بشوند).
 
 ## آنچه دست نمی‌خورد
-
-- محاسبات runPlan (`piecesPerBar`, `slots`, `remnant`) — همه با همان `cut_length_mm` خام ادامه می‌دهند (هیچ تبدیل واحدی در منطق محاسبه دست نمی‌خورد).
-- کارت "Cut Each Piece To" (که همین الان درست است).
-- لیبل "MM/IN/FT/FT-IN" روی همان کارت (که همین الان درست است).
-- هیچ فایل DB / RLS / edge function / schema.
-- هیچ فایل دیگر فرانت‌اند (`StationView.tsx`، `BenderStationView.tsx`، `ForemanPanel.tsx` همگی دست‌نخورده).
+- `src/lib/foremanBrain.ts` (تستِ صرفاً read-only علیه contract موجود).
+- هیچ هوک، کامپوننت، schema یا config دیگر.
+- `vitest.config.ts` و `src/test/setup.ts` (از قبل آماده‌اند، الگو منطبق با `src/test/*.test.ts` موجود).
 
 ## اعتبارسنجی
-
-1. `/shopfloor/station/<machineId>` با مارک A1501 (همان اسکرین‌شات): پنل Foreman باید بگوید **"Set stopper to 60""** و **"cut at 60" → 100 pieces"** (نه `60 mm`).
-2. مارکی با داده‌های mm خالص (بدون `source_total_length_text`): همچنان "Set stopper to 750 mm" نمایش داده شود (fallback سالم).
-3. هیچ خطای console و هیچ تغییری در شمارش‌ها / تعداد bar / remnant.
+- `vitest run src/lib/foremanBrain.test.ts` → سه تست سبز.
+- اگر روزی hardcode `mm` به foremanBrain برگردد، تست‌های inches و ft-in قرمز می‌شوند.
 
