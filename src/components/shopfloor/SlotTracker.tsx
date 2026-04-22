@@ -71,11 +71,13 @@ function ActiveBarRemovalSection({
   cutLengthMm,
   stockLengthMm,
   onRemoveBar,
+  displayUnit,
 }: {
   activeSlots: ActiveSlot[];
   cutLengthMm: number;
   stockLengthMm: number;
   onRemoveBar: (slotIndex: number) => void;
+  displayUnit: UnitSystem;
 }) {
   const [confirmSlot, setConfirmSlot] = useState<ActiveSlot | null>(null);
 
