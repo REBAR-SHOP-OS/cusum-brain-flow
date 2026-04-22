@@ -62,6 +62,7 @@ export function CutEngine({
   totalPiecesPlanned = 0,
   activeBars = 0,
   isDone = false,
+  displayUnit = "metric",
 }: CutEngineProps) {
   const [selectedStock, setSelectedStock] = useState(12000);
   const [bars, setBars] = useState(suggestedBars || 1);
