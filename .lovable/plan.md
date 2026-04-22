@@ -1,56 +1,59 @@
 
-# علت دقیق خطای «LinkedIn Publishing Failed»
+# علت: SlotTracker و Stock Length فقط mm را hardcode کرده‌اند
 
-## یافته ریشه‌ای (قطعی، با شواهد DB)
+## ریشهٔ مشکل
 
-### وضعیت کانکشن‌های LinkedIn در DB
-دو کانکشن LinkedIn در جدول `integration_connections` وجود دارد (هر دو متعلق به Sattar):
+در `src/components/shopfloor/CutterStationView.tsx` و `src/components/shopfloor/SlotTracker.tsx`:
 
-| user_id | status | scope ذخیره‌شده | organization_ids |
-|---|---|---|---|
-| `c9b3adc2…` | connected | `email, openid, profile, w_member_social` | **NULL** |
-| `be3b9444…` | connected | `email, openid, profile, w_member_social` | **NULL** |
+1. **DB canonical = mm**: `cut_plan_items.cut_length_mm` همیشه میلی‌متر است (storage standard). ۵۸ اینچ = `1473mm` در DB ذخیره شده.
+2. **نمایش بزرگ "58 IN" درست است** (خط ۹۱۹ CutterStationView): از `currentItem.source_total_length_text` می‌خواند که متن اصلی فایل را نگه می‌دارد، و label هم بر اساس وجود `"` یا `'` به IN/FT/MM سوییچ می‌کند.
+3. **اما SlotTracker و Stock panel هنوز mm-only هستند**:
+   - `SlotTracker.tsx` خط ۹۶: `{slot.cutsDone} cuts · {leftover}mm left` — برچسب hardcoded `mm`.
+   - `SlotTracker.tsx` خط ۱۱۶: dialog حذف bar هم `({...}mm)` می‌گوید.
+   - `CutterStationView.tsx` خط ۵۲: `useState(12000)` — stock length پیش‌فرض mm.
+   - Bar size panel و Stock length tabs (6M/12M/18M) همه فرض می‌کنند ورودی متریک است.
+   - محاسبات `selectedStockLength - cutsDone * cut_length_mm` در همان واحد mm درست‌اند، ولی **نمایش** unit-aware نیست.
 
-### کد چه چیزی **انتظار دارد** (در `linkedin-oauth/index.ts` خط ۱۹۸)
+پس اعداد محاسباتی غلط نیستند (همه در mm درست محاسبه می‌شوند)، فقط **برچسب نمایش** برای آیتم imperial گمراه‌کننده است.
+
+## تغییر
+
+**فقط لایهٔ نمایش، بدون دست زدن به محاسبات یا DB.**
+
+### ۱. تشخیص unit از روی آیتم
+در `CutterStationView.tsx` نزدیک خط ۸۸۰ (قبل از render SlotTracker) یک flag محلی:
+```ts
+const isImperial = !!currentItem.source_total_length_text &&
+  (currentItem.source_total_length_text.includes('"') || currentItem.source_total_length_text.includes("'"));
+const displayUnit: UnitSystem = isImperial ? "imperial" : "metric";
 ```
-scope = "openid profile email w_member_social w_organization_social r_organization_social"
-```
+و آن را به SlotTracker پاس می‌دهیم: `<SlotTracker ... displayUnit={displayUnit} />`.
 
-### کد چه چیزی **دریافت کرده**
-```
-scope = "openid profile email w_member_social"   ❌ دو scope گم شده
-```
+### ۲. SlotTracker
+- اضافه کردن prop اختیاری `displayUnit?: UnitSystem` (default `"metric"`).
+- import `formatLengthShort` از `@/lib/unitSystem`.
+- خط ۹۶: 
+  ```tsx
+  {slot.cutsDone} cuts · {displayUnit === "imperial" 
+    ? formatLengthShort(leftover, "imperial") 
+    : `${leftover}mm`} left
+  ```
+- خط ۱۱۶ (dialog) و خط ۲۹۷+ (removable bars warning) همان pattern.
 
-### دو scope گم‌شده
-- `r_organization_social` — لازم برای فراخوانی `/v2/organizationAcls` (کشف شرکت‌ها)
-- `w_organization_social` — لازم برای **publish** به‌نام Company Page
+### ۳. (اختیاری، در همین تغییر) Stock length tabs
+چون imperial-mark معمولاً با bar 20'/40'/60' کار می‌کند، وقتی `displayUnit==="imperial"` متن tab‌ها را به `20'`, `40'`, `60'` نمایش بده ولی **مقدار state همچنان mm** بماند (6096 / 12192 / 18288). این یک تغییر کوچک در `CutEngine` panel است.
 
-## زنجیره خطا (دقیقاً همان چیزی که در اسکرین‌شات دیدی)
+## چه چیزی دست نمی‌خورد
+- `cut_length_mm`، `stock_length_mm`، RLS، triggers، schema.
+- منطق `useSlotTracker` (همه به mm).
+- ذخیرهٔ remnant و run notes (می‌توانیم در آینده دو-واحدی کنیم؛ خارج از scope این fix).
+- نمایش بزرگ "58 IN" که قبلاً درست بود.
 
-1. کاربر در گذشته LinkedIn را وصل کرده **قبل از این‌که** scope‌های organization به کد اضافه شوند → token فقط با scope شخصی صادر شد.
-2. در `linkedin-oauth/index.ts` خط ۱۳۹، فراخوانی `organizationAcls` بدون scope `r_organization_social` با **403** برمی‌گردد → بلوک `if (aclRes.ok)` رد می‌شود → `organizationIds` خالی می‌ماند → در DB `null` ذخیره می‌شود.
-3. هنگام publish (`social-publish/index.ts` خط ۸۷۳): `config.organization_ids || {}` → `{}` → هیچ مَچی برای `Ontario Steel Detailing`، `Rebar.shop`، `Ontario Logistics`، `Ontario Steels`، `Rebar.shop Ontario` پیدا نمی‌شود → خطا پرتاب می‌شود:
-   > `LinkedIn organization ID not configured for "<page>". Please reconnect LinkedIn to auto-discover organization pages.`
-4. چون پست برای **۵ صفحه** بود، پنج خطای مشابه به‌هم چسبیده شده‌اند که در UI به‌صورت متن قرمز طولانی می‌بینی.
+## اعتبارسنجی
+1. در همین صفحه (Mark A1001، طول 58"): ردیف bar باید نشان دهد `0 cuts · 39'-4" left` (به‌جای `12000mm left`).
+2. بعد از یک stroke: `1 cuts · 34'-6" left` (تقریبی).
+3. آیتم متریک (مثلاً Mark با `source_total_length_text = "1500"` یا null): همچنان `…mm left` نمایش داده شود.
+4. شمارش پیس‌ها، remnant detection، و `STOP/Complete` بدون تغییر کار کنند.
 
-## چرا پلتفرم‌های دیگر (Facebook, Instagram) موفق بودند
-آن‌ها از مسیر کاملاً جدا (`user_meta_tokens`, خط‌های ۲۰۲–۲۴۵) عبور می‌کنند که سالم است. مشکل **فقط** در LinkedIn است.
-
-## چرا «Retry Publishing» این را درست نمی‌کند
-Retry فقط همان function را دوباره صدا می‌زند؛ token قدیمی همچنان scope ندارد و `organization_ids` همچنان `NULL` است → ابدی fail می‌شود.
-
-## راه‌حل (فقط برای اطلاع — اقدام نکردم چون در حالت plan هستم)
-
-**یک اقدام، توسط کاربر:**
-- Sattar باید از Settings → Integrations روی LinkedIn → **Disconnect** و سپس **Connect** بزند.
-- این بار صفحه consent از LinkedIn، scope‌های `r_organization_social` و `w_organization_social` را درخواست می‌کند (کد قبلاً به آن‌ها مجهز است).
-- بعد از تأیید، تابع `handleCallback` خودکار organizationAcls را می‌خواند، ۵ صفحه (Ontario Steel Detailing, Rebar.shop, Ontario Logistics, Ontario Steels, Rebar.shop Ontario) را کشف می‌کند و در `config.organization_ids` ذخیره می‌کند.
-- پس از reconnect، دکمه **Retry Publishing** روی همان پست کار خواهد کرد.
-
-**هیچ تغییر کد لازم نیست** — کد سمت سرور درست است؛ فقط token قدیمی است و باید refresh شود با scope جدید.
-
-## اختیاری (اگر می‌خواهی محکم‌تر شود — plan جداگانه)
-اگر می‌خواهی این مشکل دیگر هرگز silent نباشد، می‌توان یک گارد در `linkedin-oauth` اضافه کرد که اگر scope برگشتی شامل `w_organization_social` نبود، status را `connected` ست نکند و خطای واضح نمایش دهد. ولی این تغییر اختیاری است و ربطی به رفع وضعیت فعلی ندارد.
-
-## خلاصه یک‌خطی
-**Token LinkedIn فعلی scope `w_organization_social` ندارد، پس org IDs در connect کشف نشدند و publish به Company Pages قطعاً fail می‌کند. راه‌حل: Disconnect و دوباره Connect کردن LinkedIn از Settings.**
+## خلاصهٔ یک‌خطی
+`cut_length_mm` در DB واحد mm است (درست). تنها مشکل، **برچسب** mm hardcoded در `SlotTracker` است؛ با پاس دادن `displayUnit` از `source_total_length_text` و استفاده از `formatLengthShort`، نمایش به ft-in تبدیل می‌شود بدون تغییر در منطق.
