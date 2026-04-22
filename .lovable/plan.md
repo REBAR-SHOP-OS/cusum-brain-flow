@@ -1,41 +1,65 @@
 
 
-# تست‌های واحد برای واحد طول در Foreman Instructions
+# مسیر B — اصلاح ریشه‌ای: حفاظت دفاعی + پاک‌سازی داده‌های legacy
 
-## هدف
-تأیید این‌که `computeForemanDecision` در ماژول `cut`:
-1. وقتی `source_total_length_text = "60""` باشد → instructions و recommendation عبارت `60"` را نشان دهند، نه `60 mm`.
-2. وقتی `source_total_length_text = "2'-6""` باشد → همان متن ft-in نمایش داده شود.
-3. وقتی `source_total_length_text = null` باشد → fallback به `<cut_length_mm> mm` کار کند.
+## یافتهٔ مهم پس از بررسی DB زنده
 
-## فایل جدید
-**`src/lib/foremanBrain.test.ts`** — کنار خود ماژول.
-
-## ساختار تست
-```ts
-import { describe, it, expect } from "vitest";
-import { computeForemanDecision, type ForemanContext } from "./foremanBrain";
-import type { StationItem } from "@/hooks/useStationData";
-
-function makeItem(over: Partial<StationItem>): StationItem { /* defaults: cut_length_mm=1524, total_pieces=100, completed=0, bar_code="15M", phase="cutting", ... */ }
-
-function makeCtx(item: StationItem): ForemanContext { /* module:"cut", machineStatus:"running", canWrite:true, selectedStockLength:12000, maxBars:10, lots/floorStock/wipBatches:[], currentIndex:0, ... */ }
+تابع `auto_advance_item_phase` در حال حاضر **درست است** و آیتم‌های straight را به `clearance` می‌فرستد، نه `complete`:
+```sql
+IF NEW.bend_type = 'bend' THEN NEW.phase := 'cut_done';
+ELSE NEW.phase := 'clearance';
 ```
 
-سه `it` block:
+هر سه ردیف A2001 که الان روی `phase='complete'` گیر کرده‌اند، `ready_at = 2026-04-20 21:05:37` دارند — **دقیقاً تایم‌استمپ همان migration**. یعنی این رکوردها قبل از fix پاکسازی trigger به `complete` رفته‌اند و backfill همان migration `ready_at` را پر کرده. این **legacy data** است، نه باگ trigger فعلی.
 
-- **inches**: item با `source_total_length_text: '60"'` → `instructions[0].emphasis === '60"'` و `recommendation` شامل `cut at 60"` (و **نباید** شامل `60 mm`).
-- **ft-in**: `source_total_length_text: `2'-6"`` → `instructions[0].emphasis === `2'-6"`` و recommendation شامل همان رشته.
-- **mm fallback**: `source_total_length_text: null`, `cut_length_mm: 750` → `instructions[0].emphasis === '750 mm'` و recommendation شامل `cut at 750 mm`.
+پس "Path B" به‌شکل اولیه‌اش (بازنویسی trigger) لازم نیست. به‌جایش دو کار درست:
 
-برای هر تست بررسی می‌شود `decision.instructions.length >= 1` و `decision.runPlan?.feasible !== false` (با manualFloorStockConfirmed=true تا blocker موجودی فعال نشود و instructionها تولید بشوند).
+## تغییرات (یک migration)
+
+### ۱. سخت‌سازی دفاعی trigger
+به همان `auto_advance_item_phase` یک گارد اضافه می‌کنیم تا حتی اگر app کد یا UPDATE دستی، آیتمی را از فازهای `queued/cutting/cut_done/bending` مستقیم به `complete` ببرد، redirect شود به `clearance`:
+
+```sql
+-- Defensive guard: never allow direct jump to 'complete' from production phases
+IF NEW.phase = 'complete'
+   AND TG_OP = 'UPDATE'
+   AND OLD.phase IN ('queued','cutting','cut_done','bending') THEN
+  NEW.phase := 'clearance';
+END IF;
+```
+این بلاک **قبل از** بلاک "Transition into 'complete' → auto-stage" قرار می‌گیرد تا staging فقط برای transition قانونی `clearance → complete` (از `ClearanceCard`) فعال بماند. مسیر INSERT و transition قانونی از `clearance` دست‌نخورده می‌ماند.
+
+### ۲. پاک‌سازی داده‌های legacy (data update، نه schema)
+سه ردیف مارک A2001 که در `complete` گیر کرده‌اند به `clearance` برمی‌گردند تا QC رویشان انجام شود:
+```sql
+UPDATE public.cut_plan_items
+SET phase = 'clearance',
+    fulfillment_channel = NULL,
+    ready_at = NULL
+WHERE id IN (
+  '3799e34d-7c8e-4dc2-ab76-2a25d6ccf2f9',
+  '69b66d16-077c-4c82-b967-c0262e8bfff3',
+  '35530866-f77a-4729-bc2e-87704363029b'
+)
+AND phase = 'complete'
+AND delivery_id IS NULL
+AND loading_list_id IS NULL
+AND pickup_id IS NULL;
+```
+شرط‌های `delivery_id/loading_list_id/pickup_id IS NULL` ضمانت می‌کنند هیچ آیتمی که قبلاً به delivery/pickup ربط خورده، عقب کشیده نشود.
 
 ## آنچه دست نمی‌خورد
-- `src/lib/foremanBrain.ts` (تستِ صرفاً read-only علیه contract موجود).
-- هیچ هوک، کامپوننت، schema یا config دیگر.
-- `vitest.config.ts` و `src/test/setup.ts` (از قبل آماده‌اند، الگو منطبق با `src/test/*.test.ts` موجود).
+
+- مسیر قانونی `ClearanceCard` → `phase='complete'` (آنجا `OLD.phase='clearance'` است، گارد فعال نمی‌شود).
+- INSERTهای جدید با phase=`complete` (مهاجرت‌های آینده، seed data).
+- بلاک staging `fulfillment_channel`/`ready_at`.
+- بقیهٔ آیتم‌ها (A1003 در clearance، آیتم‌های queued).
+- هیچ schema، RLS، edge function یا UI.
 
 ## اعتبارسنجی
-- `vitest run src/lib/foremanBrain.test.ts` → سه تست سبز.
-- اگر روزی hardcode `mm` به foremanBrain برگردد، تست‌های inches و ft-in قرمز می‌شوند.
+
+1. هر سه ردیف A2001 در **Clearance Station** کنار A1003 ظاهر شوند.
+2. روی یکی از آن‌ها از Clearance Station تأیید کن → باید به `complete` برود (مسیر قانونی کار می‌کند).
+3. تست منفی (اختیاری): `UPDATE cut_plan_items SET phase='complete' WHERE id=<آیتم در فاز cutting>` → باید به `clearance` redirect شود.
+4. هیچ آیتم complete موجود از queue تحویل/pickup حذف نشده باشد.
 
