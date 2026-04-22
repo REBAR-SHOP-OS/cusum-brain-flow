@@ -477,7 +477,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
   const totalPiecesThisRun = operatorBars * piecesPerBar - (hasPartialBar ? (piecesPerBar - lastBarPieces) : 0);
   const piecesAfter = remaining - totalPiecesThisRun;
 
-  d.recommendation = `Load ${operatorBars} × ${item.bar_code} → cut at ${item.cut_length_mm}mm → ${totalPiecesThisRun} pieces`;
+  d.recommendation = `Load ${operatorBars} × ${item.bar_code} → cut at ${lengthLabel(item)} → ${totalPiecesThisRun} pieces`;
   d.recommendationReason = [
     `${piecesPerBar} pcs/bar × ${fullSlots.length} full bar${fullSlots.length !== 1 ? "s" : ""}`,
     hasPartialBar ? ` + ${lastBarPieces} pcs on partial bar` : "",
