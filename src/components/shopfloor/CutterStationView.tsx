@@ -1067,6 +1067,12 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             totalPiecesDone={slotTracker.totalCutsDone}
             totalPiecesPlanned={slotTracker.slots.reduce((s, sl) => s + sl.plannedCuts, 0)}
             activeBars={slotTracker.slots.filter(s => s.status === "active").length}
+            displayUnit={
+              currentItem?.source_total_length_text &&
+              (currentItem.source_total_length_text.includes('"') || currentItem.source_total_length_text.includes("'"))
+                ? "imperial"
+                : "metric"
+            }
           />
         </div>
       </div>
