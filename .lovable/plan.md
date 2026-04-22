@@ -1,51 +1,56 @@
 
-# بررسی: آیا واقعاً به `info@deltoidconsulting.com` ایمیل ارسال شده؟
+# علت دقیق خطای «LinkedIn Publishing Failed»
 
-## یافته‌های اولیه از DB
-در بررسی قبلی، جدول‌های `email_campaign_sends` و `lead_communications` خالی بودند. اما سیستم چندین مسیر ارسال ایمیل دارد که هنوز چک نشده‌اند. باید قبل از پاسخ نهایی، **همهٔ منابع ارسال** را روی این آدرس خاص جستجو کنم.
+## یافته ریشه‌ای (قطعی، با شواهد DB)
 
-## مسیرهای ارسال احتمالی که باید بررسی شوند
+### وضعیت کانکشن‌های LinkedIn در DB
+دو کانکشن LinkedIn در جدول `integration_connections` وجود دارد (هر دو متعلق به Sattar):
 
-1. **`email_send_log`** — جدول مرجع همهٔ ارسال‌های Lovable Email infrastructure (transactional + auth).
-2. **`prospects`** — اگر این آدرس در seed/lead data باشد و وضعیت `emailed` داشته باشد.
-3. **`contacts`** — آیا اصلاً این آدرس در دیتابیس مشتری‌ها هست؟
-4. **`leads` / `lead_communications`** — لاگ ارتباطات لیدها.
-5. **Edge function logs** — لاگ‌های `gmail-send`, `email-campaign-send`, `send-quote-email`, `send-transactional-email` با فیلتر روی این ایمیل.
-6. **`alert_dispatch_log`** و سایر جدول‌های نوتیفیکیشن — اگر آدرس به‌عنوان مقصد ثبت شده باشد.
+| user_id | status | scope ذخیره‌شده | organization_ids |
+|---|---|---|---|
+| `c9b3adc2…` | connected | `email, openid, profile, w_member_social` | **NULL** |
+| `be3b9444…` | connected | `email, openid, profile, w_member_social` | **NULL** |
 
-## برنامهٔ اقدام (Read-Only Investigation)
-
-### مرحلهٔ ۱ — جستجوی DB
-کوئری‌های هدفمند روی هر جدول:
-```sql
-SELECT 'email_send_log' src, * FROM email_send_log WHERE recipient_email ILIKE '%deltoid%';
-SELECT 'prospects' src, * FROM prospects WHERE email ILIKE '%deltoid%';
-SELECT 'contacts' src, * FROM contacts WHERE email ILIKE '%deltoid%';
-SELECT 'leads' src, * FROM leads WHERE customer_email ILIKE '%deltoid%' OR notes ILIKE '%deltoid%';
-SELECT 'lead_communications' src, * FROM lead_communications WHERE recipient ILIKE '%deltoid%' OR body ILIKE '%deltoid%';
-SELECT 'email_campaign_sends' src, * FROM email_campaign_sends WHERE email ILIKE '%deltoid%';
-SELECT 'alert_dispatch_log' src, * FROM alert_dispatch_log WHERE recipient ILIKE '%deltoid%' OR payload::text ILIKE '%deltoid%';
+### کد چه چیزی **انتظار دارد** (در `linkedin-oauth/index.ts` خط ۱۹۸)
+```
+scope = "openid profile email w_member_social w_organization_social r_organization_social"
 ```
 
-### مرحلهٔ ۲ — جستجوی edge function logs
-بررسی لاگ‌های ۴ تابع کلیدی با فیلتر `deltoid`:
-- `gmail-send`
-- `email-campaign-send`
-- `send-quote-email`
-- `send-transactional-email`
+### کد چه چیزی **دریافت کرده**
+```
+scope = "openid profile email w_member_social"   ❌ دو scope گم شده
+```
 
-### مرحلهٔ ۳ — گزارش به کاربر
-ارائهٔ تصویر کامل:
-- **اگر یافته شد**: تاریخ دقیق، منبع (کدام تابع/دکمه)، فرستنده (کاربر یا cron)، محتوا/subject، وضعیت تحویل.
-- **اگر یافته نشد**: تأیید قطعی که از این سیستم به آن آدرس ایمیلی نرفته — احتمالاً ایمیل از سیستم دیگری (Gmail شخصی، QuickBooks، RingCentral) ارسال شده یا کاربر اشتباه می‌کند.
+### دو scope گم‌شده
+- `r_organization_social` — لازم برای فراخوانی `/v2/organizationAcls` (کشف شرکت‌ها)
+- `w_organization_social` — لازم برای **publish** به‌نام Company Page
 
-## چه چیزی تغییر نمی‌کند
-- هیچ داده‌ای حذف یا اصلاح نمی‌شود.
-- این فقط یک **تحقیق فقط-خواندنی** است.
-- اگر بعد از بررسی نیاز به اقدام (مثلاً suppress کردن آدرس یا پاک‌سازی) باشد، plan جداگانه ارائه می‌دهم.
+## زنجیره خطا (دقیقاً همان چیزی که در اسکرین‌شات دیدی)
 
-## خروجی نهایی
-گزارش شفاف به فارسی شامل:
-1. آیا ارسال انجام شده؟ (بله/خیر)
-2. اگر بله: کِی، توسط چه کسی، با کدام template/دکمه، با چه محتوایی.
-3. اگر خیر: منابع جایگزین احتمالی برای بررسی خارج از ERP.
+1. کاربر در گذشته LinkedIn را وصل کرده **قبل از این‌که** scope‌های organization به کد اضافه شوند → token فقط با scope شخصی صادر شد.
+2. در `linkedin-oauth/index.ts` خط ۱۳۹، فراخوانی `organizationAcls` بدون scope `r_organization_social` با **403** برمی‌گردد → بلوک `if (aclRes.ok)` رد می‌شود → `organizationIds` خالی می‌ماند → در DB `null` ذخیره می‌شود.
+3. هنگام publish (`social-publish/index.ts` خط ۸۷۳): `config.organization_ids || {}` → `{}` → هیچ مَچی برای `Ontario Steel Detailing`، `Rebar.shop`، `Ontario Logistics`، `Ontario Steels`، `Rebar.shop Ontario` پیدا نمی‌شود → خطا پرتاب می‌شود:
+   > `LinkedIn organization ID not configured for "<page>". Please reconnect LinkedIn to auto-discover organization pages.`
+4. چون پست برای **۵ صفحه** بود، پنج خطای مشابه به‌هم چسبیده شده‌اند که در UI به‌صورت متن قرمز طولانی می‌بینی.
+
+## چرا پلتفرم‌های دیگر (Facebook, Instagram) موفق بودند
+آن‌ها از مسیر کاملاً جدا (`user_meta_tokens`, خط‌های ۲۰۲–۲۴۵) عبور می‌کنند که سالم است. مشکل **فقط** در LinkedIn است.
+
+## چرا «Retry Publishing» این را درست نمی‌کند
+Retry فقط همان function را دوباره صدا می‌زند؛ token قدیمی همچنان scope ندارد و `organization_ids` همچنان `NULL` است → ابدی fail می‌شود.
+
+## راه‌حل (فقط برای اطلاع — اقدام نکردم چون در حالت plan هستم)
+
+**یک اقدام، توسط کاربر:**
+- Sattar باید از Settings → Integrations روی LinkedIn → **Disconnect** و سپس **Connect** بزند.
+- این بار صفحه consent از LinkedIn، scope‌های `r_organization_social` و `w_organization_social` را درخواست می‌کند (کد قبلاً به آن‌ها مجهز است).
+- بعد از تأیید، تابع `handleCallback` خودکار organizationAcls را می‌خواند، ۵ صفحه (Ontario Steel Detailing, Rebar.shop, Ontario Logistics, Ontario Steels, Rebar.shop Ontario) را کشف می‌کند و در `config.organization_ids` ذخیره می‌کند.
+- پس از reconnect، دکمه **Retry Publishing** روی همان پست کار خواهد کرد.
+
+**هیچ تغییر کد لازم نیست** — کد سمت سرور درست است؛ فقط token قدیمی است و باید refresh شود با scope جدید.
+
+## اختیاری (اگر می‌خواهی محکم‌تر شود — plan جداگانه)
+اگر می‌خواهی این مشکل دیگر هرگز silent نباشد، می‌توان یک گارد در `linkedin-oauth` اضافه کرد که اگر scope برگشتی شامل `w_organization_social` نبود، status را `connected` ست نکند و خطای واضح نمایش دهد. ولی این تغییر اختیاری است و ربطی به رفع وضعیت فعلی ندارد.
+
+## خلاصه یک‌خطی
+**Token LinkedIn فعلی scope `w_organization_social` ندارد، پس org IDs در connect کشف نشدند و publish به Company Pages قطعاً fail می‌کند. راه‌حل: Disconnect و دوباره Connect کردن LinkedIn از Settings.**
