@@ -14,6 +14,12 @@ import type { InventoryLot, FloorStockItem, CutOutputBatch } from "@/hooks/useIn
 
 const REMNANT_THRESHOLD_MM = 300;
 
+// Display the cut length using the original source text (e.g. `60"`, `2'-6"`, `750 mm`)
+// when available, falling back to the raw cut_length_mm value with a "mm" suffix.
+function lengthLabel(item: StationItem): string {
+  return item.source_total_length_text || `${item.cut_length_mm} mm`;
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type ForemanModule = "cut" | "bend" | "spiral" | "inventory" | "queue";
@@ -443,7 +449,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     {
       step: 1,
       text: "Set stopper to",
-      emphasis: `${item.cut_length_mm} mm`,
+      emphasis: lengthLabel(item),
     },
     {
       step: 2,
@@ -477,7 +483,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
   const totalPiecesThisRun = operatorBars * piecesPerBar - (hasPartialBar ? (piecesPerBar - lastBarPieces) : 0);
   const piecesAfter = remaining - totalPiecesThisRun;
 
-  d.recommendation = `Load ${operatorBars} × ${item.bar_code} → cut at ${item.cut_length_mm}mm → ${totalPiecesThisRun} pieces`;
+  d.recommendation = `Load ${operatorBars} × ${item.bar_code} → cut at ${lengthLabel(item)} → ${totalPiecesThisRun} pieces`;
   d.recommendationReason = [
     `${piecesPerBar} pcs/bar × ${fullSlots.length} full bar${fullSlots.length !== 1 ? "s" : ""}`,
     hasPartialBar ? ` + ${lastBarPieces} pcs on partial bar` : "",
