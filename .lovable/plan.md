@@ -1,65 +1,41 @@
 
 
-# مسیر B — اصلاح ریشه‌ای: حفاظت دفاعی + پاک‌سازی داده‌های legacy
+# اصلاح گروه‌بندی Clearance Station — یک پروژه، نه دو
 
-## یافتهٔ مهم پس از بررسی DB زنده
+## ریشهٔ مشکل
+`Rebar Cage` و `Rebar Cage (Small)` هر دو **متعلق به همان پروژه** (`Innis College`, project_id `e11ffd9f…`) هستند، اما در Clearance Station به‌صورت دو manifest جدا دیده می‌شوند چون:
 
-تابع `auto_advance_item_phase` در حال حاضر **درست است** و آیتم‌های straight را به `clearance` می‌فرستد، نه `complete`:
-```sql
-IF NEW.bend_type = 'bend' THEN NEW.phase := 'cut_done';
-ELSE NEW.phase := 'clearance';
+- در `useClearanceData.ts` خط ۸۲ و ۱۱۵، برچسبِ گروه از فیلد denormalized **`cut_plans.project_name`** خوانده می‌شود (نه از join واقعی `projects`).
+- داده‌های فعلی این فیلد را غلط دارند:
+  - Plan `Rebar Cage` → `project_name = 'Rebar Cage'` (همان نام plan، اشتباه)
+  - Plan `Rebar Cage (Small)` → `project_name = NULL` → fallback به `plan_name`
+- نتیجه: دو لیبل متفاوت → دو ردیف در UI.
+
+## اصلاح (فقط همین یک hook)
+**فایل:** `src/hooks/useClearanceData.ts`
+
+۱. **Join واقعی به `projects`** برای گرفتن نام معتبر پروژه:
+```ts
+.select("*, cut_plans!inner(id, name, project_id, company_id, projects(id, name))")
 ```
 
-هر سه ردیف A2001 که الان روی `phase='complete'` گیر کرده‌اند، `ready_at = 2026-04-20 21:05:37` دارند — **دقیقاً تایم‌استمپ همان migration**. یعنی این رکوردها قبل از fix پاکسازی trigger به `complete` رفته‌اند و backfill همان migration `ready_at` را پر کرده. این **legacy data** است، نه باگ trigger فعلی.
+۲. در map خط ۶۹–۹۰، فیلد `project_name` از `item.cut_plans.projects?.name` خوانده شود (نه از `cut_plans.project_name` denormalized). همچنین اضافه‌کردن `project_id` به interface برای کلید گروه‌بندی پایدار.
 
-پس "Path B" به‌شکل اولیه‌اش (بازنویسی trigger) لازم نیست. به‌جایش دو کار درست:
+۳. در گروه‌بندی خط ۱۱۱–۱۲۹:
+   - کلید group: **`project_id`** (نه `cut_plan_id`).
+   - label: `projects.name` (یعنی `Innis College`).
+   - آیتم‌های هر دو plan تحت یک کارت تجمیع می‌شوند.
 
-## تغییرات (یک migration)
+۴. آیتم‌های بدون `project_id` (orphan) همچنان زیر `Unassigned` گروه می‌خورند.
 
-### ۱. سخت‌سازی دفاعی trigger
-به همان `auto_advance_item_phase` یک گارد اضافه می‌کنیم تا حتی اگر app کد یا UPDATE دستی، آیتمی را از فازهای `queued/cutting/cut_done/bending` مستقیم به `complete` ببرد، redirect شود به `clearance`:
-
-```sql
--- Defensive guard: never allow direct jump to 'complete' from production phases
-IF NEW.phase = 'complete'
-   AND TG_OP = 'UPDATE'
-   AND OLD.phase IN ('queued','cutting','cut_done','bending') THEN
-  NEW.phase := 'clearance';
-END IF;
-```
-این بلاک **قبل از** بلاک "Transition into 'complete' → auto-stage" قرار می‌گیرد تا staging فقط برای transition قانونی `clearance → complete` (از `ClearanceCard`) فعال بماند. مسیر INSERT و transition قانونی از `clearance` دست‌نخورده می‌ماند.
-
-### ۲. پاک‌سازی داده‌های legacy (data update، نه schema)
-سه ردیف مارک A2001 که در `complete` گیر کرده‌اند به `clearance` برمی‌گردند تا QC رویشان انجام شود:
-```sql
-UPDATE public.cut_plan_items
-SET phase = 'clearance',
-    fulfillment_channel = NULL,
-    ready_at = NULL
-WHERE id IN (
-  '3799e34d-7c8e-4dc2-ab76-2a25d6ccf2f9',
-  '69b66d16-077c-4c82-b967-c0262e8bfff3',
-  '35530866-f77a-4729-bc2e-87704363029b'
-)
-AND phase = 'complete'
-AND delivery_id IS NULL
-AND loading_list_id IS NULL
-AND pickup_id IS NULL;
-```
-شرط‌های `delivery_id/loading_list_id/pickup_id IS NULL` ضمانت می‌کنند هیچ آیتمی که قبلاً به delivery/pickup ربط خورده، عقب کشیده نشود.
-
-## آنچه دست نمی‌خورد
-
-- مسیر قانونی `ClearanceCard` → `phase='complete'` (آنجا `OLD.phase='clearance'` است، گارد فعال نمی‌شود).
-- INSERTهای جدید با phase=`complete` (مهاجرت‌های آینده، seed data).
-- بلاک staging `fulfillment_channel`/`ready_at`.
-- بقیهٔ آیتم‌ها (A1003 در clearance، آیتم‌های queued).
-- هیچ schema، RLS، edge function یا UI.
+## چه چیزی دست نمی‌خورد
+- `ClearanceStation.tsx`: تغییر نمی‌کند (همان `byProject: Map<string, ClearanceItem[]>` را مصرف می‌کند).
+- `ClearanceCard.tsx`، RLS، schema، migrationها، realtime channel.
+- بقیهٔ hookها (`useReadyToShip`, `useProductionQueues`, …).
+- داده در DB: فیلد `cut_plans.project_name` همچنان همان مقدار غلط را دارد ولی دیگر منبع حقیقت نیست (اصلاح آن یک data-cleanup جداگانه است که در این تغییر لازم نیست).
 
 ## اعتبارسنجی
-
-1. هر سه ردیف A2001 در **Clearance Station** کنار A1003 ظاهر شوند.
-2. روی یکی از آن‌ها از Clearance Station تأیید کن → باید به `complete` برود (مسیر قانونی کار می‌کند).
-3. تست منفی (اختیاری): `UPDATE cut_plan_items SET phase='complete' WHERE id=<آیتم در فاز cutting>` → باید به `clearance` redirect شود.
-4. هیچ آیتم complete موجود از queue تحویل/pickup حذف نشده باشد.
+1. در Clearance Station باید فقط یک کارت **«INNIS COLLEGE»** برای این پروژه دیده شود — شامل هر دو مارک‌ست (A1003 + A2001) با شمارش تجمیعی (مثلاً `3/4`).
+2. کارت‌های بقیهٔ پروژه‌ها (CAGES, J-HOOKS, R01, …) دست‌نخورده باقی بمانند.
+3. شمارهٔ هدر `3 / 7 Cleared` تغییر نمی‌کند (فقط نحوهٔ گروه‌بندی عوض می‌شود، نه تعداد آیتم‌ها).
 
