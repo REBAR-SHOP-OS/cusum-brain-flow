@@ -7,6 +7,7 @@ import { useCompanyId } from "@/hooks/useCompanyId";
 export interface ClearanceItem {
   id: string;
   cut_plan_id: string;
+  project_id: string | null;
   bar_code: string;
   cut_length_mm: number;
   mark_number: string | null;
@@ -35,7 +36,7 @@ export function useClearanceData() {
     queryFn: async () => {
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(id, name, project_name, company_id)")
+        .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, projects(id, name))")
         .eq("phase", "clearance")
         .eq("cut_plans.company_id", companyId!);
 
@@ -71,6 +72,7 @@ export function useClearanceData() {
         return {
           id: item.id,
           cut_plan_id: item.cut_plan_id,
+          project_id: item.cut_plans?.project_id || null,
           bar_code: item.bar_code,
           cut_length_mm: item.cut_length_mm,
           mark_number: item.mark_number,
@@ -79,7 +81,7 @@ export function useClearanceData() {
           total_pieces: item.total_pieces,
           bend_completed_pieces: item.bend_completed_pieces,
           plan_name: item.cut_plans?.name || "",
-          project_name: item.cut_plans?.project_name || null,
+          project_name: item.cut_plans?.projects?.name || item.cut_plans?.project_name || null,
           evidence_id: ev?.id || null,
           material_photo_url: ev?.material_photo_url || null,
           tag_scan_url: ev?.tag_scan_url || null,
@@ -110,14 +112,17 @@ export function useClearanceData() {
 
   const byProject = new Map<string, { label: string; items: ClearanceItem[] }>();
   for (const item of data || []) {
-    // Use cut_plan_id as grouping key to avoid same-name project collision
-    const key = item.cut_plan_id;
-    const label = item.project_name || item.plan_name || "Unassigned";
+    // Group by canonical project_id so multiple cut_plans of the same project merge into one card.
+    // Orphan items without a project_id fall back under "Unassigned".
+    const key = item.project_id || "__unassigned__";
+    const label = item.project_id
+      ? (item.project_name || item.plan_name || "Unassigned")
+      : "Unassigned";
     if (!byProject.has(key)) byProject.set(key, { label, items: [] });
     byProject.get(key)!.items.push(item);
   }
 
-  // Flatten to Map<label, items> for backward compat but using unique keys
+  // Flatten to Map<label, items> for backward compat with ClearanceStation consumer.
   const byProjectLabel = new Map<string, ClearanceItem[]>();
   for (const [, group] of byProject) {
     const existing = byProjectLabel.get(group.label);
