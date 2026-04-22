@@ -24,6 +24,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { formatLengthShort, type UnitSystem } from "@/lib/unitSystem";
+
+// Format a leftover length (mm) for display in the tracker UI.
+function fmtLen(mm: number, unit: UnitSystem): string {
+  if (unit === "imperial") return `${formatLengthShort(mm, "imperial")}`;
+  return `${mm}mm`;
+}
 
 // ── Types ────────────────────────────────────────────────────────────
 export type SlotStatus = "waiting" | "active" | "removable" | "removed" | "completed";
