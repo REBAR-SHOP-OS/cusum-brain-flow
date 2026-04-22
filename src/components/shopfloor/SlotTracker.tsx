@@ -104,7 +104,7 @@ function ActiveBarRemovalSection({
                 >
                   <span>Bar {slot.index + 1}</span>
                   <span className="text-muted-foreground">
-                    {slot.cutsDone} cuts · {leftover}mm left
+                    {slot.cutsDone} cuts · {fmtLen(leftover, displayUnit)} left
                   </span>
                   <MinusCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
                 </Button>
