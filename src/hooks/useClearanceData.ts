@@ -36,7 +36,7 @@ export function useClearanceData() {
     queryFn: async () => {
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(id, name, project_name, company_id)")
+        .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, projects(id, name))")
         .eq("phase", "clearance")
         .eq("cut_plans.company_id", companyId!);
 
