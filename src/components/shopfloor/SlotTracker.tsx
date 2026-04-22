@@ -24,6 +24,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { formatLengthShort, type UnitSystem } from "@/lib/unitSystem";
+
+// Format a leftover length (mm) for display in the tracker UI.
+function fmtLen(mm: number, unit: UnitSystem): string {
+  if (unit === "imperial") return `${formatLengthShort(mm, "imperial")}`;
+  return `${mm}mm`;
+}
 
 // ── Types ────────────────────────────────────────────────────────────
 export type SlotStatus = "waiting" | "active" | "removable" | "removed" | "completed";
@@ -45,6 +52,8 @@ interface SlotTrackerProps {
   onRemoveBar: (slotIndex: number) => void;
   onCompleteRun: () => void;
   canWrite: boolean;
+  /** Display unit for length labels. Storage stays mm. Default "metric". */
+  displayUnit?: UnitSystem;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -62,11 +71,13 @@ function ActiveBarRemovalSection({
   cutLengthMm,
   stockLengthMm,
   onRemoveBar,
+  displayUnit,
 }: {
   activeSlots: ActiveSlot[];
   cutLengthMm: number;
   stockLengthMm: number;
   onRemoveBar: (slotIndex: number) => void;
+  displayUnit: UnitSystem;
 }) {
   const [confirmSlot, setConfirmSlot] = useState<ActiveSlot | null>(null);
 
@@ -93,7 +104,7 @@ function ActiveBarRemovalSection({
                 >
                   <span>Bar {slot.index + 1}</span>
                   <span className="text-muted-foreground">
-                    {slot.cutsDone} cuts · {leftover}mm left
+                    {slot.cutsDone} cuts · {fmtLen(leftover, displayUnit)} left
                   </span>
                   <MinusCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
                 </Button>
@@ -113,7 +124,7 @@ function ActiveBarRemovalSection({
               {confirmSlot && (
                 <>
                   This bar has <strong>{confirmSlot.cutsDone}</strong> cut{confirmSlot.cutsDone !== 1 ? "s" : ""} done.
-                  The remnant ({computeLeftover(stockLengthMm, confirmSlot.cutsDone, cutLengthMm)}mm) will be set aside.
+                  The remnant ({fmtLen(computeLeftover(stockLengthMm, confirmSlot.cutsDone, cutLengthMm), displayUnit)}) will be set aside.
                 </>
               )}
             </AlertDialogDescription>
@@ -151,6 +162,7 @@ export function SlotTracker({
   onRemoveBar,
   onCompleteRun,
   canWrite,
+  displayUnit = "metric",
 }: SlotTrackerProps) {
   const activeSlots = slots.filter((s) => s.status === "active");
   const removableSlots = slots.filter((s) => s.status === "removable");
@@ -308,8 +320,8 @@ export function SlotTracker({
                 <p className="text-xs text-muted-foreground">
                   {slot.cutsDone}/{slot.plannedCuts} cuts done — 
                   {isRemnant
-                    ? ` set aside as remnant (${leftover}mm)`
-                    : ` scrap (${leftover}mm < ${REMNANT_THRESHOLD_MM}mm threshold)`}
+                    ? ` set aside as remnant (${fmtLen(leftover, displayUnit)})`
+                    : ` scrap (${fmtLen(leftover, displayUnit)} < ${fmtLen(REMNANT_THRESHOLD_MM, displayUnit)} threshold)`}
                 </p>
               </div>
               {canWrite && (
@@ -335,6 +347,7 @@ export function SlotTracker({
           cutLengthMm={cutLengthMm}
           stockLengthMm={stockLengthMm}
           onRemoveBar={onRemoveBar}
+          displayUnit={displayUnit}
         />
       )}
 

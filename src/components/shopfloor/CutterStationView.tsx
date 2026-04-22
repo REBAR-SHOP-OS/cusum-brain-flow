@@ -884,18 +884,24 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           ) : (
             <>
               {/* ── SLOT TRACKER (visible during active run) ── */}
-              {machineIsRunning && slotTracker.slots.length > 0 && (
-                <SlotTracker
-                  slots={slotTracker.slots}
-                  barCode={currentItem.bar_code}
-                  cutLengthMm={currentItem.cut_length_mm}
-                  stockLengthMm={selectedStockLength}
-                  onRecordStroke={handleRecordStroke}
-                  onRemoveBar={handleRemoveBar}
-                  onCompleteRun={handleCompleteRun}
-                  canWrite={effectiveCanWrite}
-                />
-              )}
+              {machineIsRunning && slotTracker.slots.length > 0 && (() => {
+                const srcText = currentItem.source_total_length_text || "";
+                const isImperial = srcText.includes('"') || srcText.includes("'");
+                const displayUnit: "metric" | "imperial" = isImperial ? "imperial" : "metric";
+                return (
+                  <SlotTracker
+                    slots={slotTracker.slots}
+                    barCode={currentItem.bar_code}
+                    cutLengthMm={currentItem.cut_length_mm}
+                    stockLengthMm={selectedStockLength}
+                    onRecordStroke={handleRecordStroke}
+                    onRemoveBar={handleRemoveBar}
+                    onCompleteRun={handleCompleteRun}
+                    canWrite={effectiveCanWrite}
+                    displayUnit={displayUnit}
+                  />
+                );
+              })()}
 
               {/* ── FOREMAN BRAIN PANEL (instructions before/during run) ── */}
               {(!machineIsRunning || slotTracker.slots.length === 0) && (
@@ -1061,6 +1067,12 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             totalPiecesDone={slotTracker.totalCutsDone}
             totalPiecesPlanned={slotTracker.slots.reduce((s, sl) => s + sl.plannedCuts, 0)}
             activeBars={slotTracker.slots.filter(s => s.status === "active").length}
+            displayUnit={
+              currentItem?.source_total_length_text &&
+              (currentItem.source_total_length_text.includes('"') || currentItem.source_total_length_text.includes("'"))
+                ? "imperial"
+                : "metric"
+            }
           />
         </div>
       </div>
