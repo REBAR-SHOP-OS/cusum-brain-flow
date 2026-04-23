@@ -45,7 +45,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ["station-data", machineId, machineType, companyId, projectId],
     enabled: !!user && !!machineId && !!companyId,
     queryFn: async () => {
@@ -214,6 +214,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
     items: data ?? [],
     groups,
     isLoading,
+    isFetching,
     error,
   };
 }

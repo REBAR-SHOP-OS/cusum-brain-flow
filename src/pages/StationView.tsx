@@ -26,7 +26,7 @@ export default function StationView() {
   const machine = machines.find((m) => m.id === machineId);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   // Fetch ALL items for this machine (no project filter) so we can extract projects
-  const { groups: allGroups, items: allItems, isLoading: dataLoading, error } = useStationData(machineId || null, machine?.type, null);
+  const { groups: allGroups, items: allItems, isLoading: dataLoading, isFetching, error } = useStationData(machineId || null, machine?.type, null);
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
   const [activeTab, setActiveTab] = useState("production");
@@ -118,12 +118,17 @@ export default function StationView() {
     ? items.filter((i) => i.cut_plan_id === selectedBarListId)
     : items;
 
-  // Auto-clear selectedItemId if the item no longer exists (e.g. moved to clearance) or list is empty
+  // Auto-clear selectedItemId only when the item is genuinely gone — not during refetch
+  // or while the operator is mid-run on this item.
   useEffect(() => {
-    if (selectedItemId && !items.some(i => i.id === selectedItemId)) {
+    if (dataLoading || isFetching) return;
+    if (!selectedItemId) return;
+    if (items.length === 0) return;
+    if (machine?.current_run_id === selectedItemId) return;
+    if (!items.some(i => i.id === selectedItemId)) {
       setSelectedItemId(null);
     }
-  }, [filteredItems, selectedItemId]);
+  }, [items, dataLoading, isFetching, selectedItemId, machine?.current_run_id]);
 
   const filteredGroups = selectedBarListId
     ? groups
