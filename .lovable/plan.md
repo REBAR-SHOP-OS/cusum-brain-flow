@@ -1,83 +1,91 @@
 
 
-## Plan — Fix "Unknown Customer" labels in Production Queue
+## Plan — Send the 3 wrongly-completed items back to the **Cutter** station
 
-### Root cause (verified live in DB)
+### Verified state
 
-The Production Queue (`/office` → Production Queue tab) resolves customer names through the `public.v_customers_clean` view. That view's WHERE clause filters out any customer whose `name` contains `", "`:
+The operator wrongly advanced 3 items to `complete` on these two manifests. None are linked to delivery / loading / pickup, so they're safe to revert.
 
-```sql
-WHERE status <> 'archived'
-  AND merged_into_customer_id IS NULL
-  AND POSITION(', ' IN name) = 0   -- ← the offender
+| # | Manifest | Plan ID | Items to revert |
+|---|---|---|---|
+| 1 | ET 7800 BUS SHELTER TYPE Q | `587adc69-4c02-44a1-a7d8-e85d9aee5a7b` | 2 (10 pcs + 2 pcs) |
+| 2 | CAGE 11' VERT X 18" DIA | `73c1e572-ac96-4fea-8786-f514136786e5` | 1 (8 pcs) |
+
+### Revised target — **Cutter**, not Clearance
+
+Per your correction, both manifests must go back to the **cutting** station (start of the flow), not to QC clearance.
+
+```
+queued → CUTTING ← target
+       → cut_done → bending → clearance → complete
 ```
 
-This filter was intended to hide contact-style entries (e.g. `"John, Doe"`) but it also excludes **legitimate business customers** whose names contain a comma, including:
-
-| Customer ID | Real name (in `customers`) | In view? |
-|---|---|---|
-| `5f296a62-11da-42dc-afc6-13714954bd8d` | Ontario Parking Systems, Blake | ❌ filtered out |
-| `c73cb08b-fec3-4e47-81a3-a91ffaaabcc0` | Powell Fence, Tyler Jones | ❌ filtered out |
-| `273778c1-…` | BESTCON FORMING INC. | ✅ shows fine |
-
-`ProductionQueueView.tsx` (line 163) queries `v_customers_clean` for these IDs, gets nothing back, and falls through to the `\`Unknown Customer (${cid.slice(0, 8)})\`` placeholder on line 320.
-
-This is **not** a React-Query staleness bug, and **not** an `/office` company-update bug — those don't exist in this codebase. The actual on-screen "Unknown Customer" labels in the user's screenshot are entirely caused by the view filter.
-
-### Fix — replace the brittle `POSITION(', ')` filter
-
-Change the view to keep all real, non-archived, non-merged customers regardless of comma in name. Contact-style entries should be filtered by a proper signal (e.g., `customer_type`, or a dedicated flag), not by punctuation in the display name.
+### Fix — one database operation, no code changes
 
 ```sql
-CREATE OR REPLACE VIEW public.v_customers_clean
-WITH (security_invoker = true) AS
-SELECT id AS customer_id, id, name, name AS display_name,
-       company_name, normalized_name, phone, email, status, company_id,
-       created_at, updated_at, quickbooks_id, customer_type,
-       payment_terms, credit_limit, notes,
-       merged_into_customer_id, merged_at, merged_by, merge_reason
-FROM customers
-WHERE status <> 'archived'
-  AND merged_into_customer_id IS NULL;
-```
+-- Send the 3 wrongly-completed items back to the Cutter station
+UPDATE public.cut_plan_items
+SET phase = 'cutting',
+    completed_pieces = 0,
+    fulfillment_channel = NULL,
+    ready_at = NULL,
+    updated_at = now()
+WHERE cut_plan_id IN (
+        '587adc69-4c02-44a1-a7d8-e85d9aee5a7b',
+        '73c1e572-ac96-4fea-8786-f514136786e5'
+      )
+  AND phase = 'complete'
+  AND delivery_id IS NULL
+  AND loading_list_id IS NULL
+  AND pickup_id IS NULL;
 
-Notes:
-- Keeps `security_invoker = true` per project view standard.
-- Drops only the `POSITION(', ' IN name) = 0` predicate; archived + merged filters preserved.
-- No frontend code change. No RLS change. No other tables touched.
-
-### Verification (run after migration)
-
-```sql
-SELECT customer_id, display_name
-FROM v_customers_clean
-WHERE customer_id IN (
-  '5f296a62-11da-42dc-afc6-13714954bd8d',
-  'c73cb08b-fec3-4e47-81a3-a91ffaaabcc0'
+-- Sync parent plan status back to queued/cutting state
+UPDATE public.cut_plans
+SET status = 'queued',
+    updated_at = now()
+WHERE id IN (
+  '587adc69-4c02-44a1-a7d8-e85d9aee5a7b',
+  '73c1e572-ac96-4fea-8786-f514136786e5'
 );
--- expect: both rows returned with their real names
 ```
 
-Then refresh `/office` → Production Queue. The two red-circled "Unknown Customer (…)" entries should display as **"Ontario Parking Systems, Blake"** and **"Powell Fence, Tyler Jones"**, with their projects (`OPS - RF YONDR Data Center`, `Powell Fence DIV 23 Cages`) nested correctly underneath.
+**Safety guards:**
+- Scoped to exactly these two plan IDs.
+- Only touches rows currently at `phase = 'complete'`.
+- Refuses any item already linked to a delivery, loading list, or pickup.
+- Resets `completed_pieces = 0` so the Cutter operator re-cuts from zero.
+- Clears `fulfillment_channel` + `ready_at` so they won't reappear on Ready-to-Ship.
+
+### Verification
+
+```sql
+SELECT cut_plan_id, phase, completed_pieces, total_pieces
+FROM cut_plan_items
+WHERE cut_plan_id IN (
+  '587adc69-4c02-44a1-a7d8-e85d9aee5a7b',
+  '73c1e572-ac96-4fea-8786-f514136786e5')
+ORDER BY 1, 2;
+-- expect: all 6 items now show phase = 'cutting' (3 reverted + 3 already there),
+--         the reverted ones with completed_pieces = 0
+```
 
 ### Result
 
 | Surface | Before | After |
 |---|---|---|
-| Production Queue customer node (5f29…) | "Unknown Customer (5f296a62)" | "Ontario Parking Systems, Blake" |
-| Production Queue customer node (c73c…) | "Unknown Customer (c73cb08b)" | "Powell Fence, Tyler Jones" |
-| Any other customer with a comma in name | hidden as "Unknown" | resolved correctly |
-| BESTCON, Marks Sign Service, ET CONSTRUCTION, etc. | already fine | unchanged |
-| Other consumers of `v_customers_clean` | filtered subset | full active set (intended) |
+| 3 wrongly-completed items | `phase = complete`, on Ready-to-Ship | `phase = cutting`, at Cutter station |
+| Cutter station queue | did not show these | shows ET 7800 (2 items) + CAGE 11' (1 item) |
+| Ready-to-Ship board | showed these 3 items | hidden |
+| Other items on these plans (already at `cut_done`) | unchanged | unchanged |
+| Other manifests / customers | untouched | untouched |
 
 ### Out of scope
 
-- No changes to `ProductionQueueView.tsx`, `useCompanies`, `useProjects`, or any frontend file.
-- No RLS changes — view is `security_invoker` and `customers` RLS still applies.
-- Archived and merged customers remain hidden.
-- If a true "no contacts" filter is needed elsewhere, that should be a separate, explicit signal (e.g., `customer_type = 'business'`) — not punctuation in `name`.
+- No frontend code changes.
+- No trigger changes — `auto_advance_item_phase` already prevents future skip-to-complete mistakes.
+- The previously-completed bend/cut_done siblings on these plans stay at their current phase.
 
 ### Files touched
 
-None in the repo. **One database migration** that runs `CREATE OR REPLACE VIEW public.v_customers_clean …` as shown above.
+None in the repo. **One database operation** with two scoped UPDATEs.
 
