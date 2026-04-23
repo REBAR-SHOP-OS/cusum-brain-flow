@@ -1,125 +1,89 @@
 
 
-# معماری کامل ماژول Social Media Manager
+# مستندسازی کامل معماری Social Media Manager
 
-این یک **پلن مستندسازی** است (نه تغییر کد). نقشهٔ کامل مسیر داده از UI تا API های خارجی را ارائه می‌دهد.
+کاربر یک سند جامع و دقیق می‌خواهد (نه فقط نمودار). یک PDF چندصفحه‌ای حرفه‌ای تولید می‌کنم که **تمام جزئیات** ماژول Social Media Manager را پوشش دهد، به‌علاوهٔ نمودار Mermaid موجود.
 
-## 1) لایهٔ UI — `/social-media-manager`
+## خروجی نهایی
 
-**صفحهٔ اصلی:** `src/pages/SocialMediaManager.tsx`
-- هدر: `Auto-generate today` • `Approvals` • `Pending Approval` • `Strategy` • `Create content` • `Settings`
-- نوار وضعیت: `267 Approved posts` • `Edit Brand Kit` • `Add Card` • شمارندهٔ `Published / Total`
-- فیلترها: پلتفرم (FB, IG, LinkedIn, X, TikTok, YouTube) • وضعیت (Drafts/Scheduled/Published/Declined)
-- Week navigator (Mon→Sun)
+یک فایل **PDF** در `/mnt/documents/SocialMediaManager_Full_Architecture.pdf` با ساختار زیر:
 
-**کامپوننت‌های کلیدی** (`src/components/social/`):
-| کامپوننت | نقش |
-|---|---|
-| `SocialCalendar` | شبکهٔ هفتگی + کارت‌های per-page با نشانگر Published/Failed/Pending |
-| `PostReviewPanel` | ویرایش کپشن، Translate، تنظیم پلتفرم/Page، Publish، Schedule |
-| `CreateContentDialog` | سه مسیر: Manual / Pixel agent / Upload |
-| `ApprovalsPanel` + `DeclineReasonDialog` | جریان تأیید |
-| `ContentStrategyPanel` + `BrandKitDialog` | استراتژی برند و رنگ/لوگو |
-| `SettingsSheet` | برین (instructions/images) |
-| `VideoStudioContent` + `VideoLibrary` + `VideoEditor` | استودیوی ویدیو |
-| `ImageGeneratorDialog` / `VideoGeneratorDialog` | تولید رسانه |
-| `PixelPostCard` / `PixelChatRenderer` | چت Pixel agent |
+### بخش ۱ — خلاصهٔ اجرایی (1 صفحه)
+- هدف ماژول، KPIها، موقعیت در ERP، کاربران (Sattar, Neel, تیم سوشال)
+- پلتفرم‌های پشتیبانی‌شده و حجم خروجی روزانه (5 پست × پلتفرم)
 
-## 2) Hooks و Client libs
+### بخش ۲ — معماری لایه‌ای کامل (2 صفحه)
+- نمودار 7-layer (UI → Hooks → Edge Functions → Services → DB → Storage → External APIs)
+- هر لایه با مسئولیت‌ها، ورودی‌ها، خروجی‌ها
 
-| Hook/lib | مسئولیت |
-|---|---|
-| `useSocialPosts` | CRUD روی `social_posts` با react-query |
-| `useAutoGenerate` | درج ۵ placeholder در ۰۶:۳۰، ۰۷:۳۰، ۰۸:۰۰، ۱۲:۳۰، ۱۴:۳۰ ET، سپس فراخوانی `auto-generate-post` |
-| `usePublishPost` | فراخوانی `social-publish` با timeout ۱۲۰s و ضد-دوباره‌انتشار |
-| `useSocialApprovals` | لیست approvals |
-| `useStrategyChecklist` | چک‌لیست استراتژی |
-| `lib/schedulePost.ts` | فراخوانی edge `schedule-post` |
-| `lib/socialConstants.ts` | نگاشت `PLATFORM_PAGES` (Rebar.shop, Ontario Steels, …) |
+### بخش ۳ — UI Components (2 صفحه)
+- جدول کامل ۲۵+ کامپوننت در `src/components/social/`
+- props اصلی، state management، realtime subscriptions
+- screenshot-style ASCII layout از صفحهٔ اصلی
 
-## 3) Edge Functions (Supabase)
+### بخش ۴ — Hooks و Client Libraries (1 صفحه)
+- `useSocialPosts`, `useAutoGenerate`, `usePublishPost`, `useSocialApprovals`, `useStrategyChecklist`
+- signature، dependencies، error handling، timeout policies
+- caching strategy (React Query keys)
 
-**تولید محتوا**
-- `auto-generate-post` — captions + images؛ از `knowledge` (agent='social') و لوگو در `social-images/brand/` می‌خواند. Lovable AI Gateway (Gemini 2.5 / GPT) + DashScope Wan 2.6.
-- `regenerate-post` — Image-only یا caption rotation با مدل‌های متعدد و dedup علیه ۳۰ فایل اخیر.
-- `generate-image` / `generate-video` — Wan 2.6 t2v/i2v، Veo 3.1، Sora 2 (با قانون **Silent Video** — صدای auto حذف می‌شود).
-- `translate-caption` — ترجمهٔ Persian preview block.
-- `video-to-social` / `video-intelligence` — convert/edit ویدیو.
-- `social-intelligence` — analytics.
+### بخش ۵ — Edge Functions کامل (3 صفحه)
+- لیست کامل ۱۵+ edge function مرتبط با social
+- برای هر function: نام، trigger، input/output، AI model، secrets موردنیاز، rate limit
+- شامل: `auto-generate-post`, `regenerate-post`, `social-publish`, `social-cron-publish`, `schedule-post`, `generate-image`, `generate-video`, `translate-caption`, `video-to-social`, `video-intelligence`, `social-intelligence`, `facebook-oauth`, `linkedin-oauth`, `tiktok-oauth`
 
-**انتشار**
-- `social-publish` — انتشار on-demand به یک پست. Token resolution: **owner-first → team fallback** در همان company. برای FB/IG token را از `user_meta_tokens` و برای LinkedIn/TikTok از `integration_connections` می‌خواند.
-- `social-cron-publish` — cron هر ۵ دقیقه (`pg_cron` job `social-cron-publish-every-5min`). recovery از publishing های stuck > ۱۰ دقیقه و حذف بلاک Persian قبل از publish.
-- `schedule-post` — تنظیم زمان.
+### بخش ۶ — Database Schema کامل (2 صفحه)
+- جدول‌های `social_posts`, `social_approvals`, `social_strategy_checklist`, `brand_kit`, `user_meta_tokens`, `integration_connections`, `knowledge`
+- ستون‌ها با type، default، constraints
+- RLS policies (متن دقیق)
+- triggers و functions
+- realtime publication
 
-**OAuth**
-- `facebook-oauth` → `user_meta_tokens` (با `pages` و `instagram_accounts` JSON).
-- `linkedin-oauth` / `tiktok-oauth` → `integration_connections.config` (encrypted).
+### بخش ۷ — جریان داده‌ها (2 صفحه)
+- 6 سناریو کامل با sequence diagram (Mermaid):
+  1. Auto-generate Today
+  2. Manual Create
+  3. Schedule Post
+  4. Cron Publish (every 5 min)
+  5. On-demand Publish
+  6. Approval Flow
 
-## 4) دیتابیس (Postgres + RLS)
+### بخش ۸ — External APIs (1 صفحه)
+- Facebook Graph v21.0، Instagram Graph، LinkedIn v2، TikTok، YouTube
+- AI providers: Lovable AI Gateway، DashScope (Wan 2.6)، OpenAI (Sora 2، gpt-image-1)
+- endpoints، auth method، rate limits، error codes
 
-| جدول | محتوا | RLS |
-|---|---|---|
-| `social_posts` | platform, status, scheduled_date, page_name, content, hashtags, image_url, cover_image_url, last_error, declined_by | `is_social_team()` — تیم سوشال CRUD کامل |
-| `social_approvals` | post_id, approver_id, status, deadline | تیم سوشال SELECT/UPDATE |
-| `social_strategy_checklist` | user_id-scoped | فقط مالک |
-| `brand_kit` | colors, logo, website, tagline | فقط مالک |
-| `user_meta_tokens` | FB long-lived token + pages[] + instagram_accounts[] | **Deny-all-client** (فقط service_role)؛ ویوی ایمن `user_meta_tokens_safe` |
-| `integration_connections` | LinkedIn / TikTok config | service_role |
-| `knowledge` (agent='social') | brain instructions + reference images | عمومی برای تیم |
-| Storage: `social-images/{brand,pixel}` | لوگو، تصاویر تولیدشده | مدیریت‌شده توسط edge functions |
+### بخش ۹ — Security & Hard Rules (1 صفحه)
+- Silent Video rule
+- No Persian Publish (regex sanitization)
+- Owner-first → Team fallback token resolution
+- Tokens never client-side
+- Idempotent publish (publishLock.ts)
+- RLS isolation by `company_id`
 
-**Realtime:** `social_posts` و `social_approvals` در `supabase_realtime` publication هستند.
+### بخش ۱۰ — Operational Concerns (1 صفحه)
+- Cron schedule (`pg_cron` jobs)
+- Monitoring & logging
+- Failure modes و retry logic
+- Token refresh strategy
+- Storage quotas
 
-## 5) APIهای خارجی
+### بخش ۱۱ — نمودار Mermaid (1 صفحه)
+- نسخهٔ به‌روزشدهٔ نمودار قبلی، embedded به‌صورت تصویر
 
-- **Facebook Graph v21.0** — refresh page token → preflight → publish (post/reel/story)
-- **Instagram Graph** — IG Business Account های لینک‌شده به Page؛ انتشار موازی
-- **LinkedIn API v2** — userinfo + UGC posts (organization یا personal)
-- **TikTok Open API** — video publish
-- **YouTube Data API** — ویدیوی تکی
-- **Lovable AI Gateway** — Gemini 2.5 Flash/Pro Image, GPT-5-mini, gpt-image-1
-- **DashScope** — Wan 2.6 t2v/i2v (1080P، silent)
-- **OpenAI** — Sora 2 (ویدیو)، gpt-image-1 (تصویر)
+## مراحل تولید
 
-## 6) جریان داده‌ها
+1. کشف کامل: خواندن همهٔ فایل‌های `src/components/social/`، `src/hooks/use*Social*`، `supabase/functions/*social*` و edge function های مرتبط، schema از `read_query`
+2. استخراج RLS policies و triggers با `supabase--read_query`
+3. تولید PDF با `reportlab` (نه pptx، چون سند فنی است)
+4. embed نمودار Mermaid به‌عنوان PNG (render شده با mmdc)
+5. QA: تبدیل PDF به تصاویر و بررسی تک‌تک صفحات
 
-```text
-A) Auto-generate Today
-   Click → useAutoGenerate inserts 5 placeholder rows
-        → invoke auto-generate-post (brain + brand_kit + knowledge images)
-        → Lovable AI generates caption + image
-        → upload to Storage → update social_posts → Realtime → UI refresh
+## فایل‌های خروجی
 
-B) Manual Create
-   CreateContentDialog → useSocialPosts.createPost → social_posts (status=draft)
+- `/mnt/documents/SocialMediaManager_Full_Architecture.pdf` — سند اصلی (~۱۵ صفحه)
+- `/mnt/documents/SocialMediaManager_Architecture.mmd` — نمودار Mermaid (به‌روزشده)
 
-C) Schedule
-   PostReviewPanel → schedulePost lib → schedule-post edge → social_posts (status=scheduled, scheduled_date)
+## آنچه دست نمی‌خورد
 
-D) Cron Publish (every 5 min)
-   pg_cron → social-cron-publish → SELECT due posts → recover stale locks
-        → strip Persian → resolve token (owner→team) → refresh page token
-        → Graph/LinkedIn/TikTok/YouTube API → update status=published / failed + last_error
-
-E) On-demand Publish
-   PostReviewPanel → usePublishPost → social-publish edge → same path as D
-
-F) Approvals
-   Pending → ApprovalsPanel → social_approvals UPDATE → Realtime → kanban refresh
-```
-
-## 7) قوانین حساس (HARD)
-
-- **Silent Video:** هیچ ویدیوی تولیدشده توسط Wan/Veo/Sora نباید صدا داشته باشد.
-- **No Persian Publish:** بلاک `---PERSIAN---` و کاراکترهای `\u0600-\u06FF` قبل از انتشار strip می‌شوند.
-- **Owner-first token, team fallback** فقط درون همان `company_id`.
-- **Tokens never client-side:** فقط `*_safe` view و service_role.
-- **Idempotent publish:** lock acquire/release از `_shared/publishLock.ts` تا duplicate جلوگیری شود.
-
-## 8) خروجی
-
-نمودار Mermaid کامل به‌عنوان آرتیفکت ضمیمه شده تا با همان ساختار بصری در پروژه قابل بازبینی باشد.
-
-<lov-artifact path="SocialMediaManager_Architecture.mmd" mime_type="text/vnd.mermaid"></lov-artifact>
+هیچ تغییری در کد، DB، یا edge functions ایجاد نمی‌شود. فقط مستندسازی.
 
