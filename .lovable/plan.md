@@ -1,64 +1,83 @@
 
 
-## Plan — Restore full Production Queue visibility for kourosh@rebar.shop
+## Plan — Fix "Unknown Customer" labels in Production Queue
 
 ### Root cause (verified live in DB)
-Three data defects on his account, all required for the Production Queue list to populate:
 
-| Defect | Current | Required |
+The Production Queue (`/office` → Production Queue tab) resolves customer names through the `public.v_customers_clean` view. That view's WHERE clause filters out any customer whose `name` contains `", "`:
+
+```sql
+WHERE status <> 'archived'
+  AND merged_into_customer_id IS NULL
+  AND POSITION(', ' IN name) = 0   -- ← the offender
+```
+
+This filter was intended to hide contact-style entries (e.g. `"John, Doe"`) but it also excludes **legitimate business customers** whose names contain a comma, including:
+
+| Customer ID | Real name (in `customers`) | In view? |
 |---|---|---|
-| `profiles.user_id` | `NULL` | `efa543f5-0f1b-4cee-b806-4176d996e9a6` |
-| `profiles.is_active` | `false` | `true` |
-| `user_roles` | `workshop` only | `workshop` + `shop_supervisor` |
+| `5f296a62-11da-42dc-afc6-13714954bd8d` | Ontario Parking Systems, Blake | ❌ filtered out |
+| `c73cb08b-fec3-4e47-81a3-a91ffaaabcc0` | Powell Fence, Tyler Jones | ❌ filtered out |
+| `273778c1-…` | BESTCON FORMING INC. | ✅ shows fine |
 
-Because `profiles.user_id` is NULL, `useCompanyId()` returns `null` → `useProjects(companyId)` returns `[]` → `ShopFloorProductionQueue` has no `projectIds` → list is empty. The header counters ("143 items", "40 pool") come from a separate hook that doesn't filter by projects, which is why those still show.
+`ProductionQueueView.tsx` (line 163) queries `v_customers_clean` for these IDs, gets nothing back, and falls through to the `\`Unknown Customer (${cid.slice(0, 8)})\`` placeholder on line 320.
 
-`is_active = false` will additionally exclude him from operator dropdowns. Missing `shop_supervisor` blocks supervisor overrides (machine unlock, cross-project admin actions) which a "shop administrator" needs.
+This is **not** a React-Query staleness bug, and **not** an `/office` company-update bug — those don't exist in this codebase. The actual on-screen "Unknown Customer" labels in the user's screenshot are entirely caused by the view filter.
 
-### Fix — three data operations, no code changes
+### Fix — replace the brittle `POSITION(', ')` filter
+
+Change the view to keep all real, non-archived, non-merged customers regardless of comma in name. Contact-style entries should be filtered by a proper signal (e.g., `customer_type`, or a dedicated flag), not by punctuation in the display name.
 
 ```sql
--- 1. Link his profile to his auth user (fixes companyId resolution → unblocks every query)
-UPDATE public.profiles
-SET user_id = 'efa543f5-0f1b-4cee-b806-4176d996e9a6',
-    is_active = true,
-    updated_at = now()
-WHERE email = 'kourosh@rebar.shop';
-
--- 2. Grant shop administrator role
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('efa543f5-0f1b-4cee-b806-4176d996e9a6', 'shop_supervisor')
-ON CONFLICT (user_id, role) DO NOTHING;
+CREATE OR REPLACE VIEW public.v_customers_clean
+WITH (security_invoker = true) AS
+SELECT id AS customer_id, id, name, name AS display_name,
+       company_name, normalized_name, phone, email, status, company_id,
+       created_at, updated_at, quickbooks_id, customer_type,
+       payment_terms, credit_limit, notes,
+       merged_into_customer_id, merged_at, merged_by, merge_reason
+FROM customers
+WHERE status <> 'archived'
+  AND merged_into_customer_id IS NULL;
 ```
 
-### Verification (run after)
+Notes:
+- Keeps `security_invoker = true` per project view standard.
+- Drops only the `POSITION(', ' IN name) = 0` predicate; archived + merged filters preserved.
+- No frontend code change. No RLS change. No other tables touched.
+
+### Verification (run after migration)
+
 ```sql
-SELECT p.user_id, p.email, p.company_id, p.is_active,
-       array_agg(ur.role) AS roles
-FROM profiles p
-LEFT JOIN user_roles ur ON ur.user_id = p.user_id
-WHERE p.email = 'kourosh@rebar.shop'
-GROUP BY p.user_id, p.email, p.company_id, p.is_active;
--- expect: user_id = efa543f5-..., is_active = true, roles = {workshop, shop_supervisor}
+SELECT customer_id, display_name
+FROM v_customers_clean
+WHERE customer_id IN (
+  '5f296a62-11da-42dc-afc6-13714954bd8d',
+  'c73cb08b-fec3-4e47-81a3-a91ffaaabcc0'
+);
+-- expect: both rows returned with their real names
 ```
+
+Then refresh `/office` → Production Queue. The two red-circled "Unknown Customer (…)" entries should display as **"Ontario Parking Systems, Blake"** and **"Powell Fence, Tyler Jones"**, with their projects (`OPS - RF YONDR Data Center`, `Powell Fence DIV 23 Cages`) nested correctly underneath.
 
 ### Result
+
 | Surface | Before | After |
 |---|---|---|
-| `useCompanyId()` | `null` | `a0000000-...-001` |
-| `useProjects()` | `[]` | all 19 customer projects |
-| Production Queue list (bottom of Station Dashboard) | empty | all customers + barlists + cut plans |
-| Pool / Clearance / Loading / Pickup / Cutter / Inventory | empty | populated |
-| MyJobsCard | empty | shows assignments |
-| Operator assignment dropdowns | excluded | included |
-| Machine unlock / supervisor override | denied | allowed |
-| Sidebar menus | Shop Floor / Time Clock / Team Hub | unchanged |
+| Production Queue customer node (5f29…) | "Unknown Customer (5f296a62)" | "Ontario Parking Systems, Blake" |
+| Production Queue customer node (c73c…) | "Unknown Customer (c73cb08b)" | "Powell Fence, Tyler Jones" |
+| Any other customer with a comma in name | hidden as "Unknown" | resolved correctly |
+| BESTCON, Marks Sign Service, ET CONSTRUCTION, etc. | already fine | unchanged |
+| Other consumers of `v_customers_clean` | filtered subset | full active set (intended) |
 
 ### Out of scope
-- No frontend code changes — `useCompanyId`, `useProjects`, RLS, and `userAccessConfig.ts` are all correct.
-- Other orphan profile rows untouched (surgical scope).
-- Menu restriction from prior approved plan stays intact.
+
+- No changes to `ProductionQueueView.tsx`, `useCompanies`, `useProjects`, or any frontend file.
+- No RLS changes — view is `security_invoker` and `customers` RLS still applies.
+- Archived and merged customers remain hidden.
+- If a true "no contacts" filter is needed elsewhere, that should be a separate, explicit signal (e.g., `customer_type = 'business'`) — not punctuation in `name`.
 
 ### Files touched
-None. Three database operations only (1 UPDATE setting two columns, 1 INSERT).
+
+None in the repo. **One database migration** that runs `CREATE OR REPLACE VIEW public.v_customers_clean …` as shown above.
 
