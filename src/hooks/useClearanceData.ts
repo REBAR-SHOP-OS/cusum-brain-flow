@@ -110,8 +110,12 @@ export function useClearanceData() {
   const clearedCount = (data || []).filter((i) => i.evidence_status === "cleared").length;
   const totalCount = (data || []).length;
 
+  // Defensive: hide items that are already cleared so they don't linger on the station
+  // even if the auto_advance trigger hasn't moved them off `clearance` phase yet.
+  const visibleItems = (data || []).filter((i) => i.evidence_status !== "cleared");
+
   const byProject = new Map<string, { label: string; items: ClearanceItem[] }>();
-  for (const item of data || []) {
+  for (const item of visibleItems) {
     // Group by canonical project_id so multiple cut_plans of the same project merge into one card.
     // Orphan items without a project_id fall back under "Unassigned".
     const key = item.project_id || "__unassigned__";
