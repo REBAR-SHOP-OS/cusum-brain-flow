@@ -1,59 +1,125 @@
 
-# علت: SlotTracker و Stock Length فقط mm را hardcode کرده‌اند
 
-## ریشهٔ مشکل
+# معماری کامل ماژول Social Media Manager
 
-در `src/components/shopfloor/CutterStationView.tsx` و `src/components/shopfloor/SlotTracker.tsx`:
+این یک **پلن مستندسازی** است (نه تغییر کد). نقشهٔ کامل مسیر داده از UI تا API های خارجی را ارائه می‌دهد.
 
-1. **DB canonical = mm**: `cut_plan_items.cut_length_mm` همیشه میلی‌متر است (storage standard). ۵۸ اینچ = `1473mm` در DB ذخیره شده.
-2. **نمایش بزرگ "58 IN" درست است** (خط ۹۱۹ CutterStationView): از `currentItem.source_total_length_text` می‌خواند که متن اصلی فایل را نگه می‌دارد، و label هم بر اساس وجود `"` یا `'` به IN/FT/MM سوییچ می‌کند.
-3. **اما SlotTracker و Stock panel هنوز mm-only هستند**:
-   - `SlotTracker.tsx` خط ۹۶: `{slot.cutsDone} cuts · {leftover}mm left` — برچسب hardcoded `mm`.
-   - `SlotTracker.tsx` خط ۱۱۶: dialog حذف bar هم `({...}mm)` می‌گوید.
-   - `CutterStationView.tsx` خط ۵۲: `useState(12000)` — stock length پیش‌فرض mm.
-   - Bar size panel و Stock length tabs (6M/12M/18M) همه فرض می‌کنند ورودی متریک است.
-   - محاسبات `selectedStockLength - cutsDone * cut_length_mm` در همان واحد mm درست‌اند، ولی **نمایش** unit-aware نیست.
+## 1) لایهٔ UI — `/social-media-manager`
 
-پس اعداد محاسباتی غلط نیستند (همه در mm درست محاسبه می‌شوند)، فقط **برچسب نمایش** برای آیتم imperial گمراه‌کننده است.
+**صفحهٔ اصلی:** `src/pages/SocialMediaManager.tsx`
+- هدر: `Auto-generate today` • `Approvals` • `Pending Approval` • `Strategy` • `Create content` • `Settings`
+- نوار وضعیت: `267 Approved posts` • `Edit Brand Kit` • `Add Card` • شمارندهٔ `Published / Total`
+- فیلترها: پلتفرم (FB, IG, LinkedIn, X, TikTok, YouTube) • وضعیت (Drafts/Scheduled/Published/Declined)
+- Week navigator (Mon→Sun)
 
-## تغییر
+**کامپوننت‌های کلیدی** (`src/components/social/`):
+| کامپوننت | نقش |
+|---|---|
+| `SocialCalendar` | شبکهٔ هفتگی + کارت‌های per-page با نشانگر Published/Failed/Pending |
+| `PostReviewPanel` | ویرایش کپشن، Translate، تنظیم پلتفرم/Page، Publish، Schedule |
+| `CreateContentDialog` | سه مسیر: Manual / Pixel agent / Upload |
+| `ApprovalsPanel` + `DeclineReasonDialog` | جریان تأیید |
+| `ContentStrategyPanel` + `BrandKitDialog` | استراتژی برند و رنگ/لوگو |
+| `SettingsSheet` | برین (instructions/images) |
+| `VideoStudioContent` + `VideoLibrary` + `VideoEditor` | استودیوی ویدیو |
+| `ImageGeneratorDialog` / `VideoGeneratorDialog` | تولید رسانه |
+| `PixelPostCard` / `PixelChatRenderer` | چت Pixel agent |
 
-**فقط لایهٔ نمایش، بدون دست زدن به محاسبات یا DB.**
+## 2) Hooks و Client libs
 
-### ۱. تشخیص unit از روی آیتم
-در `CutterStationView.tsx` نزدیک خط ۸۸۰ (قبل از render SlotTracker) یک flag محلی:
-```ts
-const isImperial = !!currentItem.source_total_length_text &&
-  (currentItem.source_total_length_text.includes('"') || currentItem.source_total_length_text.includes("'"));
-const displayUnit: UnitSystem = isImperial ? "imperial" : "metric";
+| Hook/lib | مسئولیت |
+|---|---|
+| `useSocialPosts` | CRUD روی `social_posts` با react-query |
+| `useAutoGenerate` | درج ۵ placeholder در ۰۶:۳۰، ۰۷:۳۰، ۰۸:۰۰، ۱۲:۳۰، ۱۴:۳۰ ET، سپس فراخوانی `auto-generate-post` |
+| `usePublishPost` | فراخوانی `social-publish` با timeout ۱۲۰s و ضد-دوباره‌انتشار |
+| `useSocialApprovals` | لیست approvals |
+| `useStrategyChecklist` | چک‌لیست استراتژی |
+| `lib/schedulePost.ts` | فراخوانی edge `schedule-post` |
+| `lib/socialConstants.ts` | نگاشت `PLATFORM_PAGES` (Rebar.shop, Ontario Steels, …) |
+
+## 3) Edge Functions (Supabase)
+
+**تولید محتوا**
+- `auto-generate-post` — captions + images؛ از `knowledge` (agent='social') و لوگو در `social-images/brand/` می‌خواند. Lovable AI Gateway (Gemini 2.5 / GPT) + DashScope Wan 2.6.
+- `regenerate-post` — Image-only یا caption rotation با مدل‌های متعدد و dedup علیه ۳۰ فایل اخیر.
+- `generate-image` / `generate-video` — Wan 2.6 t2v/i2v، Veo 3.1، Sora 2 (با قانون **Silent Video** — صدای auto حذف می‌شود).
+- `translate-caption` — ترجمهٔ Persian preview block.
+- `video-to-social` / `video-intelligence` — convert/edit ویدیو.
+- `social-intelligence` — analytics.
+
+**انتشار**
+- `social-publish` — انتشار on-demand به یک پست. Token resolution: **owner-first → team fallback** در همان company. برای FB/IG token را از `user_meta_tokens` و برای LinkedIn/TikTok از `integration_connections` می‌خواند.
+- `social-cron-publish` — cron هر ۵ دقیقه (`pg_cron` job `social-cron-publish-every-5min`). recovery از publishing های stuck > ۱۰ دقیقه و حذف بلاک Persian قبل از publish.
+- `schedule-post` — تنظیم زمان.
+
+**OAuth**
+- `facebook-oauth` → `user_meta_tokens` (با `pages` و `instagram_accounts` JSON).
+- `linkedin-oauth` / `tiktok-oauth` → `integration_connections.config` (encrypted).
+
+## 4) دیتابیس (Postgres + RLS)
+
+| جدول | محتوا | RLS |
+|---|---|---|
+| `social_posts` | platform, status, scheduled_date, page_name, content, hashtags, image_url, cover_image_url, last_error, declined_by | `is_social_team()` — تیم سوشال CRUD کامل |
+| `social_approvals` | post_id, approver_id, status, deadline | تیم سوشال SELECT/UPDATE |
+| `social_strategy_checklist` | user_id-scoped | فقط مالک |
+| `brand_kit` | colors, logo, website, tagline | فقط مالک |
+| `user_meta_tokens` | FB long-lived token + pages[] + instagram_accounts[] | **Deny-all-client** (فقط service_role)؛ ویوی ایمن `user_meta_tokens_safe` |
+| `integration_connections` | LinkedIn / TikTok config | service_role |
+| `knowledge` (agent='social') | brain instructions + reference images | عمومی برای تیم |
+| Storage: `social-images/{brand,pixel}` | لوگو، تصاویر تولیدشده | مدیریت‌شده توسط edge functions |
+
+**Realtime:** `social_posts` و `social_approvals` در `supabase_realtime` publication هستند.
+
+## 5) APIهای خارجی
+
+- **Facebook Graph v21.0** — refresh page token → preflight → publish (post/reel/story)
+- **Instagram Graph** — IG Business Account های لینک‌شده به Page؛ انتشار موازی
+- **LinkedIn API v2** — userinfo + UGC posts (organization یا personal)
+- **TikTok Open API** — video publish
+- **YouTube Data API** — ویدیوی تکی
+- **Lovable AI Gateway** — Gemini 2.5 Flash/Pro Image, GPT-5-mini, gpt-image-1
+- **DashScope** — Wan 2.6 t2v/i2v (1080P، silent)
+- **OpenAI** — Sora 2 (ویدیو)، gpt-image-1 (تصویر)
+
+## 6) جریان داده‌ها
+
+```text
+A) Auto-generate Today
+   Click → useAutoGenerate inserts 5 placeholder rows
+        → invoke auto-generate-post (brain + brand_kit + knowledge images)
+        → Lovable AI generates caption + image
+        → upload to Storage → update social_posts → Realtime → UI refresh
+
+B) Manual Create
+   CreateContentDialog → useSocialPosts.createPost → social_posts (status=draft)
+
+C) Schedule
+   PostReviewPanel → schedulePost lib → schedule-post edge → social_posts (status=scheduled, scheduled_date)
+
+D) Cron Publish (every 5 min)
+   pg_cron → social-cron-publish → SELECT due posts → recover stale locks
+        → strip Persian → resolve token (owner→team) → refresh page token
+        → Graph/LinkedIn/TikTok/YouTube API → update status=published / failed + last_error
+
+E) On-demand Publish
+   PostReviewPanel → usePublishPost → social-publish edge → same path as D
+
+F) Approvals
+   Pending → ApprovalsPanel → social_approvals UPDATE → Realtime → kanban refresh
 ```
-و آن را به SlotTracker پاس می‌دهیم: `<SlotTracker ... displayUnit={displayUnit} />`.
 
-### ۲. SlotTracker
-- اضافه کردن prop اختیاری `displayUnit?: UnitSystem` (default `"metric"`).
-- import `formatLengthShort` از `@/lib/unitSystem`.
-- خط ۹۶: 
-  ```tsx
-  {slot.cutsDone} cuts · {displayUnit === "imperial" 
-    ? formatLengthShort(leftover, "imperial") 
-    : `${leftover}mm`} left
-  ```
-- خط ۱۱۶ (dialog) و خط ۲۹۷+ (removable bars warning) همان pattern.
+## 7) قوانین حساس (HARD)
 
-### ۳. (اختیاری، در همین تغییر) Stock length tabs
-چون imperial-mark معمولاً با bar 20'/40'/60' کار می‌کند، وقتی `displayUnit==="imperial"` متن tab‌ها را به `20'`, `40'`, `60'` نمایش بده ولی **مقدار state همچنان mm** بماند (6096 / 12192 / 18288). این یک تغییر کوچک در `CutEngine` panel است.
+- **Silent Video:** هیچ ویدیوی تولیدشده توسط Wan/Veo/Sora نباید صدا داشته باشد.
+- **No Persian Publish:** بلاک `---PERSIAN---` و کاراکترهای `\u0600-\u06FF` قبل از انتشار strip می‌شوند.
+- **Owner-first token, team fallback** فقط درون همان `company_id`.
+- **Tokens never client-side:** فقط `*_safe` view و service_role.
+- **Idempotent publish:** lock acquire/release از `_shared/publishLock.ts` تا duplicate جلوگیری شود.
 
-## چه چیزی دست نمی‌خورد
-- `cut_length_mm`، `stock_length_mm`، RLS، triggers، schema.
-- منطق `useSlotTracker` (همه به mm).
-- ذخیرهٔ remnant و run notes (می‌توانیم در آینده دو-واحدی کنیم؛ خارج از scope این fix).
-- نمایش بزرگ "58 IN" که قبلاً درست بود.
+## 8) خروجی
 
-## اعتبارسنجی
-1. در همین صفحه (Mark A1001، طول 58"): ردیف bar باید نشان دهد `0 cuts · 39'-4" left` (به‌جای `12000mm left`).
-2. بعد از یک stroke: `1 cuts · 34'-6" left` (تقریبی).
-3. آیتم متریک (مثلاً Mark با `source_total_length_text = "1500"` یا null): همچنان `…mm left` نمایش داده شود.
-4. شمارش پیس‌ها، remnant detection، و `STOP/Complete` بدون تغییر کار کنند.
+نمودار Mermaid کامل به‌عنوان آرتیفکت ضمیمه شده تا با همان ساختار بصری در پروژه قابل بازبینی باشد.
 
-## خلاصهٔ یک‌خطی
-`cut_length_mm` در DB واحد mm است (درست). تنها مشکل، **برچسب** mm hardcoded در `SlotTracker` است؛ با پاس دادن `displayUnit` از `source_total_length_text` و استفاده از `formatLengthShort`، نمایش به ft-in تبدیل می‌شود بدون تغییر در منطق.
+<lov-artifact path="SocialMediaManager_Architecture.mmd" mime_type="text/vnd.mermaid"></lov-artifact>
+
