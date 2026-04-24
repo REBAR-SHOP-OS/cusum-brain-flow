@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatCutLength } from "@/lib/cutLengthDisplay";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RotateCcw, ArrowRight, Loader2 } from "lucide-react";
