@@ -205,11 +205,11 @@ function computeRunPlan(
     .reduce((s, l) => s + (l.qty_on_hand - l.qty_reserved), 0);
 
   const remnantAvailable = availableLots
-    .filter(l => l.source === "remnant" && l.standard_length_mm >= cutLengthMm)
+    .filter(l => l.source === "remnant" && l.standard_length_mm >= cutLength)
     .reduce((s, l) => s + (l.qty_on_hand - l.qty_reserved), 0);
 
   const floorAvailable = floorStock
-    .filter(f => f.length_mm >= cutLengthMm)
+    .filter(f => f.length_mm >= cutLength)
     .reduce((s, f) => s + (f.qty_on_hand - f.qty_reserved), 0);
 
   const totalInventory = lotAvailable + remnantAvailable + floorAvailable;
