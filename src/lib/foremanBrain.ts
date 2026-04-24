@@ -334,6 +334,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
   // ─ Compute run plan ─
   const availableLots = ctx.lots.filter(l => l.qty_on_hand - l.qty_reserved > 0);
   const floorAvailable = ctx.floorStock.filter(f => f.qty_on_hand - f.qty_reserved > 0 && f.length_mm >= item.cut_length_mm);
+  const unit: UnitTag = item.unit_system ?? null;
 
   const runPlan = computeRunPlan(
     ctx.selectedStockLength,
@@ -343,6 +344,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     availableLots,
     floorAvailable as any,
     ctx.manualFloorStockConfirmed || false,
+    unit,
   );
   d.runPlan = runPlan;
 
@@ -350,10 +352,10 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
   if (runPlan.piecesPerBar <= 0) {
     d.blockers.push({
       code: "STOCK_TOO_SHORT",
-      title: `${ctx.selectedStockLength}mm stock cannot produce even 1 piece at ${item.cut_length_mm}mm`,
+      title: `${formatLengthByUnit(ctx.selectedStockLength, unit)} stock cannot produce even 1 piece at ${lengthLabel(item)}`,
       fixSteps: [
         "Select a longer stock length.",
-        `Minimum stock: ${item.cut_length_mm}mm.`,
+        `Minimum stock: ${lengthLabel(item)}.`,
       ],
     });
     return d;
