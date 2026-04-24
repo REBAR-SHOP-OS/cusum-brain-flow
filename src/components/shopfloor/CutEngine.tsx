@@ -72,7 +72,17 @@ export function CutEngine({
   isDone = false,
   displayUnit = "metric",
 }: CutEngineProps) {
-  const [selectedStock, setSelectedStock] = useState(12000);
+  const stockLengths = displayUnit === "imperial" ? STOCK_LENGTHS_IMPERIAL : STOCK_LENGTHS_METRIC;
+  const stockLabels = displayUnit === "imperial" ? STOCK_LABEL_IMPERIAL : STOCK_LABEL_METRIC;
+  const defaultStock = displayUnit === "imperial" ? 480 : 12000;
+  const [selectedStock, setSelectedStock] = useState(defaultStock);
+
+  // When unit switches (item change), reset selected stock to that unit's default
+  useEffect(() => {
+    setSelectedStock(defaultStock);
+    onStockLengthChange?.(defaultStock);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayUnit]);
   const [bars, setBars] = useState(suggestedBars || 1);
   const [operatorOverride, setOperatorOverride] = useState(false);
   const barsLocked = useRef(false);
@@ -153,7 +163,7 @@ export function CutEngine({
           </p>
         </div>
         <div className={cn("flex rounded-lg overflow-hidden border", borderClasses)}>
-          {STOCK_LENGTHS.map((len) => (
+          {stockLengths.map((len) => (
             <button
               key={len}
               onClick={() => handleStockChange(len)}
@@ -166,7 +176,7 @@ export function CutEngine({
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
             >
-              {displayUnit === "imperial" ? (STOCK_LABEL_IMPERIAL[len] || `${len}mm`) : `${len / 1000}M`}
+              {stockLabels[len] || `${len}`}
             </button>
           ))}
         </div>
