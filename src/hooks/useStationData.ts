@@ -22,6 +22,7 @@ export interface StationItem {
   needs_fix: boolean;
   bend_dimensions: Record<string, number> | null;
   source_total_length_text: string | null;
+  unit_system: string | null;
   work_order_id: string | null;
   phase: string;
   // Joined from cut_plans
