@@ -33,12 +33,20 @@ interface CutEngineProps {
   displayUnit?: "metric" | "imperial";
 }
 
-// Stock lengths are stored in mm. Imperial labels approximate to 20'/40'/60'.
-const STOCK_LENGTHS = [6000, 12000, 18000];
+// Stock lengths are stored in the item's native unit (mm OR inches).
+// Imperial: 240" = 20', 480" = 40', 720" = 60'.
+// Metric: 6000/12000/18000 mm.
+const STOCK_LENGTHS_METRIC = [6000, 12000, 18000];
+const STOCK_LENGTHS_IMPERIAL = [240, 480, 720];
 const STOCK_LABEL_IMPERIAL: Record<number, string> = {
-  6000: "20'",
-  12000: "40'",
-  18000: "60'",
+  240: "20'",
+  480: "40'",
+  720: "60'",
+};
+const STOCK_LABEL_METRIC: Record<number, string> = {
+  6000: "6M",
+  12000: "12M",
+  18000: "18M",
 };
 
 export function CutEngine({
