@@ -453,7 +453,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     {
       step: 2,
       text: `Load`,
-      emphasis: `${operatorBars} × ${item.bar_code} bars (${ctx.selectedStockLength / 1000}M stock)`,
+      emphasis: `${operatorBars} × ${item.bar_code} bars (${formatLengthByUnit(ctx.selectedStockLength, item.unit_system)} stock)`,
     },
     {
       step: 3,
@@ -488,8 +488,8 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     hasPartialBar ? ` + ${lastBarPieces} pcs on partial bar` : "",
     ` = ${totalPiecesThisRun} pieces.`,
     piecesAfter > 0 ? ` ${piecesAfter} remaining after this run.` : " Completes this mark.",
-    runPlan.expectedRemnantBars > 0 ? ` ${runPlan.expectedRemnantBars} remnant${runPlan.expectedRemnantBars > 1 ? "s" : ""} kept (≥${REMNANT_THRESHOLD_MM}mm).` : "",
-    runPlan.expectedScrapBars > 0 ? ` ${runPlan.expectedScrapBars} scrap piece${runPlan.expectedScrapBars > 1 ? "s" : ""} (<${REMNANT_THRESHOLD_MM}mm).` : "",
+    runPlan.expectedRemnantBars > 0 ? ` ${runPlan.expectedRemnantBars} remnant${runPlan.expectedRemnantBars > 1 ? "s" : ""} kept (≥${formatLengthByUnit(remnantThreshold(item.unit_system), item.unit_system)}).` : "",
+    runPlan.expectedScrapBars > 0 ? ` ${runPlan.expectedScrapBars} scrap piece${runPlan.expectedScrapBars > 1 ? "s" : ""} (<${formatLengthByUnit(remnantThreshold(item.unit_system), item.unit_system)}).` : "",
     runPlan.isAdjusted ? ` [ADJUSTED: ${runPlan.adjustmentReason}]` : "",
   ].join("");
 
