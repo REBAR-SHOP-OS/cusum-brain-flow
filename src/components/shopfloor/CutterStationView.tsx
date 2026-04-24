@@ -25,6 +25,12 @@ import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
 import type { StationItem } from "@/hooks/useStationData";
+import {
+  isImperial,
+  remnantThreshold,
+  formatLength as formatLengthByUnit,
+  piecesPerBar as piecesPerBarByUnit,
+} from "@/lib/cutMath";
 
 interface CutterStationViewProps {
   machine: LiveMachine;
@@ -34,8 +40,6 @@ interface CutterStationViewProps {
   userSelectedItem?: boolean;
   onBack?: () => void;
 }
-
-const REMNANT_THRESHOLD_MM = 300;
 
 export function CutterStationView({ machine, items, canWrite, initialIndex = 0, userSelectedItem = false, onBack }: CutterStationViewProps) {
   // ── Project paused detection ──
