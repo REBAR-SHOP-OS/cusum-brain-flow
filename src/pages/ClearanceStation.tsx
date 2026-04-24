@@ -18,7 +18,7 @@ import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 export default function ClearanceStation() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { byProject, clearedCount, totalCount, isLoading, error } = useClearanceData();
+  const { items, byProject, clearedCount, totalCount, isLoading, error } = useClearanceData();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
 
