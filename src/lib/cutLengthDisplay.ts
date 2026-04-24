@@ -1,4 +1,5 @@
 import { formatLength } from "./unitSystem";
+import { formatLength as formatLengthByUnit, isImperial } from "./cutMath";
 
 /**
  * Single source of truth for displaying a cut-plan item's "cut each piece to" length.
@@ -41,17 +42,9 @@ export function formatCutLength(item: ItemLike): CutLengthDisplay {
   const raw = item.cut_length_mm ?? 0;
   const u = (item.unit_system || "").toLowerCase();
 
-  if (u === "in") {
-    const value = formatLength(raw * 25.4, "imperial");
-    return { value, unitLabel: labelFromText(value) };
-  }
-  if (u === "ft") {
-    const value = formatLength(raw * 304.8, "imperial");
-    return { value, unitLabel: labelFromText(value) };
-  }
-  if (u === "imperial") {
-    // raw already in mm in this case
-    const value = formatLength(raw, "imperial");
+  // Imperial pipeline: raw is already in inches; format directly without conversion.
+  if (isImperial(u)) {
+    const value = formatLengthByUnit(raw, u);
     return { value, unitLabel: labelFromText(value) };
   }
 
