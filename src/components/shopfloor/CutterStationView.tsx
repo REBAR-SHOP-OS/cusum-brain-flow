@@ -1109,8 +1109,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             <div className="text-center">
               <p className="text-xs text-muted-foreground">
                 {remnantInfo?.isWasteBank
-                  ? `≥ ${remnantThreshold(currentItem?.unit_system ?? null)}mm — eligible for waste bank`
-                  : `< ${remnantThreshold(currentItem?.unit_system ?? null)}mm — discard as scrap`}
+                  ? `≥ ${formatLengthByUnit(remnantThreshold(currentItem?.unit_system ?? null), currentItem?.unit_system ?? null)} — eligible for waste bank`
+                  : `< ${formatLengthByUnit(remnantThreshold(currentItem?.unit_system ?? null), currentItem?.unit_system ?? null)} — discard as scrap`}
               </p>
             </div>
           </div>
