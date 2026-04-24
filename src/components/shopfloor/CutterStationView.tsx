@@ -220,6 +220,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         setCompletedAtRunStart(null);
         setOperatorBars(null);
       }
+      // Unit-aware default stock length: imperial → 480" (40'), metric → 12000mm (12M)
+      if (currentItem.unit_system) {
+        setSelectedStockLength(isImperial(currentItem.unit_system) ? 480 : 12000);
+      }
       setPrevItemId(currentItem.id);
     }
   }, [currentItem?.id, restoredFromBackend]); // eslint-disable-line react-hooks/exhaustive-deps
