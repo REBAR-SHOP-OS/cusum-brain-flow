@@ -9,15 +9,24 @@
 
 import type { StationItem } from "@/hooks/useStationData";
 import type { InventoryLot, FloorStockItem, CutOutputBatch } from "@/hooks/useInventoryData";
+import {
+  computeRunPlan as computeRunPlanByUnit,
+  remnantThreshold,
+  formatLength as formatLengthByUnit,
+  isImperial,
+  type UnitTag,
+} from "@/lib/cutMath";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const REMNANT_THRESHOLD_MM = 300;
-
 // Display the cut length using the original source text (e.g. `60"`, `2'-6"`, `750 mm`)
-// when available, falling back to the raw cut_length_mm value with a "mm" suffix.
+// when available, falling back to the unit-aware numeric formatter.
 function lengthLabel(item: StationItem): string {
-  return item.source_total_length_text || `${item.cut_length_mm} mm`;
+  if (item.source_total_length_text) return item.source_total_length_text;
+  if (isImperial(item.unit_system)) {
+    return formatLengthByUnit(item.cut_length_mm, item.unit_system);
+  }
+  return `${item.cut_length_mm} mm`;
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
