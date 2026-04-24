@@ -211,7 +211,7 @@ export function CutEngine({
                 <div>
                   <p className="text-lg font-black font-mono leading-none">{expectedRemnants}</p>
                   <p className={cn("text-[9px] tracking-wider uppercase", mutedClasses)}>
-                    remnant{expectedRemnants > 1 ? "s" : ""} ({remnantMm}mm)
+                    remnant{expectedRemnants > 1 ? "s" : ""} ({remnantMm}{displayUnit === "imperial" ? '"' : "mm"})
                   </p>
                 </div>
               </div>
