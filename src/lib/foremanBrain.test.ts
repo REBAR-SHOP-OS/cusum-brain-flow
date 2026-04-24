@@ -22,6 +22,7 @@ function makeItem(over: Partial<StationItem> = {}): StationItem {
     needs_fix: false,
     bend_dimensions: null,
     source_total_length_text: null,
+    unit_system: "metric",
     work_order_id: null,
     phase: "cutting",
     plan_name: "Plan 1",
@@ -82,5 +83,18 @@ describe("foremanBrain — length unit display", () => {
     expect(decision.instructions.length).toBeGreaterThanOrEqual(1);
     expect(decision.instructions[0].emphasis).toBe("750 mm");
     expect(decision.recommendation).toContain("cut at 750 mm");
+  });
+
+  it("regression: imperial 8' on 40' stock → 5 pcs/bar (not 125)", () => {
+    const item = makeItem({
+      cut_length_mm: 96,
+      unit_system: "in",
+      source_total_length_text: `8'`,
+      total_pieces: 49,
+    });
+    const ctx = makeCtx(item);
+    ctx.selectedStockLength = 480; // 40' in inches
+    const decision = computeForemanDecision(ctx);
+    expect(decision.runPlan?.piecesPerBar).toBe(5);
   });
 });
