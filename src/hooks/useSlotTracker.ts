@@ -117,6 +117,23 @@ export function useSlotTracker({ runPlan, isRunning }: UseSlotTrackerOpts): Slot
     }
   }, [isRunning, runPlan, slots.length]);
 
+  // Self-heal: if runPlan math changes (e.g. dual-path fix) BEFORE any cuts
+  // are recorded, rebuild slots so tracker reflects the latest piecesPerBar.
+  useEffect(() => {
+    if (!isRunning || !runPlan?.feasible || slots.length === 0) return;
+    const noStrokesYet = slots.every((s) => s.cutsDone === 0);
+    if (!noStrokesYet) return;
+    const stale = slots.some((s, i) => {
+      // If any active slot's planned cuts exceed the new piecesPerBar, it's stale
+      return s.status === "active" && s.plannedCuts !== Math.min(s.plannedCuts, runPlan.piecesPerBar)
+        || (s.status === "active" && !s.isPartial && s.plannedCuts !== runPlan.piecesPerBar);
+    });
+    if (stale) {
+      setSlots(buildSlots(runPlan, slots.length));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runPlan?.piecesPerBar, runPlan?.totalBarsNeeded, runPlan?.lastBarPieces]);
+
   const recordStroke = useCallback(() => {
     setSlots((prev) => {
       const next = prev.map((s) => ({ ...s }));
