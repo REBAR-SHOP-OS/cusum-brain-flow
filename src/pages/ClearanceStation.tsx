@@ -18,7 +18,7 @@ import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 export default function ClearanceStation() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { byProject, clearedCount, totalCount, isLoading, error } = useClearanceData();
+  const { items, byProject, clearedCount, totalCount, isLoading, error } = useClearanceData();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
 
@@ -45,7 +45,12 @@ export default function ClearanceStation() {
   }
 
   const projectEntries = [...byProject.entries()];
-  const activeItems = selectedProject ? byProject.get(selectedProject) ?? [] : [];
+  // Pull the selected manifest's items from the FULL list (including cleared) so the
+  // operator stays on the manifest page after clearing the last item, instead of being
+  // bounced back to the project list.
+  const activeItems = selectedProject
+    ? items.filter((i) => (i.project_name || i.plan_name || "Unassigned") === selectedProject)
+    : [];
   const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
 
   return (
