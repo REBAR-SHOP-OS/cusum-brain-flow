@@ -919,20 +919,23 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
               <p className="text-[10px] text-muted-foreground tracking-[0.3em] uppercase font-medium mb-2 text-center">
                 Cut Each Piece To
               </p>
-              <div className="flex items-center justify-center gap-4">
-                <Scissors className="w-10 h-10 text-primary shrink-0" />
-              <p className="text-7xl sm:text-8xl lg:text-9xl font-black font-sans tabular-nums text-foreground leading-none tracking-tight">
-                  {currentItem.source_total_length_text || currentItem.cut_length_mm}
-                </p>
-                <Ruler className="w-10 h-10 text-primary shrink-0" />
-              </div>
-              <p className="text-sm text-primary tracking-[0.35em] uppercase mt-3 font-bold text-center">
-                {currentItem.source_total_length_text
-                  ? (currentItem.source_total_length_text.includes("'") && currentItem.source_total_length_text.includes('"') ? "FT-IN"
-                    : currentItem.source_total_length_text.includes("'") ? "FT"
-                    : currentItem.source_total_length_text.includes('"') ? "IN" : "MM")
-                  : "MM"}
-              </p>
+              {(() => {
+                const cl = formatCutLength(currentItem);
+                return (
+                  <>
+                    <div className="flex items-center justify-center gap-4">
+                      <Scissors className="w-10 h-10 text-primary shrink-0" />
+                      <p className="text-7xl sm:text-8xl lg:text-9xl font-black font-sans tabular-nums text-foreground leading-none tracking-tight">
+                        {cl.value}
+                      </p>
+                      <Ruler className="w-10 h-10 text-primary shrink-0" />
+                    </div>
+                    <p className="text-sm text-primary tracking-[0.35em] uppercase mt-3 font-bold text-center">
+                      {cl.unitLabel}
+                    </p>
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
 

@@ -166,22 +166,23 @@ export function ProductionCard({
                   size="sm"
                 />
                 <p className="text-xs font-sans tabular-nums text-muted-foreground">
-                  {item.source_total_length_text || `${item.cut_length_mm} mm`}
+                  {(() => { const cl = formatCutLength(item); return `${cl.value}${cl.unitLabel === "MM" ? " mm" : ""}`; })()}
                 </p>
               </div>
             ) : (
-              <div className="text-center py-4">
-                <p className="text-5xl font-black font-sans tabular-nums text-muted-foreground/50 tracking-tight">
-                  {item.source_total_length_text || item.cut_length_mm}
-                </p>
-                <p className="text-[9px] text-muted-foreground tracking-[0.2em] uppercase mt-1">
-                  {item.source_total_length_text
-                    ? (item.source_total_length_text.includes("'") && item.source_total_length_text.includes('"') ? "FT-IN"
-                      : item.source_total_length_text.includes("'") ? "FT"
-                      : item.source_total_length_text.includes('"') ? "IN" : "MM LENGTH")
-                    : "MM LENGTH"}
-                </p>
-              </div>
+              {(() => {
+                const cl = formatCutLength(item);
+                return (
+                  <div className="text-center py-4">
+                    <p className="text-5xl font-black font-sans tabular-nums text-muted-foreground/50 tracking-tight">
+                      {cl.value}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground tracking-[0.2em] uppercase mt-1">
+                      {cl.unitLabel === "MM" ? "MM LENGTH" : cl.unitLabel}
+                    </p>
+                  </div>
+                );
+              })()}
             )}
           </div>
 
