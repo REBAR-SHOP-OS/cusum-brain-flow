@@ -110,7 +110,7 @@ export function RebarTagCard({
           <div className="text-[9px] font-bold tracking-widest uppercase">
             Length
           </div>
-          <div className="text-[22px] font-black leading-tight">{sourceLength || formatVal(length, us)}</div>
+          <div className="text-[22px] font-black leading-tight">{formatVal(length, us)}</div>
         </div>
         <div className="text-center py-2 px-2">
           <div className="text-[9px] font-bold tracking-widest uppercase">Dwg</div>

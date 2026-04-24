@@ -1,68 +1,80 @@
+## Plan — Cutter station big number must use same unit as the production card
 
+### What you're seeing
 
-## Plan — Get cleared items off the Clearance Station + prevent recurrence
+On the cutter station you see:
+
+```text
+   CUT EACH PIECE TO
+✂        60"        📏
+        IN
+```
+
+But the production (unit) card for the same item shows the length in a different unit (e.g. `5'-0"` FT‑IN, or `5 FT`). The two should always agree.
 
 ### Root cause (verified live)
 
-| Plan | Item | bend_done / total | evidence | `phase` |
-|---|---|---|---|---|
-| GRADE BEAM 1 + LOOSE REBAR (505 GLENLAKE) | `35530866…` | 40 / 40 | `cleared` 2026-04-17 | **stuck `clearance`** |
-| Rebar Cage (INNIS COLLEGE) | `69b66d16…` | 0 / 30 | `cleared` 2026-04-20 | **stuck `clearance`** |
+For the active item on this station (`A1001`):
 
-The Clearance Station hook (`useClearanceData.ts:40`) filters strictly on `phase = 'clearance'`. Operator marked evidence "cleared" days ago, but the `auto_advance_item_phase` trigger never moved them to `phase = 'complete'` — so they keep showing.
+| Field | DB value |
+|---|---|
+| `source_total_length_text` | `60"` |
+| `unit_system` | `in` |
+| `cut_length_mm` | `60` (suspect — separate issue, not in scope) |
 
-### Two-part fix
+The big "Cut Each Piece To" block in `CutterStationView.tsx` (lines 916–937) renders `source_total_length_text` raw and then derives the unit label by string-matching `'` / `"` in that text:
 
-**Part 1 — Unblock the two stuck items now (data fix)**
+- contains `'` and `"` → `FT-IN`
+- contains `'` only → `FT`
+- contains `"` only → `IN`
+- else → `MM`
 
-```sql
-UPDATE public.cut_plan_items
-SET phase = 'complete',
-    ready_at = COALESCE(ready_at, now()),
-    updated_at = now()
-WHERE id IN (
-  '35530866-f77a-4729-bc2e-87704363029b', -- GRADE BEAM 1
-  '69b66d16-077c-4c82-b967-c0262e8bfff3'  -- Rebar Cage
-)
-AND phase = 'clearance'
-AND EXISTS (
-  SELECT 1 FROM public.clearance_evidence ce
-  WHERE ce.cut_plan_item_id = cut_plan_items.id
-    AND ce.status = 'cleared'
-);
-```
+The same string-match logic is in `ProductionCard.tsx` (lines 173–184). They look identical, but they don't always produce the same display because:
 
-Both items have `delivery_id`, `loading_list_id`, `pickup_id` all NULL → safe to advance to Ready-to-Ship.
+1. `source_total_length_text` is whatever the importer extracted (e.g. `60"`, `5'`, `5'-0"`, or `1524`). One source, many possible spellings.
+2. The production card and rebar tag (`RebarTagCard`) ALSO have a `formatMmToFtIn(cut_length_mm)` fallback path. When `source_total_length_text` is missing or stripped on one surface but present on the other, the two render different units for the same physical length.
+3. Operator override / re-imports can leave `source_total_length_text` set on one row and cleared on a downstream row.
 
-**Part 2 — Filter cleared items out of the Clearance Station UI (frontend safety net)**
+Result: the engine shows `60"` (raw inches) while the unit card / tag for the next mark in the same job shows `5'-0"` — same length, different unit.
 
-Even with the data fix, future items can drift into the same stuck state if the trigger has gaps. Add a defensive filter in `src/hooks/useClearanceData.ts`: after building the `ClearanceItem[]`, exclude items where `evidence_status === 'cleared'` from the rendered list, so cleared items never linger on the station regardless of `phase` value.
+### Fix — one source of truth for the cut-length display
 
-Specifically, line 110-111 currently computes `clearedCount` against the full list. Change to:
-- Compute `clearedCount` and `totalCount` first (header still shows "2/2 Cleared" briefly until refetch).
-- Then filter the cleared items out before grouping into `byProject`. Result: cleared cards disappear immediately on the next refetch.
+Add a tiny shared formatter and use it in both places so the engine's big number and the production card's center number are byte-identical for the same item.
 
-This is purely additive — does not touch the DB trigger, does not change RLS, does not break the existing realtime subscription.
+1. **New helper** `src/lib/cutLengthDisplay.ts` (~25 lines)
+   - `formatCutLength(item, { preferSourceText?: boolean }) → { value: string, unitLabel: 'FT-IN'|'FT'|'IN'|'MM' }`
+   - Rule: if `unit_system` is imperial (`in`, `ft`, `imperial`), ALWAYS render via `formatMmToFtIn(cut_length_mm)` — never trust `source_total_length_text` alone. This guarantees `60"` and `5'-0"` collapse to the same canonical form everywhere.
+   - If `unit_system` is metric, render `cut_length_mm` + `MM`.
+   - `source_total_length_text` is kept only for the small "as imported" caption under the tag, not for the big number.
 
-### Out of scope (deliberate)
+2. **`src/components/shopfloor/CutterStationView.tsx`** (lines 916–937)
+   - Replace the inline render + string-match with `formatCutLength(currentItem)`.
 
-- Not touching `auto_advance_item_phase` trigger logic — root-causing the trigger gap is a separate, larger investigation. The frontend filter makes it a non-issue for the operator.
-- Not touching evidence rows, photos, verifier names, or any other plan/item data.
-- No changes to other stations (Cutter, Bender, Ready-to-Ship).
+3. **`src/components/shopfloor/ProductionCard.tsx`** (lines 173–184 and 168–170)
+   - Replace the inline render + string-match with the same `formatCutLength(item)` call.
 
-### Verification
+4. **`src/components/office/RebarTagCard.tsx`** (Length cell, ~line ~110)
+   - Use `formatCutLength` instead of `sourceLength || formatVal(...)` so printed tags also match.
 
-```sql
-SELECT cp.name, cpi.id, cpi.phase
-FROM cut_plan_items cpi JOIN cut_plans cp ON cp.id = cpi.cut_plan_id
-WHERE cpi.id IN ('35530866-f77a-4729-bc2e-87704363029b','69b66d16-077c-4c82-b967-c0262e8bfff3');
--- expect: both at phase = 'complete'
-```
+### Out of scope
 
-Then reload `/shopfloor/clearance` → both manifests gone.
+- The suspect `cut_length_mm = 60` for `A1001` (likely should be `1524`). That's an importer bug — separate ticket.
+- No DB writes. No changes to bar/strokes math. No changes to other stations.
+
+### Expected result
+
+| Surface | Before | After |
+|---|---|---|
+| Cutter "Cut Each Piece To" | `60"` IN | `5'-0"` FT-IN |
+| Production card center | `60"` IN | `5'-0"` FT-IN |
+| Printed rebar tag Length | `60"` | `5'-0"` |
+| Metric items | `1524 MM` | `1524 MM` (unchanged) |
+
+All three surfaces — engine, on-screen card, printed tag — will always show the exact same string for the same item.
 
 ### Files touched
 
-1. **DB operation** — one scoped UPDATE on 2 specific item IDs.
-2. **`src/hooks/useClearanceData.ts`** — add a filter so any item with `evidence_status === 'cleared'` is excluded from `byProject` (the grouped map the station renders). ~5 lines.
-
+1. `src/lib/cutLengthDisplay.ts` — new (~25 lines)
+2. `src/components/shopfloor/CutterStationView.tsx` — 1 block replaced
+3. `src/components/shopfloor/ProductionCard.tsx` — 1 block replaced
+4. `src/components/office/RebarTagCard.tsx` — 1 cell updated
