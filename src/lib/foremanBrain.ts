@@ -9,15 +9,24 @@
 
 import type { StationItem } from "@/hooks/useStationData";
 import type { InventoryLot, FloorStockItem, CutOutputBatch } from "@/hooks/useInventoryData";
+import {
+  computeRunPlan as computeRunPlanByUnit,
+  remnantThreshold,
+  formatLength as formatLengthByUnit,
+  isImperial,
+  type UnitTag,
+} from "@/lib/cutMath";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const REMNANT_THRESHOLD_MM = 300;
-
 // Display the cut length using the original source text (e.g. `60"`, `2'-6"`, `750 mm`)
-// when available, falling back to the raw cut_length_mm value with a "mm" suffix.
+// when available, falling back to the unit-aware numeric formatter.
 function lengthLabel(item: StationItem): string {
-  return item.source_total_length_text || `${item.cut_length_mm} mm`;
+  if (item.source_total_length_text) return item.source_total_length_text;
+  if (isImperial(item.unit_system)) {
+    return formatLengthByUnit(item.cut_length_mm, item.unit_system);
+  }
+  return `${item.cut_length_mm} mm`;
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -158,17 +167,24 @@ export function computeForemanDecision(ctx: ForemanContext): ForemanDecision {
 // ── RUN PLAN COMPUTATION ───────────────────────────────────────────────────
 
 function computeRunPlan(
-  stockLengthMm: number,
-  cutLengthMm: number,
+  stockLength: number,
+  cutLength: number,
   remainingPieces: number,
   maxBars: number,
   availableLots: InventoryLot[],
   floorStock: FloorStockItem[],
-  manualConfirmed: boolean
+  manualConfirmed: boolean,
+  unit: UnitTag,
 ): RunPlan {
-  const piecesPerBar = Math.floor(stockLengthMm / cutLengthMm);
+  const base = computeRunPlanByUnit({
+    stock: stockLength,
+    cut: cutLength,
+    remainingPieces,
+    maxBars,
+    unit,
+  });
 
-  if (piecesPerBar <= 0) {
+  if (base.piecesPerBar <= 0) {
     return {
       piecesPerBar: 0, totalBarsNeeded: 0, fullBars: 0, lastBarPieces: 0,
       remnantPerFullBar: 0, lastBarRemnant: 0, expectedScrapBars: 0,
@@ -177,30 +193,11 @@ function computeRunPlan(
     };
   }
 
-  const totalBarsNeeded = Math.ceil(remainingPieces / piecesPerBar);
-  const fullBars = Math.floor(remainingPieces / piecesPerBar);
-  const lastBarPieces = remainingPieces % piecesPerBar;
-
-  const remnantPerFullBar = stockLengthMm - (piecesPerBar * cutLengthMm);
-  const lastBarRemnant = lastBarPieces > 0 ? stockLengthMm - (lastBarPieces * cutLengthMm) : 0;
-
-  // Count expected remnants vs scrap
-  let expectedRemnantBars = 0;
-  let expectedScrapBars = 0;
-
-  if (remnantPerFullBar >= REMNANT_THRESHOLD_MM) {
-    expectedRemnantBars += fullBars;
-  } else if (remnantPerFullBar > 0) {
-    expectedScrapBars += fullBars;
-  }
-
-  if (lastBarPieces > 0) {
-    if (lastBarRemnant >= REMNANT_THRESHOLD_MM) {
-      expectedRemnantBars += 1;
-    } else if (lastBarRemnant > 0) {
-      expectedScrapBars += 1;
-    }
-  }
+  const {
+    piecesPerBar, totalBarsNeeded, fullBars, lastBarPieces,
+    remnantPerFullBar, lastBarRemnant,
+    expectedRemnantBars, expectedScrapBars,
+  } = base;
 
   // ── Stock source resolution ──
   const lotAvailable = availableLots
@@ -208,11 +205,11 @@ function computeRunPlan(
     .reduce((s, l) => s + (l.qty_on_hand - l.qty_reserved), 0);
 
   const remnantAvailable = availableLots
-    .filter(l => l.source === "remnant" && l.standard_length_mm >= cutLengthMm)
+    .filter(l => l.source === "remnant" && l.standard_length_mm >= cutLength)
     .reduce((s, l) => s + (l.qty_on_hand - l.qty_reserved), 0);
 
   const floorAvailable = floorStock
-    .filter(f => f.length_mm >= cutLengthMm)
+    .filter(f => f.length_mm >= cutLength)
     .reduce((s, f) => s + (f.qty_on_hand - f.qty_reserved), 0);
 
   const totalInventory = lotAvailable + remnantAvailable + floorAvailable;
@@ -337,6 +334,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
   // ─ Compute run plan ─
   const availableLots = ctx.lots.filter(l => l.qty_on_hand - l.qty_reserved > 0);
   const floorAvailable = ctx.floorStock.filter(f => f.qty_on_hand - f.qty_reserved > 0 && f.length_mm >= item.cut_length_mm);
+  const unit: UnitTag = item.unit_system ?? null;
 
   const runPlan = computeRunPlan(
     ctx.selectedStockLength,
@@ -346,6 +344,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     availableLots,
     floorAvailable as any,
     ctx.manualFloorStockConfirmed || false,
+    unit,
   );
   d.runPlan = runPlan;
 
@@ -353,10 +352,10 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
   if (runPlan.piecesPerBar <= 0) {
     d.blockers.push({
       code: "STOCK_TOO_SHORT",
-      title: `${ctx.selectedStockLength}mm stock cannot produce even 1 piece at ${item.cut_length_mm}mm`,
+      title: `${formatLengthByUnit(ctx.selectedStockLength, unit)} stock cannot produce even 1 piece at ${lengthLabel(item)}`,
       fixSteps: [
         "Select a longer stock length.",
-        `Minimum stock: ${item.cut_length_mm}mm.`,
+        `Minimum stock: ${lengthLabel(item)}.`,
       ],
     });
     return d;
@@ -454,7 +453,7 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     {
       step: 2,
       text: `Load`,
-      emphasis: `${operatorBars} × ${item.bar_code} bars (${ctx.selectedStockLength / 1000}M stock)`,
+      emphasis: `${operatorBars} × ${item.bar_code} bars (${formatLengthByUnit(ctx.selectedStockLength, item.unit_system)} stock)`,
     },
     {
       step: 3,
@@ -489,8 +488,8 @@ function computeCutDecision(ctx: ForemanContext, d: ForemanDecision): ForemanDec
     hasPartialBar ? ` + ${lastBarPieces} pcs on partial bar` : "",
     ` = ${totalPiecesThisRun} pieces.`,
     piecesAfter > 0 ? ` ${piecesAfter} remaining after this run.` : " Completes this mark.",
-    runPlan.expectedRemnantBars > 0 ? ` ${runPlan.expectedRemnantBars} remnant${runPlan.expectedRemnantBars > 1 ? "s" : ""} kept (≥${REMNANT_THRESHOLD_MM}mm).` : "",
-    runPlan.expectedScrapBars > 0 ? ` ${runPlan.expectedScrapBars} scrap piece${runPlan.expectedScrapBars > 1 ? "s" : ""} (<${REMNANT_THRESHOLD_MM}mm).` : "",
+    runPlan.expectedRemnantBars > 0 ? ` ${runPlan.expectedRemnantBars} remnant${runPlan.expectedRemnantBars > 1 ? "s" : ""} kept (≥${formatLengthByUnit(remnantThreshold(item.unit_system), item.unit_system)}).` : "",
+    runPlan.expectedScrapBars > 0 ? ` ${runPlan.expectedScrapBars} scrap piece${runPlan.expectedScrapBars > 1 ? "s" : ""} (<${formatLengthByUnit(remnantThreshold(item.unit_system), item.unit_system)}).` : "",
     runPlan.isAdjusted ? ` [ADJUSTED: ${runPlan.adjustmentReason}]` : "",
   ].join("");
 

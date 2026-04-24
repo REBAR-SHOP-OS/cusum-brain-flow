@@ -33,12 +33,20 @@ interface CutEngineProps {
   displayUnit?: "metric" | "imperial";
 }
 
-// Stock lengths are stored in mm. Imperial labels approximate to 20'/40'/60'.
-const STOCK_LENGTHS = [6000, 12000, 18000];
+// Stock lengths are stored in the item's native unit (mm OR inches).
+// Imperial: 240" = 20', 480" = 40', 720" = 60'.
+// Metric: 6000/12000/18000 mm.
+const STOCK_LENGTHS_METRIC = [6000, 12000, 18000];
+const STOCK_LENGTHS_IMPERIAL = [240, 480, 720];
 const STOCK_LABEL_IMPERIAL: Record<number, string> = {
-  6000: "20'",
-  12000: "40'",
-  18000: "60'",
+  240: "20'",
+  480: "40'",
+  720: "60'",
+};
+const STOCK_LABEL_METRIC: Record<number, string> = {
+  6000: "6M",
+  12000: "12M",
+  18000: "18M",
 };
 
 export function CutEngine({
@@ -64,7 +72,17 @@ export function CutEngine({
   isDone = false,
   displayUnit = "metric",
 }: CutEngineProps) {
-  const [selectedStock, setSelectedStock] = useState(12000);
+  const stockLengths = displayUnit === "imperial" ? STOCK_LENGTHS_IMPERIAL : STOCK_LENGTHS_METRIC;
+  const stockLabels = displayUnit === "imperial" ? STOCK_LABEL_IMPERIAL : STOCK_LABEL_METRIC;
+  const defaultStock = displayUnit === "imperial" ? 480 : 12000;
+  const [selectedStock, setSelectedStock] = useState(defaultStock);
+
+  // When unit switches (item change), reset selected stock to that unit's default
+  useEffect(() => {
+    setSelectedStock(defaultStock);
+    onStockLengthChange?.(defaultStock);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayUnit]);
   const [bars, setBars] = useState(suggestedBars || 1);
   const [operatorOverride, setOperatorOverride] = useState(false);
   const barsLocked = useRef(false);
@@ -145,7 +163,7 @@ export function CutEngine({
           </p>
         </div>
         <div className={cn("flex rounded-lg overflow-hidden border", borderClasses)}>
-          {STOCK_LENGTHS.map((len) => (
+          {stockLengths.map((len) => (
             <button
               key={len}
               onClick={() => handleStockChange(len)}
@@ -158,7 +176,7 @@ export function CutEngine({
                     : "bg-muted text-muted-foreground hover:bg-muted/80"
               )}
             >
-              {displayUnit === "imperial" ? (STOCK_LABEL_IMPERIAL[len] || `${len}mm`) : `${len / 1000}M`}
+              {stockLabels[len] || `${len}`}
             </button>
           ))}
         </div>
@@ -193,7 +211,7 @@ export function CutEngine({
                 <div>
                   <p className="text-lg font-black font-mono leading-none">{expectedRemnants}</p>
                   <p className={cn("text-[9px] tracking-wider uppercase", mutedClasses)}>
-                    remnant{expectedRemnants > 1 ? "s" : ""} ({remnantMm}mm)
+                    remnant{expectedRemnants > 1 ? "s" : ""} ({remnantMm}{displayUnit === "imperial" ? '"' : "mm"})
                   </p>
                 </div>
               </div>

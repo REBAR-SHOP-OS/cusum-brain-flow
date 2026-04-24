@@ -25,6 +25,12 @@ import { cn } from "@/lib/utils";
 import type { ForemanContext } from "@/lib/foremanBrain";
 import type { LiveMachine } from "@/types/machine";
 import type { StationItem } from "@/hooks/useStationData";
+import {
+  isImperial,
+  remnantThreshold,
+  formatLength as formatLengthByUnit,
+  piecesPerBar as piecesPerBarByUnit,
+} from "@/lib/cutMath";
 
 interface CutterStationViewProps {
   machine: LiveMachine;
@@ -34,8 +40,6 @@ interface CutterStationViewProps {
   userSelectedItem?: boolean;
   onBack?: () => void;
 }
-
-const REMNANT_THRESHOLD_MM = 300;
 
 export function CutterStationView({ machine, items, canWrite, initialIndex = 0, userSelectedItem = false, onBack }: CutterStationViewProps) {
   // ── Project paused detection ──
@@ -216,6 +220,10 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         setCompletedAtRunStart(null);
         setOperatorBars(null);
       }
+      // Unit-aware default stock length: imperial → 480" (40'), metric → 12000mm (12M)
+      if (currentItem.unit_system) {
+        setSelectedStockLength(isImperial(currentItem.unit_system) ? 480 : 12000);
+      }
       setPrevItemId(currentItem.id);
     }
   }, [currentItem?.id, restoredFromBackend]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -279,8 +287,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     isRunning: machineIsRunning,
   });
 
-  // Use run plan's computed values
-  const computedPiecesPerBar = runPlan?.piecesPerBar || (currentItem ? Math.floor(selectedStockLength / currentItem.cut_length_mm) : 1);
+  // Use run plan's computed values (unit-aware fallback)
+  const computedPiecesPerBar = runPlan?.piecesPerBar || (currentItem ? piecesPerBarByUnit(selectedStockLength, currentItem.cut_length_mm, currentItem.unit_system) : 1);
   const totalPieces = currentItem?.total_pieces || 0;
   const completedPieces = currentItem?.completed_pieces || 0;
 
@@ -531,7 +539,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     slotTracker.removeBar(slotIndex);
 
     // Create remnant or scrap via inventory service
-    if (leftover >= REMNANT_THRESHOLD_MM) {
+    if (leftover >= remnantThreshold(currentItem?.unit_system ?? null)) {
       try {
         await manageInventory({
           action: "cut-complete",
@@ -550,7 +558,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       }
       toast({ title: `Bar ${slotIndex + 1} removed`, description: `Remnant: ${leftover}mm set aside` });
     } else {
-      toast({ title: `Bar ${slotIndex + 1} removed`, description: `Scrap: ${leftover}mm (< ${REMNANT_THRESHOLD_MM}mm threshold)` });
+      toast({ title: `Bar ${slotIndex + 1} removed`, description: `Scrap: ${leftover}mm (< ${remnantThreshold(currentItem?.unit_system ?? null)}mm threshold)` });
     }
 
     recordLearning({
@@ -564,7 +572,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         cuts_done: slot.cutsDone,
         planned_cuts: slot.plannedCuts,
         leftover_mm: leftover,
-        is_remnant: leftover >= REMNANT_THRESHOLD_MM,
+        is_remnant: leftover >= remnantThreshold(currentItem?.unit_system ?? null),
       },
       machineId: machine.id,
       barCode: currentItem.bar_code,
@@ -579,7 +587,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       const totalOutput = slotTracker.totalCutsDone;
       const scrapSlots = slotTracker.slots.filter(
         (s) => s.status === "removed" &&
-          selectedStockLength - s.cutsDone * currentItem.cut_length_mm < REMNANT_THRESHOLD_MM
+          selectedStockLength - s.cutsDone * currentItem.cut_length_mm < remnantThreshold(currentItem?.unit_system ?? null)
       ).length;
 
       // NOTE: completed_pieces already persisted stroke-by-stroke (see recordStroke handler).
@@ -598,7 +606,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
       if (avgRemnant > 0 && !remnantDecisionRef.current) {
         setRemnantInfo({
           lengthMm: avgRemnant,
-          isWasteBank: avgRemnant >= REMNANT_THRESHOLD_MM,
+          isWasteBank: avgRemnant >= remnantThreshold(currentItem?.unit_system ?? null),
         });
         setRemnantPromptOpen(true);
         // Don't proceed with completion yet — user must acknowledge remnant prompt first
@@ -613,8 +621,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         cutPlanItemId: currentItem.id,
         cutPlanId: currentItem.cut_plan_id || undefined,
         plannedQty: barsForThisRun * computedPiecesPerBar,
-        remnantLengthMm: remnantDecisionRef.current === "save" && avgRemnant >= REMNANT_THRESHOLD_MM ? avgRemnant : undefined,
-        remnantBarCode: remnantDecisionRef.current === "save" && avgRemnant >= REMNANT_THRESHOLD_MM ? currentItem.bar_code : undefined,
+        remnantLengthMm: remnantDecisionRef.current === "save" && avgRemnant >= remnantThreshold(currentItem?.unit_system ?? null) ? avgRemnant : undefined,
+        remnantBarCode: remnantDecisionRef.current === "save" && avgRemnant >= remnantThreshold(currentItem?.unit_system ?? null) ? currentItem.bar_code : undefined,
       });
 
       recordCompletion("cut", machine.id, currentItem.bar_code, {
@@ -625,7 +633,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
         scrap_count: scrapSlots,
         remnant_count: slotTracker.slots.filter(
           (s) => s.status === "removed" &&
-            selectedStockLength - s.cutsDone * currentItem.cut_length_mm >= REMNANT_THRESHOLD_MM
+            selectedStockLength - s.cutsDone * currentItem.cut_length_mm >= remnantThreshold(currentItem?.unit_system ?? null)
         ).length,
         slots_completed: slotTracker.slots.filter((s) => s.status === "completed").length,
         slots_removed: slotTracker.slots.filter((s) => s.status === "removed").length,
@@ -886,9 +894,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             <>
               {/* ── SLOT TRACKER (visible during active run) ── */}
               {machineIsRunning && slotTracker.slots.length > 0 && (() => {
-                const srcText = currentItem.source_total_length_text || "";
-                const isImperial = srcText.includes('"') || srcText.includes("'");
-                const displayUnit: "metric" | "imperial" = isImperial ? "imperial" : "metric";
+                const displayUnit: "metric" | "imperial" = isImperial(currentItem.unit_system) ? "imperial" : "metric";
                 return (
                   <SlotTracker
                     slots={slotTracker.slots}
@@ -1071,12 +1077,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             totalPiecesDone={slotTracker.totalCutsDone}
             totalPiecesPlanned={slotTracker.slots.reduce((s, sl) => s + sl.plannedCuts, 0)}
             activeBars={slotTracker.slots.filter(s => s.status === "active").length}
-            displayUnit={
-              currentItem?.source_total_length_text &&
-              (currentItem.source_total_length_text.includes('"') || currentItem.source_total_length_text.includes("'"))
-                ? "imperial"
-                : "metric"
-            }
+            displayUnit={isImperial(currentItem?.unit_system ?? null) ? "imperial" : "metric"}
           />
         </div>
       </div>
@@ -1100,13 +1101,15 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           <div className="py-4 space-y-3">
             <div className="text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Remaining Length</p>
-              <p className="text-4xl font-black font-mono text-foreground">{remnantInfo?.lengthMm ?? 0}<span className="text-lg text-muted-foreground ml-1">mm</span></p>
+              <p className="text-4xl font-black font-mono text-foreground">
+                {formatLengthByUnit(remnantInfo?.lengthMm ?? 0, currentItem?.unit_system ?? null)}
+              </p>
             </div>
             <div className="text-center">
               <p className="text-xs text-muted-foreground">
                 {remnantInfo?.isWasteBank
-                  ? `≥ ${REMNANT_THRESHOLD_MM}mm — eligible for waste bank`
-                  : `< ${REMNANT_THRESHOLD_MM}mm — discard as scrap`}
+                  ? `≥ ${formatLengthByUnit(remnantThreshold(currentItem?.unit_system ?? null), currentItem?.unit_system ?? null)} — eligible for waste bank`
+                  : `< ${formatLengthByUnit(remnantThreshold(currentItem?.unit_system ?? null), currentItem?.unit_system ?? null)} — discard as scrap`}
               </p>
             </div>
           </div>
