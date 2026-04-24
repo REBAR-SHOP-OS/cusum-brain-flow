@@ -1104,7 +1104,9 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
           <div className="py-4 space-y-3">
             <div className="text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Remaining Length</p>
-              <p className="text-4xl font-black font-mono text-foreground">{remnantInfo?.lengthMm ?? 0}<span className="text-lg text-muted-foreground ml-1">mm</span></p>
+              <p className="text-4xl font-black font-mono text-foreground">
+                {formatLengthByUnit(remnantInfo?.lengthMm ?? 0, currentItem?.unit_system ?? null)}
+              </p>
             </div>
             <div className="text-center">
               <p className="text-xs text-muted-foreground">
