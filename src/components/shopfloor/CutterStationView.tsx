@@ -287,8 +287,8 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
     isRunning: machineIsRunning,
   });
 
-  // Use run plan's computed values
-  const computedPiecesPerBar = runPlan?.piecesPerBar || (currentItem ? Math.floor(selectedStockLength / currentItem.cut_length_mm) : 1);
+  // Use run plan's computed values (unit-aware fallback)
+  const computedPiecesPerBar = runPlan?.piecesPerBar || (currentItem ? piecesPerBarByUnit(selectedStockLength, currentItem.cut_length_mm, currentItem.unit_system) : 1);
   const totalPieces = currentItem?.total_pieces || 0;
   const completedPieces = currentItem?.completed_pieces || 0;
 
