@@ -169,21 +169,19 @@ export function ProductionCard({
                   {(() => { const cl = formatCutLength(item); return `${cl.value}${cl.unitLabel === "MM" ? " mm" : ""}`; })()}
                 </p>
               </div>
-            ) : (
-              {(() => {
-                const cl = formatCutLength(item);
-                return (
-                  <div className="text-center py-4">
-                    <p className="text-5xl font-black font-sans tabular-nums text-muted-foreground/50 tracking-tight">
-                      {cl.value}
-                    </p>
-                    <p className="text-[9px] text-muted-foreground tracking-[0.2em] uppercase mt-1">
-                      {cl.unitLabel === "MM" ? "MM LENGTH" : cl.unitLabel}
-                    </p>
-                  </div>
-                );
-              })()}
-            )}
+            ) : (() => {
+              const cl = formatCutLength(item);
+              return (
+                <div className="text-center py-4">
+                  <p className="text-5xl font-black font-sans tabular-nums text-muted-foreground/50 tracking-tight">
+                    {cl.value}
+                  </p>
+                  <p className="text-[9px] text-muted-foreground tracking-[0.2em] uppercase mt-1">
+                    {cl.unitLabel === "MM" ? "MM LENGTH" : cl.unitLabel}
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Bottom: progress label + count */}
