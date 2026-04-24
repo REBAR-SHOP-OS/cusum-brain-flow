@@ -167,17 +167,24 @@ export function computeForemanDecision(ctx: ForemanContext): ForemanDecision {
 // ── RUN PLAN COMPUTATION ───────────────────────────────────────────────────
 
 function computeRunPlan(
-  stockLengthMm: number,
-  cutLengthMm: number,
+  stockLength: number,
+  cutLength: number,
   remainingPieces: number,
   maxBars: number,
   availableLots: InventoryLot[],
   floorStock: FloorStockItem[],
-  manualConfirmed: boolean
+  manualConfirmed: boolean,
+  unit: UnitTag,
 ): RunPlan {
-  const piecesPerBar = Math.floor(stockLengthMm / cutLengthMm);
+  const base = computeRunPlanByUnit({
+    stock: stockLength,
+    cut: cutLength,
+    remainingPieces,
+    maxBars,
+    unit,
+  });
 
-  if (piecesPerBar <= 0) {
+  if (base.piecesPerBar <= 0) {
     return {
       piecesPerBar: 0, totalBarsNeeded: 0, fullBars: 0, lastBarPieces: 0,
       remnantPerFullBar: 0, lastBarRemnant: 0, expectedScrapBars: 0,
@@ -186,30 +193,11 @@ function computeRunPlan(
     };
   }
 
-  const totalBarsNeeded = Math.ceil(remainingPieces / piecesPerBar);
-  const fullBars = Math.floor(remainingPieces / piecesPerBar);
-  const lastBarPieces = remainingPieces % piecesPerBar;
-
-  const remnantPerFullBar = stockLengthMm - (piecesPerBar * cutLengthMm);
-  const lastBarRemnant = lastBarPieces > 0 ? stockLengthMm - (lastBarPieces * cutLengthMm) : 0;
-
-  // Count expected remnants vs scrap
-  let expectedRemnantBars = 0;
-  let expectedScrapBars = 0;
-
-  if (remnantPerFullBar >= REMNANT_THRESHOLD_MM) {
-    expectedRemnantBars += fullBars;
-  } else if (remnantPerFullBar > 0) {
-    expectedScrapBars += fullBars;
-  }
-
-  if (lastBarPieces > 0) {
-    if (lastBarRemnant >= REMNANT_THRESHOLD_MM) {
-      expectedRemnantBars += 1;
-    } else if (lastBarRemnant > 0) {
-      expectedScrapBars += 1;
-    }
-  }
+  const {
+    piecesPerBar, totalBarsNeeded, fullBars, lastBarPieces,
+    remnantPerFullBar, lastBarRemnant,
+    expectedRemnantBars, expectedScrapBars,
+  } = base;
 
   // ── Stock source resolution ──
   const lotAvailable = availableLots
