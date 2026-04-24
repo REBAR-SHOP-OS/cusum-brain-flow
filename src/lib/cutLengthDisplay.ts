@@ -1,16 +1,18 @@
-import { formatLength, type UnitSystem } from "./unitSystem";
+import { formatLength } from "./unitSystem";
 
 /**
  * Single source of truth for displaying a cut-plan item's "cut each piece to" length.
  * Ensures the cutter station big number, the production card center, and the printed
  * rebar tag all show the exact same string for the same item.
  *
- * Rule: imperial items always render as canonical FT-IN via formatLength(mm, "imperial").
- * We never trust source_total_length_text alone — that's just the raw spelling from the
- * importer (e.g. `60"`, `5'`, `5'-0"`) and produces inconsistent units across surfaces.
+ * IMPORTANT: `cut_length_mm` is misnamed — for imperial rows it stores the raw numeric
+ * value in the source unit (e.g. 8' is stored as 96, not 2438mm). So we cannot treat it
+ * as millimeters. Instead we trust `source_total_length_text` (the canonical importer
+ * spelling like `8'`, `5'-0"`, `60"`) and only fall back to numeric conversion when the
+ * source text is missing.
  */
 export interface CutLengthDisplay {
-  value: string;          // e.g. "5'-0\""  or "1524"
+  value: string;          // e.g. "8'"  or "5'-0\""  or "1524"
   unitLabel: "FT-IN" | "FT" | "IN" | "MM";
 }
 
@@ -20,27 +22,38 @@ interface ItemLike {
   source_total_length_text?: string | null;
 }
 
-function isImperial(unitSystem?: string | null, sourceText?: string | null): boolean {
-  const u = (unitSystem || "").toLowerCase();
-  if (u === "in" || u === "ft" || u === "imperial") return true;
-  if (u === "mm" || u === "metric") return false;
-  // Fallback: infer from source text spelling
-  const t = sourceText || "";
-  return t.includes("'") || t.includes('"');
+function labelFromText(text: string): CutLengthDisplay["unitLabel"] {
+  const hasFt = text.includes("'");
+  const hasIn = text.includes('"');
+  if (hasFt && hasIn) return "FT-IN";
+  if (hasFt) return "FT";
+  if (hasIn) return "IN";
+  return "MM";
 }
 
 export function formatCutLength(item: ItemLike): CutLengthDisplay {
-  const mm = item.cut_length_mm ?? 0;
-  const imperial = isImperial(item.unit_system, item.source_total_length_text);
-
-  if (imperial) {
-    const value = formatLength(mm, "imperial"); // canonical e.g. 5'-0"
-    const label: CutLengthDisplay["unitLabel"] =
-      value.includes("'") && value.includes('"') ? "FT-IN"
-      : value.includes("'") ? "FT"
-      : "IN";
-    return { value, unitLabel: label };
+  const src = (item.source_total_length_text || "").trim();
+  if (src) {
+    return { value: src, unitLabel: labelFromText(src) };
   }
 
-  return { value: String(mm), unitLabel: "MM" };
+  // Fallback: no source text — interpret raw numeric by declared unit_system.
+  const raw = item.cut_length_mm ?? 0;
+  const u = (item.unit_system || "").toLowerCase();
+
+  if (u === "in") {
+    const value = formatLength(raw * 25.4, "imperial");
+    return { value, unitLabel: labelFromText(value) };
+  }
+  if (u === "ft") {
+    const value = formatLength(raw * 304.8, "imperial");
+    return { value, unitLabel: labelFromText(value) };
+  }
+  if (u === "imperial") {
+    // raw already in mm in this case
+    const value = formatLength(raw, "imperial");
+    return { value, unitLabel: labelFromText(value) };
+  }
+
+  return { value: String(raw), unitLabel: "MM" };
 }
