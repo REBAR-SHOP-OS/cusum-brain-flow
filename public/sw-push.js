@@ -9,8 +9,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body: data.body || "",
-    icon: "/favicon.ico",
-    badge: "/favicon.ico",
+    icon: "/pwa-icon-192.png",
+    badge: "/pwa-icon-192.png",
     data: { linkTo: data.linkTo || "/" },
     vibrate: [200, 100, 200],
     tag: data.tag || "default",
