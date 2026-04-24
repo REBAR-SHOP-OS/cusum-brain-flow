@@ -894,9 +894,7 @@ export function CutterStationView({ machine, items, canWrite, initialIndex = 0, 
             <>
               {/* ── SLOT TRACKER (visible during active run) ── */}
               {machineIsRunning && slotTracker.slots.length > 0 && (() => {
-                const srcText = currentItem.source_total_length_text || "";
-                const isImperial = srcText.includes('"') || srcText.includes("'");
-                const displayUnit: "metric" | "imperial" = isImperial ? "imperial" : "metric";
+                const displayUnit: "metric" | "imperial" = isImperial(currentItem.unit_system) ? "imperial" : "metric";
                 return (
                   <SlotTracker
                     slots={slotTracker.slots}
