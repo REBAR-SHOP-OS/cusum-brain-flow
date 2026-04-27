@@ -1,26 +1,35 @@
-# Stop All Outgoing Emails
+## Goal
 
-You're getting alert emails like the "[Alert] Unanswered email - 24h" one in your screenshot. We'll shut down email sending across the board.
+Stop **all automated/system-triggered emails** (alerts, reports, watchdogs, auto-replies, campaigns) — not user-composed Gmail replies typed in the UI. Last round wired the kill-switch into 6 senders but never **flipped the switch on**, and a few automated senders are still unguarded.
 
-## What will be disabled
+## What's already protected
+`gmail-send`, `comms-alerts` (unanswered-email watchdog — the one that sent your screenshot), `email-activity-report`, `timeclock-alerts`, `send-quote-email`, `notify-lead-assignees`.
 
-1. **Lovable Emails (auth + transactional)** — turn off the project-level email switch so password resets, verification emails, and any app-triggered transactional emails stop going out. Auth emails revert to default Lovable templates but we'll also block sends at the function level.
+## What's still missing
 
-2. **Custom alert / notification emails** — the ERP sends its own emails via edge functions (e.g. unanswered-email watchdog, daily digests, CEO alerts, branded ERP emails through Gmail/SMTP). We'll add a global kill-switch that short-circuits every email-sending edge function before it dispatches.
+1. **Automated senders not yet guarded** — will keep sending even after we flip the flag:
+   - `daily-summary` — daily digest email
+   - `process-rfq-emails` — auto-reply / RFQ acknowledgments
+   - `email-campaign-send` — bulk campaigns
+   - `alert-router` — alert dispatcher (if it sends mail)
+   - `admin-chat`, `support-chat`, `vizzy-erp-action` — only the **automated** email-send paths inside them (not the chat itself)
 
-3. **Gmail/SMTP outbound** — any function that pushes mail through the connected Gmail account (replies, alerts, reports) will check the kill-switch and skip sending.
+2. **The flag isn't actually on.** `EMAILS_DISABLED` env var was never set, so every guarded function still sends. This is why you're still getting alerts.
 
-## How
+3. **Lovable Emails (auth + transactional)** — still enabled at the project level.
 
-- Add a single feature flag `EMAILS_DISABLED` (env var + DB flag in `workspace_settings`) that all email-sending edge functions check at the top and exit early with a logged "skipped: emails_disabled" entry.
-- Patch the relevant edge functions to honor the flag:
-  - `unanswered-email-watchdog` (the one sending your screenshot alert)
-  - `daily-digest` / `email-campaign-*` / `social-publish` email paths
-  - `send-transactional-email`, `auth-email-hook`, `process-email-queue`
-  - Any Gmail-send wrapper in `_shared` used by ERP replies
-- Toggle off Lovable Emails via `email_domain--toggle_project_emails` (enabled: false).
-- Leave all UI, queues, and logging intact so nothing breaks — emails just don't go out. Re-enabling later is one flag flip.
+## Plan
+
+1. Add `isEmailSendingDisabled()` short-circuit to the 6 remaining automated senders above. Guard only the **automated** send paths in chat/ERP functions — leave user-typed Gmail replies alone (those go through `gmail-send`, which is already guarded; flipping the flag would also block manual replies, see note below).
+2. Set `EMAILS_DISABLED=true` as a Supabase secret so every guarded function exits early.
+3. Disable Lovable Emails via `email_domain--toggle_project_emails` (auth emails revert to default templates, transactional sends stop).
+4. Redeploy all touched edge functions.
+5. Verify: tail logs of `comms-alerts` and `gmail-send` for `[email-kill-switch] Skipped` entries.
+
+## Important note — scope
+
+`gmail-send` is the chokepoint for **both** automated emails *and* user-composed replies from the inbox UI. Flipping `EMAILS_DISABLED=true` will block **both**. If you want users to still be able to manually reply to emails from the UI while only automated alerts/reports/digests are stopped, say so and I'll narrow the guard so `gmail-send` only blocks when called from automation (e.g. by checking a `source: "automation"` flag passed by the caller) and leaves direct user-triggered sends working.
 
 ## Result
 
-No emails of any kind will leave the system — no alerts, no auth, no transactional, no ERP replies — until you explicitly turn it back on.
+Zero automated emails leave the system. Re-enable later by unsetting `EMAILS_DISABLED` and re-toggling Lovable Emails.

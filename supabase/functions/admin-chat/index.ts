@@ -2865,6 +2865,7 @@ async function executeWriteTool(supabase: any, userId: string, companyId: string
           body: args.body,
           threadId: args.threadId,
           replyToMessageId: args.replyToMessageId,
+          sent_by_agent: true,
         }),
       });
       const data = await resp.json();
