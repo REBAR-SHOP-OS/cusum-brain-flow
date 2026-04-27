@@ -392,6 +392,10 @@ async function sendQuoteEmailDirect(supabase: any, customerEmail: string, quoteN
   const { access_token } = await tokenRes.json();
 
   // Build raw email
+  if ((Deno.env.get("EMAILS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
+    console.log(`[email-kill-switch] Skipped support-chat quote email to ${customerEmail}: EMAILS_DISABLED=true`);
+    return;
+  }
   const emailLines = [
     "From: Rebar.Shop Sales <sales@rebar.shop>",
     `To: ${customerEmail}`,
