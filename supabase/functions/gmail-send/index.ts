@@ -198,11 +198,16 @@ Deno.serve((req) =>
     }
     const { to, cc, bcc, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers, attachments: emailAttachments } = parsed.data;
 
-    // Global email kill-switch — blocks ALL outbound mail when EMAILS_DISABLED=true
-    if ((Deno.env.get("EMAILS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
-      console.log(`[email-kill-switch] Skipped gmail-send to ${to}: emails globally disabled`);
+    // Global email kill-switch — blocks AUTOMATED mail when EMAILS_DISABLED=true.
+    // Manual user-composed sends (sent_by_agent !== true) are still allowed,
+    // so users can keep replying from the inbox UI even while alerts/automations are off.
+    if (
+      sent_by_agent === true &&
+      (Deno.env.get("EMAILS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)
+    ) {
+      console.log(`[email-kill-switch] Skipped automated gmail-send to ${to}: EMAILS_DISABLED=true`);
       return new Response(
-        JSON.stringify({ blocked: true, reason: "emails_disabled", message: "Email sending is globally disabled." }),
+        JSON.stringify({ blocked: true, reason: "emails_disabled", message: "Automated email sending is globally disabled." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
