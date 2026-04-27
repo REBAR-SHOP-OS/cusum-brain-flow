@@ -1,35 +1,26 @@
-# Replace Lovable Logo with rebar.shop Logo
+# Stop All Outgoing Emails
 
-## Why
+You're getting alert emails like the "[Alert] Unanswered email - 24h" one in your screenshot. We'll shut down email sending across the board.
 
-Windows push notifications (your screenshot) show the Lovable heart icon because `public/sw-push.js` references `/favicon.ico`, and `public/favicon.ico` is still the original Lovable heart. The PNG icons (`favicon.png`, `pwa-icon-192.png`, `pwa-icon-512.png`) are *already* the rebar.shop coin logo, but `favicon.ico` was never regenerated and the service worker uses the `.ico`.
+## What will be disabled
 
-## What gets done
+1. **Lovable Emails (auth + transactional)** — turn off the project-level email switch so password resets, verification emails, and any app-triggered transactional emails stop going out. Auth emails revert to default Lovable templates but we'll also block sends at the function level.
 
-**1. Regenerate `public/favicon.ico`** as a multi-resolution ICO (16/32/48/64/128/256) from `public/brand/rebar-logo.png` using ImageMagick. Replaces the Lovable heart.
+2. **Custom alert / notification emails** — the ERP sends its own emails via edge functions (e.g. unanswered-email watchdog, daily digests, CEO alerts, branded ERP emails through Gmail/SMTP). We'll add a global kill-switch that short-circuits every email-sending edge function before it dispatches.
 
-**2. Resize `public/pwa-icon-192.png` and `public/pwa-icon-512.png`** to their actual nominal dimensions. Today they are 1024×1024 files mis-named — fixing this gives crisp icons in PWA installers and notification trays.
+3. **Gmail/SMTP outbound** — any function that pushes mail through the connected Gmail account (replies, alerts, reports) will check the kill-switch and skip sending.
 
-**3. Resize `public/favicon.png`** to 512×512 (currently 1024×1024) for tab favicon.
+## How
 
-**4. Update `public/sw-push.js`** to use `/pwa-icon-192.png` for both `icon` and `badge` fields. Higher-quality PNG renders better in Windows notification toasts than the small ICO frames, and it future-proofs the SW against any further `.ico` regression.
+- Add a single feature flag `EMAILS_DISABLED` (env var + DB flag in `workspace_settings`) that all email-sending edge functions check at the top and exit early with a logged "skipped: emails_disabled" entry.
+- Patch the relevant edge functions to honor the flag:
+  - `unanswered-email-watchdog` (the one sending your screenshot alert)
+  - `daily-digest` / `email-campaign-*` / `social-publish` email paths
+  - `send-transactional-email`, `auth-email-hook`, `process-email-queue`
+  - Any Gmail-send wrapper in `_shared` used by ERP replies
+- Toggle off Lovable Emails via `email_domain--toggle_project_emails` (enabled: false).
+- Leave all UI, queues, and logging intact so nothing breaks — emails just don't go out. Re-enabling later is one flag flip.
 
-## What does not change
+## Result
 
-- `index.html` — already references the correct paths (`/favicon.png`, `/pwa-icon-192.png`, `/pwa-icon-512.png`).
-- `public/brand/rebar-logo.png` (source).
-- All other application code.
-
-## Validation
-
-After regeneration, convert each new file to a preview PNG and visually verify the rebar coin logo appears (not the heart) at all sizes.
-
-## User-side note after deploy
-
-Browsers aggressively cache favicons and service workers. Users may need to:
-- Hard-refresh (Ctrl+Shift+R) once for the tab favicon.
-- Re-register the service worker (close/reopen browser) before new push notifications pick up the new icon.
-
-## Risk
-
-Very low. Only static asset replacement plus a 2-line change in `sw-push.js`. No application logic touched.
+No emails of any kind will leave the system — no alerts, no auth, no transactional, no ERP replies — until you explicitly turn it back on.

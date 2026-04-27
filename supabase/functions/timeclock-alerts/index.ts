@@ -166,6 +166,10 @@ Deno.serve((req) =>
 );
 
 async function sendAlertEmail(to: string, subject: string, body: string) {
+  if ((Deno.env.get("EMAILS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
+    console.log(`[email-kill-switch] Skipped timeclock-alert to ${to}: emails globally disabled`);
+    return;
+  }
   const clientId = Deno.env.get("GMAIL_CLIENT_ID");
   const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
   const refreshToken = Deno.env.get("GMAIL_REFRESH_TOKEN");

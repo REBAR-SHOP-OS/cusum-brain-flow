@@ -179,6 +179,10 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
 }
 
 async function sendAlertEmail(accessToken: string, to: string, subject: string, htmlBody: string) {
+  if ((Deno.env.get("EMAILS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
+    console.log(`[email-kill-switch] Skipped comms-alert to ${to}: emails globally disabled`);
+    return true;
+  }
   const raw = createRawEmail(to, subject, htmlBody, "ai@rebar.shop");
   const resp = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
     method: "POST",

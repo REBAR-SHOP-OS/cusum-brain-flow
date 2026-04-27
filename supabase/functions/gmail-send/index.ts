@@ -198,6 +198,16 @@ Deno.serve((req) =>
     }
     const { to, cc, bcc, subject, body, threadId, replyToMessageId, references, sent_by_agent, custom_headers, attachments: emailAttachments } = parsed.data;
 
+    // Global email kill-switch — blocks ALL outbound mail when EMAILS_DISABLED=true
+    if ((Deno.env.get("EMAILS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
+      console.log(`[email-kill-switch] Skipped gmail-send to ${to}: emails globally disabled`);
+      return new Response(
+        JSON.stringify({ blocked: true, reason: "emails_disabled", message: "Email sending is globally disabled." }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+
     // --- Comms Engine: no_act_global + email routing ---
     if (sent_by_agent) {
       const { data: commsConfig } = await supabaseAdmin

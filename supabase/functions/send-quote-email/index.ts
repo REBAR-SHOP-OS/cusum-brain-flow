@@ -24,6 +24,10 @@ async function sendEmailDirectViaGmail(
   subject: string,
   bodyHtml: string
 ): Promise<boolean> {
+  if ((Deno.env.get("EMAILS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
+    console.log(`[email-kill-switch] Skipped quote email to ${to}: emails globally disabled`);
+    return true;
+  }
   // Find first available Gmail sender
   const { data: tokenRow } = await svc
     .from("user_gmail_tokens")
