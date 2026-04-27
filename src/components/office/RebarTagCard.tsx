@@ -37,9 +37,12 @@ function formatMmToFtIn(mm: number): string {
 
 function formatVal(val: number | null, unitSystem: string): string {
   if (val == null || val === 0) return "—";
-  const rounded = Math.round(val);
-  if (unitSystem === "imperial") return formatMmToFtIn(rounded);
-  return String(rounded);
+  if (unitSystem === "imperial") {
+    // Imperial rows store INCHES in `total_length_mm` (column is misnamed —
+    // see src/lib/cutMath/imperial.ts). Convert inches → mm before formatting.
+    return formatMmToFtIn(val * 25.4);
+  }
+  return String(Math.round(val));
 }
 
 function formatDim(val: number | null | undefined, unitSystem: string): string {
@@ -110,7 +113,7 @@ export function RebarTagCard({
           <div className="text-[9px] font-bold tracking-widest uppercase">
             Length
           </div>
-          <div className="text-[22px] font-black leading-tight">{formatVal(length, us)}</div>
+          <div className="text-[22px] font-black leading-tight">{sourceLength || formatVal(length, us)}</div>
         </div>
         <div className="text-center py-2 px-2">
           <div className="text-[9px] font-bold tracking-widest uppercase">Dwg</div>
