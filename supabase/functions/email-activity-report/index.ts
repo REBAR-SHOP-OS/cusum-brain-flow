@@ -111,6 +111,10 @@ function createRawEmail(to: string, subject: string, body: string, fromEmail: st
 }
 
 async function sendEmail(accessToken: string, to: string, subject: string, htmlBody: string) {
+  if ((Deno.env.get("EMAILS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
+    console.log(`[email-kill-switch] Skipped activity-report to ${to}: emails globally disabled`);
+    return;
+  }
   const profileResp = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/profile", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
