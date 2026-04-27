@@ -1,12 +1,3 @@
-# Add `fraction.ts` with input validation
-
-`fraction.ts` does not exist yet. Zahra's snippet is the input-validation guard for an inch → `{ whole, numerator, denominator }` converter. Plan: create the file in `src/lib/cutMath/` (alongside `imperial.ts`) with the guard exactly as written, plus the conversion body and a unit test.
-
-## File to create
-
-**`src/lib/cutMath/fraction.ts`**
-
-```ts
 /**
  * Convert a decimal inch value into a mixed fraction
  * { whole, numerator, denominator } rounded to the nearest 1/denominator.
@@ -21,7 +12,7 @@ export interface InchFraction {
 export function inchesToFraction(
   inch: number,
   denominator: number = 16,
-): InchFraction | typeof NaN {
+): InchFraction | number {
   if (!Number.isFinite(inch)) return NaN;
   if (inch === 0) {
     return { whole: 0, numerator: 0, denominator: 1 };
@@ -32,8 +23,8 @@ export function inchesToFraction(
 
   const whole = Math.floor(inch);
   const frac = inch - whole;
-  let num = Math.round(frac * denominator);
-  let den = denominator;
+  const num = Math.round(frac * denominator);
+  const den = denominator;
 
   // Roll over if rounding pushes fraction to 1
   if (num === den) {
@@ -46,20 +37,3 @@ export function inchesToFraction(
   const g = gcd(num, den);
   return { whole, numerator: num / g, denominator: den / g };
 }
-```
-
-## Test file
-
-**`src/lib/cutMath/fraction.test.ts`** — covers:
-- `NaN` input → returns `NaN`
-- `0` → `{ 0, 0, 1 }`
-- negative → throws `"Negative values are not allowed"`
-- `5.5` → `{ 5, 1, 2 }`
-- `6.125` → `{ 6, 1, 8 }`
-- rounding rollover (`2.999` at den 16 → `{ 3, 0, 1 }`)
-
-## Notes
-
-- Module is additive — no existing files modified, no imports broken.
-- Lives next to `imperial.ts` so future cut-math utilities can import it.
-- Follows the project's English-only and surgical-execution rules.
