@@ -442,6 +442,10 @@ serve((req) =>
           .replace(/\//g, "_")
           .replace(/=+$/, "");
 
+        if ((Deno.env.get("EMAILS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
+          console.log(`[email-kill-switch] Skipped lead-assignee notify: emails globally disabled`);
+          continue;
+        }
         const sendRes = await fetch(
           "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
           {
