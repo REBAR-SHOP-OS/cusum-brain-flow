@@ -453,6 +453,7 @@ Deno.serve((req) =>
             body,
             threadId: threadId || undefined,
             replyToMessageId: replyToMessageId || undefined,
+            sent_by_agent: true,
           }),
         });
 

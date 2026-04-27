@@ -208,6 +208,7 @@ async function dispatchAlert(
           to: user.email,
           subject: `[${priority.toUpperCase()}] ${title}`,
           body: formatEmailBody(title, message, link_to, priority),
+          sent_by_agent: true,
         }),
       });
       const result = await resp.json();

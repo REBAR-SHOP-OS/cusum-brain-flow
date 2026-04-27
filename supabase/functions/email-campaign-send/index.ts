@@ -103,6 +103,7 @@ Deno.serve((req) =>
             subject: campaign.subject_line || "No Subject",
             body: personalizedHtml,
             custom_headers: listUnsubscribeHeaders,
+            sent_by_agent: true,
           }),
         });
 
