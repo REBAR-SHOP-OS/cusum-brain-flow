@@ -10,6 +10,8 @@ export interface ClearanceItem {
   project_id: string | null;
   bar_code: string;
   cut_length_mm: number;
+  unit_system: string | null;
+  source_total_length_text: string | null;
   mark_number: string | null;
   drawing_ref: string | null;
   asa_shape_code: string | null;
