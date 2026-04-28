@@ -10,6 +10,8 @@ export interface ClearanceItem {
   project_id: string | null;
   bar_code: string;
   cut_length_mm: number;
+  unit_system: string | null;
+  source_total_length_text: string | null;
   mark_number: string | null;
   drawing_ref: string | null;
   asa_shape_code: string | null;
@@ -75,6 +77,8 @@ export function useClearanceData() {
           project_id: item.cut_plans?.project_id || null,
           bar_code: item.bar_code,
           cut_length_mm: item.cut_length_mm,
+          unit_system: item.unit_system ?? null,
+          source_total_length_text: item.source_total_length_text ?? null,
           mark_number: item.mark_number,
           drawing_ref: item.drawing_ref,
           asa_shape_code: item.asa_shape_code,

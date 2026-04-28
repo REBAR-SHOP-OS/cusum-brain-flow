@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { formatCutLength } from "@/lib/cutLengthDisplay";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -306,7 +307,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
               )}
             </div>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              Size: {item.bar_code} | L: {item.cut_length_mm}{(item as any).unit_system === "in" || (item as any).unit_system === "imperial" ? '"' : (item as any).unit_system === "ft" ? "'" : "mm"}
+              Size: {item.bar_code} | L: {formatCutLength({ cut_length_mm: item.cut_length_mm, unit_system: (item as any).unit_system, source_total_length_text: (item as any).source_total_length_text }).value}
             </p>
           </div>
           {isCleared && <CheckCircle2 className="w-6 h-6 text-primary shrink-0" />}
