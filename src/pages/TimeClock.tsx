@@ -363,6 +363,15 @@ export default function TimeClock() {
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
         </div>
         <div className="w-full max-w-lg mt-4">
+          {face.state === "idle" && (
+            <Button
+              onClick={() => { setAttemptCount(1); handleScan(); }}
+              size="lg"
+              className="w-full text-lg font-bold gap-2"
+            >
+              <ScanFace className="w-5 h-5" /> Scan to Punch
+            </Button>
+          )}
           {face.state === "scanning" && attemptCount > 0 && (
             <p className="text-center text-sm text-muted-foreground mb-3">
               Attempt {attemptCount} of {MAX_AUTO_ATTEMPTS}…
