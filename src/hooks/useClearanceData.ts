@@ -77,6 +77,8 @@ export function useClearanceData() {
           project_id: item.cut_plans?.project_id || null,
           bar_code: item.bar_code,
           cut_length_mm: item.cut_length_mm,
+          unit_system: item.unit_system ?? null,
+          source_total_length_text: item.source_total_length_text ?? null,
           mark_number: item.mark_number,
           drawing_ref: item.drawing_ref,
           asa_shape_code: item.asa_shape_code,
