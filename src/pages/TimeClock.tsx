@@ -229,19 +229,8 @@ export default function TimeClock() {
     // Kiosk resets — auto-scan loop will restart
   };
 
-  // Kiosk: auto-start scanning ~1s after camera is ready
-  useEffect(() => {
-    if (!kioskMode || kioskSleeping) return;
-    if (!face.cameraStream) return;
-    if (face.state !== "idle") return;
-    if (attemptCount > 0) return; // first attempt only here
-    const t = setTimeout(() => {
-      setAttemptCount(1);
-      handleScan();
-    }, 1000);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kioskMode, kioskSleeping, face.cameraStream, face.state]);
+  // Kiosk: auto-start scanning DISABLED — user must tap "Scan to Punch" button
+  // (Auto-retry on failure remains active in the next effect)
 
   // Kiosk: auto-retry on no_match / error up to MAX_AUTO_ATTEMPTS
   useEffect(() => {
@@ -374,6 +363,15 @@ export default function TimeClock() {
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
         </div>
         <div className="w-full max-w-lg mt-4">
+          {face.state === "idle" && (
+            <Button
+              onClick={() => { setAttemptCount(1); handleScan(); }}
+              size="lg"
+              className="w-full text-lg font-bold gap-2"
+            >
+              <ScanFace className="w-5 h-5" /> Scan to Punch
+            </Button>
+          )}
           {face.state === "scanning" && attemptCount > 0 && (
             <p className="text-center text-sm text-muted-foreground mb-3">
               Attempt {attemptCount} of {MAX_AUTO_ATTEMPTS}…

@@ -1,65 +1,22 @@
-# Add `fraction.ts` with input validation
 
-`fraction.ts` does not exist yet. Zahra's snippet is the input-validation guard for an inch → `{ whole, numerator, denominator }` converter. Plan: create the file in `src/lib/cutMath/` (alongside `imperial.ts`) with the guard exactly as written, plus the conversion body and a unit test.
+## هدف
+بازگرداندن دکمه دستی **"Scan to Punch"** در حالت کیوسک صفحه `/timeclock` تا کاربر بتواند با کلیک روی آن اسکن صورت را آغاز کند (به جای اسکن خودکار فوری).
 
-## File to create
+## تغییرات
 
-**`src/lib/cutMath/fraction.ts`**
+### 1. `src/pages/TimeClock.tsx` — UI کیوسک
+- غیرفعال کردن auto-start اسکن خودکار (حذف یا غیرفعال‌سازی `useEffect` خطوط 232-244 که بلافاصله `handleScan()` را صدا می‌زند).
+- اضافه کردن دکمه `<ScanFace /> Scan to Punch` در بلاک کیوسک (خطوط 376-389) — وقتی `face.state === "idle"` باشد دکمه نمایش داده شود.
+- auto-retry (خطوط 246-258) همچنان فعال بماند تا بعد از شروع دستی، retry خودکار کار کند.
 
-```ts
-/**
- * Convert a decimal inch value into a mixed fraction
- * { whole, numerator, denominator } rounded to the nearest 1/denominator.
- * Default denominator is 16 (matches shop-floor rebar precision).
- */
-export interface InchFraction {
-  whole: number;
-  numerator: number;
-  denominator: number;
-}
+### 2. `mem://features/timeclock/face-only-enforcement` — به‌روزرسانی حافظه
+- قانون سخت به‌روز شود: پانچ فقط از طریق Face Memory اما با دکمه دستی شروع اسکن در کیوسک.
 
-export function inchesToFraction(
-  inch: number,
-  denominator: number = 16,
-): InchFraction | typeof NaN {
-  if (!Number.isFinite(inch)) return NaN;
-  if (inch === 0) {
-    return { whole: 0, numerator: 0, denominator: 1 };
-  }
-  if (inch < 0) {
-    throw new Error("Negative values are not allowed");
-  }
+### 3. `mem://index.md` — به‌روزرسانی Core
+- خط مربوط به TimeClock Face-Only اصلاح شود تا دکمه دستی Scan مجاز باشد.
 
-  const whole = Math.floor(inch);
-  const frac = inch - whole;
-  let num = Math.round(frac * denominator);
-  let den = denominator;
-
-  // Roll over if rounding pushes fraction to 1
-  if (num === den) {
-    return { whole: whole + 1, numerator: 0, denominator: 1 };
-  }
-
-  // Reduce the fraction
-  if (num === 0) return { whole, numerator: 0, denominator: 1 };
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-  const g = gcd(num, den);
-  return { whole, numerator: num / g, denominator: den / g };
-}
-```
-
-## Test file
-
-**`src/lib/cutMath/fraction.test.ts`** — covers:
-- `NaN` input → returns `NaN`
-- `0` → `{ 0, 0, 1 }`
-- negative → throws `"Negative values are not allowed"`
-- `5.5` → `{ 5, 1, 2 }`
-- `6.125` → `{ 6, 1, 8 }`
-- rounding rollover (`2.999` at den 16 → `{ 3, 0, 1 }`)
-
-## Notes
-
-- Module is additive — no existing files modified, no imports broken.
-- Lives next to `imperial.ts` so future cut-math utilities can import it.
-- Follows the project's English-only and surgical-execution rules.
+## رفتار جدید
+1. کاربر وارد کیوسک می‌شود → دوربین روشن → دکمه "Scan to Punch" نمایش داده می‌شود
+2. کاربر روی دکمه کلیک می‌کند → اسکن شروع → تشخیص چهره → تأیید پانچ
+3. اگر تشخیص ناموفق بود → auto-retry فعال (تا سقف تلاش‌ها)
+4. بعد از اتمام تلاش‌ها → دکمه دوباره ظاهر می‌شود
