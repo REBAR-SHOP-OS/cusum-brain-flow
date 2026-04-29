@@ -18,11 +18,45 @@ import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 export default function ClearanceStation() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { items, byProject, clearedCount, totalCount, isLoading, error } = useClearanceData();
+  const { items, byProject, byProjectKey, clearedCount, totalCount, isLoading, error } = useClearanceData();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
 
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  // Track the active manifest by stable project key (project_id || "__unassigned__")
+  // so it survives label/data changes after the last item is cleared.
+  const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
+  // Cache the label of the active manifest so we can keep showing it even after
+  // the project group disappears from byProjectKey on completion.
+  const [selectedProjectLabel, setSelectedProjectLabel] = useState<string>("");
+
+  // Resolve key → label/items from the live hook.
+  const activeGroup = selectedProjectKey ? byProjectKey.get(selectedProjectKey) : undefined;
+
+  // Pull the manifest's items from the FULL list (including just-cleared) so the
+  // operator stays on the manifest page after clearing the last item.
+  const activeItems = useMemo(() => {
+    if (!selectedProjectKey) return [];
+    return items.filter((i) => (i.project_id || "__unassigned__") === selectedProjectKey);
+  }, [items, selectedProjectKey]);
+  const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
+
+  // Manifest is "complete" when we had items and they're all cleared (group removed
+  // from byProjectKey by the auto-advance trigger), and no pending items remain in view.
+  const manifestComplete =
+    !!selectedProjectKey &&
+    !activeGroup &&
+    activeItems.length > 0 &&
+    activeClearedCount === activeItems.length;
+
+  // Auto-return to project list ~4s after a manifest finishes, so kiosk doesn't get stuck.
+  useEffect(() => {
+    if (!manifestComplete) return;
+    const t = setTimeout(() => {
+      setSelectedProjectKey(null);
+      setSelectedProjectLabel("");
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [manifestComplete]);
 
   if (isLoading) {
     return (
@@ -44,14 +78,8 @@ export default function ClearanceStation() {
     );
   }
 
-  const projectEntries = [...byProject.entries()];
-  // Pull the selected manifest's items from the FULL list (including cleared) so the
-  // operator stays on the manifest page after clearing the last item, instead of being
-  // bounced back to the project list.
-  const activeItems = selectedProject
-    ? items.filter((i) => (i.project_name || i.plan_name || "Unassigned") === selectedProject)
-    : [];
-  const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
+  const projectEntries = [...byProjectKey.entries()];
+  const displayLabel = activeGroup?.label || selectedProjectLabel;
 
   return (
     <div className="flex flex-col h-full">
