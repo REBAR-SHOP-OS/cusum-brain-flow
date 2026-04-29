@@ -480,7 +480,7 @@ export default function StationView() {
                           <div className="space-y-6 pl-2 pt-2 pb-4">
                             {cust.barlists.map((bl) => (
                               <Collapsible
-                                key={bl.planId}
+                                key={`${bl.planId}::${isLastActiveCustomer && bl.planId === lastActiveBarlistId ? "open" : "closed"}`}
                                 defaultOpen={isLastActiveCustomer && bl.planId === lastActiveBarlistId}
                               >
                                 <CollapsibleTrigger className="flex items-center gap-2 w-full group/bl py-1.5">
