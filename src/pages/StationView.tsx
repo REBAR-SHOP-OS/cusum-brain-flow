@@ -33,6 +33,23 @@ export default function StationView() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isSupervisor, setIsSupervisor] = useState(false);
   const [selectedBarListId, setSelectedBarListId] = useState<string | null>(null);
+  // Remember the operator's last active context so the accordion stays expanded
+  // after returning from a focused run (e.g. cutter completed → onBack).
+  const [lastActiveCustomerName, setLastActiveCustomerName] = useState<string | null>(null);
+  const [lastActiveBarlistId, setLastActiveBarlistId] = useState<string | null>(null);
+
+  // Helper: remember context for a clicked item so we can restore it on return.
+  const rememberItemContext = (itemId: string) => {
+    const it = allItems.find((i) => i.id === itemId);
+    if (!it) return;
+    setLastActiveCustomerName(it.customer_name || "Unknown Customer");
+    setLastActiveBarlistId(it.cut_plan_id || null);
+  };
+
+  const handleCardClick = (itemId: string) => {
+    rememberItemContext(itemId);
+    setSelectedItemId(itemId);
+  };
   const { pinnedMachineId, unpinMachine } = useTabletPin();
   const { data: activeWorkOrders } = useSupabaseWorkOrders();
   const isPinned = pinnedMachineId === machineId;
@@ -314,6 +331,8 @@ export default function StationView() {
               setSelectedProjectId(null);
               setSelectedBarListId(null);
               setSelectedItemId(null);
+              setLastActiveCustomerName(null);
+              setLastActiveBarlistId(null);
             }}
           >
             <ArrowLeft className="w-3 h-3" />
@@ -417,7 +436,7 @@ export default function StationView() {
                           isSupervisor={isSupervisor}
                           machineId={machineId}
                           machineType={machine?.type}
-                          onClick={() => setSelectedItemId(item.id)}
+                          onClick={() => handleCardClick(item.id)}
                         />
                       ))}
                     </div>
@@ -429,8 +448,14 @@ export default function StationView() {
                     </div>
                   ) : customerGroupedData ? (
                     // Grouped by customer → barlist
-                    customerGroupedData.map((cust) => (
-                      <Collapsible key={cust.customerName} defaultOpen={cust.hasActiveWork}>
+                    customerGroupedData.map((cust) => {
+                      const isLastActiveCustomer = cust.customerName === lastActiveCustomerName;
+                      const customerOpen = cust.hasActiveWork || isLastActiveCustomer;
+                      return (
+                      <Collapsible
+                        key={`${cust.customerName}::${isLastActiveCustomer ? lastActiveBarlistId ?? "open" : "closed"}`}
+                        defaultOpen={customerOpen}
+                      >
                         <CollapsibleTrigger className="flex items-center gap-3 w-full group py-2">
                           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                             <Building2 className="w-4 h-4 text-primary" />
@@ -454,7 +479,10 @@ export default function StationView() {
                           ) : (
                           <div className="space-y-6 pl-2 pt-2 pb-4">
                             {cust.barlists.map((bl) => (
-                              <Collapsible key={bl.planId} defaultOpen={false}>
+                              <Collapsible
+                                key={`${bl.planId}::${isLastActiveCustomer && bl.planId === lastActiveBarlistId ? "open" : "closed"}`}
+                                defaultOpen={isLastActiveCustomer && bl.planId === lastActiveBarlistId}
+                              >
                                 <CollapsibleTrigger className="flex items-center gap-2 w-full group/bl py-1.5">
                                   <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
                                     <List className="w-3.5 h-3.5 text-muted-foreground" />
@@ -478,7 +506,7 @@ export default function StationView() {
                                         isSupervisor={isSupervisor}
                                         machineId={machineId}
                                         machineType={machine?.type}
-                                        onCardClick={(itemId) => setSelectedItemId(itemId)}
+                                        onCardClick={handleCardClick}
                                       />
                                     ))}
                                   </div>
@@ -489,7 +517,8 @@ export default function StationView() {
                           )}
                         </CollapsibleContent>
                       </Collapsible>
-                    ))
+                      );
+                    })
                   ) : (
                     // Single project selected — flat layout
                     filteredGroups.map((group) => (
@@ -500,7 +529,7 @@ export default function StationView() {
                         isSupervisor={isSupervisor}
                         machineId={machineId}
                         machineType={machine?.type}
-                        onCardClick={(itemId) => setSelectedItemId(itemId)}
+                        onCardClick={handleCardClick}
                       />
                     ))
                   )

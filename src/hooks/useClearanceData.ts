@@ -146,6 +146,9 @@ export function useClearanceData() {
     clearedCount,
     totalCount,
     byProject: byProjectLabel,
+    // Stable, project_id-keyed grouping so the manifest page can survive
+    // label changes and last-item completion without losing context.
+    byProjectKey: byProject,
     isLoading,
     error,
   };

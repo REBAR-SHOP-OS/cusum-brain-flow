@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useClearanceData } from "@/hooks/useClearanceData";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -18,11 +18,45 @@ import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 export default function ClearanceStation() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { items, byProject, clearedCount, totalCount, isLoading, error } = useClearanceData();
+  const { items, byProjectKey, clearedCount, totalCount, isLoading, error } = useClearanceData();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
 
-  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+  // Track the active manifest by stable project key (project_id || "__unassigned__")
+  // so it survives label/data changes after the last item is cleared.
+  const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
+  // Cache the label of the active manifest so we can keep showing it even after
+  // the project group disappears from byProjectKey on completion.
+  const [selectedProjectLabel, setSelectedProjectLabel] = useState<string>("");
+
+  // Resolve key → label/items from the live hook.
+  const activeGroup = selectedProjectKey ? byProjectKey.get(selectedProjectKey) : undefined;
+
+  // Pull the manifest's items from the FULL list (including just-cleared) so the
+  // operator stays on the manifest page after clearing the last item.
+  const activeItems = useMemo(() => {
+    if (!selectedProjectKey) return [];
+    return items.filter((i) => (i.project_id || "__unassigned__") === selectedProjectKey);
+  }, [items, selectedProjectKey]);
+  const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
+
+  // Manifest is "complete" when we had items and they're all cleared (group removed
+  // from byProjectKey by the auto-advance trigger), and no pending items remain in view.
+  const manifestComplete =
+    !!selectedProjectKey &&
+    !activeGroup &&
+    activeItems.length > 0 &&
+    activeClearedCount === activeItems.length;
+
+  // Auto-return to project list ~4s after a manifest finishes, so kiosk doesn't get stuck.
+  useEffect(() => {
+    if (!manifestComplete) return;
+    const t = setTimeout(() => {
+      setSelectedProjectKey(null);
+      setSelectedProjectLabel("");
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [manifestComplete]);
 
   if (isLoading) {
     return (
@@ -44,14 +78,8 @@ export default function ClearanceStation() {
     );
   }
 
-  const projectEntries = [...byProject.entries()];
-  // Pull the selected manifest's items from the FULL list (including cleared) so the
-  // operator stays on the manifest page after clearing the last item, instead of being
-  // bounced back to the project list.
-  const activeItems = selectedProject
-    ? items.filter((i) => (i.project_name || i.plan_name || "Unassigned") === selectedProject)
-    : [];
-  const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
+  const projectEntries = [...byProjectKey.entries()];
+  const displayLabel = activeGroup?.label || selectedProjectLabel;
 
   return (
     <div className="flex flex-col h-full">
@@ -62,8 +90,9 @@ export default function ClearanceStation() {
             variant="ghost"
             size="icon"
             onClick={() => {
-              if (selectedProject) {
-                setSelectedProject(null);
+              if (selectedProjectKey) {
+                setSelectedProjectKey(null);
+                setSelectedProjectLabel("");
               } else {
                 navigate("/shop-floor");
               }
@@ -95,29 +124,32 @@ export default function ClearanceStation() {
             <ShieldCheck className="w-12 h-12 mx-auto mb-3 opacity-40" />
             <p className="text-sm">No items awaiting clearance</p>
           </div>
-        ) : !selectedProject ? (
+        ) : !selectedProjectKey ? (
           <div className="p-4 space-y-3">
             <p className="text-sm text-muted-foreground mb-2">
               Select a project to view its clearance items.
             </p>
-            {projectEntries.map(([projectName, items]) => {
-              const cleared = items.filter((i) => i.evidence_status === "cleared").length;
+            {projectEntries.map(([key, group]) => {
+              const cleared = group.items.filter((i) => i.evidence_status === "cleared").length;
               return (
                 <button
-                  key={projectName}
-                  onClick={() => setSelectedProject(projectName)}
+                  key={key}
+                  onClick={() => {
+                    setSelectedProjectKey(key);
+                    setSelectedProjectLabel(group.label);
+                  }}
                   className="w-full rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors p-4 flex items-center justify-between text-left"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
                     <span className="font-bold text-sm tracking-wide uppercase text-foreground truncate">
-                      {projectName}
+                      {group.label}
                     </span>
                     <Badge
-                      variant={cleared === items.length ? "default" : "secondary"}
+                      variant={cleared === group.items.length ? "default" : "secondary"}
                       className="text-[10px] shrink-0"
                     >
-                      {cleared === items.length ? "complete" : `${cleared}/${items.length}`}
+                      {cleared === group.items.length ? "complete" : `${cleared}/${group.items.length}`}
                     </Badge>
                   </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
@@ -130,22 +162,44 @@ export default function ClearanceStation() {
             <div className="flex items-center gap-3 mb-2">
               <ShieldCheck className="w-5 h-5 text-primary" />
               <h2 className="text-sm font-bold tracking-wider uppercase text-foreground truncate">
-                Manifest: {selectedProject}
+                Manifest: {displayLabel}
               </h2>
               <Badge variant="secondary" className="text-[10px] shrink-0">
                 {activeClearedCount} / {activeItems.length}
               </Badge>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {activeItems.map((item) => (
-                <ClearanceCard
-                  key={item.id}
-                  item={item}
-                  canWrite={canWrite}
-                  userId={user?.id}
-                />
-              ))}
-            </div>
+            {manifestComplete ? (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center space-y-3">
+                <ShieldCheck className="w-10 h-10 text-primary mx-auto" />
+                <p className="text-sm font-bold tracking-wider uppercase text-foreground">
+                  Manifest Complete
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  All items cleared. Returning to projects shortly…
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedProjectKey(null);
+                    setSelectedProjectLabel("");
+                  }}
+                >
+                  Back to Projects
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeItems.map((item) => (
+                  <ClearanceCard
+                    key={item.id}
+                    item={item}
+                    canWrite={canWrite}
+                    userId={user?.id}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </ScrollArea>
