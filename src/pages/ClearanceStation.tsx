@@ -124,29 +124,32 @@ export default function ClearanceStation() {
             <ShieldCheck className="w-12 h-12 mx-auto mb-3 opacity-40" />
             <p className="text-sm">No items awaiting clearance</p>
           </div>
-        ) : !selectedProject ? (
+        ) : !selectedProjectKey ? (
           <div className="p-4 space-y-3">
             <p className="text-sm text-muted-foreground mb-2">
               Select a project to view its clearance items.
             </p>
-            {projectEntries.map(([projectName, items]) => {
-              const cleared = items.filter((i) => i.evidence_status === "cleared").length;
+            {projectEntries.map(([key, group]) => {
+              const cleared = group.items.filter((i) => i.evidence_status === "cleared").length;
               return (
                 <button
-                  key={projectName}
-                  onClick={() => setSelectedProject(projectName)}
+                  key={key}
+                  onClick={() => {
+                    setSelectedProjectKey(key);
+                    setSelectedProjectLabel(group.label);
+                  }}
                   className="w-full rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors p-4 flex items-center justify-between text-left"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
                     <span className="font-bold text-sm tracking-wide uppercase text-foreground truncate">
-                      {projectName}
+                      {group.label}
                     </span>
                     <Badge
-                      variant={cleared === items.length ? "default" : "secondary"}
+                      variant={cleared === group.items.length ? "default" : "secondary"}
                       className="text-[10px] shrink-0"
                     >
-                      {cleared === items.length ? "complete" : `${cleared}/${items.length}`}
+                      {cleared === group.items.length ? "complete" : `${cleared}/${group.items.length}`}
                     </Badge>
                   </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
@@ -159,22 +162,44 @@ export default function ClearanceStation() {
             <div className="flex items-center gap-3 mb-2">
               <ShieldCheck className="w-5 h-5 text-primary" />
               <h2 className="text-sm font-bold tracking-wider uppercase text-foreground truncate">
-                Manifest: {selectedProject}
+                Manifest: {displayLabel}
               </h2>
               <Badge variant="secondary" className="text-[10px] shrink-0">
                 {activeClearedCount} / {activeItems.length}
               </Badge>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {activeItems.map((item) => (
-                <ClearanceCard
-                  key={item.id}
-                  item={item}
-                  canWrite={canWrite}
-                  userId={user?.id}
-                />
-              ))}
-            </div>
+            {manifestComplete ? (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center space-y-3">
+                <ShieldCheck className="w-10 h-10 text-primary mx-auto" />
+                <p className="text-sm font-bold tracking-wider uppercase text-foreground">
+                  Manifest Complete
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  All items cleared. Returning to projects shortly…
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedProjectKey(null);
+                    setSelectedProjectLabel("");
+                  }}
+                >
+                  Back to Projects
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeItems.map((item) => (
+                  <ClearanceCard
+                    key={item.id}
+                    item={item}
+                    canWrite={canWrite}
+                    userId={user?.id}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </ScrollArea>
