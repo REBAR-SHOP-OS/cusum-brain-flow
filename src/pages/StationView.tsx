@@ -33,6 +33,23 @@ export default function StationView() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [isSupervisor, setIsSupervisor] = useState(false);
   const [selectedBarListId, setSelectedBarListId] = useState<string | null>(null);
+  // Remember the operator's last active context so the accordion stays expanded
+  // after returning from a focused run (e.g. cutter completed → onBack).
+  const [lastActiveCustomerName, setLastActiveCustomerName] = useState<string | null>(null);
+  const [lastActiveBarlistId, setLastActiveBarlistId] = useState<string | null>(null);
+
+  // Helper: remember context for a clicked item so we can restore it on return.
+  const rememberItemContext = (itemId: string) => {
+    const it = allItems.find((i) => i.id === itemId);
+    if (!it) return;
+    setLastActiveCustomerName(it.customer_name || "Unknown Customer");
+    setLastActiveBarlistId(it.cut_plan_id || null);
+  };
+
+  const handleCardClick = (itemId: string) => {
+    rememberItemContext(itemId);
+    setSelectedItemId(itemId);
+  };
   const { pinnedMachineId, unpinMachine } = useTabletPin();
   const { data: activeWorkOrders } = useSupabaseWorkOrders();
   const isPinned = pinnedMachineId === machineId;
