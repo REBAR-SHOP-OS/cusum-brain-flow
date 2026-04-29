@@ -90,8 +90,9 @@ export default function ClearanceStation() {
             variant="ghost"
             size="icon"
             onClick={() => {
-              if (selectedProject) {
-                setSelectedProject(null);
+              if (selectedProjectKey) {
+                setSelectedProjectKey(null);
+                setSelectedProjectLabel("");
               } else {
                 navigate("/shop-floor");
               }
