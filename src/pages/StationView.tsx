@@ -529,7 +529,7 @@ export default function StationView() {
                         isSupervisor={isSupervisor}
                         machineId={machineId}
                         machineType={machine?.type}
-                        onCardClick={(itemId) => setSelectedItemId(itemId)}
+                        onCardClick={handleCardClick}
                       />
                     ))
                   )
