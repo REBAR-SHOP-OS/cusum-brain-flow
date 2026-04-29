@@ -331,6 +331,8 @@ export default function StationView() {
               setSelectedProjectId(null);
               setSelectedBarListId(null);
               setSelectedItemId(null);
+              setLastActiveCustomerName(null);
+              setLastActiveBarlistId(null);
             }}
           >
             <ArrowLeft className="w-3 h-3" />
