@@ -436,7 +436,7 @@ export default function StationView() {
                           isSupervisor={isSupervisor}
                           machineId={machineId}
                           machineType={machine?.type}
-                          onClick={() => setSelectedItemId(item.id)}
+                          onClick={() => handleCardClick(item.id)}
                         />
                       ))}
                     </div>
