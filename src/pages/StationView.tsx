@@ -452,7 +452,10 @@ export default function StationView() {
                       const isLastActiveCustomer = cust.customerName === lastActiveCustomerName;
                       const customerOpen = cust.hasActiveWork || isLastActiveCustomer;
                       return (
-                      <Collapsible key={cust.customerName} defaultOpen={customerOpen}>
+                      <Collapsible
+                        key={`${cust.customerName}::${isLastActiveCustomer ? lastActiveBarlistId ?? "open" : "closed"}`}
+                        defaultOpen={customerOpen}
+                      >
                         <CollapsibleTrigger className="flex items-center gap-3 w-full group py-2">
                           <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                             <Building2 className="w-4 h-4 text-primary" />
