@@ -88,6 +88,7 @@ import AutomationsHub from "./pages/AutomationsHub";
 import VideoStudio from "./pages/VideoStudio";
 import AdDirector from "./pages/AdDirector";
 import AppBuilder from "./pages/AppBuilder";
+import VoiceAgent from "./pages/VoiceAgent";
 import { AppBuilderWorkspace } from "./components/app-builder/AppBuilderWorkspace";
 import { AdDirectorBackgroundIndicator } from "./components/ad-director/AdDirectorBackgroundIndicator";
 
@@ -166,6 +167,7 @@ const App = () => (
                     <Route path="/home" element={<P><Home /></P>} />
                     <Route path="/ceo" element={<P><CEOPortal /></P>} />
                     <Route path="/live-monitor" element={<P><LiveMonitor /></P>} />
+                    <Route path="/voice-agent" element={<P><VoiceAgent /></P>} />
                     
                     <Route path="/tasks" element={<P><Tasks /></P>} />
                     <Route path="/phonecalls" element={<P><Phonecalls /></P>} />
