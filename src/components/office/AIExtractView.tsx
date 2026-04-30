@@ -1004,7 +1004,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
     <div className="relative h-full">
       {/* Brain processing overlay */}
       {processing && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center pointer-events-none animate-fade-in">
+        <div className="fixed inset-0 z-40 flex flex-col items-center justify-center pointer-events-none animate-fade-in">
           {/* Dark backdrop */}
           <div className="absolute inset-0 bg-background/85 backdrop-blur-md" />
           
