@@ -55,6 +55,7 @@ import AdminDbAudit from "./pages/AdminDbAudit";
 import CleanupReport from "./pages/CleanupReport";
 import ConnectionsAudit from "./pages/ConnectionsAudit";
 import DataStoresAudit from "./pages/DataStoresAudit";
+import EdgeFunctionsAudit from "./pages/EdgeFunctionsAudit";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import DataDeletion from "./pages/DataDeletion";
 import TermsOfService from "./pages/TermsOfService";
@@ -254,6 +255,7 @@ const App = () => (
                     <Route path="/admin/bend-queue" element={<P><AdminRoute><BendQueueAdmin /></AdminRoute></P>} />
                     <Route path="/admin/bundles" element={<P><AdminRoute><BundleAdmin /></AdminRoute></P>} />
                     <Route path="/admin/production-audit" element={<P><AdminRoute><ProductionAudit /></AdminRoute></P>} />
+                    <Route path="/admin/functions-audit" element={<P><AdminRoute><EdgeFunctionsAudit /></AdminRoute></P>} />
 
                     {/* Automations Hub */}
                     <Route path="/automations" element={<P><AdminRoute><AutomationsHub /></AdminRoute></P>} />
