@@ -132,7 +132,7 @@ export default function StationDashboard() {
           </div>
         ) : (
           <>
-            <DowntimeAlertBanner machines={machines} />
+            {!isSeededMachines && <DowntimeAlertBanner machines={machines} />}
 
             <div className="flex flex-wrap items-center gap-2">
               <select
