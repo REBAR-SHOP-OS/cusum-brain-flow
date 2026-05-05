@@ -24,7 +24,7 @@ import { useWorkspaceSettings } from "@/hooks/useWorkspaceSettings";
 
 export default function StationDashboard() {
   const { timezone } = useWorkspaceSettings();
-  const { machines, isLoading, error } = useLiveMonitorData();
+  const { machines, isLoading, error, isSeededMachines } = useLiveMonitorData();
   const { data: workOrders, loading: woLoading, updateStatus } = useSupabaseWorkOrders();
   const { projectLanes } = useProductionQueues();
   const { plans: cutPlans, loading: plansLoading } = useCutPlans();
@@ -34,7 +34,6 @@ export default function StationDashboard() {
   const { pinnedMachineId } = useTabletPin();
   const queryClient = useQueryClient();
 
-  // Filter state
   const [typeFilter, setTypeFilter] = useState<MachineType | "all">("all");
   const [statusFilters, setStatusFilters] = useState<Set<MachineStatus>>(new Set());
   const [shiftFilter, setShiftFilter] = useState<ShiftType>(() => getCurrentShift(timezone));
@@ -60,7 +59,6 @@ export default function StationDashboard() {
     });
   };
 
-  // Realtime subscription for work_orders table
   useEffect(() => {
     const channel = supabase
       .channel("work-orders-realtime")
@@ -75,7 +73,6 @@ export default function StationDashboard() {
     return () => { supabase.removeChannel(channel); };
   }, [queryClient]);
 
-  // Auto-redirect if a machine is pinned to this device
   if (pinnedMachineId && !isLoading) {
     return <Navigate to={`/shopfloor/station/${pinnedMachineId}`} replace />;
   }
@@ -94,7 +91,6 @@ export default function StationDashboard() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-border">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => navigate("/shop-floor")}>
@@ -106,18 +102,20 @@ export default function StationDashboard() {
               Station Dashboard
             </h1>
             <p className="text-[9px] tracking-[0.15em] uppercase text-primary">
-              ◉ Cloud Synced / Real-Time Active
+              {isSeededMachines
+                ? "◉ Seeded Fab Layout / Awaiting Live Machine Sync"
+                : "◉ Cloud Synced / Real-Time Active"}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="gap-1.5 text-xs hidden sm:flex">
             <Cloud className="w-3 h-3 text-primary" />
-            Cloud Synced
+            {isSeededMachines ? "Seeded Layout" : "Cloud Synced"}
           </Badge>
           <Badge variant="outline" className="gap-1.5 text-xs hidden sm:flex">
-            <Radio className="w-3 h-3 text-success animate-pulse" />
-            Real-Time Active
+            <Radio className={`w-3 h-3 ${isSeededMachines ? "text-muted-foreground" : "text-success animate-pulse"}`} />
+            {isSeededMachines ? "Awaiting Live Sync" : "Real-Time Active"}
           </Badge>
           <Button variant="ghost" size="icon" className="w-8 h-8">
             <Settings className="w-4 h-4" />
@@ -125,7 +123,6 @@ export default function StationDashboard() {
         </div>
       </header>
 
-      {/* Content */}
       <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-6">
         {isLoading || woLoading || plansLoading ? (
           <div className="flex items-center justify-center h-64">
@@ -133,12 +130,9 @@ export default function StationDashboard() {
           </div>
         ) : (
           <>
-            {/* Downtime alerts */}
             <DowntimeAlertBanner machines={machines} />
 
-            {/* Filter toolbar */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Type filter */}
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value as MachineType | "all")}
@@ -150,7 +144,6 @@ export default function StationDashboard() {
                 <option value="loader">Loaders</option>
               </select>
 
-              {/* Status chips */}
               {(["running", "idle", "blocked", "down"] as MachineStatus[]).map((s) => (
                 <button
                   key={s}
@@ -168,7 +161,6 @@ export default function StationDashboard() {
                 </button>
               ))}
 
-              {/* Shift toggle */}
               <div className="ml-auto flex items-center gap-1">
                 {(["day", "night", "all"] as ShiftType[]).map((s) => (
                   <button
@@ -192,7 +184,6 @@ export default function StationDashboard() {
             <ShopFloorProductionQueue />
             <ActiveProductionHub machines={filteredMachines} activePlans={activePlans} />
 
-            {/* Work Order Queue */}
             <WorkOrderQueueSection
               workOrders={workOrders}
               onUpdateStatus={updateStatus}
