@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { SEEDED_FAB_MACHINES } from "@/components/shopfloor/seededMachines";
 import type { LiveMachine, QueuedRun } from "@/types/machine";
 
 export function useLiveMonitorData() {
@@ -31,8 +32,11 @@ export function useLiveMonitorData() {
 
       const machineList = (data || []) as LiveMachine[];
 
-      // Fetch queued runs for all machines in one query
-      const machineIds = machineList.map(m => m.id);
+      if (machineList.length === 0) {
+        return SEEDED_FAB_MACHINES;
+      }
+
+      const machineIds = machineList.map((machine) => machine.id);
       if (machineIds.length > 0) {
         const { data: queuedRuns } = await supabase
           .from("machine_runs")
@@ -65,7 +69,6 @@ export function useLiveMonitorData() {
     },
   });
 
-  // Available operators for assignment dropdown
   const { data: operators } = useQuery({
     queryKey: ["available-operators", companyId],
     enabled: !!user && !!companyId,
@@ -81,7 +84,6 @@ export function useLiveMonitorData() {
     },
   });
 
-  // Realtime subscriptions for both tables
   useEffect(() => {
     if (!user) return;
 
@@ -104,10 +106,16 @@ export function useLiveMonitorData() {
     };
   }, [user, companyId, queryClient]);
 
+  const resolvedMachines = machines ?? [];
+  const isSeededMachines =
+    resolvedMachines.length > 0 &&
+    resolvedMachines.every((machine) => machine.company_id === "seeded-shop-floor");
+
   return {
-    machines: machines ?? [],
+    machines: resolvedMachines,
     operators: operators ?? [],
     isLoading,
     error,
+    isSeededMachines,
   };
 }
