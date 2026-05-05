@@ -36,7 +36,7 @@ export default function ClearanceStation() {
   // operator stays on the manifest page after clearing the last item.
   const activeItems = useMemo(() => {
     if (!selectedProjectKey) return [];
-    return items.filter((i) => (i.project_id || "__unassigned__") === selectedProjectKey);
+    return items.filter((i) => (i.cut_plan_id || "__unassigned__") === selectedProjectKey);
   }, [items, selectedProjectKey]);
   const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
 

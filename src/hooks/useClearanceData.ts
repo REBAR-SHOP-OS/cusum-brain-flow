@@ -120,12 +120,10 @@ export function useClearanceData() {
 
   const byProject = new Map<string, { label: string; items: ClearanceItem[] }>();
   for (const item of visibleItems) {
-    // Group by canonical project_id so multiple cut_plans of the same project merge into one card.
-    // Orphan items without a project_id fall back under "Unassigned".
-    const key = item.project_id || "__unassigned__";
-    const label = item.project_id
-      ? (item.project_name || item.plan_name || "Unassigned")
-      : "Unassigned";
+    // Group by cut_plan_id so each manifest is keyed by its remark (extract session / plan name),
+    // matching the "Remark" printed on the rebar tag instead of the project address.
+    const key = item.cut_plan_id || "__unassigned__";
+    const label = item.plan_name || item.project_name || "Unassigned";
     if (!byProject.has(key)) byProject.set(key, { label, items: [] });
     byProject.get(key)!.items.push(item);
   }

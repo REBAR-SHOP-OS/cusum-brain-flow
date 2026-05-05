@@ -1,51 +1,32 @@
-# Stay on Active Project After Completion
+## Goal
+On `/shopfloor/clearance`, the Manifest header (and project list buttons) currently shows the project name — which is usually the site address (e.g. "12 LEITH HILL RD"). It should instead show the **Remark** — the same value printed on the rebar tag (e.g. "6 METER STRAIGHTS 10MM $ 15MM"), which is the cut plan / extract session name.
 
-## Problem
+## Source of "Remark"
+On printed tags, `Remark` is fed from `extract_sessions.name` (via `PrintTags.tsx` → `sessionScope`). In the clearance hook we already expose this value as `plan_name` (= `cut_plans.name`, which mirrors the extract session name for a given plan).
 
-Two related bugs across the shop floor flow:
+## Changes
 
-1. **Cutter Station (images #1 → #2 vs #4):** When an operator finishes the last cut on an item and the focused `CutterStationView` calls `onBack()`, `StationView` returns to its default customer-grouped view (image #4 — *all customers, all barlists*) instead of the project/barlist the operator was just working in (image #2). All Collapsible accordions reset to their default-collapsed state because the just-finished work order is no longer `in_progress`, so `defaultOpen={cust.hasActiveWork}` evaluates to `false`.
+### 1. `src/hooks/useClearanceData.ts`
+Group items by **plan/remark** instead of by project. Switch the grouping key from `project_id` to `cut_plan_id`, and use `plan_name` as the label. Fall back to `project_name` only when `plan_name` is empty.
 
-2. **Clearance Station (image #3):** When the last item of a manifest is cleared, the auto-advance trigger moves the items off the `clearance` phase. The realtime invalidation refetches and the project group disappears from `byProject`. Because `selectedProject` is keyed by the project label (which is now gone), the view effectively snaps back to the all-projects list.
+```ts
+const key = item.cut_plan_id || "__unassigned__";
+const label = item.plan_name || item.project_name || "Unassigned";
+```
 
-In both cases the operator's spatial context (which project / which manifest they were inside) is destroyed.
+Keep the same `byProjectKey` / `byProject` Map shape so `ClearanceStation.tsx` keeps working without further refactor (naming stays for surgical minimalism).
 
-## Fix
-
-Persist the operator's active context across completions and refetches.
-
-### 1. Cutter Station — keep the active project + barlist after `onBack`
-
-In `src/pages/StationView.tsx`:
-
-- When the focused view returns via `onBack()`, do **not** reset `selectedProjectId` or `selectedBarListId`. They are already preserved (good), but the customer accordion below them collapses everything because of `defaultOpen={cust.hasActiveWork}`.
-- Track the **last active customer** in component state (e.g. `lastActiveCustomerName`). Set it from the focused item just before navigating into `CutterStationView` / `BenderStationView` (using `item.customer_name`).
-- Change the Collapsible to: `defaultOpen={cust.hasActiveWork || cust.customerName === lastActiveCustomerName}` and pass it as a controlled `open` prop so it stays open after the active run finishes.
-- If a `selectedProjectId` is active, auto-expand that project's customer too (so the operator who filtered by project keeps seeing it expanded).
-- Inside the expanded customer, also auto-expand the specific barlist that was just worked on (track `lastActiveBarlistId`).
-
-### 2. Clearance Station — keep the operator on the manifest
-
-In `src/pages/ClearanceStation.tsx` and `src/hooks/useClearanceData.ts`:
-
-- Switch `selectedProject` from a label string to a stable `projectKey` (the same `project_id || "__unassigned__"` key used inside `useClearanceData`). Expose this key from the hook so the manifest page can match items even after the project label changes or items disappear.
-- After the last item of a manifest is cleared and removed from `visibleItems`, instead of falling through to "No items awaiting clearance", show a brief inline "Manifest complete" state on the same screen with two actions:
-  - **Back to projects** (explicit)
-  - **Auto-return after 4s** (so the kiosk doesn't get stuck)
-- Keep `selectedProject` set during this transitional state so the operator sees confirmation in place rather than being bounced.
-
-### 3. Small consistency tweaks
-
-- In `StationView.tsx`, when the operator clicks an item, also remember `lastActiveCustomerName` and `lastActiveBarlistId` (derived from the clicked item) so the accordion state is correct on return regardless of which entry path was used.
-- Clear `lastActive*` only when the user explicitly clicks "Show All Projects" or navigates away from the station.
-
-## Files touched
-
-- `src/pages/StationView.tsx` — track and apply `lastActiveCustomerName` / `lastActiveBarlistId`; controlled Collapsible open state.
-- `src/pages/ClearanceStation.tsx` — switch `selectedProject` to project key; add "manifest complete" transitional state.
-- `src/hooks/useClearanceData.ts` — expose `byProjectKey` (Map keyed by `project_id || "__unassigned__"`) alongside the existing label-keyed map for backward compat.
+### 2. `src/pages/ClearanceStation.tsx`
+- Update the active-items filter to match by `cut_plan_id` instead of `project_id`:
+  ```ts
+  items.filter((i) => (i.cut_plan_id || "__unassigned__") === selectedProjectKey)
+  ```
+- No UI label changes needed — the manifest already renders `displayLabel` which will now read the remark string.
 
 ## Out of scope
+- No DB schema changes.
+- No changes to RebarTagCard, PrintTags, or any other station — Cutting/Bending stations keep their existing grouping.
+- "Project" wording in code variable names (`selectedProjectKey`, `byProjectKey`) is preserved to keep the diff surgical.
 
-- No DB / RLS / trigger changes. The auto-advance trigger added previously continues to handle phase transitions.
-- No changes to `CutterStationView` / `BenderStationView` internals — only the parent decides where to land after `onBack`.
+## Result
+The Clearance Station list and manifest title will display the remark (e.g. "6 METER STRAIGHTS 10MM $ 15MM") matching the printed tag, instead of the site address.
