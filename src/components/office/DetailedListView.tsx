@@ -102,12 +102,17 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
       convertedDims[k] = v ? displayModeToMm(Number(v), editUnit) : undefined;
     }
     const updatePayload: Record<string, any> = { ...rest, cut_length_mm: convertedLength, bend_dimensions: convertedDims };
-    const { error } = await supabase
+    const { data: updated, error } = await supabase
       .from("cut_plan_items")
       .update(updatePayload)
-      .eq("id", editingItemId);
+      .eq("id", editingItemId)
+      .select("id");
     if (error) {
       toast.error("Failed to save", { description: error.message });
+      return;
+    }
+    if (!updated || updated.length === 0) {
+      toast.error("No changes saved", { description: "Permission denied or row not found (RLS blocked the update)." });
       return;
     }
     toast.success("Item updated");

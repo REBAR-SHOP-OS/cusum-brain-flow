@@ -986,13 +986,26 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
             updateData[key] = raw;
           }
         });
-        return supabase.from("extract_rows").update(updateData).eq("id", rowId);
+        return supabase.from("extract_rows").update(updateData).eq("id", rowId).select("id");
       });
-      await Promise.all(updates);
+      const results = await Promise.all(updates);
+      const failed = results.filter(r => r.error);
+      const blocked = results.filter(r => !r.error && (!r.data || r.data.length === 0));
+      if (failed.length > 0) {
+        throw new Error(failed.map(r => r.error?.message).filter(Boolean).join("; ") || "Update failed");
+      }
       await refreshRows();
       setIsEditing(false);
       setEditingRows({});
-      toast({ title: "Changes saved", description: `${Object.keys(editingRows).length} rows updated` });
+      if (blocked.length > 0) {
+        toast({
+          title: "No changes saved",
+          description: `${blocked.length} row(s) blocked by permissions (RLS). 0 actually updated.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Changes saved", description: `${results.length} rows updated` });
+      }
     } catch (err: any) {
       toast({ title: "Save failed", description: err.message, variant: "destructive" });
     } finally {
