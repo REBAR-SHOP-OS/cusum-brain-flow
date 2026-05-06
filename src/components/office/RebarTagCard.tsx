@@ -147,8 +147,9 @@ export function RebarTagCard({
       {/* Shape image + Dwg/Item */}
       <div className="min-h-0 border-b-2 border-black relative flex flex-col items-center justify-start px-2 pt-0.5 pb-1 bg-white" style={{ flex: "1 1 30%" }}>
         {/* Big item number for visibility */}
-        <div className="absolute bottom-1 right-2 text-[64px] font-black leading-none text-black pointer-events-none">
-          {item}
+        <div className="absolute bottom-1 left-2 text-[40px] font-black leading-none text-black pointer-events-none flex items-baseline gap-1">
+          <span className="text-[20px]">item:</span>
+          <span>{item}</span>
         </div>
         <div className="flex-1 min-h-0 flex items-start justify-center w-full">
           {shapeImageUrl ? (
