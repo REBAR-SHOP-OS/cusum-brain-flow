@@ -172,10 +172,6 @@ export function RebarTagCard({
       {/* Ref — full width */}
       <div className="border-b border-black text-[10px] flex-1 px-2 py-0.5 min-h-[5.5rem] overflow-hidden">
         <div className="flex gap-1">
-          <span className="font-bold">Item:</span>
-          <span className="font-black">{item}</span>
-        </div>
-        <div className="flex gap-1">
           <span className="font-bold">Ref:</span>
           <span className="font-black uppercase">{reference || "—"}</span>
         </div>
