@@ -87,6 +87,7 @@ export async function handleRequest(
 
   try {
     // Internal-only guard — cron/system functions require shared secret
+    // OR an authenticated admin user (for manual UI triggers).
     if (options.internalOnly) {
       const expected = Deno.env.get("INTERNAL_FUNCTION_SECRET");
       const provided = req.headers.get("x-internal-secret");
@@ -97,7 +98,35 @@ export async function handleRequest(
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      if (!provided || provided !== expected) {
+      const secretMatches = provided && provided === expected;
+      let adminOk = false;
+      if (!secretMatches) {
+        // Allow authenticated admin via Bearer token (manual UI trigger)
+        const authHeader = req.headers.get("Authorization");
+        if (authHeader?.startsWith("Bearer ")) {
+          try {
+            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+            const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+            const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+            const token = authHeader.replace("Bearer ", "");
+            if (token === serviceKey) {
+              adminOk = true;
+            } else {
+              const tmp = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
+              const { data } = await tmp.auth.getClaims(token);
+              const uid = data?.claims?.sub as string | undefined;
+              if (uid) {
+                const svc = createClient(supabaseUrl, serviceKey);
+                const { data: hasRole } = await svc.rpc("has_role", { _user_id: uid, _role: "admin" });
+                if (hasRole === true) adminOk = true;
+              }
+            }
+          } catch (e) {
+            log.warn("internalOnly admin check failed", { err: String(e) });
+          }
+        }
+      }
+      if (!secretMatches && !adminOk) {
         log.error("Invalid or missing internal secret", { functionName: options.functionName });
         return new Response(
           JSON.stringify({ ok: false, error: "Forbidden" }),
