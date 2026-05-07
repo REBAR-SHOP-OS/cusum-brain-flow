@@ -293,7 +293,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     const fileName = `voice-${Date.now()}.webm`;
     const { error } = await supabase.storage.from("team-chat-files").upload(fileName, blob, { contentType: "audio/webm" });
     if (error) { toast.error("Failed to upload voice message"); setUploading(false); return; }
-    const publicUrl = getPublicFileUrl(fileName);
+    const publicUrl = await getChatFileSignedUrl(fileName);
     await sendMutation.mutateAsync({
       channelId,
       senderProfileId: myProfile.id,
