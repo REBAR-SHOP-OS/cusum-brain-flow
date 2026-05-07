@@ -17,10 +17,14 @@ async function callErpAction(
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw new Error("Unauthorized");
+  }
+
   const resp = await fetch(`${supabaseUrl}/functions/v1/vizzy-erp-action`, {
     method: "POST",
     headers: {
-      Authorization: authHeader || `Bearer ${serviceKey}`,
+      Authorization: authHeader,
       "Content-Type": "application/json",
       apikey: serviceKey,
     },
@@ -79,5 +83,5 @@ Deno.serve((req) =>
     log.done("Action proxied", { action, cardTitle });
 
     return { ok: true, spoken, cardTitle, data };
-  }, { functionName: "assistant-action", authMode: "none", requireCompany: false, wrapResult: false }),
+  }, { functionName: "assistant-action", authMode: "required", requireCompany: false, wrapResult: false }),
 );
