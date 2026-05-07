@@ -19,7 +19,7 @@ import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
-import { getPublicFileUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks, resolveMessageContent } from "@/lib/chatFileUtils";
+import { getChatFileSignedUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks, resolveMessageContent } from "@/lib/chatFileUtils";
 import { InlineFileLink } from "@/components/pipeline/InlineFileLink";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { MentionMenu } from "@/components/chat/MentionMenu";
@@ -243,7 +243,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
       const path = `chat-uploads/${channelId}/${Date.now()}-${sanitizeFileName(pf.name)}`;
       const { error } = await uploadToStorage("team-chat-files", path, pf.file);
       if (error) throw new Error(`Upload failed for ${pf.name}: ${error.message}`);
-      results.push({ name: pf.name, url: getPublicFileUrl(path), type: pf.file.type, size: pf.size });
+      results.push({ name: pf.name, url: await getChatFileSignedUrl(path), type: pf.file.type, size: pf.size });
     }
     return results;
   };
@@ -293,7 +293,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     const fileName = `voice-${Date.now()}.webm`;
     const { error } = await supabase.storage.from("team-chat-files").upload(fileName, blob, { contentType: "audio/webm" });
     if (error) { toast.error("Failed to upload voice message"); setUploading(false); return; }
-    const publicUrl = getPublicFileUrl(fileName);
+    const publicUrl = await getChatFileSignedUrl(fileName);
     await sendMutation.mutateAsync({
       channelId,
       senderProfileId: myProfile.id,

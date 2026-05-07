@@ -48,7 +48,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { primeMobileAudio } from "@/lib/audioPlayer";
-import { getPublicFileUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
+import { getChatFileSignedUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
 import { isTeamHubAdmin } from "./teamHubConfig";
 
 const LANG_LABELS: Record<string, { name: string; flag: string }> = {
@@ -186,7 +186,7 @@ export function MessageThread({
       setIsUploading(false);
       return;
     }
-    const publicUrl = getPublicFileUrl(fileName);
+    const publicUrl = await getChatFileSignedUrl(fileName);
     onSend("🎤", [{ name: fileName, url: publicUrl, type: "audio/webm", size: blob.size }], replyTo?.id || null);
     setReplyTo(null);
     setIsUploading(false);
@@ -375,7 +375,7 @@ export function MessageThread({
         continue;
       }
 
-      const publicUrl = getPublicFileUrl(path);
+      const publicUrl = await getChatFileSignedUrl(path);
 
       newAttachments.push({
         name: file.name,
