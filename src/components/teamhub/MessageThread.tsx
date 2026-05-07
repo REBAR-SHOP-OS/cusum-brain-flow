@@ -375,7 +375,7 @@ export function MessageThread({
         continue;
       }
 
-      const publicUrl = getPublicFileUrl(path);
+      const publicUrl = await getChatFileSignedUrl(path);
 
       newAttachments.push({
         name: file.name,
