@@ -19,7 +19,7 @@ import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
-import { getPublicFileUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks, resolveMessageContent } from "@/lib/chatFileUtils";
+import { getChatFileSignedUrl, fixChatFileUrl, isImageUrl, parseAttachmentLinks, resolveMessageContent } from "@/lib/chatFileUtils";
 import { InlineFileLink } from "@/components/pipeline/InlineFileLink";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { MentionMenu } from "@/components/chat/MentionMenu";
