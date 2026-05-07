@@ -97,6 +97,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   const { messages, isLoading } = useTeamMessages(channelId);
   const { profiles } = useProfiles();
   const myProfile = useMyProfile();
+  const { companyId } = useCompanyId();
   const sendMutation = useSendMessage();
   const [inputText, setInputText] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
