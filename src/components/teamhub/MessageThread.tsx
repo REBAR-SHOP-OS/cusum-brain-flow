@@ -47,6 +47,7 @@ import { downloadFile } from "@/lib/downloadUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 import { getChatFileSignedUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
 import { isTeamHubAdmin } from "./teamHubConfig";
