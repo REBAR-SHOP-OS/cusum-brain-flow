@@ -66,7 +66,7 @@ Deno.serve((req) =>
       const requiredKeys = ["id", "email", "created_at"];
       const missing = requiredKeys.filter((k) => !(k in user));
       if (missing.length > 0) throw new Error(`Missing user fields: ${missing.join(", ")}`);
-      return `user shape valid: id=${user.id?.substring(0, 8)}…`;
+      return `user shape valid`;
     });
 
     await runCheck("quote_response_shape", async () => {
