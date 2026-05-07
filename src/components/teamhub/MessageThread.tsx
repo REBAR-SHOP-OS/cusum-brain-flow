@@ -181,7 +181,8 @@ export function MessageThread({
     const sessionOk = await ensureSession();
     if (!sessionOk) { setIsUploading(false); return; }
 
-    const fileName = `voice-${Date.now()}.webm`;
+    if (!companyId) { toast.error("Missing company context"); setIsUploading(false); return; }
+    const fileName = `${companyId}/voice-${Date.now()}.webm`;
     const { error } = await supabase.storage.from("team-chat-files").upload(fileName, blob, { contentType: "audio/webm" });
     if (error) {
       toast.error("Failed to upload voice message");
