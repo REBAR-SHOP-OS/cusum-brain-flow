@@ -66,7 +66,7 @@ Deno.serve((req) =>
       const requiredKeys = ["id", "email", "created_at"];
       const missing = requiredKeys.filter((k) => !(k in user));
       if (missing.length > 0) throw new Error(`Missing user fields: ${missing.join(", ")}`);
-      return `user shape valid: id=${user.id?.substring(0, 8)}…`;
+      return `user shape valid`;
     });
 
     await runCheck("quote_response_shape", async () => {
@@ -148,5 +148,5 @@ Deno.serve((req) =>
       JSON.stringify({ healthy: allPassed, checks: results, ts: new Date().toISOString() }),
       { status: allPassed ? 200 : 503, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
     );
-  }, { functionName: "smoke-tests", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "smoke-tests", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );
