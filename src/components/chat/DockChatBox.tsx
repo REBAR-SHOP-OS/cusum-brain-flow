@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useTeamMessages, useSendMessage, useMyProfile, type TeamMessage, type ChatAttachment } from "@/hooks/useTeamChat";
 import { useProfiles } from "@/hooks/useProfiles";
 import { useOpenDM } from "@/hooks/useChannelManagement";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { useDockChat } from "@/contexts/DockChatContext";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
@@ -96,6 +97,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   const { messages, isLoading } = useTeamMessages(channelId);
   const { profiles } = useProfiles();
   const myProfile = useMyProfile();
+  const { companyId } = useCompanyId();
   const sendMutation = useSendMessage();
   const [inputText, setInputText] = useState("");
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
@@ -238,9 +240,10 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   const uploadFiles = async (): Promise<Array<{ name: string; url: string; type: string; size: number }>> => {
     const sessionOk = await ensureSession();
     if (!sessionOk) throw new Error("Session expired — please log in again");
+    if (!companyId) throw new Error("Missing company context");
     const results: Array<{ name: string; url: string; type: string; size: number }> = [];
     for (const pf of pendingFiles) {
-      const path = `chat-uploads/${channelId}/${Date.now()}-${sanitizeFileName(pf.name)}`;
+      const path = `${companyId}/chat-uploads/${channelId}/${Date.now()}-${sanitizeFileName(pf.name)}`;
       const { error } = await uploadToStorage("team-chat-files", path, pf.file);
       if (error) throw new Error(`Upload failed for ${pf.name}: ${error.message}`);
       results.push({ name: pf.name, url: await getChatFileSignedUrl(path), type: pf.file.type, size: pf.size });
@@ -290,7 +293,8 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     setUploading(true);
     const sessionOk = await ensureSession();
     if (!sessionOk) { setUploading(false); return; }
-    const fileName = `voice-${Date.now()}.webm`;
+    if (!companyId) { toast.error("Missing company context"); setUploading(false); return; }
+    const fileName = `${companyId}/chat-uploads/${channelId}/voice-${Date.now()}.webm`;
     const { error } = await supabase.storage.from("team-chat-files").upload(fileName, blob, { contentType: "audio/webm" });
     if (error) { toast.error("Failed to upload voice message"); setUploading(false); return; }
     const publicUrl = await getChatFileSignedUrl(fileName);

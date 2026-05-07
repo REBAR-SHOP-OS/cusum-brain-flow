@@ -47,6 +47,7 @@ import { downloadFile } from "@/lib/downloadUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 import { getChatFileSignedUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
 import { isTeamHubAdmin } from "./teamHubConfig";
@@ -155,6 +156,7 @@ export function MessageThread({
   headerExtra,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
+  const { companyId } = useCompanyId();
   const [replyTo, setReplyTo] = useState<TeamMessage | null>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
@@ -179,7 +181,8 @@ export function MessageThread({
     const sessionOk = await ensureSession();
     if (!sessionOk) { setIsUploading(false); return; }
 
-    const fileName = `voice-${Date.now()}.webm`;
+    if (!companyId) { toast.error("Missing company context"); setIsUploading(false); return; }
+    const fileName = `${companyId}/voice-${Date.now()}.webm`;
     const { error } = await supabase.storage.from("team-chat-files").upload(fileName, blob, { contentType: "audio/webm" });
     if (error) {
       toast.error("Failed to upload voice message");
@@ -365,7 +368,8 @@ export function MessageThread({
         continue;
       }
 
-      const path = `${Date.now()}-${file.name}`;
+      if (!companyId) { toast.error("Missing company context"); continue; }
+      const path = `${companyId}/${Date.now()}-${file.name}`;
       const { error } = await supabase.storage
         .from("team-chat-files")
         .upload(path, file);
