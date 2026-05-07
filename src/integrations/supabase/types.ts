@@ -16080,7 +16080,7 @@ export type Database = {
       }
       workspace_settings: {
         Row: {
-          company_id: string | null
+          company_id: string
           date_format: string
           id: string
           time_format: string
@@ -16088,7 +16088,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          company_id?: string | null
+          company_id: string
           date_format?: string
           id?: string
           time_format?: string
@@ -16096,7 +16096,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          company_id?: string | null
+          company_id?: string
           date_format?: string
           id?: string
           time_format?: string
