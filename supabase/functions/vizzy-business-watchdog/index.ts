@@ -199,7 +199,7 @@ Deno.serve((req) =>
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-  }, { functionName: "vizzy-business-watchdog", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: false })
+  }, { functionName: "vizzy-business-watchdog", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );
 
 // ─── CHECK FUNCTIONS ───
