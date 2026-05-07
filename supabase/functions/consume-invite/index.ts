@@ -16,6 +16,13 @@ Deno.serve(async (req) => {
       );
     }
 
+    if (!email || typeof email !== "string") {
+      return new Response(
+        JSON.stringify({ error: "Missing email" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const client = createClient(supabaseUrl, serviceKey);
@@ -36,33 +43,40 @@ Deno.serve(async (req) => {
       );
     }
 
+    // SECURITY: Bind the invite to the email it was issued for. This prevents
+    // an attacker who obtains an invite link from applying it to a different
+    // account and inheriting the company/role.
+    if (invite.email && email.toLowerCase() !== String(invite.email).toLowerCase()) {
+      return new Response(
+        JSON.stringify({ error: "Email does not match invite" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Mark token as used
     await client
       .from("invite_tokens")
       .update({ used_at: new Date().toISOString() })
       .eq("id", invite.id);
 
-    // Find the user by email to assign company and role
-    if (email) {
-      const { data: userData } = await client.auth.admin.listUsers();
-      const user = userData?.users?.find((u: any) => u.email === email);
+    // Find the user by the invite's email (authoritative) and assign company/role
+    const targetEmail = String(invite.email || email).toLowerCase();
+    const { data: userData } = await client.auth.admin.listUsers();
+    const user = userData?.users?.find((u: any) => (u.email || "").toLowerCase() === targetEmail);
 
-      if (user && invite.company_id) {
-        // Update profile with company_id
+    if (user && invite.company_id) {
+      await client
+        .from("profiles")
+        .update({ company_id: invite.company_id })
+        .eq("id", user.id);
+
+      if (invite.role && invite.role !== "user") {
         await client
-          .from("profiles")
-          .update({ company_id: invite.company_id })
-          .eq("id", user.id);
-
-        // Assign role if specified
-        if (invite.role && invite.role !== "user") {
-          await client
-            .from("user_roles")
-            .upsert(
-              { user_id: user.id, role: invite.role },
-              { onConflict: "user_id,role" }
-            );
-        }
+          .from("user_roles")
+          .upsert(
+            { user_id: user.id, role: invite.role },
+            { onConflict: "user_id,role" }
+          );
       }
     }
 
