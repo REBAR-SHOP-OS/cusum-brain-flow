@@ -67,7 +67,11 @@ Deno.serve((req) =>
     const isSuperAdmin = ALL_ADMIN_EMAILS.includes(userEmail);
     if (isSuperAdmin) isAdmin = true;
 
-    const isScheduled = body.backup_type === "scheduled";
+    // Scheduled callers MUST authenticate via internalOnly (x-internal-secret).
+    // Manual callers must be an admin user. Body-based "scheduled" bypass removed.
+    const hasInternalSecret =
+      req.headers.get("x-internal-secret") === Deno.env.get("INTERNAL_FUNCTION_SECRET");
+    const isScheduled = hasInternalSecret && body.backup_type === "scheduled";
 
     if (!isAdmin && !isScheduled) {
       return json({ error: "Forbidden: admin access required" }, 403);
@@ -87,8 +91,8 @@ Deno.serve((req) =>
       creatorName = profile?.full_name ?? "Admin";
       companyId = profile?.company_id ?? null;
     }
-    // For scheduled backups without userId, accept body.company_id as trusted input
-    if (!companyId && body.company_id && typeof body.company_id === "string") {
+    // For scheduled backups (verified via internal secret), accept body.company_id
+    if (!companyId && isScheduled && body.company_id && typeof body.company_id === "string") {
       companyId = body.company_id;
     }
     if (!companyId) {
