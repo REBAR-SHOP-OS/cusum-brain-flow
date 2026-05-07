@@ -201,5 +201,5 @@ Deno.serve((req) =>
     }
 
     return { breaches_processed: breachCount, checked_at: now.toISOString() };
-  }, { functionName: "check-sla-breaches", authMode: "optional", requireCompany: false, wrapResult: false })
+  }, { functionName: "check-sla-breaches", authMode: "optional", requireCompany: false, wrapResult: false, internalOnly: true })
 );
