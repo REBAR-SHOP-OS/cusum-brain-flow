@@ -186,7 +186,7 @@ export function MessageThread({
       setIsUploading(false);
       return;
     }
-    const publicUrl = getPublicFileUrl(fileName);
+    const publicUrl = await getChatFileSignedUrl(fileName);
     onSend("🎤", [{ name: fileName, url: publicUrl, type: "audio/webm", size: blob.size }], replyTo?.id || null);
     setReplyTo(null);
     setIsUploading(false);
