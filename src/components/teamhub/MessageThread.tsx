@@ -48,7 +48,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { primeMobileAudio } from "@/lib/audioPlayer";
-import { getPublicFileUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
+import { getChatFileSignedUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
 import { isTeamHubAdmin } from "./teamHubConfig";
 
 const LANG_LABELS: Record<string, { name: string; flag: string }> = {
