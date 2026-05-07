@@ -368,7 +368,8 @@ export function MessageThread({
         continue;
       }
 
-      const path = `${Date.now()}-${file.name}`;
+      if (!companyId) { toast.error("Missing company context"); continue; }
+      const path = `${companyId}/${Date.now()}-${file.name}`;
       const { error } = await supabase.storage
         .from("team-chat-files")
         .upload(path, file);
