@@ -156,6 +156,7 @@ export function MessageThread({
   headerExtra,
 }: MessageThreadProps) {
   const [input, setInput] = useState("");
+  const { companyId } = useCompanyId();
   const [replyTo, setReplyTo] = useState<TeamMessage | null>(null);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
