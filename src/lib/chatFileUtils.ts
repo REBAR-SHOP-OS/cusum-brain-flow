@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
 
 /** ~1 year — long-lived signed URL for chat attachments */
 const CHAT_FILE_SIGNED_TTL = 60 * 60 * 24 * 365;
