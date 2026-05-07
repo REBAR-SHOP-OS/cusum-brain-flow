@@ -243,7 +243,7 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
       const path = `chat-uploads/${channelId}/${Date.now()}-${sanitizeFileName(pf.name)}`;
       const { error } = await uploadToStorage("team-chat-files", path, pf.file);
       if (error) throw new Error(`Upload failed for ${pf.name}: ${error.message}`);
-      results.push({ name: pf.name, url: getPublicFileUrl(path), type: pf.file.type, size: pf.size });
+      results.push({ name: pf.name, url: await getChatFileSignedUrl(path), type: pf.file.type, size: pf.size });
     }
     return results;
   };
