@@ -1,4 +1,5 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { signUnsubscribeToken } from "../_shared/unsubscribeToken.ts";
 
 const RATE_LIMIT_PER_MINUTE = 50;
 const DELAY_MS = Math.ceil(60000 / RATE_LIMIT_PER_MINUTE);
