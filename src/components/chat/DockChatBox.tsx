@@ -293,7 +293,8 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
     setUploading(true);
     const sessionOk = await ensureSession();
     if (!sessionOk) { setUploading(false); return; }
-    const fileName = `voice-${Date.now()}.webm`;
+    if (!companyId) { toast.error("Missing company context"); setUploading(false); return; }
+    const fileName = `${companyId}/chat-uploads/${channelId}/voice-${Date.now()}.webm`;
     const { error } = await supabase.storage.from("team-chat-files").upload(fileName, blob, { contentType: "audio/webm" });
     if (error) { toast.error("Failed to upload voice message"); setUploading(false); return; }
     const publicUrl = await getChatFileSignedUrl(fileName);
