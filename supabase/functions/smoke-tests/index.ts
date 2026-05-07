@@ -148,5 +148,5 @@ Deno.serve((req) =>
       JSON.stringify({ healthy: allPassed, checks: results, ts: new Date().toISOString() }),
       { status: allPassed ? 200 : 503, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
     );
-  }, { functionName: "smoke-tests", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "smoke-tests", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
 );
