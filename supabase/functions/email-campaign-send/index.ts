@@ -1,4 +1,5 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { signUnsubscribeToken } from "../_shared/unsubscribeToken.ts";
 
 const RATE_LIMIT_PER_MINUTE = 50;
 const DELAY_MS = Math.ceil(60000 / RATE_LIMIT_PER_MINUTE);
@@ -68,11 +69,11 @@ Deno.serve((req) =>
 
     for (const contact of eligible) {
       try {
-        const unsubToken = btoa(JSON.stringify({
+        const unsubToken = await signUnsubscribeToken({
           email: contact.email,
           campaign_id,
           ts: Date.now(),
-        }));
+        });
         const unsubscribeUrl = `${unsubscribeBase}?token=${encodeURIComponent(unsubToken)}`;
 
         const personalizedHtml = (campaign.body_html || "")

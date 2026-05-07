@@ -1,5 +1,6 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
+import { verifyUnsubscribeToken } from "../_shared/unsubscribeToken.ts";
 
 Deno.serve((req) =>
   handleRequest(req, async ({ body, serviceClient }) => {
@@ -19,22 +20,36 @@ Deno.serve((req) =>
       });
     }
 
-    let payload: { email: string; campaign_id?: string };
-    try {
-      payload = JSON.parse(atob(token));
-    } catch {
+    const verified = await verifyUnsubscribeToken<{ email: string; campaign_id?: string }>(token);
+    if (!verified.valid || !verified.payload?.email) {
       return new Response(JSON.stringify({ error: "Invalid token" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
-    if (!payload.email) {
-      return new Response(JSON.stringify({ error: "Invalid token: no email" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
+    const payload = verified.payload;
     const email = payload.email.toLowerCase();
+
+    // Legacy unsigned tokens (pre-HMAC rollout) are accepted ONLY if the
+    // (email, campaign_id) pair matches a real send. This blocks forgery
+    // while keeping in-flight emails working.
+    if (verified.legacy) {
+      if (!payload.campaign_id) {
+        return new Response(JSON.stringify({ error: "Invalid token" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const { data: realSend } = await serviceClient
+        .from("email_campaign_sends")
+        .select("id")
+        .eq("campaign_id", payload.campaign_id)
+        .ilike("email", email)
+        .maybeSingle();
+      if (!realSend) {
+        return new Response(JSON.stringify({ error: "Invalid token" }), {
+          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
 
     let companyId: string | null = null;
     if (payload.campaign_id) {
