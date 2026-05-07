@@ -2,36 +2,66 @@ import { supabase } from "@/integrations/supabase/client";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
+/** ~1 year — long-lived signed URL for chat attachments */
+const CHAT_FILE_SIGNED_TTL = 60 * 60 * 24 * 365;
+
 /**
- * Get a permanent public URL for a file in the team-chat-files bucket.
+ * Create a long-lived signed URL for a file in the (private) team-chat-files bucket.
+ * Returns empty string on failure. Use this when persisting a URL into a chat message.
  */
-export function getPublicFileUrl(storagePath: string): string {
-  const { data } = supabase.storage.from("team-chat-files").getPublicUrl(storagePath);
-  return data?.publicUrl || "";
+export async function getChatFileSignedUrl(storagePath: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from("team-chat-files")
+    .createSignedUrl(storagePath, CHAT_FILE_SIGNED_TTL);
+  if (error || !data?.signedUrl) {
+    console.warn("Failed to sign chat file URL", error);
+    return "";
+  }
+  return data.signedUrl;
 }
 
 /**
- * Fix a potentially expired signed URL by converting it to a public URL.
- * If the URL is already a public URL or external, returns it as-is.
+ * Backwards-compatible synchronous helper. The team-chat-files bucket is private,
+ * so this can no longer return a working public URL — callers should migrate to
+ * `getChatFileSignedUrl`. Kept to avoid breaking imports; returns empty string.
+ * @deprecated use getChatFileSignedUrl
+ */
+export function getPublicFileUrl(_storagePath: string): string {
+  return "";
+}
+
+/**
+ * Extract the storage path from a legacy public/signed team-chat-files URL.
+ * Returns null if the URL is external or doesn't match.
+ */
+function extractChatFilePath(url: string): string | null {
+  if (!url) return null;
+  const signed = url.match(/\/object\/sign\/team-chat-files\/([^?]+)/);
+  if (signed?.[1]) return decodeURIComponent(signed[1]);
+  const publicMatch = url.match(/\/object\/public\/team-chat-files\/([^?]+)/);
+  if (publicMatch?.[1]) return decodeURIComponent(publicMatch[1]);
+  return null;
+}
+
+/**
+ * Legacy URL fixer. Bucket is now private — cannot return a public URL.
+ * Returns the original URL (signed URLs already in messages will continue
+ * to work until they expire; old `public/` URLs will be re-resolved on demand
+ * by `resolveChatFileUrl`).
  */
 export function fixChatFileUrl(url: string): string {
-  if (!url) return url;
-
-  // Detect signed URL pattern from our Supabase storage
-  if (url.includes("/storage/v1/") && url.includes("token=")) {
-    // Extract the path after /object/sign/team-chat-files/
-    const match = url.match(/\/object\/sign\/team-chat-files\/([^?]+)/);
-    if (match?.[1]) {
-      return `${SUPABASE_URL}/storage/v1/object/public/team-chat-files/${decodeURIComponent(match[1])}`;
-    }
-  }
-
-  // Detect already-public URL pattern — leave as-is
-  if (url.includes("/object/public/team-chat-files/")) {
-    return url;
-  }
-
   return url;
+}
+
+/**
+ * Resolve any chat-file URL to a fresh signed URL (async).
+ * If it's an external URL, returns as-is. If unparseable, returns original.
+ */
+export async function resolveChatFileUrl(url: string): Promise<string> {
+  const path = extractChatFilePath(url);
+  if (!path) return url;
+  const fresh = await getChatFileSignedUrl(path);
+  return fresh || url;
 }
 
 /**
