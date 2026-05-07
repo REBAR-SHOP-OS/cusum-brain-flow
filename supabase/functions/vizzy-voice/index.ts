@@ -69,5 +69,5 @@ Deno.serve((req) =>
 
     log.done("Voice query handled", { query: text });
     return { reply };
-  }, { functionName: "vizzy-voice", authMode: "none", requireCompany: false, wrapResult: false })
+  }, { functionName: "vizzy-voice", authMode: "required", requireCompany: true, wrapResult: false })
 );
