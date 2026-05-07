@@ -240,10 +240,10 @@ export function DockChatBox({ channelId, channelName, channelType, minimized, st
   const uploadFiles = async (): Promise<Array<{ name: string; url: string; type: string; size: number }>> => {
     const sessionOk = await ensureSession();
     if (!sessionOk) throw new Error("Session expired — please log in again");
-    if (!myProfile?.company_id) throw new Error("Missing company context");
+    if (!companyId) throw new Error("Missing company context");
     const results: Array<{ name: string; url: string; type: string; size: number }> = [];
     for (const pf of pendingFiles) {
-      const path = `${myProfile.company_id}/chat-uploads/${channelId}/${Date.now()}-${sanitizeFileName(pf.name)}`;
+      const path = `${companyId}/chat-uploads/${channelId}/${Date.now()}-${sanitizeFileName(pf.name)}`;
       const { error } = await uploadToStorage("team-chat-files", path, pf.file);
       if (error) throw new Error(`Upload failed for ${pf.name}: ${error.message}`);
       results.push({ name: pf.name, url: await getChatFileSignedUrl(path), type: pf.file.type, size: pf.size });
