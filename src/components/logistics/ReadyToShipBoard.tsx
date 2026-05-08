@@ -68,7 +68,7 @@ export function ReadyToShipBoard() {
               </div>
             ) : (
               <ul className="space-y-2">
-                {filtered.map(item => (
+                {filtered.map((item, idx) => (
                   <li
                     key={item.id}
                     className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border bg-muted/20 hover:bg-muted/40 transition-colors"
@@ -85,6 +85,14 @@ export function ReadyToShipBoard() {
                         {item.mark_number && (
                           <Badge variant="outline" className="text-[10px] font-mono">
                             {item.mark_number}
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
+                          #{idx + 1}
+                        </Badge>
+                        {item.drawing_ref && (
+                          <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground">
+                            DWG {item.drawing_ref}
                           </Badge>
                         )}
                       </div>
