@@ -12,6 +12,7 @@ export interface ReadyItem {
   cut_length_mm: number | null;
   total_pieces: number;
   mark_number: string | null;
+  drawing_ref: string | null;
   bend_type: string | null;
   fulfillment_channel: FulfillmentChannel;
   ready_at: string | null;
