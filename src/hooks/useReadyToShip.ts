@@ -64,6 +64,7 @@ export function useReadyToShip() {
       cut_length_mm: row.cut_length_mm,
       total_pieces: row.total_pieces,
       mark_number: row.mark_number,
+      drawing_ref: row.drawing_ref,
       bend_type: row.bend_type,
       fulfillment_channel: (row.fulfillment_channel ?? "pickup") as FulfillmentChannel,
       ready_at: row.ready_at,
