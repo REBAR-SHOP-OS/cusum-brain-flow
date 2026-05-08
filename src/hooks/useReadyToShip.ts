@@ -37,7 +37,7 @@ export function useReadyToShip() {
     const { data, error } = await supabase
       .from("cut_plan_items")
       .select(
-        "id, cut_plan_id, bar_code, cut_length_mm, total_pieces, mark_number, bend_type, fulfillment_channel, ready_at, delivery_id, loading_list_id, pickup_id, cut_plans!inner(name, company_id, projects(name, customers(name)))"
+        "id, cut_plan_id, bar_code, cut_length_mm, total_pieces, mark_number, drawing_ref, bend_type, fulfillment_channel, ready_at, delivery_id, loading_list_id, pickup_id, cut_plans!inner(name, company_id, projects(name, customers(name)))"
       )
       .eq("phase", "complete")
       .is("delivery_id", null)
