@@ -186,7 +186,11 @@ Deno.serve((req) =>
       }
 
       // ── Atomic Lock ──────────────────────────────────────────────
-      const lock = await acquirePublishLock(supabaseAdmin, post_id, ["scheduled", "draft"]);
+      // Allow retry from "failed" when manually triggered (force_publish)
+      const allowedStatuses = force_publish
+        ? ["scheduled", "draft", "failed", "pending_approval"]
+        : ["scheduled", "draft"];
+      const lock = await acquirePublishLock(supabaseAdmin, post_id, allowedStatuses);
       if (!lock.locked) {
         console.warn(`[social-publish] Cannot acquire lock for post ${post_id}: ${lock.reason}`);
         return new Response(
