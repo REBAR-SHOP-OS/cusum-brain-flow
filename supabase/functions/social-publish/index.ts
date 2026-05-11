@@ -874,18 +874,43 @@ async function publishToLinkedIn(
     } else {
       // Company page publishing — look up org ID from config
       // page_name may be comma-separated (e.g. "Rebar.shop Ontario, Rebar.shop")
-      const orgIds = config.organization_ids || {};
-      const pageNames = pageName.split(",").map((s: string) => s.trim());
-      let orgId: string | undefined;
-      let matchedPage = pageName;
-      for (const pn of pageNames) {
-        if (orgIds[pn]) { orgId = orgIds[pn]; matchedPage = pn; break; }
+      const pageNames = pageName.split(",").map((s: string) => s.trim()).filter(Boolean);
+      const findOrg = (ids: Record<string, string>, names: string[]) => {
+        const lower: Record<string, string> = {};
+        for (const k of Object.keys(ids || {})) lower[k.trim().toLowerCase()] = ids[k];
+        for (const pn of names) {
+          const v = ids?.[pn] || lower[pn.trim().toLowerCase()];
+          if (v) return { orgId: v, matchedPage: pn };
+        }
+        return null;
+      };
+
+      let match = findOrg(config.organization_ids || {}, pageNames);
+
+      // Team fallback: scan teammates' LinkedIn connections for the org ID
+      if (!match) {
+        const { data: ownerProfile } = await supabase
+          .from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
+        if (ownerProfile?.company_id) {
+          const { data: teammates } = await supabase
+            .from("profiles").select("user_id")
+            .eq("company_id", ownerProfile.company_id);
+          for (const tm of teammates || []) {
+            const { data: tmConn } = await supabase
+              .from("integration_connections").select("config")
+              .eq("user_id", tm.user_id).eq("integration_id", "linkedin").maybeSingle();
+            const tmIds = (tmConn?.config as any)?.organization_ids || {};
+            const m = findOrg(tmIds, pageNames);
+            if (m) { match = m; console.log(`[linkedin] Org ID for "${m.matchedPage}" found via teammate ${tm.user_id}`); break; }
+          }
+        }
       }
-      if (!orgId) {
+
+      if (!match) {
         return { error: `LinkedIn organization ID not configured for "${pageName}". Please reconnect LinkedIn to auto-discover organization pages.` };
       }
-      console.log(`[linkedin] Matched page "${matchedPage}" → org ${orgId}`);
-      authorUrn = `urn:li:organization:${orgId}`;
+      console.log(`[linkedin] Matched page "${match.matchedPage}" → org ${match.orgId}`);
+      authorUrn = `urn:li:organization:${match.orgId}`;
     }
 
     const payload: any = {
