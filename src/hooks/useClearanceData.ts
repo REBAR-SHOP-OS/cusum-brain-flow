@@ -87,6 +87,7 @@ export function useClearanceData() {
           bend_completed_pieces: item.bend_completed_pieces,
           plan_name: item.cut_plans?.name || "",
           project_name: item.cut_plans?.projects?.name || item.cut_plans?.project_name || null,
+          customer_name: item.cut_plans?.projects?.customers?.name || null,
           evidence_id: ev?.id || null,
           material_photo_url: ev?.material_photo_url || null,
           tag_scan_url: ev?.tag_scan_url || null,
