@@ -80,6 +80,8 @@ export default function ClearanceStation() {
 
   const projectEntries = [...byProjectKey.entries()];
   const displayLabel = activeGroup?.label || selectedProjectLabel;
+  const formatStatus = (status: string | null | undefined) =>
+    (status || "pending").replace(/_/g, " ").toUpperCase();
 
   return (
     <div className="flex flex-col h-full">
@@ -144,10 +146,26 @@ export default function ClearanceStation() {
                     <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
                     <div className="min-w-0 flex flex-col">
                       <span className="text-base font-bold uppercase tracking-wider text-white truncate">
-                        {group.customerName || "Unassigned"}
+                        {(group.customerName || "Unassigned").toUpperCase()}
                       </span>
-                      <span className="text-[10px] font-bold tracking-wide uppercase text-primary truncate">
-                        {group.label}
+                      <span className="text-[11px] tracking-wide text-primary truncate pl-3">
+                        ├─ {group.projectName || "Unassigned"}
+                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0 pl-3">
+                        <span className="text-[10px] text-muted-foreground truncate">
+                          └─ {group.barlistName || group.label}
+                        </span>
+                        {typeof group.barlistRevisionNo === "number" && (
+                          <span className="text-[10px] text-muted-foreground shrink-0">
+                            R{group.barlistRevisionNo}
+                          </span>
+                        )}
+                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
+                          {formatStatus(group.barlistStatus || group.cutPlanStatus)}
+                        </Badge>
+                      </div>
+                      <span className="text-[10px] font-bold tracking-wide uppercase text-primary truncate pl-3">
+                        {group.items.length} item{group.items.length !== 1 ? "s" : ""}
                       </span>
                     </div>
                     <Badge

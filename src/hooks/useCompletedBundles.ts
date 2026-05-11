@@ -7,7 +7,11 @@ import { useEffect } from "react";
 export interface CompletedBundle {
   projectName: string;
   customerName: string | null;
+  projectDisplayName: string | null;
   planName: string;
+  barlistRevisionNo: number | null;
+  barlistStatus: string | null;
+  cutPlanStatus: string | null;
   cutPlanId: string;
   items: CompletedBundleItem[];
   totalPieces: number;
@@ -35,7 +39,7 @@ export function useCompletedBundles(options?: { pickupOnly?: boolean }) {
     queryFn: async () => {
       const { data: items, error: err } = await supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(id, name, project_name, company_id, project_id, projects(customer_id, customers(name)))")
+        .select("*, cut_plans!inner(id, name, status, project_name, company_id, project_id, barlist_id, projects(name, customer_id, customers(name)), barlists(name, revision_no, status))")
         .eq("phase", "complete")
         .eq("cut_plans.company_id", companyId!);
 
@@ -43,17 +47,31 @@ export function useCompletedBundles(options?: { pickupOnly?: boolean }) {
       if (!items?.length) return [];
 
       // Group by cutPlanId to prevent merge bugs when multiple plans share a project name
-      const byPlan = new Map<string, { projectName: string; customerName: string | null; planName: string; items: CompletedBundleItem[] }>();
+      const byPlan = new Map<string, {
+        projectName: string;
+        customerName: string | null;
+        projectDisplayName: string | null;
+        planName: string;
+        barlistRevisionNo: number | null;
+        barlistStatus: string | null;
+        cutPlanStatus: string | null;
+        items: CompletedBundleItem[];
+      }>();
       for (const item of items as Record<string, unknown>[]) {
         const cutPlans = item.cut_plans as Record<string, unknown> | undefined;
         const projects = cutPlans?.projects as Record<string, unknown> | undefined;
         const customers = projects?.customers as Record<string, unknown> | undefined;
+        const barlists = cutPlans?.barlists as Record<string, unknown> | undefined;
         const key = item.cut_plan_id as string;
         if (!byPlan.has(key)) {
           byPlan.set(key, {
             projectName: (cutPlans?.project_name as string) || (cutPlans?.name as string) || "Unassigned",
             customerName: (customers?.name as string) || null,
+            projectDisplayName: (projects?.name as string) || null,
             planName: (cutPlans?.name as string) || "",
+            barlistRevisionNo: typeof barlists?.revision_no === "number" ? (barlists.revision_no as number) : null,
+            barlistStatus: (barlists?.status as string) || null,
+            cutPlanStatus: (cutPlans?.status as string) || null,
             items: [],
           });
         }
@@ -73,7 +91,11 @@ export function useCompletedBundles(options?: { pickupOnly?: boolean }) {
         bundles.push({
           projectName: data.projectName,
           customerName: data.customerName,
+          projectDisplayName: data.projectDisplayName,
           planName: data.planName,
+          barlistRevisionNo: data.barlistRevisionNo,
+          barlistStatus: data.barlistStatus,
+          cutPlanStatus: data.cutPlanStatus,
           cutPlanId,
           items: data.items,
           totalPieces: data.items.reduce((sum, i) => sum + i.total_pieces, 0),
