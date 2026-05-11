@@ -19,6 +19,7 @@ export interface ClearanceItem {
   bend_completed_pieces: number;
   plan_name: string;
   project_name: string | null;
+  customer_name: string | null;
   evidence_id: string | null;
   material_photo_url: string | null;
   tag_scan_url: string | null;
@@ -38,7 +39,7 @@ export function useClearanceData() {
     queryFn: async () => {
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, projects(id, name))")
+        .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, projects(id, name, customer_id, customers(name)))")
         .eq("phase", "clearance")
         .eq("cut_plans.company_id", companyId!);
 
@@ -86,6 +87,7 @@ export function useClearanceData() {
           bend_completed_pieces: item.bend_completed_pieces,
           plan_name: item.cut_plans?.name || "",
           project_name: item.cut_plans?.projects?.name || item.cut_plans?.project_name || null,
+          customer_name: item.cut_plans?.projects?.customers?.name || null,
           evidence_id: ev?.id || null,
           material_photo_url: ev?.material_photo_url || null,
           tag_scan_url: ev?.tag_scan_url || null,
@@ -118,13 +120,13 @@ export function useClearanceData() {
   // even if the auto_advance trigger hasn't moved them off `clearance` phase yet.
   const visibleItems = (data || []).filter((i) => i.evidence_status !== "cleared");
 
-  const byProject = new Map<string, { label: string; items: ClearanceItem[] }>();
+  const byProject = new Map<string, { label: string; customerName: string | null; items: ClearanceItem[] }>();
   for (const item of visibleItems) {
     // Group by cut_plan_id so each manifest is keyed by its remark (extract session / plan name),
     // matching the "Remark" printed on the rebar tag instead of the project address.
     const key = item.cut_plan_id || "__unassigned__";
     const label = item.plan_name || item.project_name || "Unassigned";
-    if (!byProject.has(key)) byProject.set(key, { label, items: [] });
+    if (!byProject.has(key)) byProject.set(key, { label, customerName: item.customer_name, items: [] });
     byProject.get(key)!.items.push(item);
   }
 
