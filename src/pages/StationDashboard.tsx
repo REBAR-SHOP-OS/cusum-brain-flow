@@ -212,14 +212,7 @@ export default function StationDashboard() {
               </button>
             )}
 
-            <ShopFloorProductionQueue />
             <ActiveProductionHub machines={filteredMachines} activePlans={activePlans} />
-
-            <WorkOrderQueueSection
-              workOrders={workOrders}
-              onUpdateStatus={updateStatus}
-              onStatusChanged={(name, action) => toast({ title: action, description: name })}
-            />
 
             <MachineSelector machines={filteredMachines} />
           </>
