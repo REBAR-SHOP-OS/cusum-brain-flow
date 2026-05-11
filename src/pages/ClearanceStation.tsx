@@ -80,7 +80,7 @@ export default function ClearanceStation() {
 
   const projectEntries = [...byProjectKey.entries()];
   const displayLabel = activeGroup?.label || selectedProjectLabel;
-  const formatStatus = (status: string | null | undefined) =>
+  const formatStatus = (status: string | null) =>
     (status || "pending").replace(/_/g, " ").toUpperCase();
 
   return (
@@ -146,7 +146,7 @@ export default function ClearanceStation() {
                     <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
                     <div className="min-w-0 flex flex-col">
                       <span className="text-base font-bold uppercase tracking-wider text-white truncate">
-                        {(group.customerName || "Unassigned").toUpperCase()}
+                        {group.customerName || "Unassigned"}
                       </span>
                       <span className="text-[11px] tracking-wide text-primary truncate pl-3">
                         ├─ {group.projectName || "Unassigned"}
@@ -161,7 +161,7 @@ export default function ClearanceStation() {
                           </span>
                         )}
                         <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
-                          {formatStatus(group.barlistStatus || group.cutPlanStatus)}
+                          {formatStatus(group.barlistStatus || group.cutPlanStatus || null)}
                         </Badge>
                       </div>
                       <span className="text-[10px] font-bold tracking-wide uppercase text-primary truncate pl-3">
