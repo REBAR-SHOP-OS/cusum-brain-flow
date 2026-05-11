@@ -19,6 +19,7 @@ export interface ClearanceItem {
   bend_completed_pieces: number;
   plan_name: string;
   project_name: string | null;
+  customer_name: string | null;
   evidence_id: string | null;
   material_photo_url: string | null;
   tag_scan_url: string | null;
