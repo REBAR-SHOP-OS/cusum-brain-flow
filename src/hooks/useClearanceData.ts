@@ -120,13 +120,13 @@ export function useClearanceData() {
   // even if the auto_advance trigger hasn't moved them off `clearance` phase yet.
   const visibleItems = (data || []).filter((i) => i.evidence_status !== "cleared");
 
-  const byProject = new Map<string, { label: string; items: ClearanceItem[] }>();
+  const byProject = new Map<string, { label: string; customerName: string | null; items: ClearanceItem[] }>();
   for (const item of visibleItems) {
     // Group by cut_plan_id so each manifest is keyed by its remark (extract session / plan name),
     // matching the "Remark" printed on the rebar tag instead of the project address.
     const key = item.cut_plan_id || "__unassigned__";
     const label = item.plan_name || item.project_name || "Unassigned";
-    if (!byProject.has(key)) byProject.set(key, { label, items: [] });
+    if (!byProject.has(key)) byProject.set(key, { label, customerName: item.customer_name, items: [] });
     byProject.get(key)!.items.push(item);
   }
 
