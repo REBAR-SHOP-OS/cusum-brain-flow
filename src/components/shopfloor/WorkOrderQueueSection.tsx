@@ -65,10 +65,21 @@ function StationGroup({ stationName, orders, onUpdateStatus, onStatusChanged }: 
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-md bg-muted/50 hover:bg-muted transition-colors">
         {open ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
-        <Users className="w-3.5 h-3.5 text-primary" />
-        <span className="text-xs font-bold uppercase tracking-wide text-foreground flex-1 truncate">
-          {stationName}
-        </span>
+        <Users className="w-3.5 h-3.5 text-primary shrink-0" />
+        <div className="flex-1 min-w-0 flex flex-col">
+          <span className="text-base font-bold uppercase tracking-wider text-white truncate">
+            {stationName}
+          </span>
+          {(() => {
+            const projects = [...new Set(orders.map(o => o.order_number).filter(Boolean))] as string[];
+            if (projects.length === 0) return null;
+            return (
+              <span className="text-[10px] font-bold tracking-wide uppercase text-primary truncate">
+                {projects.join(" · ")}
+              </span>
+            );
+          })()}
+        </div>
         <Badge variant="secondary" className="text-[10px] shrink-0">
           {orders.length} {orders.length === 1 ? "WO" : "WOs"}
         </Badge>
