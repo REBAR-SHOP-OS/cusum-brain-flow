@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, Play, Pause, CheckCircle2, Cpu } from "lucide-react";
+import { ChevronDown, ChevronRight, Play, Pause, CheckCircle2, Users } from "lucide-react";
 import { SupabaseWorkOrder } from "@/hooks/useSupabaseWorkOrders";
 
 interface WorkOrderQueueSectionProps {
@@ -62,18 +62,18 @@ function StationGroup({ stationName, orders, onUpdateStatus, onStatusChanged }: 
   const [open, setOpen] = useState(false);
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border border-border rounded-lg bg-card">
-      <CollapsibleTrigger className="flex items-center gap-3 w-full p-3 hover:bg-muted/30 transition-colors rounded-t-lg">
-        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${open ? "" : "-rotate-90"}`} />
-        <Cpu className="w-4 h-4 text-primary" />
-        <span className="text-sm font-black italic tracking-wide uppercase text-foreground flex-1 text-left truncate">
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-md bg-muted/50 hover:bg-muted transition-colors">
+        {open ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
+        <Users className="w-3.5 h-3.5 text-primary" />
+        <span className="text-xs font-bold uppercase tracking-wide text-foreground flex-1 truncate">
           {stationName}
         </span>
-        <Badge variant="outline" className="text-[10px] tracking-wider shrink-0">
+        <Badge variant="secondary" className="text-[10px] shrink-0">
           {orders.length} {orders.length === 1 ? "WO" : "WOs"}
         </Badge>
       </CollapsibleTrigger>
-      <CollapsibleContent className="px-3 pb-3 space-y-1.5">
+      <CollapsibleContent className="pl-5 pt-1 space-y-1.5">
         {orders.map(wo => (
           <WorkOrderRow key={wo.id} wo={wo} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
         ))}
