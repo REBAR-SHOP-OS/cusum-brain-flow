@@ -13,6 +13,9 @@ export const ReadyBundleList = forwardRef<HTMLDivElement, ReadyBundleListProps>(
   function ReadyBundleList({ bundles, title, onSelect }, ref) {
     if (bundles.length === 0) return null;
 
+    const formatStatus = (status: string | null) =>
+      status ? status.replace(/_/g, " ").toUpperCase() : "PENDING";
+
     return (
       <div ref={ref} className="space-y-3">
         <div className="flex items-center gap-2">
@@ -32,14 +35,27 @@ export const ReadyBundleList = forwardRef<HTMLDivElement, ReadyBundleListProps>(
           >
             <div className="flex items-center gap-3 min-w-0">
               <Package className="w-5 h-5 text-primary shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 space-y-0.5">
                 <span className="font-bold text-sm tracking-wide uppercase text-foreground block truncate">
-                  {bundle.projectName}
+                  {bundle.customerName || "Unassigned"}
                 </span>
-                <span className="text-[10px] text-muted-foreground">
-                  {bundle.planName && bundle.planName !== bundle.projectName && (
-                    <>{bundle.planName} • </>
+                <span className="text-[11px] text-primary/90 block truncate pl-3">
+                  ├─ {bundle.projectDisplayName || bundle.projectName || "Unassigned"}
+                </span>
+                <div className="flex items-center gap-1.5 min-w-0 pl-3">
+                  <span className="text-[10px] text-muted-foreground truncate">
+                    └─ {bundle.planName || "Unassigned Barlist"}
+                  </span>
+                  {typeof bundle.barlistRevisionNo === "number" && (
+                    <span className="text-[10px] text-muted-foreground shrink-0">
+                      R{bundle.barlistRevisionNo}
+                    </span>
                   )}
+                  <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
+                    {formatStatus(bundle.barlistStatus || bundle.cutPlanStatus)}
+                  </Badge>
+                </div>
+                <span className="text-[10px] text-muted-foreground block pl-3">
                   {bundle.items.length} items • {bundle.totalPieces} pcs
                 </span>
               </div>
