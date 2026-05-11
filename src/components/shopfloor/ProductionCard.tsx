@@ -105,8 +105,13 @@ export function ProductionCard({
                 )}
               </div>
               {item.customer_name && (
-                <p className="text-[10px] text-muted-foreground font-medium truncate max-w-[160px]">
+                <p className="text-base font-bold uppercase tracking-wider text-white truncate max-w-[200px]">
                   {item.customer_name}
+                </p>
+              )}
+              {item.project_name && (
+                <p className="text-[10px] font-bold tracking-wide uppercase text-primary truncate max-w-[200px]">
+                  {item.project_name}
                 </p>
               )}
             </div>
