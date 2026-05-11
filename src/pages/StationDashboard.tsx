@@ -182,6 +182,12 @@ export default function StationDashboard() {
               </div>
             </div>
 
+            <WorkOrderQueueSection
+              workOrders={workOrders}
+              onUpdateStatus={updateStatus}
+              onStatusChanged={(name, action) => toast({ title: action, description: name })}
+            />
+
             <MaterialFlowDiagram />
 
             {readyCounts.total > 0 && (
