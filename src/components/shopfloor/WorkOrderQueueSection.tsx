@@ -106,12 +106,20 @@ function WorkOrderRow({ wo, onUpdateStatus, onStatusChanged }: {
       isActive ? "border-success/40 bg-card hover:bg-muted/30" : "border-border bg-card hover:bg-muted/30"
     }`}>
       <div className={`w-2 h-2 rounded-full shrink-0 ${isActive ? "bg-success animate-pulse" : "bg-muted-foreground/30"}`} />
-      <Badge className={`${st.color} text-[10px] tracking-wider shrink-0`}>{st.label}</Badge>
-      <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-bold text-foreground truncate">{wo.work_order_number}</h3>
-        <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-          {wo.customer_name && <span>{wo.customer_name}</span>}
-          {wo.order_number && <span>• Order {wo.order_number}</span>}
+      <div className="flex-1 min-w-0 space-y-0.5">
+        <span className="font-bold text-sm tracking-wide uppercase text-foreground block truncate">
+          {wo.customer_name || "Unassigned"}
+        </span>
+        {wo.order_number && (
+          <span className="text-[11px] text-primary/90 block truncate pl-3">
+            ├─ {wo.order_number}
+          </span>
+        )}
+        <div className="flex items-center gap-1.5 min-w-0 pl-3">
+          <span className="text-[10px] text-muted-foreground truncate">
+            └─ {wo.work_order_number}
+          </span>
+          <Badge className={`${st.color} text-[9px] px-1.5 py-0 tracking-wider shrink-0`}>{st.label}</Badge>
         </div>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
