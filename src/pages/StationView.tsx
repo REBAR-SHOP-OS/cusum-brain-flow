@@ -461,7 +461,16 @@ export default function StationView() {
                             <Building2 className="w-4 h-4 text-primary" />
                           </div>
                           <div className="text-left flex-1 min-w-0">
-                            <h2 className="text-sm font-bold text-foreground truncate">{cust.customerName}</h2>
+                            <h2 className="text-base font-bold uppercase tracking-wider text-white truncate">{cust.customerName}</h2>
+                            {(() => {
+                              const names = [...new Set(cust.barlists.map(b => b.projectName).filter(Boolean))] as string[];
+                              if (names.length === 0) return null;
+                              return (
+                                <p className="text-[10px] font-bold tracking-wide uppercase text-primary truncate">
+                                  {names.join(" · ")}
+                                </p>
+                              );
+                            })()}
                             <p className="text-[9px] tracking-[0.15em] uppercase text-muted-foreground">
                               {cust.totalItems > 0
                                 ? `${cust.totalItems} items · ${cust.barlists.length} barlist${cust.barlists.length !== 1 ? "s" : ""}`
