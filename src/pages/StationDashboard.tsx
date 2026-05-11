@@ -5,7 +5,7 @@ import { useProductionQueues } from "@/hooks/useProductionQueues";
 import { useCutPlans } from "@/hooks/useCutPlans";
 import { MachineSelector } from "@/components/shopfloor/MachineSelector";
 import { MaterialFlowDiagram } from "@/components/shopfloor/MaterialFlowDiagram";
-import { ShopFloorProductionQueue } from "@/components/shopfloor/ShopFloorProductionQueue";
+
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
 import { WorkOrderQueueSection } from "@/components/shopfloor/WorkOrderQueueSection";
 import { DowntimeAlertBanner } from "@/components/shopfloor/DowntimeAlertBanner";
