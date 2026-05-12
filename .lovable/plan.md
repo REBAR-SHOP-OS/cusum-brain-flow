@@ -1,45 +1,22 @@
-## Root cause
+## نتیجه بررسی
+مشکل از اینجاست که مسیر Story در UI درست می‌گوید «استوری فقط عکس/ویدیو است و کپشن لازم ندارد»، اما قانون دیتابیس `block_social_publish_without_qa` هنوز برای همه‌ی محتواها، از جمله Story، `content` غیرخالی می‌خواهد. بنابراین وقتی Story بدون کپشن Schedule می‌شود، backend هنگام تغییر وضعیت به `scheduled` خطای `content cannot be empty` می‌دهد.
 
-The Pages panel (LinkedIn / Facebook / Instagram / X) is shown **grouped per platform** because each platform has its own list of pages (e.g. LinkedIn has `Sattar Esmaeili-Oureh (Personal)` which does not exist on Facebook). Internally, however, the panel keeps **one flat array `localPages`** of all selected page values across all groups.
+## برنامه اصلاح اصولی
+1. **اصلاح قانون دیتابیس**
+   - تابع `block_social_publish_without_qa` را به‌روزرسانی می‌کنم تا شرط کپشن فقط برای `post` و `reel` اعمال شود.
+   - برای `story` کپشن الزامی نباشد، ولی خود Story همچنان باید مدیا داشته باشد: `image_url` یا `cover_image_url`.
+   - QA gate باقی می‌ماند: فقط آیتم‌های تاییدشده/درحال زمان‌بندی/منتشرشده قابل Schedule/Publish باشند.
 
-When you press **Save (N)** it calls `handlePagesSaveMulti` in `src/components/social/PostReviewPanel.tsx` (lines 698–713):
+2. **اصلاح Edge Function `schedule-post`**
+   - منطق backfill کپشن را برای Story دور می‌زنم، چون Story بدون کپشن معتبر است.
+   - قبل از Schedule برای Story، اگر مدیا وجود نداشته باشد خطای واضح 400 برگردانده شود، نه خطای دیتابیس 500.
+   - در مسیر clone/update چند پلتفرمی، مقدارهای `content_type` و مدیا حفظ شوند تا ردیف‌های sibling ناقص Schedule نشوند.
 
-```ts
-const pagesString = values.join(", ");
-await supabase.from("social_posts").update({ page_name: pagesString }).eq("id", post.id);
-```
+3. **هماهنگ‌سازی frontend**
+   - در `PostReviewPanel` همان رفتار فعلی حفظ می‌شود: Story نیاز به کپشن ندارد.
+   - اگر Story بدون عکس/ویدیو باشد، قبل از ارسال درخواست، پیام واضح به کاربر نشان داده می‌شود.
 
-Two bugs follow from this:
-
-1. **Only the current row is updated.** When a card has been split across 4 platforms, there are 4 sibling rows (one per platform). The save writes the joined page string only to `post.id`. The other platform rows keep their old `page_name`, so deselecting a page on, say, LinkedIn does not remove it from the LinkedIn sibling row — the publisher still sees the old set and posts to it.
-2. **Pages from other platforms leak into the row.** The flat string mixes pages from every group. Saving 2 LinkedIn pages while a Facebook group is also visible writes `"Rebar.shop Ontario, Rebar.shop, <facebook pages…>"` into whatever the current row happens to be. Backend `social-publish` splits `page_name` on `", "` and tries to post each page on that row's platform → it either silently posts to extra pages or fails for pages that do not exist on that platform.
-
-Net effect the user sees: deselecting a page in the panel has no effect — the post still publishes to "all pages".
-
-## Fix
-
-Make `handlePagesSaveMulti` **per-platform** and **sibling-aware**, mirroring how `handleContentTypeSave` already works.
-
-In `src/components/social/PostReviewPanel.tsx`:
-
-1. Replace `handlePagesSaveMulti` with logic that:
-   - Computes per-platform selection: for each platform in `localPlatforms`, take `values ∩ PLATFORM_PAGES[platform].map(o => o.value)`.
-   - Validates that **every selected platform has at least one page**. If a platform ends up with zero pages, show a toast naming the platform and abort save (do not silently drop the row).
-   - For each platform `p` in `localPlatforms`, run an `UPDATE social_posts SET page_name = <p's joined pages> WHERE platform = p AND title = post.title AND scheduled_date = post.scheduled_date` (same sibling key as `handleContentTypeSave`).
-   - Run those updates in parallel via `Promise.all`; on any error toast and stop. On success invalidate `["social_posts"]` and close the sub-panel.
-2. Update local state with the validated flat union (`setLocalPages(values)`) so the main panel summary stays in sync.
-3. Leave `handleContentTypeSave` and `handlePlatformsSaveMulti` untouched — they already scope correctly.
-
-No DB schema, RLS, edge-function, or hook changes. No changes to `SelectionSubPanel.tsx`. No change to publishing logic — `social-publish` will receive the correct per-platform `page_name` automatically.
-
-## Files to change
-
-- `src/components/social/PostReviewPanel.tsx` — `handlePagesSaveMulti` (lines 698–713).
-
-## Validation
-
-- Open a card already split across Facebook + Instagram + LinkedIn + X. Open Pages, deselect `Sattar Esmaeili-Oureh (Personal)` under LinkedIn, keep all Facebook/Instagram/X pages, press Save.
-  Expected: only the LinkedIn row's `page_name` loses Sattar; Facebook/Instagram/X rows are unchanged. Publishing posts to exactly the remaining pages.
-- Deselect every page under one platform group and press Save.
-  Expected: toast "Select at least one page for <Platform>" and no DB write.
-- Single-platform card: behavior unchanged — the one platform's row is updated to the selected pages.
+4. **اعتبارسنجی بعد از اجرا**
+   - با داده‌ی مشابه مورد فعلی: `content_type='story'`, `content=''`, `image_url موجود`، مسیر Schedule باید موفق شود.
+   - برای `post/reel` بدون کپشن، همچنان باید بلاک شود.
+   - برای `story` بدون مدیا، باید خطای واضح و کنترل‌شده برگردد.

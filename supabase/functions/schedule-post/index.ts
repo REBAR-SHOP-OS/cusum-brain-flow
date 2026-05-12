@@ -139,30 +139,62 @@ Deno.serve((req) =>
     }
 
     // NORMAL flow: update primary post
-    // Backfill content/image/hashtags from sibling rows if this row is empty
-    // (multi-platform sibling rows often miss caption updates).
+    const isStory = (fullPost.content_type || "post") === "story";
     let backfill: Record<string, unknown> = {};
-    const isContentEmpty = !fullPost.content || String(fullPost.content).trim().length === 0;
-    if (isContentEmpty && fullPost.title) {
-      const { data: siblingWithContent } = await serviceClient
-        .from("social_posts")
-        .select("content, image_url, hashtags")
-        .eq("title", fullPost.title)
-        .eq("user_id", fullPost.user_id)
-        .neq("id", post_id)
-        .not("content", "is", null)
-        .neq("content", "")
-        .limit(1)
-        .maybeSingle();
-      if (siblingWithContent?.content) {
-        console.log(`[schedule-post] Backfilling empty content for ${post_id} from sibling`);
-        backfill = {
-          content: siblingWithContent.content,
-          ...(siblingWithContent.image_url ? { image_url: siblingWithContent.image_url } : {}),
-          ...(siblingWithContent.hashtags ? { hashtags: siblingWithContent.hashtags } : {}),
-        };
-      } else {
-        return json({ error: "Cannot schedule: this post has no caption content. Please add content before scheduling." }, 400);
+
+    if (isStory) {
+      // Stories are media-only — caption is optional, but media is required.
+      const hasMedia =
+        (fullPost.image_url && String(fullPost.image_url).trim().length > 0) ||
+        (fullPost.cover_image_url && String(fullPost.cover_image_url).trim().length > 0);
+      if (!hasMedia && fullPost.title) {
+        const { data: siblingMedia } = await serviceClient
+          .from("social_posts")
+          .select("image_url, cover_image_url")
+          .eq("title", fullPost.title)
+          .eq("user_id", fullPost.user_id)
+          .neq("id", post_id)
+          .not("image_url", "is", null)
+          .neq("image_url", "")
+          .limit(1)
+          .maybeSingle();
+        if (siblingMedia?.image_url) {
+          console.log(`[schedule-post] Backfilling story media for ${post_id} from sibling`);
+          backfill = {
+            image_url: siblingMedia.image_url,
+            ...(siblingMedia.cover_image_url ? { cover_image_url: siblingMedia.cover_image_url } : {}),
+          };
+        } else {
+          return json({ error: "Cannot schedule story: media (image or video) is required." }, 400);
+        }
+      } else if (!hasMedia) {
+        return json({ error: "Cannot schedule story: media (image or video) is required." }, 400);
+      }
+    } else {
+      // Posts/reels: backfill caption from sibling rows if this row is empty
+      // (multi-platform sibling rows often miss caption updates).
+      const isContentEmpty = !fullPost.content || String(fullPost.content).trim().length === 0;
+      if (isContentEmpty && fullPost.title) {
+        const { data: siblingWithContent } = await serviceClient
+          .from("social_posts")
+          .select("content, image_url, hashtags")
+          .eq("title", fullPost.title)
+          .eq("user_id", fullPost.user_id)
+          .neq("id", post_id)
+          .not("content", "is", null)
+          .neq("content", "")
+          .limit(1)
+          .maybeSingle();
+        if (siblingWithContent?.content) {
+          console.log(`[schedule-post] Backfilling empty content for ${post_id} from sibling`);
+          backfill = {
+            content: siblingWithContent.content,
+            ...(siblingWithContent.image_url ? { image_url: siblingWithContent.image_url } : {}),
+            ...(siblingWithContent.hashtags ? { hashtags: siblingWithContent.hashtags } : {}),
+          };
+        } else {
+          return json({ error: "Cannot schedule: this post has no caption content. Please add content before scheduling." }, 400);
+        }
       }
     }
 
