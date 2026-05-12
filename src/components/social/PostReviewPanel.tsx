@@ -539,35 +539,109 @@ export function PostReviewPanel({
     setLocalPlatforms(sanitized);
     // Reset pages to only valid ones for new platform selection
     const validPages = new Set(sanitized.flatMap(p => (PLATFORM_PAGES[p] || []).map(o => o.value)));
-    setLocalPages(prev => prev.filter(p => validPages.has(p)));
+    const filteredPages = localPages.filter(p => validPages.has(p));
+    setLocalPages(filteredPages);
 
-    // Map UI platform keys to DB platform values
-    const dbPlatforms = [...new Set(sanitized.map(p => platformMap[p] || p))];
+    // Map UI platform keys to DB platform values (de-duped, order preserved)
+    const dbPlatforms = Array.from(new Set(sanitized.map(p => platformMap[p] || p)));
+    if (dbPlatforms.length === 0) {
+      setSubPanel(null);
+      return;
+    }
 
-    // Find all siblings for this title + exact time slot
-    const siblings = allPosts.filter(p =>
-      p.title === post.title &&
-      p.scheduled_date === post.scheduled_date
-    );
+    const pagesString = filteredPages.join(", ");
+
+    // ── Flush any pending caption / title edits to the current row first,
+    //    so newly cloned platform rows pick up the latest content & image.
+    try {
+      const editableCaption = localContent;
+      const contentToSave = buildPostContent(editableCaption, persianImageText, persianCaptionText);
+      const hashtagArray = localHashtags
+        .split(/[\s,]+/)
+        .map((h: string) => h.trim())
+        .filter(Boolean)
+        .map((h: string) => (h.startsWith("#") ? h : `#${h}`));
+      await updatePost.mutateAsync({
+        id: post.id,
+        title: localTitle,
+        content: contentToSave,
+        hashtags: hashtagArray,
+      } as any);
+    } catch (err) {
+      console.warn("[handlePlatformsSaveMulti] flush of local edits failed (continuing):", err);
+    }
+
+    // ── CONVERT-IN-PLACE path for unassigned cards ──
+    // Never delete the current row. Update it to the first selected platform,
+    // then clone one new row per remaining platform.
+    if (post.platform === "unassigned") {
+      const [firstPlatform, ...restPlatforms] = dbPlatforms;
+
+      const { error: updErr } = await supabase
+        .from("social_posts")
+        .update({
+          platform: firstPlatform as SocialPost["platform"],
+          page_name: pagesString || post.page_name,
+        })
+        .eq("id", post.id);
+
+      if (updErr) {
+        toast({ title: "Failed to assign platform", description: updErr.message, variant: "destructive" });
+        return;
+      }
+
+      // Re-fetch the freshly updated row so clones use the latest media + caption
+      const { data: freshRow } = await supabase
+        .from("social_posts")
+        .select("*")
+        .eq("id", post.id)
+        .maybeSingle();
+      const src = (freshRow as SocialPost) || post;
+
+      for (const newPlatform of restPlatforms) {
+        const { error: insErr } = await supabase.from("social_posts").insert({
+          user_id: src.user_id,
+          platform: newPlatform as SocialPost["platform"],
+          status: src.status,
+          qa_status: src.qa_status,
+          title: src.title,
+          content: src.content,
+          image_url: src.image_url,
+          scheduled_date: src.scheduled_date,
+          hashtags: src.hashtags,
+          page_name: pagesString || src.page_name,
+          content_type: src.content_type,
+          neel_approved: src.neel_approved,
+        });
+        if (insErr) {
+          console.error("[handlePlatformsSaveMulti] clone insert failed:", insErr);
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+      setSubPanel(null);
+      return;
+    }
+
+    // ── Standard already-assigned path: tighten sibling matching so empty-title
+    //    cards never sweep up unrelated drafts on the same day.
+    const siblings = post.title
+      ? allPosts.filter(p => p.title === post.title && p.scheduled_date === post.scheduled_date)
+      : allPosts.filter(p => p.id === post.id);
+
     const targetSet = new Set(dbPlatforms as string[]);
     const existingSet = new Set(siblings.map(s => s.platform as string));
 
-    // Delete siblings whose platform is no longer selected
     const toDelete = siblings.filter(s => !targetSet.has(s.platform as string));
-    // Platforms that need new rows (ONE row per platform)
     const toAdd = dbPlatforms.filter(p => !existingSet.has(p));
 
     const promises: PromiseLike<any>[] = [];
 
     for (const sib of toDelete) {
-      promises.push(supabase.from("social_posts").delete().eq("id", sib.id).select());
+      promises.push(supabase.from("social_posts").delete().eq("id", sib.id).select("id"));
     }
 
-    // Build comma-separated page_name from currently selected pages
-    const pagesString = localPages.join(", ");
-
     for (const newPlatform of toAdd) {
-      // Create exactly ONE row per new platform with all pages as metadata
       promises.push(
         supabase.from("social_posts").insert({
           user_id: post.user_id,
@@ -588,12 +662,10 @@ export function PostReviewPanel({
 
     if (promises.length > 0) {
       const results = await Promise.all(promises);
-      // If current post was deleted, re-select a surviving sibling
       const currentDeleted = toDelete.some(s => s.id === post.id);
       if (currentDeleted && onSelectNewPost) {
-        // Try to find a newly created post ID from insert results
         for (const res of results) {
-          const row = res?.data?.[0];
+          const row = (res as any)?.data?.[0];
           if (row?.id && !toDelete.some(d => d.id === row.id)) {
             onSelectNewPost(row.id);
             break;
