@@ -1,46 +1,45 @@
 ## Root cause
 
-When you create a new card via **Add Card**, it is inserted with `platform: "unassigned"`, empty `title`, empty `content`. You then upload media, type a caption, open the **Platforms** panel and tick 4 platforms (Facebook / Instagram / LinkedIn / X) and press **Save (4)**.
+The Pages panel (LinkedIn / Facebook / Instagram / X) is shown **grouped per platform** because each platform has its own list of pages (e.g. LinkedIn has `Sattar Esmaeili-Oureh (Personal)` which does not exist on Facebook). Internally, however, the panel keeps **one flat array `localPages`** of all selected page values across all groups.
 
-That save runs `handlePlatformsSaveMulti` in `src/components/social/PostReviewPanel.tsx` (lines 535–606). The logic is:
+When you press **Save (N)** it calls `handlePagesSaveMulti` in `src/components/social/PostReviewPanel.tsx` (lines 698–713):
 
-1. Find "siblings" with `p.title === post.title && p.scheduled_date === post.scheduled_date`.  
-   Because the new card has `title = ""`, this matches **every other empty-title draft on the same day**, not just this card.
-2. Mark every sibling whose platform is not in the new selection (i.e. every `unassigned` row, including the current one) for **DELETE**.
-3. **INSERT** one fresh row per selected platform, copying `image_url`, `content`, `hashtags`, `page_name`, etc. from `post`.
+```ts
+const pagesString = values.join(", ");
+await supabase.from("social_posts").update({ page_name: pagesString }).eq("id", post.id);
+```
 
-Two things go wrong:
+Two bugs follow from this:
 
-- The current card row (and possibly other unrelated empty-title drafts on the same day) is **deleted**, so the panel's `post` becomes a dangling id. `onSelectNewPost` is only called when a freshly-inserted row is found in the Promise results, and only re-points the side panel — the calendar then shows whichever new rows survived (which may not be visible to you because selection moved or the current view filter hides them).
-- Any caption / image still in local React state that hasn't been flushed to the DB is lost, because the new rows are built from the **stale** `post` snapshot.
+1. **Only the current row is updated.** When a card has been split across 4 platforms, there are 4 sibling rows (one per platform). The save writes the joined page string only to `post.id`. The other platform rows keep their old `page_name`, so deselecting a page on, say, LinkedIn does not remove it from the LinkedIn sibling row — the publisher still sees the old set and posts to it.
+2. **Pages from other platforms leak into the row.** The flat string mixes pages from every group. Saving 2 LinkedIn pages while a Facebook group is also visible writes `"Rebar.shop Ontario, Rebar.shop, <facebook pages…>"` into whatever the current row happens to be. Backend `social-publish` splits `page_name` on `", "` and tries to post each page on that row's platform → it either silently posts to extra pages or fails for pages that do not exist on that platform.
 
-Result: the card you were editing visually "disappears" — it was destroyed and replaced by new platform-specific rows that you weren't looking at, and any unsaved caption text is gone.
+Net effect the user sees: deselecting a page in the panel has no effect — the post still publishes to "all pages".
 
 ## Fix
 
-Change `handlePlatformsSaveMulti` so it does **not** delete the current row when the post is in the `unassigned` (or otherwise being-assigned) state. Strategy:
+Make `handlePagesSaveMulti` **per-platform** and **sibling-aware**, mirroring how `handleContentTypeSave` already works.
 
-1. **Tighten sibling matching.** Require a non-empty `post.title` before doing any sibling delete. If the title is empty, treat only the current `post.id` as the sibling set (so unrelated empty drafts on the same day are never touched).
-2. **Convert-in-place instead of delete+insert** when the current card's platform is `unassigned`:
-   - `UPDATE` the current row's `platform` to the **first** selected DB platform and set its `page_name` to the joined pages string.
-   - `INSERT` one new row per **additional** selected platform, copying the (now-fresh) field values — including the freshly-uploaded `image_url` and the freshly-typed `content` — from the current row (re-fetched or from local state).
-   - Do not delete anything.
-3. **Flush pending caption / title edits first.** Before assigning platforms, persist any local caption / title edits to the current row (await an `updatePost` for `id, title, content, hashtags`) so the new platform rows are cloned from up-to-date data, not the stale snapshot.
-4. **Selection stability.** After the in-place update, keep the side panel pointed at the same row id (now bearing the first selected platform). No `onSelectNewPost` jump needed in the unassigned-conversion path.
-5. For the existing already-assigned case (post.platform is a real platform and user toggles platforms), keep the current delete-old / add-new behaviour but with the tightened sibling filter (id-based when title is empty).
+In `src/components/social/PostReviewPanel.tsx`:
+
+1. Replace `handlePagesSaveMulti` with logic that:
+   - Computes per-platform selection: for each platform in `localPlatforms`, take `values ∩ PLATFORM_PAGES[platform].map(o => o.value)`.
+   - Validates that **every selected platform has at least one page**. If a platform ends up with zero pages, show a toast naming the platform and abort save (do not silently drop the row).
+   - For each platform `p` in `localPlatforms`, run an `UPDATE social_posts SET page_name = <p's joined pages> WHERE platform = p AND title = post.title AND scheduled_date = post.scheduled_date` (same sibling key as `handleContentTypeSave`).
+   - Run those updates in parallel via `Promise.all`; on any error toast and stop. On success invalidate `["social_posts"]` and close the sub-panel.
+2. Update local state with the validated flat union (`setLocalPages(values)`) so the main panel summary stays in sync.
+3. Leave `handleContentTypeSave` and `handlePlatformsSaveMulti` untouched — they already scope correctly.
+
+No DB schema, RLS, edge-function, or hook changes. No changes to `SelectionSubPanel.tsx`. No change to publishing logic — `social-publish` will receive the correct per-platform `page_name` automatically.
 
 ## Files to change
 
-- `src/components/social/PostReviewPanel.tsx`
-  - `handlePlatformsSaveMulti` (≈ lines 535–606): add the unassigned-conversion branch, tighten sibling filter, await caption/title flush before mutating.
-
-No DB schema, RLS, or hook changes required.
+- `src/components/social/PostReviewPanel.tsx` — `handlePagesSaveMulti` (lines 698–713).
 
 ## Validation
 
-- Add Card → upload image → type caption → open Platforms → pick 4 platforms → Save.  
-  Expected: card stays visible, image and caption preserved, card is now split into 4 platform-specific rows on the same day, side panel stays open on the first one.
-- Repeat with only 1 platform selected.  
-  Expected: the original row is updated in place to that platform; no new rows; no deletions.
-- Repeat with an already-assigned card, toggling platforms on/off.  
-  Expected: existing per-platform behaviour unchanged; sibling deletes still scoped to this card's title+time, never to other empty drafts.
+- Open a card already split across Facebook + Instagram + LinkedIn + X. Open Pages, deselect `Sattar Esmaeili-Oureh (Personal)` under LinkedIn, keep all Facebook/Instagram/X pages, press Save.
+  Expected: only the LinkedIn row's `page_name` loses Sattar; Facebook/Instagram/X rows are unchanged. Publishing posts to exactly the remaining pages.
+- Deselect every page under one platform group and press Save.
+  Expected: toast "Select at least one page for <Platform>" and no DB write.
+- Single-platform card: behavior unchanged — the one platform's row is updated to the selected pages.
