@@ -13,6 +13,7 @@ interface WorkOrderQueueSectionProps {
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   pending: { label: "READY", color: "bg-primary/20 text-primary" },
+  queued: { label: "QUEUED", color: "bg-secondary/20 text-secondary" },
   in_progress: { label: "ACTIVE", color: "bg-success/20 text-success" },
   on_hold: { label: "ON HOLD", color: "bg-warning/20 text-warning" },
   completed: { label: "DONE", color: "bg-primary/20 text-primary" },
@@ -20,7 +21,7 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChanged }: WorkOrderQueueSectionProps) {
   const activeOrders = useMemo(() =>
-    workOrders.filter(wo => wo.status === "in_progress" || wo.status === "on_hold" || wo.status === "pending"),
+    workOrders.filter(wo => wo.status === "in_progress" || wo.status === "on_hold" || wo.status === "pending" || wo.status === "queued"),
     [workOrders]
   );
 
