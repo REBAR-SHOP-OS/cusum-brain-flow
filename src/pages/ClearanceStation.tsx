@@ -224,11 +224,8 @@ export default function ClearanceStation() {
                           >
                             <div className="flex items-center gap-3 min-w-0 pl-6">
                               <div className="min-w-0 flex flex-col">
-                                <span className="text-[12px] tracking-wide text-primary truncate">
-                                  ├─ {group.projectName || "Unassigned"}
-                                </span>
-                                <div className="flex items-center gap-1.5 min-w-0 pl-3">
-                                  <span className="text-[10px] text-muted-foreground truncate">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="text-[12px] text-foreground truncate">
                                     └─ {group.barlistName || group.label}
                                   </span>
                                   {typeof group.barlistRevisionNo === "number" && (
@@ -240,7 +237,7 @@ export default function ClearanceStation() {
                                     {formatStatus(group.barlistStatus || group.cutPlanStatus || null)}
                                   </Badge>
                                 </div>
-                                <span className="text-[10px] font-bold tracking-wide uppercase text-primary/70 truncate pl-3">
+                                <span className="text-[10px] font-bold tracking-wide uppercase text-primary/70 truncate">
                                   {group.items.length} item{group.items.length !== 1 ? "s" : ""}
                                 </span>
                               </div>
