@@ -78,7 +78,13 @@ export default function ClearanceStation() {
     );
   }
 
-  const projectEntries = [...byProjectKey.entries()];
+  // Sort by customer → project → barlist label so cards keep a stable visual position
+  // across realtime refetches (prevents customer names like "Walden Homes" from flickering).
+  const projectEntries = [...byProjectKey.entries()].sort(([, a], [, b]) => {
+    const sa = `${a.customerName || "~"}|${a.projectName || "~"}|${a.barlistName || a.label}`;
+    const sb = `${b.customerName || "~"}|${b.projectName || "~"}|${b.barlistName || b.label}`;
+    return sa.localeCompare(sb);
+  });
   const displayLabel = activeGroup?.label || selectedProjectLabel;
   const formatStatus = (status: string | null) =>
     (status || "pending").replace(/_/g, " ").toUpperCase();
