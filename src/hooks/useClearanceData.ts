@@ -74,7 +74,16 @@ export function useClearanceData() {
         (profiles || []).forEach((p: any) => profileMap.set(p.id, p.full_name));
       }
 
-      return items.map((item: any) => {
+      // Stable sort so grouping/Map insertion order is deterministic across refetches.
+      // Without this, Postgres may return rows in different order each tick, causing
+      // the project cards (e.g. "Walden Homes") to visibly reshuffle / flicker.
+      const sortedItems = [...items].sort((a: any, b: any) => {
+        const ka = `${a.cut_plan_id || ""}|${a.id}`;
+        const kb = `${b.cut_plan_id || ""}|${b.id}`;
+        return ka.localeCompare(kb);
+      });
+
+      return sortedItems.map((item: any) => {
         const ev = evidenceMap.get(item.id);
         return {
           id: item.id,
