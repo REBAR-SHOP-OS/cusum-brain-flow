@@ -109,35 +109,6 @@ export default function ClearanceStation() {
     );
   }
 
-  // Sort by customer → project → barlist label so cards keep a stable visual position
-  // across realtime refetches (prevents customer names like "Walden Homes" from flickering).
-  const projectEntries = [...byProjectKey.entries()].sort(([, a], [, b]) => {
-    const sa = `${a.customerName || "~"}|${a.projectName || "~"}|${a.barlistName || a.label}`;
-    const sb = `${b.customerName || "~"}|${b.projectName || "~"}|${b.barlistName || b.label}`;
-    return sa.localeCompare(sb);
-  });
-
-  // Group cut plans by customer so the operator sees ONE row per customer,
-  // with cut plans (manifests) listed inside.
-  type GroupVal = NonNullable<ReturnType<typeof byProjectKey.get>>;
-  const customerGroups = useMemo(() => {
-    const map = new Map<string, { customerName: string; plans: Array<[string, GroupVal]> }>();
-    for (const [key, group] of projectEntries) {
-      const cname = group.customerName || "Unassigned";
-      if (!map.has(cname)) map.set(cname, { customerName: cname, plans: [] });
-      map.get(cname)!.plans.push([key, group as GroupVal]);
-    }
-    return [...map.values()];
-  }, [projectEntries]);
-
-  const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
-  const toggleCustomer = (name: string) =>
-    setExpandedCustomers((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name); else next.add(name);
-      return next;
-    });
-
   const displayLabel = activeGroup?.label || selectedProjectLabel;
   const formatStatus = (status: string | null) =>
     (status || "pending").replace(/_/g, " ").toUpperCase();
