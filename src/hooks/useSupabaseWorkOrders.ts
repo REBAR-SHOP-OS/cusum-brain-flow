@@ -56,7 +56,7 @@ async function fetchWorkOrders(): Promise<SupabaseWorkOrder[]> {
 
     const idsWithItems = new Set((itemCounts || []).map((r: any) => r.work_order_id));
     return mapped.filter(wo =>
-      idsWithItems.has(wo.id) || wo.status === "in_progress" || wo.status === "completed" || wo.status === "on_hold"
+      idsWithItems.has(wo.id) || wo.status === "in_progress" || wo.status === "completed" || wo.status === "on_hold" || wo.status === "queued"
     );
   }
   return mapped;
