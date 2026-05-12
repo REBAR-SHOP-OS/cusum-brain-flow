@@ -696,18 +696,51 @@ export function PostReviewPanel({
   };
 
   const handlePagesSaveMulti = async (values: string[]) => {
-    setLocalPages(values);
-    const pagesString = values.join(", ");
+    // Compute per-platform page selection (intersect with each platform's catalogue)
+    const perPlatform: { platform: string; pages: string[] }[] = localPlatforms
+      .filter((p) => p !== "unassigned")
+      .map((platform) => {
+        const catalogue = new Set((PLATFORM_PAGES[platform] || []).map((o) => o.value));
+        const pages = values.filter((v) => catalogue.has(v));
+        return { platform, pages };
+      });
 
-    // Only update the CURRENT post row — not siblings on other platforms
-    const { error } = await supabase
-      .from("social_posts")
-      .update({ page_name: pagesString })
-      .eq("id", post.id);
-
-    if (error) {
-      toast({ title: "Failed to update pages", description: error.message, variant: "destructive" });
+    // Validate: every selected platform must have at least one page
+    const empty = perPlatform.find((x) => x.pages.length === 0);
+    if (empty) {
+      const label = empty.platform.charAt(0).toUpperCase() + empty.platform.slice(1);
+      toast({
+        title: `Select at least one page for ${label}`,
+        description: "Each selected platform needs at least one page.",
+        variant: "destructive",
+      });
+      return;
     }
+
+    setLocalPages(values);
+
+    // Update each platform's sibling row(s) with only that platform's pages
+    try {
+      const results = await Promise.all(
+        perPlatform.map(({ platform, pages }) =>
+          supabase
+            .from("social_posts")
+            .update({ page_name: pages.join(", ") })
+            .eq("platform", platform)
+            .eq("title", post.title)
+            .eq("scheduled_date", post.scheduled_date)
+        )
+      );
+      const firstErr = results.find((r) => r.error)?.error;
+      if (firstErr) {
+        toast({ title: "Failed to update pages", description: firstErr.message, variant: "destructive" });
+        return;
+      }
+    } catch (err: any) {
+      toast({ title: "Failed to update pages", description: err?.message || "Unknown error", variant: "destructive" });
+      return;
+    }
+
     queryClient.invalidateQueries({ queryKey: ["social_posts"] });
     setSubPanel(null);
   };
