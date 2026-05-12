@@ -139,6 +139,33 @@ Deno.serve((req) =>
     }
 
     // NORMAL flow: update primary post
+    // Backfill content/image/hashtags from sibling rows if this row is empty
+    // (multi-platform sibling rows often miss caption updates).
+    let backfill: Record<string, unknown> = {};
+    const isContentEmpty = !fullPost.content || String(fullPost.content).trim().length === 0;
+    if (isContentEmpty && fullPost.title) {
+      const { data: siblingWithContent } = await serviceClient
+        .from("social_posts")
+        .select("content, image_url, hashtags")
+        .eq("title", fullPost.title)
+        .eq("user_id", fullPost.user_id)
+        .neq("id", post_id)
+        .not("content", "is", null)
+        .neq("content", "")
+        .limit(1)
+        .maybeSingle();
+      if (siblingWithContent?.content) {
+        console.log(`[schedule-post] Backfilling empty content for ${post_id} from sibling`);
+        backfill = {
+          content: siblingWithContent.content,
+          ...(siblingWithContent.image_url ? { image_url: siblingWithContent.image_url } : {}),
+          ...(siblingWithContent.hashtags ? { hashtags: siblingWithContent.hashtags } : {}),
+        };
+      } else {
+        return json({ error: "Cannot schedule: this post has no caption content. Please add content before scheduling." }, 400);
+      }
+    }
+
     const { data, error } = await serviceClient
       .from("social_posts")
       .update({
@@ -147,6 +174,7 @@ Deno.serve((req) =>
         scheduled_date,
         ...(platform ? { platform } : {}),
         ...(page_name ? { page_name } : {}),
+        ...backfill,
       })
       .eq("id", post_id)
       .select("id, status, qa_status, scheduled_date")
