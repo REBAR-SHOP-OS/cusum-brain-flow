@@ -157,54 +157,107 @@ export default function ClearanceStation() {
         ) : !selectedProjectKey ? (
           <div className="p-4 space-y-3">
             <p className="text-sm text-muted-foreground mb-2">
-              Select a project to view its clearance items.
+              Select a customer to view its clearance manifests.
             </p>
-            {projectEntries.map(([key, group]) => {
-              const cleared = group.items.filter((i) => i.evidence_status === "cleared").length;
+            {customerGroups.map(({ customerName, plans }) => {
+              const allItems = plans.flatMap(([, g]) => g.items);
+              const cleared = allItems.filter((i) => i.evidence_status === "cleared").length;
+              const totalPlanItems = allItems.length;
+              const isSingle = plans.length === 1;
+              const isExpanded = expandedCustomers.has(customerName) || isSingle;
+
               return (
-                <button
-                  key={key}
-                  onClick={() => {
-                    setSelectedProjectKey(key);
-                    setSelectedProjectLabel(group.label);
-                  }}
-                  className="w-full rounded-xl border border-border bg-card hover:bg-muted/50 transition-colors p-4 flex items-center justify-between text-left"
+                <div
+                  key={customerName}
+                  className="rounded-xl border border-border bg-card overflow-hidden"
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
-                    <div className="min-w-0 flex flex-col">
-                      <span className="text-base font-bold uppercase tracking-wider text-white truncate">
-                        {group.customerName || "Unassigned"}
-                      </span>
-                      <span className="text-[11px] tracking-wide text-primary truncate pl-3">
-                        ├─ {group.projectName || "Unassigned"}
-                      </span>
-                      <div className="flex items-center gap-1.5 min-w-0 pl-3">
-                        <span className="text-[10px] text-muted-foreground truncate">
-                          └─ {group.barlistName || group.label}
+                  <button
+                    onClick={() => {
+                      if (isSingle) {
+                        const [key, group] = plans[0];
+                        setSelectedProjectKey(key);
+                        setSelectedProjectLabel(group.label);
+                      } else {
+                        toggleCustomer(customerName);
+                      }
+                    }}
+                    className="w-full hover:bg-muted/50 transition-colors p-4 flex items-center justify-between text-left"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
+                      <div className="min-w-0 flex flex-col">
+                        <span className="text-base font-bold uppercase tracking-wider text-white truncate">
+                          {customerName}
                         </span>
-                        {typeof group.barlistRevisionNo === "number" && (
-                          <span className="text-[10px] text-muted-foreground shrink-0">
-                            R{group.barlistRevisionNo}
-                          </span>
-                        )}
-                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
-                          {formatStatus(group.barlistStatus || group.cutPlanStatus || null)}
-                        </Badge>
+                        <span className="text-[10px] font-bold tracking-wide uppercase text-primary truncate">
+                          {plans.length} manifest{plans.length !== 1 ? "s" : ""} · {totalPlanItems} item{totalPlanItems !== 1 ? "s" : ""}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-bold tracking-wide uppercase text-primary truncate pl-3">
-                        {group.items.length} item{group.items.length !== 1 ? "s" : ""}
-                      </span>
                     </div>
-                    <Badge
-                      variant={cleared === group.items.length ? "default" : "secondary"}
-                      className="text-[10px] shrink-0"
-                    >
-                      {cleared === group.items.length ? "complete" : `${cleared}/${group.items.length}`}
-                    </Badge>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0" />
-                </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge
+                        variant={cleared === totalPlanItems ? "default" : "secondary"}
+                        className="text-[10px]"
+                      >
+                        {cleared === totalPlanItems ? "complete" : `${cleared}/${totalPlanItems}`}
+                      </Badge>
+                      <ChevronRight
+                        className={`w-5 h-5 text-muted-foreground transition-transform ${isExpanded && !isSingle ? "rotate-90" : ""}`}
+                      />
+                    </div>
+                  </button>
+
+                  {isExpanded && !isSingle && (
+                    <div className="border-t border-border bg-background/40">
+                      {plans.map(([key, group]) => {
+                        const planCleared = group.items.filter((i) => i.evidence_status === "cleared").length;
+                        return (
+                          <button
+                            key={key}
+                            onClick={() => {
+                              setSelectedProjectKey(key);
+                              setSelectedProjectLabel(group.label);
+                            }}
+                            className="w-full hover:bg-muted/50 transition-colors px-4 py-3 flex items-center justify-between text-left border-t border-border/50 first:border-t-0"
+                          >
+                            <div className="flex items-center gap-3 min-w-0 pl-6">
+                              <div className="min-w-0 flex flex-col">
+                                <span className="text-[12px] tracking-wide text-primary truncate">
+                                  ├─ {group.projectName || "Unassigned"}
+                                </span>
+                                <div className="flex items-center gap-1.5 min-w-0 pl-3">
+                                  <span className="text-[10px] text-muted-foreground truncate">
+                                    └─ {group.barlistName || group.label}
+                                  </span>
+                                  {typeof group.barlistRevisionNo === "number" && (
+                                    <span className="text-[10px] text-muted-foreground shrink-0">
+                                      R{group.barlistRevisionNo}
+                                    </span>
+                                  )}
+                                  <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
+                                    {formatStatus(group.barlistStatus || group.cutPlanStatus || null)}
+                                  </Badge>
+                                </div>
+                                <span className="text-[10px] font-bold tracking-wide uppercase text-primary/70 truncate pl-3">
+                                  {group.items.length} item{group.items.length !== 1 ? "s" : ""}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <Badge
+                                variant={planCleared === group.items.length ? "default" : "secondary"}
+                                className="text-[10px]"
+                              >
+                                {planCleared === group.items.length ? "complete" : `${planCleared}/${group.items.length}`}
+                              </Badge>
+                              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>
