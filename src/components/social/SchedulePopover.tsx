@@ -47,8 +47,8 @@ export function SchedulePopover({ post, onScheduled }: SchedulePopoverProps) {
   const handleConfirm = async () => {
     if (!selectedDate || selectedPlatforms.length === 0) return;
 
-    if (post.content_type !== "story" && (post.content || "").length < 20) {
-      toast({ title: "Content too short", description: "Post content must be at least 20 characters to schedule.", variant: "destructive" });
+    if (post.content_type !== "story" && !(post.content || "").trim()) {
+      toast({ title: "Content empty", description: "Post content cannot be empty.", variant: "destructive" });
       return;
     }
 
