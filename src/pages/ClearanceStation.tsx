@@ -58,6 +58,37 @@ export default function ClearanceStation() {
     return () => clearTimeout(t);
   }, [manifestComplete]);
 
+  // Sort by customer → barlist label so cards keep a stable visual position.
+  const projectEntries = useMemo(
+    () =>
+      [...byProjectKey.entries()].sort(([, a], [, b]) => {
+        const sa = `${a.customerName || "~"}|${a.barlistName || a.label}`;
+        const sb = `${b.customerName || "~"}|${b.barlistName || b.label}`;
+        return sa.localeCompare(sb);
+      }),
+    [byProjectKey]
+  );
+
+  // Group ALL barlists/cut-plans for the same customer together — across projects.
+  type GroupVal = NonNullable<ReturnType<typeof byProjectKey.get>>;
+  const customerGroups = useMemo(() => {
+    const map = new Map<string, { customerName: string; plans: Array<[string, GroupVal]> }>();
+    for (const [key, group] of projectEntries) {
+      const cname = group.customerName || "Unassigned";
+      if (!map.has(cname)) map.set(cname, { customerName: cname, plans: [] });
+      map.get(cname)!.plans.push([key, group as GroupVal]);
+    }
+    return [...map.values()];
+  }, [projectEntries]);
+
+  const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
+  const toggleCustomer = (name: string) =>
+    setExpandedCustomers((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -77,35 +108,6 @@ export default function ClearanceStation() {
       </div>
     );
   }
-
-  // Sort by customer → project → barlist label so cards keep a stable visual position
-  // across realtime refetches (prevents customer names like "Walden Homes" from flickering).
-  const projectEntries = [...byProjectKey.entries()].sort(([, a], [, b]) => {
-    const sa = `${a.customerName || "~"}|${a.projectName || "~"}|${a.barlistName || a.label}`;
-    const sb = `${b.customerName || "~"}|${b.projectName || "~"}|${b.barlistName || b.label}`;
-    return sa.localeCompare(sb);
-  });
-
-  // Group cut plans by customer so the operator sees ONE row per customer,
-  // with cut plans (manifests) listed inside.
-  type GroupVal = NonNullable<ReturnType<typeof byProjectKey.get>>;
-  const customerGroups = useMemo(() => {
-    const map = new Map<string, { customerName: string; plans: Array<[string, GroupVal]> }>();
-    for (const [key, group] of projectEntries) {
-      const cname = group.customerName || "Unassigned";
-      if (!map.has(cname)) map.set(cname, { customerName: cname, plans: [] });
-      map.get(cname)!.plans.push([key, group as GroupVal]);
-    }
-    return [...map.values()];
-  }, [projectEntries]);
-
-  const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
-  const toggleCustomer = (name: string) =>
-    setExpandedCustomers((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name); else next.add(name);
-      return next;
-    });
 
   const displayLabel = activeGroup?.label || selectedProjectLabel;
   const formatStatus = (status: string | null) =>
@@ -222,11 +224,8 @@ export default function ClearanceStation() {
                           >
                             <div className="flex items-center gap-3 min-w-0 pl-6">
                               <div className="min-w-0 flex flex-col">
-                                <span className="text-[12px] tracking-wide text-primary truncate">
-                                  ├─ {group.projectName || "Unassigned"}
-                                </span>
-                                <div className="flex items-center gap-1.5 min-w-0 pl-3">
-                                  <span className="text-[10px] text-muted-foreground truncate">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="text-[12px] text-foreground truncate">
                                     └─ {group.barlistName || group.label}
                                   </span>
                                   {typeof group.barlistRevisionNo === "number" && (
@@ -238,7 +237,7 @@ export default function ClearanceStation() {
                                     {formatStatus(group.barlistStatus || group.cutPlanStatus || null)}
                                   </Badge>
                                 </div>
-                                <span className="text-[10px] font-bold tracking-wide uppercase text-primary/70 truncate pl-3">
+                                <span className="text-[10px] font-bold tracking-wide uppercase text-primary/70 truncate">
                                   {group.items.length} item{group.items.length !== 1 ? "s" : ""}
                                 </span>
                               </div>
