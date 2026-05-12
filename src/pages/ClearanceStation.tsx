@@ -58,6 +58,37 @@ export default function ClearanceStation() {
     return () => clearTimeout(t);
   }, [manifestComplete]);
 
+  // Sort by customer → barlist label so cards keep a stable visual position.
+  const projectEntries = useMemo(
+    () =>
+      [...byProjectKey.entries()].sort(([, a], [, b]) => {
+        const sa = `${a.customerName || "~"}|${a.barlistName || a.label}`;
+        const sb = `${b.customerName || "~"}|${b.barlistName || b.label}`;
+        return sa.localeCompare(sb);
+      }),
+    [byProjectKey]
+  );
+
+  // Group ALL barlists/cut-plans for the same customer together — across projects.
+  type GroupVal = NonNullable<ReturnType<typeof byProjectKey.get>>;
+  const customerGroups = useMemo(() => {
+    const map = new Map<string, { customerName: string; plans: Array<[string, GroupVal]> }>();
+    for (const [key, group] of projectEntries) {
+      const cname = group.customerName || "Unassigned";
+      if (!map.has(cname)) map.set(cname, { customerName: cname, plans: [] });
+      map.get(cname)!.plans.push([key, group as GroupVal]);
+    }
+    return [...map.values()];
+  }, [projectEntries]);
+
+  const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());
+  const toggleCustomer = (name: string) =>
+    setExpandedCustomers((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
