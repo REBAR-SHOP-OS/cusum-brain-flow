@@ -397,6 +397,58 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
                         {s.total_exceptions} exception{s.total_exceptions !== 1 ? "s" : ""}
                       </div>
                     )}
+
+                    {usingFallback && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs px-2 -mx-2"
+                          onClick={() => setExpanded((prev) => ({ ...prev, [s.profile_id]: !prev[s.profile_id] }))}
+                        >
+                          {expanded[s.profile_id] ? <ChevronDown className="w-3.5 h-3.5 mr-1" /> : <ChevronRight className="w-3.5 h-3.5 mr-1" />}
+                          {expanded[s.profile_id] ? "Hide" : "Show"} daily breakdown
+                        </Button>
+                        {expanded[s.profile_id] && (
+                          <div className="rounded-md border border-border overflow-hidden">
+                            <table className="w-full text-xs">
+                              <thead className="bg-muted/50">
+                                <tr className="text-left">
+                                  <th className="px-2 py-1.5 font-medium">Date</th>
+                                  <th className="px-2 py-1.5 font-medium">Clock In</th>
+                                  <th className="px-2 py-1.5 font-medium">Clock Out</th>
+                                  <th className="px-2 py-1.5 font-medium text-right">Hours</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {punches
+                                  .filter((p) => p.profile_id === s.profile_id)
+                                  .sort((a, b) => new Date(a.clock_in).getTime() - new Date(b.clock_in).getTime())
+                                  .map((p) => {
+                                    const ci = new Date(p.clock_in);
+                                    const co = p.clock_out ? new Date(p.clock_out) : null;
+                                    const hrs = co
+                                      ? ((co.getTime() - ci.getTime()) / 60000 - (p.break_minutes || 0)) / 60
+                                      : null;
+                                    return (
+                                      <tr key={p.id} className="border-t border-border">
+                                        <td className="px-2 py-1.5 tabular-nums">{format(ci, "EEE MMM d")}</td>
+                                        <td className="px-2 py-1.5 tabular-nums">{format(ci, "h:mm a")}</td>
+                                        <td className="px-2 py-1.5 tabular-nums">
+                                          {co ? format(co, "h:mm a") : <span className="text-orange-500">open</span>}
+                                        </td>
+                                        <td className="px-2 py-1.5 tabular-nums text-right font-medium">
+                                          {hrs !== null && hrs > 0 ? hrs.toFixed(2) : "—"}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </CardContent>
                 </Card>
               );
