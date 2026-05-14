@@ -531,7 +531,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
               );
             })}
           </div>
-        </ScrollArea>
+        </div>
       )}
     </div>
   );
