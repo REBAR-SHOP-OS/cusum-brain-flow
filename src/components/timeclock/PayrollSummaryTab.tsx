@@ -11,6 +11,7 @@ import { DollarSign, AlertTriangle, Download, CalendarIcon, ChevronDown, Chevron
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
 interface Profile {
   id: string;
