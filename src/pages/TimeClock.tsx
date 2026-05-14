@@ -615,7 +615,7 @@ export default function TimeClock() {
 
           <TabsContent value="payroll">
             <PayrollSummaryTab
-              isAdmin={isAdmin}
+              isAdmin={isAdmin || ACCESS_POLICIES.accountingAccess.includes((user?.email || "").toLowerCase())}
               myProfile={myProfile as any}
               profiles={profiles as any}
             />
