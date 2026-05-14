@@ -401,9 +401,9 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
             : ` · ${summaries.length} week${summaries.length !== 1 ? "s" : ""}`}
         </Badge>
 
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={exportCsv} disabled={aggregated.length === 0}>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={exportXlsx} disabled={aggregated.length === 0 && punches.length === 0}>
           <Download className="w-3.5 h-3.5 mr-1.5" />
-          Export CSV
+          Export Excel
         </Button>
       </div>
 
