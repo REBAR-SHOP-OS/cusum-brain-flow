@@ -215,59 +215,134 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
     }
   };
 
-  const exportCsv = () => {
+  const exportXlsx = () => {
     const hasSummary = summaries.length > 0;
-    const hasPunches = usingFallback && punches.length > 0;
-    if (!hasSummary && !hasPunches) {
+    const hasPunches = punches.length > 0;
+    if (aggregated.length === 0 && !hasPunches) {
       toast.error("Nothing to export");
       return;
     }
-    let header: string[];
-    let rows: (string | number)[][];
-    if (hasSummary) {
-      header = [
-        "Employee", "Employee Type", "Week Start", "Week End",
-        "Regular Hours", "Overtime Hours", "Total Paid Hours", "Exceptions", "Status",
-      ];
-      rows = summaries.map((s) => {
-        const name = profileMap.get(s.profile_id)?.full_name || "Unknown";
-        return [
-          name, s.employee_type, s.week_start, s.week_end,
-          s.regular_hours, s.overtime_hours, s.total_paid_hours, s.total_exceptions, s.status,
-        ];
+
+    const rangeLabel = `${format(rangeStart, "MMM d, yyyy")} – ${format(rangeEnd, "MMM d, yyyy")}`;
+    const wb = XLSX.utils.book_new();
+
+    // ---------- Sheet 1: Employee Summary (per-employee totals) ----------
+    const summaryAoa: (string | number)[][] = [];
+    summaryAoa.push([`Payroll Summary — ${rangeLabel}`]);
+    summaryAoa.push([`Generated: ${format(new Date(), "yyyy-MM-dd HH:mm")}`]);
+    summaryAoa.push([]);
+    summaryAoa.push([
+      "Employee", "Type", "Weeks",
+      "Regular Hours", "Overtime Hours", "Total Paid Hours",
+      "Exceptions", "Status",
+    ]);
+
+    let tReg = 0, tOt = 0, tTot = 0, tExc = 0;
+    aggregated.forEach((s) => {
+      const name = profileMap.get(s.profile_id)?.full_name || "Unknown";
+      const reg = Number(s.regular_hours.toFixed(2));
+      const ot = Number(s.overtime_hours.toFixed(2));
+      const tot = Number(s.total_paid_hours.toFixed(2));
+      tReg += reg; tOt += ot; tTot += tot; tExc += s.total_exceptions;
+      summaryAoa.push([
+        name, s.employee_type, s.weeks,
+        reg, ot, tot,
+        s.total_exceptions, s.latestStatus,
+      ]);
+    });
+    summaryAoa.push([]);
+    summaryAoa.push(["TOTALS", "", "", Number(tReg.toFixed(2)), Number(tOt.toFixed(2)), Number(tTot.toFixed(2)), tExc, ""]);
+
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+    wsSummary["!cols"] = [
+      { wch: 26 }, { wch: 12 }, { wch: 8 },
+      { wch: 14 }, { wch: 14 }, { wch: 16 },
+      { wch: 12 }, { wch: 12 },
+    ];
+    wsSummary["!merges"] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
+    ];
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
+
+    // ---------- Sheet 2: Daily Punches (all employees, sorted) ----------
+    if (hasPunches) {
+      const punchAoa: (string | number)[][] = [];
+      punchAoa.push([`Daily Punches — ${rangeLabel}`]);
+      punchAoa.push([]);
+      punchAoa.push(["Employee", "Date", "Day", "Clock In", "Clock Out", "Break (min)", "Hours Worked"]);
+
+      const sorted = [...punches].sort((a, b) => {
+        const an = profileMap.get(a.profile_id)?.full_name || "";
+        const bn = profileMap.get(b.profile_id)?.full_name || "";
+        if (an !== bn) return an.localeCompare(bn);
+        return new Date(a.clock_in).getTime() - new Date(b.clock_in).getTime();
       });
-    } else {
-      header = ["Employee", "Clock In", "Clock Out", "Break (min)", "Hours Worked"];
-      rows = punches.map((p) => {
+
+      sorted.forEach((p) => {
         const name = profileMap.get(p.profile_id)?.full_name || "Unknown";
-        const hrs = p.clock_out
-          ? ((new Date(p.clock_out).getTime() - new Date(p.clock_in).getTime()) / 60000 - (p.break_minutes || 0)) / 60
+        const ci = new Date(p.clock_in);
+        const co = p.clock_out ? new Date(p.clock_out) : null;
+        const hrs = co
+          ? Number((((co.getTime() - ci.getTime()) / 60000 - (p.break_minutes || 0)) / 60).toFixed(2))
           : 0;
-        return [
+        punchAoa.push([
           name,
-          format(new Date(p.clock_in), "yyyy-MM-dd HH:mm"),
-          p.clock_out ? format(new Date(p.clock_out), "yyyy-MM-dd HH:mm") : "(open)",
+          format(ci, "yyyy-MM-dd"),
+          format(ci, "EEE"),
+          format(ci, "HH:mm"),
+          co ? format(co, "HH:mm") : "(open)",
           p.break_minutes || 0,
-          hrs > 0 ? hrs.toFixed(2) : "—",
-        ];
+          hrs > 0 ? hrs : "—",
+        ]);
       });
+
+      const wsPunches = XLSX.utils.aoa_to_sheet(punchAoa);
+      wsPunches["!cols"] = [
+        { wch: 26 }, { wch: 12 }, { wch: 6 },
+        { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 },
+      ];
+      wsPunches["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
+      XLSX.utils.book_append_sheet(wb, wsPunches, "Daily Punches");
     }
-    const csv = [header, ...rows]
-      .map((r) => r.map((v) => {
-        const str = String(v ?? "");
-        return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
-      }).join(","))
-      .join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${hasSummary ? "payroll" : "punches"}_${format(rangeStart, "yyyyMMdd")}_${format(rangeEnd, "yyyyMMdd")}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast.success("Export downloaded");
+
+    // ---------- Sheet 3: Weekly Breakdown (only when computed payroll exists) ----------
+    if (hasSummary) {
+      const weekAoa: (string | number)[][] = [];
+      weekAoa.push([`Weekly Breakdown — ${rangeLabel}`]);
+      weekAoa.push([]);
+      weekAoa.push(["Employee", "Type", "Week Start", "Week End", "Regular", "Overtime", "Total Paid", "Exceptions", "Status"]);
+
+      const sortedSummaries = [...summaries].sort((a, b) => {
+        const an = profileMap.get(a.profile_id)?.full_name || "";
+        const bn = profileMap.get(b.profile_id)?.full_name || "";
+        if (an !== bn) return an.localeCompare(bn);
+        return a.week_start.localeCompare(b.week_start);
+      });
+
+      sortedSummaries.forEach((s) => {
+        const name = profileMap.get(s.profile_id)?.full_name || "Unknown";
+        weekAoa.push([
+          name, s.employee_type, s.week_start, s.week_end,
+          Number(Number(s.regular_hours).toFixed(2)),
+          Number(Number(s.overtime_hours).toFixed(2)),
+          Number(Number(s.total_paid_hours).toFixed(2)),
+          s.total_exceptions, s.status,
+        ]);
+      });
+
+      const wsWeek = XLSX.utils.aoa_to_sheet(weekAoa);
+      wsWeek["!cols"] = [
+        { wch: 26 }, { wch: 12 }, { wch: 12 }, { wch: 12 },
+        { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+      ];
+      wsWeek["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }];
+      XLSX.utils.book_append_sheet(wb, wsWeek, "Weekly Breakdown");
+    }
+
+    const fileName = `payroll_${format(rangeStart, "yyyyMMdd")}_${format(rangeEnd, "yyyyMMdd")}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    toast.success("Excel report downloaded");
   };
 
   return (
