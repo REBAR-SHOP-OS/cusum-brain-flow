@@ -408,14 +408,14 @@ export default function TimeClock() {
 
   return (
     <>
-    <div className="relative flex flex-col items-center min-h-screen bg-background overflow-hidden">
+    <div className="relative flex flex-col items-center min-h-screen bg-background">
       <canvas ref={face.canvasRef} className="hidden" />
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-primary/8 blur-[150px]" />
       </div>
 
       {/* Header */}
-      <header className="relative z-10 w-full max-w-4xl px-6 pt-8 pb-4">
+      <header className="relative z-10 w-full max-w-7xl px-6 pt-8 pb-4">
         <Link to="/shop-floor" className="inline-flex items-center gap-2 text-xs tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase mb-4">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Command Hub
         </Link>
@@ -445,7 +445,7 @@ export default function TimeClock() {
       </header>
 
       {/* Face Enrollment */}
-      <div className="relative z-10 w-full max-w-4xl px-6 pt-4">
+      <div className="relative z-10 w-full max-w-7xl px-6 pt-4">
         <div className="flex items-center justify-between">
           <FaceEnrollment existingCount={enrollmentCount} onComplete={fetchEnrollmentCount} />
           <div className="flex items-center gap-2">
@@ -465,7 +465,7 @@ export default function TimeClock() {
 
       {/* Face Mode */}
       {faceMode ? (
-        <div className="relative z-10 w-full max-w-4xl px-6 py-4 space-y-4">
+        <div className="relative z-10 w-full max-w-7xl px-6 py-4 space-y-4">
           <FaceCamera videoRef={face.videoRef as any} isActive={!!face.cameraStream} scanning={face.state === "scanning"} stream={face.cameraStream} />
           {face.state === "idle" && (
             <Button onClick={handleScan} size="lg" className="w-full text-lg font-bold gap-2">
@@ -485,7 +485,7 @@ export default function TimeClock() {
         </div>
       ) : (
         /* Manual Mode - My Clock Card */
-        <div className="relative z-10 w-full max-w-4xl px-6 py-4">
+        <div className="relative z-10 w-full max-w-7xl px-6 py-4">
           <Card className="border-primary/20 bg-card/80 backdrop-blur-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -540,7 +540,7 @@ export default function TimeClock() {
       )}
 
       {/* Tabbed Content: Team Status / My Leave / Team Calendar */}
-      <div className="relative z-10 w-full max-w-4xl px-6 py-4 flex-1">
+      <div className="relative z-10 w-full max-w-7xl px-6 py-4 flex-1">
         
 
         <Tabs defaultValue="team-status">
@@ -566,7 +566,7 @@ export default function TimeClock() {
           </TabsList>
 
           <TabsContent value="team-status">
-            <ScrollArea className="h-[calc(100vh-480px)]">
+            <ScrollArea className="max-h-[calc(100vh-220px)]">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {loading ? (
                   <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
@@ -580,7 +580,7 @@ export default function TimeClock() {
           </TabsContent>
 
           <TabsContent value="team-status-shop">
-            <ScrollArea className="h-[calc(100vh-480px)]">
+            <ScrollArea className="max-h-[calc(100vh-220px)]">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {loading ? (
                   <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
@@ -622,7 +622,7 @@ export default function TimeClock() {
           </TabsContent>
 
           <TabsContent value="kiosk-status">
-            <ScrollArea className="h-[calc(100vh-480px)]">
+            <ScrollArea className="max-h-[calc(100vh-220px)]">
               <div className="space-y-4">
                 {(() => {
                   const todayStart = new Date();
