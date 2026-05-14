@@ -29,6 +29,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const isInternal = (user?.email ?? "").endsWith("@rebar.shop");
   const location = useLocation();
   const isAppBuilderDashboard = location.pathname === "/app-builder";
+  const isTimeClockRoute = location.pathname === "/timeclock";
 
   // Log navigation for all authenticated users
   useEffect(() => {
@@ -68,7 +69,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               {/* Main content - add bottom padding on mobile for nav bar */}
               <main
                 id="main-content"
-                className="flex-1 overflow-hidden pb-14 md:pb-0"
+                className={`flex-1 min-w-0 pb-14 md:pb-0 ${isTimeClockRoute ? "min-h-0 overflow-y-auto" : "overflow-hidden"}`}
                 data-app-builder-dashboard={isAppBuilderDashboard ? "true" : undefined}
               >
                 {children}
