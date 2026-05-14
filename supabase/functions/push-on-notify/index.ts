@@ -27,14 +27,12 @@ Deno.serve((req) =>
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const internalSecret = Deno.env.get("INTERNAL_FUNCTION_SECRET") || "";
-
+    // Authenticate to send-push via service role Bearer (recognized by internalOnly guard).
     const resp = await fetch(`${supabaseUrl}/functions/v1/send-push`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${serviceKey}`,
-        "x-internal-secret": internalSecret,
       },
       body: JSON.stringify({
         user_id,
