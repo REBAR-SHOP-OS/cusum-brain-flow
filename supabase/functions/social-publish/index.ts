@@ -165,22 +165,11 @@ Deno.serve((req) =>
         }
       }
 
-      // Bypass Neel-approval gate: admins, or legacy publisher emails (unchanged behavior)
-      const { data: publisher } = await supabaseAdmin
-        .from("profiles")
-        .select("email")
-        .eq("user_id", userId)
-        .maybeSingle();
-      const publisherEmail = (publisher?.email || "").toLowerCase();
-      const bypassByEmail = ["radin@rebar.shop", "zahra@rebar.shop"].includes(publisherEmail);
-      const isAdminUser = await hasAnyRole(supabaseAdmin, userId, ["admin"]);
-      const canBypassApproval = isAdminUser || bypassByEmail;
-
-      // HARD GATE: require neel_approved unless user has publish bypass
-      if (!existing?.neel_approved && !canBypassApproval) {
-        console.warn(`[social-publish] BLOCKED — post ${post_id} not approved by Neel/Sattar`);
+      // HARD GATE: ONLY Neel-approved posts may publish. No admin/email bypass.
+      if (!existing?.neel_approved) {
+        console.warn(`[social-publish] BLOCKED — post ${post_id} not approved by Neel`);
         return new Response(
-          JSON.stringify({ error: "This post requires approval from Neel or Sattar before publishing." }),
+          JSON.stringify({ error: "This post requires Neel's approval before publishing." }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
