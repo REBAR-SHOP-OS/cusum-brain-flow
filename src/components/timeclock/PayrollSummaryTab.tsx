@@ -190,8 +190,9 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
         });
       }
     }
-    return Array.from(map.values());
-  }, [summaries]);
+    const fromSummaries = Array.from(map.values());
+    return fromSummaries.length > 0 ? fromSummaries : punchAggregated;
+  }, [summaries, punchAggregated]);
 
   const setPreset = (preset: "this_week" | "last_week" | "last_4_weeks" | "ytd") => {
     const today = new Date();
