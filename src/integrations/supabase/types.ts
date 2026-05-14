@@ -17159,6 +17159,23 @@ export type Database = {
           total_total_tokens: number
         }[]
       }
+      get_cron_health: {
+        Args: never
+        Returns: {
+          active: boolean
+          failures_24h: number
+          function_name: string
+          http_auth_failures_24h: number
+          jobid: number
+          jobname: string
+          last_end: string
+          last_message: string
+          last_start: string
+          last_status: string
+          runs_24h: number
+          schedule: string
+        }[]
+      }
       get_internal_function_secret: { Args: never; Returns: string }
       get_my_gmail_status: {
         Args: never
