@@ -566,7 +566,7 @@ export default function TimeClock() {
           </TabsList>
 
           <TabsContent value="team-status">
-            <ScrollArea className="max-h-[calc(100vh-220px)]">
+            <div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {loading ? (
                   <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
@@ -576,11 +576,11 @@ export default function TimeClock() {
                   officeProfiles.map(renderProfileCard)
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </TabsContent>
 
           <TabsContent value="team-status-shop">
-            <ScrollArea className="max-h-[calc(100vh-220px)]">
+            <div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {loading ? (
                   <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
@@ -590,7 +590,7 @@ export default function TimeClock() {
                   shopProfiles.map(renderProfileCard)
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </TabsContent>
 
           <TabsContent value="my-leave">
@@ -622,7 +622,7 @@ export default function TimeClock() {
           </TabsContent>
 
           <TabsContent value="kiosk-status">
-            <ScrollArea className="max-h-[calc(100vh-220px)]">
+            <div>
               <div className="space-y-4">
                 {(() => {
                   const todayStart = new Date();
@@ -697,7 +697,7 @@ export default function TimeClock() {
                   );
                 })()}
               </div>
-            </ScrollArea>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
