@@ -48,9 +48,19 @@ const statusStyles: Record<string, string> = {
   locked: "bg-primary/15 text-primary",
 };
 
+interface RawPunch {
+  id: string;
+  profile_id: string;
+  clock_in: string;
+  clock_out: string | null;
+  break_minutes: number | null;
+}
+
 export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSummaryTabProps) {
   const [summaries, setSummaries] = useState<WeeklySummary[]>([]);
+  const [punches, setPunches] = useState<RawPunch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   const now = new Date();
   const [rangeStart, setRangeStart] = useState<Date>(startOfWeek(now, { weekStartsOn: 1 }));
@@ -74,13 +84,76 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
       }
 
       const { data, error } = await query;
-      if (!error && data) {
-        setSummaries(data as WeeklySummary[]);
+      const summaryRows = (!error && data ? (data as WeeklySummary[]) : []);
+      setSummaries(summaryRows);
+
+      // Fallback: if no computed summary exists, aggregate raw punches in range
+      if (summaryRows.length === 0) {
+        const startIso = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate(), 0, 0, 0).toISOString();
+        const endIso = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate(), 23, 59, 59).toISOString();
+        let pq = supabase
+          .from("time_clock_entries")
+          .select("id, profile_id, clock_in, clock_out, break_minutes")
+          .gte("clock_in", startIso)
+          .lte("clock_in", endIso)
+          .order("clock_in", { ascending: false });
+        if (!isAdmin && myProfile) pq = pq.eq("profile_id", myProfile.id);
+        const { data: pdata } = await pq;
+        setPunches((pdata as RawPunch[]) || []);
+        setUsingFallback(true);
+      } else {
+        setPunches([]);
+        setUsingFallback(false);
       }
       setLoading(false);
     }
     fetch();
   }, [isAdmin, myProfile?.id, rangeStart, rangeEnd]);
+
+  // Aggregate raw punches per profile when fallback active
+  const punchAggregated = useMemo(() => {
+    if (!usingFallback) return [];
+    const map = new Map<string, {
+      profile_id: string;
+      employee_type: string;
+      regular_hours: number;
+      overtime_hours: number;
+      total_paid_hours: number;
+      total_exceptions: number;
+      weeks: number;
+      latestStatus: string;
+    }>();
+    for (const p of punches) {
+      if (!p.clock_out) continue;
+      const mins = (new Date(p.clock_out).getTime() - new Date(p.clock_in).getTime()) / 60000 - (p.break_minutes || 0);
+      if (mins <= 0) continue;
+      const hrs = mins / 60;
+      const existing = map.get(p.profile_id);
+      if (existing) {
+        existing.total_paid_hours += hrs;
+        existing.regular_hours += hrs;
+      } else {
+        map.set(p.profile_id, {
+          profile_id: p.profile_id,
+          employee_type: "raw",
+          regular_hours: hrs,
+          overtime_hours: 0,
+          total_paid_hours: hrs,
+          total_exceptions: 0,
+          weeks: 0,
+          latestStatus: "raw",
+        });
+      }
+    }
+    // Count open shifts as exceptions
+    for (const p of punches) {
+      if (!p.clock_out) {
+        const e = map.get(p.profile_id);
+        if (e) e.total_exceptions += 1;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.total_paid_hours - a.total_paid_hours);
+  }, [punches, usingFallback]);
 
   const profileMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
 
@@ -117,8 +190,9 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
         });
       }
     }
-    return Array.from(map.values());
-  }, [summaries]);
+    const fromSummaries = Array.from(map.values());
+    return fromSummaries.length > 0 ? fromSummaries : punchAggregated;
+  }, [summaries, punchAggregated]);
 
   const setPreset = (preset: "this_week" | "last_week" | "last_4_weeks" | "ytd") => {
     const today = new Date();
@@ -140,21 +214,42 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
   };
 
   const exportCsv = () => {
-    if (summaries.length === 0) {
+    const hasSummary = summaries.length > 0;
+    const hasPunches = usingFallback && punches.length > 0;
+    if (!hasSummary && !hasPunches) {
       toast.error("Nothing to export");
       return;
     }
-    const header = [
-      "Employee", "Employee Type", "Week Start", "Week End",
-      "Regular Hours", "Overtime Hours", "Total Paid Hours", "Exceptions", "Status",
-    ];
-    const rows = summaries.map((s) => {
-      const name = profileMap.get(s.profile_id)?.full_name || "Unknown";
-      return [
-        name, s.employee_type, s.week_start, s.week_end,
-        s.regular_hours, s.overtime_hours, s.total_paid_hours, s.total_exceptions, s.status,
+    let header: string[];
+    let rows: (string | number)[][];
+    if (hasSummary) {
+      header = [
+        "Employee", "Employee Type", "Week Start", "Week End",
+        "Regular Hours", "Overtime Hours", "Total Paid Hours", "Exceptions", "Status",
       ];
-    });
+      rows = summaries.map((s) => {
+        const name = profileMap.get(s.profile_id)?.full_name || "Unknown";
+        return [
+          name, s.employee_type, s.week_start, s.week_end,
+          s.regular_hours, s.overtime_hours, s.total_paid_hours, s.total_exceptions, s.status,
+        ];
+      });
+    } else {
+      header = ["Employee", "Clock In", "Clock Out", "Break (min)", "Hours Worked"];
+      rows = punches.map((p) => {
+        const name = profileMap.get(p.profile_id)?.full_name || "Unknown";
+        const hrs = p.clock_out
+          ? ((new Date(p.clock_out).getTime() - new Date(p.clock_in).getTime()) / 60000 - (p.break_minutes || 0)) / 60
+          : 0;
+        return [
+          name,
+          format(new Date(p.clock_in), "yyyy-MM-dd HH:mm"),
+          p.clock_out ? format(new Date(p.clock_out), "yyyy-MM-dd HH:mm") : "(open)",
+          p.break_minutes || 0,
+          hrs > 0 ? hrs.toFixed(2) : "—",
+        ];
+      });
+    }
     const csv = [header, ...rows]
       .map((r) => r.map((v) => {
         const str = String(v ?? "");
@@ -165,7 +260,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `payroll_${format(rangeStart, "yyyyMMdd")}_${format(rangeEnd, "yyyyMMdd")}.csv`;
+    a.download = `${hasSummary ? "payroll" : "punches"}_${format(rangeStart, "yyyyMMdd")}_${format(rangeEnd, "yyyyMMdd")}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -223,21 +318,30 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
         <div className="flex-1" />
 
         <Badge variant="secondary" className="text-xs">
-          {aggregated.length} employee{aggregated.length !== 1 ? "s" : ""} · {summaries.length} week{summaries.length !== 1 ? "s" : ""}
+          {aggregated.length} employee{aggregated.length !== 1 ? "s" : ""}
+          {usingFallback
+            ? ` · ${punches.length} punch${punches.length !== 1 ? "es" : ""} (raw)`
+            : ` · ${summaries.length} week${summaries.length !== 1 ? "s" : ""}`}
         </Badge>
 
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={exportCsv} disabled={summaries.length === 0}>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={exportCsv} disabled={aggregated.length === 0}>
           <Download className="w-3.5 h-3.5 mr-1.5" />
           Export CSV
         </Button>
       </div>
+
+      {usingFallback && aggregated.length > 0 && (
+        <p className="text-[11px] text-muted-foreground px-1">
+          Showing raw clock-in/clock-out totals — no payroll has been computed for this range yet.
+        </p>
+      )}
 
       {loading ? (
         <p className="text-muted-foreground text-sm text-center py-8">Loading payroll data...</p>
       ) : aggregated.length === 0 ? (
         <div className="text-center py-12 space-y-2">
           <DollarSign className="w-10 h-10 mx-auto text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No payroll summary in this range.</p>
+          <p className="text-sm text-muted-foreground">No clock-in records or payroll summary in this range.</p>
           <p className="text-xs text-muted-foreground">
             {format(rangeStart, "MMM d, yyyy")} – {format(rangeEnd, "MMM d, yyyy")}
           </p>
