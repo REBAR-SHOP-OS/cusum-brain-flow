@@ -5,6 +5,7 @@ import { useFaceRecognition } from "@/hooks/useFaceRecognition";
 import { useUserRole } from "@/hooks/useUserRole";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -615,7 +616,7 @@ export default function TimeClock() {
 
           <TabsContent value="payroll">
             <PayrollSummaryTab
-              isAdmin={isAdmin}
+              isAdmin={isAdmin || ACCESS_POLICIES.accountingAccess.includes((user?.email || "").toLowerCase())}
               myProfile={myProfile as any}
               profiles={profiles as any}
             />
