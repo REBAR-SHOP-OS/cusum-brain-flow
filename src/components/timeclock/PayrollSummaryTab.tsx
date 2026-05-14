@@ -424,7 +424,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
           </p>
         </div>
       ) : (
-        <ScrollArea className="h-[calc(100vh-480px)]">
+        <ScrollArea className="max-h-[calc(100vh-260px)]">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {aggregated.map((s) => {
               const profile = profileMap.get(s.profile_id);
