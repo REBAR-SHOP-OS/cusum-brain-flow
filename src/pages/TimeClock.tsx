@@ -344,7 +344,7 @@ export default function TimeClock() {
         )}
         <canvas ref={face.canvasRef} className="hidden" />
         <div className="absolute top-4 right-4 flex items-center gap-2">
-          {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
+          {["zahra@rebar.shop", "sattar@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
             <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={() => setShowMemoryPanel(true)}>
               <Brain className="w-4 h-4" /> Memory
             </Button>
@@ -455,7 +455,7 @@ export default function TimeClock() {
                 {enrollmentCount} photo{enrollmentCount !== 1 ? "s" : ""} enrolled
               </Badge>
             )}
-            {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
+            {["zahra@rebar.shop", "sattar@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
               <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5" onClick={() => setShowMemoryPanel(true)}>
                 <Brain className="w-4 h-4" /> Memory
               </Button>
@@ -738,7 +738,7 @@ export default function TimeClock() {
       />
 
 
-      {["radin@rebar.shop", "sattar@rebar.shop", "neel@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
+      {["zahra@rebar.shop", "sattar@rebar.shop"].includes(user?.email?.toLowerCase() ?? "") && (
         <FaceMemoryPanel open={showMemoryPanel} onOpenChange={setShowMemoryPanel} />
       )}
     </>
