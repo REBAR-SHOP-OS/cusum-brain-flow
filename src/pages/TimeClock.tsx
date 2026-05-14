@@ -566,7 +566,7 @@ export default function TimeClock() {
           </TabsList>
 
           <TabsContent value="team-status">
-            <ScrollArea className="h-[calc(100vh-480px)]">
+            <ScrollArea className="max-h-[calc(100vh-220px)]">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {loading ? (
                   <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
@@ -580,7 +580,7 @@ export default function TimeClock() {
           </TabsContent>
 
           <TabsContent value="team-status-shop">
-            <ScrollArea className="h-[calc(100vh-480px)]">
+            <ScrollArea className="max-h-[calc(100vh-220px)]">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {loading ? (
                   <p className="text-muted-foreground text-sm col-span-2 text-center py-8">Loading...</p>
@@ -622,7 +622,7 @@ export default function TimeClock() {
           </TabsContent>
 
           <TabsContent value="kiosk-status">
-            <ScrollArea className="h-[calc(100vh-480px)]">
+            <ScrollArea className="max-h-[calc(100vh-220px)]">
               <div className="space-y-4">
                 {(() => {
                   const todayStart = new Date();
