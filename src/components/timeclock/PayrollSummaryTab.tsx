@@ -48,9 +48,19 @@ const statusStyles: Record<string, string> = {
   locked: "bg-primary/15 text-primary",
 };
 
+interface RawPunch {
+  id: string;
+  profile_id: string;
+  clock_in: string;
+  clock_out: string | null;
+  break_minutes: number | null;
+}
+
 export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSummaryTabProps) {
   const [summaries, setSummaries] = useState<WeeklySummary[]>([]);
+  const [punches, setPunches] = useState<RawPunch[]>([]);
   const [loading, setLoading] = useState(true);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   const now = new Date();
   const [rangeStart, setRangeStart] = useState<Date>(startOfWeek(now, { weekStartsOn: 1 }));
@@ -74,13 +84,76 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
       }
 
       const { data, error } = await query;
-      if (!error && data) {
-        setSummaries(data as WeeklySummary[]);
+      const summaryRows = (!error && data ? (data as WeeklySummary[]) : []);
+      setSummaries(summaryRows);
+
+      // Fallback: if no computed summary exists, aggregate raw punches in range
+      if (summaryRows.length === 0) {
+        const startIso = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate(), 0, 0, 0).toISOString();
+        const endIso = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate(), 23, 59, 59).toISOString();
+        let pq = supabase
+          .from("time_clock_entries")
+          .select("id, profile_id, clock_in, clock_out, break_minutes")
+          .gte("clock_in", startIso)
+          .lte("clock_in", endIso)
+          .order("clock_in", { ascending: false });
+        if (!isAdmin && myProfile) pq = pq.eq("profile_id", myProfile.id);
+        const { data: pdata } = await pq;
+        setPunches((pdata as RawPunch[]) || []);
+        setUsingFallback(true);
+      } else {
+        setPunches([]);
+        setUsingFallback(false);
       }
       setLoading(false);
     }
     fetch();
   }, [isAdmin, myProfile?.id, rangeStart, rangeEnd]);
+
+  // Aggregate raw punches per profile when fallback active
+  const punchAggregated = useMemo(() => {
+    if (!usingFallback) return [];
+    const map = new Map<string, {
+      profile_id: string;
+      employee_type: string;
+      regular_hours: number;
+      overtime_hours: number;
+      total_paid_hours: number;
+      total_exceptions: number;
+      weeks: number;
+      latestStatus: string;
+    }>();
+    for (const p of punches) {
+      if (!p.clock_out) continue;
+      const mins = (new Date(p.clock_out).getTime() - new Date(p.clock_in).getTime()) / 60000 - (p.break_minutes || 0);
+      if (mins <= 0) continue;
+      const hrs = mins / 60;
+      const existing = map.get(p.profile_id);
+      if (existing) {
+        existing.total_paid_hours += hrs;
+        existing.regular_hours += hrs;
+      } else {
+        map.set(p.profile_id, {
+          profile_id: p.profile_id,
+          employee_type: "raw",
+          regular_hours: hrs,
+          overtime_hours: 0,
+          total_paid_hours: hrs,
+          total_exceptions: 0,
+          weeks: 0,
+          latestStatus: "raw",
+        });
+      }
+    }
+    // Count open shifts as exceptions
+    for (const p of punches) {
+      if (!p.clock_out) {
+        const e = map.get(p.profile_id);
+        if (e) e.total_exceptions += 1;
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => b.total_paid_hours - a.total_paid_hours);
+  }, [punches, usingFallback]);
 
   const profileMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles]);
 
