@@ -51,7 +51,7 @@ export function MyLeaveTab({ balance, requests, profiles, onSubmit, onCancel }: 
       <LeaveBalanceCards balance={balance} />
 
       <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground pt-2">My Requests</h3>
-      <ScrollArea className="h-[300px]">
+      <div>
         <div className="space-y-2">
           {requests.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">No leave requests yet.</p>
@@ -89,7 +89,7 @@ export function MyLeaveTab({ balance, requests, profiles, onSubmit, onCancel }: 
             </Card>
           ))}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

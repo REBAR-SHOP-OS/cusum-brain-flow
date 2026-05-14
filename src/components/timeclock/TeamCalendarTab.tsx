@@ -94,7 +94,7 @@ export function TeamCalendarTab({ requests, profiles, onReview, currentProfileId
 
       {/* Pending Requests */}
       <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground pt-2">Pending Requests</h3>
-      <ScrollArea className="h-[350px]">
+      <div>
         <div className="space-y-2">
           {pendingRequests.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">No pending requests.</p>
@@ -157,11 +157,11 @@ export function TeamCalendarTab({ requests, profiles, onReview, currentProfileId
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Recent Decisions */}
       <h3 className="text-sm font-bold tracking-wider uppercase text-muted-foreground pt-2">Recent Decisions</h3>
-      <ScrollArea className="h-[200px]">
+      <div>
         <div className="space-y-2">
           {requests.filter((r) => r.status === "approved" || r.status === "denied").slice(0, 20).map((req) => {
             const profile = getProfile(req.profile_id);
@@ -187,7 +187,7 @@ export function TeamCalendarTab({ requests, profiles, onReview, currentProfileId
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
