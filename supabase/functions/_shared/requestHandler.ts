@@ -86,48 +86,39 @@ export async function handleRequest(
   const log = createLogger(options.functionName);
 
   try {
-    // Internal-only guard — cron/system functions require shared secret
-    // OR an authenticated admin user (for manual UI triggers).
+    // Internal-only guard — cron/system functions authenticate via Bearer token
+    // matching the service role key (or its mirrored CRON_AUTH_TOKEN value),
+    // OR via an authenticated admin user JWT (for manual UI triggers).
+    // INTERNAL_FUNCTION_SECRET / x-internal-secret header are no longer used.
     if (options.internalOnly) {
-      const expected = Deno.env.get("INTERNAL_FUNCTION_SECRET");
-      const provided = req.headers.get("x-internal-secret");
-      if (!expected) {
-        log.error("INTERNAL_FUNCTION_SECRET not configured");
-        return new Response(
-          JSON.stringify({ ok: false, error: "Server misconfiguration" }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      const secretMatches = provided && provided === expected;
-      let adminOk = false;
-      if (!secretMatches) {
-        // Allow authenticated admin via Bearer token (manual UI trigger)
-        const authHeader = req.headers.get("Authorization");
-        if (authHeader?.startsWith("Bearer ")) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const cronToken = Deno.env.get("CRON_AUTH_TOKEN") || "";
+
+      let authorized = false;
+      const authHeader = req.headers.get("Authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        const token = authHeader.replace("Bearer ", "");
+        if (token === serviceKey || (cronToken && token === cronToken)) {
+          authorized = true;
+        } else {
           try {
-            const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-            const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-            const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-            const token = authHeader.replace("Bearer ", "");
-            if (token === serviceKey) {
-              adminOk = true;
-            } else {
-              const tmp = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
-              const { data } = await tmp.auth.getClaims(token);
-              const uid = data?.claims?.sub as string | undefined;
-              if (uid) {
-                const svc = createClient(supabaseUrl, serviceKey);
-                const { data: hasRole } = await svc.rpc("has_role", { _user_id: uid, _role: "admin" });
-                if (hasRole === true) adminOk = true;
-              }
+            const tmp = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
+            const { data } = await tmp.auth.getClaims(token);
+            const uid = data?.claims?.sub as string | undefined;
+            if (uid) {
+              const svc = createClient(supabaseUrl, serviceKey);
+              const { data: hasRole } = await svc.rpc("has_role", { _user_id: uid, _role: "admin" });
+              if (hasRole === true) authorized = true;
             }
           } catch (e) {
-            log.warn("internalOnly admin check failed", { err: String(e) });
+            log.warn("internalOnly admin JWT check failed", { err: String(e) });
           }
         }
       }
-      if (!secretMatches && !adminOk) {
-        log.error("Invalid or missing internal secret", { functionName: options.functionName });
+      if (!authorized) {
+        log.error("Internal endpoint unauthorized", { functionName: options.functionName });
         return new Response(
           JSON.stringify({ ok: false, error: "Forbidden" }),
           { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },

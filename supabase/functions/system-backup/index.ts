@@ -67,11 +67,14 @@ Deno.serve((req) =>
     const isSuperAdmin = ALL_ADMIN_EMAILS.includes(userEmail);
     if (isSuperAdmin) isAdmin = true;
 
-    // Scheduled callers MUST authenticate via internalOnly (x-internal-secret).
-    // Manual callers must be an admin user. Body-based "scheduled" bypass removed.
-    const hasInternalSecret =
-      req.headers.get("x-internal-secret") === Deno.env.get("INTERNAL_FUNCTION_SECRET");
-    const isScheduled = hasInternalSecret && body.backup_type === "scheduled";
+    // Scheduled callers authenticate via Bearer token matching the service role
+    // key (or mirrored CRON_AUTH_TOKEN). Manual callers must be an admin user.
+    const authHeader = req.headers.get("Authorization") || "";
+    const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const cronToken = Deno.env.get("CRON_AUTH_TOKEN") || "";
+    const hasCronAuth = !!bearer && (bearer === serviceKey || (cronToken && bearer === cronToken));
+    const isScheduled = hasCronAuth && body.backup_type === "scheduled";
 
     if (!isAdmin && !isScheduled) {
       return json({ error: "Forbidden: admin access required" }, 403);

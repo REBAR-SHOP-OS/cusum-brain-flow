@@ -3,12 +3,13 @@
  * Token format: base64url(payloadJson) + "." + base64url(hmac)
  *
  * The signing secret is read from UNSUBSCRIBE_TOKEN_SECRET, falling back to
- * INTERNAL_FUNCTION_SECRET so deployments don't need an extra secret.
+ * CRON_AUTH_TOKEN, then SUPABASE_SERVICE_ROLE_KEY so deployments don't need an extra secret.
  */
 
 function getSecret(): string {
   const s = Deno.env.get("UNSUBSCRIBE_TOKEN_SECRET")
-    ?? Deno.env.get("INTERNAL_FUNCTION_SECRET")
+    ?? Deno.env.get("CRON_AUTH_TOKEN")
+    ?? Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
     ?? "";
   if (!s) throw new Error("Token signing secret not configured");
   return s;
