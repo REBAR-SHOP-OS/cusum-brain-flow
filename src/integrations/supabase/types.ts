@@ -17110,6 +17110,10 @@ export type Database = {
           inserted_count: number
         }[]
       }
+      bootstrap_set_vault_secret: {
+        Args: { p_name: string; p_value: string }
+        Returns: string
+      }
       check_rate_limit: {
         Args: {
           _function_name: string
