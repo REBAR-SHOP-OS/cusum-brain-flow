@@ -318,21 +318,30 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
         <div className="flex-1" />
 
         <Badge variant="secondary" className="text-xs">
-          {aggregated.length} employee{aggregated.length !== 1 ? "s" : ""} · {summaries.length} week{summaries.length !== 1 ? "s" : ""}
+          {aggregated.length} employee{aggregated.length !== 1 ? "s" : ""}
+          {usingFallback
+            ? ` · ${punches.length} punch${punches.length !== 1 ? "es" : ""} (raw)`
+            : ` · ${summaries.length} week${summaries.length !== 1 ? "s" : ""}`}
         </Badge>
 
-        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={exportCsv} disabled={summaries.length === 0}>
+        <Button variant="outline" size="sm" className="h-8 text-xs" onClick={exportCsv} disabled={aggregated.length === 0}>
           <Download className="w-3.5 h-3.5 mr-1.5" />
           Export CSV
         </Button>
       </div>
+
+      {usingFallback && aggregated.length > 0 && (
+        <p className="text-[11px] text-muted-foreground px-1">
+          Showing raw clock-in/clock-out totals — no payroll has been computed for this range yet.
+        </p>
+      )}
 
       {loading ? (
         <p className="text-muted-foreground text-sm text-center py-8">Loading payroll data...</p>
       ) : aggregated.length === 0 ? (
         <div className="text-center py-12 space-y-2">
           <DollarSign className="w-10 h-10 mx-auto text-muted-foreground/40" />
-          <p className="text-sm text-muted-foreground">No payroll summary in this range.</p>
+          <p className="text-sm text-muted-foreground">No clock-in records or payroll summary in this range.</p>
           <p className="text-xs text-muted-foreground">
             {format(rangeStart, "MMM d, yyyy")} – {format(rangeEnd, "MMM d, yyyy")}
           </p>
