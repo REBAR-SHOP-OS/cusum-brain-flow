@@ -255,6 +255,7 @@ const App = () => (
                     <Route path="/admin/bend-queue" element={<P><AdminRoute><BendQueueAdmin /></AdminRoute></P>} />
                     <Route path="/admin/bundles" element={<P><AdminRoute><BundleAdmin /></AdminRoute></P>} />
                     <Route path="/admin/production-audit" element={<P><AdminRoute><ProductionAudit /></AdminRoute></P>} />
+                    <Route path="/admin/cron-health" element={<P><AdminRoute><CronHealth /></AdminRoute></P>} />
 
                     {/* Automations Hub */}
                     <Route path="/automations" element={<P><AdminRoute><AutomationsHub /></AdminRoute></P>} />
