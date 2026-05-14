@@ -214,21 +214,42 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
   };
 
   const exportCsv = () => {
-    if (summaries.length === 0) {
+    const hasSummary = summaries.length > 0;
+    const hasPunches = usingFallback && punches.length > 0;
+    if (!hasSummary && !hasPunches) {
       toast.error("Nothing to export");
       return;
     }
-    const header = [
-      "Employee", "Employee Type", "Week Start", "Week End",
-      "Regular Hours", "Overtime Hours", "Total Paid Hours", "Exceptions", "Status",
-    ];
-    const rows = summaries.map((s) => {
-      const name = profileMap.get(s.profile_id)?.full_name || "Unknown";
-      return [
-        name, s.employee_type, s.week_start, s.week_end,
-        s.regular_hours, s.overtime_hours, s.total_paid_hours, s.total_exceptions, s.status,
+    let header: string[];
+    let rows: (string | number)[][];
+    if (hasSummary) {
+      header = [
+        "Employee", "Employee Type", "Week Start", "Week End",
+        "Regular Hours", "Overtime Hours", "Total Paid Hours", "Exceptions", "Status",
       ];
-    });
+      rows = summaries.map((s) => {
+        const name = profileMap.get(s.profile_id)?.full_name || "Unknown";
+        return [
+          name, s.employee_type, s.week_start, s.week_end,
+          s.regular_hours, s.overtime_hours, s.total_paid_hours, s.total_exceptions, s.status,
+        ];
+      });
+    } else {
+      header = ["Employee", "Clock In", "Clock Out", "Break (min)", "Hours Worked"];
+      rows = punches.map((p) => {
+        const name = profileMap.get(p.profile_id)?.full_name || "Unknown";
+        const hrs = p.clock_out
+          ? ((new Date(p.clock_out).getTime() - new Date(p.clock_in).getTime()) / 60000 - (p.break_minutes || 0)) / 60
+          : 0;
+        return [
+          name,
+          format(new Date(p.clock_in), "yyyy-MM-dd HH:mm"),
+          p.clock_out ? format(new Date(p.clock_out), "yyyy-MM-dd HH:mm") : "(open)",
+          p.break_minutes || 0,
+          hrs > 0 ? hrs.toFixed(2) : "—",
+        ];
+      });
+    }
     const csv = [header, ...rows]
       .map((r) => r.map((v) => {
         const str = String(v ?? "");
@@ -239,7 +260,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `payroll_${format(rangeStart, "yyyyMMdd")}_${format(rangeEnd, "yyyyMMdd")}.csv`;
+    a.download = `${hasSummary ? "payroll" : "punches"}_${format(rangeStart, "yyyyMMdd")}_${format(rangeEnd, "yyyyMMdd")}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
