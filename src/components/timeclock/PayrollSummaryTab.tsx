@@ -199,6 +199,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
 
   const setPreset = (preset: "this_week" | "last_week" | "last_4_weeks" | "ytd") => {
     const today = new Date();
+    setActivePreset(preset);
     if (preset === "this_week") {
       setRangeStart(startOfWeek(today, { weekStartsOn: 1 }));
       setRangeEnd(endOfWeek(today, { weekStartsOn: 1 }));
