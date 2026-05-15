@@ -63,6 +63,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
   const [loading, setLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [activePreset, setActivePreset] = useState<"this_week" | "last_week" | "last_4_weeks" | "ytd" | "custom">("this_week");
 
   const now = new Date();
   const [rangeStart, setRangeStart] = useState<Date>(startOfWeek(now, { weekStartsOn: 1 }));
@@ -198,6 +199,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
 
   const setPreset = (preset: "this_week" | "last_week" | "last_4_weeks" | "ytd") => {
     const today = new Date();
+    setActivePreset(preset);
     if (preset === "this_week") {
       setRangeStart(startOfWeek(today, { weekStartsOn: 1 }));
       setRangeEnd(endOfWeek(today, { weekStartsOn: 1 }));
@@ -360,7 +362,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
             <Calendar
               mode="single"
               selected={rangeStart}
-              onSelect={(d) => d && setRangeStart(d)}
+              onSelect={(d) => { if (d) { setRangeStart(d); setActivePreset("custom"); } }}
               initialFocus
               className="pointer-events-auto"
             />
@@ -378,7 +380,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
             <Calendar
               mode="single"
               selected={rangeEnd}
-              onSelect={(d) => d && setRangeEnd(d)}
+              onSelect={(d) => { if (d) { setRangeEnd(d); setActivePreset("custom"); } }}
               initialFocus
               className="pointer-events-auto"
             />
@@ -475,7 +477,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
                       </div>
                     )}
 
-                    {usingFallback && (
+                    {usingFallback && activePreset === "last_week" && (
                       <>
                         <Button
                           variant="ghost"
