@@ -39,7 +39,7 @@ export function BendingSchematic({ dimensions }: BendingSchematicProps) {
               </span>
               <span className="text-3xl font-black font-mono text-foreground">
                 {value}
-                <span className="text-sm text-muted-foreground ml-1 font-normal">mm</span>
+                <span className="text-sm text-muted-foreground ml-1 font-normal">{unitLabel}</span>
               </span>
             </div>
           ))}
