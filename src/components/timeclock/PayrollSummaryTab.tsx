@@ -362,7 +362,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
             <Calendar
               mode="single"
               selected={rangeStart}
-              onSelect={(d) => d && setRangeStart(d)}
+              onSelect={(d) => { if (d) { setRangeStart(d); setActivePreset("custom"); } }}
               initialFocus
               className="pointer-events-auto"
             />
