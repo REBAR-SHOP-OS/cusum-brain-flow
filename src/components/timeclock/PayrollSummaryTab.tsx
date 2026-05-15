@@ -63,6 +63,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
   const [loading, setLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [activePreset, setActivePreset] = useState<"this_week" | "last_week" | "last_4_weeks" | "ytd" | "custom">("this_week");
 
   const now = new Date();
   const [rangeStart, setRangeStart] = useState<Date>(startOfWeek(now, { weekStartsOn: 1 }));
