@@ -1,5 +1,6 @@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { extractChatFilePath } from "@/lib/chatFileUtils";
 
 /**
  * Programmatically download a file by fetching it as a blob.
@@ -14,6 +15,22 @@ export async function downloadFile(
   // data: URIs can always be fetched directly
   if (url.startsWith("data:")) {
     return directDownload(url, filename);
+  }
+
+  // team-chat-files: fetch via Supabase JS client to dodge ad-blockers
+  // that filter the /storage/v1/object/sign/* URL pattern.
+  const chatPath = extractChatFilePath(url);
+  if (chatPath) {
+    try {
+      const { data, error } = await supabase.storage
+        .from("team-chat-files")
+        .download(chatPath);
+      if (error || !data) throw error || new Error("Empty download");
+      triggerBlobDownload(data, filename);
+      return;
+    } catch (e) {
+      console.warn("[download] SDK download failed, falling back to anchor:", (e as Error).message);
+    }
   }
 
   // Supabase storage URLs: use anchor tag to bypass CORS fetch issues

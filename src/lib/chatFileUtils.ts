@@ -34,7 +34,7 @@ export function getPublicFileUrl(_storagePath: string): string {
  * Extract the storage path from a legacy public/signed team-chat-files URL.
  * Returns null if the URL is external or doesn't match.
  */
-function extractChatFilePath(url: string): string | null {
+export function extractChatFilePath(url: string): string | null {
   if (!url) return null;
   const signed = url.match(/\/object\/sign\/team-chat-files\/([^?]+)/);
   if (signed?.[1]) return decodeURIComponent(signed[1]);
