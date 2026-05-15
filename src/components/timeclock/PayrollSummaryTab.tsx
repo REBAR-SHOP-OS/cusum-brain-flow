@@ -421,7 +421,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
       ) : (
         <div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {aggregated.map((s) => {
+            {aggregated.filter((s) => profileMap.has(s.profile_id)).map((s) => {
               const profile = profileMap.get(s.profile_id);
               const name = profile?.full_name || "Unknown";
 
