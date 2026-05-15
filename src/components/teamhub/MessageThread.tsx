@@ -50,6 +50,7 @@ import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 import { getChatFileSignedUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
+import { sanitizeFileName } from "@/lib/sanitizeFileName";
 import { isTeamHubAdmin } from "./teamHubConfig";
 
 const LANG_LABELS: Record<string, { name: string; flag: string }> = {
@@ -362,17 +363,35 @@ export function MessageThread({
       return;
     }
 
+    // Resolve company id fresh from the active session — avoids stale React Query cache
+    // and guarantees the storage RLS policy (folder[1] = company_id) sees a valid value.
+    let activeCompanyId = companyId as string | null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (prof?.company_id) activeCompanyId = prof.company_id as string;
+      }
+    } catch {
+      // fall back to hook value
+    }
+
     for (const file of Array.from(files)) {
       if (file.size > 50 * 1024 * 1024) {
         toast.error(`${file.name} is too large (max 50MB)`);
         continue;
       }
 
-      if (!companyId) { toast.error("Missing company context"); continue; }
-      const path = `${companyId}/${Date.now()}-${file.name}`;
+      if (!activeCompanyId) { toast.error("Missing company context"); continue; }
+      const safeName = sanitizeFileName(file.name);
+      const path = `${activeCompanyId}/chat-uploads/${Date.now()}-${safeName}`;
       const { error } = await supabase.storage
         .from("team-chat-files")
-        .upload(path, file);
+        .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
 
       if (error) {
         toast.error(`Failed to upload ${file.name}: ${error.message}`);
