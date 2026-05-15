@@ -1,10 +1,14 @@
 import { Card, CardContent } from "@/components/ui/card";
+import { useUnitSystem, lengthUnit } from "@/lib/unitSystem";
 
 interface BendingSchematicProps {
   dimensions: Record<string, number> | null;
 }
 
 export function BendingSchematic({ dimensions }: BendingSchematicProps) {
+  const unitSystem = useUnitSystem();
+  const unitLabel = lengthUnit(unitSystem);
+
   if (!dimensions || Object.keys(dimensions).length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-border p-4 text-center text-muted-foreground text-sm">
