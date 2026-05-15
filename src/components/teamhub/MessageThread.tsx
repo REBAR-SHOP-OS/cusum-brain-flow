@@ -50,6 +50,7 @@ import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { primeMobileAudio } from "@/lib/audioPlayer";
 import { getChatFileSignedUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
+import { sanitizeFileName } from "@/lib/sanitizeFileName";
 import { isTeamHubAdmin } from "./teamHubConfig";
 
 const LANG_LABELS: Record<string, { name: string; flag: string }> = {
