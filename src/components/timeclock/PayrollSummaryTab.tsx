@@ -477,7 +477,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
                       </div>
                     )}
 
-                    {usingFallback && (
+                    {usingFallback && activePreset === "last_week" && (
                       <>
                         <Button
                           variant="ghost"
