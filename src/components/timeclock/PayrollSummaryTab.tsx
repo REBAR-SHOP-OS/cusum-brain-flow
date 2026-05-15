@@ -63,7 +63,6 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
   const [loading, setLoading] = useState(true);
   const [usingFallback, setUsingFallback] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [activePreset, setActivePreset] = useState<"this_week" | "last_week" | "last_4_weeks" | "ytd" | "custom">("this_week");
 
   const now = new Date();
   const [rangeStart, setRangeStart] = useState<Date>(startOfWeek(now, { weekStartsOn: 1 }));
@@ -90,24 +89,19 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
       const summaryRows = (!error && data ? (data as WeeklySummary[]) : []);
       setSummaries(summaryRows);
 
-      // Fallback: if no computed summary exists, aggregate raw punches in range
-      if (summaryRows.length === 0) {
-        const startIso = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate(), 0, 0, 0).toISOString();
-        const endIso = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate(), 23, 59, 59).toISOString();
-        let pq = supabase
-          .from("time_clock_entries")
-          .select("id, profile_id, clock_in, clock_out, break_minutes")
-          .gte("clock_in", startIso)
-          .lte("clock_in", endIso)
-          .order("clock_in", { ascending: false });
-        if (!isAdmin && myProfile) pq = pq.eq("profile_id", myProfile.id);
-        const { data: pdata } = await pq;
-        setPunches((pdata as RawPunch[]) || []);
-        setUsingFallback(true);
-      } else {
-        setPunches([]);
-        setUsingFallback(false);
-      }
+      // Always fetch raw punches so daily breakdown is available for every payroll range.
+      const startIso = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate(), 0, 0, 0).toISOString();
+      const endIso = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate(), 23, 59, 59).toISOString();
+      let pq = supabase
+        .from("time_clock_entries")
+        .select("id, profile_id, clock_in, clock_out, break_minutes")
+        .gte("clock_in", startIso)
+        .lte("clock_in", endIso)
+        .order("clock_in", { ascending: false });
+      if (!isAdmin && myProfile) pq = pq.eq("profile_id", myProfile.id);
+      const { data: pdata } = await pq;
+      setPunches((pdata as RawPunch[]) || []);
+      setUsingFallback(summaryRows.length === 0);
       setLoading(false);
     }
     fetch();
@@ -199,7 +193,6 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
 
   const setPreset = (preset: "this_week" | "last_week" | "last_4_weeks" | "ytd") => {
     const today = new Date();
-    setActivePreset(preset);
     if (preset === "this_week") {
       setRangeStart(startOfWeek(today, { weekStartsOn: 1 }));
       setRangeEnd(endOfWeek(today, { weekStartsOn: 1 }));
@@ -362,7 +355,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
             <Calendar
               mode="single"
               selected={rangeStart}
-              onSelect={(d) => { if (d) { setRangeStart(d); setActivePreset("custom"); } }}
+              onSelect={(d) => { if (d) setRangeStart(d); }}
               initialFocus
               className="pointer-events-auto"
             />
@@ -380,7 +373,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
             <Calendar
               mode="single"
               selected={rangeEnd}
-              onSelect={(d) => { if (d) { setRangeEnd(d); setActivePreset("custom"); } }}
+              onSelect={(d) => { if (d) setRangeEnd(d); }}
               initialFocus
               className="pointer-events-auto"
             />
@@ -477,7 +470,7 @@ export function PayrollSummaryTab({ isAdmin, myProfile, profiles }: PayrollSumma
                       </div>
                     )}
 
-                    {usingFallback && (
+                    {punches.some((p) => p.profile_id === s.profile_id) && (
                       <>
                         <Button
                           variant="ghost"
