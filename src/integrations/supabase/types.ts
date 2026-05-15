@@ -17074,16 +17074,6 @@ export type Database = {
       }
     }
     Functions: {
-      _tmp_check_saurabh: {
-        Args: never
-        Returns: {
-          auth_email: string
-          auth_id: string
-          profile_company: string
-          profile_id: string
-          profile_user_id: string
-        }[]
-      }
       accounting_health_customer_debug: {
         Args: { p_company_id: string; p_customer_qb_id: string }
         Returns: {
