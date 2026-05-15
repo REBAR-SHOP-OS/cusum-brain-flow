@@ -598,7 +598,7 @@ export default function TimeClock() {
             <MyLeaveTab
               balance={leave.balance}
               requests={leave.myRequests}
-              profiles={leave.profiles}
+              profiles={leave.profiles.filter((p: any) => p.full_name !== "Ai")}
               onSubmit={leave.submitRequest}
               onCancel={leave.cancelRequest}
             />
@@ -607,7 +607,7 @@ export default function TimeClock() {
           <TabsContent value="team-calendar">
             <TeamCalendarTab
               requests={leave.allRequests}
-              profiles={leave.profiles}
+              profiles={leave.profiles.filter((p: any) => p.full_name !== "Ai")}
               onReview={leave.reviewRequest}
               currentProfileId={leave.myProfile?.id}
               isAdmin={isAdmin}
@@ -618,7 +618,7 @@ export default function TimeClock() {
             <PayrollSummaryTab
               isAdmin={isAdmin || ACCESS_POLICIES.accountingAccess.includes((user?.email || "").toLowerCase())}
               myProfile={myProfile as any}
-              profiles={profiles as any}
+              profiles={activeProfiles as any}
             />
           </TabsContent>
 
