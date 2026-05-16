@@ -56,6 +56,56 @@ Deno.serve((req) =>
       result.ok = false;
     }
 
+    // --- WOOCOMMERCE READ + WRITE TEST ---
+    const wcKey = Deno.env.get("WC_CONSUMER_KEY");
+    const wcSecret = Deno.env.get("WC_CONSUMER_SECRET");
+    // baseUrl is /wp-json/wp/v2 — derive site root for /wc/v3
+    const siteRoot = baseUrl.replace(/\/wp-json.*$/, "");
+    const wcBase = `${siteRoot}/wp-json/wc/v3`;
+
+    if (!wcKey || !wcSecret) {
+      result.wc_read = { status: "failed", error: "Missing WC_CONSUMER_KEY/SECRET" };
+      result.wc_write = { status: "failed", error: "Missing WC_CONSUMER_KEY/SECRET" };
+      result.ok = false;
+    } else {
+      const wcAuth = `consumer_key=${encodeURIComponent(wcKey)}&consumer_secret=${encodeURIComponent(wcSecret)}`;
+      try {
+        const wcReadRes = await fetch(`${wcBase}/products?per_page=1&${wcAuth}`);
+        const wcReadBody = await wcReadRes.text();
+        if (!wcReadRes.ok) {
+          result.wc_read = { status: "failed", error: `HTTP ${wcReadRes.status}: ${wcReadBody.slice(0, 300)}` };
+          result.ok = false;
+        } else {
+          const products = JSON.parse(wcReadBody);
+          const sample = products[0];
+          result.wc_read = { status: "ok", sample_product_id: sample?.id ?? null, sample_name: sample?.name ?? null };
+
+          // Write test: PUT same description back to itself (no-op write)
+          if (sample?.id) {
+            const original = sample.description ?? "";
+            const wcWriteRes = await fetch(`${wcBase}/products/${sample.id}?${wcAuth}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ description: original }),
+            });
+            const wcWriteBody = await wcWriteRes.text();
+            if (!wcWriteRes.ok) {
+              result.wc_write = { status: "failed", error: `HTTP ${wcWriteRes.status}: ${wcWriteBody.slice(0, 300)}` };
+              result.ok = false;
+            } else {
+              result.wc_write = { status: "ok", updated_id: sample.id, note: "no-op PUT (description unchanged)" };
+            }
+          } else {
+            result.wc_write = { status: "skipped", error: "no product available to write-test" };
+          }
+        }
+      } catch (wcErr: any) {
+        result.wc_read = result.wc_read ?? { status: "failed", error: wcErr.message };
+        result.wc_write = result.wc_write ?? { status: "failed", error: wcErr.message };
+        result.ok = false;
+      }
+    }
+
     return result;
   }, { functionName: "wp-test", authMode: "required", requireCompany: false, wrapResult: false })
 );
