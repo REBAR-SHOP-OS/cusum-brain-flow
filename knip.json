@@ -1,0 +1,29 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main.tsx",
+    "index.html",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "tailwind.config.ts",
+    "postcss.config.js",
+    "eslint.config.js",
+    "src/test/setup.ts",
+    "src/**/*.test.{ts,tsx}",
+    "supabase/functions/*/index.ts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "supabase/functions/**/*.ts"
+  ],
+  "ignore": [
+    "src/integrations/supabase/types.ts",
+    "src/integrations/supabase/client.ts",
+    "supabase/functions/_shared/**",
+    "supabase/functions/*/lib/**"
+  ],
+  "ignoreDependencies": [
+    "@tailwindcss/typography"
+  ],
+  "ignoreExportsUsedInFile": true
+}
