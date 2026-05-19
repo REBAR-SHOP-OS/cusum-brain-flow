@@ -6,7 +6,7 @@ export const TEAM_HUB_ADMIN_EMAILS = [
   "sattar@rebar.shop",
 ] as const;
 
-export const TEAM_HUB_OFFICIAL_WRITER_EMAILS = TEAM_HUB_ADMIN_EMAILS;
+
 
 export const TEAM_HUB_PROTECTED_CHANNELS = [
   "Official Channel",
