@@ -114,6 +114,7 @@ import VizzyVoice from "./pages/VizzyVoice";
 import CameraIntelligence from "./pages/CameraIntelligence";
 import NilaInterpreter from "./pages/NilaInterpreter";
 import VizzyLive from "./pages/VizzyLive";
+import DashboardV2 from "./pages/DashboardV2";
 const queryClient = new QueryClient();
 
 /** Helper to wrap protected routes with layout + page-level error boundary */
@@ -168,6 +169,7 @@ const App = () => (
                     <Route path="/home" element={<P><Home /></P>} />
                     <Route path="/ceo" element={<P><CEOPortal /></P>} />
                     <Route path="/live-monitor" element={<P><LiveMonitor /></P>} />
+                    <Route path="/dashboard/v2" element={<P><DashboardV2 /></P>} />
                     <Route path="/voice-agent" element={<P><VoiceAgent /></P>} />
                     
                     <Route path="/tasks" element={<P><Tasks /></P>} />
