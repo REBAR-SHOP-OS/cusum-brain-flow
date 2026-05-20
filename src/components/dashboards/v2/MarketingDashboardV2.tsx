@@ -27,6 +27,7 @@ export function MarketingDashboardV2({ roleSwitcher }: { roleSwitcher?: ReactNod
       title="Marketing · Content & Reach"
       subtitle="Live"
       roleSwitcher={roleSwitcher}
+      shortcuts={<ShortcutBar items={mktShortcuts} />}
       statusStrip={
         <>
           <StatusTile label="Posts Scheduled" value="14" hint="Next 7d" />
