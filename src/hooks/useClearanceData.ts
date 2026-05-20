@@ -114,6 +114,7 @@ export function useClearanceData() {
           evidence_status: ev?.status || "pending",
           verified_at: ev?.verified_at || null,
           verified_by_name: ev?.verified_by ? profileMap.get(ev.verified_by) || null : null,
+          created_at: item.created_at || null,
         } as ClearanceItem;
       });
     },
