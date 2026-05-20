@@ -30,6 +30,7 @@ export interface ClearanceItem {
   evidence_status: string;
   verified_at: string | null;
   verified_by_name: string | null;
+  created_at: string | null;
 }
 
 export function useClearanceData() {
@@ -113,6 +114,7 @@ export function useClearanceData() {
           evidence_status: ev?.status || "pending",
           verified_at: ev?.verified_at || null,
           verified_by_name: ev?.verified_by ? profileMap.get(ev.verified_by) || null : null,
+          created_at: item.created_at || null,
         } as ClearanceItem;
       });
     },
@@ -147,6 +149,7 @@ export function useClearanceData() {
     barlistRevisionNo: number | null;
     barlistStatus: string | null;
     cutPlanStatus: string | null;
+    latestCreatedAt: number;
     items: ClearanceItem[];
   }>();
   for (const item of visibleItems) {
@@ -163,10 +166,14 @@ export function useClearanceData() {
         barlistRevisionNo: item.barlist_revision_no,
         barlistStatus: item.barlist_status,
         cutPlanStatus: item.cut_plan_status,
+        latestCreatedAt: 0,
         items: [],
       });
     }
-    byProject.get(key)!.items.push(item);
+    const g = byProject.get(key)!;
+    g.items.push(item);
+    const t = item.created_at ? new Date(item.created_at).getTime() : 0;
+    if (t > g.latestCreatedAt) g.latestCreatedAt = t;
   }
 
   // Flatten to Map<label, items> for backward compat with ClearanceStation consumer.

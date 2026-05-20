@@ -58,10 +58,12 @@ export default function ClearanceStation() {
     return () => clearTimeout(t);
   }, [manifestComplete]);
 
-  // Sort by customer → barlist label so cards keep a stable visual position.
+  // Sort plans by newest first (latestCreatedAt desc); fallback to label for stability.
   const projectEntries = useMemo(
     () =>
       [...byProjectKey.entries()].sort(([, a], [, b]) => {
+        const diff = (b.latestCreatedAt || 0) - (a.latestCreatedAt || 0);
+        if (diff !== 0) return diff;
         const sa = `${a.customerName || "~"}|${a.barlistName || a.label}`;
         const sb = `${b.customerName || "~"}|${b.barlistName || b.label}`;
         return sa.localeCompare(sb);
@@ -72,13 +74,20 @@ export default function ClearanceStation() {
   // Group ALL barlists/cut-plans for the same customer together — across projects.
   type GroupVal = NonNullable<ReturnType<typeof byProjectKey.get>>;
   const customerGroups = useMemo(() => {
-    const map = new Map<string, { customerName: string; plans: Array<[string, GroupVal]> }>();
+    const map = new Map<string, { customerName: string; latest: number; plans: Array<[string, GroupVal]> }>();
     for (const [key, group] of projectEntries) {
       const cname = group.customerName || "Unassigned";
-      if (!map.has(cname)) map.set(cname, { customerName: cname, plans: [] });
-      map.get(cname)!.plans.push([key, group as GroupVal]);
+      if (!map.has(cname)) map.set(cname, { customerName: cname, latest: 0, plans: [] });
+      const bucket = map.get(cname)!;
+      bucket.plans.push([key, group as GroupVal]);
+      if ((group.latestCreatedAt || 0) > bucket.latest) bucket.latest = group.latestCreatedAt || 0;
     }
-    return [...map.values()];
+    // Newest customer first; Unassigned last
+    return [...map.values()].sort((a, b) => {
+      if (a.customerName === "Unassigned") return 1;
+      if (b.customerName === "Unassigned") return -1;
+      return b.latest - a.latest;
+    });
   }, [projectEntries]);
 
   const [expandedCustomers, setExpandedCustomers] = useState<Set<string>>(new Set());

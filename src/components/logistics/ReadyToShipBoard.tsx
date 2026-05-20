@@ -49,15 +49,21 @@ function groupByCustomer(items: ReadyItem[]): CustomerGroup[] {
     }
     plans.get(planKey)!.items.push(it);
   }
+  const newest = (its: ReadyItem[]) =>
+    Math.max(0, ...its.map((i) => (i.ready_at ? new Date(i.ready_at).getTime() : 0)));
   return [...byCustomer.entries()]
     .map(([customerName, plansMap]) => {
-      const plans = [...plansMap.values()].sort((a, b) =>
-        (a.projectName || a.planName).localeCompare(b.projectName || b.planName)
-      );
+      // Newest plan first within each customer
+      const plans = [...plansMap.values()].sort((a, b) => newest(b.items) - newest(a.items));
       const totalItems = plans.reduce((n, p) => n + p.items.length, 0);
       return { customerName, plans, totalItems };
     })
-    .sort((a, b) => a.customerName.localeCompare(b.customerName));
+    // Newest customer (by their most recent ready item) first; Unassigned last
+    .sort((a, b) => {
+      if (a.customerName === "Unassigned") return 1;
+      if (b.customerName === "Unassigned") return -1;
+      return newest(b.plans.flatMap((p) => p.items)) - newest(a.plans.flatMap((p) => p.items));
+    });
 }
 
 export function ReadyToShipBoard() {
