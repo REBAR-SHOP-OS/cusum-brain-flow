@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
 import { ShortcutBar, ShortcutItem } from "./Shortcuts";
-import { Calculator, HeartPulse, FileText, Users, Plug } from "lucide-react";
+import { Calculator, HeartPulse, FileText, Users, Plug, Clock } from "lucide-react";
 
 const acctShortcuts: ShortcutItem[] = [
   { label: "Accounting", to: "/accounting", icon: Calculator },
@@ -10,6 +10,7 @@ const acctShortcuts: ShortcutItem[] = [
   { label: "Invoices", to: "/sales/invoices", icon: FileText },
   { label: "Customers", to: "/customers", icon: Users },
   { label: "Integrations", to: "/integrations", icon: Plug },
+  { label: "Time Clock", to: "/timeclock", icon: Clock },
 ];
 
 
