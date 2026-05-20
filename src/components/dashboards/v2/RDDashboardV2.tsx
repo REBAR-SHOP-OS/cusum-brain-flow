@@ -1,6 +1,17 @@
 import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
+import { ShortcutBar, ShortcutItem } from "./Shortcuts";
+import { Hammer, Network, Brain, Zap, Shield } from "lucide-react";
+
+const rdShortcuts: ShortcutItem[] = [
+  { label: "App Builder", to: "/app-builder", icon: Hammer },
+  { label: "Architecture", to: "/architecture", icon: Network },
+  { label: "Brain", to: "/brain", icon: Brain },
+  { label: "Automations", to: "/automations", icon: Zap },
+  { label: "Admin", to: "/admin", icon: Shield },
+];
+
 
 const adoption = [8, 12, 18, 22, 28, 34, 40, 48, 54, 62, 68, 74, 78, 82];
 
