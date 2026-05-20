@@ -1,6 +1,17 @@
 import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
+import { ShortcutBar, ShortcutItem } from "./Shortcuts";
+import { Calculator, FileText, Users, Briefcase, CheckSquare } from "lucide-react";
+
+const estShortcuts: ShortcutItem[] = [
+  { label: "Estimation", to: "/estimation", icon: Calculator },
+  { label: "Quotations", to: "/sales/quotations", icon: FileText },
+  { label: "Customers", to: "/customers", icon: Users },
+  { label: "Office Portal", to: "/office", icon: Briefcase },
+  { label: "Tasks", to: "/tasks", icon: CheckSquare },
+];
+
 
 const series = [22, 25, 28, 26, 31, 33, 30, 35, 38, 36, 40, 42, 45, 48];
 
