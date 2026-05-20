@@ -28,6 +28,7 @@ export function CEODashboardV2({ roleSwitcher }: { roleSwitcher?: ReactNode }) {
       title="CEO · Business Heartbeat"
       subtitle="Live"
       roleSwitcher={roleSwitcher}
+      shortcuts={<ShortcutBar items={ceoShortcuts} />}
       statusStrip={
         <>
           <StatusTile label="Cash Position" value="$1.04M" tone="ok" delta={{ value: "+2.4%", direction: "up", good: true }} hint="vs last week" />
