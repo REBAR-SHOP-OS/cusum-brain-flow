@@ -17,6 +17,7 @@ export interface SupabaseWorkOrder {
   order_id: string;
   customer_name: string | null;
   order_number: string | null;
+  created_at: string | null;
 }
 
 async function fetchWorkOrders(): Promise<SupabaseWorkOrder[]> {
