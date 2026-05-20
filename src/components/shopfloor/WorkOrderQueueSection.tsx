@@ -102,16 +102,17 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
 }
 
 
-function StationGroup({ stationName, orders, onUpdateStatus, onStatusChanged }: {
+function StationGroup({ stationName, orders, open, onOpenChange, onUpdateStatus, onStatusChanged }: {
   stationName: string;
   orders: SupabaseWorkOrder[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
   onStatusChanged: (name: string, action: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={onOpenChange}>
+
       <CollapsibleTrigger className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-md bg-muted/50 hover:bg-muted transition-colors">
         {open ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
         <Users className="w-3.5 h-3.5 text-primary shrink-0" />
