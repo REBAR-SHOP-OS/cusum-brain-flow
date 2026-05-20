@@ -6,11 +6,13 @@ export interface DashboardShellProps {
   title: string;
   subtitle?: string;
   roleSwitcher?: ReactNode;
+  shortcuts?: ReactNode;
   statusStrip: ReactNode;
   actionQueue: ReactNode;
   pulse: ReactNode;
   drilldowns?: ReactNode;
 }
+
 
 type SectionKey = "statusStrip" | "actionQueue" | "pulse" | "drilldowns";
 type Density = "compact" | "comfortable";
