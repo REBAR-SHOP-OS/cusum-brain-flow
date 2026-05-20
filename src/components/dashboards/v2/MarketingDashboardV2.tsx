@@ -1,6 +1,17 @@
 import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
+import { ShortcutBar, ShortcutItem } from "./Shortcuts";
+import { Share2, Megaphone, Video, Mail, Search } from "lucide-react";
+
+const mktShortcuts: ShortcutItem[] = [
+  { label: "Social Media", to: "/social-media-manager", icon: Share2 },
+  { label: "Ad Director", to: "/ad-director", icon: Megaphone },
+  { label: "Video Studio", to: "/video-studio", icon: Video },
+  { label: "Email Marketing", to: "/email-marketing", icon: Mail },
+  { label: "SEO", to: "/seo", icon: Search },
+];
+
 
 const seriesClicks = [320, 345, 380, 360, 410, 430, 425, 470, 495, 510, 540, 580, 605, 622];
 
