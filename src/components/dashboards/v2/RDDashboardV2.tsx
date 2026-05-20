@@ -28,6 +28,7 @@ export function RDDashboardV2({ roleSwitcher }: { roleSwitcher?: ReactNode }) {
       title="R&D · Experiments & Adoption"
       subtitle="Live"
       roleSwitcher={roleSwitcher}
+      shortcuts={<ShortcutBar items={rdShortcuts} />}
       statusStrip={
         <>
           <StatusTile label="Active Experiments" value="6" hint="2 in promotion" />
