@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
 import { ShortcutBar, ShortcutItem } from "./Shortcuts";
-import { Calculator, FileText, Users, Briefcase, CheckSquare } from "lucide-react";
+import { Calculator, FileText, Users, Briefcase, CheckSquare, Clock } from "lucide-react";
 
 const estShortcuts: ShortcutItem[] = [
   { label: "Estimation", to: "/estimation", icon: Calculator },
@@ -10,6 +10,7 @@ const estShortcuts: ShortcutItem[] = [
   { label: "Customers", to: "/customers", icon: Users },
   { label: "Office Portal", to: "/office", icon: Briefcase },
   { label: "Tasks", to: "/tasks", icon: CheckSquare },
+  { label: "Time Clock", to: "/timeclock", icon: Clock },
 ];
 
 
