@@ -28,6 +28,7 @@ export function ShopFloorDashboardV2({ roleSwitcher }: { roleSwitcher?: ReactNod
       title="Shop Floor · Production Cockpit"
       subtitle="Live"
       roleSwitcher={roleSwitcher}
+      shortcuts={<ShortcutBar items={sfShortcuts} />}
       statusStrip={
         <>
           <StatusTile label="Active Stations" value="4 / 5" tone="warn" hint="M3 down" />
