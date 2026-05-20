@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Search, Bell, ChevronDown, Settings2, RotateCcw } from "lucide-react";
+import { Search, Bell, Settings2, RotateCcw } from "lucide-react";
 import { v2StyleVars } from "./theme";
 
 export interface DashboardShellProps {
@@ -91,9 +91,6 @@ export function DashboardShell({
         </div>
         <div className="flex-1" />
         {roleSwitcher}
-        <button className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border border-[hsl(var(--v2-border))] text-[hsl(var(--v2-text-muted))] hover:text-[hsl(var(--v2-text))]">
-          Today <ChevronDown className="w-3 h-3" />
-        </button>
         <button className="p-1.5 rounded text-[hsl(var(--v2-text-muted))] hover:text-[hsl(var(--v2-text))]">
           <Search className="w-4 h-4" />
         </button>
