@@ -176,7 +176,11 @@ export function DashboardShell({
 
       {/* Body */}
       <div className={pad}>
+        {/* Shortcuts */}
+        {shortcuts && <div>{shortcuts}</div>}
+
         {/* Row 1 — Status strip */}
+
         {prefs.visible.statusStrip && (
           <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 ${gap}`}>
             {statusStrip}
