@@ -19,6 +19,19 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   completed: { label: "DONE", color: "bg-primary/20 text-primary" },
 };
 
+const EXPAND_KEY = "woq:expanded:v1";
+
+function loadExpanded(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(EXPAND_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChanged }: WorkOrderQueueSectionProps) {
   const activeOrders = useMemo(() =>
     workOrders.filter(wo => wo.status === "in_progress" || wo.status === "on_hold" || wo.status === "pending" || wo.status === "queued"),
@@ -43,6 +56,26 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
     });
   }, [activeOrders]);
 
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => loadExpanded());
+
+  // Prune stale keys when group set changes; persist on every change
+  useEffect(() => {
+    const names = new Set(groups.map(([n]) => n));
+    setExpanded(prev => {
+      const next: Record<string, boolean> = {};
+      for (const k of Object.keys(prev)) if (names.has(k)) next[k] = prev[k];
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups.map(([n]) => n).join("|")]);
+
+  useEffect(() => {
+    try { localStorage.setItem(EXPAND_KEY, JSON.stringify(expanded)); } catch {}
+  }, [expanded]);
+
+  const setOpenFor = (key: string, open: boolean) =>
+    setExpanded(prev => ({ ...prev, [key]: open }));
+
   return (
     <div className="space-y-4">
       <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Work Order Queue</h2>
@@ -53,12 +86,21 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
         </div>
       ) : (
         groups.map(([station, orders]) => (
-          <StationGroup key={station} stationName={station} orders={orders} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
+          <StationGroup
+            key={station}
+            stationName={station}
+            orders={orders}
+            open={!!expanded[station]}
+            onOpenChange={(o) => setOpenFor(station, o)}
+            onUpdateStatus={onUpdateStatus}
+            onStatusChanged={onStatusChanged}
+          />
         ))
       )}
     </div>
   );
 }
+
 
 function StationGroup({ stationName, orders, onUpdateStatus, onStatusChanged }: {
   stationName: string;
