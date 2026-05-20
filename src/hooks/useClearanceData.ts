@@ -149,6 +149,7 @@ export function useClearanceData() {
     barlistRevisionNo: number | null;
     barlistStatus: string | null;
     cutPlanStatus: string | null;
+    latestCreatedAt: number;
     items: ClearanceItem[];
   }>();
   for (const item of visibleItems) {
