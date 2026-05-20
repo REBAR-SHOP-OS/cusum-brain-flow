@@ -27,6 +27,7 @@ export function EstimationDashboardV2({ roleSwitcher }: { roleSwitcher?: ReactNo
       title="Estimation · Extract Workbench"
       subtitle="Live"
       roleSwitcher={roleSwitcher}
+      shortcuts={<ShortcutBar items={estShortcuts} />}
       statusStrip={
         <>
           <StatusTile label="PDFs in Queue" value="7" hint="3 priority" />
