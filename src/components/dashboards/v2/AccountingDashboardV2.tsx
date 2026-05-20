@@ -1,6 +1,17 @@
 import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
+import { ShortcutBar, ShortcutItem } from "./Shortcuts";
+import { Calculator, HeartPulse, FileText, Users, Plug } from "lucide-react";
+
+const acctShortcuts: ShortcutItem[] = [
+  { label: "Accounting", to: "/accounting", icon: Calculator },
+  { label: "Health", to: "/accounting/health", icon: HeartPulse },
+  { label: "Invoices", to: "/sales/invoices", icon: FileText },
+  { label: "Customers", to: "/customers", icon: Users },
+  { label: "Integrations", to: "/integrations", icon: Plug },
+];
+
 
 const cashSeries = [85, 92, 88, 95, 102, 98, 110, 115, 108, 121, 128, 132, 138, 145];
 
