@@ -1,30 +1,33 @@
 ## Goal
-Add a row of **5 shortcut tiles** at the very top of every department dashboard (CEO, GM, Sales, Marketing, Estimation, Shop Floor, Accounting, R&D) on `/dashboard/v2`. Each tile = icon + label, clicks navigate to the most-used app/section for that department.
-
-## Default shortcuts per department
-| Dashboard | Shortcuts |
-|---|---|
-| **CEO** | CEO Portal · Pipeline · Accounting · Shop Floor · Vizzy |
-| **GM** | Shop Floor · Pipeline · Accounting · Team Hub · Tasks |
-| **Sales** | Sales Hub · Pipeline · Quotations · Customers · Lead Scoring |
-| **Marketing** | Social Media Manager · Ad Director · Video Studio · Email Marketing · SEO |
-| **Estimation** | Estimation · Quotations · Customers · Office Portal · Tasks |
-| **Shop Floor** | Shop Floor · Cutter · Station · Clearance · Delivery Ops |
-| **Accounting** | Accounting · Accounting Health · Invoices · Customers · Integrations |
-| **R&D** | App Builder · Architecture · Brain · Automations · Admin Panel |
+Preserve the user's place in the Work Order Queue (`/shopfloor/station` → `WorkOrderQueueSection`) across re-renders, tab switches, and page reloads:
+- Which customer groups are expanded/collapsed
+- The window scroll position
 
 ## Implementation
-1. **`DashboardShell.tsx`** — add optional `shortcuts?: ReactNode` prop, rendered as a horizontal strip immediately below the header (above the status strip), shown only when provided. Use the existing `v2-panel` / `v2-border` tokens to stay on-theme; honor density (compact/comfortable) for padding.
-2. **New `Shortcuts.tsx`** in `src/components/dashboards/v2/` — exports:
-   - `ShortcutTile({ icon, label, to })` — small card with lucide icon + label, navigates via `react-router-dom`'s `Link`.
-   - `ShortcutBar({ items })` — 5-column grid (responsive: 2 cols mobile, 5 cols ≥sm).
-3. **Each `*DashboardV2.tsx`** — import the bar, define a `const shortcuts = [...]` array with lucide icons + routes from the table above, pass via `shortcuts={<ShortcutBar items={shortcuts} />}`.
 
-No backend/data changes. No layout shift to existing sections. Adds the bar above; everything else unchanged.
+### 1. Group expansion state — lifted + persisted
+Currently each `StationGroup` holds local `useState(false)` so every render forgets it.
+
+- In `WorkOrderQueueSection`: add a single `expanded: Record<string, boolean>` state, hydrated from `localStorage` key `woq:expanded:v1` on mount, written back on every change (debounced via effect).
+- Pass `open` + `onOpenChange` down to `StationGroup` (controlled). Remove `StationGroup`'s internal `useState`.
+- Keys = customer name (already used as group key).
+- Prune stale keys on hydrate by intersecting with current group names (keeps storage small).
+
+### 2. Scroll position — restore on mount
+- In `StationDashboard.tsx` (page that mounts WOQ): add a small `useEffect` that:
+  - On mount: reads `localStorage["woq:scrollY:v1"]` and `window.scrollTo(0, y)` after a microtask (so content has rendered).
+  - On scroll: throttled (rAF) write of `window.scrollY` to that key.
+  - On unmount: final flush.
+- Scoped to this page only — does not affect other pages.
+
+### 3. Storage helpers
+Inline in the component (no new lib file needed). Wrap reads/writes in `try/catch` to ignore quota or private-mode errors.
+
+## Files touched
+- `src/components/shopfloor/WorkOrderQueueSection.tsx` — lift expansion state, persist.
+- `src/pages/StationDashboard.tsx` — add scroll persistence effect.
 
 ## Out of scope
-- Per-user customization of shortcuts (can be added later via the existing dashboard `prefs` localStorage if you want).
-- Permissions filtering (links just render; existing route guards handle access).
-
-## Confirm before I build
-- Are the default shortcut sets above good, or do you want to swap any? (e.g. replace "Vizzy" on CEO with "Live Monitor", etc.)
+- Per-user (DB-backed) persistence — localStorage is per-device and matches "don't lose my place" intent.
+- Persisting status of completed/dismissed orders.
+- Animations or scroll-anchoring of newly added rows.
