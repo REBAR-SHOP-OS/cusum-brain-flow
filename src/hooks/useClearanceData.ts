@@ -166,10 +166,14 @@ export function useClearanceData() {
         barlistRevisionNo: item.barlist_revision_no,
         barlistStatus: item.barlist_status,
         cutPlanStatus: item.cut_plan_status,
+        latestCreatedAt: 0,
         items: [],
       });
     }
-    byProject.get(key)!.items.push(item);
+    const g = byProject.get(key)!;
+    g.items.push(item);
+    const t = item.created_at ? new Date(item.created_at).getTime() : 0;
+    if (t > g.latestCreatedAt) g.latestCreatedAt = t;
   }
 
   // Flatten to Map<label, items> for backward compat with ClearanceStation consumer.
