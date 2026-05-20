@@ -45,6 +45,7 @@ async function fetchWorkOrders(): Promise<SupabaseWorkOrder[]> {
     order_id: wo.order_id,
     customer_name: wo.orders?.customers?.name || null,
     order_number: wo.orders?.order_number || null,
+    created_at: wo.created_at || null,
   }));
 
   // Filter out work orders with zero cut_plan_items (empty shells)
