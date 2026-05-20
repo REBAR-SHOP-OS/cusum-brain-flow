@@ -1,6 +1,17 @@
 import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
+import { ShortcutBar, ShortcutItem } from "./Shortcuts";
+import { Briefcase, Workflow, FileText, Users, Target } from "lucide-react";
+
+const salesShortcuts: ShortcutItem[] = [
+  { label: "Sales Hub", to: "/sales", icon: Briefcase },
+  { label: "Pipeline", to: "/pipeline", icon: Workflow },
+  { label: "Quotations", to: "/sales/quotations", icon: FileText },
+  { label: "Customers", to: "/customers", icon: Users },
+  { label: "Lead Scoring", to: "/lead-scoring", icon: Target },
+];
+
 
 const pipelineSeries = [1.2, 1.3, 1.35, 1.4, 1.45, 1.5, 1.55, 1.6, 1.7, 1.75, 1.78, 1.8].map(v => v * 100);
 
