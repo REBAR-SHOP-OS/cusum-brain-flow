@@ -1,6 +1,17 @@
 import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
+import { ShortcutBar, ShortcutItem } from "./Shortcuts";
+import { Factory, Scissors, Monitor, ShieldCheck, Truck } from "lucide-react";
+
+const sfShortcuts: ShortcutItem[] = [
+  { label: "Shop Floor", to: "/shop-floor", icon: Factory },
+  { label: "Cutter", to: "/shopfloor/cutter", icon: Scissors },
+  { label: "Station", to: "/shopfloor/station", icon: Monitor },
+  { label: "Clearance", to: "/shopfloor/clearance", icon: ShieldCheck },
+  { label: "Delivery Ops", to: "/shopfloor/delivery-ops", icon: Truck },
+];
+
 
 const tonsSeries = [38, 42, 44, 41, 47, 49, 48, 52, 54, 53, 55, 58, 60, 55];
 
@@ -17,6 +28,7 @@ export function ShopFloorDashboardV2({ roleSwitcher }: { roleSwitcher?: ReactNod
       title="Shop Floor · Production Cockpit"
       subtitle="Live"
       roleSwitcher={roleSwitcher}
+      shortcuts={<ShortcutBar items={sfShortcuts} />}
       statusStrip={
         <>
           <StatusTile label="Active Stations" value="4 / 5" tone="warn" hint="M3 down" />

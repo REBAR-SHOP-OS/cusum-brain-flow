@@ -6,11 +6,13 @@ export interface DashboardShellProps {
   title: string;
   subtitle?: string;
   roleSwitcher?: ReactNode;
+  shortcuts?: ReactNode;
   statusStrip: ReactNode;
   actionQueue: ReactNode;
   pulse: ReactNode;
   drilldowns?: ReactNode;
 }
+
 
 type SectionKey = "statusStrip" | "actionQueue" | "pulse" | "drilldowns";
 type Density = "compact" | "comfortable";
@@ -47,11 +49,13 @@ export function DashboardShell({
   title,
   subtitle,
   roleSwitcher,
+  shortcuts,
   statusStrip,
   actionQueue,
   pulse,
   drilldowns,
 }: DashboardShellProps) {
+
   const [prefs, setPrefs] = useState<DashPrefs>(DEFAULTS);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -172,7 +176,11 @@ export function DashboardShell({
 
       {/* Body */}
       <div className={pad}>
+        {/* Shortcuts */}
+        {shortcuts && <div>{shortcuts}</div>}
+
         {/* Row 1 — Status strip */}
+
         {prefs.visible.statusStrip && (
           <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 ${gap}`}>
             {statusStrip}
