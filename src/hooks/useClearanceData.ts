@@ -30,6 +30,7 @@ export interface ClearanceItem {
   evidence_status: string;
   verified_at: string | null;
   verified_by_name: string | null;
+  created_at: string | null;
 }
 
 export function useClearanceData() {
