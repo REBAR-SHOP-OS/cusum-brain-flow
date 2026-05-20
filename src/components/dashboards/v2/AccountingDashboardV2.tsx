@@ -28,6 +28,7 @@ export function AccountingDashboardV2({ roleSwitcher }: { roleSwitcher?: ReactNo
       title="Accounting · Cash Control"
       subtitle="Live"
       roleSwitcher={roleSwitcher}
+      shortcuts={<ShortcutBar items={acctShortcuts} />}
       statusStrip={
         <>
           <StatusTile label="Bank Balance" value="$1.04M" tone="ok" hint="Plaid · live" />
