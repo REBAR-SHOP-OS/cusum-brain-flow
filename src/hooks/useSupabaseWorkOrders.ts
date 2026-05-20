@@ -23,9 +23,9 @@ async function fetchWorkOrders(): Promise<SupabaseWorkOrder[]> {
   const { data: workOrders, error: err } = await supabase
     .from("work_orders")
     .select("*, orders(order_number, customers(name))")
-    .order("priority", { ascending: false })
-    .order("scheduled_start", { ascending: true })
-    .limit(100);
+    .in("status", ["pending", "queued", "in_progress", "on_hold"])
+    .order("created_at", { ascending: false })
+    .limit(500);
 
   if (err) throw new Error(err.message);
 
