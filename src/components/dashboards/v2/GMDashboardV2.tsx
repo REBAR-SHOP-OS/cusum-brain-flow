@@ -27,6 +27,7 @@ export function GMDashboardV2({ roleSwitcher }: { roleSwitcher?: ReactNode }) {
       title="General Manager · Operations Cockpit"
       subtitle="Live"
       roleSwitcher={roleSwitcher}
+      shortcuts={<ShortcutBar items={gmShortcuts} />}
       statusStrip={
         <>
           <StatusTile label="Orders Today" value="34" delta={{ value: "+3", direction: "up", good: true }} />
