@@ -1,6 +1,17 @@
 import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
+import { ShortcutBar, ShortcutItem } from "./Shortcuts";
+import { Factory, Workflow, Calculator, Users, CheckSquare } from "lucide-react";
+
+const gmShortcuts: ShortcutItem[] = [
+  { label: "Shop Floor", to: "/shop-floor", icon: Factory },
+  { label: "Pipeline", to: "/pipeline", icon: Workflow },
+  { label: "Accounting", to: "/accounting", icon: Calculator },
+  { label: "Team Hub", to: "/team-hub", icon: Users },
+  { label: "Tasks", to: "/tasks", icon: CheckSquare },
+];
+
 
 const throughput = [38, 42, 41, 45, 44, 48, 47, 50, 49, 52, 51, 48, 53, 55];
 
