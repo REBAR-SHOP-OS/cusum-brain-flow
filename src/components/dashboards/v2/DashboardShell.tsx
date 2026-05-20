@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useState } from "react";
-import { Search, Bell, ChevronDown, Settings2, RotateCcw } from "lucide-react";
+import { Search, Bell, Settings2, RotateCcw } from "lucide-react";
 import { v2StyleVars } from "./theme";
 
 export interface DashboardShellProps {
