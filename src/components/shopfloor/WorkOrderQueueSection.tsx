@@ -27,14 +27,20 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
 
   const groups = useMemo(() => {
     const map = new Map<string, SupabaseWorkOrder[]>();
+    // activeOrders already arrive newest-first from the hook; preserve that insertion order
     for (const wo of activeOrders) {
       const key = wo.customer_name || "Unassigned";
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(wo);
     }
-    return [...map.entries()].sort((a, b) =>
-      a[0] === "Unassigned" ? 1 : b[0] === "Unassigned" ? -1 : a[0].localeCompare(b[0])
-    );
+    // Sort customer groups by their newest WO's created_at desc; Unassigned last
+    return [...map.entries()].sort((a, b) => {
+      if (a[0] === "Unassigned") return 1;
+      if (b[0] === "Unassigned") return -1;
+      const aNewest = Math.max(...a[1].map(w => new Date((w as any).created_at || (w as any).actual_start || 0).getTime()));
+      const bNewest = Math.max(...b[1].map(w => new Date((w as any).created_at || (w as any).actual_start || 0).getTime()));
+      return bNewest - aNewest;
+    });
   }, [activeOrders]);
 
   return (
