@@ -1,6 +1,17 @@
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
+import { ShortcutBar, ShortcutItem } from "./Shortcuts";
+import { Building2, Workflow, Calculator, Factory, Bot } from "lucide-react";
 import { ReactNode } from "react";
+
+const ceoShortcuts: ShortcutItem[] = [
+  { label: "CEO Portal", to: "/ceo", icon: Building2 },
+  { label: "Pipeline", to: "/pipeline", icon: Workflow },
+  { label: "Accounting", to: "/accounting", icon: Calculator },
+  { label: "Shop Floor", to: "/shop-floor", icon: Factory },
+  { label: "Vizzy", to: "/vizzy", icon: Bot },
+];
+
 
 const cashSeries = [820, 845, 833, 870, 902, 895, 921, 940, 933, 968, 985, 1012, 1020, 1045];
 
