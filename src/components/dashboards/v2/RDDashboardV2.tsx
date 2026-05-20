@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
 import { ShortcutBar, ShortcutItem } from "./Shortcuts";
-import { Hammer, Network, Brain, Zap, Shield } from "lucide-react";
+import { Hammer, Network, Brain, Zap, Shield, Clock } from "lucide-react";
 
 const rdShortcuts: ShortcutItem[] = [
   { label: "App Builder", to: "/app-builder", icon: Hammer },
@@ -10,6 +10,7 @@ const rdShortcuts: ShortcutItem[] = [
   { label: "Brain", to: "/brain", icon: Brain },
   { label: "Automations", to: "/automations", icon: Zap },
   { label: "Admin", to: "/admin", icon: Shield },
+  { label: "Time Clock", to: "/timeclock", icon: Clock },
 ];
 
 
