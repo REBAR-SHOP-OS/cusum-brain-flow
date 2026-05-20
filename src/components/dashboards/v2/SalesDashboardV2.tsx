@@ -28,6 +28,7 @@ export function SalesDashboardV2({ roleSwitcher }: { roleSwitcher?: ReactNode })
       title="Sales · Pipeline Command"
       subtitle="Live"
       roleSwitcher={roleSwitcher}
+      shortcuts={<ShortcutBar items={salesShortcuts} />}
       statusStrip={
         <>
           <StatusTile label="Pipeline" value="$1.8M" tone="ok" delta={{ value: "+$140K", direction: "up", good: true }} />
