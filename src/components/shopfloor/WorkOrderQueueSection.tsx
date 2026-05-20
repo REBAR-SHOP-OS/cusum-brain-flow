@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -18,6 +18,19 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   on_hold: { label: "ON HOLD", color: "bg-warning/20 text-warning" },
   completed: { label: "DONE", color: "bg-primary/20 text-primary" },
 };
+
+const EXPAND_KEY = "woq:expanded:v1";
+
+function loadExpanded(): Record<string, boolean> {
+  try {
+    const raw = localStorage.getItem(EXPAND_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChanged }: WorkOrderQueueSectionProps) {
   const activeOrders = useMemo(() =>
@@ -43,6 +56,26 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
     });
   }, [activeOrders]);
 
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => loadExpanded());
+
+  // Prune stale keys when group set changes; persist on every change
+  useEffect(() => {
+    const names = new Set(groups.map(([n]) => n));
+    setExpanded(prev => {
+      const next: Record<string, boolean> = {};
+      for (const k of Object.keys(prev)) if (names.has(k)) next[k] = prev[k];
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups.map(([n]) => n).join("|")]);
+
+  useEffect(() => {
+    try { localStorage.setItem(EXPAND_KEY, JSON.stringify(expanded)); } catch {}
+  }, [expanded]);
+
+  const setOpenFor = (key: string, open: boolean) =>
+    setExpanded(prev => ({ ...prev, [key]: open }));
+
   return (
     <div className="space-y-4">
       <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Work Order Queue</h2>
@@ -53,23 +86,33 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
         </div>
       ) : (
         groups.map(([station, orders]) => (
-          <StationGroup key={station} stationName={station} orders={orders} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
+          <StationGroup
+            key={station}
+            stationName={station}
+            orders={orders}
+            open={!!expanded[station]}
+            onOpenChange={(o) => setOpenFor(station, o)}
+            onUpdateStatus={onUpdateStatus}
+            onStatusChanged={onStatusChanged}
+          />
         ))
       )}
     </div>
   );
 }
 
-function StationGroup({ stationName, orders, onUpdateStatus, onStatusChanged }: {
+
+function StationGroup({ stationName, orders, open, onOpenChange, onUpdateStatus, onStatusChanged }: {
   stationName: string;
   orders: SupabaseWorkOrder[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
   onStatusChanged: (name: string, action: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <Collapsible open={open} onOpenChange={onOpenChange}>
+
       <CollapsibleTrigger className="flex items-center gap-2 w-full text-left px-3 py-2 rounded-md bg-muted/50 hover:bg-muted transition-colors">
         {open ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
         <Users className="w-3.5 h-3.5 text-primary shrink-0" />

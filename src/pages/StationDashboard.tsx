@@ -36,6 +36,39 @@ export default function StationDashboard() {
   const queryClient = useQueryClient();
   const { counts: readyCounts } = useReadyToShip();
 
+  // Persist & restore window scroll position across remounts/reloads
+  useEffect(() => {
+    const KEY = "woq:scrollY:v1";
+    try {
+      const raw = localStorage.getItem(KEY);
+      const y = raw ? parseInt(raw, 10) : 0;
+      if (y > 0) {
+        // wait for layout
+        const id = window.setTimeout(() => window.scrollTo(0, y), 0);
+        // also try after a short delay in case async data shifts layout
+        const id2 = window.setTimeout(() => window.scrollTo(0, y), 250);
+        var cleanupIds: number[] = [id, id2];
+      }
+    } catch {}
+
+    let raf = 0;
+    const onScroll = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame(() => {
+        raf = 0;
+        try { localStorage.setItem(KEY, String(window.scrollY)); } catch {}
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+      try { localStorage.setItem(KEY, String(window.scrollY)); } catch {}
+    };
+  }, []);
+
+
+
   const [typeFilter, setTypeFilter] = useState<MachineType | "all">("all");
   const [statusFilters, setStatusFilters] = useState<Set<MachineStatus>>(new Set());
   const [shiftFilter, setShiftFilter] = useState<ShiftType>(() => getCurrentShift(timezone));
