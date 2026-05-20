@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
 import { ShortcutBar, ShortcutItem } from "./Shortcuts";
-import { Share2, Megaphone, Video, Mail, Search } from "lucide-react";
+import { Share2, Megaphone, Video, Mail, Search, Clock } from "lucide-react";
 
 const mktShortcuts: ShortcutItem[] = [
   { label: "Social Media", to: "/social-media-manager", icon: Share2 },
@@ -10,6 +10,7 @@ const mktShortcuts: ShortcutItem[] = [
   { label: "Video Studio", to: "/video-studio", icon: Video },
   { label: "Email Marketing", to: "/email-marketing", icon: Mail },
   { label: "SEO", to: "/seo", icon: Search },
+  { label: "Time Clock", to: "/timeclock", icon: Clock },
 ];
 
 

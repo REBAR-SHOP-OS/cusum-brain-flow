@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
 import { ShortcutBar, ShortcutItem } from "./Shortcuts";
-import { Briefcase, Workflow, FileText, Users, Target } from "lucide-react";
+import { Briefcase, Workflow, FileText, Users, Target, Clock } from "lucide-react";
 
 const salesShortcuts: ShortcutItem[] = [
   { label: "Sales Hub", to: "/sales", icon: Briefcase },
@@ -10,6 +10,7 @@ const salesShortcuts: ShortcutItem[] = [
   { label: "Quotations", to: "/sales/quotations", icon: FileText },
   { label: "Customers", to: "/customers", icon: Users },
   { label: "Lead Scoring", to: "/lead-scoring", icon: Target },
+  { label: "Time Clock", to: "/timeclock", icon: Clock },
 ];
 
 

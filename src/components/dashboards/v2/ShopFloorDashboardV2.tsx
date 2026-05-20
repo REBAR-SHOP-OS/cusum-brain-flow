@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
 import { ShortcutBar, ShortcutItem } from "./Shortcuts";
-import { Factory, Scissors, Monitor, ShieldCheck, Truck } from "lucide-react";
+import { Factory, Scissors, Monitor, ShieldCheck, Truck, Clock } from "lucide-react";
 
 const sfShortcuts: ShortcutItem[] = [
   { label: "Shop Floor", to: "/shop-floor", icon: Factory },
@@ -10,6 +10,7 @@ const sfShortcuts: ShortcutItem[] = [
   { label: "Station", to: "/shopfloor/station", icon: Monitor },
   { label: "Clearance", to: "/shopfloor/clearance", icon: ShieldCheck },
   { label: "Delivery Ops", to: "/shopfloor/delivery-ops", icon: Truck },
+  { label: "Time Clock", to: "/timeclock", icon: Clock },
 ];
 
 

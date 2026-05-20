@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
 import { ShortcutBar, ShortcutItem } from "./Shortcuts";
-import { Factory, Workflow, Calculator, Users, CheckSquare } from "lucide-react";
+import { Factory, Workflow, Calculator, Users, CheckSquare, Clock } from "lucide-react";
 
 const gmShortcuts: ShortcutItem[] = [
   { label: "Shop Floor", to: "/shop-floor", icon: Factory },
@@ -10,6 +10,7 @@ const gmShortcuts: ShortcutItem[] = [
   { label: "Accounting", to: "/accounting", icon: Calculator },
   { label: "Team Hub", to: "/team-hub", icon: Users },
   { label: "Tasks", to: "/tasks", icon: CheckSquare },
+  { label: "Time Clock", to: "/timeclock", icon: Clock },
 ];
 
 

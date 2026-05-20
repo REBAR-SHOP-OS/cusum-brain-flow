@@ -1,7 +1,7 @@
 import { DashboardShell } from "./DashboardShell";
 import { StatusTile, Panel, ActionQueue, Sparkline, ActionItem } from "./primitives";
 import { ShortcutBar, ShortcutItem } from "./Shortcuts";
-import { Building2, Workflow, Calculator, Factory, Bot } from "lucide-react";
+import { Building2, Workflow, Calculator, Factory, Bot, Clock } from "lucide-react";
 import { ReactNode } from "react";
 
 const ceoShortcuts: ShortcutItem[] = [
@@ -10,6 +10,7 @@ const ceoShortcuts: ShortcutItem[] = [
   { label: "Accounting", to: "/accounting", icon: Calculator },
   { label: "Shop Floor", to: "/shop-floor", icon: Factory },
   { label: "Vizzy", to: "/vizzy", icon: Bot },
+  { label: "Time Clock", to: "/timeclock", icon: Clock },
 ];
 
 
