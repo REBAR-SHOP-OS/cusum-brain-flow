@@ -49,11 +49,13 @@ export function DashboardShell({
   title,
   subtitle,
   roleSwitcher,
+  shortcuts,
   statusStrip,
   actionQueue,
   pulse,
   drilldowns,
 }: DashboardShellProps) {
+
   const [prefs, setPrefs] = useState<DashPrefs>(DEFAULTS);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
