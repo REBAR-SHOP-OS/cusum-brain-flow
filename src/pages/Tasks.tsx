@@ -184,10 +184,13 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ─── Helpers ────────────────────────────────────────────
 function parseDateString(dateStr: string): Date {
+  const m = dateStr.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const [, y, mo, d] = m;
+    return new Date(Number(y), Number(mo) - 1, Number(d));
+  }
   const d = new Date(dateStr);
-  if (!isNaN(d.getTime())) return d;
-  const [year, month, day] = dateStr.slice(0, 10).split("-").map(Number);
-  return new Date(year, month - 1, day);
+  return isNaN(d.getTime()) ? new Date(NaN) : d;
 }
 
 function isOverdue(task: TaskRow) {
