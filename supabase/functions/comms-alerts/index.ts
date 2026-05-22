@@ -355,8 +355,11 @@ Deno.serve((req) =>
         .eq("alert_type", alertType);
       if (alertExists && alertExists > 0) continue;
 
-      const ownerEmail = comm.to_address?.toLowerCase() || "";
-      const pairing = pairingMap.get(ownerEmail);
+      const rawTo = extractEmailAddress(comm.to_address);
+      // Only treat as owner if it's an internal mailbox; never derive owner from an external address
+      const ownerEmail = isInternalRecipient(rawTo, config.internal_domain) ? rawTo : "";
+      const pairing = ownerEmail ? pairingMap.get(ownerEmail) : undefined;
+
 
       alerts.push({
         type: alertType,
