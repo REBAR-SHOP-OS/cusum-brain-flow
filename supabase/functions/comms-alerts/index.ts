@@ -438,7 +438,7 @@ Deno.serve((req) =>
           ? `[Alert] Missed call from ${alert.comm.from_address || "Unknown"}`
           : `[Alert] Unanswered email - ${alert.type.replace("response_time_", "")} - ${alert.comm.subject || ""}`;
 
-        if (alert.owner) {
+        if (alert.owner && isInternalRecipient(alert.owner, config.internal_domain)) {
           const ownerOk = await sendAlertEmail(accessToken, alert.owner, subj, html);
           if (ownerOk) {
             await svc.from("comms_alerts")
@@ -446,15 +446,27 @@ Deno.serve((req) =>
               .eq("communication_id", alert.commId)
               .eq("alert_type", alert.type);
           }
-        }
-
-        const ceoOk = await sendAlertEmail(accessToken, config.ceo_email, subj, html);
-        if (ceoOk) {
+        } else if (alert.owner) {
+          console.warn(`[guard] dropped external alert recipient: ${alert.owner} (comm ${alert.commId})`);
           await svc.from("comms_alerts")
-            .update({ ceo_notified_at: new Date().toISOString() })
+            .update({ metadata: { agent_name: alert.agent, subject: alert.comm.subject, dropped_external: true, dropped_recipient: alert.owner } })
             .eq("communication_id", alert.commId)
             .eq("alert_type", alert.type);
         }
+
+        const ceoAddr = extractEmailAddress(config.ceo_email);
+        if (isInternalRecipient(ceoAddr, config.internal_domain)) {
+          const ceoOk = await sendAlertEmail(accessToken, ceoAddr, subj, html);
+          if (ceoOk) {
+            await svc.from("comms_alerts")
+              .update({ ceo_notified_at: new Date().toISOString() })
+              .eq("communication_id", alert.commId)
+              .eq("alert_type", alert.type);
+          }
+        } else {
+          console.warn(`[guard] dropped external CEO recipient: ${config.ceo_email}`);
+        }
+
 
         results.push({ type: alert.type, owner: alert.owner, sent: true });
       } catch (e) {
