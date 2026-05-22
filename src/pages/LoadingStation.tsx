@@ -285,6 +285,96 @@ export default function LoadingStation() {
     },
   });
 
+  // ---------- Auto-match handler ----------
+  const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const findNextUnmatchedRef = (afterId?: string) => {
+    const idx = afterId ? checklistItems.findIndex((i) => i.id === afterId) : -1;
+    const ordered = idx >= 0 ? [...checklistItems.slice(idx + 1), ...checklistItems.slice(0, idx + 1)] : checklistItems;
+    return ordered.find((i) => !checklistMap.get(i.id)?.loaded) || null;
+  };
+
+  const runAutoMatch = async (file: File) => {
+    setAutoState("reading");
+    setAutoError(null);
+    setPendingPhoto(file);
+    try {
+      const base64 = await fileToBase64(file);
+      const unmatched = checklistItems.filter((i) => !checklistMap.get(i.id)?.loaded);
+      const pool = unmatched.length > 0 ? unmatched : checklistItems;
+      const { data, error } = await supabase.functions.invoke("match-tag-photo", {
+        body: {
+          imageBase64: base64,
+          candidates: pool.map((i) => ({
+            id: i.id,
+            mark_number: i.mark_number,
+            bar_code: i.bar_code,
+            cut_length_mm: i.cut_length_mm,
+            total_pieces: i.total_pieces,
+            asa_shape_code: i.asa_shape_code,
+          })),
+        },
+      });
+      if (error) throw error;
+      const { ranked = [], decision } = data || {};
+
+      if (decision === "auto" && ranked[0]) {
+        const top = ranked[0];
+        await uploadPhoto(top.id, file);
+        setLastMatch({ id: top.id, mark: top.mark_number, score: top.score });
+        toast.success(`Matched ${top.mark_number || "tag"} (${Math.round(top.score * 100)}%)`);
+        setAutoState("idle");
+        setPendingPhoto(null);
+        setCandidates([]);
+        const next = findNextUnmatchedRef(top.id);
+        if (next) {
+          setTimeout(() => {
+            document.getElementById(`load-item-${next.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 200);
+        }
+      } else if (decision === "confirm" && ranked.length > 0) {
+        setCandidates(ranked.slice(0, 3));
+        setAutoState("confirm");
+      } else {
+        setAutoError("Couldn't read tag clearly. Retake or pick manually.");
+        setAutoState("error");
+      }
+    } catch (e: any) {
+      console.error("auto-match error", e);
+      const msg = e?.message || "Match failed";
+      if (msg.includes("429")) setAutoError("Rate limited. Wait a moment and retry.");
+      else if (msg.includes("402")) setAutoError("AI credits exhausted. Add funds in Workspace > Usage.");
+      else setAutoError(msg);
+      setAutoState("error");
+    }
+  };
+
+  const confirmCandidate = async (id: string) => {
+    if (!pendingPhoto) return;
+    const cand = candidates.find((c) => c.id === id);
+    await uploadPhoto(id, pendingPhoto);
+    setLastMatch({ id, mark: cand?.mark_number || null, score: cand?.score || 0 });
+    toast.success(`Loaded ${cand?.mark_number || "item"}`);
+    setAutoState("idle");
+    setPendingPhoto(null);
+    setCandidates([]);
+  };
+
+  const resetAuto = () => {
+    setAutoState("idle");
+    setPendingPhoto(null);
+    setCandidates([]);
+    setAutoError(null);
+  };
+
+
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
