@@ -184,10 +184,13 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ─── Helpers ────────────────────────────────────────────
 function parseDateString(dateStr: string): Date {
+  const m = dateStr.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) {
+    const [, y, mo, d] = m;
+    return new Date(Number(y), Number(mo) - 1, Number(d));
+  }
   const d = new Date(dateStr);
-  if (!isNaN(d.getTime())) return d;
-  const [year, month, day] = dateStr.slice(0, 10).split("-").map(Number);
-  return new Date(year, month - 1, day);
+  return isNaN(d.getTime()) ? new Date(NaN) : d;
 }
 
 function isOverdue(task: TaskRow) {
@@ -1488,6 +1491,8 @@ export default function Tasks() {
                           onSelect={async (date) => {
                             const oldDate = selectedTask.due_date;
                             const newDate = date ? format(date, "yyyy-MM-dd") : null;
+                            const oldNorm = oldDate ? oldDate.slice(0, 10) : null;
+                            if (newDate === oldNorm) return;
                             const { error } = await supabase.from("tasks").update({ due_date: newDate, updated_at: new Date().toISOString() }).eq("id", selectedTask.id);
                             if (error) { toast.error(error.message); return; }
                             await writeAudit(selectedTask.id, "reschedule", "due_date", oldDate || null, newDate);
@@ -1516,7 +1521,7 @@ export default function Tasks() {
                       </PopoverContent>
                     </Popover>
                   ) : (
-                    <p className={cn("mt-0.5 text-sm", isOverdue(selectedTask) && "text-destructive font-medium")}>{selectedTask.due_date ? format(new Date(selectedTask.due_date), "MMM d, yyyy") : "—"}</p>
+                    <p className={cn("mt-0.5 text-sm", isOverdue(selectedTask) && "text-destructive font-medium")}>{selectedTask.due_date ? format(parseDateString(selectedTask.due_date), "MMM d, yyyy") : "—"}</p>
                   )}
                 </div>
                 <div>

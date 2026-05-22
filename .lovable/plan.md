@@ -1,82 +1,50 @@
-# Build the "Office Clearances" feature
+## Bug
 
-## Context check (important)
+In `src/pages/Tasks.tsx`, editing a task's due date appears flaky: the calendar highlights the wrong day, the detail panel sometimes shows the previous day, and the audit log records "no-op" reschedules like `2026-05-23 → 2026-05-23`.
 
-- The original "fix" prompt was a **false positive** — nothing in the codebase queries `office_clearances`, and the `/office` screenshot you sent shows the normal AI Extract loading state, not an error.
-- The word "clearance" is already used in this project for the **manufacturing QC step** (`cut_plan_items` + `clearance_evidence`, governed by the Production Flow Governance rule). To avoid colliding with that domain concept, this new feature is scoped explicitly as **Office Clearances** — office-side sign-offs on extract sessions / orders (e.g. estimation approved, pricing approved, customer notified).
+## Root Cause
 
-If that's not what you mean by "clearance", stop here and clarify before I implement.
+`parseDateString` (line 186) calls `new Date("2026-05-23")` first. JavaScript parses a bare `YYYY-MM-DD` string as **UTC midnight**, which in America/Toronto (UTC−4/−5) renders as the **previous calendar day**. The local-date fallback on line 189 is never reached for the common case.
 
-## Scope
+Consequences:
+- The Calendar's `selected={parseDateString(due_date)}` highlights the day before the stored date.
+- The display `format(parseDateString(due_date), "MMM d, yyyy")` shows the day before.
+- User clicks the "correct" day in the picker (which is actually the same day already stored) → DB write is a no-op → audit row reads `2026-05-23 → 2026-05-23`.
+- Mixed legacy values stored as full ISO (`2026-05-30T00:00:00+00:00`) interact with new `yyyy-MM-dd` writes, producing the second audit line the screenshot shows.
 
-1. New table `public.office_clearances` with RLS.
-2. New hook `useOfficeClearances`.
-3. New view `OfficeClearancesView` added to `OfficePortal` sidebar.
-4. No change to existing manufacturing clearance flow.
+The same helper feeds `isOverdue`, the card list (`line 1217`), and sort order — so overdue badges and ordering can also be off by one near midnight.
 
-## Database (single migration)
+## Fix (surgical, single file)
 
-```sql
-create type public.office_clearance_status as enum ('pending','approved','rejected');
+Edit only `src/pages/Tasks.tsx`:
 
-create table public.office_clearances (
-  id uuid primary key default gen_random_uuid(),
-  company_id uuid not null,                  -- multi-tenant scoping (Core rule)
-  session_id uuid references public.extract_sessions(id) on delete cascade,
-  order_id uuid,                             -- optional link to orders
-  title text not null,
-  notes text,
-  status public.office_clearance_status not null default 'pending',
-  requested_by uuid not null,                -- auth.uid()
-  reviewed_by uuid,
-  reviewed_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+1. **Rewrite `parseDateString`** to treat any `YYYY-MM-DD` prefix as a local-time date, and only fall through to `new Date(...)` for full ISO timestamps:
+   ```ts
+   function parseDateString(dateStr: string): Date {
+     const m = dateStr.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+     if (m) {
+       const [, y, mo, d] = m;
+       return new Date(Number(y), Number(mo) - 1, Number(d));
+     }
+     const d = new Date(dateStr);
+     return isNaN(d.getTime()) ? new Date(NaN) : d;
+   }
+   ```
+2. **Line 1519 fallback render**: replace `new Date(selectedTask.due_date)` with `parseDateString(selectedTask.due_date)` so the read-only branch uses the same local-date logic.
+3. **Calendar `onSelect` (line 1488)**: guard against no-op writes — if `newDate === oldDate`, close the popover without hitting the DB or writing an audit row. Prevents future phantom `X → X` audit entries even if data drifts.
 
-create index on public.office_clearances (company_id, status);
-create index on public.office_clearances (session_id);
+No schema, RLS, or other component changes.
 
-alter table public.office_clearances enable row level security;
+## Out of Scope
 
--- Strict company_id scoping via existing helper get_user_company_id()
-create policy "select own company" on public.office_clearances
-  for select using (company_id = public.get_user_company_id());
-create policy "insert own company" on public.office_clearances
-  for insert with check (company_id = public.get_user_company_id() and requested_by = auth.uid());
-create policy "update own company (office/admin)" on public.office_clearances
-  for update using (
-    company_id = public.get_user_company_id()
-    and (public.has_role(auth.uid(),'admin') or public.has_role(auth.uid(),'office'))
-  );
-create policy "delete admin only" on public.office_clearances
-  for delete using (
-    company_id = public.get_user_company_id() and public.has_role(auth.uid(),'admin')
-  );
+- Backfilling legacy `due_date` values stored as full ISO timestamps (display will now be correct regardless).
+- Changes to `useProjectTasks`, `useAgentDomainDrilldown`, or other consumers.
+- Audit-log UI changes.
 
-create trigger trg_office_clearances_updated_at
-  before update on public.office_clearances
-  for each row execute function public.update_updated_at_column();
-```
+## Verification
 
-Notes:
-- Uses existing `get_user_company_id()` + `has_role()` helpers (consistent with RLS Standards memory).
-- No FK to `auth.users` (per project rule).
-- No CHECK constraints with non-immutable expressions.
-
-## Frontend
-
-1. **`src/hooks/useOfficeClearances.ts`** — list/create/approve/reject with realtime subscription scoped by `company_id` (unique channel id).
-2. **`src/components/office/OfficeClearancesView.tsx`** — table of clearances grouped by status, with Approve / Reject actions for office+admin roles.
-3. **`src/components/office/OfficeSidebar.tsx`** — add `"office-clearances"` to `OfficeSection` union + sidebar entry (icon: `ShieldCheck`).
-4. **`src/pages/OfficePortal.tsx`** — register `"office-clearances": OfficeClearancesView` in `sectionComponents`.
-
-No changes to: routing, existing views, manufacturing clearance code, or auth.
-
-## Out of scope
-
-- Email/SMS notifications on approval.
-- Workflow gates blocking other modules until approved.
-- Bulk approve.
-
-Tell me yes to implement, or correct the scope (especially what an "office clearance" represents in your workflow) and I'll revise.
+1. Open a task whose `due_date` is `YYYY-MM-DD` → detail panel and calendar both show the same correct day.
+2. Pick a new day → toast "Due date updated", audit log shows `old → new` with different dates.
+3. Re-open the picker and click the currently selected day → popover closes, no toast, no new audit row.
+4. Clear date → toast "Due date cleared", audit log shows `old → null`.
+5. Cards in the column show the same `MMM d` as the detail panel.
