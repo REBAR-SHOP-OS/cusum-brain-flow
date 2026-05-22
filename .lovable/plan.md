@@ -1,50 +1,62 @@
-## Bug
+## Root cause
 
-In `src/pages/Tasks.tsx`, editing a task's due date appears flaky: the calendar highlights the wrong day, the detail panel sometimes shows the previous day, and the audit log records "no-op" reschedules like `2026-05-23 → 2026-05-23`.
+The `comms-alerts` cron (in `supabase/functions/comms-alerts/index.ts`) sends "⏰ Unanswered Email — Xh breach" notifications. The recipient (`alert.owner`) is taken from `comm.to_address` of inbound messages:
 
-## Root Cause
+```ts
+const ownerEmail = comm.to_address?.toLowerCase() || "";
+```
 
-`parseDateString` (line 186) calls `new Date("2026-05-23")` first. JavaScript parses a bare `YYYY-MM-DD` string as **UTC midnight**, which in America/Toronto (UTC−4/−5) renders as the **previous calendar day**. The local-date fallback on line 189 is never reached for the common case.
+It then sends to that address:
 
-Consequences:
-- The Calendar's `selected={parseDateString(due_date)}` highlights the day before the stored date.
-- The display `format(parseDateString(due_date), "MMM d, yyyy")` shows the day before.
-- User clicks the "correct" day in the picker (which is actually the same day already stored) → DB write is a no-op → audit row reads `2026-05-23 → 2026-05-23`.
-- Mixed legacy values stored as full ISO (`2026-05-30T00:00:00+00:00`) interact with new `yyyy-MM-dd` writes, producing the second audit line the screenshot shows.
+```ts
+if (alert.owner) await sendAlertEmail(accessToken, alert.owner, subj, html);
+```
 
-The same helper feeds `isOverdue`, the card list (`line 1217`), and sort order — so overdue badges and ordering can also be off by one near midnight.
+But `to_address` is unreliable — for some Gmail-synced threads (replies, forwards, mislabeled inbound) it ends up being the **external customer's email**, not an internal mailbox. Database confirms this is actively happening:
 
-## Fix (surgical, single file)
+```
+owner_email = "lantern developments (pembroke) inc." <lantern.developments@gmail.com>
+subject     = RE: SO2324
+alert_type  = response_time_24h
+```
 
-Edit only `src/pages/Tasks.tsx`:
+Two of these were sent today (18:15 and 18:30 UTC), which is exactly what David Langlois complained about. Same bug also sent alerts to `sonia@ontariorebars.ca`, `info@ontariorebars.ca`, `orders@ontariorebars.ca`, `matias@edgegroupltd.com`, etc. The CEO (`sattar@rebar.shop`) also got every one of them as a CC.
 
-1. **Rewrite `parseDateString`** to treat any `YYYY-MM-DD` prefix as a local-time date, and only fall through to `new Date(...)` for full ISO timestamps:
-   ```ts
-   function parseDateString(dateStr: string): Date {
-     const m = dateStr.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-     if (m) {
-       const [, y, mo, d] = m;
-       return new Date(Number(y), Number(mo) - 1, Number(d));
-     }
-     const d = new Date(dateStr);
-     return isNaN(d.getTime()) ? new Date(NaN) : d;
-   }
+## Fix (surgical, in `comms-alerts/index.ts` only)
+
+Add a **hard allow-list gate** before any `sendAlertEmail` call so the alert can only land in an internal mailbox.
+
+1. **Owner sanitization** (around line 341):
+   - Parse `comm.to_address` with a name+email regex (current code stores raw `"Name" <addr>` strings).
+   - If the extracted address does **not** end with `@${config.internal_domain}` (e.g. `@rebar.shop`), treat owner as missing — do not derive owner from external addresses.
+   - Optionally fall back to looking up the matching internal mailbox via `comms_agent_pairing` if needed; otherwise leave owner empty.
+
+2. **Send-time guard** (around line 421 and 431):
+   - Before `sendAlertEmail(...)`, assert recipient ends with `@${config.internal_domain}`. If not, skip the send, log `[guard] dropped external alert recipient: <addr>`, and write `metadata.dropped_external = true` on the `comms_alerts` row.
+   - Apply the same guard to the CEO send (defense in depth; `ceo_email` is already internal, but guard anyway).
+
+3. **Idempotency carry-over**: the `comms_alerts` row is still inserted so we don't re-alert on the same `(communication_id, alert_type)` next cron tick. We just don't email externals.
+
+4. **Backfill cleanup (one-off SQL, not a migration)**: mark the already-created external-recipient rows as suppressed so they don't muddy reporting:
+   ```sql
+   UPDATE comms_alerts
+   SET metadata = jsonb_set(coalesce(metadata,'{}'::jsonb), '{dropped_external}', 'true')
+   WHERE owner_email !~* '@rebar\.shop'
+     AND owner_email <> ''
+     AND created_at > now() - interval '7 days';
    ```
-2. **Line 1519 fallback render**: replace `new Date(selectedTask.due_date)` with `parseDateString(selectedTask.due_date)` so the read-only branch uses the same local-date logic.
-3. **Calendar `onSelect` (line 1488)**: guard against no-op writes — if `newDate === oldDate`, close the popover without hitting the DB or writing an audit row. Prevents future phantom `X → X` audit entries even if data drifts.
 
-No schema, RLS, or other component changes.
+No other files touched. No schema change. No RLS change. No frontend change.
 
-## Out of Scope
+## Out of scope
 
-- Backfilling legacy `due_date` values stored as full ISO timestamps (display will now be correct regardless).
-- Changes to `useProjectTasks`, `useAgentDomainDrilldown`, or other consumers.
-- Audit-log UI changes.
+- Rewriting how `communications.to_address` is parsed during Gmail sync (separate, larger bug).
+- Changing thresholds, skip-sender lists, or CEO recipient logic.
+- Touching `missed_call` alert path (already routes through `comms_agent_pairing` and stays internal).
 
 ## Verification
 
-1. Open a task whose `due_date` is `YYYY-MM-DD` → detail panel and calendar both show the same correct day.
-2. Pick a new day → toast "Due date updated", audit log shows `old → new` with different dates.
-3. Re-open the picker and click the currently selected day → popover closes, no toast, no new audit row.
-4. Clear date → toast "Due date cleared", audit log shows `old → null`.
-5. Cards in the column show the same `MMM d` as the detail panel.
+1. After deploy, manually invoke `comms-alerts` (or wait one cron tick).
+2. Query `comms_alerts` for rows in the last 15 min — every `owner_notified_at IS NOT NULL` row must have `owner_email LIKE '%@rebar.shop'`.
+3. Inspect Edge Function logs for `[guard] dropped external alert recipient` entries corresponding to threads like `RE: SO2324`.
+4. Confirm `lantern.developments@gmail.com` receives no new alert in the next hour.
