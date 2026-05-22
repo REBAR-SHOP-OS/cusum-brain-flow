@@ -79,6 +79,23 @@ function shouldSkipAlert(
   return null;
 }
 
+// ── Extract bare email address from a "Name" <email@x> formatted field ──
+function extractEmailAddress(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const m = raw.match(/<([^>]+)>/);
+  const addr = (m ? m[1] : raw).trim().toLowerCase();
+  // Take first address if comma-separated
+  return addr.split(",")[0].trim();
+}
+
+// ── Hard guard: only allow sends to the internal email domain ──
+function isInternalRecipient(addr: string, internalDomain: string): boolean {
+  if (!addr || !internalDomain) return false;
+  const dom = internalDomain.replace(/^@/, "").toLowerCase();
+  return addr.toLowerCase().endsWith(`@${dom}`);
+}
+
+
 function highestBreachedThreshold(
   receivedAt: string,
   thresholds: number[],
