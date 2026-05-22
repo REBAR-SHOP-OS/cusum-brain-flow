@@ -522,19 +522,21 @@ export default function LoadingStation() {
                   const hasPhoto = !!checklist?.photo_path;
 
                   return (
-                    <LoadingItemCard
-                      key={item.id}
-                      markNumber={item.mark_number}
-                      barCode={item.bar_code}
-                      cutLength={item.cut_length_mm}
-                      pieces={item.total_pieces}
-                      shapeCode={item.asa_shape_code}
-                      isLoaded={isLoaded}
-                      hasPhoto={hasPhoto}
-                      onToggle={(loaded) => toggleLoaded.mutate({ itemId: item.id, loaded })}
-                      onPhoto={(file) => uploadPhoto(item.id, file)}
-                    />
+                    <div key={item.id} id={`load-item-${item.id}`}>
+                      <LoadingItemCard
+                        markNumber={item.mark_number}
+                        barCode={item.bar_code}
+                        cutLength={item.cut_length_mm}
+                        pieces={item.total_pieces}
+                        shapeCode={item.asa_shape_code}
+                        isLoaded={isLoaded}
+                        hasPhoto={hasPhoto}
+                        onToggle={(loaded) => toggleLoaded.mutate({ itemId: item.id, loaded })}
+                        onPhoto={(file) => uploadPhoto(item.id, file)}
+                      />
+                    </div>
                   );
+
                 })
               )}
             </div>
