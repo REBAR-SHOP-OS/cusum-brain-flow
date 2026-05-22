@@ -7,6 +7,7 @@ import {
   Tag, 
   FileBox, 
   DollarSign,
+  ShieldCheck,
   ArrowLeft,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -22,7 +23,8 @@ export type OfficeSection =
   | "tags-export"
   | "packing-slips"
   | "payroll"
-  | "order-calc";
+  | "order-calc"
+  | "office-clearances";
 
 interface OfficeSidebarProps {
   active: OfficeSection;
