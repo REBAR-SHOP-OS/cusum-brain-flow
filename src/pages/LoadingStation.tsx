@@ -18,7 +18,11 @@ import {
   ImageIcon,
   Truck,
   Eye,
+  Sparkles,
+  AlertTriangle,
+  XCircle,
 } from "lucide-react";
+
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -39,6 +43,15 @@ export default function LoadingStation() {
     toggleLoaded,
     uploadPhoto,
   } = useLoadingChecklist(selectedBundle?.cutPlanId ?? null);
+
+  // Auto-match state
+  const [mode, setMode] = useState<"manual" | "auto">("manual");
+  const [autoState, setAutoState] = useState<"idle" | "reading" | "confirm" | "error">("idle");
+  const [autoError, setAutoError] = useState<string | null>(null);
+  const [lastMatch, setLastMatch] = useState<{ id: string; mark: string | null; score: number } | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [candidates, setCandidates] = useState<Array<{ id: string; mark_number: string | null; score: number; reasons: string[] }>>([]);
+
 
   // Fetch ALL items for the selected cut plan (not just phase-filtered ones)
   const { data: allPlanItems = [], isLoading: planItemsLoading } = useQuery({
@@ -272,6 +285,96 @@ export default function LoadingStation() {
     },
   });
 
+  // ---------- Auto-match handler ----------
+  const fileToBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const findNextUnmatchedRef = (afterId?: string) => {
+    const idx = afterId ? checklistItems.findIndex((i) => i.id === afterId) : -1;
+    const ordered = idx >= 0 ? [...checklistItems.slice(idx + 1), ...checklistItems.slice(0, idx + 1)] : checklistItems;
+    return ordered.find((i) => !checklistMap.get(i.id)?.loaded) || null;
+  };
+
+  const runAutoMatch = async (file: File) => {
+    setAutoState("reading");
+    setAutoError(null);
+    setPendingPhoto(file);
+    try {
+      const base64 = await fileToBase64(file);
+      const unmatched = checklistItems.filter((i) => !checklistMap.get(i.id)?.loaded);
+      const pool = unmatched.length > 0 ? unmatched : checklistItems;
+      const { data, error } = await supabase.functions.invoke("match-tag-photo", {
+        body: {
+          imageBase64: base64,
+          candidates: pool.map((i) => ({
+            id: i.id,
+            mark_number: i.mark_number,
+            bar_code: i.bar_code,
+            cut_length_mm: i.cut_length_mm,
+            total_pieces: i.total_pieces,
+            asa_shape_code: i.asa_shape_code,
+          })),
+        },
+      });
+      if (error) throw error;
+      const { ranked = [], decision } = data || {};
+
+      if (decision === "auto" && ranked[0]) {
+        const top = ranked[0];
+        await uploadPhoto(top.id, file);
+        setLastMatch({ id: top.id, mark: top.mark_number, score: top.score });
+        toast.success(`Matched ${top.mark_number || "tag"} (${Math.round(top.score * 100)}%)`);
+        setAutoState("idle");
+        setPendingPhoto(null);
+        setCandidates([]);
+        const next = findNextUnmatchedRef(top.id);
+        if (next) {
+          setTimeout(() => {
+            document.getElementById(`load-item-${next.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 200);
+        }
+      } else if (decision === "confirm" && ranked.length > 0) {
+        setCandidates(ranked.slice(0, 3));
+        setAutoState("confirm");
+      } else {
+        setAutoError("Couldn't read tag clearly. Retake or pick manually.");
+        setAutoState("error");
+      }
+    } catch (e: any) {
+      console.error("auto-match error", e);
+      const msg = e?.message || "Match failed";
+      if (msg.includes("429")) setAutoError("Rate limited. Wait a moment and retry.");
+      else if (msg.includes("402")) setAutoError("AI credits exhausted. Add funds in Workspace > Usage.");
+      else setAutoError(msg);
+      setAutoState("error");
+    }
+  };
+
+  const confirmCandidate = async (id: string) => {
+    if (!pendingPhoto) return;
+    const cand = candidates.find((c) => c.id === id);
+    await uploadPhoto(id, pendingPhoto);
+    setLastMatch({ id, mark: cand?.mark_number || null, score: cand?.score || 0 });
+    toast.success(`Loaded ${cand?.mark_number || "item"}`);
+    setAutoState("idle");
+    setPendingPhoto(null);
+    setCandidates([]);
+  };
+
+  const resetAuto = () => {
+    setAutoState("idle");
+    setPendingPhoto(null);
+    setCandidates([]);
+    setAutoError(null);
+  };
+
+
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header */}
@@ -331,9 +434,26 @@ export default function LoadingStation() {
                 <h2 className="text-sm font-bold text-foreground">{selectedBundle.projectName}</h2>
                 <p className="text-[10px] text-muted-foreground">{selectedBundle.planName}</p>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedBundle(null)}>
-                Change Bundle
-              </Button>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-md border border-border overflow-hidden text-[10px] font-bold uppercase tracking-wide">
+                  <button
+                    onClick={() => { setMode("manual"); resetAuto(); }}
+                    className={`px-2.5 py-1 transition-colors ${mode === "manual" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Manual
+                  </button>
+                  <button
+                    onClick={() => setMode("auto")}
+                    className={`px-2.5 py-1 transition-colors flex items-center gap-1 ${mode === "auto" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <Sparkles className="w-3 h-3" /> Auto
+                  </button>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedBundle(null)}>
+                  Change Bundle
+                </Button>
+              </div>
+
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -371,7 +491,20 @@ export default function LoadingStation() {
             )}
           </div>
 
+          {mode === "auto" && (
+            <AutoMatchPanel
+              state={autoState}
+              error={autoError}
+              lastMatch={lastMatch}
+              candidates={candidates}
+              onCapture={runAutoMatch}
+              onConfirm={confirmCandidate}
+              onReset={resetAuto}
+            />
+          )}
+
           {/* Items Checklist */}
+
           <ScrollArea className="flex-1">
             <div className="p-4 sm:p-6 space-y-2">
               {checklistLoading ? (
@@ -389,19 +522,21 @@ export default function LoadingStation() {
                   const hasPhoto = !!checklist?.photo_path;
 
                   return (
-                    <LoadingItemCard
-                      key={item.id}
-                      markNumber={item.mark_number}
-                      barCode={item.bar_code}
-                      cutLength={item.cut_length_mm}
-                      pieces={item.total_pieces}
-                      shapeCode={item.asa_shape_code}
-                      isLoaded={isLoaded}
-                      hasPhoto={hasPhoto}
-                      onToggle={(loaded) => toggleLoaded.mutate({ itemId: item.id, loaded })}
-                      onPhoto={(file) => uploadPhoto(item.id, file)}
-                    />
+                    <div key={item.id} id={`load-item-${item.id}`}>
+                      <LoadingItemCard
+                        markNumber={item.mark_number}
+                        barCode={item.bar_code}
+                        cutLength={item.cut_length_mm}
+                        pieces={item.total_pieces}
+                        shapeCode={item.asa_shape_code}
+                        isLoaded={isLoaded}
+                        hasPhoto={hasPhoto}
+                        onToggle={(loaded) => toggleLoaded.mutate({ itemId: item.id, loaded })}
+                        onPhoto={(file) => uploadPhoto(item.id, file)}
+                      />
+                    </div>
                   );
+
                 })
               )}
             </div>
@@ -492,3 +627,121 @@ function LoadingItemCard({
 }
 
 LoadingItemCard.displayName = "LoadingItemCard";
+
+/* ---------- Auto Match Tag Photo Panel ---------- */
+
+interface AutoMatchPanelProps {
+  state: "idle" | "reading" | "confirm" | "error";
+  error: string | null;
+  lastMatch: { id: string; mark: string | null; score: number } | null;
+  candidates: Array<{ id: string; mark_number: string | null; score: number; reasons: string[] }>;
+  onCapture: (file: File) => void;
+  onConfirm: (id: string) => void;
+  onReset: () => void;
+}
+
+function AutoMatchPanel({
+  state,
+  error,
+  lastMatch,
+  candidates,
+  onCapture,
+  onConfirm,
+  onReset,
+}: AutoMatchPanelProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="px-4 sm:px-6 py-4 border-b border-border bg-card/30">
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="w-4 h-4 text-primary" />
+        <span className="text-xs font-bold uppercase tracking-wide text-foreground">Auto Match Tag Photo</span>
+        {lastMatch && state === "idle" && (
+          <Badge variant="outline" className="ml-auto font-mono text-[9px]">
+            Last: {lastMatch.mark || "—"} • {Math.round(lastMatch.score * 100)}%
+          </Badge>
+        )}
+      </div>
+
+      {state === "idle" && (
+        <Button
+          className="w-full gap-2"
+          size="lg"
+          onClick={() => fileRef.current?.click()}
+        >
+          <Camera className="w-5 h-5" />
+          CAPTURE TAG
+        </Button>
+      )}
+
+      {state === "reading" && (
+        <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Reading tag…
+        </div>
+      )}
+
+      {state === "confirm" && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-amber-500">
+            <AlertTriangle className="w-4 h-4" />
+            <span>Uncertain match — pick the correct item:</span>
+          </div>
+          {candidates.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onConfirm(c.id)}
+              className="w-full text-left rounded-md border border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 transition-colors p-2.5"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-foreground">{c.mark_number || "No mark"}</span>
+                <Badge variant="outline" className="font-mono text-[9px]">{Math.round(c.score * 100)}%</Badge>
+              </div>
+              {c.reasons.length > 0 && (
+                <div className="text-[10px] text-muted-foreground mt-1 truncate">
+                  {c.reasons.join(" · ")}
+                </div>
+              )}
+            </button>
+          ))}
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" size="sm" className="flex-1" onClick={() => { onReset(); setTimeout(() => fileRef.current?.click(), 50); }}>
+              <Camera className="w-4 h-4 mr-1" /> Retake
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onReset}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {state === "error" && (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md p-2.5">
+            <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{error || "Couldn't read tag."}</span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1" onClick={() => { onReset(); setTimeout(() => fileRef.current?.click(), 50); }}>
+              <Camera className="w-4 h-4 mr-1" /> Retake
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onReset}>Dismiss</Button>
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onCapture(file);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
+AutoMatchPanel.displayName = "AutoMatchPanel";
