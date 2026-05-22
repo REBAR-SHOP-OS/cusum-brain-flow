@@ -79,6 +79,23 @@ function shouldSkipAlert(
   return null;
 }
 
+// ── Extract bare email address from a "Name" <email@x> formatted field ──
+function extractEmailAddress(raw: string | null | undefined): string {
+  if (!raw) return "";
+  const m = raw.match(/<([^>]+)>/);
+  const addr = (m ? m[1] : raw).trim().toLowerCase();
+  // Take first address if comma-separated
+  return addr.split(",")[0].trim();
+}
+
+// ── Hard guard: only allow sends to the internal email domain ──
+function isInternalRecipient(addr: string, internalDomain: string): boolean {
+  if (!addr || !internalDomain) return false;
+  const dom = internalDomain.replace(/^@/, "").toLowerCase();
+  return addr.toLowerCase().endsWith(`@${dom}`);
+}
+
+
 function highestBreachedThreshold(
   receivedAt: string,
   thresholds: number[],
@@ -338,8 +355,11 @@ Deno.serve((req) =>
         .eq("alert_type", alertType);
       if (alertExists && alertExists > 0) continue;
 
-      const ownerEmail = comm.to_address?.toLowerCase() || "";
-      const pairing = pairingMap.get(ownerEmail);
+      const rawTo = extractEmailAddress(comm.to_address);
+      // Only treat as owner if it's an internal mailbox; never derive owner from an external address
+      const ownerEmail = isInternalRecipient(rawTo, config.internal_domain) ? rawTo : "";
+      const pairing = ownerEmail ? pairingMap.get(ownerEmail) : undefined;
+
 
       alerts.push({
         type: alertType,
@@ -382,11 +402,13 @@ Deno.serve((req) =>
         .eq("alert_type", "missed_call");
       if (alertExists && alertExists > 0) continue;
 
-      let ownerEmail = comm.to_address || "";
+      let ownerEmail = extractEmailAddress(comm.to_address);
       if (meta?.extension) {
         const extPairing = (pairings || []).find((p: any) => p.rc_extension === meta.extension);
-        if (extPairing) ownerEmail = (extPairing as any).user_email;
+        if (extPairing) ownerEmail = extractEmailAddress((extPairing as any).user_email);
       }
+      if (!isInternalRecipient(ownerEmail, config.internal_domain)) ownerEmail = "";
+
 
       alerts.push({
         type: "missed_call",
@@ -418,7 +440,7 @@ Deno.serve((req) =>
           ? `[Alert] Missed call from ${alert.comm.from_address || "Unknown"}`
           : `[Alert] Unanswered email - ${alert.type.replace("response_time_", "")} - ${alert.comm.subject || ""}`;
 
-        if (alert.owner) {
+        if (alert.owner && isInternalRecipient(alert.owner, config.internal_domain)) {
           const ownerOk = await sendAlertEmail(accessToken, alert.owner, subj, html);
           if (ownerOk) {
             await svc.from("comms_alerts")
@@ -426,15 +448,27 @@ Deno.serve((req) =>
               .eq("communication_id", alert.commId)
               .eq("alert_type", alert.type);
           }
-        }
-
-        const ceoOk = await sendAlertEmail(accessToken, config.ceo_email, subj, html);
-        if (ceoOk) {
+        } else if (alert.owner) {
+          console.warn(`[guard] dropped external alert recipient: ${alert.owner} (comm ${alert.commId})`);
           await svc.from("comms_alerts")
-            .update({ ceo_notified_at: new Date().toISOString() })
+            .update({ metadata: { agent_name: alert.agent, subject: alert.comm.subject, dropped_external: true, dropped_recipient: alert.owner } })
             .eq("communication_id", alert.commId)
             .eq("alert_type", alert.type);
         }
+
+        const ceoAddr = extractEmailAddress(config.ceo_email);
+        if (isInternalRecipient(ceoAddr, config.internal_domain)) {
+          const ceoOk = await sendAlertEmail(accessToken, ceoAddr, subj, html);
+          if (ceoOk) {
+            await svc.from("comms_alerts")
+              .update({ ceo_notified_at: new Date().toISOString() })
+              .eq("communication_id", alert.commId)
+              .eq("alert_type", alert.type);
+          }
+        } else {
+          console.warn(`[guard] dropped external CEO recipient: ${config.ceo_email}`);
+        }
+
 
         results.push({ type: alert.type, owner: alert.owner, sent: true });
       } catch (e) {
