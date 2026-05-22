@@ -434,9 +434,26 @@ export default function LoadingStation() {
                 <h2 className="text-sm font-bold text-foreground">{selectedBundle.projectName}</h2>
                 <p className="text-[10px] text-muted-foreground">{selectedBundle.planName}</p>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedBundle(null)}>
-                Change Bundle
-              </Button>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-md border border-border overflow-hidden text-[10px] font-bold uppercase tracking-wide">
+                  <button
+                    onClick={() => { setMode("manual"); resetAuto(); }}
+                    className={`px-2.5 py-1 transition-colors ${mode === "manual" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Manual
+                  </button>
+                  <button
+                    onClick={() => setMode("auto")}
+                    className={`px-2.5 py-1 transition-colors flex items-center gap-1 ${mode === "auto" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <Sparkles className="w-3 h-3" /> Auto
+                  </button>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setSelectedBundle(null)}>
+                  Change Bundle
+                </Button>
+              </div>
+
             </div>
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
