@@ -402,11 +402,13 @@ Deno.serve((req) =>
         .eq("alert_type", "missed_call");
       if (alertExists && alertExists > 0) continue;
 
-      let ownerEmail = comm.to_address || "";
+      let ownerEmail = extractEmailAddress(comm.to_address);
       if (meta?.extension) {
         const extPairing = (pairings || []).find((p: any) => p.rc_extension === meta.extension);
-        if (extPairing) ownerEmail = (extPairing as any).user_email;
+        if (extPairing) ownerEmail = extractEmailAddress((extPairing as any).user_email);
       }
+      if (!isInternalRecipient(ownerEmail, config.internal_domain)) ownerEmail = "";
+
 
       alerts.push({
         type: "missed_call",
