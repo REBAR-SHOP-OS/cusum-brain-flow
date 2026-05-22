@@ -491,7 +491,20 @@ export default function LoadingStation() {
             )}
           </div>
 
+          {mode === "auto" && (
+            <AutoMatchPanel
+              state={autoState}
+              error={autoError}
+              lastMatch={lastMatch}
+              candidates={candidates}
+              onCapture={runAutoMatch}
+              onConfirm={confirmCandidate}
+              onReset={resetAuto}
+            />
+          )}
+
           {/* Items Checklist */}
+
           <ScrollArea className="flex-1">
             <div className="p-4 sm:p-6 space-y-2">
               {checklistLoading ? (
