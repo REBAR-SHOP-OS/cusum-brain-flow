@@ -1491,6 +1491,8 @@ export default function Tasks() {
                           onSelect={async (date) => {
                             const oldDate = selectedTask.due_date;
                             const newDate = date ? format(date, "yyyy-MM-dd") : null;
+                            const oldNorm = oldDate ? oldDate.slice(0, 10) : null;
+                            if (newDate === oldNorm) return;
                             const { error } = await supabase.from("tasks").update({ due_date: newDate, updated_at: new Date().toISOString() }).eq("id", selectedTask.id);
                             if (error) { toast.error(error.message); return; }
                             await writeAudit(selectedTask.id, "reschedule", "due_date", oldDate || null, newDate);
