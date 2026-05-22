@@ -7,6 +7,7 @@ import {
   Tag, 
   FileBox, 
   DollarSign,
+  ShieldCheck,
   ArrowLeft,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -22,7 +23,8 @@ export type OfficeSection =
   | "tags-export"
   | "packing-slips"
   | "payroll"
-  | "order-calc";
+  | "order-calc"
+  | "office-clearances";
 
 interface OfficeSidebarProps {
   active: OfficeSection;
@@ -40,6 +42,7 @@ const officeTools: { id: OfficeSection; label: string; icon: React.ElementType }
   { id: "packing-slips", label: "Packing Slips", icon: FileBox },
   { id: "payroll", label: "Payroll", icon: DollarSign },
   { id: "order-calc", label: "Order Calc", icon: Package },
+  { id: "office-clearances", label: "Clearances", icon: ShieldCheck },
 ];
 
 export function OfficeSidebar({ active, onNavigate, onBack }: OfficeSidebarProps) {

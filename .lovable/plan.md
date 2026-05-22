@@ -1,33 +1,82 @@
-## Goal
-Preserve the user's place in the Work Order Queue (`/shopfloor/station` → `WorkOrderQueueSection`) across re-renders, tab switches, and page reloads:
-- Which customer groups are expanded/collapsed
-- The window scroll position
+# Build the "Office Clearances" feature
 
-## Implementation
+## Context check (important)
 
-### 1. Group expansion state — lifted + persisted
-Currently each `StationGroup` holds local `useState(false)` so every render forgets it.
+- The original "fix" prompt was a **false positive** — nothing in the codebase queries `office_clearances`, and the `/office` screenshot you sent shows the normal AI Extract loading state, not an error.
+- The word "clearance" is already used in this project for the **manufacturing QC step** (`cut_plan_items` + `clearance_evidence`, governed by the Production Flow Governance rule). To avoid colliding with that domain concept, this new feature is scoped explicitly as **Office Clearances** — office-side sign-offs on extract sessions / orders (e.g. estimation approved, pricing approved, customer notified).
 
-- In `WorkOrderQueueSection`: add a single `expanded: Record<string, boolean>` state, hydrated from `localStorage` key `woq:expanded:v1` on mount, written back on every change (debounced via effect).
-- Pass `open` + `onOpenChange` down to `StationGroup` (controlled). Remove `StationGroup`'s internal `useState`.
-- Keys = customer name (already used as group key).
-- Prune stale keys on hydrate by intersecting with current group names (keeps storage small).
+If that's not what you mean by "clearance", stop here and clarify before I implement.
 
-### 2. Scroll position — restore on mount
-- In `StationDashboard.tsx` (page that mounts WOQ): add a small `useEffect` that:
-  - On mount: reads `localStorage["woq:scrollY:v1"]` and `window.scrollTo(0, y)` after a microtask (so content has rendered).
-  - On scroll: throttled (rAF) write of `window.scrollY` to that key.
-  - On unmount: final flush.
-- Scoped to this page only — does not affect other pages.
+## Scope
 
-### 3. Storage helpers
-Inline in the component (no new lib file needed). Wrap reads/writes in `try/catch` to ignore quota or private-mode errors.
+1. New table `public.office_clearances` with RLS.
+2. New hook `useOfficeClearances`.
+3. New view `OfficeClearancesView` added to `OfficePortal` sidebar.
+4. No change to existing manufacturing clearance flow.
 
-## Files touched
-- `src/components/shopfloor/WorkOrderQueueSection.tsx` — lift expansion state, persist.
-- `src/pages/StationDashboard.tsx` — add scroll persistence effect.
+## Database (single migration)
+
+```sql
+create type public.office_clearance_status as enum ('pending','approved','rejected');
+
+create table public.office_clearances (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null,                  -- multi-tenant scoping (Core rule)
+  session_id uuid references public.extract_sessions(id) on delete cascade,
+  order_id uuid,                             -- optional link to orders
+  title text not null,
+  notes text,
+  status public.office_clearance_status not null default 'pending',
+  requested_by uuid not null,                -- auth.uid()
+  reviewed_by uuid,
+  reviewed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index on public.office_clearances (company_id, status);
+create index on public.office_clearances (session_id);
+
+alter table public.office_clearances enable row level security;
+
+-- Strict company_id scoping via existing helper get_user_company_id()
+create policy "select own company" on public.office_clearances
+  for select using (company_id = public.get_user_company_id());
+create policy "insert own company" on public.office_clearances
+  for insert with check (company_id = public.get_user_company_id() and requested_by = auth.uid());
+create policy "update own company (office/admin)" on public.office_clearances
+  for update using (
+    company_id = public.get_user_company_id()
+    and (public.has_role(auth.uid(),'admin') or public.has_role(auth.uid(),'office'))
+  );
+create policy "delete admin only" on public.office_clearances
+  for delete using (
+    company_id = public.get_user_company_id() and public.has_role(auth.uid(),'admin')
+  );
+
+create trigger trg_office_clearances_updated_at
+  before update on public.office_clearances
+  for each row execute function public.update_updated_at_column();
+```
+
+Notes:
+- Uses existing `get_user_company_id()` + `has_role()` helpers (consistent with RLS Standards memory).
+- No FK to `auth.users` (per project rule).
+- No CHECK constraints with non-immutable expressions.
+
+## Frontend
+
+1. **`src/hooks/useOfficeClearances.ts`** — list/create/approve/reject with realtime subscription scoped by `company_id` (unique channel id).
+2. **`src/components/office/OfficeClearancesView.tsx`** — table of clearances grouped by status, with Approve / Reject actions for office+admin roles.
+3. **`src/components/office/OfficeSidebar.tsx`** — add `"office-clearances"` to `OfficeSection` union + sidebar entry (icon: `ShieldCheck`).
+4. **`src/pages/OfficePortal.tsx`** — register `"office-clearances": OfficeClearancesView` in `sectionComponents`.
+
+No changes to: routing, existing views, manufacturing clearance code, or auth.
 
 ## Out of scope
-- Per-user (DB-backed) persistence — localStorage is per-device and matches "don't lose my place" intent.
-- Persisting status of completed/dismissed orders.
-- Animations or scroll-anchoring of newly added rows.
+
+- Email/SMS notifications on approval.
+- Workflow gates blocking other modules until approved.
+- Bulk approve.
+
+Tell me yes to implement, or correct the scope (especially what an "office clearance" represents in your workflow) and I'll revise.

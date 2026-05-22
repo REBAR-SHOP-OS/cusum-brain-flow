@@ -8523,6 +8523,59 @@ export type Database = {
         }
         Relationships: []
       }
+      office_clearances: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          notes: string | null
+          order_id: string | null
+          requested_by: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          session_id: string | null
+          status: Database["public"]["Enums"]["office_clearance_status"]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          order_id?: string | null
+          requested_by: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          session_id?: string | null
+          status?: Database["public"]["Enums"]["office_clearance_status"]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          order_id?: string | null
+          requested_by?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          session_id?: string | null
+          status?: Database["public"]["Enums"]["office_clearance_status"]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "office_clearances_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "extract_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       optimization_snapshots: {
         Row: {
           company_id: string
@@ -17291,6 +17344,7 @@ export type Database = {
         | "shop_supervisor"
         | "customer"
       fulfillment_channel: "pickup" | "loading" | "delivery"
+      office_clearance_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -17429,6 +17483,7 @@ export const Constants = {
         "customer",
       ],
       fulfillment_channel: ["pickup", "loading", "delivery"],
+      office_clearance_status: ["pending", "approved", "rejected"],
     },
   },
 } as const
