@@ -44,6 +44,15 @@ export default function LoadingStation() {
     uploadPhoto,
   } = useLoadingChecklist(selectedBundle?.cutPlanId ?? null);
 
+  // Auto-match state
+  const [mode, setMode] = useState<"manual" | "auto">("manual");
+  const [autoState, setAutoState] = useState<"idle" | "reading" | "confirm" | "error">("idle");
+  const [autoError, setAutoError] = useState<string | null>(null);
+  const [lastMatch, setLastMatch] = useState<{ id: string; mark: string | null; score: number } | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [candidates, setCandidates] = useState<Array<{ id: string; mark_number: string | null; score: number; reasons: string[] }>>([]);
+
+
   // Fetch ALL items for the selected cut plan (not just phase-filtered ones)
   const { data: allPlanItems = [], isLoading: planItemsLoading } = useQuery({
     queryKey: ["cut-plan-items-all", selectedBundle?.cutPlanId],
