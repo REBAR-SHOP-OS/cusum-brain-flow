@@ -27,6 +27,7 @@ import ShopFloor from "./pages/ShopFloor";
 import LoadingStation from "./pages/LoadingStation";
 import DeliveryOps from "./pages/DeliveryOps";
 import DeliveryTerminal from "./pages/DeliveryTerminal";
+import DeliveryPipeline from "./pages/DeliveryPipeline";
 
 import CutterPlanning from "./pages/CutterPlanning";
 import StationDashboard from "./pages/StationDashboard";
