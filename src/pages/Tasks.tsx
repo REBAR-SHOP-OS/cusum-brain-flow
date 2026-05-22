@@ -1521,7 +1521,7 @@ export default function Tasks() {
                       </PopoverContent>
                     </Popover>
                   ) : (
-                    <p className={cn("mt-0.5 text-sm", isOverdue(selectedTask) && "text-destructive font-medium")}>{selectedTask.due_date ? format(new Date(selectedTask.due_date), "MMM d, yyyy") : "—"}</p>
+                    <p className={cn("mt-0.5 text-sm", isOverdue(selectedTask) && "text-destructive font-medium")}>{selectedTask.due_date ? format(parseDateString(selectedTask.due_date), "MMM d, yyyy") : "—"}</p>
                   )}
                 </div>
                 <div>
