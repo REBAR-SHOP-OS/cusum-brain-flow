@@ -220,6 +220,7 @@ const App = () => (
                     <Route path="/shopfloor/delivery-ops" element={<P><DeliveryOps /></P>} />
                     <Route path="/shopfloor/camera-intelligence" element={<P><CameraIntelligence /></P>} />
                     <Route path="/shopfloor/delivery/:stopId" element={<P><DeliveryTerminal /></P>} />
+                    <Route path="/shopfloor/delivery-pipeline" element={<P><DeliveryPipeline /></P>} />
                     
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
                     <Route path="/glasses" element={<P><GlassesCapture /></P>} />
