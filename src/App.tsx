@@ -27,6 +27,7 @@ import ShopFloor from "./pages/ShopFloor";
 import LoadingStation from "./pages/LoadingStation";
 import DeliveryOps from "./pages/DeliveryOps";
 import DeliveryTerminal from "./pages/DeliveryTerminal";
+import DeliveryPipeline from "./pages/DeliveryPipeline";
 
 import CutterPlanning from "./pages/CutterPlanning";
 import StationDashboard from "./pages/StationDashboard";
@@ -219,6 +220,7 @@ const App = () => (
                     <Route path="/shopfloor/delivery-ops" element={<P><DeliveryOps /></P>} />
                     <Route path="/shopfloor/camera-intelligence" element={<P><CameraIntelligence /></P>} />
                     <Route path="/shopfloor/delivery/:stopId" element={<P><DeliveryTerminal /></P>} />
+                    <Route path="/shopfloor/delivery-pipeline" element={<P><DeliveryPipeline /></P>} />
                     
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
                     <Route path="/glasses" element={<P><GlassesCapture /></P>} />
