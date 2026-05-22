@@ -627,3 +627,121 @@ function LoadingItemCard({
 }
 
 LoadingItemCard.displayName = "LoadingItemCard";
+
+/* ---------- Auto Match Tag Photo Panel ---------- */
+
+interface AutoMatchPanelProps {
+  state: "idle" | "reading" | "confirm" | "error";
+  error: string | null;
+  lastMatch: { id: string; mark: string | null; score: number } | null;
+  candidates: Array<{ id: string; mark_number: string | null; score: number; reasons: string[] }>;
+  onCapture: (file: File) => void;
+  onConfirm: (id: string) => void;
+  onReset: () => void;
+}
+
+function AutoMatchPanel({
+  state,
+  error,
+  lastMatch,
+  candidates,
+  onCapture,
+  onConfirm,
+  onReset,
+}: AutoMatchPanelProps) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="px-4 sm:px-6 py-4 border-b border-border bg-card/30">
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="w-4 h-4 text-primary" />
+        <span className="text-xs font-bold uppercase tracking-wide text-foreground">Auto Match Tag Photo</span>
+        {lastMatch && state === "idle" && (
+          <Badge variant="outline" className="ml-auto font-mono text-[9px]">
+            Last: {lastMatch.mark || "—"} • {Math.round(lastMatch.score * 100)}%
+          </Badge>
+        )}
+      </div>
+
+      {state === "idle" && (
+        <Button
+          className="w-full gap-2"
+          size="lg"
+          onClick={() => fileRef.current?.click()}
+        >
+          <Camera className="w-5 h-5" />
+          CAPTURE TAG
+        </Button>
+      )}
+
+      {state === "reading" && (
+        <div className="flex items-center justify-center gap-2 py-4 text-sm text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          Reading tag…
+        </div>
+      )}
+
+      {state === "confirm" && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-amber-500">
+            <AlertTriangle className="w-4 h-4" />
+            <span>Uncertain match — pick the correct item:</span>
+          </div>
+          {candidates.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => onConfirm(c.id)}
+              className="w-full text-left rounded-md border border-amber-500/40 bg-amber-500/5 hover:bg-amber-500/10 transition-colors p-2.5"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-foreground">{c.mark_number || "No mark"}</span>
+                <Badge variant="outline" className="font-mono text-[9px]">{Math.round(c.score * 100)}%</Badge>
+              </div>
+              {c.reasons.length > 0 && (
+                <div className="text-[10px] text-muted-foreground mt-1 truncate">
+                  {c.reasons.join(" · ")}
+                </div>
+              )}
+            </button>
+          ))}
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" size="sm" className="flex-1" onClick={() => { onReset(); setTimeout(() => fileRef.current?.click(), 50); }}>
+              <Camera className="w-4 h-4 mr-1" /> Retake
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onReset}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {state === "error" && (
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 text-xs text-destructive bg-destructive/10 border border-destructive/30 rounded-md p-2.5">
+            <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{error || "Couldn't read tag."}</span>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1" onClick={() => { onReset(); setTimeout(() => fileRef.current?.click(), 50); }}>
+              <Camera className="w-4 h-4 mr-1" /> Retake
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onReset}>Dismiss</Button>
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onCapture(file);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
+AutoMatchPanel.displayName = "AutoMatchPanel";
