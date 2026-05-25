@@ -11,67 +11,83 @@ function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; e
   const pages = post.page_name.split(", ").filter(Boolean);
   if (pages.length === 0) return null;
 
+  const status = post.status;
+  const lastError = post.last_error || "";
+  const isPartial = lastError.toLowerCase().startsWith("partial");
+
+  // Helper: extract per-page error from a "Partial: Page "X": err; Page "Y": err" string.
+  const extractError = (name: string): string | undefined => {
+    if (!lastError) return undefined;
+    const regex = new RegExp(`Page "${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}":\\s*([^;]+)`, "i");
+    const match = lastError.match(regex);
+    return match?.[1]?.trim();
+  };
+
   // Prefer structured page_results (source of truth) when available.
   const pr = post.page_results as Array<{ name: string; status: string; error?: string }> | null | undefined;
-  if (Array.isArray(pr) && pr.length > 0) {
+  const hasStructured = Array.isArray(pr) && pr.length > 0;
+
+  if (hasStructured) {
     return pages.map((name) => {
-      const match = pr.find((p) => p?.name === name);
-      if (!match) {
-        // No structured entry yet — treat as failed unless overall status is published with no errors.
-        if (post.status === "published" && !post.last_error) return { name, failed: false };
-        return { name, failed: true };
+      const match = pr!.find((p) => p?.name === name);
+      if (match) {
+        if (match.status === "success") return { name, failed: false };
+        if (match.status === "failed") return { name, failed: true, error: match.error };
+        // pending: if post is overall published, treat as success; otherwise pending → not failed yet
+        if (status === "published") return { name, failed: false };
+        return { name, failed: false };
       }
-      if (match.status === "success") return { name, failed: false };
-      // pending or failed → red
-      return { name, failed: true, error: match.error };
+      // No structured entry for this page.
+      // If overall post is published and last_error does not mention this page → success.
+      if (status === "published") {
+        const err = extractError(name);
+        if (err) return { name, failed: true, error: err };
+        return { name, failed: false };
+      }
+      if (status === "failed") {
+        return { name, failed: true, error: extractError(name) || lastError || undefined };
+      }
+      // scheduled / draft / publishing / pending_approval → not failed, just not-yet-published
+      return { name, failed: false };
     });
   }
 
-  // Fallback: legacy posts without page_results — parse last_error text.
-  const lastError = post.last_error || "";
-  const status = post.status;
-
-  const isPartial = lastError.toLowerCase().startsWith("partial");
-
+  // Fallback: legacy posts without page_results — interpret status + last_error.
   return pages.map((name) => {
     // Published with NO errors → green
     if (status === "published" && !lastError) return { name, failed: false };
 
-    // Published with partial error → parse which pages failed
-    if (status === "published" && isPartial) {
-      const isFailed = lastError.includes(`Page "${name}"`) || lastError.includes(name);
-      let error: string | undefined;
-      if (isFailed) {
-        const regex = new RegExp(`Page "${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}":\\s*([^;]+)`, "i");
-        const match = lastError.match(regex);
-        error = match?.[1]?.trim();
+    // Published: only pages explicitly named in last_error are red
+    if (status === "published") {
+      const err = extractError(name);
+      if (err) return { name, failed: true, error: err };
+      // Some legacy errors use "(failed on: PageName: ...)" format
+      const legacyFailedMatch = /failed on:\s*([^)]+)/i.exec(lastError);
+      if (legacyFailedMatch) {
+        const failedSegment = legacyFailedMatch[1];
+        const isMentioned = new RegExp(`(^|[\\s,;])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:`, "i").test(failedSegment);
+        if (isMentioned) {
+          const segRegex = new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:\\s*([^;)]+)`, "i");
+          const m = failedSegment.match(segRegex);
+          return { name, failed: true, error: m?.[1]?.trim() };
+        }
       }
-      return { name, failed: isFailed, error };
+      return { name, failed: false };
     }
 
-    // Full failure (no "Partial" prefix) → all pages red
+    // Fully failed (no Partial prefix) → all red
     if (status === "failed" && !isPartial) {
-      let error: string | undefined;
-      const regex = new RegExp(`Page "${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}":\\s*([^;]+)`, "i");
-      const match = lastError.match(regex);
-      error = match?.[1]?.trim() || (lastError || undefined);
-      return { name, failed: true, error };
+      return { name, failed: true, error: extractError(name) || lastError || undefined };
     }
 
-    // Non-published partial → mentioned pages red, rest green
+    // Partial failure on a non-published row → only mentioned pages red
     if (isPartial) {
-      const isFailed = lastError.includes(`Page "${name}"`) || lastError.includes(name);
-      let error: string | undefined;
-      if (isFailed) {
-        const regex = new RegExp(`Page "${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}":\\s*([^;]+)`, "i");
-        const match = lastError.match(regex);
-        error = match?.[1]?.trim();
-      }
-      return { name, failed: isFailed, error };
+      const err = extractError(name);
+      return { name, failed: !!err, error: err };
     }
 
-    // Draft/scheduled/pending → red (not published = red for monitoring)
-    return { name, failed: true };
+    // draft / scheduled / pending_approval / publishing → not failed (no red)
+    return { name, failed: false };
   });
 }
 
