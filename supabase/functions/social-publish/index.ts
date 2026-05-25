@@ -454,10 +454,11 @@ Deno.serve((req) =>
       const linkedInPages = individualPages.length > 0 ? individualPages : [null];
       for (const targetPage of linkedInPages) {
         const result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url, targetPage || undefined);
+        const label = targetPage || "linkedin";
         if (result.error) {
-          pageErrors.push(`${targetPage || "linkedin"}: ${result.error}`);
+          markFailure(label, result.error);
         } else {
-          pageSuccesses.push(targetPage || "linkedin");
+          markSuccess(label, (result as any).id);
         }
       }
     } else if (platform === "twitter") {
