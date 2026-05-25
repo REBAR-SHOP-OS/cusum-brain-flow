@@ -361,7 +361,7 @@ Deno.serve((req) =>
             if (permData.data && Array.isArray(permData.data)) {
               const managePostsPerm = permData.data.find((p: any) => p.permission === "pages_manage_posts");
               if (!managePostsPerm || managePostsPerm.status !== "granted") {
-                pageErrors.push(`Page "${targetPageName}": Missing pages_manage_posts permission`);
+                markFailure(targetPageName, "Missing pages_manage_posts permission");
                 continue;
               }
             }
