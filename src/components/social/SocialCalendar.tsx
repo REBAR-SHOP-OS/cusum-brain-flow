@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { addDays, format, isSameDay, isToday, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Video, ChevronDown, CheckCircle2, XCircle, Circle } from "lucide-react";
+import { Video, CheckCircle2, XCircle, Circle } from "lucide-react";
+
 import type { SocialPost } from "@/hooks/useSocialPosts";
 
 /** Parse last_error to determine which pages failed */
