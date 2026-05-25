@@ -195,7 +195,8 @@ async function handleCallback(
 
 function handleGetAuthUrl(supabaseUrl: string, clientId: string, userId: string, body: Record<string, unknown>) {
   const redirectUri = `${supabaseUrl}/functions/v1/linkedin-oauth/callback`;
-  const scope = "openid profile email w_member_social w_organization_social r_organization_social";
+  // offline_access is REQUIRED to receive a refresh_token (LinkedIn does not return refresh_token without it).
+  const scope = "openid profile email w_member_social w_organization_social r_organization_social offline_access";
   const state = `${userId}|${body.returnUrl || ""}`;
 
   const authUrl = new URL(LINKEDIN_AUTH_URL);
