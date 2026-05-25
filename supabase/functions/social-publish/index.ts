@@ -347,7 +347,7 @@ Deno.serve((req) =>
           const preflightData = await preflightRes.json();
           if (preflightData.error) {
             console.error(`[social-publish] Facebook pre-flight failed for page "${targetPageName}":`, preflightData.error);
-            pageErrors.push(`Page "${targetPageName}": ${preflightData.error.message || "Permission check failed"}`);
+            markFailure(targetPageName, preflightData.error.message || "Permission check failed");
             if (post_id) {
               await supabaseAdmin.from("social_posts").update({ last_error: `Facebook permission error on page "${targetPageName}"` }).eq("id", post_id);
             }
