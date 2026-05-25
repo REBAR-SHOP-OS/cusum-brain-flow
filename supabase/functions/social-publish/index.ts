@@ -642,15 +642,25 @@ async function publishToInstagram(
     let ready = false;
     for (let i = 0; i < maxPolls; i++) {
       await new Promise((r) => setTimeout(r, pollInterval));
+      // Use Authorization header (Meta's recommended method — query-string tokens
+      // are increasingly rejected on IG container status with "Authorization Error")
       const statusRes = await fetch(
-        `${GRAPH_API}/${containerId}?fields=status_code&access_token=${accessToken}`
+        `${GRAPH_API}/${containerId}?fields=status_code`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       const statusData = await statusRes.json();
       console.log(`[IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}, raw=${JSON.stringify(statusData)}`);
 
       if (statusData.error) {
-        console.error(`[IG] Poll error: ${statusData.error.message}`);
-        return { error: `Instagram polling error: ${statusData.error.message}` };
+        const msg = statusData.error.message || "";
+        const code = statusData.error.code;
+        const type = statusData.error.type || "";
+        const isAuth = code === 190 || code === 200 || code === 102 || /OAuth|Authorization/i.test(type) || /Authorization Error/i.test(msg);
+        console.error(`[IG] Poll error: ${msg} (code=${code}, type=${type})`);
+        if (isAuth) {
+          return { error: "Instagram token expired or missing permissions — please reconnect Facebook/Instagram in Integrations." };
+        }
+        return { error: `Instagram polling error: ${msg}` };
       }
 
       if (statusData.status_code === "FINISHED") {
