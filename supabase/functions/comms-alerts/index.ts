@@ -264,6 +264,13 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { serviceClient: svc } = ctx;
 
+    // Kill switch — independent of EMAILS_DISABLED, lets us stop comms-alerts spam without disabling all email
+    if ((Deno.env.get("COMMS_ALERTS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
+      console.log("[comms-alerts] skipped: COMMS_ALERTS_DISABLED is set");
+      return { success: true, skipped: true, reason: "COMMS_ALERTS_DISABLED" };
+    }
+
+
     // Load all comms_config rows (one per company) — iterate per-company
     const { data: configRows } = await svc
       .from("comms_config")
