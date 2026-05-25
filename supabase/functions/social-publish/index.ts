@@ -774,6 +774,9 @@ Deno.serve((req) =>
         );
       }
 
+      // Flush queued page_results writes so the final status reflects the real per-page truth.
+      await pageResultsQueue.catch(() => {});
+
       // Determine final result
       if (pageSuccesses.length > 0) {
         if (post_id && lockId) {
