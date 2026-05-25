@@ -15,6 +15,43 @@ function jsonRes(data: unknown, status = 200) {
   });
 }
 
+function getScopeSet(scope?: string): Set<string> {
+  return new Set(
+    (scope || "").split(/[\s,]+/).map((item) => item.trim()).filter(Boolean),
+  );
+}
+
+function getLinkedInStatusError(
+  config: {
+    access_token?: string;
+    expires_at?: number;
+    refresh_token?: string | null;
+    scope?: string;
+    organization_ids?: Record<string, string>;
+  },
+) {
+  const reasons: string[] = [];
+  const scopeSet = getScopeSet(config.scope);
+
+  if (!config.access_token) reasons.push("no access token is stored");
+  if ((config.expires_at || 0) < Date.now() && !config.refresh_token) {
+    reasons.push("the authorization is expired and cannot auto-refresh");
+  }
+  if (
+    scopeSet.size > 0 &&
+    (!scopeSet.has("offline_access") ||
+      !scopeSet.has("w_organization_social") ||
+      !scopeSet.has("r_organization_social"))
+  ) {
+    reasons.push("the connection was created with older LinkedIn permissions");
+  }
+
+  const detail = reasons.length > 0
+    ? ` (${Array.from(new Set(reasons)).join("; ")})`
+    : "";
+  return `Reconnect LinkedIn from Settings → Integrations${detail}.`;
+}
+
 // ─── Main Handler ──────────────────────────────────────────────────
 
 Deno.serve((req) =>
@@ -61,7 +98,12 @@ Deno.serve((req) =>
       default:
         return jsonRes({ error: `Unknown action: ${action}` }, 400);
     }
-  }, { functionName: "linkedin-oauth", authMode: "optional", requireCompany: false, wrapResult: false })
+  }, {
+    functionName: "linkedin-oauth",
+    authMode: "optional",
+    requireCompany: false,
+    wrapResult: false,
+  })
 );
 
 // ─── OAuth Callback ────────────────────────────────────────────────
@@ -71,7 +113,7 @@ async function handleCallback(
   supabase: ReturnType<typeof createClient>,
   supabaseUrl: string,
   clientId: string,
-  clientSecret: string
+  clientSecret: string,
 ) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -138,7 +180,7 @@ async function handleCallback(
   try {
     const aclRes = await fetch(
       "https://api.linkedin.com/v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&projection=(elements*(organization~(localizedName),organization))",
-      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+      { headers: { Authorization: `Bearer ${tokens.access_token}` } },
     );
     if (aclRes.ok) {
       const aclData = await aclRes.json();
@@ -149,11 +191,15 @@ async function handleCallback(
         const orgName = el["organization~"]?.localizedName;
         if (orgId && orgName) {
           organizationIds[orgName] = orgId;
-          console.log(`[linkedin-oauth] Discovered org: "${orgName}" → ${orgId}`);
+          console.log(
+            `[linkedin-oauth] Discovered org: "${orgName}" → ${orgId}`,
+          );
         }
       }
     } else {
-      console.warn(`[linkedin-oauth] Organization ACL fetch failed (${aclRes.status}) — org publishing won't be available until reconnect`);
+      console.warn(
+        `[linkedin-oauth] Organization ACL fetch failed (${aclRes.status}) — org publishing won't be available until reconnect`,
+      );
     }
   } catch (e) {
     console.warn("[linkedin-oauth] Failed to fetch organizations:", e);
@@ -193,10 +239,16 @@ async function handleCallback(
 
 // ─── Auth URL ──────────────────────────────────────────────────────
 
-function handleGetAuthUrl(supabaseUrl: string, clientId: string, userId: string, body: Record<string, unknown>) {
+function handleGetAuthUrl(
+  supabaseUrl: string,
+  clientId: string,
+  userId: string,
+  body: Record<string, unknown>,
+) {
   const redirectUri = `${supabaseUrl}/functions/v1/linkedin-oauth/callback`;
   // offline_access is REQUIRED to receive a refresh_token (LinkedIn does not return refresh_token without it).
-  const scope = "openid profile email w_member_social w_organization_social r_organization_social offline_access";
+  const scope =
+    "openid profile email w_member_social w_organization_social r_organization_social offline_access";
   const state = `${userId}|${body.returnUrl || ""}`;
 
   const authUrl = new URL(LINKEDIN_AUTH_URL);
@@ -211,7 +263,10 @@ function handleGetAuthUrl(supabaseUrl: string, clientId: string, userId: string,
 
 // ─── Check Status ──────────────────────────────────────────────────
 
-async function handleCheckStatus(supabase: ReturnType<typeof createClient>, userId: string) {
+async function handleCheckStatus(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+) {
   const { data: connection } = await supabase
     .from("integration_connections")
     .select("*")
@@ -223,7 +278,39 @@ async function handleCheckStatus(supabase: ReturnType<typeof createClient>, user
     return jsonRes({ status: "available" });
   }
 
-  const config = connection.config as { access_token: string; expires_at: number; profile_name: string; refresh_token?: string };
+  const config = connection.config as {
+    access_token: string;
+    expires_at: number;
+    profile_name: string;
+    refresh_token?: string;
+  };
+
+  const reconnectError = getLinkedInStatusError(
+    connection.config as {
+      access_token?: string;
+      expires_at?: number;
+      refresh_token?: string | null;
+      scope?: string;
+      organization_ids?: Record<string, string>;
+    },
+  );
+
+  const scopeSet = getScopeSet(
+    (connection.config as { scope?: string })?.scope,
+  );
+  const missingModernScopes = !scopeSet.has("offline_access") ||
+    !scopeSet.has("w_organization_social") ||
+    !scopeSet.has("r_organization_social");
+
+  if (!config.access_token || missingModernScopes) {
+    await supabase
+      .from("integration_connections")
+      .update({ status: "error", error_message: reconnectError })
+      .eq("user_id", userId)
+      .eq("integration_id", "linkedin");
+
+    return jsonRes({ status: "error", error: reconnectError });
+  }
 
   if (config.expires_at < Date.now()) {
     // Attempt auto-refresh before marking as error
@@ -233,16 +320,19 @@ async function handleCheckStatus(supabase: ReturnType<typeof createClient>, user
 
       if (clientId && clientSecret) {
         try {
-          const res = await fetch("https://www.linkedin.com/oauth/v2/accessToken", {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: new URLSearchParams({
-              grant_type: "refresh_token",
-              refresh_token: config.refresh_token,
-              client_id: clientId,
-              client_secret: clientSecret,
-            }),
-          });
+          const res = await fetch(
+            "https://www.linkedin.com/oauth/v2/accessToken",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+              body: new URLSearchParams({
+                grant_type: "refresh_token",
+                refresh_token: config.refresh_token,
+                client_id: clientId,
+                client_secret: clientSecret,
+              }),
+            },
+          );
 
           if (res.ok) {
             const tokens = await res.json();
@@ -250,23 +340,43 @@ async function handleCheckStatus(supabase: ReturnType<typeof createClient>, user
               ...config,
               access_token: tokens.access_token,
               expires_at: Date.now() + (tokens.expires_in * 1000),
-              ...(tokens.refresh_token ? { refresh_token: tokens.refresh_token } : {}),
+              ...(tokens.refresh_token
+                ? { refresh_token: tokens.refresh_token }
+                : {}),
             };
 
             await supabase
               .from("integration_connections")
-              .update({ config: newConfig, status: "connected", error_message: null, last_sync_at: new Date().toISOString() })
+              .update({
+                config: newConfig,
+                status: "connected",
+                error_message: null,
+                last_sync_at: new Date().toISOString(),
+              })
               .eq("user_id", userId)
               .eq("integration_id", "linkedin");
 
-            console.log("[linkedin-oauth] Token auto-refreshed during status check for user", userId);
-            return jsonRes({ status: "connected", profileName: config.profile_name });
+            console.log(
+              "[linkedin-oauth] Token auto-refreshed during status check for user",
+              userId,
+            );
+            return jsonRes({
+              status: "connected",
+              profileName: config.profile_name,
+            });
           } else {
             const errText = await res.text();
-            console.error("[linkedin-oauth] Refresh failed during status check:", res.status, errText);
+            console.error(
+              "[linkedin-oauth] Refresh failed during status check:",
+              res.status,
+              errText,
+            );
           }
         } catch (err) {
-          console.error("[linkedin-oauth] Refresh exception during status check:", err);
+          console.error(
+            "[linkedin-oauth] Refresh exception during status check:",
+            err,
+          );
         }
       }
     }
@@ -274,11 +384,11 @@ async function handleCheckStatus(supabase: ReturnType<typeof createClient>, user
     // Refresh failed or no refresh token — mark as error
     await supabase
       .from("integration_connections")
-      .update({ status: "error", error_message: "Token expired, please reconnect" })
+      .update({ status: "error", error_message: reconnectError })
       .eq("user_id", userId)
       .eq("integration_id", "linkedin");
 
-    return jsonRes({ status: "error", error: "Token expired, please reconnect" });
+    return jsonRes({ status: "error", error: reconnectError });
   }
 
   return jsonRes({ status: "connected", profileName: config.profile_name });
@@ -286,7 +396,10 @@ async function handleCheckStatus(supabase: ReturnType<typeof createClient>, user
 
 // ─── Disconnect ────────────────────────────────────────────────────
 
-async function handleDisconnect(supabase: ReturnType<typeof createClient>, userId: string) {
+async function handleDisconnect(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+) {
   await supabase
     .from("integration_connections")
     .delete()
@@ -298,7 +411,10 @@ async function handleDisconnect(supabase: ReturnType<typeof createClient>, userI
 
 // ─── Get Profile ───────────────────────────────────────────────────
 
-async function handleGetProfile(supabase: ReturnType<typeof createClient>, userId: string) {
+async function handleGetProfile(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+) {
   const { data: connection } = await supabase
     .from("integration_connections")
     .select("config")
@@ -319,7 +435,11 @@ async function handleGetProfile(supabase: ReturnType<typeof createClient>, userI
 
 // ─── Create Post ───────────────────────────────────────────────────
 
-async function handleCreatePost(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+async function handleCreatePost(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  body: Record<string, unknown>,
+) {
   const { data: connection } = await supabase
     .from("integration_connections")
     .select("config")
@@ -375,7 +495,10 @@ async function handleCreatePost(supabase: ReturnType<typeof createClient>, userI
 
 // ─── List Posts ────────────────────────────────────────────────────
 
-async function handleListPosts(supabase: ReturnType<typeof createClient>, userId: string) {
+async function handleListPosts(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+) {
   const { data: connection } = await supabase
     .from("integration_connections")
     .select("config")
@@ -400,7 +523,7 @@ async function handleListPosts(supabase: ReturnType<typeof createClient>, userId
         Authorization: `Bearer ${config.access_token}`,
         "X-Restli-Protocol-Version": "2.0.0",
       },
-    }
+    },
   );
 
   if (!postsRes.ok) {

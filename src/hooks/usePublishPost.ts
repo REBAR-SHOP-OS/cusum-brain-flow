@@ -50,6 +50,20 @@ export function usePublishPost() {
         ? cleanContent
         : [cleanContent, post.hashtags.length > 0 ? "\n\n" + post.hashtags.join(" ") : ""].join("");
 
+      if (post.platform === "linkedin") {
+        const { data: linkedInStatus, error: linkedInStatusError } = await supabase.functions.invoke("linkedin-oauth", {
+          body: { action: "check-status" },
+        });
+
+        if (linkedInStatusError) {
+          throw new Error(linkedInStatusError.message);
+        }
+
+        if (linkedInStatus?.status === "error") {
+          throw new Error(linkedInStatus.error || "Reconnect LinkedIn from Settings → Integrations.");
+        }
+      }
+
       // Use raw fetch with 120s timeout so client doesn't abort before server-side
       // video polling completes (Instagram Reels can take 60-90s to process)
       const { data: { session } } = await supabase.auth.getSession();
