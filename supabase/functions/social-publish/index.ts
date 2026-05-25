@@ -746,7 +746,7 @@ async function publishToLinkedIn(
       if (!profileRes.ok) {
         // If 401 on profile fetch, try refresh once
         if (profileRes.status === 401) {
-          const refreshed = await refreshLinkedInToken(supabase, userId, config as any);
+          const refreshed = await refreshLinkedInToken(supabase, tokenOwnerUserId, config as any);
           if (refreshed) {
             accessToken = refreshed;
             const retryRes = await fetch("https://api.linkedin.com/v2/userinfo", {
@@ -880,7 +880,7 @@ async function publishToLinkedIn(
     if (postRes.status === 401) {
       console.log("[social-publish] LinkedIn ugcPosts returned 401, attempting token refresh...");
       await postRes.text(); // consume body
-      const refreshed = await refreshLinkedInToken(supabase, userId, config as any);
+      const refreshed = await refreshLinkedInToken(supabase, tokenOwnerUserId, config as any);
       if (refreshed) {
         accessToken = refreshed;
         postRes = await doPost(accessToken);
@@ -890,7 +890,13 @@ async function publishToLinkedIn(
     if (!postRes.ok) {
       const errText = await postRes.text();
       console.error("LinkedIn post error:", errText);
-      return { error: `LinkedIn API error (${postRes.status})` };
+      // Surface LinkedIn's actual error message when available so the UI can show a precise reason.
+      let detail = "";
+      try {
+        const parsed = JSON.parse(errText);
+        detail = parsed?.message || parsed?.error_description || parsed?.error || "";
+      } catch { detail = errText.slice(0, 200); }
+      return { error: `LinkedIn API error (${postRes.status})${detail ? `: ${detail}` : ""}` };
     }
 
     return { id: postRes.headers.get("x-restli-id") || "published" };
