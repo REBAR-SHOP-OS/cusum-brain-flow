@@ -1,35 +1,63 @@
-# Plan: comms-alerts hardening (A + B + D)
+# Plan: Add Meta Platforms Developer Docs skill
 
-Apply three changes to `supabase/functions/comms-alerts/index.ts` (and shared spam filter). No DB changes, no UI changes.
+Create a new draft skill at `.agents/skills/meta-platforms-docs/SKILL.md` (following the same shape as the existing `google-search-docs` skill) and apply it via `skills--apply_draft`.
 
-## A) Kill switch
-- Add env check `COMMS_ALERTS_DISABLED` at the very top of the handler.
-- If `1|true|yes|on` → log `[comms-alerts] skipped: disabled` and return `{ ok: true, skipped: true }`.
-- Independent from `EMAILS_DISABLED` so we can re-enable later without touching all email paths.
+## Skill scope (Full Meta platforms overview)
 
-## B) Harder spam filter
-- Extend `supabase/functions/_shared/spamFilter.ts` with an email-oriented keyword/sender list:
-  - Subjects: `birthday sale`, `summer course`, `reminder:`, `delivery status notification`, `mail delivery`, `undeliverable`, `instagram`, `kylie jenner`, `newsletter`, `digest`, `unsubscribe`, `% off`, `flash sale`, `weekly recap`.
-  - Senders: `mailer-daemon@`, `postmaster@`, `no-reply@instagram`, `notification@`, `news@`, `marketing@`, `noreply@mail.instagram.com`.
-- New helper `analyzeEmailSpam({ subject, from, snippet })` reusing normalizer.
-- In `comms-alerts`, before queuing any alert, run `analyzeEmailSpam` on the comm; if spam → skip + log reason; do not send to owner or CEO.
+Single SKILL.md file with curated links — no copied content (docs change frequently; use `code--fetch_website` on demand).
 
-## D) Owner-only routing (no CEO fallback for owned comms)
-- Current behavior: if owner present, alert goes to owner AND CEO; if no owner, only CEO.
-- New behavior:
-  - If `owner_email` present and valid (rebar.shop) → send to owner ONLY. No CEO copy.
-  - If no owner → keep current single CEO alert (so nothing is silently dropped).
-- Keep existing dedupe logic intact.
+Sections:
 
-## Out of scope
-- C (suppression of 2h/4h/24h repetition) — not selected.
-- Any UI, DB schema, or other edge function changes.
+1. **Graph API** — overview, versioning, access tokens, debug tool, rate limits
+   - https://developers.facebook.com/docs/graph-api/overview
+   - https://developers.facebook.com/docs/graph-api/guides/versioning
+   - https://developers.facebook.com/docs/facebook-login/guides/access-tokens
 
-## Files touched
-- `supabase/functions/_shared/spamFilter.ts` — add `analyzeEmailSpam` + email keyword list.
-- `supabase/functions/comms-alerts/index.ts` — kill switch + spam gate + owner-only routing.
+2. **Facebook Pages / Publishing** (relevant to Social Manager in this project)
+   - https://developers.facebook.com/docs/pages-api
+   - https://developers.facebook.com/docs/pages-api/posts
+   - Page access tokens, required permissions (`pages_manage_posts`, `pages_read_engagement`, `pages_show_list`)
 
-## Verification
-- Deploy `comms-alerts`.
-- Tail `comms_alerts` table for 1 hour: confirm zero rows for Instagram/Birthday/Delivery Failure subjects; confirm owned comms have no CEO copy.
-- Flip `COMMS_ALERTS_DISABLED=true` as emergency stop if needed.
+3. **Instagram Graph API** (Business/Creator account publishing)
+   - https://developers.facebook.com/docs/instagram-platform
+   - https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
+   - Container → publish two-step flow, image/video/reels/carousel
+
+4. **Marketing API** (ads)
+   - https://developers.facebook.com/docs/marketing-apis
+
+5. **Messenger Platform**
+   - https://developers.facebook.com/docs/messenger-platform
+
+6. **Webhooks**
+   - https://developers.facebook.com/docs/graph-api/webhooks
+   - Verification handshake, X-Hub-Signature-256 HMAC verification
+
+7. **Login / Permissions / App Review**
+   - https://developers.facebook.com/docs/facebook-login
+   - https://developers.facebook.com/docs/permissions
+   - https://developers.facebook.com/docs/app-review
+
+8. **Usage rules** specific to this project:
+   - Always use latest stable Graph API version pinned in code (don't rely on default)
+   - Page tokens for Pages, IG User tokens (via linked Page) for Instagram
+   - Verify webhook signatures with HMAC-SHA256 (matches project's webhook security memory)
+   - Respect Neel approval gate before publishing (HARD rule)
+   - Per-platform text sanitization already in `socialConstants.ts`
+   - Fetch live doc pages with `code--fetch_website` when quoting — Meta updates often
+
+## Trigger description (frontmatter)
+
+> Reference for Facebook/Meta developer platforms — Graph API, Pages publishing, Instagram Graph API, Marketing API, Messenger, Webhooks, Login, and App Review. Use when working on Social Manager, Facebook/Instagram integrations, ads, messenger flows, or webhook handlers from Meta.
+
+## Files to create
+
+- `.agents/skills/meta-platforms-docs/SKILL.md` (single file, ~150 lines)
+
+## Apply
+
+Call `skills--apply_draft` with `.agents/skills/meta-platforms-docs`.
+
+## Naming
+
+Using `meta-platforms-docs` (covers FB + IG + Messenger + Marketing under the Meta umbrella). If you'd prefer `facebook-graph-api` (narrower) or another name, tell me before I implement.
