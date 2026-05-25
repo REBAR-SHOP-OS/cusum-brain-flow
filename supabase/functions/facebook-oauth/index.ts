@@ -258,39 +258,71 @@ Deno.serve((req) =>
 
     // ─── Check connection status ───────────────────────────────────
     if (action === "check-status") {
-      const integration = body.integration as string;
+      const integration = (body.integration as string) === "facebook" ? "facebook" : "instagram";
 
-      const { data: tokenData } = await supabaseAdmin
-        .from("user_meta_tokens")
-        .select("meta_user_name, expires_at, pages, instagram_accounts")
-        .eq("user_id", userId)
-        .eq("platform", integration)
-        .maybeSingle();
+      // Use unified resolver: self → same-company teammate fallback
+      const resolved = await resolveMetaToken(supabaseAdmin, userId, integration);
 
-      if (!tokenData) {
+      if (!resolved) {
+        // Sync DB row to "available" so the UI matches truth
+        await supabaseAdmin
+          .from("integration_connections")
+          .upsert({
+            user_id: userId,
+            integration_id: integration,
+            status: "error",
+            last_checked_at: new Date().toISOString(),
+            error_message: "Not connected. Please connect Facebook/Instagram in Integrations.",
+          }, { onConflict: "user_id,integration_id" });
+
         return new Response(
           JSON.stringify({ status: "available" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const isExpired = tokenData.expires_at && new Date(tokenData.expires_at) < new Date();
-      if (isExpired) {
+      // Remote-validate against Meta to catch revoked tokens
+      const valid = await validateMetaTokenRemote(resolved.accessToken);
+      if (!valid) {
+        await supabaseAdmin
+          .from("integration_connections")
+          .upsert({
+            user_id: userId,
+            integration_id: integration,
+            status: "error",
+            last_checked_at: new Date().toISOString(),
+            error_message: "Token rejected by Meta. Please reconnect Facebook/Instagram.",
+          }, { onConflict: "user_id,integration_id" });
+
         return new Response(
           JSON.stringify({ status: "error", error: "Token expired. Please reconnect." }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      // Healthy — sync DB row to connected
+      await supabaseAdmin
+        .from("integration_connections")
+        .upsert({
+          user_id: userId,
+          integration_id: integration,
+          status: "connected",
+          last_checked_at: new Date().toISOString(),
+          last_sync_at: new Date().toISOString(),
+          error_message: null,
+        }, { onConflict: "user_id,integration_id" });
+
       return new Response(
         JSON.stringify({
           status: "connected",
-          profileName: tokenData.meta_user_name,
-          pagesCount: (tokenData.pages as unknown[])?.length || 0,
+          profileName: resolved.ownedByCurrentUser ? undefined : `(team-shared)`,
+          pagesCount: resolved.pages.length,
+          source: resolved.source,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
 
     // ─── Refresh / rediscover IG accounts from existing page tokens ─
     if (action === "refresh-accounts") {
