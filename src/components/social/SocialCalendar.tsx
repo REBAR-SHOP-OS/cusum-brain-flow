@@ -11,6 +11,23 @@ function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; e
   const pages = post.page_name.split(", ").filter(Boolean);
   if (pages.length === 0) return null;
 
+  // Prefer structured page_results (source of truth) when available.
+  const pr = post.page_results as Array<{ name: string; status: string; error?: string }> | null | undefined;
+  if (Array.isArray(pr) && pr.length > 0) {
+    return pages.map((name) => {
+      const match = pr.find((p) => p?.name === name);
+      if (!match) {
+        // No structured entry yet — treat as failed unless overall status is published with no errors.
+        if (post.status === "published" && !post.last_error) return { name, failed: false };
+        return { name, failed: true };
+      }
+      if (match.status === "success") return { name, failed: false };
+      // pending or failed → red
+      return { name, failed: true, error: match.error };
+    });
+  }
+
+  // Fallback: legacy posts without page_results — parse last_error text.
   const lastError = post.last_error || "";
   const status = post.status;
 
